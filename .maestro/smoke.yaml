@@ -8,7 +8,7 @@ appId: com.inukshuk.app
       location: allow
 - assertVisible: 'Record'
 - tapOn: 'Library'
-- assertVisible: 'Import map'
+- assertVisible: 'Recorded trails'
 - tapOn: 'Settings'
 - assertVisible: 'Keep screen awake'
 - tapOn: 'Map'
