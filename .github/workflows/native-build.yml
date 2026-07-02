@@ -52,6 +52,20 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
+      # Gradle's dependency caches live in ~/.gradle regardless of the
+      # prebuild-generated android/ dir, so they ARE cacheable in this CNG repo
+      # (setup-java's `cache: gradle` is not — it keys on gradle files that
+      # don't exist at checkout, see #77). Keyed on the lockfile since the
+      # native deps derive from the RN/Expo packages.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       - run: npm ci
 
       - name: Prebuild native Android project
@@ -87,6 +101,15 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Caches downloaded pod artifacts (not the generated Pods/ dir, which
+      # depends on the prebuild output) — keyed on the lockfile like Gradle.
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pods-${{ runner.os }}-
 
       - name: Prebuild native iOS project
         run: npx expo prebuild --platform ios --no-install

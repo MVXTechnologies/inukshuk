@@ -47,6 +47,18 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
+      # Same lockfile-keyed Gradle cache as native-build.yml — ~/.gradle exists
+      # independently of the prebuild-generated android/ dir (setup-java's
+      # `cache: gradle` variant hard-fails here, see #77).
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       - run: npm ci
 
       # x86_64 only: the emulator is x86_64, and a single-ABI APK cuts both the
