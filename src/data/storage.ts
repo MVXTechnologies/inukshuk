@@ -167,21 +167,55 @@ export function fileExists(uri: string): boolean {
   return new File(uri).exists;
 }
 
-/** Read a JSON document stored at the document root, or null if absent/corrupt. */
+/**
+ * Read a JSON document stored at the document root, or null if absent/corrupt.
+ *
+ * Recovery order: the file itself, then the `.tmp` staging file (covers a crash
+ * between {@link writeJson}'s delete and move). A file that exists but fails to
+ * parse is preserved as `<name>.corrupt` instead of being silently discarded,
+ * so a torn write never silently costs the user their data.
+ */
 export async function readJson<T>(name: string): Promise<T | null> {
   const file = new File(Paths.document, name);
-  if (!file.exists) return null;
-  try {
-    return JSON.parse(await file.text()) as T;
-  } catch {
-    return null;
+  if (file.exists) {
+    try {
+      return JSON.parse(await file.text()) as T;
+    } catch {
+      try {
+        const evidence = new File(Paths.document, `${name}.corrupt`);
+        if (evidence.exists) evidence.delete();
+        file.copy(evidence);
+      } catch {
+        /* best-effort forensics only */
+      }
+    }
   }
+  const staged = new File(Paths.document, `${name}.tmp`);
+  if (staged.exists) {
+    try {
+      return JSON.parse(await staged.text()) as T;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
+/**
+ * Write a JSON document atomically: stage the full payload in `<name>.tmp`,
+ * then swap it into place. A kill mid-write can no longer truncate the target
+ * (the previous version survives, or the completed staging file is recovered
+ * by {@link readJson}) — this index is rewritten on every library mutation, so
+ * torn writes were a real data-loss path.
+ */
 export function writeJson(name: string, value: unknown): void {
+  const staged = new File(Paths.document, `${name}.tmp`);
+  if (staged.exists) staged.delete();
+  staged.create();
+  staged.write(JSON.stringify(value));
   const file = new File(Paths.document, name);
-  if (!file.exists) file.create();
-  file.write(JSON.stringify(value));
+  if (file.exists) file.delete();
+  staged.move(file);
 }
 
 /** Read the persisted library index, or null if it has never been written. */

@@ -45,6 +45,27 @@ export function basemapTileUrl(basemap: MapBasemap, tileUrl: string): string {
 }
 
 /**
+ * Per-basemap raster colour tuning, toward a muted outdoor/topographic look
+ * (think AllTrails/Gaia): desaturate the neon OSM palette into natural tones and
+ * lift contrast a touch. Satellite is left alone — imagery shouldn't be muted.
+ */
+const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
+  map: {
+    'raster-saturation': -0.25,
+    'raster-contrast': 0.06,
+    'raster-brightness-min': 0.04,
+    'raster-brightness-max': 0.96,
+  },
+  relief: {
+    'raster-saturation': -0.1,
+    'raster-contrast': 0.04,
+  },
+};
+
+/** Basemaps that get a shaded-relief hillshade blended under the live 2D map. */
+const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
+
+/**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
  * satellite imagery, or a topographic relief map — see {@link baseSource}).
  * Raster (not vector) keeps us free of any API key or paid tile service. The OSM
@@ -58,6 +79,7 @@ export function buildOsmStyle(
   tileUrl: string,
   terrain3d = false,
   basemap: MapBasemap = 'map',
+  shadedRelief = false,
 ): StyleSpecification {
   const base = baseSource(basemap, tileUrl);
   const style: StyleSpecification = {
@@ -72,10 +94,39 @@ export function buildOsmStyle(
       },
     },
     layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': '#E9E5DC' } },
-      { id: 'osm', type: 'raster', source: 'osm' },
+      // Warm paper backdrop that shows through while tiles load and at the edges.
+      { id: 'background', type: 'background', paint: { 'background-color': '#E6DFCF' } },
+      { id: 'osm', type: 'raster', source: 'osm', paint: RASTER_PAINT[basemap] ?? {} },
     ],
   };
+
+  // A shaded-relief hillshade derived from the free Terrarium DEM, blended under
+  // the live 2D map for the warm topographic look. Kept OFF for offline packs
+  // (shadedRelief=false) so the DEM source doesn't bloat downloaded tile pyramids
+  // — relief just degrades to flat tiles offline. Skipped in 3D (the real terrain
+  // surface adds its own DEM/hillshade below) and for satellite imagery.
+  if (shadedRelief && !terrain3d && SHADE_BASEMAPS.has(basemap)) {
+    style.sources.dem = {
+      type: 'raster-dem',
+      tiles: [TERRAIN_DEM_URL],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 15,
+      attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
+    };
+    style.layers.push({
+      id: 'hillshade-2d',
+      type: 'hillshade',
+      source: 'dem',
+      paint: {
+        'hillshade-exaggeration': 0.45,
+        'hillshade-shadow-color': 'rgba(74, 62, 45, 0.55)',
+        'hillshade-highlight-color': 'rgba(255, 250, 240, 0.25)',
+        'hillshade-accent-color': 'rgba(120, 105, 80, 0.30)',
+        'hillshade-illumination-direction': 335,
+      },
+    });
+  }
 
   if (terrain3d) {
     style.sources.dem = {

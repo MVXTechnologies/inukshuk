@@ -1,6 +1,7 @@
 import type { BoundingBox } from '@core/models';
 
 import {
+  clampTileRange,
   lngLatToTile,
   padBbox,
   pickTerrainZoom,
@@ -108,5 +109,28 @@ describe('padBbox', () => {
     const mPerDegLat = 111320;
     const spanLatM = (p.maxLat - p.minLat) * mPerDegLat;
     expect(spanLatM).toBeGreaterThanOrEqual(2000 - 1);
+  });
+});
+
+describe('clampTileRange', () => {
+  it('returns in-budget ranges unchanged', () => {
+    const r = { z: 10, minX: 5, maxX: 8, minY: 3, maxY: 6 };
+    expect(clampTileRange(r, 6)).toEqual(r);
+  });
+
+  it('crops a continent-sized range around its centre to the budget', () => {
+    // A 2000 km bbox at zMin still spans ~20 tiles per side — the fetch budget
+    // must bound it (this is the 3D-view OOM guard).
+    const bbox: BoundingBox = { minLng: -80, minLat: 40, maxLng: -55, maxLat: 58 };
+    const r = tileRangeForBbox(bbox, 8);
+    expect(r.maxX - r.minX + 1).toBeGreaterThan(6);
+    const c = clampTileRange(r, 6);
+    expect(c.maxX - c.minX + 1).toBe(6);
+    expect(c.maxY - c.minY + 1).toBe(6);
+    // Cropped window stays inside the original range, centred on it.
+    expect(c.minX).toBeGreaterThanOrEqual(r.minX);
+    expect(c.maxX).toBeLessThanOrEqual(r.maxX);
+    expect(c.minY).toBeGreaterThanOrEqual(r.minY);
+    expect(c.maxY).toBeLessThanOrEqual(r.maxY);
   });
 });

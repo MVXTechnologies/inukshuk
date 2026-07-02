@@ -29,11 +29,14 @@ export function CompassBadge({ heading, onPress }: CompassBadgeProps) {
       >
         <View style={styles.content}>
           <View style={styles.needleWrap}>
+            {/* The arrow points to NORTH: as the device heading increases (you
+                turn clockwise), north sits counter-clockwise from you, so the
+                needle counter-rotates by -heading. */}
             <MaterialCommunityIcons
               name="navigation"
               size={26}
               color={theme.colors.tertiary}
-              style={{ transform: [{ rotate: `${deg}deg` }] }}
+              style={{ transform: [{ rotate: `${-deg}deg` }] }}
             />
           </View>
           <Text variant="labelMedium" style={styles.label}>

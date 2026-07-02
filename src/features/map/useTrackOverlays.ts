@@ -48,6 +48,9 @@ export function useTrackOverlays(tracks: readonly TrackSummary[]): TrackOverlay[
 
   const overlays: TrackOverlay[] = [];
   for (const id of activeTrackIds) {
+    // Membership check: a deleted trail can linger in activeTrackIds (and in
+    // the parsed cache) — without this it kept rendering until app restart.
+    if (!tracks.some((t) => t.id === id)) continue;
     const feature = cache[id];
     if (feature) overlays.push({ id, feature });
   }

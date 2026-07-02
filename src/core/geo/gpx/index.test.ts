@@ -215,3 +215,21 @@ describe('parseGpx error handling', () => {
     expect(() => parseGpx('this is not xml at all <<<')).toThrow();
   });
 });
+
+describe('parseGpx multiple routes', () => {
+  it('keeps the points of every <rte>, not just the first', () => {
+    const xml = `<?xml version="1.0"?><gpx version="1.1" creator="t">
+      <rte><rtept lat="1" lon="2"/><rtept lat="3" lon="4"/></rte>
+      <rte><rtept lat="5" lon="6"/><rtept lat="7" lon="8"/></rte></gpx>`;
+    const back = parseGpx(xml).points;
+    expect(back.map((p) => p.latitude)).toEqual([1, 3, 5, 7]);
+  });
+
+  it('still ignores routes when track points exist', () => {
+    const xml = `<?xml version="1.0"?><gpx version="1.1" creator="t">
+      <trk><trkseg><trkpt lat="9" lon="9"/></trkseg></trk>
+      <rte><rtept lat="1" lon="2"/></rte></gpx>`;
+    const back = parseGpx(xml).points;
+    expect(back.map((p) => p.latitude)).toEqual([9]);
+  });
+});

@@ -36,6 +36,10 @@ interface RecorderState {
   status: RecorderStatus;
   name: string;
   startedAt: number | null;
+  /** Wall time spent paused so far (completed pauses only). */
+  pausedMs: number;
+  /** When the current pause began, while status === 'paused'. */
+  pausedAt: number | null;
   points: TrackPoint[];
   stats: TrackStats;
   waypoints: PendingWaypoint[];
@@ -66,6 +70,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   status: 'idle',
   name: '',
   startedAt: null,
+  pausedMs: 0,
+  pausedAt: null,
   points: [],
   stats: EMPTY_STATS,
   waypoints: [],
@@ -76,6 +82,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       status: 'recording',
       name: name?.trim() || defaultName(now),
       startedAt: now,
+      pausedMs: 0,
+      pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],
@@ -144,11 +152,20 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     }),
 
   pause: () => {
-    if (get().status === 'recording') set({ status: 'paused' });
+    if (get().status === 'recording') set({ status: 'paused', pausedAt: Date.now() });
   },
 
   resume: () => {
-    if (get().status === 'paused') set({ status: 'recording' });
+    const { status, pausedMs, pausedAt } = get();
+    if (status !== 'paused') return;
+    // Fold the completed pause into pausedMs so the elapsed timer (now -
+    // startedAt - pausedMs) resumes where it froze instead of jumping forward
+    // by the pause duration.
+    set({
+      status: 'recording',
+      pausedMs: pausedMs + (pausedAt !== null ? Date.now() - pausedAt : 0),
+      pausedAt: null,
+    });
   },
 
   stop: async () => {
@@ -194,6 +211,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       status: 'idle',
       name: '',
       startedAt: null,
+      pausedMs: 0,
+      pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],
@@ -207,6 +226,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       status: 'idle',
       name: '',
       startedAt: null,
+      pausedMs: 0,
+      pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],

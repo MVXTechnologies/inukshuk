@@ -1,4 +1,4 @@
-import { inflateSync, unzlibSync } from 'fflate';
+import { Inflate, Unzlib } from 'fflate';
 import {
   type PdfArray,
   type PdfDict,
@@ -304,12 +304,42 @@ class Lexer {
   }
 }
 
-/** Apply FlateDecode to a stream's raw bytes; throws on failure. */
+/**
+ * Decompressed-output cap. These streams hold xref tables, object streams and
+ * metadata — legitimately a few MB at most. Without a cap, a few-KB crafted
+ * "decompression bomb" stream in an imported PDF inflates to gigabytes and
+ * OOM-kills the app during parse.
+ */
+const MAX_DECODED_BYTES = 64 * 1024 * 1024;
+
+/** Streaming inflate with a hard output cap; throws once the cap is exceeded. */
+function inflateBounded(raw: Uint8Array, zlibWrapped: boolean): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const onData = (chunk: Uint8Array) => {
+    total += chunk.length;
+    if (total > MAX_DECODED_BYTES) throw new Error('decoded stream exceeds size cap');
+    chunks.push(chunk);
+  };
+  const inflater = zlibWrapped ? new Unzlib(onData) : new Inflate(onData);
+  inflater.push(raw, true);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
+/** Apply FlateDecode to a stream's raw bytes; throws on failure or oversize output. */
 function flateDecode(raw: Uint8Array): Uint8Array {
   try {
-    return unzlibSync(raw);
-  } catch {
-    return inflateSync(raw);
+    return inflateBounded(raw, true);
+  } catch (e) {
+    // The cap is a security bound, not a format mismatch — never retry past it.
+    if ((e as Error).message?.includes('size cap')) throw e;
+    return inflateBounded(raw, false);
   }
 }
 
@@ -436,7 +466,11 @@ export class PdfDocument {
       const countStr = lex.readRegular();
       if (!/^\d+$/.test(startStr) || !/^\d+$/.test(countStr)) break;
       const start = Number(startStr);
-      const count = Number(countStr);
+      // Clamp the declared entry count to what the file can actually hold
+      // (20 bytes per entry): a crafted "0 9999999999" subsection would
+      // otherwise spin this loop ~1e10 times and freeze the JS thread.
+      const maxEntries = Math.max(0, Math.floor((this.bytes.length - lex.pos) / 20));
+      const count = Math.min(Number(countStr), maxEntries);
       lex.skipWs();
       for (let i = 0; i < count; i++) {
         const line = latin1(this.bytes, lex.pos, lex.pos + 20);
@@ -472,6 +506,12 @@ export class PdfDocument {
     const w = (wVal as PdfArray).map((x) => Number(x)) as number[];
     const [w0, w1, w2] = [w[0] ?? 0, w[1] ?? 0, w[2] ?? 0];
     const rowLen = w0 + w1 + w2;
+    // /W [0 0 0] (rowLen 0) would make the row loop below advance by 0 bytes
+    // forever — a malformed/crafted file must not freeze the JS thread.
+    if (rowLen <= 0 || w0 < 0 || w1 < 0 || w2 < 0) {
+      this.warnings.push(`xref stream has invalid /W [${w.join(' ')}]`);
+      return -1;
+    }
 
     let data: Uint8Array;
     try {
@@ -529,6 +569,9 @@ export class PdfDocument {
         }
       }
     }
+    // A real PDF needs at most 1-2 filters; a long chain of stacked /Fl entries
+    // is a decompression-bomb multiplier.
+    if (filters.length > 4) throw new Error(`implausible filter chain (${filters.length})`);
     let data = stream.raw;
     for (const f of filters) {
       if (f === 'FlateDecode' || f === 'Fl') {

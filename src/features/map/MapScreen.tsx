@@ -84,6 +84,7 @@ export function MapScreen() {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const set = useSettingsStore((s) => s.set);
 
   const { permission, location } = useLocationTracking();
@@ -104,12 +105,16 @@ export function MapScreen() {
   const toggleTerrain3d = useMapStore((s) => s.toggleTerrain3d);
   const basemap = useMapStore((s) => s.basemap);
   const setBasemap = useMapStore((s) => s.setBasemap);
-  // 2D base style; hillshade-3D was replaced by the real 3D terrain surface.
-  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap), [tileUrl, basemap]);
+  // 2D base style with shaded-relief hillshade for the outdoor/topo look;
+  // hillshade-3D was replaced by the real 3D terrain surface.
+  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap, true), [tileUrl, basemap]);
   const focusBounds = useMapStore((s) => s.focusBounds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const [overlayMenuOpen, setOverlayMenuOpen] = useState(false);
   const [selecting, setSelecting] = useState(false);
+  // The bottom-right "+" speed-dial (start recording today; room for more map
+  // actions later — plan a route, drop a destination pin, import…).
+  const [actionsOpen, setActionsOpen] = useState(false);
   const downloadProgress = useOfflineStore((s) => s.progress);
 
   // Consume a one-shot "fit these bounds" request (e.g. "view trail" from the
@@ -163,6 +168,7 @@ export function MapScreen() {
   const stats = useRecorderStore((s) => s.stats);
   const points = useRecorderStore((s) => s.points);
   const startedAt = useRecorderStore((s) => s.startedAt);
+  const pausedMs = useRecorderStore((s) => s.pausedMs);
   const start = useRecorderStore((s) => s.start);
   const pause = useRecorderStore((s) => s.pause);
   const resume = useRecorderStore((s) => s.resume);
@@ -174,6 +180,19 @@ export function MapScreen() {
 
   const [elapsedS, setElapsedS] = useState(0);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
+
+  // Overlay errors surface through the timed hook too: a raw <Snackbar
+  // duration={4000}> never auto-dismisses on Samsung One UI (paper arms its
+  // timer in an animation callback that may not fire), and its onDismiss was a
+  // no-op — the error banner stuck on screen forever.
+  const {
+    message: overlaySnack,
+    show: showOverlaySnack,
+    dismiss: dismissOverlaySnack,
+  } = useTimedSnackbar(4000);
+  useEffect(() => {
+    if (overlayError) showOverlaySnack(`Map overlay: ${overlayError}`);
+  }, [overlayError, showOverlaySnack]);
 
   // Tapping a live waypoint marker opens an editor for its note + photo.
   const [editWpId, setEditWpId] = useState<string | null>(null);
@@ -203,14 +222,16 @@ export function MapScreen() {
     updateWaypoint(editWpId, { photoUri: stored });
   };
 
-  // Live wall-clock timer, independent of GPS fix cadence.
+  // Live elapsed timer, independent of GPS fix cadence. Excludes paused wall
+  // time (pausedMs) so resuming continues from where the display froze instead
+  // of jumping forward by the whole pause.
   useEffect(() => {
     if (status !== 'recording' || startedAt === null) return;
-    const tick = () => setElapsedS(Math.floor((Date.now() - startedAt) / 1000));
+    const tick = () => setElapsedS(Math.floor((Date.now() - startedAt - pausedMs) / 1000));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status, startedAt]);
+  }, [status, startedAt, pausedMs]);
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {
@@ -243,26 +264,35 @@ export function MapScreen() {
   const WAYPOINT_BADGE_OFFSET = 45;
   const WAYPOINT_HIT_PX = 60;
   const onMapPress = useCallback(
-    (e: { nativeEvent?: { point?: [number, number] } }) => {
+    async (e: { nativeEvent?: { point?: [number, number] } }) => {
       const point = e.nativeEvent?.point;
-      const b = boundsRef.current;
-      if (!point || !b || mapSize.w === 0 || mapSize.h === 0 || waypoints.length === 0) return;
+      const map = mapRef.current;
+      if (!point || !map || waypoints.length === 0) return;
       const [px, py] = point;
-      const [w, s, east, n] = b;
       let best: (typeof waypoints)[number] | null = null;
       let bestD = WAYPOINT_HIT_PX;
-      for (const wp of waypoints) {
-        const wx = ((wp.longitude - w) / (east - w)) * mapSize.w;
-        const wy = ((n - wp.latitude) / (n - s)) * mapSize.h - WAYPOINT_BADGE_OFFSET;
-        const d = Math.hypot(px - wx, py - wy);
-        if (d < bestD) {
-          bestD = d;
-          best = wp;
+      try {
+        // Project each pin through the real camera — a linear mapping over the
+        // visible bounds is wrong the moment the map is rotated or pitched
+        // (taps would miss, or open a different waypoint's note).
+        const pts = await Promise.all(
+          waypoints.map((wp) => map.project([wp.longitude, wp.latitude])),
+        );
+        for (let i = 0; i < waypoints.length; i++) {
+          const p = pts[i];
+          if (!p) continue;
+          const d = Math.hypot(px - p[0], py - (p[1] - WAYPOINT_BADGE_OFFSET));
+          if (d < bestD) {
+            bestD = d;
+            best = waypoints[i] ?? null;
+          }
         }
+      } catch {
+        return; // projection unavailable mid-teardown — ignore the tap
       }
       if (best) openWaypoint(best.id, best.note ?? '');
     },
-    [waypoints, mapSize],
+    [waypoints],
   );
 
   // Screen point (px) → [lng, lat], synchronously, from the cached bounds.
@@ -278,15 +308,17 @@ export function MapScreen() {
     [mapSize],
   );
 
-  // Apply persisted offlineOnly flag and hydrate offline tile regions on mount.
-  useEffect(
-    () => {
-      setOfflineOnly(offlineOnly);
-      void useOfflineStore.getState().hydrate();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  // Apply the persisted offlineOnly flag once settings hydrate. Child effects
+  // run before RootLayout's, so a mount-only effect always saw the default
+  // (false) and a persisted "Locally downloaded only" was silently ignored
+  // until manually re-toggled. Re-runs on later changes to stay in sync.
+  useEffect(() => {
+    if (settingsHydrated) setOfflineOnly(offlineOnly);
+  }, [settingsHydrated, offlineOnly]);
+  // Hydrate offline tile regions on mount.
+  useEffect(() => {
+    void useOfflineStore.getState().hydrate();
+  }, []);
 
   const trailFeature = useMemo(() => toLineFeature(points), [points]);
 
@@ -328,6 +360,14 @@ export function MapScreen() {
   // current center and zoom.
   const resetNorth = () => {
     cameraRef.current?.setStop({ bearing: 0, duration: 300 });
+  };
+
+  // Recording and 3D don't mix (3D can crash mid-record), so drop out of 3D when
+  // a recording starts — the 3D button is disabled for the duration anyway.
+  const startRecording = () => {
+    setActionsOpen(false);
+    if (terrain3d) toggleTerrain3d();
+    start();
   };
 
   const handleStop = async () => {
@@ -385,7 +425,11 @@ export function MapScreen() {
               if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
             }}
             minZoom={1}
-            maxZoom={20}
+            // Cap at 18: the raster basemaps (OSM z19, Esri) have real tiles to
+            // here globally. Past this, sparse high-zoom tiles run out and MapLibre
+            // shows "Map data not yet available" / blank — so don't let the user
+            // zoom into that dead zone.
+            maxZoom={18}
           />
 
           {showPdfOverlay &&
@@ -408,7 +452,8 @@ export function MapScreen() {
                   type="line"
                   layout={{ 'line-cap': 'round', 'line-join': 'round' }}
                   paint={{
-                    'line-color': inspectId === t.id ? mapColors.userLocation : '#3B6FB0',
+                    'line-color':
+                      inspectId === t.id ? mapColors.trackOverlayActive : mapColors.trackOverlay,
                     'line-width': inspectId === t.id ? 6 : 4,
                     'line-opacity': 0.9,
                   }}
@@ -441,10 +486,10 @@ export function MapScreen() {
           {trailFeature && (
             <GeoJSONSource id="trail" data={trailFeature}>
               <Layer
-                id="trail-glow"
+                id="trail-casing"
                 type="line"
                 layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{ 'line-color': mapColors.trailGlow, 'line-width': 11 }}
+                paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
               />
               <Layer
                 id="trail-line"
@@ -522,17 +567,10 @@ export function MapScreen() {
             style={styles.controlFab}
           />
         )}
-        <FAB
-          icon="video-3d"
-          size="small"
-          variant={terrain3d ? 'primary' : 'surface'}
-          onPress={toggleTerrain3d}
-          // 3D is unstable while recording (it can crash) and is meaningless while
-          // selecting/downloading an offline region — disable it in those states.
-          disabled={status !== 'idle' || selecting || downloadProgress !== null}
-          style={styles.controlFab}
-          accessibilityLabel="3D relief"
-        />
+        {/* 3D relief temporarily pulled back — the live-3D experience isn't where
+            we want it yet. The Terrain3DLiveView code stays in the tree (gated off
+            via the `terrain3d` store flag, which nothing toggles now) so it's ready
+            to re-enable once the camera/gesture feel is dialed in. */}
         {!terrain3d && (
           <FAB
             icon="tray-arrow-down"
@@ -643,13 +681,6 @@ export function MapScreen() {
             <View style={styles.controlsRow} pointerEvents="box-none">
               <RecordControls
                 status={status}
-                // Recording and 3D don't mix (3D can crash mid-record), so drop out
-                // of 3D when a recording starts — the 3D button is already disabled
-                // for the duration.
-                onStart={() => {
-                  if (terrain3d) toggleTerrain3d();
-                  start();
-                }}
                 onPause={pause}
                 onResume={resume}
                 onStop={handleStop}
@@ -684,6 +715,29 @@ export function MapScreen() {
             onScrub={setMarkerAt}
           />
         </Surface>
+      )}
+
+      {/* "+" speed-dial: the recording entry point (and home for future map
+          actions). Hidden while a recording is under way (the active controls
+          take over) and while selecting an offline region. */}
+      {status === 'idle' && !selecting && (
+        <FAB.Group
+          open={actionsOpen}
+          visible
+          icon={actionsOpen ? 'close' : 'plus'}
+          color={theme.colors.onTertiary}
+          fabStyle={{ backgroundColor: theme.colors.tertiary }}
+          backdropColor="#00000066"
+          actions={[
+            {
+              icon: 'record-circle',
+              label: 'Record track',
+              onPress: startRecording,
+            },
+          ]}
+          onStateChange={({ open }) => setActionsOpen(open)}
+          accessibilityLabel="Map actions"
+        />
       )}
 
       <Portal>
@@ -744,11 +798,13 @@ export function MapScreen() {
       >
         {snack ?? ''}
       </Snackbar>
-      {overlayError && (
-        <Snackbar visible onDismiss={() => undefined} duration={4000}>
-          {`Map overlay: ${overlayError}`}
-        </Snackbar>
-      )}
+      <Snackbar
+        visible={overlaySnack !== null}
+        onDismiss={dismissOverlaySnack}
+        duration={Number.POSITIVE_INFINITY}
+      >
+        {overlaySnack ?? ''}
+      </Snackbar>
       {downloadProgress !== null && (
         <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
           {`Downloading ${downloadProgress.label}… ${downloadProgress.pct}%`}

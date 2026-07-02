@@ -91,7 +91,12 @@ interface LibraryState extends LibraryIndex {
   activeMap: () => MapDocument | null;
 }
 
-function persist(state: LibraryIndex): void {
+function persist(state: LibraryIndex & { hydrated: boolean }): void {
+  // Never write before hydration: a mutation that lands mid-hydrate (e.g. a
+  // cold-start "Open with" import) would persist an index built from the empty
+  // initial state and wipe the on-disk library. Callers that can run that early
+  // must `await hydrate()` first; this guard is the backstop.
+  if (!state.hydrated) return;
   storage.writeIndex({
     maps: state.maps,
     tracks: state.tracks,
@@ -101,6 +106,10 @@ function persist(state: LibraryIndex): void {
   } satisfies LibraryIndex);
 }
 
+// Single-flight hydration: concurrent callers (RootLayout's effect and a
+// cold-start "Open with" intent) await the same read instead of racing it.
+let hydration: Promise<void> | null = null;
+
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   maps: [],
   tracks: [],
@@ -109,21 +118,25 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activeMapId: null,
   hydrated: false,
 
-  hydrate: async () => {
-    storage.ensureStorage();
-    const index = await storage.readIndex<LibraryIndex>();
-    if (index) {
-      set({
-        maps: (index.maps ?? []).map(migrateDoc),
-        tracks: index.tracks ?? [],
-        bundles: index.bundles ?? [],
-        folders: index.folders ?? [],
-        activeMapId: index.activeMapId ?? null,
-        hydrated: true,
-      });
-    } else {
-      set({ hydrated: true });
-    }
+  hydrate: () => {
+    if (get().hydrated) return Promise.resolve();
+    hydration ??= (async () => {
+      storage.ensureStorage();
+      const index = await storage.readIndex<LibraryIndex>();
+      if (index) {
+        set({
+          maps: (index.maps ?? []).map(migrateDoc),
+          tracks: index.tracks ?? [],
+          bundles: index.bundles ?? [],
+          folders: index.folders ?? [],
+          activeMapId: index.activeMapId ?? null,
+          hydrated: true,
+        });
+      } else {
+        set({ hydrated: true });
+      }
+    })();
+    return hydration;
   },
 
   addMap: (doc) =>

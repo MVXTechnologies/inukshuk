@@ -6,14 +6,17 @@ appId: com.inukshuk.app
 - launchApp:
     permissions:
       location: allow
-- assertVisible: 'Record'
+# The map screen's record entry point is now a "+" speed-dial (not a "Record"
+# button); its accessibility label proves the map screen mounted.
+- assertVisible: 'Map actions'
 - tapOn: 'Library'
 - assertVisible: 'Recorded trails'
 - tapOn: 'Settings'
 - assertVisible: 'Keep screen awake'
-# The Settings screen has its own "Map" section header, which Maestro taps
-# instead of the tab bar (navigation silently doesn't happen). Hop through
-# Library — which has no exact-"Map" text — before returning to the Map tab.
+# Settings has its own "Map" section header that Maestro would tap instead of
+# the tab bar; hop through Library (no exact-"Map" text) before returning.
 - tapOn: 'Library'
 - tapOn: 'Map'
-- assertVisible: 'Record'
+# The speed-dial's accessibility label — proves the Map screen itself mounted
+# (asserting 'Map' would match the tab label even if the screen failed).
+- assertVisible: 'Map actions'

@@ -1,6 +1,8 @@
 import { zlibSync } from 'fflate';
 import { parseGeoPdf } from './parseGeoPdf';
-import { latin1Bytes } from './testUtils';
+import { PdfDocument } from './pdfReader';
+import { type PdfStream, isStream } from './types';
+import { buildClassicPdf, latin1Bytes } from './testUtils';
 
 /**
  * Directly exercise the low-level reader paths that the higher-level tests do
@@ -156,5 +158,57 @@ describe('pdfReader — PNG-predicted xref stream', () => {
     expect(res.pageCount).toBe(1);
     expect(res.georeferences).toHaveLength(1);
     expect(res.georeferences[0]!.source).toBe('lgidict');
+  });
+});
+
+describe('pdfReader — hostile input hardening', () => {
+  it('does not freeze on a classic xref with an absurd subsection count', () => {
+    // A crafted "0 9999999999" subsection used to spin the entry loop ~1e10
+    // times on the JS thread. The clamp bounds it by the actual file size.
+    const head = '%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n';
+    const pdf =
+      head +
+      `xref\n0 9999999999\ntrailer\n<< /Size 2 /Root 1 0 R >>\nstartxref\n${head.length}\n%%EOF`;
+    const res = parseGeoPdf(latin1Bytes(pdf));
+    expect(res.pageCount).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not freeze on an xref stream with /W [0 0 0]', () => {
+    // rowLen 0 used to advance the row cursor by 0 bytes forever.
+    const head = '%PDF-1.7\n';
+    const obj =
+      '1 0 obj\n<< /Type /XRef /W [0 0 0] /Size 4 /Length 4 >>\nstream\nAAAA\nendstream\nendobj\n';
+    const pdf = head + obj + `startxref\n${head.length}\n%%EOF`;
+    const doc = PdfDocument.parse(latin1Bytes(pdf));
+    expect(doc.warnings.join('\n')).toContain('invalid /W');
+  });
+
+  it('rejects a FlateDecode decompression bomb instead of inflating it', () => {
+    // A few-KB zlib stream that inflates to 80 MB must throw at the 64 MB cap,
+    // not OOM the app.
+    const bomb = zlibSync(new Uint8Array(80 * 1024 * 1024));
+    let body = '';
+    for (let i = 0; i < bomb.length; i++) body += String.fromCharCode(bomb[i]!);
+    const doc = PdfDocument.parse(
+      buildClassicPdf(
+        [`<< /Length ${bomb.length} /Filter /FlateDecode >>\nstream\n${body}\nendstream`],
+        1,
+      ),
+    );
+    const stream = doc.getObject(1);
+    expect(isStream(stream)).toBe(true);
+    expect(() => doc.decodeStream(stream as PdfStream)).toThrow(/size cap/);
+  });
+
+  it('rejects an implausibly long /Filter chain (stacked-bomb multiplier)', () => {
+    const doc = PdfDocument.parse(
+      buildClassicPdf(
+        ['<< /Length 4 /Filter [/Fl /Fl /Fl /Fl /Fl] >>\nstream\nAAAA\nendstream'],
+        1,
+      ),
+    );
+    const stream = doc.getObject(1);
+    expect(isStream(stream)).toBe(true);
+    expect(() => doc.decodeStream(stream as PdfStream)).toThrow(/filter chain/);
   });
 });

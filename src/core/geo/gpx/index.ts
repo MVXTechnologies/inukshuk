@@ -210,11 +210,15 @@ export function parseGpx(xml: string): GpxDocument {
       }
     }
   }
-  for (const rte of asArray<AnyRecord>(gpx['rte'])) {
-    if (points.length > 0) break;
-    for (const pt of asArray<AnyRecord>(rte['rtept'])) {
-      const parsedPt = parsePoint(pt);
-      if (parsedPt) points.push(parsedPt);
+  // Routes are a fallback when there are no track points — but the check must
+  // stay OUTSIDE the loop: re-testing it per <rte> made the first non-empty
+  // route trip the guard, silently dropping every subsequent route.
+  if (points.length === 0) {
+    for (const rte of asArray<AnyRecord>(gpx['rte'])) {
+      for (const pt of asArray<AnyRecord>(rte['rtept'])) {
+        const parsedPt = parsePoint(pt);
+        if (parsedPt) points.push(parsedPt);
+      }
     }
   }
   const hasTrackOrRoutePoints = points.length > 0;

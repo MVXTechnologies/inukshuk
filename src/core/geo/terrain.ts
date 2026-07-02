@@ -49,6 +49,25 @@ export function pickTerrainZoom(
   return zMin;
 }
 
+/**
+ * Crop a tile range around its centre so neither side exceeds `maxTilesPerSide`.
+ *
+ * {@link pickTerrainZoom} bottoms out at `zMin` for very large boxes (e.g. a
+ * 2000 km imported tour), where the range can still span dozens of tiles per
+ * side — hundreds of downloads and a heightmap/texture allocation big enough to
+ * OOM the app. Consumers must clamp the range they actually fetch.
+ */
+export function clampTileRange(r: TileRange, maxTilesPerSide: number): TileRange {
+  const crop = (min: number, max: number): [number, number] => {
+    if (max - min + 1 <= maxTilesPerSide) return [min, max];
+    const lo = Math.floor((min + max) / 2) - Math.floor((maxTilesPerSide - 1) / 2);
+    return [lo, lo + maxTilesPerSide - 1];
+  };
+  const [minX, maxX] = crop(r.minX, r.maxX);
+  const [minY, maxY] = crop(r.minY, r.maxY);
+  return { z: r.z, minX, maxX, minY, maxY };
+}
+
 /** Lng/lat of a tile's top-left corner (inverse of {@link lngLatToTile}). */
 export function tileToLngLat(x: number, y: number, z: number): { lng: number; lat: number } {
   const n = 2 ** z;

@@ -5,7 +5,6 @@ import { InukshukIcon } from './InukshukIcon';
 
 interface RecordControlsProps {
   status: RecorderStatus;
-  onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -13,13 +12,13 @@ interface RecordControlsProps {
 }
 
 /**
- * Primary recording control: a split pill whose left half starts/pauses/resumes
+ * Active-recording controls: a split pill whose left half pauses/resumes the
  * recording and whose right half drops an inukshuk waypoint (active only while
- * recording). A stop button sits alongside once a recording is under way.
+ * recording), with a stop button alongside. The *start* entry point lives in the
+ * map's "+" speed-dial (MapScreen), so this renders nothing while idle.
  */
 export function RecordControls({
   status,
-  onStart,
   onPause,
   onResume,
   onStop,
@@ -28,20 +27,8 @@ export function RecordControls({
   const theme = useTheme();
   const recording = status === 'recording';
 
-  // Idle: just a compact Record button — the waypoint half only matters once a
-  // recording is under way.
-  if (status === 'idle') {
-    return (
-      <FAB
-        icon="record-circle"
-        label="Record"
-        size="small"
-        onPress={onStart}
-        color={theme.colors.onTertiary}
-        style={{ backgroundColor: theme.colors.tertiary }}
-      />
-    );
-  }
+  // Idle has no inline controls — starting is handled by the map's "+" FAB.
+  if (status === 'idle') return null;
 
   const left = recording
     ? { icon: 'pause', label: 'Pause', onPress: onPause, color: theme.colors.tertiary }

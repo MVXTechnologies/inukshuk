@@ -18,7 +18,7 @@ export function Trail2DView({
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const basemap = useMapStore((s) => s.basemap);
-  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap), [tileUrl, basemap]);
+  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap, true), [tileUrl, basemap]);
   const cameraRef = useRef<CameraRef>(null);
 
   const lngLats = useMemo(

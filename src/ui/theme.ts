@@ -72,10 +72,17 @@ export const darkTheme: MD3Theme = {
   },
 };
 
+// Warm orange-red route line, in the AllTrails/Gaia idiom — reads clearly over a
+// muted topographic basemap where the brand slate-blue washed out. The blue
+// (RIVER_DEEP) still leads the app chrome; orange is reserved for "your path".
+const ROUTE_WARM = '#E8612C';
+
 /** Semantic colours used by the map HUD that aren't part of MD3. */
 export const mapColors = {
-  trail: RIVER_DEEP, // recorded GPX route — slate blue, like the logo's river
-  trailGlow: 'rgba(62, 123, 160, 0.35)',
-  userLocation: FOLIAGE_DEEP,
+  trail: ROUTE_WARM, // recorded GPX route — warm orange-red
+  trailCasing: 'rgba(38, 28, 18, 0.5)', // dark casing under the route, for legibility on topo
+  trackOverlay: '#C2410C', // saved-track overlays — burnt orange
+  trackOverlayActive: '#EA580C', // the inspected track — brighter orange
+  userLocation: FOLIAGE_DEEP, // live position dot / scrub marker — olive, stands apart
   pdfOverlayBorder: INUKSHUK,
 };

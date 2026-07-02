@@ -37,17 +37,38 @@ function buildFromGpxText(
   return { track, fileUri, notes };
 }
 
+/**
+ * The file is copied into permanent storage BEFORE it can be validated (we need
+ * its text to parse). If the parse then throws — the picker accepts `*\/*`, so
+ * any photo or PDF gets this far — delete the copy, or it is orphaned in the
+ * tracks dir forever.
+ */
+async function buildOrCleanUp(
+  text: string,
+  id: string,
+  fileUri: string,
+  fallbackName: string,
+): Promise<ImportedTrack> {
+  try {
+    return buildFromGpxText(text, id, fileUri, fallbackName);
+  } catch (err) {
+    storage.deleteFileAt(fileUri);
+    throw err;
+  }
+}
+
 /** Copy + parse one picked GPX asset into a Track (throws on failure / no points). */
 async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<ImportedTrack> {
   const id = storage.newId();
   const fileUri = await storage.importGpx(asset.uri, id);
-  const text = await storage.readFileText(fileUri);
-  return buildFromGpxText(
-    text,
-    id,
-    fileUri,
-    asset.name?.replace(/\.gpx$/i, '') ?? 'Imported trail',
-  );
+  let text: string;
+  try {
+    text = await storage.readFileText(fileUri);
+  } catch (err) {
+    storage.deleteFileAt(fileUri);
+    throw err;
+  }
+  return buildOrCleanUp(text, id, fileUri, asset.name?.replace(/\.gpx$/i, '') ?? 'Imported trail');
 }
 
 /** Import a GPX from an arbitrary opened URI (e.g. an Android "Open with" intent). */
@@ -55,7 +76,7 @@ export async function importGpxFromUri(uri: string, fallbackName: string): Promi
   const id = storage.newId();
   const text = await storage.readFileText(uri);
   const fileUri = storage.writeTrackGpx(id, text);
-  return buildFromGpxText(text, id, fileUri, fallbackName);
+  return buildOrCleanUp(text, id, fileUri, fallbackName);
 }
 
 /**

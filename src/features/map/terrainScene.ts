@@ -32,6 +32,12 @@ export interface TerrainBuild {
   trailRadius: number;
   /** Map a lng/lat to its position on the terrain surface (for markers). */
   project: (lng: number, lat: number) => THREE.Vector3;
+  /**
+   * Inverse of {@link project} on the ground plane: a scene x/z back to lng/lat.
+   * Used to find which geographic point the camera is looking at while panning,
+   * so the live view can re-anchor terrain around it.
+   */
+  unproject: (x: number, z: number) => { lng: number; lat: number };
 }
 
 /** RGBA texture to drape over the terrain (e.g. stitched OSM tiles). */
@@ -50,6 +56,7 @@ export function buildTerrain(
   hm: Heightmap,
   points: readonly TrackPoint[],
   texture?: TerrainTexture,
+  maxAnisotropy = 1,
 ): TerrainBuild {
   const { data, grid, bbox, minH, maxH } = hm;
   const midLat = (bbox.minLat + bbox.maxLat) / 2;
@@ -69,6 +76,15 @@ export function buildTerrain(
     const fyN = (bbox.maxLat - lat) / (bbox.maxLat - bbox.minLat || 1);
     const h = sampleGridBilinear(data, grid, grid, fx, fyN);
     return new THREE.Vector3((fx - 0.5) * spanXn, yOf(h) + 0.02, (fyN - 0.5) * spanZn);
+  };
+
+  const unproject = (x: number, z: number): { lng: number; lat: number } => {
+    const fx = x / (spanXn || 1) + 0.5;
+    const fyN = z / (spanZn || 1) + 0.5;
+    return {
+      lng: bbox.minLng + fx * (bbox.maxLng - bbox.minLng),
+      lat: bbox.maxLat - fyN * (bbox.maxLat - bbox.minLat),
+    };
   };
 
   const positions = new Float32Array(grid * grid * 3);
@@ -115,6 +131,14 @@ export function buildTerrain(
       texture.height,
       THREE.RGBAFormat,
     );
+    // DataTexture defaults are point-sampled (NearestFilter), linear colour space
+    // and anisotropy 1 — which makes the drape look blocky, washed-out and smeared
+    // at the grazing angles a tilted terrain view is dominated by. Fix all three:
+    // bilinear filtering, sRGB decode (tile bytes are sRGB), and max anisotropy.
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = maxAnisotropy;
     tex.needsUpdate = true;
     material = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
   } else {
@@ -157,5 +181,6 @@ export function buildTerrain(
     radius: slabRadius,
     trailRadius,
     project,
+    unproject,
   };
 }

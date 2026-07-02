@@ -1,6 +1,8 @@
 import {
+  clampTileRange,
   pickTerrainZoom,
   rangeBbox,
+  sampleGridBilinear,
   terrariumToMeters,
   tileRangeForBbox,
   type TileRange,
@@ -63,7 +65,11 @@ export async function fetchHeightmap(bounds: BoundingBox, grid = 256): Promise<H
   // Allow more DEM tiles per side → a higher zoom level → finer elevation detail
   // (and a sharper basemap drape, which reuses the same tile range/zoom).
   const z = pickTerrainZoom(bounds, 6);
-  const range = tileRangeForBbox(bounds, z);
+  // pickTerrainZoom bottoms out at its zMin for very large boxes (a long
+  // imported tour), where the range can still span dozens of tiles per side —
+  // hundreds of downloads and an OOM-sized heightmap. Enforce the same budget
+  // on the range we actually fetch, cropped around the box centre.
+  const range = clampTileRange(tileRangeForBbox(bounds, z), 6);
   const fullW = (range.maxX - range.minX + 1) * TILE;
   const fullH = (range.maxY - range.minY + 1) * TILE;
   const full = new Float32Array(fullW * fullH);
@@ -97,11 +103,12 @@ export async function fetchHeightmap(bounds: BoundingBox, grid = 256): Promise<H
   const data = new Float32Array(grid * grid);
   let minH = Infinity;
   let maxH = -Infinity;
+  // Bilinearly resample the full-resolution DEM down to the mesh grid. Nearest
+  // sampling here (Math.round) aliased and terraced the relief, throwing away real
+  // shape the tiles carried; bilinear recovers smooth slopes for the same cost.
   for (let gy = 0; gy < grid; gy++) {
     for (let gx = 0; gx < grid; gx++) {
-      const sx = Math.min(fullW - 1, Math.round((gx / (grid - 1)) * (fullW - 1)));
-      const sy = Math.min(fullH - 1, Math.round((gy / (grid - 1)) * (fullH - 1)));
-      const h = full[sy * fullW + sx]!;
+      const h = sampleGridBilinear(full, fullW, fullH, gx / (grid - 1), gy / (grid - 1));
       data[gy * grid + gx] = h;
       if (h < minH) minH = h;
       if (h > maxH) maxH = h;

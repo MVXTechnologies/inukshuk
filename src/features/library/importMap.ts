@@ -12,8 +12,16 @@ export type BulkImportResult =
 async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<MapDocument> {
   const id = storage.newId();
   const fileUri = await storage.importPdf(asset.uri, id);
-  const bytes = await storage.readFileBytes(fileUri);
-  const parsed = parseGeoPdf(bytes);
+  let parsed: ReturnType<typeof parseGeoPdf>;
+  try {
+    const bytes = await storage.readFileBytes(fileUri);
+    parsed = parseGeoPdf(bytes);
+  } catch (err) {
+    // The copy landed in permanent storage before it could be read/parsed;
+    // delete it or a failed import orphans the file there forever.
+    storage.deleteFileAt(fileUri);
+    throw err;
+  }
   return {
     id,
     name: asset.name?.replace(/\.pdf$/i, '') ?? 'Map',

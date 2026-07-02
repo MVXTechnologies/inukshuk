@@ -60,6 +60,7 @@ async function buildGroupFor(
   hm: Heightmap,
   pts: readonly TrackPoint[],
   bm: BasemapChoice,
+  maxAnisotropy = 1,
 ): Promise<TerrainBuild> {
   let texture;
   if (bm !== 'relief') {
@@ -69,7 +70,7 @@ async function buildGroupFor(
       texture = undefined; // fall back to hypsometric relief
     }
   }
-  return buildTerrain(hm, pts, texture);
+  return buildTerrain(hm, pts, texture, maxAnisotropy);
 }
 
 function disposeGroup(g: THREE.Group): void {
@@ -131,12 +132,24 @@ export function Trail3DGLScreen({ trackId }: Props) {
   });
   const gest = useRef({ x: 0, y: 0, cx: 0, cy: 0, dist: 0, single: true });
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
+  const maxAnisoRef = useRef(1);
   const scrubRef = useRef<TrackPointAt | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
   const basemapRef = useRef<'map' | 'satellite' | 'relief'>('map');
+  // GL "generation": bumped on every new context and on unmount. The render
+  // loop re-queues itself only while its generation is current — without this,
+  // every 2D↔3D toggle (which remounts the GLView) stacked another permanent
+  // 60fps loop rendering a retained multi-MB scene against a dead GL context.
+  const glGenRef = useRef(0);
+  useEffect(
+    () => () => {
+      glGenRef.current++;
+    },
+    [],
+  );
 
   const pan = useMemo(
     () =>
@@ -246,9 +259,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
   );
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
+    const gen = ++glGenRef.current;
     try {
       const gpx = fileUri ? await storage.readFileText(fileUri) : '';
       const pts = gpx ? parseGpx(gpx).points : [];
+      if (gen !== glGenRef.current) return; // superseded while loading
       setPoints(pts);
       if (!bbox) {
         setStatus('error');
@@ -257,23 +272,36 @@ export function Trail3DGLScreen({ trackId }: Props) {
       // Pad the trail's box so the terrain extends past the trace and fills the
       // viewport, instead of rendering as a tight floating slab.
       const hm = await fetchHeightmap(padBbox(bbox));
+      if (gen !== glGenRef.current) return;
       hmRef.current = hm;
       ptsRef.current = pts;
+
+      // Renderer first, so the drape texture can use the GL context's max
+      // anisotropy and stay sharp at grazing angles.
+      const renderer = new Renderer({ gl });
+      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
+      renderer.setClearColor(0xcfe0ec, 1);
+      maxAnisoRef.current = renderer.capabilities.getMaxAnisotropy();
+
       const { group, center, trailRadius, project } = await buildGroupFor(
         hm,
         pts,
         basemapRef.current,
+        maxAnisoRef.current,
       );
+      if (gen !== glGenRef.current) {
+        disposeGroup(group);
+        return;
+      }
       projectRef.current = project;
 
-      const renderer = new Renderer({ gl });
-      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-      renderer.setClearColor(0xcfe0ec, 1);
       const scene = new THREE.Scene();
       sceneRef.current = scene;
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 0.9));
-      const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-      sun.position.set(1.5, 2.5, 1);
+      // Warm key light from a low azimuth for stronger relief, plus a soft sky/
+      // ground hemisphere fill (matches the live 3D map).
+      scene.add(new THREE.HemisphereLight(0xfff4e6, 0x55603f, 0.85));
+      const sun = new THREE.DirectionalLight(0xfff2e0, 1.35);
+      sun.position.set(2.2, 1.8, 1.0);
       scene.add(sun);
       scene.add(group);
       groupRef.current = group;
@@ -309,6 +337,17 @@ export function Trail3DGLScreen({ trackId }: Props) {
       setStatus('ready');
 
       const render = () => {
+        if (gen !== glGenRef.current) {
+          // Superseded (unmount or GLView remount): stop the loop and free the
+          // scene's GPU resources exactly once.
+          disposeGroup(scene as unknown as THREE.Group);
+          renderer.dispose();
+          if (sceneRef.current === scene) {
+            sceneRef.current = null;
+            groupRef.current = null;
+          }
+          return;
+        }
         requestAnimationFrame(render);
         const { theta, phi, radius: r, center: c } = orbit.current;
         camera.position.set(
@@ -329,6 +368,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
       };
       render();
     } catch (e) {
+      if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
       setErrMsg(e instanceof Error ? e.message : String(e));
       setStatus('error');
     }
@@ -351,7 +391,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     basemapRef.current = bm;
     setSwitching(true);
     try {
-      const built = await buildGroupFor(hm, ptsRef.current, bm);
+      const built = await buildGroupFor(hm, ptsRef.current, bm, maxAnisoRef.current);
       if (groupRef.current) {
         scene.remove(groupRef.current);
         disposeGroup(groupRef.current);

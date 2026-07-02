@@ -26,7 +26,8 @@ interface Props {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-// Half-extent (metres) of terrain built around the anchor — ~4 km of context.
+// Full span (metres) of the terrain box built around the anchor (passed as the
+// min-span to padBbox) — ~4 km of context, i.e. ~2 km in each direction.
 const BOX_M = 4000;
 // Re-anchor (rebuild around the new position) once the user drifts this far from
 // the current box centre, so terrain always extends well ahead of them.
@@ -54,7 +55,11 @@ interface Built extends TerrainBuild {
 }
 
 /** Fetch the DEM + basemap for a box around `anchor` and build a terrain group. */
-async function fetchAndBuild(anchor: LatLng, basemap: MapBasemap): Promise<Built> {
+async function fetchAndBuild(
+  anchor: LatLng,
+  basemap: MapBasemap,
+  maxAnisotropy: number,
+): Promise<Built> {
   const hm = await fetchHeightmap(padBbox(pointBox(anchor), 0, BOX_M));
   let texture;
   if (basemap !== 'relief') {
@@ -64,7 +69,7 @@ async function fetchAndBuild(anchor: LatLng, basemap: MapBasemap): Promise<Built
       texture = undefined; // fall back to hypsometric relief
     }
   }
-  return { ...buildTerrain(hm, [], texture), bbox: hm.bbox };
+  return { ...buildTerrain(hm, [], texture, maxAnisotropy), bbox: hm.bbox };
 }
 
 function disposeGroup(g: THREE.Group): void {
@@ -190,14 +195,31 @@ export function Terrain3DLiveView({
     basemapRef.current = basemap;
   }, [basemap]);
 
-  const orbit = useRef({ theta: 0.6, phi: 1.12, radius: 4, center: new THREE.Vector3() });
-  const gest = useRef({ x: 0, y: 0, cx: 0, cy: 0, dist: 0, single: true });
+  const orbit = useRef({ theta: 0.6, phi: 1.05, radius: 4, center: new THREE.Vector3() });
+  const gest = useRef({ x: 0, y: 0, cy: 0, dist: 0, ang: 0, single: true });
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
+  const unprojectRef = useRef<((x: number, z: number) => { lng: number; lat: number }) | null>(
+    null,
+  );
   const bboxRef = useRef<BoundingBox | null>(null);
   const anchorRef = useRef<LatLng | null>(null);
+  // Max anisotropy the GL context supports, read once the renderer exists; passed
+  // into every terrain build so the drape texture stays sharp at grazing angles.
+  const maxAnisoRef = useRef(1);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   const reanchoringRef = useRef(false);
+  // GL "generation": bumped on every new context and on unmount. The render
+  // loop re-queues itself only while its generation is current — the GLView
+  // remounts on every basemap change / recenter (see its `key`), and without
+  // this each remount stacked another permanent 60fps loop and retained scene.
+  const glGenRef = useRef(0);
+  useEffect(
+    () => () => {
+      glGenRef.current++;
+    },
+    [],
+  );
   const overlaysRef = useRef<THREE.Group | null>(null);
   const trailsRef = useRef(trails);
   const recordPointsRef = useRef(recordPoints);
@@ -241,6 +263,51 @@ export function Terrain3DLiveView({
     overlaysRef.current = g;
   };
 
+  // Rebuild the terrain around a new anchor (lat/lng) and swap it in without a GL
+  // remount — used both by follow-mode GPS drift (M3) and by free-look panning
+  // toward the box edge. Only the newly-needed tiles are fetched (the cache serves
+  // the overlap). Re-maps the look-at point into the fresh, re-normalised frame so
+  // the view stays continuous. Reads refs, so it stays current without recreation.
+  const rebuildAround = (target: LatLng) => {
+    const scene = sceneRef.current;
+    if (!scene || reanchoringRef.current) return;
+    reanchoringRef.current = true;
+    setStreaming(true);
+    // Capture the projection in effect now: the fetch is async and the user may
+    // keep panning during it, so afterwards we re-map wherever the camera is
+    // CURRENTLY looking into the new frame — not the stale `target` from when the
+    // threshold was crossed (that would snap the camera back, undoing the pan).
+    const prevUnproject = unprojectRef.current;
+    (async () => {
+      try {
+        const built = await fetchAndBuild(target, basemapRef.current, maxAnisoRef.current);
+        const old = groupRef.current;
+        scene.add(built.group);
+        if (old) {
+          scene.remove(old);
+          disposeGroup(old);
+        }
+        groupRef.current = built.group;
+        projectRef.current = built.project;
+        unprojectRef.current = built.unproject;
+        bboxRef.current = built.bbox;
+        anchorRef.current = target;
+        // Keep the camera on the ground point it's looking at right now, mapped
+        // into the freshly re-normalised frame — so a pan in flight isn't undone.
+        const look = prevUnproject
+          ? prevUnproject(orbit.current.center.x, orbit.current.center.z)
+          : { lng: target.longitude, lat: target.latitude };
+        orbit.current.center.copy(built.project(look.lng, look.lat));
+        rebuildOverlays(); // re-drape against the new projection
+      } catch {
+        /* keep the existing terrain on failure */
+      } finally {
+        reanchoringRef.current = false;
+        setStreaming(false);
+      }
+    })();
+  };
+
   // Keep the data refs fresh and re-drape whenever overlays change.
   useEffect(() => {
     trailsRef.current = trails;
@@ -257,29 +324,48 @@ export function Terrain3DLiveView({
         onStartShouldSetPanResponderCapture: () => true,
         onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: (_e, g) => {
-          gest.current = { x: g.x0, y: g.y0, cx: 0, cy: 0, dist: 0, single: true };
+          gest.current = { x: g.x0, y: g.y0, cy: 0, dist: 0, ang: 0, single: true };
         },
         onPanResponderMove: (e, g) => {
           const t = e.nativeEvent.touches;
           const o = orbit.current;
           const gp = gest.current;
           if (t.length >= 2 && t[0] && t[1]) {
-            const dist = Math.hypot(t[0].pageX - t[1].pageX, t[0].pageY - t[1].pageY);
-            const cx = (t[0].pageX + t[1].pageX) / 2;
+            // Two fingers, the map-app standard: pinch to zoom, *twist* to rotate
+            // the bearing, drag up/down to tilt. (Twist = the angle between the two
+            // fingers — far more intuitive than the old horizontal-centroid rotate.)
+            const fx = t[1].pageX - t[0].pageX;
+            const fy = t[1].pageY - t[0].pageY;
+            const dist = Math.hypot(fx, fy);
+            const ang = Math.atan2(fy, fx);
             const cy = (t[0].pageY + t[1].pageY) / 2;
             if (gp.dist > 0) {
               o.radius = clamp(o.radius * (gp.dist / dist), 0.8, 9);
-              o.theta -= (cx - gp.cx) * 0.006;
-              o.phi = clamp(o.phi - (cy - gp.cy) * 0.006, 0.12, 1.45);
+              let dAng = ang - gp.ang;
+              if (dAng > Math.PI) dAng -= 2 * Math.PI;
+              else if (dAng < -Math.PI) dAng += 2 * Math.PI;
+              o.theta -= dAng;
+              o.phi = clamp(o.phi - (cy - gp.cy) * 0.005, 0.12, 1.25);
             }
             gp.dist = dist;
-            gp.cx = cx;
+            gp.ang = ang;
             gp.cy = cy;
             gp.single = false;
           } else {
+            // One finger: drag to pan the look-at point across the ground, like
+            // dragging the 2D map. Translating into world space depends on the
+            // current azimuth so "up" is always away from the camera. Panning means
+            // free-look, so it drops follow mode (the camera stops chasing the user).
             if (gp.single) {
-              o.theta -= (g.moveX - gp.x) * 0.008;
-              o.phi = clamp(o.phi - (g.moveY - gp.y) * 0.006, 0.12, 1.45);
+              if (followRef.current) {
+                followRef.current = false;
+                setFollow(false);
+              }
+              const s = o.radius * 0.0016;
+              const dx = (g.moveX - gp.x) * s;
+              const dy = (g.moveY - gp.y) * s;
+              o.center.x += -dx * Math.cos(o.theta) + dy * Math.sin(o.theta);
+              o.center.z += dx * Math.sin(o.theta) + dy * Math.cos(o.theta);
             }
             gp.x = g.moveX;
             gp.y = g.moveY;
@@ -292,6 +378,7 @@ export function Terrain3DLiveView({
   );
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
+    const gen = ++glGenRef.current;
     const anchor = locRef.current;
     if (!anchor) {
       setStatus('error');
@@ -299,29 +386,41 @@ export function Terrain3DLiveView({
     }
     setStatus('loading');
     try {
+      // Create the renderer first so we can read the GL context's max anisotropy
+      // and build the drape texture sharp from the very first frame.
+      const renderer = new Renderer({ gl });
+      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
+      maxAnisoRef.current = renderer.capabilities.getMaxAnisotropy();
+      const SKY = 0xcfe0ec;
+      renderer.setClearColor(SKY, 1);
+
       const {
         group,
         center: gc,
         radius,
         project,
+        unproject,
         bbox,
-      } = await fetchAndBuild(anchor, basemapRef.current);
+      } = await fetchAndBuild(anchor, basemapRef.current, maxAnisoRef.current);
+      if (gen !== glGenRef.current) {
+        disposeGroup(group);
+        return; // superseded while loading (remount/unmount)
+      }
       projectRef.current = project;
+      unprojectRef.current = unproject;
       bboxRef.current = bbox;
       anchorRef.current = anchor;
 
-      const renderer = new Renderer({ gl });
-      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-      const SKY = 0xcfe0ec;
-      renderer.setClearColor(SKY, 1);
       const scene = new THREE.Scene();
       sceneRef.current = scene;
       // Fade the terrain into the sky at distance so its edges never read as a
       // floating slab — the mesh appears to extend to a hazy horizon, filling view.
       scene.fog = new THREE.Fog(SKY, radius * 0.7, radius * 2.0);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 0.9));
-      const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-      sun.position.set(1.5, 2.5, 1);
+      // Warm key light from a low azimuth for stronger relief, plus a soft sky/
+      // ground hemisphere fill so shadowed slopes keep some colour.
+      scene.add(new THREE.HemisphereLight(0xfff4e6, 0x55603f, 0.85));
+      const sun = new THREE.DirectionalLight(0xfff2e0, 1.35);
+      sun.position.set(2.2, 1.8, 1.0);
       scene.add(sun);
       scene.add(group);
       groupRef.current = group;
@@ -348,13 +447,29 @@ export function Terrain3DLiveView({
         0.01,
         100,
       );
-      // Closer + lower angle so terrain fills the frame down to a fogged horizon.
+      // Immersed, low oblique camera so terrain fills the frame foreground-to-
+      // horizon (OutMap/Gaia look). `radius` here is the slab's full-span metric
+      // (~2.3); the terrain only extends ~1 unit from centre, so we must sit well
+      // inside that — a small radius — or the mesh reads as a distant floating slab.
       orbit.current.center = gc;
-      orbit.current.radius = clamp(radius * 1.25, 0.8, 9);
+      orbit.current.radius = clamp(radius * 0.6, 0.7, 9);
+      orbit.current.phi = 1.05;
       setStatus('ready');
 
       const target = new THREE.Vector3();
       const render = () => {
+        if (gen !== glGenRef.current) {
+          // Superseded (unmount or GLView remount): stop the loop and free the
+          // scene's GPU resources exactly once.
+          disposeGroup(scene as unknown as THREE.Group);
+          renderer.dispose();
+          if (sceneRef.current === scene) {
+            sceneRef.current = null;
+            groupRef.current = null;
+            overlaysRef.current = null;
+          }
+          return;
+        }
         requestAnimationFrame(render);
         const o = orbit.current;
         // Project the live position onto the (possibly re-anchored) surface.
@@ -376,6 +491,18 @@ export function Terrain3DLiveView({
         } else {
           marker.visible = false;
         }
+        // Free-look: when not following, stream fresh terrain around wherever the
+        // camera is looking, so panning never slides off the loaded slab into fog.
+        if (
+          !followRef.current &&
+          unprojectRef.current &&
+          anchorRef.current &&
+          !reanchoringRef.current
+        ) {
+          const look = unprojectRef.current(o.center.x, o.center.z);
+          const at = { latitude: look.lat, longitude: look.lng };
+          if (metresBetween(anchorRef.current, at) > REANCHOR_M) rebuildAround(at);
+        }
         const c = o.center;
         camera.position.set(
           c.x + o.radius * Math.sin(o.phi) * Math.sin(o.theta),
@@ -388,49 +515,22 @@ export function Terrain3DLiveView({
       };
       render();
     } catch {
+      if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
       setStatus('error');
     }
   };
 
   // M3: when following and the user has drifted far from the current box centre,
-  // rebuild the terrain around their new position and swap it in (no GL remount).
+  // rebuild the terrain around their new position (free-look panning re-anchors
+  // the same way from the render loop, around the camera's look-at point).
   useEffect(() => {
     if (!follow || !center) return;
     const anchor = anchorRef.current;
-    const scene = sceneRef.current;
-    if (!anchor || !scene || reanchoringRef.current) return;
+    if (!anchor || reanchoringRef.current) return;
     if (metresBetween(anchor, center) < REANCHOR_M) return;
-    reanchoringRef.current = true;
-    setStreaming(true);
-    let cancelled = false;
-    (async () => {
-      try {
-        const built = await fetchAndBuild(center, basemapRef.current);
-        if (cancelled) {
-          disposeGroup(built.group);
-          return;
-        }
-        const old = groupRef.current;
-        scene.add(built.group);
-        if (old) {
-          scene.remove(old);
-          disposeGroup(old);
-        }
-        groupRef.current = built.group;
-        projectRef.current = built.project;
-        bboxRef.current = built.bbox;
-        anchorRef.current = center;
-        rebuildOverlays(); // re-drape against the new projection
-      } catch {
-        /* keep the existing terrain on failure */
-      } finally {
-        reanchoringRef.current = false;
-        if (!cancelled) setStreaming(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    rebuildAround(center);
+    // rebuildAround reads refs and guards re-entry; deps cover the drift trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center, follow]);
 
   if (permission === 'denied') {
@@ -479,13 +579,21 @@ export function Terrain3DLiveView({
         iconColor={follow ? theme.colors.onPrimary : theme.colors.onSurface}
         containerColor={follow ? theme.colors.primary : theme.colors.surface}
         onPress={() => {
-          // Retry a failed load; otherwise toggle follow (camera tracks you and
-          // the terrain re-anchors as you move).
-          if (status === 'error') setRecenter((n) => n + 1);
-          else setFollow((f) => !f);
+          // Retry a failed load; otherwise recenter on the user with a clean
+          // default orientation and resume follow — always a visible action (pan
+          // with one finger to break out of follow and explore freely again).
+          if (status === 'error') {
+            setRecenter((n) => n + 1);
+            return;
+          }
+          orbit.current.theta = 0.6;
+          orbit.current.phi = 1.05;
+          orbit.current.radius = clamp(orbit.current.radius, 0.6, 1.6);
+          followRef.current = true;
+          setFollow(true);
         }}
         style={styles.recenter}
-        accessibilityLabel={follow ? 'Stop following my location' : 'Follow my location in 3D'}
+        accessibilityLabel="Recenter on my location"
       />
     </View>
   );

@@ -142,6 +142,27 @@ export async function createRegionPack(
     const styleUrl = `${started.origin}/${args.id}.json`;
 
     await new Promise<void>((resolve, reject) => {
+      // Stall watchdog: MapLibre's downloader can simply stop emitting progress
+      // (no error event) when connectivity drops mid-download. Without a
+      // timeout this promise never settles, the caller's `finally` never runs,
+      // and the download UI stays disabled until the app is force-killed.
+      const STALL_MS = 90_000;
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(stallTimer);
+        fn();
+      };
+      const armWatchdog = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(
+          () => settle(() => reject(new Error('Download stalled (no progress for 90 s)'))),
+          STALL_MS,
+        );
+      };
+      armWatchdog();
       OfflineManager.createPack(
         {
           mapStyle: styleUrl,
@@ -152,18 +173,20 @@ export async function createRegionPack(
         },
         (pack, status) => {
           nativePackId = pack.id;
+          if (settled) return;
+          armWatchdog();
           onProgress(status.percentage, status.completedTileSize);
-          if (status.percentage >= 100) resolve();
+          if (status.percentage >= 100) settle(resolve);
         },
         (pack, err) => {
           nativePackId = pack.id;
-          reject(new Error(err.message));
+          settle(() => reject(new Error(err.message)));
         },
       )
         .then((pack) => {
           nativePackId = pack.id;
         })
-        .catch(reject);
+        .catch((err) => settle(() => reject(err instanceof Error ? err : new Error(String(err)))));
     });
   } catch (err) {
     // Best-effort: delete the partially-created native pack (so it doesn't show up

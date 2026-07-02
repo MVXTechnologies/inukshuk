@@ -24,6 +24,10 @@ export async function redirectSystemPath({
   void initial;
   if (/^(content|file):\/\//i.test(path)) {
     try {
+      // On a cold start this runs concurrently with RootLayout's hydrate();
+      // adding a track before the on-disk index is loaded would persist an
+      // index built from the empty initial state and wipe the library.
+      await useLibraryStore.getState().hydrate();
       const { track, fileUri, notes } = await importGpxFromUri(path, 'Imported trail');
       useLibraryStore.getState().addTrack(track, fileUri, notes);
       useImportFeedbackStore.getState().show(`Imported ${track.name}`);
