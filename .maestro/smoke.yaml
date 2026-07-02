@@ -10,7 +10,7 @@ appId: com.inukshuk.app
 # button), so assert the Map tab itself is mounted instead.
 - assertVisible: 'Map'
 - tapOn: 'Library'
-- assertVisible: 'Import map'
+- assertVisible: 'Recorded trails'
 - tapOn: 'Settings'
 - assertVisible: 'Keep screen awake'
 - tapOn: 'Map'
