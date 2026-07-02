@@ -13,8 +13,8 @@ jobs:
   health:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -27,8 +27,11 @@ jobs:
         run: npm run test:ci
       - name: Expo Doctor (blocking)
         run: npx expo-doctor
-      - name: Security audit (high+)
-        run: npm audit --audit-level=high
+      # audit-ci instead of raw `npm audit`: same high+ threshold, but accepted
+      # advisories can be allowlisted (with reasons and exit plans) in
+      # audit-ci.jsonc instead of failing the gate every night.
+      - name: Security audit (high+, allowlist in audit-ci.jsonc)
+        run: npx audit-ci@^7 --config ./audit-ci.jsonc
 
   report-failure:
     needs: health

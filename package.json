@@ -10,17 +10,17 @@
     "expo": "~56.0.12",
     "expo-asset": "^56.0.17",
     "expo-constants": "~56.0.18",
-    "expo-dev-client": "~56.0.20",
+    "expo-dev-client": "~56.0.21",
     "expo-document-picker": "~56.0.4",
     "expo-file-system": "~56.0.8",
     "expo-font": "~56.0.7",
-    "expo-gl": "~56.0.5",
-    "expo-image-picker": "~56.0.18",
+    "expo-gl": "~56.0.6",
+    "expo-image-picker": "~56.0.19",
     "expo-keep-awake": "~56.0.3",
     "expo-linking": "~56.0.14",
-    "expo-location": "~56.0.18",
+    "expo-location": "~56.0.19",
     "expo-print": "~56.0.4",
-    "expo-router": "~56.2.11",
+    "expo-router": "~56.2.12",
     "expo-sensors": "~56.0.6",
     "expo-sharing": "~56.0.18",
     "expo-splash-screen": "~56.0.10",
@@ -28,7 +28,7 @@
     "expo-status-bar": "~56.0.4",
     "expo-system-ui": "~56.0.5",
     "expo-three": "^8.0.0",
-    "expo-updates": "~56.0.19",
+    "expo-updates": "~56.0.20",
     "fast-xml-parser": "^5.9.3",
     "fflate": "^0.8.3",
     "jpeg-js": "^0.4.4",
@@ -65,6 +65,14 @@
     "jest-expo": "^56.0.5",
     "prettier": "^3.8.4",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "isomorphic-fetch": {
+      "node-fetch": "^2.6.12"
+    },
+    "pdfjs-dist": {
+      "canvas": "^3.2.0"
+    }
   },
   "scripts": {
     "start": "expo start --dev-client",

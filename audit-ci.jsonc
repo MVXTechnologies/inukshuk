@@ -1,0 +1,16 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  // Nightly security gate (see .github/workflows/nightly.yml): fail on
+  // high/critical advisories, except the explicitly accepted ones below.
+  // Every allowlist entry needs a reason AND an exit plan.
+  "high": true,
+  "allowlist": [
+    // pdf.js <=4.1.392: arbitrary JS execution when opening a malicious PDF
+    // (isEvalSupported font-matrix eval). Mitigated in-app: PdfRasterizer
+    // passes `isEvalSupported: false` to getDocument, which closes the eval
+    // path. Exit plan: the pdfjs-dist 6.x upgrade (PR #72), which needs
+    // on-device validation of the PDF overlay pipeline (see the pipeline's
+    // device-only-bug history) before it can land.
+    "GHSA-wgrm-67xf-hhpq",
+  ],
+}
