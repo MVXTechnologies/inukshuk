@@ -28,7 +28,7 @@ jobs:
     name: Android (Gradle assembleDebug)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The RN + reanimated/worklets NDK build exhausts the runner's small disk
       # ("No space left on device"). Reclaim the large preinstalled toolchains we
@@ -40,17 +40,17 @@ jobs:
           sudo docker image prune --all --force || true
           echo "After:"; df -h /
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
 
       - run: npm ci
 
@@ -61,7 +61,7 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon
         working-directory: android
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
@@ -71,7 +71,7 @@ jobs:
     name: iOS (xcodebuild simulator)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A Swift Package dependency requires Swift tools 6.2; the image's default
       # Xcode 16.4 ships Swift 6.1, so package resolution fails ("Could not
@@ -81,7 +81,7 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm

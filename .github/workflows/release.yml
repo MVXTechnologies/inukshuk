@@ -35,9 +35,9 @@ jobs:
       HAS_GSA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
       HAS_ASC: ${{ secrets.ASC_API_KEY_P8 != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm

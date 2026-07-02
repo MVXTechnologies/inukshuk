@@ -22,6 +22,22 @@ updates:
       # patches only; block anything that crosses r163.
       - dependency-name: 'three'
         versions: ['>=0.163.0']
+      # Everything below is version-managed by the Expo SDK: CI's
+      # `npx expo install --check` gate rejects any independent bump (see the
+      # never-mergeable PRs #68/#69), so don't propose them. They move together
+      # via `npx expo install` during an SDK upgrade.
+      - dependency-name: 'expo'
+      - dependency-name: 'expo-*'
+      - dependency-name: '@expo/*'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-native-*'
+      - dependency-name: '@react-native/*'
+      - dependency-name: 'babel-preset-expo'
+      - dependency-name: 'jest'
+      - dependency-name: 'jest-*'
+      - dependency-name: '@types/jest'
+      - dependency-name: '@types/react'
+      - dependency-name: 'typescript'
     groups:
       expo:
         patterns:
