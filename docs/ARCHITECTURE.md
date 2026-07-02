@@ -5,18 +5,21 @@
 The guiding rule: **all the hard logic is pure and unit-tested; platform code is
 a thin shell around it.**
 
-- `src/core/**` — zero React Native / Expo imports. Pure functions and types.
-  This is where georeferencing, GPX, and track math live, and where the test
-  coverage gate is enforced (80% lines). Runs identically in Node (Jest) and on
-  device.
-- `src/data/**` — persistence via `expo-file-system`. The only place that
-  touches the filesystem.
+- `src/core/**` — zero React Native / Expo imports (mechanically enforced by an
+  eslint `no-restricted-imports` boundary). Pure functions and types. This is
+  where georeferencing, GPX, track math, terrain/tile math, and the library
+  domain logic (bundles, folders, notes) live, and where the test coverage gate
+  is enforced (80% lines). Runs identically in Node (Jest) and on device.
+- `src/data/**` — persistence via `expo-file-system`, plus the MapLibre offline
+  pack manager (`offline.ts`). The only place that touches the filesystem.
 - `src/state/**` — Zustand stores. They orchestrate `core` + `data`; they hold
   no business math themselves.
 - `src/features/**` — screens and hooks. Composition and platform APIs
-  (location, sensors, WebView).
+  (location, sensors, WebView, expo-gl).
 - `src/ui/**`, `src/lib/**` — theme, shared components, formatting.
 - `app/**` — expo-router routes only; each file just renders a feature screen.
+  `+native-intent.tsx` intercepts "Open with" file intents (GPX import) before
+  routing.
 
 Path aliases (`@core`, `@data`, `@features`, `@state`, `@ui`, `@lib`, `@/`) are
 declared once in `tsconfig.json` and mirrored in `jest.config.js`.
@@ -31,14 +34,18 @@ four stages:
    - Adobe ISO 32000 `/VP` → `/Measure /GEO` (GPTS in lat/lon, a GCS/EPSG/WKT),
    - OGC/TerraGo `/LGIDict` (registration control points + neatline), or
    - a sidecar world file / GDAL `.aux.xml`.
-     The source CRS is reprojected to WGS84 with **proj4**. The result is a
-     `GeoReference`: the map-frame rectangle in PDF points (`viewport.rect`) and
-     its geographic corners (`viewport.corners`).
+     The source CRS is reprojected to WGS84 with **proj4**. The result is one
+     `GeoReference` per georeferenced page: the map-frame rectangle in PDF
+     points (`viewport.rect`) and its geographic corners (`viewport.corners`).
+     A `MapDocument` stores `georeferences[]` plus `activePages[]` (which pages
+     are currently shown as overlays). The hand-written PDF reader is hardened
+     against hostile input (clamped xref counts, bounded FlateDecode output).
 
 2. **Rasterize the page** (`features/map/PdfRasterizer`). A hidden offscreen
-   WebView runs **bundled pdf.js** (no network) to render the page to a PNG data
-   URI, and reports the page size in points. Requests are queued and chunked so
-   multi-MB PDFs cross the bridge safely.
+   WebView runs **bundled pdf.js** (no network, `isEvalSupported: false`) to
+   render the page to a PNG, and reports the page size in points. Requests are
+   queued and chunked so multi-MB PDFs cross the bridge safely, with a watchdog
+   that falls back to pdf.js's main-thread fake worker if the real one wedges.
 
 3. **Extrapolate full-page corners** (`core/geo/geomath`). The georeferencing
    often describes only the inner map frame, but we render the _whole_ page. We
@@ -46,9 +53,10 @@ four stages:
    corner correspondences and evaluate it at the full page rectangle. This
    yields the geographic corners of the rendered image even with rotation/skew.
 
-4. **Overlay** (`MapScreen`). The PNG goes into a MapLibre `ImageSource` at those
-   four corners; OSM raster tiles render underneath, so anywhere the PDF doesn't
-   cover is still mapped.
+4. **Overlay** (`MapScreen`). The PNG is written to a cache **file** (Android's
+   MapLibre `ImageSource` cannot consume a `data:` URI — it crashes) and the
+   `file://` URL goes into an `ImageSource` at those four corners; OSM raster
+   tiles render underneath, so anywhere the PDF doesn't cover is still mapped.
 
 ## Recording & track math
 
@@ -56,19 +64,50 @@ four stages:
   The recorder store ignores incoming fixes unless its status is `recording`.
 - Live HUD stats use a cheap incremental fold (`reduceStatsWith`); the
   authoritative stats saved to GPX are recomputed over the full point list
-  (`computeTrackStats`).
+  (`computeTrackStats`). Elapsed time excludes paused wall time (`pausedMs`).
 - **D+ / D-** uses hysteresis (default 3 m threshold) so GPS altitude noise on
   flat ground doesn't inflate elevation gain — the number hikers actually expect.
 - Tracks persist as standard GPX 1.1 in the document directory; the library
   index (`library.json`) keeps lightweight summaries and loads points on demand.
+- Waypoints dropped during recording become distance-anchored trail notes
+  (optionally with photos) on the saved track.
+
+## Offline maps
+
+- 2D basemap tiles for a user-drawn region are downloaded into MapLibre
+  offline packs (`data/offline.ts` → `OfflineManager.createPack`). MapLibre's
+  downloader only accepts an **http(s) style URL**, so the style JSON is served
+  from a transient loopback HTTP server for the duration of the download. A
+  stall watchdog rejects if progress stops (MapLibre can hang without erroring).
+- "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
+  only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches
+  bypass this — see docs/CODE-REVIEW-2026-07-02.md.)
+
+## 3D terrain
+
+- Elevation comes from free Terrarium DEM tiles; drape textures from Esri tile
+  services (`features/map/dem.ts`, tile math in `core/geo/terrain.ts` — tile
+  ranges are budget-clamped so huge track bboxes can't OOM). The mesh is built
+  in `features/map/terrainScene.ts` (three r162 — expo-gl is WebGL 1; never
+  bump three past r162).
+- Two GL screens share that plumbing: `Trail3DGLScreen` (per-trail view,
+  reachable from the Library) and `Terrain3DLiveView` (live main-map 3D,
+  currently gated off behind the `terrain3d` flag). Render loops carry a GL
+  "generation" and dispose their scene when the GLView remounts.
 
 ## State & persistence
 
-| Store           | Persisted?            | Holds                                        |
-| --------------- | --------------------- | -------------------------------------------- |
-| `libraryStore`  | yes (`library.json`)  | imported maps + track summaries + active map |
-| `settingsStore` | yes (`settings.json`) | tile URL, keep-awake, point spacing          |
-| `recorderStore` | no (transient)        | live recording state + points + stats        |
-| `mapStore`      | no (transient)        | follow-me, overlay toggle, focused track     |
+| Store                 | Persisted?            | Holds                                                                                      |
+| --------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
+| `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, active map |
+| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs                              |
+| `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                  |
+| `mapStore`            | no (transient)        | active trail overlays, basemap, terrain3d flag, focus bounds                               |
+| `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                           |
+| `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                |
 
-Stores hydrate from disk on app start in `app/_layout.tsx`.
+Stores hydrate from disk on app start in `app/_layout.tsx`. `libraryStore`'s
+hydration is single-flight and `persist()` refuses to write before hydration
+(a cold-start "Open with" import must not clobber the index). JSON documents
+are written atomically (staged `.tmp` + swap); a corrupt index is preserved as
+`.corrupt` instead of being silently reset.
