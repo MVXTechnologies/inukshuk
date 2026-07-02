@@ -11,5 +11,9 @@ appId: com.inukshuk.app
 - assertVisible: 'Recorded trails'
 - tapOn: 'Settings'
 - assertVisible: 'Keep screen awake'
+# The Settings screen has its own "Map" section header, which Maestro taps
+# instead of the tab bar (navigation silently doesn't happen). Hop through
+# Library — which has no exact-"Map" text — before returning to the Map tab.
+- tapOn: 'Library'
 - tapOn: 'Map'
 - assertVisible: 'Record'
