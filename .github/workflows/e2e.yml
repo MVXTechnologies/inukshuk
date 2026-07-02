@@ -25,6 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Without this the emulator runs pure-software emulation: boot takes
+      # ~6.5 min and the Android system process itself ANRs under load ("Process
+      # system isn't responding" over the app at launch), failing any UI assert.
+      # Linux runners have /dev/kvm but it isn't accessible by default.
+      - name: Enable KVM group perms (hardware-accelerated emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -77,6 +87,10 @@ jobs:
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
+            # Let system_server finish its post-boot work before loading it
+            # further — installing + launching immediately after boot is what
+            # tipped the (previously unaccelerated) system process into ANR.
+            sleep 20
             adb install -r android/app/build/outputs/apk/release/app-release.apk
             maestro test .maestro/smoke.yaml
 
