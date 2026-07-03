@@ -1,4 +1,5 @@
 import * as storage from '@data/storage';
+import { setDisplayUnits, type Units } from '@lib/format';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
@@ -32,6 +33,8 @@ export interface Settings {
   trailViewMode: '2d' | '3d';
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;
+  /** Display units for distances, elevation, speed and pace. */
+  units: Units;
 }
 
 const DEFAULTS: Settings = {
@@ -42,6 +45,7 @@ const DEFAULTS: Settings = {
   elevationProfileStyle: 'gradient',
   trailViewMode: '3d',
   offlineOnly: false,
+  units: 'metric',
 };
 
 interface SettingsState extends Settings {
@@ -55,38 +59,50 @@ function persist(s: Settings): void {
   storage.writeJson(SETTINGS_FILE, s);
 }
 
+/** Pick just the persisted Settings fields out of the full store state. */
+function snapshot(s: SettingsState): Settings {
+  const {
+    tileUrl,
+    keepAwakeWhileRecording,
+    rotateMapWithHeading,
+    minDisplacementM,
+    elevationProfileStyle,
+    trailViewMode,
+    offlineOnly,
+    units,
+  } = s;
+  return {
+    tileUrl,
+    keepAwakeWhileRecording,
+    rotateMapWithHeading,
+    minDisplacementM,
+    elevationProfileStyle,
+    trailViewMode,
+    offlineOnly,
+    units,
+  };
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   hydrated: false,
 
   hydrate: async () => {
     const saved = await storage.readJson<Partial<Settings>>(SETTINGS_FILE);
-    set({ ...DEFAULTS, ...(saved ?? {}), hydrated: true });
+    const next = { ...DEFAULTS, ...(saved ?? {}) };
+    setDisplayUnits(next.units);
+    set({ ...next, hydrated: true });
   },
 
   set: (key, value) => {
     set({ [key]: value } as Pick<Settings, typeof key>);
-    const {
-      tileUrl,
-      keepAwakeWhileRecording,
-      rotateMapWithHeading,
-      minDisplacementM,
-      elevationProfileStyle,
-      trailViewMode,
-      offlineOnly,
-    } = get();
-    persist({
-      tileUrl,
-      keepAwakeWhileRecording,
-      rotateMapWithHeading,
-      minDisplacementM,
-      elevationProfileStyle,
-      trailViewMode,
-      offlineOnly,
-    });
+    const next = snapshot(get());
+    setDisplayUnits(next.units);
+    persist(next);
   },
 
   reset: () => {
+    setDisplayUnits(DEFAULTS.units);
     set({ ...DEFAULTS });
     persist(DEFAULTS);
   },

@@ -1,13 +1,15 @@
 import { useMapStore } from '@state/mapStore';
-import { useRecorderStore } from '@state/recorderStore';
+import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useEffect, useState } from 'react';
+import { useBackgroundRecording } from '../useLocation';
 
 /**
  * Recording lifecycle for the map screen: recorder-store state/actions, the
- * live elapsed-time ticker, the keep-awake guard while recording, and the
- * start/stop handlers.
+ * live elapsed-time ticker, the keep-awake guard while recording, the
+ * background foreground-service feed, crash recovery, and the start/stop
+ * handlers.
  */
 export function useRecordingSession({ showSnack }: { showSnack: (message: string) => void }) {
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
@@ -30,6 +32,21 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const removeWaypoint = useRecorderStore((s) => s.removeWaypoint);
 
   const [elapsedS, setElapsedS] = useState(0);
+
+  // Foreground-service location feed while recording (falls back to the
+  // foreground-only watch on binaries without the native task module).
+  useBackgroundRecording();
+
+  // One-shot crash recovery: if a previous session died mid-hike, restore its
+  // checkpoint as a paused recording and tell the user.
+  useEffect(() => {
+    void initRecorderRecovery().then((recovered) => {
+      if (recovered) showSnack('Recovered an interrupted recording — resume or stop to save');
+    });
+    // Mount-only: initRecorderRecovery is itself one-shot, and showSnack must
+    // not retrigger recovery notices.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Live elapsed timer, independent of GPS fix cadence. Excludes paused wall
   // time (pausedMs) so resuming continues from where the display froze instead

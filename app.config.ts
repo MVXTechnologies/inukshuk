@@ -65,8 +65,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       // shows at the mask edges during launcher parallax.
       backgroundColor: '#E0D8CC',
     },
-    // Foreground-only location in v1 — no background or foreground-service
-    // location permissions, which avoids Play's stricter background-location
+    // While-in-use location plus a recording foreground service (the
+    // expo-location plugin below adds FOREGROUND_SERVICE /
+    // FOREGROUND_SERVICE_LOCATION). Deliberately NO ACCESS_BACKGROUND_LOCATION:
+    // a foreground service keeps fixes flowing with the screen off using only
+    // while-in-use permission, which avoids Play's stricter background-location
     // review.
     permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
     // Let users open a .gpx with Inukshuk from a file manager / browser. File
@@ -110,7 +113,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         locationWhenInUsePermission:
           'Inukshuk uses your location to show where you are on the map and to record your trail.',
         isAndroidBackgroundLocationEnabled: false,
-        isAndroidForegroundServiceEnabled: false,
+        // Adds FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION so recording
+        // survives the screen turning off / app-switching, via
+        // startLocationUpdatesAsync's foreground service (persistent
+        // notification). Takes effect in the NEXT store binary; on older
+        // binaries the JS falls back to the foreground-only watch at runtime.
+        isAndroidForegroundServiceEnabled: true,
       },
     ],
     [

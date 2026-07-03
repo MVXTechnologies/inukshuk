@@ -41,7 +41,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
-import { exportTrailPdf } from '../library/exportTrailPdf';
+import { SharingUnavailableError, exportTrailPdf } from '../library/exportTrailPdf';
 import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
 import {
   clamp,
@@ -395,8 +395,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
     setExporting(true);
     try {
       await exportTrailPdf(track, points);
-    } catch {
-      showSnack('Could not export PDF');
+    } catch (e) {
+      // Sharing-unavailable carries a user-appropriate message; anything else
+      // stays generic.
+      showSnack(e instanceof SharingUnavailableError ? e.message : 'Could not export PDF');
     }
     setExporting(false);
   };

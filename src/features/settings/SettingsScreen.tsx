@@ -1,7 +1,20 @@
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import Constants from 'expo-constants';
+import { useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Appbar, Button, Divider, List, SegmentedButtons, Switch, Text } from 'react-native-paper';
+import {
+  Appbar,
+  Button,
+  Dialog,
+  Divider,
+  HelperText,
+  List,
+  Portal,
+  SegmentedButtons,
+  Switch,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineMapsSection } from './OfflineMapsSection';
 
@@ -11,14 +24,44 @@ const DISPLACEMENT_OPTIONS = [
   { value: '10', label: '10 m' },
 ];
 
+const UNITS_OPTIONS = [
+  { value: 'metric', label: 'Metric (km)' },
+  { value: 'imperial', label: 'Imperial (mi)' },
+];
+
+/** A usable raster-tile URL template: http(s) with {z}/{x}/{y} placeholders. */
+function isValidTileUrl(url: string): boolean {
+  return (
+    /^https?:\/\//i.test(url) && url.includes('{z}') && url.includes('{x}') && url.includes('{y}')
+  );
+}
+
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
+  const units = useSettingsStore((s) => s.units);
   const set = useSettingsStore((s) => s.set);
   const reset = useSettingsStore((s) => s.reset);
+
+  const [tileDialogVisible, setTileDialogVisible] = useState(false);
+  const [tileDraft, setTileDraft] = useState('');
+
+  const openTileDialog = () => {
+    setTileDraft(tileUrl === DEFAULT_TILE_URL ? '' : tileUrl);
+    setTileDialogVisible(true);
+  };
+
+  const trimmedDraft = tileDraft.trim();
+  const draftValid = trimmedDraft === '' || isValidTileUrl(trimmedDraft);
+
+  const saveTileUrl = () => {
+    if (!draftValid) return;
+    set('tileUrl', trimmedDraft === '' ? DEFAULT_TILE_URL : trimmedDraft);
+    setTileDialogVisible(false);
+  };
 
   return (
     <View style={styles.fill}>
@@ -52,6 +95,20 @@ export function SettingsScreen() {
         <Divider />
 
         <List.Section>
+          <List.Subheader>Display</List.Subheader>
+          <List.Item title="Units" description="Distances, elevation, speed and pace" />
+          <View style={styles.segment}>
+            <SegmentedButtons
+              value={units}
+              onValueChange={(v) => set('units', v === 'imperial' ? 'imperial' : 'metric')}
+              buttons={UNITS_OPTIONS}
+            />
+          </View>
+        </List.Section>
+
+        <Divider />
+
+        <List.Section>
           <List.Subheader>Map</List.Subheader>
           <List.Item
             title="Rotate map with compass"
@@ -63,6 +120,8 @@ export function SettingsScreen() {
           <List.Item
             title="Base map tiles"
             description={tileUrl === DEFAULT_TILE_URL ? 'OpenStreetMap (default)' : tileUrl}
+            onPress={openTileDialog}
+            right={(p) => <List.Icon {...p} icon="pencil-outline" />}
           />
           <View style={styles.note}>
             <Text variant="bodySmall">
@@ -102,6 +161,35 @@ export function SettingsScreen() {
           </View>
         </List.Section>
       </ScrollView>
+
+      <Portal>
+        <Dialog visible={tileDialogVisible} onDismiss={() => setTileDialogVisible(false)}>
+          <Dialog.Title>Base map tiles</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Tile URL template"
+              value={tileDraft}
+              onChangeText={setTileDraft}
+              mode="outlined"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder={DEFAULT_TILE_URL}
+            />
+            <HelperText type={draftValid ? 'info' : 'error'} visible>
+              {draftValid
+                ? 'Leave empty to use the default OpenStreetMap tiles.'
+                : 'Must start with http(s):// and contain {z}, {x} and {y} placeholders.'}
+            </HelperText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setTileDialogVisible(false)}>Cancel</Button>
+            <Button onPress={saveTileUrl} disabled={!draftValid}>
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }

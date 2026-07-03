@@ -30,6 +30,7 @@ import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
 import { toLineFeature } from './geojson';
 import { useCameraControls } from './hooks/useCameraControls';
+import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
@@ -49,6 +50,7 @@ export function MapScreen() {
 
   const { permission, location } = useLocationTracking();
   const heading = useCompass();
+  const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -212,7 +214,14 @@ export function MapScreen() {
                 ? { center: [location.longitude, location.latitude] as [number, number] }
                 : {}),
             }}
-            trackUserLocation={followUser ? 'default' : undefined}
+            // "Rotate map with heading" setting. While following, MapLibre's
+            // native 'heading' tracking rotates from the compass (smooth, no
+            // JS churn); otherwise the smoothed + 2°-throttled hook value
+            // drives the bearing. undefined when the setting is off.
+            bearing={followUser ? undefined : headingForCamera}
+            trackUserLocation={
+              followUser ? (headingForCamera !== undefined ? 'heading' : 'default') : undefined
+            }
             onTrackUserLocationChange={(e) => {
               if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
             }}

@@ -106,6 +106,84 @@ export async function readFileBytes(uri: string): Promise<Uint8Array> {
   return new File(uri).bytes();
 }
 
+/** Thrown by {@link downloadBytes} when offline-only mode is on and the file is not cached. */
+export class OfflineOnlyError extends Error {
+  constructor(name: string) {
+    super(`offline-only: ${name} not cached`);
+    this.name = 'OfflineOnlyError';
+  }
+}
+
+// One switch governs ALL tile traffic. MapLibre's own fetches are gated natively
+// via NetworkManager.setConnected; the raw 3D DEM/basemap fetches all flow through
+// downloadBytes, which honors this flag. Toggled by offline.setOfflineOnly().
+let networkAllowed = true;
+
+/** Allow (true) or forbid (false) network fetches in {@link downloadBytes}. */
+export function setNetworkAllowed(allowed: boolean): void {
+  networkAllowed = allowed;
+}
+
+// ---- DEM/basemap tile cache eviction --------------------------------------
+// Paths.cache/dem would otherwise grow without bound (every 3D pan streams new
+// tiles). After every EVICTION_CHECK_EVERY successful downloads we scan the dir
+// and, if it exceeds the cap, delete oldest-modified files down to ~75% of cap.
+
+const DEM_CACHE_CAP_BYTES = 128 * 1024 * 1024; // 128 MB
+const EVICTION_TARGET_RATIO = 0.75; // shrink to 75% of cap so evictions are infrequent
+const EVICTION_CHECK_EVERY = 32; // downloads between cache-size checks
+let downloadsSinceEvictionCheck = 0;
+
+/** A cache file as seen by the eviction policy. */
+export interface CacheEntry {
+  name: string;
+  /** Size in bytes. */
+  size: number;
+  /** Last-modified time (ms since epoch); older files are evicted first. */
+  mtime: number;
+}
+
+/**
+ * Pure eviction policy (exported for unit tests — no FS access). Given the cache
+ * contents and a byte cap, returns the names to delete, oldest-modified first,
+ * until the remaining total is at or below `capBytes * EVICTION_TARGET_RATIO`.
+ * Returns `[]` when the total is already within the cap.
+ */
+export function pickEvictions(entries: CacheEntry[], capBytes: number): string[] {
+  let total = entries.reduce((sum, e) => sum + e.size, 0);
+  if (total <= capBytes) return [];
+  const target = capBytes * EVICTION_TARGET_RATIO;
+  const oldestFirst = [...entries].sort((a, b) => a.mtime - b.mtime);
+  const evict: string[] = [];
+  for (const entry of oldestFirst) {
+    if (total <= target) break;
+    evict.push(entry.name);
+    total -= entry.size;
+  }
+  return evict;
+}
+
+/** Best-effort LRU-ish eviction; runs at most once per EVICTION_CHECK_EVERY downloads. */
+function maybeEvictDemCache(dir: Directory): void {
+  downloadsSinceEvictionCheck += 1;
+  if (downloadsSinceEvictionCheck < EVICTION_CHECK_EVERY) return;
+  downloadsSinceEvictionCheck = 0;
+  try {
+    const files = dir.list().filter((entry): entry is File => entry instanceof File);
+    const entries: CacheEntry[] = files.map((f) => ({
+      name: f.name,
+      size: f.size,
+      mtime: f.modificationTime ?? 0,
+    }));
+    const doomed = new Set(pickEvictions(entries, DEM_CACHE_CAP_BYTES));
+    for (const f of files) {
+      if (doomed.has(f.name)) f.delete();
+    }
+  } catch {
+    /* eviction is best-effort — never let it break a fetch */
+  }
+}
+
 /**
  * Download a remote file (e.g. a DEM/basemap tile) into the cache and return its
  * raw bytes. Reliable for binary, unlike RN's `fetch().arrayBuffer()`.
@@ -114,6 +192,9 @@ export async function readFileBytes(uri: string): Promise<Uint8Array> {
  * on subsequent calls. This is essential once the 3D view streams terrain as you
  * move: overlapping tiles between map positions are served from disk instead of
  * re-downloaded, which keeps it fast and avoids tripping tile-server rate limits.
+ *
+ * In offline-only mode ({@link setNetworkAllowed}) cached tiles still serve
+ * normally, but a cache miss throws {@link OfflineOnlyError} instead of fetching.
  */
 export async function downloadBytes(
   url: string,
@@ -132,8 +213,11 @@ export async function downloadBytes(
     }
     dest.delete();
   }
+  if (!networkAllowed) throw new OfflineOnlyError(name);
   await File.downloadFileAsync(url, dest, headers ? { headers } : undefined);
-  return dest.bytes();
+  const bytes = await dest.bytes();
+  maybeEvictDemCache(dir);
+  return bytes;
 }
 
 /**
@@ -225,4 +309,29 @@ export function readIndex<T>(): Promise<T | null> {
 
 export function writeIndex(value: unknown): void {
   writeJson(INDEX_FILE, value);
+}
+
+/**
+ * Raw text of the persisted library index (`library.json`), or null if it has
+ * never been written. Used by the backup export, which packs the on-disk index
+ * verbatim rather than a re-serialization.
+ */
+export async function readIndexText(): Promise<string | null> {
+  const file = new File(Paths.document, INDEX_FILE);
+  return file.exists ? file.text() : null;
+}
+
+/**
+ * Stage bytes in the cache (`exports/`) and return the file uri — for archives
+ * that only exist to be handed to the share sheet. Callers should
+ * {@link deleteFileAt} the uri once the share resolves.
+ */
+export function writeCacheBytes(name: string, bytes: Uint8Array): string {
+  const dir = new Directory(Paths.cache, 'exports');
+  if (!dir.exists) dir.create({ intermediates: true });
+  const file = new File(dir, name);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(bytes);
+  return file.uri;
 }

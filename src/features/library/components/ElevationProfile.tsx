@@ -355,12 +355,14 @@ export function ElevationProfile({
                     opacity={0.25}
                   />
                   <Circle cx={x} cy={10} r={8} fill={lineColor} />
+                  {/* onPrimary, not #fff: dark mode's primary is a light sage and
+                      white numerals vanish on it (theme.test.ts gates the pair). */}
                   <SvgText
                     x={x}
                     y={13.5}
                     fontSize={9}
                     fontWeight="bold"
-                    fill="#fff"
+                    fill={theme.colors.onPrimary}
                     textAnchor="middle"
                   >
                     {m.label}
@@ -385,7 +387,7 @@ export function ElevationProfile({
                   cy={marker.y}
                   r={5}
                   fill={lineColor}
-                  stroke="#fff"
+                  stroke={theme.colors.onPrimary}
                   strokeWidth={1.5}
                 />
               </>

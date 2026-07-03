@@ -4,6 +4,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { BoundingBox } from '@core/models';
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
+import { setNetworkAllowed } from './storage';
+
 // MapLibre's offline `createPack` expects `mapStyle` to be an **http(s) style URL**
 // it can fetch through its native HTTP source — inline style JSON AND `file://`
 // are both rejected ("Unable to parse resourceUrl …"). So during a download we
@@ -237,9 +239,14 @@ export async function deleteRegionPack(id: string): Promise<void> {
   if (f.exists) f.delete();
 }
 
-/** Force MapLibre to serve only cached/pack tiles (true) or fetch normally (false). */
+/**
+ * Force offline-only tile serving (true) or normal fetching (false). One switch
+ * governs both tile paths: MapLibre's native fetches (NetworkManager) and the raw
+ * 3D DEM/basemap downloads (storage.downloadBytes) — cached tiles still serve.
+ */
 export function setOfflineOnly(on: boolean): void {
   NetworkManager.setConnected(!on);
+  setNetworkAllowed(!on);
 }
 
 export function setTileLimit(n: number): void {
