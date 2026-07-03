@@ -10,7 +10,6 @@ import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
 import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
-import { Renderer } from 'expo-three';
 import {
   formatDistance,
   formatDuration,
@@ -19,11 +18,12 @@ import {
   formatSpeed,
 } from '@lib/format';
 import { useLibraryStore } from '@state/libraryStore';
+import type { MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -40,8 +40,22 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
-import { fetchBasemapTexture, fetchHeightmap, type Basemap, type Heightmap } from './dem';
+import { fetchHeightmap, type Heightmap } from './dem';
 import { exportTrailPdf } from '../library/exportTrailPdf';
+import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
+import {
+  clamp,
+  createTerrainPanResponder,
+  groundPanDelta,
+  positionCameraFromOrbit,
+} from './terrain3d/orbitGestures';
+import {
+  addTerrainLights,
+  buildMarkerPin,
+  createTerrainCamera,
+  createTerrainRenderer,
+  fetchDrapeTexture,
+} from './terrain3d/sceneSetup';
 import { buildTerrain, type TerrainBuild } from './terrainScene';
 import { ElevationProfile } from '../library/components/ElevationProfile';
 import { Trail2DView } from './Trail2DView';
@@ -51,38 +65,16 @@ interface Props {
   trackId: string;
 }
 
-type BasemapChoice = Basemap | 'relief';
 type Editing = { mode: 'add'; distanceM: number } | { mode: 'edit'; noteId: string };
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** Build a terrain group for a basemap choice, draping its tiles (or relief). */
 async function buildGroupFor(
   hm: Heightmap,
   pts: readonly TrackPoint[],
-  bm: BasemapChoice,
+  bm: MapBasemap,
   maxAnisotropy = 1,
 ): Promise<TerrainBuild> {
-  let texture;
-  if (bm !== 'relief') {
-    try {
-      texture = await fetchBasemapTexture(hm.range, bm);
-    } catch {
-      texture = undefined; // fall back to hypsometric relief
-    }
-  }
-  return buildTerrain(hm, pts, texture, maxAnisotropy);
-}
-
-function disposeGroup(g: THREE.Group): void {
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.geometry) m.geometry.dispose();
-    const mat = m.material as THREE.MeshStandardMaterial | undefined;
-    if (mat) {
-      mat.map?.dispose();
-      mat.dispose();
-    }
-  });
+  return buildTerrain(hm, pts, await fetchDrapeTexture(hm.range, bm), maxAnisotropy);
 }
 
 /**
@@ -110,7 +102,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [demPoints, setDemPoints] = useState<TrackPoint[] | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errMsg, setErrMsg] = useState('');
-  const [basemap, setBasemap] = useState<'map' | 'satellite' | 'relief'>('map');
+  const [basemap, setBasemap] = useState<MapBasemap>('map');
   const [switching, setSwitching] = useState(false);
   const [scrub, setScrub] = useState<TrackPointAt | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -130,7 +122,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
     home: new THREE.Vector3(),
     maxPan: 1,
   });
-  const gest = useRef({ x: 0, y: 0, cx: 0, cy: 0, dist: 0, single: true });
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
   const maxAnisoRef = useRef(1);
   const scrubRef = useRef<TrackPointAt | null>(null);
@@ -138,63 +129,36 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const groupRef = useRef<THREE.Group | null>(null);
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
-  const basemapRef = useRef<'map' | 'satellite' | 'relief'>('map');
-  // GL "generation": bumped on every new context and on unmount. The render
-  // loop re-queues itself only while its generation is current — without this,
-  // every 2D↔3D toggle (which remounts the GLView) stacked another permanent
-  // 60fps loop rendering a retained multi-MB scene against a dead GL context.
-  const glGenRef = useRef(0);
-  useEffect(
-    () => () => {
-      glGenRef.current++;
-    },
-    [],
-  );
+  const basemapRef = useRef<MapBasemap>('map');
+  // GL generation: every 2D↔3D toggle remounts the GLView; the render loop must
+  // not outlive its context (see useGlGeneration).
+  const glGenRef = useGlGeneration();
 
   const pan = useMemo(
     () =>
       // Refs are read on touch events only, never during render.
       // eslint-disable-next-line react-hooks/refs
-      PanResponder.create({
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderGrant: (_e, g) => {
-          gest.current = { x: g.x0, y: g.y0, cx: 0, cy: 0, dist: 0, single: true };
-        },
-        onPanResponderMove: (e, g) => {
-          const t = e.nativeEvent.touches;
+      createTerrainPanResponder({
+        orbit,
+        // Two-finger drag (beyond the shared pinch-zoom) pans the look-at point
+        // across the ground (move around the trail a bit), bounded to maxPan
+        // from the trail centre.
+        onTwoFinger: (curr, prev) => {
           const o = orbit.current;
-          const gp = gest.current;
-          if (t.length >= 2 && t[0] && t[1]) {
-            const dist = Math.hypot(t[0].pageX - t[1].pageX, t[0].pageY - t[1].pageY);
-            const cx = (t[0].pageX + t[1].pageX) / 2;
-            const cy = (t[0].pageY + t[1].pageY) / 2;
-            if (gp.dist > 0) {
-              o.radius = clamp(o.radius * (gp.dist / dist), 0.8, 9);
-              // Two-finger drag pans the look-at point across the ground (move
-              // around the trail a bit), bounded to maxPan from the trail centre.
-              const s = o.radius * 0.0016;
-              const dx = (cx - gp.cx) * s;
-              const dy = (cy - gp.cy) * s;
-              const nx = o.center.x - dx * Math.cos(o.theta) + dy * Math.sin(o.theta);
-              const nz = o.center.z + dx * Math.sin(o.theta) + dy * Math.cos(o.theta);
-              o.center.x = clamp(nx, o.home.x - o.maxPan, o.home.x + o.maxPan);
-              o.center.z = clamp(nz, o.home.z - o.maxPan, o.home.z + o.maxPan);
-            }
-            gp.dist = dist;
-            gp.cx = cx;
-            gp.cy = cy;
-            gp.single = false;
-          } else {
-            if (gp.single) {
-              o.theta -= (g.moveX - gp.x) * 0.008;
-              o.phi = clamp(o.phi - (g.moveY - gp.y) * 0.006, 0.12, 1.45);
-            }
-            gp.x = g.moveX;
-            gp.y = g.moveY;
-            gp.single = true;
-            gp.dist = 0;
-          }
+          const { dx, dz } = groundPanDelta(
+            o.theta,
+            o.radius,
+            curr.cx - prev.cx,
+            curr.cy - prev.cy,
+          );
+          o.center.x = clamp(o.center.x + dx, o.home.x - o.maxPan, o.home.x + o.maxPan);
+          o.center.z = clamp(o.center.z + dz, o.home.z - o.maxPan, o.home.z + o.maxPan);
+        },
+        // One finger orbits: drag sideways to rotate, up/down to tilt.
+        onSingle: (dxPx, dyPx) => {
+          const o = orbit.current;
+          o.theta -= dxPx * 0.008;
+          o.phi = clamp(o.phi - dyPx * 0.006, 0.12, 1.45);
         },
       }),
     [],
@@ -278,10 +242,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
       // Renderer first, so the drape texture can use the GL context's max
       // anisotropy and stay sharp at grazing angles.
-      const renderer = new Renderer({ gl });
-      renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-      renderer.setClearColor(0xcfe0ec, 1);
-      maxAnisoRef.current = renderer.capabilities.getMaxAnisotropy();
+      const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
+      maxAnisoRef.current = maxAnisotropy;
 
       const { group, center, trailRadius, project } = await buildGroupFor(
         hm,
@@ -297,37 +259,22 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
       const scene = new THREE.Scene();
       sceneRef.current = scene;
-      // Warm key light from a low azimuth for stronger relief, plus a soft sky/
-      // ground hemisphere fill (matches the live 3D map).
-      scene.add(new THREE.HemisphereLight(0xfff4e6, 0x55603f, 0.85));
-      const sun = new THREE.DirectionalLight(0xfff2e0, 1.35);
-      sun.position.set(2.2, 1.8, 1.0);
-      scene.add(sun);
+      // Warm key light + soft hemisphere fill (matches the live 3D map).
+      addTerrainLights(scene);
       scene.add(group);
       groupRef.current = group;
 
       // A pin that stands above the surface so the highlighted point is obvious.
-      const marker = new THREE.Group();
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.032, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x7a5200 }),
-      );
-      head.position.y = 0.14;
-      const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.006, 0.006, 0.14, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x444444 }),
-      );
-      pole.position.y = 0.07;
-      marker.add(head, pole);
+      const marker = buildMarkerPin({
+        headRadius: 0.032,
+        headColor: 0xffd166,
+        headEmissive: 0x7a5200,
+        height: 0.14,
+      });
       marker.visible = false;
       scene.add(marker);
 
-      const camera = new THREE.PerspectiveCamera(
-        55,
-        gl.drawingBufferWidth / gl.drawingBufferHeight,
-        0.01,
-        100,
-      );
+      const camera = createTerrainCamera(gl);
       orbit.current.center = center.clone();
       orbit.current.home = center.clone();
       orbit.current.maxPan = Math.max(trailRadius * 1.8, 0.5);
@@ -336,37 +283,29 @@ export function Trail3DGLScreen({ trackId }: Props) {
       orbit.current.radius = clamp(trailRadius * 2.6, 0.8, 9);
       setStatus('ready');
 
-      const render = () => {
-        if (gen !== glGenRef.current) {
-          // Superseded (unmount or GLView remount): stop the loop and free the
-          // scene's GPU resources exactly once.
-          disposeGroup(scene as unknown as THREE.Group);
-          renderer.dispose();
+      runRenderLoop({
+        isCurrent: () => gen === glGenRef.current,
+        gl,
+        scene,
+        camera,
+        renderer,
+        onFrame: () => {
+          positionCameraFromOrbit(camera, orbit.current);
+          const sc = scrubRef.current;
+          if (sc && projectRef.current) {
+            marker.position.copy(projectRef.current(sc.longitude, sc.latitude));
+            marker.visible = true;
+          } else {
+            marker.visible = false;
+          }
+        },
+        onDisposed: () => {
           if (sceneRef.current === scene) {
             sceneRef.current = null;
             groupRef.current = null;
           }
-          return;
-        }
-        requestAnimationFrame(render);
-        const { theta, phi, radius: r, center: c } = orbit.current;
-        camera.position.set(
-          c.x + r * Math.sin(phi) * Math.sin(theta),
-          c.y + r * Math.cos(phi),
-          c.z + r * Math.sin(phi) * Math.cos(theta),
-        );
-        camera.lookAt(c);
-        const sc = scrubRef.current;
-        if (sc && projectRef.current) {
-          marker.position.copy(projectRef.current(sc.longitude, sc.latitude));
-          marker.visible = true;
-        } else {
-          marker.visible = false;
-        }
-        renderer.render(scene, camera);
-        gl.endFrameEXP();
-      };
-      render();
+        },
+      });
     } catch (e) {
       if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
       setErrMsg(e instanceof Error ? e.message : String(e));
@@ -383,7 +322,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     setScrub(at);
   };
 
-  const applyBasemap = async (bm: BasemapChoice) => {
+  const applyBasemap = async (bm: MapBasemap) => {
     const scene = sceneRef.current;
     const hm = hmRef.current;
     if (bm === basemap || !scene || !hm || switching) return;
