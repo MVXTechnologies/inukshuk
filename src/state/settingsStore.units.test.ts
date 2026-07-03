@@ -39,6 +39,18 @@ it('hydrate applies persisted units to the formatters', async () => {
   expect(formatDistance(100)).toBe('328 ft');
 });
 
+it('hydrates a legacy unversioned file (junk dropped) and writes back versioned', async () => {
+  storage.readJson.mockResolvedValue({ units: 'imperial', junkField: 'dropped' });
+  await useSettingsStore.getState().hydrate();
+  expect(useSettingsStore.getState().units).toBe('imperial');
+  expect(useSettingsStore.getState()).not.toHaveProperty('junkField');
+  useSettingsStore.getState().set('units', 'metric');
+  expect(storage.writeJson).toHaveBeenLastCalledWith(
+    'settings.json',
+    expect.objectContaining({ schemaVersion: 2, units: 'metric' }),
+  );
+});
+
 it('reset restores metric formatting', () => {
   useSettingsStore.getState().set('units', 'imperial');
   useSettingsStore.getState().reset();

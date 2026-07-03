@@ -1,3 +1,4 @@
+import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
 import { create } from 'zustand';
@@ -56,7 +57,7 @@ interface SettingsState extends Settings {
 }
 
 function persist(s: Settings): void {
-  storage.writeJson(SETTINGS_FILE, s);
+  storage.writeJson(SETTINGS_FILE, { schemaVersion: SETTINGS_SCHEMA_VERSION, ...s });
 }
 
 /** Pick just the persisted Settings fields out of the full store state. */
@@ -88,8 +89,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const saved = await storage.readJson<Partial<Settings>>(SETTINGS_FILE);
-    const next = { ...DEFAULTS, ...(saved ?? {}) };
+    const saved = await storage.readJson<unknown>(SETTINGS_FILE);
+    // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
+    // fields and wrong-typed values are dropped instead of crashing hydration.
+    const next = migrateSettings(saved, DEFAULTS);
     setDisplayUnits(next.units);
     set({ ...next, hydrated: true });
   },

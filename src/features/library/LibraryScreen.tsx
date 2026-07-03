@@ -36,6 +36,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { bundleCounts } from '@core/library/bundles';
+import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from './components/ElevationProfile';
@@ -94,7 +95,8 @@ export function LibraryScreen() {
   const removeFolder = useLibraryStore((s) => s.removeFolder);
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
   const activeMapId = useLibraryStore((s) => s.activeMapId);
-  const setActiveTrackIds = useMapStore((s) => s.setActiveTrackIds);
+  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+  const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
 
   const [busy, setBusy] = useState(false);
@@ -195,11 +197,13 @@ export function LibraryScreen() {
   const onExportBackup = async () => {
     setExportingBackup(true);
     const result = await exportLibraryBackup(tracks, {
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
       maps,
       tracks,
       bundles,
       folders,
       activeMapId,
+      activeTrackIds,
     });
     setExportingBackup(false);
     if (result.kind === 'exported') {
@@ -215,8 +219,7 @@ export function LibraryScreen() {
   };
 
   const onActivateBundle = (id: string, name: string) => {
-    const trackIds = activateBundle(id); // turns on member maps' overlays
-    setActiveTrackIds(trackIds); // and member trails
+    activateBundle(id); // turns on member maps' page overlays + member trails
     showSnack(`Activated "${name}"`);
     router.navigate('/');
   };
