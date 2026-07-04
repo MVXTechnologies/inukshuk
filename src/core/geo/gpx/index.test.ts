@@ -202,6 +202,97 @@ describe('parseGpx waypoints', () => {
   });
 });
 
+describe('parseGpx malformed and unusual input', () => {
+  it('drops points with missing or non-numeric coordinates', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lon="2"/>
+        <trkpt lat="abc" lon="2"/>
+        <trkpt lat="1" lon=""/>
+        <trkpt lat="1" lon="2"/>
+      </trkseg></trk></gpx>`;
+    const doc = parseGpx(xml);
+    expect(doc.points).toHaveLength(1);
+    expect(doc.points[0]!).toMatchObject({ latitude: 1, longitude: 2 });
+  });
+
+  it('reads tag text when the tag also carries attributes (#text nodes)', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lat="45" lon="-73"><ele units="m">102.4</ele><time zone="utc">2024-01-01T00:00:00Z</time></trkpt>
+      </trkseg></trk></gpx>`;
+    const p = parseGpx(xml).points[0]!;
+    expect(p.altitude).toBe(102.4);
+    expect(p.time).toBe(Date.parse('2024-01-01T00:00:00Z'));
+  });
+
+  it('treats an attribute-only empty tag as absent text', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <metadata><name xml:lang="en"/></metadata>
+      <trk><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).metadata.name).toBeUndefined();
+  });
+
+  it('falls back to a top-level <name> when <metadata> has none', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <name>Top-level name</name>
+      <trk><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).metadata.name).toBe('Top-level name');
+  });
+
+  it('accepts <description> as an alias of <desc> in metadata', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <metadata><description>Alt tag</description></metadata>
+      <trk><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).metadata.description).toBe('Alt tag');
+  });
+
+  it('ignores an unparseable <time> instead of producing NaN', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <metadata><time>yesterday-ish</time></metadata>
+      <trk><trkseg><trkpt lat="1" lon="2"><time>not-a-date</time></trkpt></trkseg></trk></gpx>`;
+    const doc = parseGpx(xml);
+    expect(doc.metadata.time).toBeUndefined();
+    expect(doc.points[0]!.time).toBe(0);
+  });
+
+  it('drops coordinate-less waypoints but keeps wpt time and <description>', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <wpt lon="2"><name>no latitude</name></wpt>
+      <wpt lat="4" lon="5"><description>long form</description><time>2024-05-05T05:00:00Z</time></wpt>
+      <trk><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    const doc = parseGpx(xml);
+    expect(doc.waypoints).toEqual([
+      {
+        latitude: 4,
+        longitude: 5,
+        description: 'long form',
+        time: Date.parse('2024-05-05T05:00:00Z'),
+      },
+    ]);
+  });
+
+  it('returns no speed when <extensions> holds no speed key anywhere', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lat="1" lon="2"><extensions>
+          <gpxtpx:TrackPointExtension><gpxtpx:hr>120</gpxtpx:hr><gpxtpx:cad>80</gpxtpx:cad></gpxtpx:TrackPointExtension>
+        </extensions></trkpt>
+      </trkseg></trk></gpx>`;
+    expect(parseGpx(xml).points[0]!.speed).toBeUndefined();
+  });
+
+  it('ignores a non-numeric extension speed value', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lat="1" lon="2"><extensions>
+          <gpxtpx:TrackPointExtension><gpxtpx:speed>fast</gpxtpx:speed></gpxtpx:TrackPointExtension>
+        </extensions></trkpt>
+      </trkseg></trk></gpx>`;
+    expect(parseGpx(xml).points[0]!.speed).toBeUndefined();
+  });
+});
+
 describe('parseGpx error handling', () => {
   it('throws on empty input', () => {
     expect(() => parseGpx('')).toThrow();

@@ -41,7 +41,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
-import { SharingUnavailableError, exportTrailPdf } from '../library/exportTrailPdf';
+import { SharingUnavailableError, exportTrailPdf } from '../common/exportTrailPdf';
 import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
 import {
   clamp,
@@ -57,7 +57,7 @@ import {
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
 import { buildTerrain, type TerrainBuild } from './terrainScene';
-import { ElevationProfile } from '../library/components/ElevationProfile';
+import { ElevationProfile } from '../common/components/ElevationProfile';
 import { Trail2DView } from './Trail2DView';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 

@@ -3,7 +3,7 @@ import type { TrackPoint, TrackSummary } from '@core/models';
 import { StyleSheet, View } from 'react-native';
 import { IconButton, Surface, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ElevationProfile } from '../../library/components/ElevationProfile';
+import { ElevationProfile } from '../../common/components/ElevationProfile';
 
 interface Props {
   track: TrackSummary;

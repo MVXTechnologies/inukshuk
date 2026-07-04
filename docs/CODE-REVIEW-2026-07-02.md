@@ -9,6 +9,46 @@ verification; 3 were refuted and discarded.
 **Status legend:** ✅ fixed in this branch · 🔧 fixed in the CI pipeline PR
 (#75) · ⏳ open (listed for planning).
 
+## Status update — 2026-07-04 (branch `feat/review-fixes`)
+
+Everything below was remediated in three agent waves on this branch unless
+listed as still-open:
+
+**Fixed — structure (§3):** MapScreen decomposed (844 → ~450 lines; hooks +
+components under `features/map/`); 3D duplication extracted to
+`features/map/terrain3d/`; Basemap types unified (`DrapeSource`);
+offline-only policy centralized in `data/storage.downloadBytes`; trail
+activation persisted in the library index (bundle activation survives
+restarts); `schemaVersion` + migration ladder on both persisted documents;
+`incomingFile.ts` deleted; `ElevationProfile`/`exportTrailPdf` moved to
+`features/common/`; `expo-sensors` + `expo-sqlite` removed (`expo-system-ui`
+and reanimated/worklets kept — required; see wave-1 dep verdicts).
+
+**Fixed — features (§4):** crash-safe recording (atomic throttled checkpoints
+
+- paused-state recovery); GPS accuracy/teleport gating (pure, tested);
+  background recording via Android foreground service (while-in-use permission
+  only; OTA-guarded — activates with the next store binary); units setting
+  (metric/imperial everywhere); all destructive deletes confirm; tile-URL
+  editing; 'Rotate map with heading' wired (native heading-tracking while
+  following); library backup export (zip: index + GPX + photos);
+  `exportTrailPdf` leak + silent-failure fixed; a11y labels + dark-mode pin
+  contrast.
+
+**Fixed — tests/gates (§5):** `src/data` + store hydration/checkpoint/offline
+suites added; coverage gate no longer exempts the GPX codec and track stats
+(97–100% measured); terrain.ts at 100% branches; `console.warn` unsilenced.
+**Fixed — perf (§6):** compass re-renders isolated to the badge; live-track
+serialization throttled; PDF overlay rasterization cached per page; DEM cache
+eviction (128 MB, oldest-first). Suite: 37 suites / 306 tests.
+
+**Still open (deliberate):** re-enabling live 3D + M5a/M5b (PDF drape on 3D,
+offline 3D) and active navigation — product decisions + device-only
+validation; first-run onboarding and the one-action speed-dial — product
+taste; OpenTopoMap basemap — deferred by design; `features/map/dem.ts`
+fetch/stitch pipeline tests and a component-test (RTL) story — the two
+remaining §5 gaps.
+
 ## 1. Overall assessment
 
 The codebase is in genuinely good shape for a single-dev app: `src/core` is

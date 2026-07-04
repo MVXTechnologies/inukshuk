@@ -39,7 +39,7 @@ import { bundleCounts } from '@core/library/bundles';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ElevationProfile } from './components/ElevationProfile';
+import { ElevationProfile } from '../common/components/ElevationProfile';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { exportLibraryBackup } from './exportBackup';
 import { pickAndImportGpxFiles } from './importGpx';

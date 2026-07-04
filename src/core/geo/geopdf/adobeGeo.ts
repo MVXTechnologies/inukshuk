@@ -13,8 +13,9 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  *   - `/Measure` dict with `/Subtype /GEO`:
  *       - `/GPTS` — flat array of lat,lon pairs (GEOGRAPHIC, lat-first!) giving
  *         the geo positions of /BOUNDS points in the unit square of the bbox
- *       - `/BOUNDS` — optional flat array of x,y in [0,1] (defaults to the unit
- *         square corners 0,1,0,0,1,0,1,1 → the four bbox corners)
+ *       - `/BOUNDS` — optional flat array of x,y in [0,1] (per ISO 32000 it
+ *         defaults to 0,0 0,1 1,1 1,0 — the bbox corners lower-left,
+ *         upper-left, upper-right, lower-right)
  *       - `/GCS` — coordinate system dict (/EPSG, /WKT, or /Type /PROJCS|GEOGCS)
  */
 
@@ -55,8 +56,8 @@ function cornersFromMeasure(
   // BOUNDS are (x,y) pairs in the unit square; default to the four bbox corners.
   let bounds = numArray(doc, measure.entries.get('BOUNDS'));
   if (!bounds || bounds.length !== gpts.length) {
-    // Default unit-square ordering matching GPTS: 0,0 1,0 1,1 0,1 (per spec it
-    // defaults to the corners of the bbox). Build to match GPTS pair count.
+    // ISO 32000 default: pairs 0,0 0,1 1,1 1,0 — bbox corners lower-left,
+    // upper-left, upper-right, lower-right. Trim to match the GPTS pair count.
     bounds = [0, 0, 0, 1, 1, 1, 1, 0].slice(0, gpts.length);
   }
 

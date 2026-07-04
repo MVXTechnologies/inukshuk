@@ -2,10 +2,9 @@ import { headingToCardinal } from '@lib/format';
 import { StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { useCompass } from '../useCompass';
 
 interface CompassBadgeProps {
-  /** Heading in degrees clockwise from north, or null if unavailable. */
-  heading: number | null;
   /** Called when the badge is tapped (used to reset the map to north). */
   onPress?: () => void;
 }
@@ -13,8 +12,15 @@ interface CompassBadgeProps {
 /**
  * A small floating compass that rotates its needle to the device heading.
  * Tapping it resets the map to north (when `onPress` is provided).
+ *
+ * The badge owns its own `useCompass` subscription: compass events fire many
+ * times a second, so subscribing here (instead of in MapScreen) means each
+ * heading update re-renders only this small badge, not the whole map tree.
+ * Camera rotation is separate — it uses `useHeadingCamera` / MapLibre's native
+ * heading tracking, not this value.
  */
-export function CompassBadge({ heading, onPress }: CompassBadgeProps) {
+export function CompassBadge({ onPress }: CompassBadgeProps) {
+  const heading = useCompass();
   const theme = useTheme();
   const deg = heading ?? 0;
   return (

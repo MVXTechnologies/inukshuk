@@ -1,4 +1,5 @@
-import type { LngLat } from '@core/models';
+import type { LngLat, TrackPoint } from '@core/models';
+import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
 import {
   Camera,
@@ -35,11 +36,55 @@ import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { buildOsmStyle } from './mapStyle';
-import { useCompass } from './useCompass';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { useTrackOverlays } from './useTrackOverlays';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+
+// Live-recording line throttle: rebuilding the LineString on every GPS fix
+// re-serializes the entire track so far and pushes it across the bridge each
+// fix. Rebuild at most once per TRAIL_REBUILD_MS or every TRAIL_REBUILD_POINTS
+// new fixes, whichever comes first.
+const TRAIL_REBUILD_MS = 1000;
+const TRAIL_REBUILD_POINTS = 5;
+
+/**
+ * Throttled `toLineFeature(points)`. Between rebuilds the previous feature
+ * object is returned unchanged, so the GeoJSON source keeps a stable reference.
+ * A trailing timer commits the newest points shortly after fixes stop arriving,
+ * so the drawn line never visibly lags the GPS.
+ */
+function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineString> | null {
+  const [feature, setFeature] = useState<Feature<LineString> | null>(() => toLineFeature(points));
+  const builtAtRef = useRef(0);
+  const builtCountRef = useRef(points.length);
+
+  useEffect(() => {
+    const build = () => {
+      builtAtRef.current = Date.now();
+      builtCountRef.current = points.length;
+      setFeature(toLineFeature(points));
+    };
+    if (points.length < builtCountRef.current) {
+      // Track reset (recording stopped or restarted) — reflect it immediately.
+      build();
+      return;
+    }
+    if (points.length === builtCountRef.current) return;
+    const sinceLast = Date.now() - builtAtRef.current;
+    const newPoints = points.length - builtCountRef.current;
+    if (newPoints >= TRAIL_REBUILD_POINTS || sinceLast >= TRAIL_REBUILD_MS) {
+      build();
+      return;
+    }
+    // Trailing flush: if no further fix arrives to trigger a rebuild, this
+    // timer commits the pending points once the throttle window elapses.
+    const timer = setTimeout(build, TRAIL_REBUILD_MS - sinceLast);
+    return () => clearTimeout(timer);
+  }, [points]);
+
+  return feature;
+}
 
 export function MapScreen() {
   const insets = useSafeAreaInsets();
@@ -49,7 +94,6 @@ export function MapScreen() {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
 
   const { permission, location } = useLocationTracking();
-  const heading = useCompass();
   const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
@@ -167,7 +211,7 @@ export function MapScreen() {
     [waypoints],
   );
 
-  const trailFeature = useMemo(() => toLineFeature(points), [points]);
+  const trailFeature = useThrottledLineFeature(points);
 
   // Active saved-trail polylines (lng/lat) to drape on the 3D terrain.
   const trail3dLines = useMemo<readonly LngLat[][]>(
@@ -325,9 +369,10 @@ export function MapScreen() {
         />
       )}
 
-      {/* Top-left compass */}
+      {/* Top-left compass. The badge subscribes to the compass itself so the
+          rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <CompassBadge heading={heading} onPress={resetNorth} />
+        <CompassBadge onPress={resetNorth} />
       </View>
 
       {/* Right-side map controls */}
