@@ -7,6 +7,7 @@ import {
   tileRangeForBbox,
   type TileRange,
 } from '@core/geo/terrain';
+import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
 import jpeg from 'jpeg-js';
@@ -19,16 +20,18 @@ const demUrl = (z: number, x: number, y: number) =>
   `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 
 /**
- * Free, key-free basemaps drapeable on the 3D terrain. Both come from Esri's
- * public ArcGIS Online tile services (note the `{z}/{y}/{x}` row/col order).
+ * Free, key-free basemaps drapeable on the 3D terrain — every app {@link Basemap}
+ * except 'relief', which has no drape (the mesh's hypsometric tint is the relief
+ * look). Both come from Esri's public ArcGIS Online tile services (note the
+ * `{z}/{y}/{x}` row/col order).
  *
  * We deliberately do NOT use raw `tile.openstreetmap.org` here: the OSM tile
  * policy forbids app/bulk fetching and returns "Access Blocked 403" tiles when a
  * 3D drape stitches many tiles at once. Esri World Street Map is permissive and
  * matches the satellite/relief sources.
  */
-export type Basemap = 'map' | 'satellite';
-const basemapUrl = (source: Basemap, z: number, x: number, y: number) =>
+export type DrapeSource = Exclude<Basemap, 'relief'>;
+const basemapUrl = (source: DrapeSource, z: number, x: number, y: number) =>
   source === 'satellite'
     ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
     : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`;
@@ -131,7 +134,7 @@ export interface BasemapTexture {
  */
 export async function fetchBasemapTexture(
   range: TileRange,
-  source: Basemap,
+  source: DrapeSource,
 ): Promise<BasemapTexture> {
   const fullW = (range.maxX - range.minX + 1) * TILE;
   const fullH = (range.maxY - range.minY + 1) * TILE;

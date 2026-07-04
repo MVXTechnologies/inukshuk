@@ -15,7 +15,16 @@ module.exports = {
     '^@state/(.*)$': '<rootDir>/src/state/$1',
     '^@lib/(.*)$': '<rootDir>/src/lib/$1',
   },
-  collectCoverageFrom: ['src/core/**/*.{ts,tsx}', '!src/core/**/*.d.ts', '!src/core/**/index.ts'],
+  collectCoverageFrom: [
+    'src/core/**/*.{ts,tsx}',
+    '!src/core/**/*.d.ts',
+    // Pure re-export barrels — no logic to measure. Real modules that happen to
+    // be named index.ts (gpx, track) stay covered; don't re-add a blanket glob.
+    '!src/core/geo/geopdf/index.ts',
+    '!src/core/models/index.ts',
+    // Test-only fixture helpers.
+    '!src/core/geo/geopdf/testUtils.ts',
+  ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.
     './src/core/': {

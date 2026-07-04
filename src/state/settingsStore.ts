@@ -1,4 +1,6 @@
+import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import * as storage from '@data/storage';
+import { setDisplayUnits, type Units } from '@lib/format';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
@@ -32,6 +34,8 @@ export interface Settings {
   trailViewMode: '2d' | '3d';
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;
+  /** Display units for distances, elevation, speed and pace. */
+  units: Units;
 }
 
 const DEFAULTS: Settings = {
@@ -42,6 +46,7 @@ const DEFAULTS: Settings = {
   elevationProfileStyle: 'gradient',
   trailViewMode: '3d',
   offlineOnly: false,
+  units: 'metric',
 };
 
 interface SettingsState extends Settings {
@@ -52,7 +57,31 @@ interface SettingsState extends Settings {
 }
 
 function persist(s: Settings): void {
-  storage.writeJson(SETTINGS_FILE, s);
+  storage.writeJson(SETTINGS_FILE, { schemaVersion: SETTINGS_SCHEMA_VERSION, ...s });
+}
+
+/** Pick just the persisted Settings fields out of the full store state. */
+function snapshot(s: SettingsState): Settings {
+  const {
+    tileUrl,
+    keepAwakeWhileRecording,
+    rotateMapWithHeading,
+    minDisplacementM,
+    elevationProfileStyle,
+    trailViewMode,
+    offlineOnly,
+    units,
+  } = s;
+  return {
+    tileUrl,
+    keepAwakeWhileRecording,
+    rotateMapWithHeading,
+    minDisplacementM,
+    elevationProfileStyle,
+    trailViewMode,
+    offlineOnly,
+    units,
+  };
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -60,33 +89,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const saved = await storage.readJson<Partial<Settings>>(SETTINGS_FILE);
-    set({ ...DEFAULTS, ...(saved ?? {}), hydrated: true });
+    const saved = await storage.readJson<unknown>(SETTINGS_FILE);
+    // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
+    // fields and wrong-typed values are dropped instead of crashing hydration.
+    const next = migrateSettings(saved, DEFAULTS);
+    setDisplayUnits(next.units);
+    set({ ...next, hydrated: true });
   },
 
   set: (key, value) => {
     set({ [key]: value } as Pick<Settings, typeof key>);
-    const {
-      tileUrl,
-      keepAwakeWhileRecording,
-      rotateMapWithHeading,
-      minDisplacementM,
-      elevationProfileStyle,
-      trailViewMode,
-      offlineOnly,
-    } = get();
-    persist({
-      tileUrl,
-      keepAwakeWhileRecording,
-      rotateMapWithHeading,
-      minDisplacementM,
-      elevationProfileStyle,
-      trailViewMode,
-      offlineOnly,
-    });
+    const next = snapshot(get());
+    setDisplayUnits(next.units);
+    persist(next);
   },
 
   reset: () => {
+    setDisplayUnits(DEFAULTS.units);
     set({ ...DEFAULTS });
     persist(DEFAULTS);
   },

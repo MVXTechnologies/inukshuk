@@ -1,54 +1,16 @@
-import type {
-  Bundle,
-  Folder,
-  GeoReference,
-  MapDocument,
-  Track,
-  TrackNote,
-  TrackSummary,
-} from '@core/models';
+import type { Bundle, Folder, MapDocument, Track, TrackNote, TrackSummary } from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { bundleMapActivePages, pruneBundles, toggleId } from '@core/library/bundles';
+import {
+  LIBRARY_SCHEMA_VERSION,
+  migrateLibraryIndex,
+  type LibraryIndex,
+} from '@core/library/migrations';
 import { removeNoteById } from '@core/library/notes';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
 
-/**
- * Normalize a persisted map document to the current shape. Older builds stored a
- * single `georeference` (or none); the current model stores `georeferences[]` +
- * `activePages[]`. This keeps existing libraries working after an update.
- */
-function migrateDoc(raw: MapDocument & { georeference?: GeoReference | null }): MapDocument {
-  const georeferences = Array.isArray(raw.georeferences)
-    ? raw.georeferences
-    : raw.georeference
-      ? [raw.georeference]
-      : [];
-  const activePages = Array.isArray(raw.activePages)
-    ? raw.activePages
-    : georeferences.map((g) => g.pageIndex);
-  return {
-    id: raw.id,
-    name: raw.name,
-    fileUri: raw.fileUri,
-    importedAt: raw.importedAt,
-    pageCount: raw.pageCount,
-    georeferences,
-    activePages,
-    georeferenceWarning: raw.georeferenceWarning,
-    folderId: raw.folderId,
-  };
-}
-
-interface LibraryIndex {
-  maps: MapDocument[];
-  tracks: TrackSummary[];
-  bundles: Bundle[];
-  folders: Folder[];
-  activeMapId: string | null;
-}
-
-interface LibraryState extends LibraryIndex {
+interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   addMap: (doc: MapDocument) => void;
@@ -59,6 +21,12 @@ interface LibraryState extends LibraryIndex {
   toggleMapPage: (id: string, pageIndex: number) => void;
   addTrack: (track: Track, fileUri: string, notes?: readonly ImportedNote[]) => void;
   removeTrack: (id: string) => void;
+  // Trail overlays — which saved trails are drawn on the main map. Persisted
+  // (like maps' activePages) so a bundle activation survives an app restart.
+  /** Toggle whether a saved trail is drawn as an overlay on the main map. */
+  toggleTrackOverlay: (id: string) => void;
+  /** Replace the set of trail overlays (e.g. "view trail", bundle activation). */
+  setActiveTrackIds: (ids: string[]) => void;
   // Trail annotations (GPX editor) — anchored by distance along the trail.
   addTrackNote: (trackId: string, distanceM: number, text: string, photoUri?: string) => string;
   /** Update a note's text and, when `photoUri` is given, its photo (null = remove). */
@@ -77,10 +45,10 @@ interface LibraryState extends LibraryIndex {
   toggleBundleTrack: (bundleId: string, trackId: string) => void;
   /**
    * Turn on every overlay in the bundle: sets each member map's activePages to
-   * all its georeferenced pages, and returns the member track ids so the caller
-   * can show them as trail overlays (which live in the map store).
+   * all its georeferenced pages and replaces the trail overlays with the
+   * bundle's (still-existing) member trails.
    */
-  activateBundle: (id: string) => string[];
+  activateBundle: (id: string) => void;
   // Folders — flat, cross-type containers that organize maps + trails by area.
   addFolder: (name: string) => string;
   renameFolder: (id: string, name: string) => void;
@@ -91,18 +59,20 @@ interface LibraryState extends LibraryIndex {
   activeMap: () => MapDocument | null;
 }
 
-function persist(state: LibraryIndex & { hydrated: boolean }): void {
+function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolean }): void {
   // Never write before hydration: a mutation that lands mid-hydrate (e.g. a
   // cold-start "Open with" import) would persist an index built from the empty
   // initial state and wipe the on-disk library. Callers that can run that early
   // must `await hydrate()` first; this guard is the backstop.
   if (!state.hydrated) return;
   storage.writeIndex({
+    schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps: state.maps,
     tracks: state.tracks,
     bundles: state.bundles,
     folders: state.folders,
     activeMapId: state.activeMapId,
+    activeTrackIds: state.activeTrackIds,
   } satisfies LibraryIndex);
 }
 
@@ -116,22 +86,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   bundles: [],
   folders: [],
   activeMapId: null,
+  activeTrackIds: [],
   hydrated: false,
 
   hydrate: () => {
     if (get().hydrated) return Promise.resolve();
     hydration ??= (async () => {
       storage.ensureStorage();
-      const index = await storage.readIndex<LibraryIndex>();
-      if (index) {
-        set({
-          maps: (index.maps ?? []).map(migrateDoc),
-          tracks: index.tracks ?? [],
-          bundles: index.bundles ?? [],
-          folders: index.folders ?? [],
-          activeMapId: index.activeMapId ?? null,
-          hydrated: true,
-        });
+      const raw = await storage.readIndex<unknown>();
+      if (raw) {
+        // Route every load through the schema-version migration ladder: legacy
+        // unversioned indexes are normalized, junk is dropped, never throws.
+        const { schemaVersion: _v, ...index } = migrateLibraryIndex(raw);
+        set({ ...index, hydrated: true });
       } else {
         set({ hydrated: true });
       }
@@ -229,7 +196,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         ...s,
         tracks: s.tracks.filter((x) => x.id !== id),
         bundles: pruneBundles(s.bundles, { trackId: id }),
+        // A deleted trail must not linger as (or come back as) a map overlay.
+        activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
+      persist(next);
+      return next;
+    }),
+
+  toggleTrackOverlay: (id) =>
+    set((s) => {
+      const next = { ...s, activeTrackIds: toggleId(s.activeTrackIds, id) };
+      persist(next);
+      return next;
+    }),
+
+  setActiveTrackIds: (ids) =>
+    set((s) => {
+      const next = { ...s, activeTrackIds: ids };
       persist(next);
       return next;
     }),
@@ -361,7 +344,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activateBundle: (id) => {
     const { bundles, maps } = get();
     const bundle = bundles.find((b) => b.id === id);
-    if (!bundle) return [];
+    if (!bundle) return;
     const activations = bundleMapActivePages(bundle, maps);
     set((s) => {
       const next = {
@@ -369,11 +352,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         maps: s.maps.map((m) =>
           m.id in activations ? { ...m, activePages: activations[m.id]! } : m,
         ),
+        // Dangling ids (deleted trails) are skipped, mirroring the maps side.
+        activeTrackIds: bundle.trackIds.filter((tid) => s.tracks.some((t) => t.id === tid)),
       };
       persist(next);
       return next;
     });
-    return bundle.trackIds.filter((tid) => get().tracks.some((t) => t.id === tid));
   },
 
   addFolder: (name) => {

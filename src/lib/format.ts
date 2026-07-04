@@ -1,15 +1,46 @@
 /** Human-readable formatting for the live HUD and library. Pure functions. */
 
-/** Metres -> "1.23 km" or "840 m". */
-export function formatDistance(meters: number): string {
-  if (!Number.isFinite(meters) || meters < 0) return '0 m';
-  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
-  return `${Math.round(meters)} m`;
+/** Display unit system for distance/elevation/speed/pace formatting. */
+export type Units = 'metric' | 'imperial';
+
+const M_PER_FT = 0.3048;
+const M_PER_MI = 1609.344;
+const MPH_PER_MPS = 3600 / M_PER_MI;
+
+let displayUnits: Units = 'metric';
+
+/**
+ * Select the unit system used by formatDistance/formatElevation/formatSpeed/
+ * formatPace. Module-level so the many existing call sites keep their
+ * `(value) => string` signatures — the settings store calls this on hydrate,
+ * on change, and on reset.
+ */
+export function setDisplayUnits(units: Units): void {
+  displayUnits = units;
 }
 
-/** Metres -> "1 234 m" (elevation, no decimals). */
+/** Metres -> "1.23 km" / "840 m" (metric) or "1.23 mi" / "840 ft" (imperial). */
+export function formatDistance(meters: number): string {
+  if (!Number.isFinite(meters) || meters < 0) {
+    return displayUnits === 'imperial' ? '0 ft' : '0 m';
+  }
+  if (displayUnits === 'imperial') {
+    const feet = meters / M_PER_FT;
+    // Switch to miles at the same threshold the rounding uses, so a value that
+    // would round to 1000 ft renders as miles instead of "1000 ft".
+    if (Math.round(feet) < 1000) return `${Math.round(feet)} ft`;
+    const miles = meters / M_PER_MI;
+    return miles < 10 ? `${miles.toFixed(2)} mi` : `${miles.toFixed(1)} mi`;
+  }
+  // Same boundary rule: [999.5, 1000) must render as km, never "1000 m".
+  if (Math.round(meters) < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(2)} km`;
+}
+
+/** Metres -> "1 234 m" or "4 049 ft" (elevation, no decimals). */
 export function formatElevation(meters: number): string {
-  if (!Number.isFinite(meters)) return '0 m';
+  if (!Number.isFinite(meters)) return displayUnits === 'imperial' ? '0 ft' : '0 m';
+  if (displayUnits === 'imperial') return `${Math.round(meters / M_PER_FT)} ft`;
   return `${Math.round(meters)} m`;
 }
 
@@ -23,22 +54,25 @@ export function formatDuration(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** m/s -> "4.2 km/h". */
+/** m/s -> "4.2 km/h" or "2.6 mph". */
 export function formatSpeed(mps: number): string {
-  if (!Number.isFinite(mps) || mps < 0) return '0.0 km/h';
+  if (!Number.isFinite(mps) || mps < 0) {
+    return displayUnits === 'imperial' ? '0.0 mph' : '0.0 km/h';
+  }
+  if (displayUnits === 'imperial') return `${(mps * MPH_PER_MPS).toFixed(1)} mph`;
   return `${(mps * 3.6).toFixed(1)} km/h`;
 }
 
-/** m/s -> "6:00/km" pace. Returns "—" for non-positive/implausible speeds. */
+/** m/s -> "6:00/km" or "9:39/mi" pace. Returns "—" for non-positive/implausible speeds. */
 export function formatPace(mps: number): string {
   if (!Number.isFinite(mps) || mps <= 0.1) return '—';
-  const secPerKm = 1000 / mps;
-  if (secPerKm > 99 * 60) return '—';
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
+  const secPerUnit = (displayUnits === 'imperial' ? M_PER_MI : 1000) / mps;
+  if (secPerUnit > 99 * 60) return '—';
+  const m = Math.floor(secPerUnit / 60);
+  const s = Math.round(secPerUnit % 60);
   const mm = s === 60 ? m + 1 : m;
   const ss = s === 60 ? 0 : s;
-  return `${mm}:${ss.toString().padStart(2, '0')}/km`;
+  return `${mm}:${ss.toString().padStart(2, '0')}/${displayUnits === 'imperial' ? 'mi' : 'km'}`;
 }
 
 /** Heading degrees -> cardinal abbreviation (N, NE, …). */
@@ -59,8 +93,10 @@ export function formatTimestamp(epochMs: number): string {
   });
 }
 
-/** Bytes -> human-readable size, e.g. "840 KB" or "12 MB". */
+/** Bytes -> human-readable size, e.g. "840 KB", "12 MB" or "1.2 GB". */
 export function formatBytes(n: number): string {
-  if (n < 1e6) return `${(n / 1e3).toFixed(0)} KB`;
-  return `${(n / 1e6).toFixed(0)} MB`;
+  if (!Number.isFinite(n) || n < 0) return '0 KB';
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(0)} MB`;
+  return `${(n / 1e3).toFixed(0)} KB`;
 }

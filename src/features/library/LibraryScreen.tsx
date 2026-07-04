@@ -36,12 +36,39 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { bundleCounts } from '@core/library/bundles';
+import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ElevationProfile } from './components/ElevationProfile';
+import { ElevationProfile } from '../common/components/ElevationProfile';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { exportLibraryBackup } from './exportBackup';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
+
+// One confirm flow covers every destructive delete in the Library; the copy
+// spells out exactly what is (and is not) lost for each kind.
+type DeleteTarget = { kind: 'map' | 'track' | 'bundle' | 'folder'; id: string; name: string };
+
+const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: string) => string }> =
+  {
+    map: {
+      title: 'Delete map',
+      body: (name) => `Delete map "${name}"? Its PDF file is permanently deleted.`,
+    },
+    track: {
+      title: 'Delete trail',
+      body: (name) =>
+        `Delete trail "${name}"? Its GPX file, notes and photos are permanently deleted.`,
+    },
+    bundle: {
+      title: 'Delete bundle',
+      body: (name) => `Delete bundle "${name}"? Its maps and trails stay in the library.`,
+    },
+    folder: {
+      title: 'Delete folder',
+      body: (name) => `Delete folder "${name}"? Its items fall back to Ungrouped.`,
+    },
+  };
 
 export function LibraryScreen() {
   const insets = useSafeAreaInsets();
@@ -67,7 +94,9 @@ export function LibraryScreen() {
   const renameFolder = useLibraryStore((s) => s.renameFolder);
   const removeFolder = useLibraryStore((s) => s.removeFolder);
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
-  const setActiveTrackIds = useMapStore((s) => s.setActiveTrackIds);
+  const activeMapId = useLibraryStore((s) => s.activeMapId);
+  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+  const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
 
   const [busy, setBusy] = useState(false);
@@ -85,6 +114,8 @@ export function LibraryScreen() {
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
+  const [exportingBackup, setExportingBackup] = useState(false);
 
   const grouped = groupByFolder(folders, maps, tracks);
 
@@ -153,9 +184,42 @@ export function LibraryScreen() {
     setRenamingFolder(null);
   };
 
+  const onConfirmDelete = () => {
+    if (!confirmDelete) return;
+    const { kind, id } = confirmDelete;
+    setConfirmDelete(null);
+    if (kind === 'map') removeMap(id);
+    else if (kind === 'track') removeTrack(id);
+    else if (kind === 'bundle') removeBundle(id);
+    else removeFolder(id);
+  };
+
+  const onExportBackup = async () => {
+    setExportingBackup(true);
+    const result = await exportLibraryBackup(tracks, {
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps,
+      tracks,
+      bundles,
+      folders,
+      activeMapId,
+      activeTrackIds,
+    });
+    setExportingBackup(false);
+    if (result.kind === 'exported') {
+      showSnack(
+        `Backup exported (${result.tracks} trail${result.tracks === 1 ? '' : 's'}, ` +
+          `${result.photos} photo${result.photos === 1 ? '' : 's'})`,
+      );
+    } else if (result.kind === 'unavailable') {
+      showSnack('Sharing is not available on this device');
+    } else {
+      showSnack(`Backup failed: ${result.message}`);
+    }
+  };
+
   const onActivateBundle = (id: string, name: string) => {
-    const trackIds = activateBundle(id); // turns on member maps' overlays
-    setActiveTrackIds(trackIds); // and member trails
+    activateBundle(id); // turns on member maps' page overlays + member trails
     showSnack(`Activated "${name}"`);
     router.navigate('/');
   };
@@ -207,7 +271,7 @@ export function LibraryScreen() {
   // A per-card overflow menu that handles both organization concerns: moving the
   // item into a folder (exclusive) and toggling its membership in bundles. The
   // menu stays open across taps so several bundles can be picked in one go.
-  const itemMenu = (kind: 'map' | 'track', id: string, folderId?: string) => (
+  const itemMenu = (kind: 'map' | 'track', id: string, name: string, folderId?: string) => (
     <Menu
       visible={cardMenu?.kind === kind && cardMenu.id === id}
       onDismiss={() => setCardMenu(null)}
@@ -264,8 +328,7 @@ export function LibraryScreen() {
         title={kind === 'map' ? 'Delete map' : 'Delete trail'}
         onPress={() => {
           setCardMenu(null);
-          if (kind === 'map') removeMap(id);
-          else removeTrack(id);
+          setConfirmDelete({ kind, id, name });
         }}
       />
     </Menu>
@@ -307,7 +370,7 @@ export function LibraryScreen() {
               accessibilityLabel="Overlay pages"
             />
           )}
-          {itemMenu('map', m.id, m.folderId)}
+          {itemMenu('map', m.id, m.name, m.folderId)}
         </View>
         {hasPages && expanded && (
           <Card.Content>
@@ -402,7 +465,7 @@ export function LibraryScreen() {
         title="Delete trail"
         onPress={() => {
           setCardMenu(null);
-          removeTrack(t.id);
+          setConfirmDelete({ kind: 'track', id: t.id, name: t.name });
         }}
       />
     </Menu>
@@ -478,7 +541,9 @@ export function LibraryScreen() {
               <IconButton
                 icon="trash-can-outline"
                 size={20}
-                onPress={() => removeFolder(g.folder.id)}
+                onPress={() =>
+                  setConfirmDelete({ kind: 'folder', id: g.folder.id, name: g.folder.name })
+                }
                 accessibilityLabel="Delete folder"
               />
             </View>,
@@ -506,6 +571,12 @@ export function LibraryScreen() {
           icon="folder-plus-outline"
           onPress={() => setNewFolderVisible(true)}
           accessibilityLabel="New folder"
+        />
+        <Appbar.Action
+          icon="export-variant"
+          onPress={() => void onExportBackup()}
+          disabled={exportingBackup}
+          accessibilityLabel="Export backup"
         />
       </Appbar.Header>
 
@@ -545,12 +616,22 @@ export function LibraryScreen() {
                           icon="layers"
                           onPress={() => onActivateBundle(b.id, b.name)}
                           disabled={counts.maps + counts.tracks === 0}
+                          accessibilityLabel={`Activate bundle ${b.name}`}
                         />
                         <IconButton
                           icon={editing ? 'chevron-up' : 'pencil-outline'}
                           onPress={() => setEditingBundle(editing ? null : b.id)}
+                          accessibilityLabel={
+                            editing ? `Close bundle ${b.name}` : `Edit bundle ${b.name}`
+                          }
                         />
-                        <IconButton icon="trash-can-outline" onPress={() => removeBundle(b.id)} />
+                        <IconButton
+                          icon="trash-can-outline"
+                          onPress={() =>
+                            setConfirmDelete({ kind: 'bundle', id: b.id, name: b.name })
+                          }
+                          accessibilityLabel={`Delete bundle ${b.name}`}
+                        />
                       </View>
                     )}
                   />
@@ -724,6 +805,22 @@ export function LibraryScreen() {
           <Dialog.Actions>
             <Button onPress={() => setRenamingFolder(null)}>Cancel</Button>
             <Button onPress={commitRenameFolder}>Rename</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Single confirm flow for every destructive delete (map/trail/bundle/folder). */}
+        <Dialog visible={confirmDelete !== null} onDismiss={() => setConfirmDelete(null)}>
+          <Dialog.Title>{confirmDelete ? DELETE_COPY[confirmDelete.kind].title : ''}</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              {confirmDelete ? DELETE_COPY[confirmDelete.kind].body(confirmDelete.name) : ''}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button textColor={theme.colors.error} onPress={onConfirmDelete}>
+              Delete
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

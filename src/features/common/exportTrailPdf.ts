@@ -14,9 +14,24 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 /**
+ * Thrown when the OS offers no share sheet. Callers should surface `message`
+ * (it is user-facing copy) in their snackbar rather than a generic failure.
+ */
+export class SharingUnavailableError extends Error {
+  constructor() {
+    super('Sharing is not available on this device');
+    this.name = 'SharingUnavailableError';
+  }
+}
+
+/**
  * Render a trail's elevation profile, numbered notes (with photos) and a summary
  * table to a PDF via expo-print, then hand it to the share sheet. Photos are
  * inlined as data URIs because the print webview doesn't reliably load file://.
+ *
+ * Throws {@link SharingUnavailableError} when the device has no share sheet.
+ * The generated PDF is deleted once the share sheet resolves (expo-print would
+ * otherwise leave it in the cache forever).
  */
 export async function exportTrailPdf(
   track: TrackSummary,
@@ -74,11 +89,14 @@ export async function exportTrailPdf(
   });
 
   const { uri } = await Print.printToFileAsync({ html });
-  if (await Sharing.isAvailableAsync()) {
+  try {
+    if (!(await Sharing.isAvailableAsync())) throw new SharingUnavailableError();
     await Sharing.shareAsync(uri, {
       mimeType: 'application/pdf',
       UTI: 'com.adobe.pdf',
       dialogTitle: `${track.name}.pdf`,
     });
+  } finally {
+    storage.deleteFileAt(uri);
   }
 }

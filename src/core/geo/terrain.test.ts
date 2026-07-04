@@ -88,6 +88,24 @@ describe('tileRangeForBbox / pickTerrainZoom', () => {
     expect(c.wide).toBeLessThanOrEqual(4);
     expect(c.high).toBeLessThanOrEqual(4);
   });
+
+  it('works with all-default arguments (budget 4, zoom 8..14)', () => {
+    const z = pickTerrainZoom(bbox);
+    expect(z).toBeGreaterThanOrEqual(8);
+    expect(z).toBeLessThanOrEqual(14);
+    const c = tileCount(tileRangeForBbox(bbox, z));
+    expect(c.wide).toBeLessThanOrEqual(4);
+    expect(c.high).toBeLessThanOrEqual(4);
+  });
+
+  it('bottoms out at zMin when even that zoom exceeds the tile budget', () => {
+    // A near-hemispheric bbox spans far more than 4 tiles per side even at z=8,
+    // so the loop exhausts and the function must return zMin (not z=zMin-1).
+    const huge: BoundingBox = { minLat: -60, minLng: -170, maxLat: 60, maxLng: 170 };
+    expect(pickTerrainZoom(huge, 4, 14, 8)).toBe(8);
+    const c = tileCount(tileRangeForBbox(huge, 8));
+    expect(c.wide).toBeGreaterThan(4); // confirms the budget really was unmeetable
+  });
 });
 
 describe('padBbox', () => {
@@ -109,6 +127,26 @@ describe('padBbox', () => {
     const mPerDegLat = 111320;
     const spanLatM = (p.maxLat - p.minLat) * mPerDegLat;
     expect(spanLatM).toBeGreaterThanOrEqual(2000 - 1);
+  });
+
+  it('defaults to factor 0.6 and a 1200 m minimum span', () => {
+    const tiny: BoundingBox = { minLat: 45.5, maxLat: 45.5001, minLng: -73.6, maxLng: -73.5999 };
+    const p = padBbox(tiny);
+    const mPerDegLat = 111320;
+    const mPerDegLng = mPerDegLat * Math.cos((45.5 * Math.PI) / 180);
+    expect((p.maxLat - p.minLat) * mPerDegLat).toBeGreaterThanOrEqual(1200 - 1);
+    expect((p.maxLng - p.minLng) * mPerDegLng).toBeGreaterThanOrEqual(1200 - 1);
+  });
+
+  it('keeps longitude padding finite when the latitude midpoint is not a number', () => {
+    // The `|| 111320` fallback guards mPerDegLng against a NaN cos() so a
+    // corrupt latitude cannot poison the longitude axis with NaN too.
+    const corrupt: BoundingBox = { minLat: NaN, maxLat: NaN, minLng: -73.6, maxLng: -73.58 };
+    const p = padBbox(corrupt, 0.5, 0);
+    expect(Number.isFinite(p.minLng)).toBe(true);
+    expect(Number.isFinite(p.maxLng)).toBe(true);
+    expect(p.minLng).toBeLessThan(-73.6);
+    expect(p.maxLng).toBeGreaterThan(-73.58);
   });
 });
 

@@ -1,6 +1,8 @@
 import type { Track, TrackPoint, TrackStats } from '@core/models';
 import { buildGpx } from '@core/geo/gpx';
 import { computeTrackStats, reduceStatsWith } from '@core/geo/track';
+import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
+import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
 import { useLibraryStore } from './libraryStore';
@@ -66,6 +68,23 @@ function defaultName(now: number): string {
     .replace(/\s/g, '')}`;
 }
 
+/**
+ * Snapshot the live recording for the crash journal, or null when idle.
+ * An in-flight pause is folded into pausedMs at write time so a recording
+ * recovered after a crash-while-paused keeps its frozen elapsed time.
+ */
+function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
+  if (s.status === 'idle' || s.startedAt === null) return null;
+  return {
+    status: s.status,
+    name: s.name,
+    startedAt: s.startedAt,
+    pausedMs: s.pausedMs + (s.pausedAt !== null ? Date.now() - s.pausedAt : 0),
+    points: s.points,
+    waypoints: s.waypoints,
+  };
+}
+
 export const useRecorderStore = create<RecorderState>((set, get) => ({
   status: 'idle',
   name: '',
@@ -78,6 +97,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
   start: (name) => {
     const now = Date.now();
+    // A fresh session supersedes any stale checkpoint from a previous crash.
+    checkpoint.clearCheckpoint();
     set({
       status: 'recording',
       name: name?.trim() || defaultName(now),
@@ -94,12 +115,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     const { status, points, stats } = get();
     if (status !== 'recording') return;
     const prev = points[points.length - 1];
+    // Gate raw fixes: bad-accuracy and teleport outliers inflate distance/D±,
+    // and near-duplicate timestamps guard against double-feeding when both the
+    // background task and the foreground watch deliver the same fix.
+    if (!shouldAcceptFix(prev, point)) return;
     set({
       points: [...points, point],
       // Live HUD uses the cheap incremental fold; final stats are recomputed
       // exactly on stop().
       stats: reduceStatsWith(stats, prev, point),
     });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.maybeWriteCheckpoint(cp); // throttled crash journal
   },
 
   addWaypoint: () => {
@@ -120,10 +147,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         },
       ],
     });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp); // waypoints are rare + high-value: write now
     return n;
   },
 
-  updateWaypoint: (id, patch) =>
+  updateWaypoint: (id, patch) => {
     set((s) => {
       const old = s.waypoints.find((w) => w.id === id);
       // Replacing or clearing a photo: delete the now-orphaned file.
@@ -142,17 +171,26 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
           return next;
         }),
       };
-    }),
+    });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
+  },
 
-  removeWaypoint: (id) =>
+  removeWaypoint: (id) => {
     set((s) => {
       const w = s.waypoints.find((x) => x.id === id);
       if (w?.photoUri) storage.deleteFileAt(w.photoUri);
       return { waypoints: s.waypoints.filter((x) => x.id !== id) };
-    }),
+    });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
+  },
 
   pause: () => {
-    if (get().status === 'recording') set({ status: 'paused', pausedAt: Date.now() });
+    if (get().status !== 'recording') return;
+    set({ status: 'paused', pausedAt: Date.now() });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
   },
 
   resume: () => {
@@ -166,11 +204,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       pausedMs: pausedMs + (pausedAt !== null ? Date.now() - pausedAt : 0),
       pausedAt: null,
     });
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
   },
 
   stop: async () => {
     const { points, name, startedAt, status, waypoints } = get();
     if (status === 'idle' || startedAt === null) return null;
+
+    // Last checkpoint before finalizing: a crash during the GPX write below
+    // still leaves a complete journal to recover from.
+    const preStop = checkpointOf(get());
+    if (preStop) checkpoint.writeCheckpoint(preStop);
 
     const endedAt = Date.now();
     const finalStats = computeTrackStats(points);
@@ -207,6 +252,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       for (const wp of waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
     }
 
+    // The recording is safely persisted (or intentionally empty) — the crash
+    // journal is now stale and must not resurrect on next launch.
+    checkpoint.clearCheckpoint();
     set({
       status: 'idle',
       name: '',
@@ -222,6 +270,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
   discard: () => {
     for (const wp of get().waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
+    checkpoint.clearCheckpoint();
     set({
       status: 'idle',
       name: '',
@@ -234,3 +283,46 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     });
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Crash recovery
+
+let recoveryAttempted = false;
+
+/**
+ * One-shot launch recovery: if a crash left a checkpoint with recorded points,
+ * restore it into the store as a PAUSED session (never auto-recording — the
+ * user decides whether to resume or stop/save). Returns true when a recording
+ * was recovered so the UI can explain what happened.
+ *
+ * Test-only `reset` escape hatch: the one-shot latch must not leak between
+ * jest cases.
+ */
+export async function initRecorderRecovery(): Promise<boolean> {
+  if (recoveryAttempted) return false;
+  recoveryAttempted = true;
+  // Never clobber a live session (e.g. recovery raced a fast manual start).
+  if (useRecorderStore.getState().status !== 'idle') return false;
+
+  const cp = await checkpoint.readCheckpoint();
+  if (!cp || !Array.isArray(cp.points) || cp.points.length === 0) return false;
+
+  useRecorderStore.setState({
+    status: 'paused',
+    name: cp.name,
+    startedAt: cp.startedAt,
+    pausedMs: cp.pausedMs,
+    // Restored paused-at-now: the dead time between crash and relaunch never
+    // counts as elapsed, and resume() folds the wait correctly.
+    pausedAt: Date.now(),
+    points: cp.points,
+    stats: computeTrackStats(cp.points),
+    waypoints: cp.waypoints ?? [],
+  });
+  return true;
+}
+
+/** Reset the one-shot recovery latch. Exported for tests only. */
+export function resetRecorderRecoveryForTests(): void {
+  recoveryAttempted = false;
+}

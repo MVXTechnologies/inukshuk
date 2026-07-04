@@ -97,17 +97,20 @@ four stages:
 
 ## State & persistence
 
-| Store                 | Persisted?            | Holds                                                                                      |
-| --------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
-| `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, active map |
-| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs                              |
-| `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                  |
-| `mapStore`            | no (transient)        | active trail overlays, basemap, terrain3d flag, focus bounds                               |
-| `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                           |
-| `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                |
+| Store                 | Persisted?            | Holds                                                                                                             |
+| --------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, active map, active trail overlays |
+| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs                                                     |
+| `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                         |
+| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                    |
+| `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                  |
+| `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                                       |
 
 Stores hydrate from disk on app start in `app/_layout.tsx`. `libraryStore`'s
 hydration is single-flight and `persist()` refuses to write before hydration
 (a cold-start "Open with" import must not clobber the index). JSON documents
 are written atomically (staged `.tmp` + swap); a corrupt index is preserved as
-`.corrupt` instead of being silently reset.
+`.corrupt` instead of being silently reset. Both persisted documents carry a
+`schemaVersion` and every load routes through the migration ladder in
+`src/core/library/migrations.ts` (legacy unversioned files are treated as v1
+and normalized; migrators are total and never throw on junk).
