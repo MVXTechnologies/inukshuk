@@ -51,7 +51,7 @@ jobs:
       # independently of the prebuild-generated android/ dir (setup-java's
       # `cache: gradle` variant hard-fails here, see #77).
       - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
