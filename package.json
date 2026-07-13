@@ -28,7 +28,7 @@
     "expo-task-manager": "~56.0.20",
     "expo-three": "^8.0.0",
     "expo-updates": "~56.0.21",
-    "fast-xml-parser": "^5.9.3",
+    "fast-xml-parser": "^5.10.0",
     "fflate": "^0.8.3",
     "jpeg-js": "^0.4.4",
     "nanoid": "^5.1.16",
