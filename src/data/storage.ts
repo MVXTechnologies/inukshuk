@@ -313,27 +313,12 @@ export function writeIndex(value: unknown): void {
 
 /**
  * Raw text of the persisted library index (`library.json`), or null if it has
- * never been written. Used by the backup export, which packs the on-disk index
+ * never been written. Used by the data export, which packs the on-disk index
  * verbatim rather than a re-serialization.
  */
 export async function readIndexText(): Promise<string | null> {
   const file = new File(Paths.document, INDEX_FILE);
   return file.exists ? file.text() : null;
-}
-
-/**
- * Stage bytes in the cache (`exports/`) and return the file uri — for archives
- * that only exist to be handed to the share sheet. Callers should
- * {@link deleteFileAt} the uri once the share resolves.
- */
-export function writeCacheBytes(name: string, bytes: Uint8Array): string {
-  const dir = new Directory(Paths.cache, 'exports');
-  if (!dir.exists) dir.create({ intermediates: true });
-  const file = new File(dir, name);
-  if (file.exists) file.delete();
-  file.create();
-  file.write(bytes);
-  return file.uri;
 }
 
 /** Size in bytes of the file at `uri`, or 0 when it does not exist / cannot be read. */
@@ -377,7 +362,7 @@ export function readFileChunks(
   }
 }
 
-/** Incremental writer into the cache `exports/` staging area (see {@link writeCacheBytes}). */
+/** Incremental writer into the cache `exports/` staging area. */
 export interface CacheFileWriter {
   uri: string;
   write(chunk: Uint8Array): void;

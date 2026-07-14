@@ -12,6 +12,12 @@ on the same app version; native changes require a new store build. See
 
 ### Fixed
 
+- **"Download your data" no longer claims success when the share sheet is
+  cancelled.** `expo-sharing` resolves identically whether the user completed the
+  share or dismissed the sheet (Android reports no outcome), so the export now
+  says what it can actually vouch for — "Archive ready — N files, X MB", shown as
+  the sheet opens — and stays silent afterwards instead of announcing a save that
+  may never have happened. The staged zip is still deleted on cancel.
 - **The compass is steady at rest.** The previous smoother scaled its
   responsiveness with how far each new sample sat from the estimate — but on
   Android `expo-location` derives the heading from the raw accelerometer +
@@ -55,6 +61,12 @@ on the same app version; native changes require a new store build. See
   `workerSrc` with a watchdog that falls back to the main-thread worker), and the
   rasterized page was handed to MapLibre as a `data:` URI, which crashed its
   native `ImageSource` (now written to a cache file and referenced by `file://`).
+
+### Changed
+
+- **One export, in Settings.** The Library's "Export backup" button is gone; the
+  Settings → "Download your data" export supersedes it (same `library.json`,
+  trails and note photos, plus the map PDFs the old in-memory backup had to omit).
 
 ### Added
 
