@@ -1,3 +1,4 @@
+import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
 import type { Feature, Polygon } from 'geojson';
@@ -67,10 +68,10 @@ const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
 const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
 
 /**
- * Highest zoom at which each tile service reliably serves REAL tiles worldwide
- * — the raster SOURCE's `maxzoom`. Beyond it MapLibre OVERSCALES the deepest
- * real tiles (blurry but correct) instead of fetching, because the raster
- * LAYERS deliberately carry no `maxzoom` of their own.
+ * The raster SOURCE's `maxzoom` per basemap — the highest zoom at which each
+ * tile service reliably serves REAL tiles worldwide. Beyond it MapLibre
+ * OVERSCALES the deepest real tiles (blurry but correct) instead of fetching,
+ * because the raster LAYERS deliberately carry no `maxzoom` of their own.
  *
  * Esri never 404s past its data: it serves an HTTP-200 grey "Map data not yet
  * available" placeholder tile, which MapLibre happily renders — that's the
@@ -80,8 +81,11 @@ const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
  * z15 (Patagonia placeholders start at z16). OSM has real tiles to z19
  * globally. Capping each source below its placeholder zone trades a little
  * sharpness in well-covered areas for never showing "data not available".
+ *
+ * The caps live in `@core/geo/tiles` because the offline downloader has to obey
+ * them too (see `packZoomRange`): a pack may only ever request zooms its
+ * source's `maxzoom` allows.
  */
-const NATIVE_MAX_ZOOM: Record<MapBasemap, number> = { map: 19, satellite: 17, relief: 15 };
 
 /** Optional tweaks to the base style (all default off). */
 export interface OsmStyleOptions {
