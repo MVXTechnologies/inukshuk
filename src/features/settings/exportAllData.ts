@@ -3,10 +3,24 @@ import * as storage from '@data/storage';
 import * as Sharing from 'expo-sharing';
 import { strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 
+/**
+ * Outcome of a "Download your data" run. There is deliberately no `success`
+ * variant: `Sharing.shareAsync` resolves identically whether the user completed
+ * the share or dismissed the sheet (Android surfaces no completion signal), so
+ * `shared` means only "the archive was built and the sheet was presented, then
+ * closed" — the caller must never claim the data was saved anywhere.
+ */
 export type ExportAllDataResult =
-  | { kind: 'exported'; files: number }
+  | { kind: 'shared' }
   | { kind: 'unavailable' }
   | { kind: 'error'; message: string };
+
+export interface ExportAllDataCallbacks {
+  /** Ticks once per planned file while the archive is being written. */
+  onProgress?: (done: number, total: number) => void;
+  /** The archive is complete and about to be handed to the share sheet. */
+  onReady?: (files: number, bytes: number) => void;
+}
 
 /** Slice size for streaming file bytes into the zip (bounds peak memory). */
 const CHUNK_BYTES = 1024 * 1024;
@@ -19,21 +33,24 @@ const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resol
  * the share sheet: `library.json` (the persisted index, verbatim) at the root
  * plus every planned map/GPX/photo under its Library-mirroring path.
  *
- * Unlike the Library's backup (which assembles the whole archive in memory and
- * therefore excludes maps), this streams: each source file is read in
- * {@link CHUNK_BYTES} slices, pushed through fflate's incremental `Zip`, and
- * the compressed output is appended straight to a cache file — peak memory
- * stays around one chunk regardless of how many tens of MB a PDF weighs.
+ * The archive is streamed rather than assembled in memory: each source file is
+ * read in {@link CHUNK_BYTES} slices, pushed through fflate's incremental
+ * `Zip`, and the compressed output is appended straight to a cache file — peak
+ * memory stays around one chunk regardless of how many tens of MB a PDF weighs.
  *
  * A source file that vanished since planning is skipped (the index still
  * records it); the archive is staged in the cache and deleted once the share
- * sheet resolves. `onProgress(done, total)` ticks once per planned file.
+ * sheet resolves — including when the user dismissed it.
+ *
+ * `onReady` fires once the zip exists (the only moment we can honestly report
+ * anything to the user); the resolved `shared` result carries no counts,
+ * because whether the user actually saved/sent the archive is unknowable.
  */
 export async function exportAllData(
   plan: ArchivePlan,
   /** In-memory index snapshot, packed only if `library.json` was never written. */
   fallbackIndex: unknown,
-  onProgress?: (done: number, total: number) => void,
+  { onProgress, onReady }: ExportAllDataCallbacks = {},
 ): Promise<ExportAllDataResult> {
   let writer: storage.CacheFileWriter | null = null;
   try {
@@ -89,6 +106,9 @@ export async function exportAllData(
     checkZip();
     writer.close();
 
+    onReady?.(files, storage.fileSizeAt(writer.uri));
+    await yieldToUi(); // let the "archive ready" message paint before the sheet covers it
+
     try {
       await Sharing.shareAsync(writer.uri, {
         mimeType: 'application/zip',
@@ -96,9 +116,11 @@ export async function exportAllData(
         dialogTitle: 'Inukshuk — your data (maps, trails, notes & photos)',
       });
     } finally {
-      storage.deleteFileAt(writer.uri); // the staged zip is only needed for the share sheet
+      // The staged zip is only needed for the share sheet — drop it whether the
+      // user completed the share or dismissed it.
+      storage.deleteFileAt(writer.uri);
     }
-    return { kind: 'exported', files };
+    return { kind: 'shared' };
   } catch (e) {
     if (writer) {
       // Never leave a half-written archive behind in the cache.
