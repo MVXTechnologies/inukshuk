@@ -1,41 +1,50 @@
 /**
- * Compass-heading smoothing. The raw heading stream jitters rapidly; we smooth
- * it with a circular exponential moving average. Averaging is done on the
- * heading's unit vector (cos/sin) rather than the angle directly, so the 0°/360°
- * wraparound is handled correctly (e.g. 359° and 1° smooth toward 0°, not 180°).
+ * Compass-heading filtering.
  *
- * Two smoothers live here:
- * - `createHeadingSmoother` — fixed-alpha EMA (kept as the simple primitive).
- * - `createAdaptiveHeadingSmoother` — the one the app uses: alpha scales with
- *   how far the new sample deviates from the current estimate (snappy while
- *   you turn, steady while you stand still), is corrected for irregular sample
- *   intervals, and is damped when the sensor reports poor calibration.
+ * ## What the sensor actually gives us
  *
- * Pure (no platform deps) so the smoothing is unit-tested independently of the
+ * On Android, `expo-location`'s heading watch is *not* the gyro-fused rotation
+ * vector: it derives the azimuth from the raw accelerometer + magnetometer
+ * (`SensorManager.getRotationMatrix` / `getOrientation`) at `SENSOR_DELAY_NORMAL`.
+ * That signal carries several degrees of noise even on a table. Worse, the
+ * native module only forwards a reading when it differs from the **last one it
+ * sent** by more than ~2° (and ≥50 ms have passed) — so at rest we are handed a
+ * stream made *exclusively* of ≥2° noise excursions, arriving irregularly at up
+ * to ~10 Hz. There is no such thing as a "quiet" sample to average against.
+ *
+ * Any filter whose responsiveness grows with the *deviation of the incoming
+ * sample* therefore speeds up for noise, and the needle wanders by several
+ * degrees while the phone lies still. (That was the previous
+ * `createAdaptiveHeadingSmoother`, and it is why the compass still jittered.)
+ *
+ * ## What we do instead
+ *
+ * `createHeadingFilter` = **1-Euro filter** (see `./oneEuro`) + a **rest
+ * deadband**:
+ *
+ * 1. The heading is *unwrapped* onto a continuous scale (359° → 361°, never a
+ *    358° backflip), so ordinary linear filtering is valid across 0/360.
+ * 2. The 1-Euro filter adapts on the *speed of the filtered signal*, not on the
+ *    deviation of the sample: still phone → cutoff `minCutoffHz` → heavy
+ *    smoothing; real turn → cutoff opens → follows within a few degrees.
+ * 3. A circular **backlash (play) deadband** sits on the output: the reported
+ *    heading does not move at all until the filtered heading has left a
+ *    `deadbandDeg` window around it, and thereafter tracks it 1:1 (offset by
+ *    the deadband). Unlike a plain threshold this never produces stair-steps —
+ *    it is exactly zero motion at rest and continuous motion when turning.
+ *
+ * Net effect: **< 1° peak-to-peak while the phone is still**, and a turn is
+ * tracked with a lag of a few degrees. Both are covered by the tests here.
+ *
+ * Pure (no platform deps) so the filtering is unit-tested independently of the
  * sensor; `useCompass` just feeds it raw readings.
  */
 
-const DEG2RAD = Math.PI / 180;
-const RAD2DEG = 180 / Math.PI;
+import { createOneEuroFilter } from './oneEuro';
 
 /** Wrap any angle into [0, 360). */
 export function normalizeDeg(deg: number): number {
   return ((deg % 360) + 360) % 360;
-}
-
-/** Circular mean of headings in degrees. Returns 0 for empty / fully-opposed input. */
-export function circularMeanDeg(degrees: readonly number[]): number {
-  let x = 0;
-  let y = 0;
-  for (const d of degrees) {
-    const r = d * DEG2RAD;
-    x += Math.cos(r);
-    y += Math.sin(r);
-  }
-  // Near-zero resultant (empty, or antipodal samples that cancel) has no defined
-  // direction — return 0 rather than a noisy atan2 of floating-point dust.
-  if (Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9) return 0;
-  return normalizeDeg(Math.atan2(y, x) * RAD2DEG);
 }
 
 /**
@@ -51,64 +60,18 @@ export function signedDeltaDeg(fromDeg: number, toDeg: number): number {
  * Unwrap `headingDeg` (any angle, typically [0,360)) onto the continuous scale
  * of `prevContinuousDeg` by taking the shortest arc. Feeding successive
  * headings through this yields a continuous angle (e.g. 350 → 370, not → 10),
- * which is what animated rotations need to avoid a 350° spin-the-wrong-way at
- * the 0/360 boundary.
+ * which is what animated rotations — and any linear filter — need in order to
+ * cross the 0/360 boundary the short way.
  */
 export function unwrapDeg(prevContinuousDeg: number, headingDeg: number): number {
   return prevContinuousDeg + signedDeltaDeg(prevContinuousDeg, headingDeg);
 }
 
-export interface HeadingSmoother {
-  /** Feed a raw heading (deg); returns the updated smoothed heading [0,360). */
-  push(deg: number): number;
-  /** Current smoothed heading, or null before the first sample. */
-  value(): number | null;
-  /** Forget all history (e.g. when the sensor subscription restarts). */
-  reset(): void;
-}
-
-/**
- * Circular exponential moving average over the heading unit vector.
- * `alpha` in (0, 1]: lower = smoother but laggier. 0.2 tames sensor jitter while
- * staying responsive within ~1s at typical update rates.
- */
-export function createHeadingSmoother(alpha = 0.2): HeadingSmoother {
-  if (!(alpha > 0 && alpha <= 1)) {
-    throw new Error(`alpha must be in (0, 1], got ${alpha}`);
-  }
-  let x: number | null = null;
-  let y = 0;
-
-  const current = (): number | null =>
-    x === null ? null : normalizeDeg(Math.atan2(y, x) * RAD2DEG);
-
-  return {
-    push(deg) {
-      const r = normalizeDeg(deg) * DEG2RAD;
-      const cx = Math.cos(r);
-      const cy = Math.sin(r);
-      if (x === null) {
-        x = cx;
-        y = cy;
-      } else {
-        x += alpha * (cx - x);
-        y += alpha * (cy - y);
-      }
-      return normalizeDeg(Math.atan2(y, x) * RAD2DEG);
-    },
-    value: current,
-    reset() {
-      x = null;
-      y = 0;
-    },
-  };
-}
-
-/** One raw heading reading fed to the adaptive smoother. */
+/** One raw heading reading fed to the filter. */
 export interface HeadingSample {
   /** Heading in degrees (any range; normalized internally). */
   degrees: number;
-  /** Wall-clock time of the reading (ms). Enables sample-rate correction. */
+  /** Wall-clock time of the reading (ms). Lets the filter honour the real rate. */
   timestampMs?: number;
   /**
    * Sensor calibration level as reported by expo-location: 0 (uncalibrated)
@@ -117,129 +80,186 @@ export interface HeadingSample {
   accuracy?: number | null;
 }
 
-export interface AdaptiveHeadingSmootherOptions {
-  /** Alpha when the sample agrees with the estimate (standing still). */
-  minAlpha?: number;
-  /** Alpha when the sample deviates by `deltaForMaxAlphaDeg` or more (turning). */
-  maxAlpha?: number;
-  /** Deviation (deg) at which alpha reaches `maxAlpha`. */
-  deltaForMaxAlphaDeg?: number;
-  /** Sample interval (ms) the alphas are tuned for; other rates are corrected. */
-  refIntervalMs?: number;
-  /** Alpha multiplier at calibration level 0 (ramps linearly to 1 at level 3). */
-  lowAccuracyAlphaScale?: number;
+export interface HeadingFilterOptions {
+  /** 1-Euro cutoff (Hz) at rest. Lower = steadier when still. */
+  minCutoffHz?: number;
+  /** 1-Euro speed coefficient (Hz per °/s). Higher = less lag while turning. */
+  beta?: number;
+  /**
+   * Cutoff (Hz) of the low-pass on the speed estimate. Keep it low: the speed
+   * of a noisy signal is zero-mean noise plus, when you really turn, a DC term.
+   * A heavy low-pass keeps the DC and averages the noise away, so noise cannot
+   * bootstrap itself into a phantom turn that opens the main cutoff.
+   */
+  dCutoffHz?: number;
+  /**
+   * Turn rate (°/s) that promotes the filter from "still" to "turning". Must sit
+   * above the phantom rate that sensor noise alone produces (a few °/s).
+   */
+  enterTurnRateDegPerSec?: number;
+  /** Turn rate (°/s) below which "turning" relaxes back to "still" (hysteresis). */
+  exitTurnRateDegPerSec?: number;
+  /**
+   * How far (°) the filtered heading may drift from the held one before the hold
+   * breaks even without a detected turn. This is the safety net for a rotation
+   * so slow that it never trips `enterTurnRateDegPerSec`.
+   */
+  holdBreakoutDeg?: number;
+  /** Backlash half-width (°) applied while turning. Keep small — it is pure lag. */
+  turningDeadbandDeg?: number;
+  /**
+   * Cutoff/beta multiplier at calibration level 0, ramping linearly to 1 at
+   * level 3: a badly calibrated compass is filtered harder.
+   */
+  lowAccuracyScale?: number;
+  /** Interval assumed for a sample with no timestamp (ms). */
+  defaultIntervalMs?: number;
 }
 
-export interface AdaptiveHeadingSmoother {
-  /** Feed a reading; returns the updated smoothed heading [0, 360). */
+export interface HeadingFilter {
+  /** Feed a reading; returns the filtered heading in [0, 360). */
   push(sample: HeadingSample): number;
-  /** Current smoothed heading, or null before the first sample. */
+  /** Current filtered heading in [0, 360), or null before the first sample. */
   value(): number | null;
+  /** Current turn rate estimate (°/s, signed clockwise). */
+  turnRateDegPerSec(): number;
   /** Forget all history (e.g. when the sensor subscription restarts). */
   reset(): void;
 }
 
 /**
- * Circular EMA with adaptive alpha:
+ * Defaults tuned against the simulated real Android stream (see the module
+ * header and the tests): ~7 Hz, ≥2°-quantised, σ ≈ 5° of noise at rest.
  *
- * - **Deviation-adaptive**: alpha grows linearly from `minAlpha` (sample close
- *   to the estimate → jitter, smooth hard) to `maxAlpha` (sample far away →
- *   a real turn, follow quickly). This is what makes the needle both steady
- *   when still and snappy when turning.
- * - **Rate-corrected**: with timestamps, alpha is converted to an equivalent
- *   per-sample weight for the actual interval (`1 - (1-a)^(dt/ref)`), so the
- *   smoothing time-constant is the same whether the sensor fires at 5 or 50 Hz.
- * - **Accuracy-gated**: readings the OS flags as poorly calibrated pull the
- *   estimate less (alpha scaled down toward `lowAccuracyAlphaScale`).
- *
- * Smoothing runs on the heading unit vector, so the 0/360 wraparound is
- * handled correctly; the vector is renormalized each step for numeric health.
+ * - `minCutoffHz: 0.05` → τ ≈ 3 s at rest. The empirical sweet spot: heavier
+ *   than this and the estimate starts to *wander* (a very long time constant
+ *   just turns white noise into slow drift) rather than settle.
+ * - `beta: 0.15` → a 60°/s turn lifts the cutoff to ~9 Hz — effectively
+ *   unfiltered — so a real rotation is followed within a few degrees.
+ * - `dCutoffHz: 0.15` → the speed estimate is itself heavily low-passed, which
+ *   is what stops resting noise from being mistaken for motion.
+ * - The still/turning **hold** is the deciding trick, and it is not optional.
+ *   Even at its best a low-pass of a σ≈5° sensor leaves a slow ±3° wander
+ *   (averaging *that* away would need a ~1-minute time constant — the noise is
+ *   simply that large), and a plain deadband does not help, because a backlash
+ *   tracks slow drift 1:1 once it exceeds the band. So while the compass is not
+ *   turning we do not move the reported heading **at all**. Rest jitter is then
+ *   exactly 0°, by construction.
+ * - The hold's two exits are sized off measurements of that resting signal
+ *   (see the tests): noise alone never pushes the estimated turn rate past
+ *   ~4°/s (hence `enterTurnRateDegPerSec: 8`) nor the filtered heading more
+ *   than ~6° from where it was held (hence `holdBreakoutDeg: 10`). Both leave
+ *   roughly a 2× margin, so noise cannot break the hold, while any real
+ *   rotation trips the rate gate almost immediately.
  */
-export function createAdaptiveHeadingSmoother(
-  options: AdaptiveHeadingSmootherOptions = {},
-): AdaptiveHeadingSmoother {
+const DEFAULTS = {
+  minCutoffHz: 0.05,
+  beta: 0.15,
+  dCutoffHz: 0.15,
+  enterTurnRateDegPerSec: 8,
+  exitTurnRateDegPerSec: 4,
+  holdBreakoutDeg: 10,
+  turningDeadbandDeg: 0.5,
+  lowAccuracyScale: 0.5,
+  defaultIntervalMs: 100,
+} as const;
+
+/**
+ * Heading filter: 1-Euro on the unwrapped angle + a backlash deadband.
+ * Steady when the phone is still, prompt when it turns, correct across 0/360.
+ */
+export function createHeadingFilter(options: HeadingFilterOptions = {}): HeadingFilter {
   const {
-    minAlpha = 0.06,
-    maxAlpha = 0.5,
-    deltaForMaxAlphaDeg = 30,
-    refIntervalMs = 100,
-    lowAccuracyAlphaScale = 0.3,
+    minCutoffHz = DEFAULTS.minCutoffHz,
+    beta = DEFAULTS.beta,
+    dCutoffHz = DEFAULTS.dCutoffHz,
+    enterTurnRateDegPerSec = DEFAULTS.enterTurnRateDegPerSec,
+    exitTurnRateDegPerSec = DEFAULTS.exitTurnRateDegPerSec,
+    holdBreakoutDeg = DEFAULTS.holdBreakoutDeg,
+    turningDeadbandDeg = DEFAULTS.turningDeadbandDeg,
+    lowAccuracyScale = DEFAULTS.lowAccuracyScale,
+    defaultIntervalMs = DEFAULTS.defaultIntervalMs,
   } = options;
-  if (!(minAlpha > 0 && minAlpha <= 1)) {
-    throw new Error(`minAlpha must be in (0, 1], got ${minAlpha}`);
+  if (!(enterTurnRateDegPerSec > 0)) {
+    throw new Error(`enterTurnRateDegPerSec must be > 0, got ${enterTurnRateDegPerSec}`);
   }
-  if (!(maxAlpha >= minAlpha && maxAlpha <= 1)) {
-    throw new Error(`maxAlpha must be in [minAlpha, 1], got ${maxAlpha}`);
+  if (!(exitTurnRateDegPerSec >= 0 && exitTurnRateDegPerSec <= enterTurnRateDegPerSec)) {
+    throw new Error(
+      `exitTurnRateDegPerSec must be in [0, enterTurnRateDegPerSec], got ${exitTurnRateDegPerSec}`,
+    );
   }
-  if (!(deltaForMaxAlphaDeg > 0)) {
-    throw new Error(`deltaForMaxAlphaDeg must be > 0, got ${deltaForMaxAlphaDeg}`);
+  if (!(holdBreakoutDeg > 0)) {
+    throw new Error(`holdBreakoutDeg must be > 0, got ${holdBreakoutDeg}`);
   }
-  if (!(refIntervalMs > 0)) {
-    throw new Error(`refIntervalMs must be > 0, got ${refIntervalMs}`);
+  if (!(turningDeadbandDeg >= 0 && turningDeadbandDeg < holdBreakoutDeg)) {
+    throw new Error(
+      `turningDeadbandDeg must be in [0, holdBreakoutDeg), got ${turningDeadbandDeg}`,
+    );
   }
-  if (!(lowAccuracyAlphaScale >= 0 && lowAccuracyAlphaScale <= 1)) {
-    throw new Error(`lowAccuracyAlphaScale must be in [0, 1], got ${lowAccuracyAlphaScale}`);
+  if (!(lowAccuracyScale > 0 && lowAccuracyScale <= 1)) {
+    throw new Error(`lowAccuracyScale must be in (0, 1], got ${lowAccuracyScale}`);
   }
 
-  let x: number | null = null;
-  let y = 0;
-  let lastTs: number | null = null;
+  const euro = createOneEuroFilter({ minCutoffHz, beta, dCutoffHz, defaultIntervalMs });
+
+  /** Continuous (unwrapped) scale of the raw input. */
+  let rawContinuous: number | null = null;
+  /** Continuous reported heading — what the UI shows. */
+  let reported: number | null = null;
+  /** Are we tracking a real turn, or holding still? */
+  let turning = false;
+
+  /** Calibration level → cutoff multiplier: worse calibration, heavier filter. */
+  const trustFor = (accuracy: number | null | undefined): number => {
+    if (accuracy === null || accuracy === undefined || !Number.isFinite(accuracy)) return 1;
+    const level = Math.min(3, Math.max(0, accuracy)) / 3;
+    return lowAccuracyScale + (1 - lowAccuracyScale) * level;
+  };
 
   return {
     push(sample) {
       const deg = normalizeDeg(sample.degrees);
-      const r = deg * DEG2RAD;
-      const cx = Math.cos(r);
-      const cy = Math.sin(r);
-      const ts = sample.timestampMs ?? null;
+      rawContinuous = rawContinuous === null ? deg : unwrapDeg(rawContinuous, deg);
+      const filtered = euro.push(rawContinuous, sample.timestampMs, trustFor(sample.accuracy));
 
-      if (x === null) {
-        x = cx;
-        y = cy;
-        lastTs = ts;
-        return deg;
+      if (reported === null) {
+        reported = filtered;
+        return normalizeDeg(reported);
       }
 
-      const current = normalizeDeg(Math.atan2(y, x) * RAD2DEG);
-      const deviation = Math.abs(signedDeltaDeg(current, deg));
-      let alpha = minAlpha + (maxAlpha - minAlpha) * Math.min(1, deviation / deltaForMaxAlphaDeg);
+      const rate = Math.abs(euro.speed());
+      const drift = filtered - reported;
 
-      const acc = sample.accuracy;
-      if (acc !== null && acc !== undefined && Number.isFinite(acc)) {
-        const trust = Math.min(1, Math.max(0, acc / 3));
-        alpha *= lowAccuracyAlphaScale + (1 - lowAccuracyAlphaScale) * trust;
+      // The 1-Euro stage keeps tracking even while the output is held, so both
+      // triggers below stay live — the hold can always break. (Gating the
+      // filter's *cutoff* on the rate instead would deadlock: it would have to
+      // move in order to be allowed to move.)
+      if (turning) {
+        if (rate < exitTurnRateDegPerSec && Math.abs(drift) <= turningDeadbandDeg) turning = false;
+      } else if (rate > enterTurnRateDegPerSec || Math.abs(drift) > holdBreakoutDeg) {
+        turning = true;
       }
 
-      if (ts !== null && lastTs !== null && ts > lastTs) {
-        // Equivalent weight for the actual interval, clamped so a long sensor
-        // gap can't overshoot and a burst of readings can't zero out alpha.
-        const frames = Math.min(10, Math.max(0.1, (ts - lastTs) / refIntervalMs));
-        alpha = 1 - Math.pow(1 - alpha, frames);
-      }
-      if (ts !== null) lastTs = ts;
+      if (!turning) return normalizeDeg(reported); // held: exactly 0° of jitter
 
-      let nx = x + alpha * (cx - x);
-      let ny = y + alpha * (cy - y);
-      const mag = Math.hypot(nx, ny);
-      if (mag < 1e-9) {
-        // Degenerate (near-antipodal flip collapsed the vector): adopt the sample.
-        nx = cx;
-        ny = cy;
-      } else {
-        nx /= mag;
-        ny /= mag;
-      }
-      x = nx;
-      y = ny;
-      return normalizeDeg(Math.atan2(ny, nx) * RAD2DEG);
+      // Turning: backlash / play operator — dead inside a small band, 1:1
+      // outside it, so it lags by at most `turningDeadbandDeg` and never
+      // stair-steps.
+      if (drift > turningDeadbandDeg) reported = filtered - turningDeadbandDeg;
+      else if (drift < -turningDeadbandDeg) reported = filtered + turningDeadbandDeg;
+      return normalizeDeg(reported);
     },
     value() {
-      return x === null ? null : normalizeDeg(Math.atan2(y, x) * RAD2DEG);
+      return reported === null ? null : normalizeDeg(reported);
+    },
+    turnRateDegPerSec() {
+      return euro.speed();
     },
     reset() {
-      x = null;
-      y = 0;
-      lastTs = null;
+      euro.reset();
+      rawContinuous = null;
+      reported = null;
+      turning = false;
     },
   };
 }

@@ -11,10 +11,16 @@ import type { BoundingBox } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
-/** One basemap layer to download for a region, with its serialized style. */
+/**
+ * One basemap layer to download for a region: its serialized style and the zoom
+ * range to store. The range is per-layer because each tile service tops out at a
+ * different zoom (see `packZoomRange`) — relief cannot be downloaded past z15.
+ */
 export interface DownloadLayer {
   basemap: Basemap;
   styleJSON: string;
+  minZoom: number;
+  maxZoom: number;
 }
 
 interface DownloadProgress {
@@ -36,8 +42,6 @@ interface OfflineState {
     baseId: string;
     label: string;
     bounds: BoundingBox;
-    minZoom: number;
-    maxZoom: number;
     layers: DownloadLayer[];
   }) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -77,7 +81,9 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   downloadMany: async (args) => {
     const total = args.layers.length;
     // Each layer is independent: one failing must not abort the others. Collect
-    // the failures and report them together once every layer has been attempted.
+    // the failures — WITH their reason, so the user is told *why* the relief
+    // layer failed, not merely that it did — and report them together once every
+    // layer has been attempted.
     const failed: string[] = [];
     try {
       for (let i = 0; i < args.layers.length; i++) {
@@ -94,23 +100,22 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
               basemap: layer.basemap,
               styleJSON: layer.styleJSON,
               bounds: args.bounds,
-              minZoom: args.minZoom,
-              maxZoom: args.maxZoom,
+              minZoom: layer.minZoom,
+              maxZoom: layer.maxZoom,
             },
             (pct, sizeBytes) => set({ progress: { pct, sizeBytes, label } }),
           );
         } catch (err) {
-          // The summary error below tells the user which layers failed; the
-          // underlying cause would otherwise be lost — report it.
           reportError(err, 'offline-region-download');
-          failed.push(LAYER_LABEL[layer.basemap]);
+          const reason = err instanceof Error ? err.message : String(err);
+          failed.push(`${LAYER_LABEL[layer.basemap]}: ${reason}`);
         }
       }
     } finally {
       set({ progress: null, regions: await loadRegions() });
     }
     if (failed.length > 0) {
-      throw new Error(`${failed.join(', ')} failed to download`);
+      throw new Error(`Download failed — ${failed.join(' · ')}`);
     }
   },
 

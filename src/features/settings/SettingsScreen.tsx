@@ -168,14 +168,22 @@ export function SettingsScreen() {
         activeMapId,
         activeTrackIds,
       },
-      (done, total) => setExportProgress({ done, total }),
+      {
+        onProgress: (done, total) => setExportProgress({ done, total }),
+        // The only outcome we can vouch for: the zip exists. Say so *before* the
+        // share sheet opens — once it closes, the platform tells us nothing about
+        // whether the user saved the archive or just backed out.
+        onReady: (files, bytes) =>
+          showSnack(
+            `Archive ready — ${files} file${files === 1 ? '' : 's'}, ${formatBytes(bytes)}`,
+          ),
+      },
     );
     setExportProgress(null);
-    if (result.kind === 'exported') {
-      showSnack(`Your data is ready — ${result.files} file${result.files === 1 ? '' : 's'} zipped`);
-    } else if (result.kind === 'unavailable') {
+    // `shared` is silent on purpose: never claim a success we cannot verify.
+    if (result.kind === 'unavailable') {
       showSnack('Sharing is not available on this device');
-    } else {
+    } else if (result.kind === 'error') {
       showSnack(`Export failed: ${result.message}`);
     }
   };

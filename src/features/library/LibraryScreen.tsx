@@ -37,12 +37,10 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { bundleCounts } from '@core/library/bundles';
-import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
-import { exportLibraryBackup } from './exportBackup';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
@@ -96,8 +94,6 @@ export function LibraryScreen() {
   const renameFolder = useLibraryStore((s) => s.renameFolder);
   const removeFolder = useLibraryStore((s) => s.removeFolder);
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
-  const activeMapId = useLibraryStore((s) => s.activeMapId);
-  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
   const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
 
@@ -117,7 +113,6 @@ export function LibraryScreen() {
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
-  const [exportingBackup, setExportingBackup] = useState(false);
   // Trail multi-select (long-press a trail to enter): ids in selection order,
   // which is the merge order for untimed tracks.
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
@@ -199,30 +194,6 @@ export function LibraryScreen() {
     else if (kind === 'track') removeTrack(id);
     else if (kind === 'bundle') removeBundle(id);
     else removeFolder(id);
-  };
-
-  const onExportBackup = async () => {
-    setExportingBackup(true);
-    const result = await exportLibraryBackup(tracks, {
-      schemaVersion: LIBRARY_SCHEMA_VERSION,
-      maps,
-      tracks,
-      bundles,
-      folders,
-      activeMapId,
-      activeTrackIds,
-    });
-    setExportingBackup(false);
-    if (result.kind === 'exported') {
-      showSnack(
-        `Backup exported (${result.tracks} trail${result.tracks === 1 ? '' : 's'}, ` +
-          `${result.photos} photo${result.photos === 1 ? '' : 's'})`,
-      );
-    } else if (result.kind === 'unavailable') {
-      showSnack('Sharing is not available on this device');
-    } else {
-      showSnack(`Backup failed: ${result.message}`);
-    }
   };
 
   const onActivateBundle = (id: string, name: string) => {
@@ -643,16 +614,12 @@ export function LibraryScreen() {
       ) : (
         <Appbar.Header>
           <Appbar.Content title="Library" />
+          {/* Exporting the library lives in Settings → "Download your data"
+              (maps included); a second entry point here only duplicated it. */}
           <Appbar.Action
             icon="folder-plus-outline"
             onPress={() => setNewFolderVisible(true)}
             accessibilityLabel="New folder"
-          />
-          <Appbar.Action
-            icon="export-variant"
-            onPress={() => void onExportBackup()}
-            disabled={exportingBackup}
-            accessibilityLabel="Export backup"
           />
         </Appbar.Header>
       )}

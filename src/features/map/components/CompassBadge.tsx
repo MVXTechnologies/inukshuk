@@ -11,19 +11,28 @@ interface CompassBadgeProps {
   onPress?: () => void;
 }
 
-/** How long the needle eases toward a new heading. Short enough to feel live,
- * long enough to swallow the gap between throttled updates. */
-const NEEDLE_ANIM_MS = 180;
+/**
+ * How long the needle eases toward a new heading. Sized to just outrun the
+ * sensor's own cadence (~7–10 Hz on Android) so each animation is still running
+ * when the next update replaces it — the needle then glides continuously rather
+ * than landing and re-starting.
+ */
+const NEEDLE_ANIM_MS = 200;
 
 /**
  * A small floating compass that rotates its needle to the device heading.
  * Tapping it resets the map to north (when `onPress` is provided).
  *
+ * The heading it renders is the shared, filtered one (see `useCompass` and
+ * `@core/signal/heading`): perfectly still while the phone is, so both the
+ * needle and the degree readout stop trembling on a table.
+ *
  * The badge owns its own `useCompass` subscription: compass events fire many
  * times a second, so subscribing here (instead of in MapScreen) means each
  * heading update re-renders only this small badge, not the whole map tree.
- * Camera rotation is separate — it uses `useHeadingCamera` / MapLibre's native
- * heading tracking, not this value.
+ * Camera rotation is separate — it uses `useHeadingCamera` — but reads from the
+ * same shared filtered stream, so the needle, the heading cone and the map
+ * bearing can never disagree.
  *
  * The needle animates on the native driver toward an **unwrapped** continuous
  * angle (349° → 361°, not → 1°), so crossing north eases through the boundary
@@ -51,7 +60,10 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
     Animated.timing(rotationAnim, {
       toValue: next,
       duration: NEEDLE_ANIM_MS,
-      easing: Easing.out(Easing.quad),
+      // Linear, not eased: successive updates interrupt each other, and an
+      // ease-out restarts its deceleration every time, which reads as a stutter
+      // while you turn. Linear segments chain into one smooth sweep.
+      easing: Easing.linear,
       useNativeDriver: true,
     }).start();
   }, [heading, rotationAnim]);

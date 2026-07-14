@@ -1,4 +1,4 @@
-import { sanitizeEntryName, uniquePath } from '@core/library/backup';
+import { sanitizeEntryName, uniquePath } from '@core/export/zipPaths';
 import { groupByFolder } from '@core/library/folders';
 import type { Folder, MapDocument, TrackSummary } from '@core/models';
 
