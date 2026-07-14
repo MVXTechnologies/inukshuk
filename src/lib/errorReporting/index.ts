@@ -302,5 +302,9 @@ export function installErrorReporting(): void {
     if (state === 'active') void flushErrorQueue().catch(() => undefined);
   });
 
-  void flushErrorQueue().catch(() => undefined);
+  // Deferred launch flush: the queue read + delivery attempt can wait until
+  // well after first interaction — doing it during startup competes with the
+  // initial render/navigation on slow devices (it tipped cold CI emulators
+  // into dropping the first tab tap, the 2026-07-14 e2e flake).
+  setTimeout(() => void flushErrorQueue().catch(() => undefined), 8000);
 }

@@ -9,14 +9,28 @@ appId: com.inukshuk.app
 # The map screen's record entry point is now a "+" speed-dial (not a "Record"
 # button); its accessibility label proves the map screen mounted.
 - assertVisible: 'Map actions'
-- tapOn: 'Library'
+# Every tab tap uses retryTapIfNoChange: on cold CI emulators the first paint
+# lands well before React Native's JS thread is interactive, so a single tap
+# fired right after the first assert can be silently dropped during startup
+# jank (the 2026-07-14 e2e flake: tap ignored → next assert polls a screen
+# that will never change). Retrying until the hierarchy changes absorbs the
+# race without slowing the happy path.
+- tapOn:
+    text: 'Library'
+    retryTapIfNoChange: true
 - assertVisible: 'Recorded trails'
-- tapOn: 'Settings'
+- tapOn:
+    text: 'Settings'
+    retryTapIfNoChange: true
 - assertVisible: 'Keep screen awake'
 # Settings has its own "Map" section header that Maestro would tap instead of
 # the tab bar; hop through Library (no exact-"Map" text) before returning.
-- tapOn: 'Library'
-- tapOn: 'Map'
+- tapOn:
+    text: 'Library'
+    retryTapIfNoChange: true
+- tapOn:
+    text: 'Map'
+    retryTapIfNoChange: true
 # The speed-dial's accessibility label — proves the Map screen itself mounted
 # (asserting 'Map' would match the tab label even if the screen failed).
 - assertVisible: 'Map actions'
