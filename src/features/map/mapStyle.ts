@@ -1,5 +1,6 @@
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import type { Feature, Polygon } from 'geojson';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -66,6 +67,42 @@ const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
 const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
 
 /**
+ * Highest zoom at which each tile service reliably serves REAL tiles worldwide
+ * — the raster SOURCE's `maxzoom`. Beyond it MapLibre OVERSCALES the deepest
+ * real tiles (blurry but correct) instead of fetching, because the raster
+ * LAYERS deliberately carry no `maxzoom` of their own.
+ *
+ * Esri never 404s past its data: it serves an HTTP-200 grey "Map data not yet
+ * available" placeholder tile, which MapLibre happily renders — that's the
+ * "white/unavailable" screen users hit when zooming in close. Probed z15–19
+ * across rural Québec, Yukon, Patagonia, the Sahara and Siberia (2026-07):
+ * World_Imagery is real everywhere through z17; World_Topo_Map only through
+ * z15 (Patagonia placeholders start at z16). OSM has real tiles to z19
+ * globally. Capping each source below its placeholder zone trades a little
+ * sharpness in well-covered areas for never showing "data not available".
+ */
+const NATIVE_MAX_ZOOM: Record<MapBasemap, number> = { map: 19, satellite: 17, relief: 15 };
+
+/** Optional tweaks to the base style (all default off). */
+export interface OsmStyleOptions {
+  /**
+   * Cap the base raster source's tile-fetch zoom, e.g. at the top stored zoom
+   * of the offline packs when only locally downloaded tiles may be served —
+   * past the cap the map overscales the deepest downloaded tiles instead of
+   * requesting tiles that can never arrive.
+   */
+  rasterMaxZoom?: number;
+  /**
+   * "Locally downloaded only" mask: an opaque fill drawn ABOVE the raster/
+   * hillshade layers (but below everything added at runtime — trails, markers,
+   * the location dot) hiding the basemap outside downloaded regions. `data` is
+   * a world polygon with holes over the downloaded regions (see
+   * `buildDownloadedMask`); `color` should suit the app theme.
+   */
+  downloadedMask?: { data: Feature<Polygon>; color: string };
+}
+
+/**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
  * satellite imagery, or a topographic relief map — see {@link baseSource}).
  * Raster (not vector) keeps us free of any API key or paid tile service. The OSM
@@ -80,6 +117,7 @@ export function buildOsmStyle(
   terrain3d = false,
   basemap: MapBasemap = 'map',
   shadedRelief = false,
+  options: OsmStyleOptions = {},
 ): StyleSpecification {
   const base = baseSource(basemap, tileUrl);
   const style: StyleSpecification = {
@@ -89,7 +127,7 @@ export function buildOsmStyle(
         type: 'raster',
         tiles: base.tiles,
         tileSize: 256,
-        maxzoom: 19,
+        maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
     },
@@ -144,6 +182,23 @@ export function buildOsmStyle(
       paint: { 'hillshade-exaggeration': 0.7 },
     });
     style.terrain = { source: 'dem', exaggeration: 2.2 };
+  }
+
+  // "Locally downloaded only" mask, pushed LAST so it sits above every basemap
+  // layer (raster + hillshade). Layers the map adds at runtime (trails, the
+  // recording line, markers, the location dot) are appended after the style's
+  // own layers, so they still draw on top of the mask.
+  if (options.downloadedMask) {
+    style.sources['downloaded-mask'] = {
+      type: 'geojson',
+      data: options.downloadedMask.data,
+    };
+    style.layers.push({
+      id: 'downloaded-mask',
+      type: 'fill',
+      source: 'downloaded-mask',
+      paint: { 'fill-color': options.downloadedMask.color, 'fill-opacity': 1 },
+    });
   }
 
   return style;
