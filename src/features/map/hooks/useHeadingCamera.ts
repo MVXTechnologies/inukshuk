@@ -11,20 +11,24 @@ const MIN_EMIT_INTERVAL_MS = 80;
 /**
  * Camera heading for the "Rotate map with compass" setting.
  *
- * Returns the smoothed device heading ([0, 360)) while `rotateMapWithHeading`
+ * Returns the filtered device heading ([0, 360)) while `rotateMapWithHeading`
  * is on, and `undefined` while it's off. Pass the result straight to
  * MapLibre's `<Camera bearing={...} />` — `undefined` leaves the camera's
  * rotation alone. MapLibre's native transition normalizes bearing changes to
  * the shortest arc, so crossing 0/360 rotates the short way.
  *
+ * This is the *only* thing that should set the map bearing while the setting is
+ * on — see the note in MapScreen about why `trackUserLocation="heading"` (whose
+ * native camera mode reads the raw platform compass) is not used.
+ *
  * Perf: the raw sensor stream never touches React state — it comes from the
- * shared smoothed subscription (see `subscribeHeading`), and state (hence a
+ * shared filtered subscription (see `subscribeHeading`), and state (hence a
  * re-render + camera update) is only emitted when the heading moves by at
- * least MIN_EMIT_DELTA_DEG and MIN_EMIT_INTERVAL_MS has elapsed. The old
- * whole-degree rounding + 2° gate made the rotation advance in visible 2°
- * ticks; the finer gate plus a short eased camera transition (set where the
- * Camera is rendered) keeps it fluid. When the setting is off the hook
- * subscribes to nothing.
+ * least MIN_EMIT_DELTA_DEG and MIN_EMIT_INTERVAL_MS has elapsed. Since the
+ * filter holds a resting heading perfectly still, a stationary phone emits
+ * nothing at all. The finer gate plus a short eased camera transition (set
+ * where the Camera is rendered) keeps a real rotation fluid. When the setting
+ * is off the hook subscribes to nothing.
  *
  * Like `useCompass`, this expects location permission to already be granted.
  */

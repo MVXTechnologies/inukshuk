@@ -357,20 +357,24 @@ export function MapScreen() {
                 ? { center: [location.longitude, location.latitude] as [number, number] }
                 : {}),
             }}
-            // "Rotate map with heading" setting. While following, MapLibre's
-            // native 'heading' tracking rotates from the compass (smooth, no
-            // JS churn); otherwise the smoothed + throttled hook value drives
-            // the bearing, eased over a short linear transition so successive
-            // updates glide instead of ticking. MapLibre normalizes bearing
-            // transitions to the shortest arc, so 359°→1° turns 2°, not 358°.
-            // undefined when the setting is off.
-            bearing={followUser ? undefined : headingForCamera}
-            {...(!followUser && headingForCamera !== undefined
+            // "Rotate map with heading" setting: the map bearing always comes
+            // from OUR filtered heading (see useHeadingCamera → useCompass),
+            // whether or not we are following the user, eased over a short
+            // linear transition so successive updates glide instead of ticking.
+            // MapLibre normalizes bearing transitions to the shortest arc, so
+            // 359°→1° turns 2°, not 358°. undefined when the setting is off.
+            //
+            // We deliberately do NOT use trackUserLocation="heading": that maps
+            // to MapLibre's native CameraMode.TRACKING_COMPASS, which drives the
+            // bearing from the platform's *raw* compass — the unfiltered signal
+            // this whole module exists to tame, so the map would shake even
+            // while the needle sat still. "default" (CameraMode.TRACKING) keeps
+            // the centre-on-user behaviour and leaves the bearing to us.
+            bearing={headingForCamera}
+            {...(headingForCamera !== undefined
               ? { duration: 150, easing: 'linear' as const }
               : {})}
-            trackUserLocation={
-              followUser ? (headingForCamera !== undefined ? 'heading' : 'default') : undefined
-            }
+            trackUserLocation={followUser ? 'default' : undefined}
             onTrackUserLocationChange={(e) => {
               if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
             }}
