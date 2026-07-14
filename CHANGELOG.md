@@ -18,6 +18,37 @@ on the same app version; native changes require a new store build. See
   says what it can actually vouch for — "Archive ready — N files, X MB", shown as
   the sheet opens — and stays silent afterwards instead of announcing a save that
   may never have happened. The staged zip is still deleted on cancel.
+- **The compass is steady at rest.** The previous smoother scaled its
+  responsiveness with how far each new sample sat from the estimate — but on
+  Android `expo-location` derives the heading from the raw accelerometer +
+  magnetometer and only emits a reading once it has moved ≥2°, so at rest the
+  app receives nothing _but_ noise excursions. The filter therefore sped up for
+  noise, and the needle wandered ~5° on a table. Heading is now filtered by a
+  1-Euro filter (`src/core/signal/oneEuro.ts`) that adapts on the signal's
+  _speed_, plus a still/turning hold: while the compass is not turning the
+  reported heading does not move at all (0° of jitter, by construction), and a
+  real turn is tracked within a few degrees. The needle, the direction cone and
+  the map bearing in heading-up mode are all fed from that one filtered value —
+  heading-up no longer uses MapLibre's native compass camera mode, which read
+  the raw sensor and shook the map.
+- **Offline downloads no longer grab a much larger area than the drawn box.**
+  Entering region-select flattened the camera _and_ read the map's visible bounds
+  in the same tick, so the box was converted against the still-pitched/rotated
+  camera — whose visible bounds run to the horizon and are far larger than the
+  viewport rectangle — and the bounds were never recomputed once the flatten
+  landed. The screen-rect → bounds conversion now lives in `src/core/geo/screenBounds.ts`
+  (interpolating in web-mercator Y, not in latitude), only ever runs against
+  bounds captured from a flat, north-up camera, and is re-derived from fresh
+  bounds at the moment Download is tapped.
+- **The relief basemap can be downloaded again.** Relief tiles (Esri
+  `World_Topo_Map`) are only served to z15, but the pack was created with the
+  quality zoom (z16 "High", z17 "Max") — above the raster source's `maxzoom` —
+  so the relief layer failed while map (z19) and satellite (z17) succeeded. Each
+  layer is now clamped to its source's native max zoom (`packZoomRange`), the
+  clamp is reflected in the size estimate and shown in the sheet ("Relief tops
+  out at z15"), and the pack metadata records the zoom it really stored. Failed
+  downloads now name the layer and the reason (network, tile limit, invalid zoom
+  range, stall) instead of "X failed to download".
 - **Multi-page georeferenced PDFs no longer crash the app.** A projected `/GCS`
   (e.g. UTM) in an Adobe GEO viewport caused the geographic `GPTS` to be wrongly
   reprojected, collapsing every page to a degenerate point near the equator; the

@@ -59,6 +59,39 @@ export function centerTileForRegion(b: BoundingBox): { x: number; y: number; z: 
 export type Basemap = 'map' | 'satellite' | 'relief';
 
 /**
+ * Highest zoom at which each tile service reliably serves REAL tiles worldwide —
+ * the raster SOURCE's `maxzoom` (see `mapStyle.ts`, which builds the style from
+ * this) and therefore the deepest zoom an offline pack of that basemap can ever
+ * store: MapLibre's offline downloader never fetches past a source's `maxzoom`.
+ *
+ * Requesting a pack deeper than this is not just wasted — it produces a pack
+ * whose requested zoom range is partly (or, for a small box whose overview zoom
+ * already exceeds the cap, entirely) outside what the source can serve, which is
+ * how the relief basemap (cap z15, requested z16/z17) failed to download while
+ * map (z19) and satellite (z17) succeeded. Clamp with {@link packZoomRange}.
+ */
+export const NATIVE_MAX_ZOOM: Record<Basemap, number> = { map: 19, satellite: 17, relief: 15 };
+
+/**
+ * The zoom range an offline pack of `basemap` should actually be created with,
+ * given the requested overview (min) and quality (max) zooms:
+ *
+ * - the top zoom is capped at the source's native max — a pack can't hold tiles
+ *   the tile service doesn't serve;
+ * - the bottom zoom is then capped at the top zoom, so the range is never
+ *   inverted (MapLibre rejects `maxZoom < minZoom` outright) nor empty.
+ */
+export function packZoomRange(
+  basemap: Basemap,
+  minZoom: number,
+  maxZoom: number,
+): { minZoom: number; maxZoom: number } {
+  const top = Math.min(Math.round(maxZoom), NATIVE_MAX_ZOOM[basemap]);
+  const bottom = Math.max(0, Math.min(Math.round(minZoom), top));
+  return { minZoom: bottom, maxZoom: top };
+}
+
+/**
  * Assumed top stored zoom for offline packs downloaded before the max zoom was
  * recorded in pack metadata: the shallowest quality option ('standard' = z15).
  * Assuming the shallowest keeps overzoom safe — the live map overscales from a
@@ -100,4 +133,27 @@ export function estimateBytes(tileCount: number, basemap: Basemap): number {
  */
 export function estimateBytesForBasemaps(tileCount: number, basemaps: readonly Basemap[]): number {
   return basemaps.reduce((sum, b) => sum + estimateBytes(tileCount, b), 0);
+}
+
+/**
+ * Pre-download estimate for a region across several basemaps. Each basemap gets
+ * its own clamped zoom range ({@link packZoomRange}), so a basemap whose source
+ * tops out early (relief at z15) is estimated for the tiles it will really
+ * store, not for the requested quality zoom it cannot reach.
+ */
+export function estimateRegionDownload(
+  bounds: BoundingBox,
+  minZoom: number,
+  maxZoom: number,
+  basemaps: readonly Basemap[],
+): { tiles: number; bytes: number } {
+  let tiles = 0;
+  let bytes = 0;
+  for (const basemap of basemaps) {
+    const range = packZoomRange(basemap, minZoom, maxZoom);
+    const count = tileCountForRegion(bounds, range.minZoom, range.maxZoom);
+    tiles += count;
+    bytes += estimateBytes(count, basemap);
+  }
+  return { tiles, bytes };
 }

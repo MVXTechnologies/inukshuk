@@ -9,8 +9,13 @@ import { subscribeHeading } from '../useCompass';
  * map is actually navigated at (z14–18) without dominating the screen. */
 const CONE_RADIUS_M = 70;
 
-/** Minimum heading change (deg) before the sector polygon is regenerated. */
-const MIN_UPDATE_DELTA_DEG = 1;
+/**
+ * Minimum heading change (deg) before the sector polygon is regenerated. The
+ * shared filter holds the heading exactly still at rest, so this no longer has
+ * to defend against jitter — it only has to keep the beam from visibly stepping
+ * while you turn, hence the sub-degree value.
+ */
+const MIN_UPDATE_DELTA_DEG = 0.5;
 
 /** Matches the blue of maplibre-react-native's default user-location puck. */
 const CONE_BLUE = '#33B5E5';

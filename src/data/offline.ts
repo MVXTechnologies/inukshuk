@@ -1,6 +1,7 @@
 import StaticServer from '@dr.pogodin/react-native-static-server';
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { packZoomRange } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
@@ -124,6 +125,28 @@ function regionFromPack(
   };
 }
 
+/**
+ * Turn MapLibre's native download error into something a user can act on.
+ * Native messages are terse and sometimes empty ("" from an OfflineRegionError
+ * with no reason), which is how a failing layer used to surface as nothing more
+ * than "Relief failed to download".
+ */
+function describeNativeError(message: string, zoomRange: string): string {
+  const raw = message.trim();
+  const lower = raw.toLowerCase();
+  if (raw === '') return `the tile server rejected the request (${zoomRange})`;
+  if (lower.includes('tile limit') || lower.includes('tilecountlimit')) {
+    return `too many tiles — shrink the area or lower the quality (${zoomRange})`;
+  }
+  if (lower.includes('offline region definition') || lower.includes('invalid')) {
+    return `invalid zoom range ${zoomRange} for this basemap`;
+  }
+  if (lower.includes('connect') || lower.includes('network') || lower.includes('timed out')) {
+    return `network error at ${zoomRange} — ${raw}`;
+  }
+  return `${raw} (${zoomRange})`;
+}
+
 export async function createRegionPack(
   args: {
     id: string;
@@ -136,13 +159,21 @@ export async function createRegionPack(
   },
   onProgress: (pct: number, sizeBytes: number) => void,
 ): Promise<void> {
+  // Last line of defence for the zoom range: a pack may only request zooms its
+  // basemap's tile source actually serves (relief: z15) and MapLibre rejects an
+  // inverted range outright. Clamping here means no caller can create a pack
+  // that is doomed before the first tile is fetched.
+  const { minZoom, maxZoom } = packZoomRange(args.basemap, args.minZoom, args.maxZoom);
+
   // OfflinePackCreateOptions has no `name` field — the native layer assigns a UUID.
   // We embed our app-level id in metadata so we can recover it in listRegionPacks().
+  // `maxZoom` is the CLAMPED one — it must describe what the pack really stores,
+  // or the live map would overzoom onto tiles the pack never downloaded.
   const meta: PackMeta = {
     appId: args.id,
     label: args.label,
     basemap: args.basemap,
-    maxZoom: args.maxZoom,
+    maxZoom,
   };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can
@@ -150,6 +181,10 @@ export async function createRegionPack(
   let nativePackId: string | undefined;
   // The loopback server, assigned once started so the finally can always stop it.
   let server: StaticServer | undefined;
+
+  // Quoted in every failure message: a download that fails at z13–z15 vs one
+  // that fails before a single tile is requested are different bugs.
+  const zoomRange = `z${minZoom}–z${maxZoom}`;
 
   try {
     writeStyleFile(args.id, args.styleJSON);
@@ -178,7 +213,12 @@ export async function createRegionPack(
       const armWatchdog = () => {
         clearTimeout(stallTimer);
         stallTimer = setTimeout(
-          () => settle(() => reject(new Error('Download stalled (no progress for 90 s)'))),
+          () =>
+            settle(() =>
+              reject(
+                new Error(`no tiles arrived for 90 s at ${zoomRange} — check your connection`),
+              ),
+            ),
           STALL_MS,
         );
       };
@@ -187,8 +227,8 @@ export async function createRegionPack(
         {
           mapStyle: styleUrl,
           bounds: toLngLatBounds(args.bounds),
-          minZoom: args.minZoom,
-          maxZoom: args.maxZoom,
+          minZoom,
+          maxZoom,
           metadata: meta as unknown as Record<string, unknown>,
         },
         (pack, status) => {
@@ -200,13 +240,21 @@ export async function createRegionPack(
         },
         (pack, err) => {
           nativePackId = pack.id;
-          settle(() => reject(new Error(err.message)));
+          settle(() => reject(new Error(describeNativeError(err.message, zoomRange))));
         },
       )
         .then((pack) => {
           nativePackId = pack.id;
         })
-        .catch((err) => settle(() => reject(err instanceof Error ? err : new Error(String(err)))));
+        .catch((err: unknown) =>
+          settle(() =>
+            reject(
+              new Error(
+                describeNativeError(err instanceof Error ? err.message : String(err), zoomRange),
+              ),
+            ),
+          ),
+        );
     });
   } catch (err) {
     // Best-effort: delete the partially-created native pack (so it doesn't show up
