@@ -17,9 +17,11 @@ jest.mock('@data/storage', () => ({
 // In-memory checkpoint journal: the store's persistence boundary, mocked so the
 // checkpoint→restore round-trip is testable without a filesystem. The throttled
 // writer persists unconditionally here (throttling itself is the data module's
-// concern, not the store's).
+// concern, not the store's). The background points journal mirrors the real
+// module's contract: clearCheckpoint drops it too (same session).
 jest.mock('@data/recorderCheckpoint', () => {
   let stored: unknown = null;
+  let bgStored: unknown[] = [];
   return {
     writeCheckpoint: jest.fn((cp: unknown) => {
       stored = cp;
@@ -30,6 +32,14 @@ jest.mock('@data/recorderCheckpoint', () => {
     readCheckpoint: jest.fn(async () => stored),
     clearCheckpoint: jest.fn(() => {
       stored = null;
+      bgStored = [];
+    }),
+    appendBackgroundPoints: jest.fn(async (points: unknown[]) => {
+      bgStored.push(...points);
+    }),
+    readBackgroundPoints: jest.fn(async () => bgStored.slice()),
+    clearBackgroundPoints: jest.fn(() => {
+      bgStored = [];
     }),
   };
 });
@@ -139,6 +149,88 @@ describe('checkpoint + recovery round-trip', () => {
     useRecorderStore.getState().start('Second');
     expect(await initRecorderRecovery()).toBe(false);
     expect(useRecorderStore.getState().name).toBe('Second');
+  });
+
+  it('folds background-journaled points in, deduped by timestamp and sorted', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Screen-off hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    s.addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    simulateCrash();
+
+    // Fixes the background task journaled while the JS process was dead: one
+    // duplicate delivery of the last checkpointed fix, plus two new ones
+    // (delivered out of order).
+    await checkpoint.appendBackgroundPoints([
+      pt({ time: 1_006_000, latitude: 46.800075 }),
+      pt({ time: 1_002_000, latitude: 46.800025 }),
+      pt({ time: 1_004_000, latitude: 46.80005 }),
+    ]);
+
+    expect(await initRecorderRecovery()).toBe(true);
+    const after = useRecorderStore.getState();
+    expect(after.points.map((p) => p.time)).toEqual([1_000_000, 1_002_000, 1_004_000, 1_006_000]);
+    expect(after.stats.pointCount).toBe(4);
+    // The merged session is re-checkpointed and the journal dropped, so a
+    // second crash cannot lose the background points.
+    expect(checkpoint.writeCheckpoint).toHaveBeenCalled();
+    expect(checkpoint.clearBackgroundPoints).toHaveBeenCalled();
+  });
+
+  it('background points pass through the GPS filter on recovery', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Filtered');
+    s.addPoint(pt({ time: 1_000_000 }));
+    s.addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    simulateCrash();
+
+    await checkpoint.appendBackgroundPoints([
+      pt({ time: 1_004_000, latitude: 46.9 }), // ~11 km teleport — rejected
+      pt({ time: 1_006_000, latitude: 46.80005, accuracy: 120 }), // bad accuracy — rejected
+      pt({ time: 1_008_000, latitude: 46.800075 }), // fine
+    ]);
+
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().points.map((p) => p.time)).toEqual([
+      1_000_000, 1_002_000, 1_008_000,
+    ]);
+  });
+});
+
+describe('mergeBackgroundPoints (foreground merge)', () => {
+  it('folds journaled points into a live session, recomputes stats, checkpoints', () => {
+    const s = useRecorderStore.getState();
+    s.start('Live merge');
+    s.addPoint(pt({ time: 1_000_000 }));
+    s.addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    (checkpoint.writeCheckpoint as jest.Mock).mockClear();
+
+    useRecorderStore.getState().mergeBackgroundPoints([
+      pt({ time: 1_002_000, latitude: 46.800025 }), // duplicate delivery
+      pt({ time: 1_004_000, latitude: 46.80005 }),
+    ]);
+
+    const after = useRecorderStore.getState();
+    expect(after.points.map((p) => p.time)).toEqual([1_000_000, 1_002_000, 1_004_000]);
+    expect(after.stats.pointCount).toBe(3);
+    expect(checkpoint.writeCheckpoint).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the checkpoint write when nothing new was merged', () => {
+    const s = useRecorderStore.getState();
+    s.start('No-op merge');
+    s.addPoint(pt({ time: 1_000_000 }));
+    (checkpoint.writeCheckpoint as jest.Mock).mockClear();
+
+    useRecorderStore.getState().mergeBackgroundPoints([pt({ time: 1_000_000 })]);
+    expect(useRecorderStore.getState().points).toHaveLength(1);
+    expect(checkpoint.writeCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op while idle (recovery owns that case)', () => {
+    useRecorderStore.getState().mergeBackgroundPoints([pt({ time: 1_000_000 })]);
+    expect(useRecorderStore.getState().points).toHaveLength(0);
+    expect(useRecorderStore.getState().status).toBe('idle');
   });
 });
 

@@ -1,3 +1,9 @@
+// Side-effect import FIRST: registers the background-location task
+// (TaskManager.defineTask) at module scope, so a headless launch — Android
+// killing and relaunching the app mid-recording — re-registers the handler
+// before any UI mounts. See src/lib/backgroundLocation.ts.
+import '@lib/backgroundLocation';
+
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
 import { ErrorReportPrompt } from '@features/common/components/ErrorReportPrompt';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';

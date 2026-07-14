@@ -23,6 +23,7 @@ import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
+import { BackgroundLocationRationaleDialog } from './components/BackgroundLocationRationaleDialog';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
@@ -170,6 +171,8 @@ export function MapScreen() {
     addWaypoint,
     updateWaypoint,
     removeWaypoint,
+    bgRationaleVisible,
+    respondToBgRationale,
   } = useRecordingSession({ showSnack });
 
   const {
@@ -608,6 +611,11 @@ export function MapScreen() {
           actions). Hidden while a recording is under way (the active controls
           take over) and while selecting an offline region. */}
       {status === 'idle' && !selecting && <MapActionsFab onRecord={startRecording} />}
+
+      <BackgroundLocationRationaleDialog
+        visible={bgRationaleVisible}
+        onRespond={respondToBgRationale}
+      />
 
       <WaypointEditorDialog
         waypoint={editWp}

@@ -3,7 +3,7 @@ import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useEffect, useState } from 'react';
-import { useBackgroundRecording } from '../useLocation';
+import { useBackgroundRecording } from './useBackgroundRecording';
 
 /**
  * Recording lifecycle for the map screen: recorder-store state/actions, the
@@ -33,9 +33,10 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
 
   const [elapsedS, setElapsedS] = useState(0);
 
-  // Foreground-service location feed while recording (falls back to the
-  // foreground-only watch on binaries without the native task module).
-  useBackgroundRecording();
+  // OS-level background location feed while recording (foreground service on
+  // Android, background mode on iOS), including the "Allow all the time"
+  // permission flow and its rationale dialog.
+  const { bgRationaleVisible, respondToBgRationale } = useBackgroundRecording({ showSnack });
 
   // One-shot crash recovery: if a previous session died mid-hike, restore its
   // checkpoint as a paused recording and tell the user.
@@ -101,5 +102,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     addWaypoint,
     updateWaypoint,
     removeWaypoint,
+    bgRationaleVisible,
+    respondToBgRationale,
   };
 }

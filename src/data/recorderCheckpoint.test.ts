@@ -1,10 +1,13 @@
 import * as storage from '@data/storage';
 
 import {
+  appendBackgroundPoints,
   CHECKPOINT_EVERY_MS,
   CHECKPOINT_EVERY_N_POINTS,
+  clearBackgroundPoints,
   clearCheckpoint,
   maybeWriteCheckpoint,
+  readBackgroundPoints,
   readCheckpoint,
   writeCheckpoint,
   type RecorderCheckpoint,
@@ -139,5 +142,87 @@ describe('clearCheckpoint', () => {
 
     maybeWriteCheckpoint(cp); // 1 point since the reset — no write yet
     expect(storage.writeJson).not.toHaveBeenCalled();
+  });
+});
+
+describe('background points journal', () => {
+  const p = (time: number) => ({ latitude: 46.8, longitude: -71.2, time });
+
+  it('flushes the very first append immediately, then throttles by point count', async () => {
+    await appendBackgroundPoints([p(1)]);
+    expect(storage.writeJson).toHaveBeenCalledTimes(1);
+    expect(storage.writeJson).toHaveBeenCalledWith('recorder-bgpoints.json', [p(1)]);
+
+    (storage.writeJson as jest.Mock).mockClear();
+    for (let t = 2; t <= CHECKPOINT_EVERY_N_POINTS; t++) await appendBackgroundPoints([p(t)]);
+    expect(storage.writeJson).not.toHaveBeenCalled(); // N-1 pending — below the cadence
+
+    await appendBackgroundPoints([p(CHECKPOINT_EVERY_N_POINTS + 1)]); // Nth pending point
+    expect(storage.writeJson).toHaveBeenCalledTimes(1);
+    const written = (storage.writeJson as jest.Mock).mock.calls[0]?.[1] as { time: number }[];
+    expect(written).toHaveLength(CHECKPOINT_EVERY_N_POINTS + 1); // full journal, not just the tail
+  });
+
+  it('flushes on the time cadence even with few pending points', async () => {
+    await appendBackgroundPoints([p(1)]); // immediate first flush at t=1000
+    (storage.writeJson as jest.Mock).mockClear();
+
+    jest.setSystemTime(1_000 + CHECKPOINT_EVERY_MS - 1);
+    await appendBackgroundPoints([p(2)]);
+    expect(storage.writeJson).not.toHaveBeenCalled();
+
+    jest.setSystemTime(1_000 + CHECKPOINT_EVERY_MS);
+    await appendBackgroundPoints([p(3)]);
+    expect(storage.writeJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('readBackgroundPoints includes the unflushed in-memory tail', async () => {
+    await appendBackgroundPoints([p(1)]); // flushed
+    await appendBackgroundPoints([p(2)]); // still pending
+    await expect(readBackgroundPoints()).resolves.toEqual([p(1), p(2)]);
+  });
+
+  it('reads the journal from disk in a fresh JS context, dropping junk entries', async () => {
+    (storage.readJson as jest.Mock).mockResolvedValue([
+      p(1),
+      { latitude: 'oops', longitude: -71.2, time: 2 }, // corrupt entry
+      null,
+      p(3),
+    ]);
+    await expect(readBackgroundPoints()).resolves.toEqual([p(1), p(3)]);
+  });
+
+  it('returns [] when the journal file is unreadable', async () => {
+    (storage.readJson as jest.Mock).mockRejectedValue(new Error('unreadable'));
+    await expect(readBackgroundPoints()).resolves.toEqual([]);
+  });
+
+  it('appendBackgroundPoints swallows write errors', async () => {
+    (storage.writeJson as jest.Mock).mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    await expect(appendBackgroundPoints([p(1)])).resolves.toBeUndefined();
+  });
+
+  it('clearBackgroundPoints removes the journal file, its .tmp, and the buffer', async () => {
+    // Earlier tests leave throwing/rejecting implementations behind — restore.
+    (storage.writeJson as jest.Mock).mockImplementation(() => undefined);
+    (storage.readJson as jest.Mock).mockImplementation(async () => null);
+    await appendBackgroundPoints([p(1)]);
+    fsMock.__files.add('/doc/recorder-bgpoints.json');
+    fsMock.__files.add('/doc/recorder-bgpoints.json.tmp');
+
+    clearBackgroundPoints();
+    expect(fsMock.__files.has('/doc/recorder-bgpoints.json')).toBe(false);
+    expect(fsMock.__files.has('/doc/recorder-bgpoints.json.tmp')).toBe(false);
+    await expect(readBackgroundPoints()).resolves.toEqual([]);
+  });
+
+  it('clearCheckpoint clears the background journal too (same session)', async () => {
+    (storage.writeJson as jest.Mock).mockImplementation(() => undefined);
+    (storage.readJson as jest.Mock).mockImplementation(async () => null);
+    await appendBackgroundPoints([p(1)]);
+    clearCheckpoint();
+    await expect(readBackgroundPoints()).resolves.toEqual([]);
   });
 });

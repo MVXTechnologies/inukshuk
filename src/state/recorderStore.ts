@@ -2,6 +2,7 @@ import type { Track, TrackPoint, TrackStats } from '@core/models';
 import { buildGpx } from '@core/geo/gpx';
 import { computeTrackStats, reduceStatsWith } from '@core/geo/track';
 import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
+import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
@@ -48,6 +49,12 @@ interface RecorderState {
 
   start: (name?: string) => void;
   addPoint: (point: TrackPoint) => void;
+  /**
+   * Fold points journaled by the background location task into the live
+   * session: deduped by timestamp, gated by the GPS filter, stats recomputed.
+   * No-op while idle (crash recovery owns that case).
+   */
+  mergeBackgroundPoints: (incoming: TrackPoint[]) => void;
   /** Drop a waypoint at the current position (becomes a numbered note on stop). */
   addWaypoint: () => number;
   /** Edit a live waypoint's note text and/or photo (empty photoUri removes it). */
@@ -127,6 +134,21 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     });
     const cp = checkpointOf(get());
     if (cp) checkpoint.maybeWriteCheckpoint(cp); // throttled crash journal
+  },
+
+  mergeBackgroundPoints: (incoming) => {
+    const { status, points } = get();
+    if (status === 'idle') return;
+    const merged = mergeTrackPoints(points, incoming, { accept: shouldAcceptFix });
+    if (merged === points) return; // nothing new — keep identity, skip the I/O
+    set({
+      points: merged,
+      // Out-of-order inserts invalidate the incremental fold; recompute exactly.
+      stats: computeTrackStats(merged),
+    });
+    // Force a checkpoint: the journal these came from is about to be cleared.
+    const cp = checkpointOf(get());
+    if (cp) checkpoint.writeCheckpoint(cp);
   },
 
   addWaypoint: () => {
@@ -292,8 +314,10 @@ let recoveryAttempted = false;
 /**
  * One-shot launch recovery: if a crash left a checkpoint with recorded points,
  * restore it into the store as a PAUSED session (never auto-recording — the
- * user decides whether to resume or stop/save). Returns true when a recording
- * was recovered so the UI can explain what happened.
+ * user decides whether to resume or stop/save). Points journaled by the
+ * background location task while the JS process was dead are folded in
+ * (deduped by timestamp, gated by the GPS filter). Returns true when a
+ * recording was recovered so the UI can explain what happened.
  *
  * Test-only `reset` escape hatch: the one-shot latch must not leak between
  * jest cases.
@@ -305,7 +329,11 @@ export async function initRecorderRecovery(): Promise<boolean> {
   if (useRecorderStore.getState().status !== 'idle') return false;
 
   const cp = await checkpoint.readCheckpoint();
-  if (!cp || !Array.isArray(cp.points) || cp.points.length === 0) return false;
+  if (!cp || !Array.isArray(cp.points)) return false;
+
+  const journaled = await checkpoint.readBackgroundPoints();
+  const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
+  if (points.length === 0) return false;
 
   useRecorderStore.setState({
     status: 'paused',
@@ -315,10 +343,15 @@ export async function initRecorderRecovery(): Promise<boolean> {
     // Restored paused-at-now: the dead time between crash and relaunch never
     // counts as elapsed, and resume() folds the wait correctly.
     pausedAt: Date.now(),
-    points: cp.points,
-    stats: computeTrackStats(cp.points),
+    points,
+    stats: computeTrackStats(points),
     waypoints: cp.waypoints ?? [],
   });
+  // The journal is folded in — re-checkpoint the merged session so a second
+  // crash cannot lose the background points, then drop the journal.
+  const merged = checkpointOf(useRecorderStore.getState());
+  if (merged) checkpoint.writeCheckpoint(merged);
+  checkpoint.clearBackgroundPoints();
   return true;
 }
 
