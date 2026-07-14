@@ -85,4 +85,8 @@ export const mapColors = {
   trackOverlayActive: '#EA580C', // the inspected track — brighter orange
   userLocation: FOLIAGE_DEEP, // live position dot / scrub marker — olive, stands apart
   pdfOverlayBorder: INUKSHUK,
+  // Trim preview: the kept segment pops, the cut ends recede. Drawn over map
+  // tiles (not themed surfaces), so one pair works in light and dark mode.
+  trimKept: '#EA580C',
+  trimCut: '#8A8F98',
 };
