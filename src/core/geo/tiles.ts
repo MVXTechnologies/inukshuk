@@ -58,6 +58,33 @@ export function centerTileForRegion(b: BoundingBox): { x: number; y: number; z: 
 /** The downloadable raster basemaps. */
 export type Basemap = 'map' | 'satellite' | 'relief';
 
+/**
+ * Assumed top stored zoom for offline packs downloaded before the max zoom was
+ * recorded in pack metadata: the shallowest quality option ('standard' = z15).
+ * Assuming the shallowest keeps overzoom safe — the live map overscales from a
+ * zoom the pack is guaranteed to contain instead of requesting missing tiles.
+ */
+export const OFFLINE_PACK_FALLBACK_MAX_ZOOM = 15;
+
+/**
+ * The zoom the live map's raster source should fetch up to (and overscale
+ * beyond) when only locally downloaded tiles may be served: the SHALLOWEST max
+ * zoom across this basemap's downloaded packs. Using the min means a pack
+ * downloaded at a lower quality never shows missing-tile blanks past its top
+ * zoom — deeper packs just render slightly blurrier than they could.
+ */
+export function offlinePackMaxZoom(
+  packs: readonly { basemap: Basemap; maxZoom?: number }[],
+  basemap: Basemap,
+): number {
+  let min = Number.POSITIVE_INFINITY;
+  for (const p of packs) {
+    if (p.basemap !== basemap) continue;
+    min = Math.min(min, p.maxZoom ?? OFFLINE_PACK_FALLBACK_MAX_ZOOM);
+  }
+  return Number.isFinite(min) ? min : OFFLINE_PACK_FALLBACK_MAX_ZOOM;
+}
+
 // Rough average compressed tile sizes: Esri satellite/relief JPEG tiles are
 // heavier than OSM/street PNG tiles. Used only for a pre-download size estimate.
 const AVG_BYTES: Record<Basemap, number> = { map: 18_000, satellite: 30_000, relief: 28_000 };

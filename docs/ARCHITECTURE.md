@@ -81,7 +81,17 @@ four stages:
   stall watchdog rejects if progress stops (MapLibre can hang without erroring).
 - "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
   only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches
-  bypass this — see docs/CODE-REVIEW-2026-07-02.md.)
+  bypass this — see docs/CODE-REVIEW-2026-07-02.md.) The live style also caps
+  the raster source's `maxzoom` at the packs' top stored zoom (recorded in
+  pack metadata; legacy packs assume z15) so zooming deeper overscales the
+  deepest downloaded tiles instead of going blank, and draws an opaque
+  theme-matched mask over everything outside the downloaded regions
+  (`core/geo/downloadedMask.ts` — a world polygon with disjoint holes).
+- Raster sources always cap `maxzoom` at each service's real-data zoom
+  (OSM z19, Esri imagery z17, Esri topo z15 — see `NATIVE_MAX_ZOOM` in
+  `features/map/mapStyle.ts`): Esri serves HTTP-200 "Map data not yet
+  available" placeholder tiles past its data, so without the cap MapLibre
+  renders grey placeholders instead of overscaling real tiles.
 
 ## 3D terrain
 

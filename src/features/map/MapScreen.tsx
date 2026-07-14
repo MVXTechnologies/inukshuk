@@ -1,3 +1,5 @@
+import { buildDownloadedMask } from '@core/geo/downloadedMask';
+import { offlinePackMaxZoom } from '@core/geo/tiles';
 import type { LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -14,10 +16,11 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Banner, Snackbar } from 'react-native-paper';
+import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { CompassBadge } from './components/CompassBadge';
@@ -108,9 +111,32 @@ export function MapScreen() {
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
+  const theme = useTheme();
+  const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  const offlineRegions = useOfflineStore((s) => s.regions);
   // 2D base style with shaded-relief hillshade for the outdoor/topo look;
   // hillshade-3D was replaced by the real 3D terrain surface.
-  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap, true), [tileUrl, basemap]);
+  //
+  // With "Locally downloaded only" on, the style also (a) caps the raster
+  // source at the packs' top stored zoom so zooming past it overscales the
+  // deepest downloaded tiles instead of going blank, and (b) masks everything
+  // outside the downloaded regions with an opaque theme-matched fill (white in
+  // light mode, the app background in dark mode) — downloaded areas show
+  // through holes in the mask; trails/markers/location still draw on top.
+  const style = useMemo(() => {
+    const options = offlineOnly
+      ? {
+          rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
+          downloadedMask: {
+            data: buildDownloadedMask(
+              offlineRegions.filter((r) => r.basemap === basemap).map((r) => r.bounds),
+            ),
+            color: theme.dark ? theme.colors.background : '#FFFFFF',
+          },
+        }
+      : {};
+    return buildOsmStyle(tileUrl, false, basemap, true, options);
+  }, [tileUrl, basemap, offlineOnly, offlineRegions, theme.dark, theme.colors.background]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -277,10 +303,12 @@ export function MapScreen() {
               if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
             }}
             minZoom={1}
-            // Cap at 18: the raster basemaps (OSM z19, Esri) have real tiles to
-            // here globally. Past this, sparse high-zoom tiles run out and MapLibre
-            // shows "Map data not yet available" / blank — so don't let the user
-            // zoom into that dead zone.
+            // Camera cap; the raster SOURCES cap their tile-fetch zoom lower
+            // (see NATIVE_MAX_ZOOM in mapStyle.ts) so zooming past each
+            // service's real data — or past an offline pack's deepest stored
+            // zoom — overscales the last real tiles (blurry) instead of
+            // rendering Esri's "Map data not yet available" placeholders or
+            // blank offline tiles.
             maxZoom={18}
           />
 
