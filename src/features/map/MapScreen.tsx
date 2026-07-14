@@ -36,6 +36,7 @@ import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { buildOsmStyle } from './mapStyle';
+import { overwriteWithTrim, saveTrimmedCopy } from './trimTrack';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { useTrackOverlays } from './useTrackOverlays';
@@ -98,6 +99,8 @@ export function MapScreen() {
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
+  const addTrack = useLibraryStore((s) => s.addTrack);
+  const updateTrack = useLibraryStore((s) => s.updateTrack);
   const { overlays, error: overlayError } = usePdfOverlays(maps);
   const trackOverlays = useTrackOverlays(tracks);
 
@@ -155,8 +158,74 @@ export function MapScreen() {
 
   const { fitActiveMap, resetNorth } = useCameraControls({ cameraRef, overlays });
 
-  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
-    useTrailInspection(tracks);
+  const {
+    inspectId,
+    inspectTrack,
+    inspectPoints,
+    markerAt,
+    setMarkerAt,
+    inspect,
+    trimRange,
+    beginTrim,
+    cancelTrim,
+    changeTrim,
+  } = useTrailInspection(tracks);
+
+  // Trim tool: live preview segments + the two save paths. The kept window is
+  // drawn bright over the trace; the cut ends are dimmed (see below).
+  const [trimSaving, setTrimSaving] = useState(false);
+  const trimPreview = useMemo(() => {
+    if (!trimRange || !inspectPoints) return null;
+    const { start, end } = trimRange;
+    return {
+      // Cut segments share their boundary point with the kept one — no gaps.
+      cutHead: toLineFeature(inspectPoints.slice(0, start + 1)),
+      kept: toLineFeature(inspectPoints.slice(start, end + 1)),
+      cutTail: toLineFeature(inspectPoints.slice(end)),
+    };
+  }, [trimRange, inspectPoints]);
+
+  const onSaveTrimCopy = useCallback(async () => {
+    if (!inspectTrack || !inspectPoints || !trimRange) return;
+    setTrimSaving(true);
+    try {
+      const { track, fileUri } = await saveTrimmedCopy(
+        inspectTrack,
+        inspectPoints,
+        trimRange.start,
+        trimRange.end,
+      );
+      addTrack(track, fileUri);
+      showSnack(`Saved "${track.name}" to the library`);
+      cancelTrim();
+    } catch (err) {
+      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
+    } finally {
+      setTrimSaving(false);
+    }
+  }, [inspectTrack, inspectPoints, trimRange, addTrack, showSnack, cancelTrim]);
+
+  const onOverwriteTrim = useCallback(async () => {
+    if (!inspectTrack || !inspectPoints || !trimRange) return;
+    setTrimSaving(true);
+    try {
+      const { patch } = await overwriteWithTrim(
+        inspectTrack,
+        inspectPoints,
+        trimRange.start,
+        trimRange.end,
+      );
+      updateTrack(inspectTrack.id, patch);
+      showSnack(`Trimmed "${inspectTrack.name}"`);
+      inspect(null); // points on disk changed — drop the stale inspection
+    } catch (err) {
+      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
+    } finally {
+      setTrimSaving(false);
+    }
+    // `inspect` is a stable setter wrapper from the hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectTrack, inspectPoints, trimRange, updateTrack, showSnack]);
 
   // Tapping a live waypoint marker opens an editor for its note + photo.
   const [editWpId, setEditWpId] = useState<string | null>(null);
@@ -285,26 +354,76 @@ export function MapScreen() {
             ))}
 
           {showTrackOverlays &&
-            trackOverlays.map((t) => (
-              <GeoJSONSource
-                key={t.id}
-                id={`track-${t.id}`}
-                data={t.feature}
-                onPress={() => inspect(inspectId === t.id ? null : t.id)}
-              >
-                <Layer
-                  id={`track-${t.id}-line`}
-                  type="line"
-                  layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                  paint={{
-                    'line-color':
-                      inspectId === t.id ? mapColors.trackOverlayActive : mapColors.trackOverlay,
-                    'line-width': inspectId === t.id ? 6 : 4,
-                    'line-opacity': 0.9,
-                  }}
-                />
-              </GeoJSONSource>
-            ))}
+            trackOverlays.map((t) =>
+              // While trimming, the inspected trail is drawn by the preview
+              // sources below instead (kept segment bright, cut ends dimmed).
+              trimPreview && t.id === inspectId ? null : (
+                <GeoJSONSource
+                  key={t.id}
+                  id={`track-${t.id}`}
+                  data={t.feature}
+                  onPress={() => inspect(inspectId === t.id ? null : t.id)}
+                >
+                  <Layer
+                    id={`track-${t.id}-line`}
+                    type="line"
+                    layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                    paint={{
+                      'line-color':
+                        inspectId === t.id ? mapColors.trackOverlayActive : mapColors.trackOverlay,
+                      'line-width': inspectId === t.id ? 6 : 4,
+                      'line-opacity': 0.9,
+                    }}
+                  />
+                </GeoJSONSource>
+              ),
+            )}
+
+          {/* Trim preview: dimmed dashed cut ends under a bright kept segment. */}
+          {trimPreview?.cutHead && (
+            <GeoJSONSource id="trim-cut-head" data={trimPreview.cutHead}>
+              <Layer
+                id="trim-cut-head-line"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': mapColors.trimCut,
+                  'line-width': 4,
+                  'line-opacity': 0.6,
+                  'line-dasharray': [1.5, 1.5],
+                }}
+              />
+            </GeoJSONSource>
+          )}
+          {trimPreview?.cutTail && (
+            <GeoJSONSource id="trim-cut-tail" data={trimPreview.cutTail}>
+              <Layer
+                id="trim-cut-tail-line"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': mapColors.trimCut,
+                  'line-width': 4,
+                  'line-opacity': 0.6,
+                  'line-dasharray': [1.5, 1.5],
+                }}
+              />
+            </GeoJSONSource>
+          )}
+          {trimPreview?.kept && (
+            <GeoJSONSource id="trim-kept" data={trimPreview.kept}>
+              <Layer
+                id="trim-kept-line"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': mapColors.trimKept,
+                  'line-width': 6,
+                  'line-opacity': 0.95,
+                }}
+              />
+            </GeoJSONSource>
+          )}
 
           {markerAt && (
             <GeoJSONSource
@@ -436,6 +555,13 @@ export function MapScreen() {
           points={inspectPoints}
           onClose={() => inspect(null)}
           onScrub={setMarkerAt}
+          trim={trimRange}
+          onBeginTrim={beginTrim}
+          onCancelTrim={cancelTrim}
+          onChangeTrim={changeTrim}
+          onSaveTrimCopy={() => void onSaveTrimCopy()}
+          onOverwriteTrim={() => void onOverwriteTrim()}
+          trimSaving={trimSaving}
         />
       )}
 

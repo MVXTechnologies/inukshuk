@@ -244,10 +244,15 @@ export function parseGpx(xml: string): GpxDocument {
 /**
  * Serialize points to a valid GPX 1.1 string with a single <trk>/<trkseg>.
  * Coordinates are rounded to 7 decimals, elevation to 2. `<ele>`/`<time>` are
- * emitted only when defined on the source point.
+ * emitted only when defined on the source point. Standalone `<wpt>` markers
+ * (with their labels) are emitted before the track, per the GPX 1.1 order.
  */
-export function buildGpx(args: { points: TrackPoint[]; metadata?: GpxMetadata }): string {
-  const { points, metadata } = args;
+export function buildGpx(args: {
+  points: TrackPoint[];
+  metadata?: GpxMetadata;
+  waypoints?: readonly GpxWaypoint[];
+}): string {
+  const { points, metadata, waypoints } = args;
 
   const trkpts = points.map((p) => {
     const node: AnyRecord = {
@@ -277,6 +282,22 @@ export function buildGpx(args: { points: TrackPoint[]; metadata?: GpxMetadata })
     [`${ATTR_PREFIX}xmlns`]: GPX_NS,
   };
   if (Object.keys(metaNode).length > 0) gpx['metadata'] = metaNode;
+  // <wpt> must precede <trk> in the GPX 1.1 sequence.
+  if (waypoints && waypoints.length > 0) {
+    gpx['wpt'] = waypoints.map((w) => {
+      const node: AnyRecord = {
+        [`${ATTR_PREFIX}lat`]: round(w.latitude, 7),
+        [`${ATTR_PREFIX}lon`]: round(w.longitude, 7),
+      };
+      if (w.time !== undefined && Number.isFinite(w.time) && w.time > 0) {
+        node['time'] = epochMsToIso(w.time);
+      }
+      if (w.name !== undefined) node['name'] = w.name;
+      if (w.description !== undefined) node['desc'] = w.description;
+      if (w.symbol !== undefined) node['sym'] = w.symbol;
+      return node;
+    });
+  }
   gpx['trk'] = {
     ...(metadata?.name !== undefined ? { name: metadata.name } : {}),
     trkseg: { trkpt: trkpts },
