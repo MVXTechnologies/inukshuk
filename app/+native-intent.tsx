@@ -1,4 +1,5 @@
 import { importGpxFromUri } from '@features/library/importGpx';
+import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { useImportFeedbackStore } from '@state/importFeedbackStore';
 import { useLibraryStore } from '@state/libraryStore';
 
@@ -23,6 +24,7 @@ export async function redirectSystemPath({
 }): Promise<string> {
   void initial;
   if (/^(content|file):\/\//i.test(path)) {
+    addBreadcrumb('open-with intent received');
     try {
       // On a cold start this runs concurrently with RootLayout's hydrate();
       // adding a track before the on-disk index is loaded would persist an
@@ -31,7 +33,8 @@ export async function redirectSystemPath({
       const { track, fileUri, notes } = await importGpxFromUri(path, 'Imported trail');
       useLibraryStore.getState().addTrack(track, fileUri, notes);
       useImportFeedbackStore.getState().show(`Imported ${track.name}`);
-    } catch {
+    } catch (err) {
+      reportError(err, 'open-with-import');
       useImportFeedbackStore.getState().show('Could not import that file');
     }
     // Land on the Library regardless, so the opened URI never reaches routing.

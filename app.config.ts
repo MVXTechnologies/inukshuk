@@ -160,6 +160,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     eas: {
       projectId: process.env.EAS_PROJECT_ID ?? 'ba200eac-11b2-4c40-bd17-c0c66351ea54',
     },
+    // Automatic error reporting (src/lib/errorReporting): a fine-grained GitHub
+    // PAT with Issues-only read/write on marcandrevigneault/inukshuk, set as an
+    // EAS secret (`eas env:create --name ERROR_REPORT_TOKEN ...`). Baked into
+    // the binary at build time — the narrow scope is the mitigation. When unset
+    // (local dev, forks), the app falls back to asking the user to open a
+    // pre-filled GitHub issue instead.
+    errorReportToken: process.env.ERROR_REPORT_TOKEN,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

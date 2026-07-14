@@ -202,6 +202,47 @@ describe('parseGpx waypoints', () => {
   });
 });
 
+describe('buildGpx waypoints', () => {
+  it('round-trips waypoints with name/desc/sym/time', () => {
+    const waypoints = [
+      {
+        latitude: 46.81,
+        longitude: -71.21,
+        name: 'Lookout',
+        description: 'great view',
+        symbol: 'Summit',
+        time: Date.parse('2024-05-05T05:00:00Z'),
+      },
+      { latitude: 46.5, longitude: -71.5 },
+    ];
+    const xml = buildGpx({ points: [pt(46.8, -71.2, 0)], waypoints });
+    const doc = parseGpx(xml);
+    expect(doc.points).toHaveLength(1);
+    expect(doc.hasTrackOrRoutePoints).toBe(true);
+    expect(doc.waypoints).toEqual(waypoints);
+  });
+
+  it('emits <wpt> before <trk> per the GPX 1.1 sequence', () => {
+    const xml = buildGpx({
+      points: [pt(1, 2, 0)],
+      waypoints: [{ latitude: 3, longitude: 4, name: 'W' }],
+    });
+    expect(xml.indexOf('<wpt')).toBeGreaterThan(-1);
+    expect(xml.indexOf('<wpt')).toBeLessThan(xml.indexOf('<trk'));
+  });
+
+  it('omits the wpt <time> when it is 0/undefined and skips empty waypoint lists', () => {
+    const withZeroTime = buildGpx({
+      points: [pt(1, 2, 0)],
+      waypoints: [{ latitude: 3, longitude: 4, time: 0 }],
+    });
+    expect(withZeroTime).toContain('<wpt');
+    expect(withZeroTime).not.toContain('<time>');
+    const empty = buildGpx({ points: [pt(1, 2, 0)], waypoints: [] });
+    expect(empty).not.toContain('<wpt');
+  });
+});
+
 describe('parseGpx malformed and unusual input', () => {
   it('drops points with missing or non-numeric coordinates', () => {
     const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">

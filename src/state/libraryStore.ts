@@ -20,6 +20,8 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
   toggleMapPage: (id: string, pageIndex: number) => void;
   addTrack: (track: Track, fileUri: string, notes?: readonly ImportedNote[]) => void;
+  /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
+  updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id' | 'fileUri'>>) => void;
   removeTrack: (id: string) => void;
   // Trail overlays — which saved trails are drawn on the main map. Persisted
   // (like maps' activePages) so a bundle activation survives an app restart.
@@ -181,6 +183,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         ...(seeded ? { notes: seeded } : {}),
       };
       const next = { ...s, tracks: [summary, ...s.tracks] };
+      persist(next);
+      return next;
+    }),
+
+  updateTrack: (id, patch) =>
+    set((s) => {
+      const next = { ...s, tracks: s.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
       persist(next);
       return next;
     }),

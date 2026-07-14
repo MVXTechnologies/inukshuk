@@ -81,7 +81,17 @@ four stages:
   stall watchdog rejects if progress stops (MapLibre can hang without erroring).
 - "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
   only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches
-  bypass this — see docs/CODE-REVIEW-2026-07-02.md.)
+  bypass this — see docs/CODE-REVIEW-2026-07-02.md.) The live style also caps
+  the raster source's `maxzoom` at the packs' top stored zoom (recorded in
+  pack metadata; legacy packs assume z15) so zooming deeper overscales the
+  deepest downloaded tiles instead of going blank, and draws an opaque
+  theme-matched mask over everything outside the downloaded regions
+  (`core/geo/downloadedMask.ts` — a world polygon with disjoint holes).
+- Raster sources always cap `maxzoom` at each service's real-data zoom
+  (OSM z19, Esri imagery z17, Esri topo z15 — see `NATIVE_MAX_ZOOM` in
+  `features/map/mapStyle.ts`): Esri serves HTTP-200 "Map data not yet
+  available" placeholder tiles past its data, so without the cap MapLibre
+  renders grey placeholders instead of overscaling real tiles.
 
 ## 3D terrain
 
@@ -95,12 +105,30 @@ four stages:
   currently gated off behind the `terrain3d` flag). Render loops carry a GL
   "generation" and dispose their scene when the GLView remounts.
 
+## Error reporting ("no silent fails")
+
+- Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'
+  unhandled-promise-rejection tracker, a top-level error boundary around the
+  router root, and explicit `reportError(err, context)` calls from catch blocks
+  that would otherwise swallow user-facing failures.
+- Queue: reports persist to `error-reports.json` (same atomic write path as the
+  other documents) so errors captured offline on a hike survive restarts. Pure
+  logic — fingerprinting, dedupe/merge, rate limiting, issue formatting — lives
+  in `src/core/errors/`; the platform glue in `src/lib/errorReporting` +
+  `src/data/errorQueue.ts`.
+- Delivery: flushed on launch / foreground / capture to GitHub issues on this
+  repo, deduped by a fingerprint marker in the issue title (repeats become a
+  "Seen again" comment) and rate-limited client-side. The API token comes from
+  `extra.errorReportToken` (`ERROR_REPORT_TOKEN` EAS secret, a fine-grained
+  Issues-only PAT); without one, the user is asked to open a pre-filled
+  `issues/new` URL. Users can opt out in Settings → Privacy.
+
 ## State & persistence
 
 | Store                 | Persisted?            | Holds                                                                                                             |
 | --------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, active map, active trail overlays |
-| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs                                                     |
+| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                            |
 | `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                         |
 | `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                    |
 | `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                  |

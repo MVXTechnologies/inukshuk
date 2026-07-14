@@ -11,11 +11,16 @@ export interface TrackOverlay {
   feature: Feature<LineString>;
 }
 
+// Cache key: the id alone is not enough — a trim "overwrite" rewrites the GPX
+// under the same id, and a stale cached feature would keep drawing the old
+// geometry until app restart. Point count + distance change on any edit.
+const cacheKey = (t: TrackSummary): string => `${t.id}|${t.stats.pointCount}|${t.stats.distanceM}`;
+
 /**
  * Loads + parses the GPX of every active trail (persisted in the library store,
  * like PDF page activation) into GeoJSON line features for rendering. Parsed
- * features are cached by track id so toggling a trail back on is instant.
- * Mirrors `usePdfOverlays`.
+ * features are cached by track id + stats so toggling a trail back on is
+ * instant while an edited trail reloads. Mirrors `usePdfOverlays`.
  */
 export function useTrackOverlays(tracks: readonly TrackSummary[]): TrackOverlay[] {
   const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
@@ -27,17 +32,18 @@ export function useTrackOverlays(tracks: readonly TrackSummary[]): TrackOverlay[
     let cancelled = false;
     (async () => {
       for (const id of activeTrackIds) {
-        if (cache[id] !== undefined) continue;
         const t = tracks.find((x) => x.id === id);
         if (!t) continue;
+        const ck = cacheKey(t);
+        if (cache[ck] !== undefined) continue;
         try {
           const gpx = await storage.readFileText(t.fileUri);
           const { points } = parseGpx(gpx);
           if (cancelled) return;
-          setCache((c) => ({ ...c, [id]: toLineFeature(points) }));
+          setCache((c) => ({ ...c, [ck]: toLineFeature(points) }));
         } catch {
           if (cancelled) return;
-          setCache((c) => ({ ...c, [id]: null }));
+          setCache((c) => ({ ...c, [ck]: null }));
         }
       }
     })();
@@ -52,8 +58,9 @@ export function useTrackOverlays(tracks: readonly TrackSummary[]): TrackOverlay[
     // Membership check: removeTrack prunes activeTrackIds, but the parsed cache
     // (and any stale persisted id) must never render a deleted trail — without
     // this it kept rendering until app restart.
-    if (!tracks.some((t) => t.id === id)) continue;
-    const feature = cache[id];
+    const t = tracks.find((x) => x.id === id);
+    if (!t) continue;
+    const feature = cache[cacheKey(t)];
     if (feature) overlays.push({ id, feature });
   }
   return overlays;

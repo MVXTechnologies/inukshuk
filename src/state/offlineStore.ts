@@ -5,8 +5,10 @@ import {
   setTileLimit,
   type OfflineRegion,
 } from '@data/offline';
+import { deleteRegionName, readRegionNames, saveRegionNames } from '@data/regionNames';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
+import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
 /** One basemap layer to download for a region, with its serialized style. */
@@ -39,6 +41,13 @@ interface OfflineState {
     layers: DownloadLayer[];
   }) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /**
+   * Set the display name of one or more regions (several ids when the layers of
+   * one download share a name). Persists to the name sidecar — MapLibre pack
+   * metadata can't be updated after creation — and updates any already-listed
+   * regions in place; regions still downloading pick the name up on refresh.
+   */
+  rename: (ids: string[], label: string) => Promise<void>;
 }
 
 const LAYER_LABEL: Record<Basemap, string> = {
@@ -47,13 +56,22 @@ const LAYER_LABEL: Record<Basemap, string> = {
   relief: 'Relief',
 };
 
+/** Native pack list with the persisted name overrides merged over pack labels. */
+async function loadRegions(): Promise<OfflineRegion[]> {
+  const [packs, names] = await Promise.all([listRegionPacks(), readRegionNames()]);
+  return packs.map((region) => {
+    const label = names[region.id];
+    return label !== undefined ? { ...region, label } : region;
+  });
+}
+
 export const useOfflineStore = create<OfflineState>((set, get) => ({
   regions: [],
   progress: null,
 
   hydrate: async () => {
     setTileLimit(50_000); // headroom above the 25k UI cap
-    set({ regions: await listRegionPacks() });
+    set({ regions: await loadRegions() });
   },
 
   downloadMany: async (args) => {
@@ -81,12 +99,15 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
             },
             (pct, sizeBytes) => set({ progress: { pct, sizeBytes, label } }),
           );
-        } catch {
+        } catch (err) {
+          // The summary error below tells the user which layers failed; the
+          // underlying cause would otherwise be lost — report it.
+          reportError(err, 'offline-region-download');
           failed.push(LAYER_LABEL[layer.basemap]);
         }
       }
     } finally {
-      set({ progress: null, regions: await listRegionPacks() });
+      set({ progress: null, regions: await loadRegions() });
     }
     if (failed.length > 0) {
       throw new Error(`${failed.join(', ')} failed to download`);
@@ -95,6 +116,14 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
 
   remove: async (id) => {
     await deleteRegionPack(id);
+    await deleteRegionName(id);
     set({ regions: get().regions.filter((r) => r.id !== id) });
+  },
+
+  rename: async (ids, label) => {
+    await saveRegionNames(Object.fromEntries(ids.map((id) => [id, label])));
+    set({
+      regions: get().regions.map((r) => (ids.includes(r.id) ? { ...r, label } : r)),
+    });
   },
 }));
