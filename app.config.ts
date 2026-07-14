@@ -11,11 +11,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // Bumped to 1.0.1 for the offline-maps release: it adds a native module, and
+  // Bumped to 1.0.2 for background recording: it adds ACCESS_BACKGROUND_LOCATION
+  // + the iOS location background mode (native manifest/plist changes), and
   // runtimeVersion follows appVersion — a new version name gives this build its
-  // own OTA runtime, so it never pulls the older 1.0.0 runtime's JS (which lacks
-  // the native module). Existing 1.0.0 installs keep their own OTA lineage.
-  version: '1.0.1',
+  // own OTA runtime, so the background-recording JS never lands on older
+  // binaries that lack those entries. Existing installs keep their OTA lineage.
+  version: '1.0.2',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -27,8 +28,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     infoPlist: {
-      // v1 records in the foreground only (screen kept awake), so no background
-      // location mode is declared — keeps store review simple.
+      // Trail recording keeps running with the screen off / app backgrounded.
+      // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
+      // this; declared explicitly so the requirement is visible here.
+      UIBackgroundModes: ['location'],
       ITSAppUsesNonExemptEncryption: false,
       // Allow cleartext to loopback only, for the in-app HTTP server that serves the
       // MapLibre style during an offline-region download (see src/data/offline.ts).
@@ -57,21 +60,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.inukshuk.app',
     // versionCode must keep monotonically increasing on Play (it can't reset) —
-    // bump this each store build. (vc42 was 1.0.0; vc43 is 1.0.1, see version above.)
-    versionCode: 43,
+    // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 is
+    // 1.0.2, see version above.)
+    versionCode: 44,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
       // shows at the mask edges during launcher parallax.
       backgroundColor: '#E0D8CC',
     },
-    // While-in-use location plus a recording foreground service (the
-    // expo-location plugin below adds FOREGROUND_SERVICE /
-    // FOREGROUND_SERVICE_LOCATION). Deliberately NO ACCESS_BACKGROUND_LOCATION:
-    // a foreground service keeps fixes flowing with the screen off using only
-    // while-in-use permission, which avoids Play's stricter background-location
-    // review.
-    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
+    // While-in-use location, a recording foreground service (the expo-location
+    // plugin below adds FOREGROUND_SERVICE / FOREGROUND_SERVICE_LOCATION), and
+    // background location. The foreground service alone keeps fixes flowing
+    // with the screen off under while-in-use permission; "Allow all the time"
+    // (requested in-app with a rationale, only when a recording starts) makes
+    // tracking survive aggressive OEM battery management and process restarts.
+    // Play's background-location review will require a declaration + demo video.
+    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION'],
     // Let users open a .gpx with Inukshuk from a file manager / browser. File
     // managers are inconsistent about GPX's MIME type, so match by MIME AND by
     // a `.*\\.gpx` path pattern for both content:// and file:// URIs.
@@ -112,13 +117,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         locationWhenInUsePermission:
           'Inukshuk uses your location to show where you are on the map and to record your trail.',
-        isAndroidBackgroundLocationEnabled: false,
+        locationAlwaysAndWhenInUsePermission:
+          'Inukshuk uses your location in the background to keep recording your trail while the screen is off or you use another app.',
+        locationAlwaysPermission:
+          'Inukshuk uses your location in the background to keep recording your trail while the screen is off or you use another app.',
+        // ACCESS_BACKGROUND_LOCATION ("Allow all the time"): keeps the recording
+        // task alive across process restarts and strict OEM battery managers.
+        isAndroidBackgroundLocationEnabled: true,
         // Adds FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION so recording
         // survives the screen turning off / app-switching, via
         // startLocationUpdatesAsync's foreground service (persistent
-        // notification). Takes effect in the NEXT store binary; on older
-        // binaries the JS falls back to the foreground-only watch at runtime.
+        // notification).
         isAndroidForegroundServiceEnabled: true,
+        // Adds UIBackgroundModes: [location] on iOS.
+        isIosBackgroundLocationEnabled: true,
       },
     ],
     [
