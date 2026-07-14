@@ -179,6 +179,7 @@ export function MapScreen() {
     selecting,
     downloadProgress,
     toGeo,
+    boundsVersion,
     refreshBounds,
     onMapLayout,
     beginRegionSelect,
@@ -527,6 +528,7 @@ export function MapScreen() {
       {selecting && !terrain3d && (
         <RegionSelectOverlay
           toGeo={toGeo}
+          boundsVersion={boundsVersion}
           activeBasemap={basemap}
           tileUrl={tileUrl}
           onCancel={cancelRegionSelect}

@@ -25,6 +25,24 @@ on the same app version; native changes require a new store build. See
   the map bearing in heading-up mode are all fed from that one filtered value —
   heading-up no longer uses MapLibre's native compass camera mode, which read
   the raw sensor and shook the map.
+- **Offline downloads no longer grab a much larger area than the drawn box.**
+  Entering region-select flattened the camera _and_ read the map's visible bounds
+  in the same tick, so the box was converted against the still-pitched/rotated
+  camera — whose visible bounds run to the horizon and are far larger than the
+  viewport rectangle — and the bounds were never recomputed once the flatten
+  landed. The screen-rect → bounds conversion now lives in `src/core/geo/screenBounds.ts`
+  (interpolating in web-mercator Y, not in latitude), only ever runs against
+  bounds captured from a flat, north-up camera, and is re-derived from fresh
+  bounds at the moment Download is tapped.
+- **The relief basemap can be downloaded again.** Relief tiles (Esri
+  `World_Topo_Map`) are only served to z15, but the pack was created with the
+  quality zoom (z16 "High", z17 "Max") — above the raster source's `maxzoom` —
+  so the relief layer failed while map (z19) and satellite (z17) succeeded. Each
+  layer is now clamped to its source's native max zoom (`packZoomRange`), the
+  clamp is reflected in the size estimate and shown in the sheet ("Relief tops
+  out at z15"), and the pack metadata records the zoom it really stored. Failed
+  downloads now name the layer and the reason (network, tile limit, invalid zoom
+  range, stall) instead of "X failed to download".
 - **Multi-page georeferenced PDFs no longer crash the app.** A projected `/GCS`
   (e.g. UTM) in an Adobe GEO viewport caused the geographic `GPTS` to be wrongly
   reprojected, collapsing every page to a degenerate point near the equator; the

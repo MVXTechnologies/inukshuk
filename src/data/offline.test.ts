@@ -192,9 +192,9 @@ describe('createRegionPack', () => {
     await jest.advanceTimersByTimeAsync(89_000);
     expect(rejected).toBe(false);
 
-    // … but 90 s of silence rejects.
+    // … but 90 s of silence rejects, naming the zoom range that stalled.
     await jest.advanceTimersByTimeAsync(2_000);
-    await expect(pending).rejects.toThrow('Download stalled (no progress for 90 s)');
+    await expect(pending).rejects.toThrow('no tiles arrived for 90 s at z10–z14');
 
     // The partially-created native pack and its orphaned style file are removed.
     expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-1');
@@ -208,11 +208,46 @@ describe('createRegionPack', () => {
     await flushMicrotasks();
 
     emitError({ id: 'native-1' }, { message: 'connection lost' });
+    // The reason survives, with the zoom range that failed appended.
     await expect(pending).rejects.toThrow('connection lost');
 
     expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-1');
     expect(fsMock.__has('/doc/offline-styles/r1.json')).toBe(false);
     expect(lastServer()?.stop).toHaveBeenCalled();
+  });
+
+  it('gives an empty native error a specific reason', async () => {
+    mockCreatePack();
+    const pending = createRegionPack(packArgs, jest.fn());
+    await flushMicrotasks();
+
+    emitError({ id: 'native-1' }, { message: '' });
+    await expect(pending).rejects.toThrow('the tile server rejected the request (z10–z14)');
+  });
+
+  it('clamps the pack to the basemap native max zoom (relief tops out at z15)', async () => {
+    mockCreatePack();
+    const pending = createRegionPack(
+      { ...packArgs, id: 'r2', basemap: 'relief', minZoom: 11, maxZoom: 17 },
+      jest.fn(),
+    );
+    await flushMicrotasks();
+
+    const options = (OfflineManager.createPack as jest.Mock).mock.calls[0]?.[0] as {
+      minZoom: number;
+      maxZoom: number;
+      metadata: Record<string, unknown>;
+    };
+    // Requesting z16/z17 from a source that only serves z15 is what made the
+    // relief layer fail to download.
+    expect(options.minZoom).toBe(11);
+    expect(options.maxZoom).toBe(15);
+    // The metadata records what the pack REALLY holds, so the live map overzooms
+    // from z15 instead of asking for tiles that were never stored.
+    expect(options.metadata).toMatchObject({ basemap: 'relief', maxZoom: 15 });
+
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 10 });
+    await pending;
   });
 });
 
