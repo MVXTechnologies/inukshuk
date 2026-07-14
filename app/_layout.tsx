@@ -5,7 +5,6 @@
 import '@lib/backgroundLocation';
 
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
-import { ErrorReportPrompt } from '@features/common/components/ErrorReportPrompt';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
@@ -59,7 +58,6 @@ export default function RootLayout() {
                 <Stack.Screen name="trail3d/[id]" />
               </Stack>
               <ImportFeedbackSnackbar />
-              <ErrorReportPrompt />
             </PdfRasterizerProvider>
           </ErrorBoundary>
         </PaperProvider>

@@ -1,4 +1,7 @@
 import {
+  BACKOFF_BASE_MS,
+  BACKOFF_MAX_MS,
+  backoffDelayMs,
   canSendReport,
   emptyQueueDoc,
   ERROR_QUEUE_SCHEMA_VERSION,
@@ -126,5 +129,23 @@ describe('migrateErrorQueueDoc', () => {
     });
     expect(doc.queue).toHaveLength(MAX_QUEUED_REPORTS);
     expect(doc.queue[0]?.fingerprint).toBe('fp-5');
+  });
+});
+
+describe('backoffDelayMs', () => {
+  it('does not delay when nothing has failed', () => {
+    expect(backoffDelayMs(0)).toBe(0);
+    expect(backoffDelayMs(-1)).toBe(0);
+  });
+
+  it('backs off exponentially from the base delay', () => {
+    expect(backoffDelayMs(1)).toBe(BACKOFF_BASE_MS);
+    expect(backoffDelayMs(2)).toBe(BACKOFF_BASE_MS * 2);
+    expect(backoffDelayMs(3)).toBe(BACKOFF_BASE_MS * 4);
+  });
+
+  it('clamps at the ceiling, even after a very long offline stretch', () => {
+    expect(backoffDelayMs(20)).toBe(BACKOFF_MAX_MS);
+    expect(backoffDelayMs(5000)).toBe(BACKOFF_MAX_MS);
   });
 });

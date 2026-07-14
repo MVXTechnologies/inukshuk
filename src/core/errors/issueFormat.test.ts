@@ -1,8 +1,9 @@
 import {
   buildIssueBody,
   buildIssueTitle,
-  buildManualReportUrl,
+  buildReportPayload,
   buildSeenAgainComment,
+  ISSUE_BODY_MAX,
 } from './issueFormat';
 import type { ErrorReport } from './types';
 
@@ -84,6 +85,12 @@ describe('buildIssueBody', () => {
     expect(body).toContain('### Component stack');
     expect(body).toContain('in MapScreen');
   });
+
+  it('caps a runaway stack under the GitHub body limit (a 422 would block the queue)', () => {
+    const body = buildIssueBody({ ...base, stack: 'x'.repeat(200_000) });
+    expect(body.length).toBeLessThanOrEqual(ISSUE_BODY_MAX);
+    expect(body.endsWith('…')).toBe(true);
+  });
 });
 
 describe('buildSeenAgainComment', () => {
@@ -101,16 +108,20 @@ describe('buildSeenAgainComment', () => {
   });
 });
 
-describe('buildManualReportUrl', () => {
-  it('builds a prefilled issues/new URL on the right repo', () => {
-    const url = buildManualReportUrl('owner/repo', base);
-    expect(url.startsWith('https://github.com/owner/repo/issues/new?title=')).toBe(true);
-    expect(url).toContain(encodeURIComponent('[auto-report:aabbccdd]'));
-    expect(url).toContain('&body=');
+describe('buildReportPayload', () => {
+  it('carries the marker plus the pre-rendered issue strings and the raw report', () => {
+    const payload = buildReportPayload(base);
+    expect(payload).toMatchObject({
+      fingerprint: 'aabbccdd',
+      marker: '[auto-report:aabbccdd]',
+      title: buildIssueTitle(base),
+      body: buildIssueBody(base),
+      comment: buildSeenAgainComment(base),
+      report: base,
+    });
   });
 
-  it('caps the body length for huge stacks', () => {
-    const url = buildManualReportUrl('owner/repo', { ...base, stack: 'x'.repeat(20000) });
-    expect(url.length).toBeLessThan(13000); // 4000 chars, worst-case %XX encoding
+  it('is JSON-serializable (it is POSTed as-is to the relay endpoint)', () => {
+    expect(() => JSON.stringify(buildReportPayload(base))).not.toThrow();
   });
 });

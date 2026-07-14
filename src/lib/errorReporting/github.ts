@@ -18,6 +18,39 @@ interface IssueSummary {
   title: string;
 }
 
+/** An HTTP-level failure from the GitHub API, carrying the status for triage. */
+export class GitHubApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'GitHubApiError';
+  }
+}
+
+/**
+ * Is this failure worth retrying with the same payload?
+ *
+ * - No status (network down, DNS, timeout/abort) → transient, retry later.
+ * - 408 / 429 / 5xx → transient (server hiccup or secondary rate limit).
+ * - 401 / 403 / 404 → the token is missing/expired/wrong-scope, or the repo is
+ *   gone: retrying can only fail. Not transient — back off hard.
+ * - 422 → the payload itself is unacceptable (e.g. an oversized body). Retrying
+ *   the same bytes is pointless; the report is dropped rather than left as a
+ *   poison pill at the head of the queue.
+ */
+export function isTransientFailure(error: unknown): boolean {
+  if (!(error instanceof GitHubApiError)) return true;
+  const { status } = error;
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/** True when the report itself is unacceptable and will never be accepted. */
+export function isPayloadRejection(error: unknown): boolean {
+  return error instanceof GitHubApiError && error.status === 422;
+}
+
 async function githubFetch(
   token: string,
   path: string,
@@ -38,7 +71,10 @@ async function githubFetch(
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw new Error(`GitHub API ${init?.method ?? 'GET'} ${path} failed: ${response.status}`);
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API ${init?.method ?? 'GET'} ${path} failed: ${response.status}`,
+      );
     }
     return (await response.json()) as unknown;
   } finally {
