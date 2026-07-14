@@ -6,6 +6,9 @@ import {
   tileSpanAtZoom,
   offlinePackMaxZoom,
   OFFLINE_PACK_FALLBACK_MAX_ZOOM,
+  NATIVE_MAX_ZOOM,
+  packZoomRange,
+  estimateRegionDownload,
 } from './tiles';
 import type { BoundingBox } from '@core/models';
 
@@ -78,5 +81,48 @@ describe('offlinePackMaxZoom', () => {
     expect(offlinePackMaxZoom([{ basemap: 'map', maxZoom: 17 }], 'relief')).toBe(
       OFFLINE_PACK_FALLBACK_MAX_ZOOM,
     );
+  });
+});
+
+describe('packZoomRange', () => {
+  const region: BoundingBox = { minLat: 45.9, minLng: -73.1, maxLat: 46.0, maxLng: -73.0 };
+
+  it('caps the top zoom at the basemap source native max', () => {
+    // Relief tops out at z15: asking for the "Max" quality (z17) must not
+    // produce a pack that requests zooms the tile service never serves.
+    expect(packZoomRange('relief', 11, 17)).toEqual({ minZoom: 11, maxZoom: 15 });
+    expect(packZoomRange('relief', 11, 16)).toEqual({ minZoom: 11, maxZoom: 15 });
+    expect(packZoomRange('satellite', 11, 17)).toEqual({ minZoom: 11, maxZoom: 17 });
+    expect(packZoomRange('map', 11, 17)).toEqual({ minZoom: 11, maxZoom: 17 });
+  });
+
+  it('never inverts the range when the overview zoom exceeds the cap', () => {
+    // A tiny box's overview zoom can sit above relief's cap; MapLibre rejects
+    // maxZoom < minZoom outright ("Invalid offline region definition").
+    const r = packZoomRange('relief', 17, 17);
+    expect(r).toEqual({ minZoom: 15, maxZoom: 15 });
+    expect(r.minZoom).toBeLessThanOrEqual(r.maxZoom);
+  });
+
+  it('keeps every basemap within its native max', () => {
+    for (const basemap of ['map', 'satellite', 'relief'] as const) {
+      const { minZoom, maxZoom } = packZoomRange(basemap, 0, 22);
+      expect(maxZoom).toBe(NATIVE_MAX_ZOOM[basemap]);
+      expect(minZoom).toBeGreaterThanOrEqual(0);
+      expect(minZoom).toBeLessThanOrEqual(maxZoom);
+    }
+  });
+
+  it('estimates each basemap over its own clamped range', () => {
+    const relief = estimateRegionDownload(region, 11, 17, ['relief']);
+    expect(relief.tiles).toBe(tileCountForRegion(region, 11, 15));
+    expect(relief.bytes).toBe(estimateBytes(relief.tiles, 'relief'));
+
+    // Relief stops at z15, so it contributes fewer tiles than satellite (z17).
+    const both = estimateRegionDownload(region, 11, 17, ['satellite', 'relief']);
+    const satellite = estimateRegionDownload(region, 11, 17, ['satellite']);
+    expect(satellite.tiles).toBeGreaterThan(relief.tiles);
+    expect(both.tiles).toBe(satellite.tiles + relief.tiles);
+    expect(estimateRegionDownload(region, 11, 17, []).tiles).toBe(0);
   });
 });

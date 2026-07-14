@@ -8,10 +8,11 @@
  * conversion is injected via the `toGeo` prop.
  */
 
+import type { ScreenRect } from '@core/geo/screenBounds';
 import {
-  tileCountForRegion,
   overviewZoomFor,
-  estimateBytesForBasemaps,
+  estimateRegionDownload,
+  NATIVE_MAX_ZOOM,
   type Basemap,
 } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
@@ -36,21 +37,28 @@ interface Props {
    * aren't ready yet (avoids a degenerate [0,0] "null island" estimate).
    */
   toGeo: (screen: { x: number; y: number }) => [number, number] | null;
+  /**
+   * Bumped by the owner whenever the map's cached bounds change (pan/zoom, or
+   * the entry flatten settling). The drawn box then means a different area, so
+   * the geometry is recomputed even though the box itself didn't move.
+   */
+  boundsVersion: number;
   /** The currently-active basemap — pre-checked in the layer picker. */
   activeBasemap: Basemap;
   /** OSM tile URL (from settings) used to build the preview thumbnails. */
   tileUrl: string;
-  onConfirm: (bounds: BoundingBox, basemaps: Basemap[], minZoom: number, maxZoom: number) => void;
+  /**
+   * The drawn rectangle is handed back in SCREEN space, not as bounds: the owner
+   * re-derives the geographic bounds from freshly read flat-camera bounds, so
+   * what gets downloaded is what is on screen (the displayed estimate may have
+   * been computed against slightly older bounds).
+   */
+  onConfirm: (rect: ScreenRect, basemaps: Basemap[], maxZoom: number) => void;
   onCancel: () => void;
 }
 
 /** Rectangle in screen-space pixels, relative to the overlay's top-left. */
-interface Box {
-  x: number; // left
-  y: number; // top
-  w: number; // width  (always > 0)
-  h: number; // height (always > 0)
-}
+type Box = ScreenRect;
 
 /** The region geometry derived (async) from the box; quality/layers are applied on top. */
 interface Geo {
@@ -86,6 +94,7 @@ const LAYERS: { key: Basemap; label: string }[] = [
 
 export function RegionSelectOverlay({
   toGeo,
+  boundsVersion,
   activeBasemap,
   tileUrl,
   onConfirm,
@@ -164,10 +173,12 @@ export function RegionSelectOverlay({
   }, [recomputeGeo]);
 
   // Recompute geometry whenever the box changes (including the initial box) — fires
-  // on every drag move, so the estimate tracks the box live.
+  // on every drag move, so the estimate tracks the box live — AND whenever the map's
+  // bounds change under it: the entry flatten settles asynchronously, so the very
+  // first bounds are only trustworthy once the camera is flat and north-up.
   useEffect(() => {
     if (box.w > 0) recomputeCallbackRef.current(box);
-  }, [box]);
+  }, [box, boundsVersion]);
 
   // If the bounds cache wasn't ready when the overlay opened, keep retrying until
   // the first estimate lands (then stop).
@@ -186,9 +197,18 @@ export function RegionSelectOverlay({
     () => LAYERS.map((l) => l.key).filter((k) => selected[k]),
     [selected],
   );
-  const perLayerTiles = geo ? tileCountForRegion(geo.bbox, geo.minZoom, maxZoom) : 0;
-  const totalTiles = perLayerTiles * selectedBasemaps.length;
-  const totalBytes = geo ? estimateBytesForBasemaps(perLayerTiles, selectedBasemaps) : 0;
+  // Every basemap's tile source tops out at its own zoom, so each is estimated
+  // over the range it will really store (relief stops at z15).
+  const estimate = geo
+    ? estimateRegionDownload(geo.bbox, geo.minZoom, maxZoom, selectedBasemaps)
+    : { tiles: 0, bytes: 0 };
+  const totalTiles = estimate.tiles;
+  const totalBytes = estimate.bytes;
+  // Basemaps whose source can't reach the chosen quality — worth saying out loud,
+  // otherwise "Max" quality silently downloads a coarser relief layer.
+  const cappedLayers = LAYERS.filter(
+    (l) => selected[l.key] && NATIVE_MAX_ZOOM[l.key] < maxZoom,
+  ).map((l) => l.label);
   const noneSelected = selectedBasemaps.length === 0;
   const tooLarge = totalTiles > MAX_TILES;
   const canDownload = geo !== null && !noneSelected && !tooLarge;
@@ -331,7 +351,9 @@ export function RegionSelectOverlay({
 
   const handleConfirm = useCallback(() => {
     if (!geo || noneSelected || tooLarge) return;
-    onConfirm(geo.bbox, selectedBasemaps, geo.minZoom, maxZoom);
+    // Hand back the SCREEN rect: the owner converts it against freshly-read map
+    // bounds so the downloaded area is exactly the drawn one.
+    onConfirm({ ...boxRef.current }, selectedBasemaps, maxZoom);
   }, [geo, noneSelected, tooLarge, onConfirm, selectedBasemaps, maxZoom]);
 
   // ---------------------------------------------------------------------------
@@ -345,6 +367,16 @@ export function RegionSelectOverlay({
       : geo === null
         ? 'Calculating…'
         : `≈ ${totalTiles.toLocaleString()} tiles · ${formatBytes(totalBytes)}`;
+
+  // e.g. "Relief tops out at z15" — the layer downloads, just not that deep.
+  const capNote =
+    cappedLayers.length > 0 && !noneSelected
+      ? `${cappedLayers.join(' & ')} tops out at z${Math.min(
+          ...LAYERS.filter((l) => cappedLayers.includes(l.label)).map(
+            (l) => NATIVE_MAX_ZOOM[l.key],
+          ),
+        )}`
+      : null;
 
   return (
     <View
@@ -482,6 +514,14 @@ export function RegionSelectOverlay({
         <Text variant="bodyMedium" style={styles.summary}>
           {summary}
         </Text>
+        {capNote !== null && (
+          <Text
+            variant="labelSmall"
+            style={[styles.summary, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {capNote}
+          </Text>
+        )}
         <View style={styles.actions}>
           <Button mode="outlined" onPress={onCancel} style={styles.actionBtn}>
             Cancel
