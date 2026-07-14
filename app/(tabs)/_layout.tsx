@@ -6,6 +6,14 @@ export default function TabsLayout() {
   const theme = useTheme();
   return (
     <Tabs
+      screenListeners={{
+        tabPress: (e) => console.log(`[diag] tabPress target=${e.target ?? '?'}`),
+        focus: (e) => console.log(`[diag] focus target=${e.target ?? '?'}`),
+        state: (e) =>
+          console.log(
+            `[diag] nav state index=${(e.data as { state?: { index?: number } })?.state?.index ?? '?'}`,
+          ),
+      }}
       screenOptions={{
         headerShown: false,
         // Theme the scene background too, else it defaults to light and shows
