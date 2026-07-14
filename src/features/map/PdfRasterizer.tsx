@@ -10,6 +10,7 @@
  *
  * See `PdfRasterizer.README.md` for the bundling/offline design and limitations.
  */
+import { reportError } from '@lib/errorReporting';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import React, {
@@ -326,6 +327,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!cancelled) {
           // The WebView never mounts (html stays null), so rasterize() calls
           // queue but cannot run; they reject via the per-request timeout.
+          reportError(err, 'pdfjs-assets-load');
           console.error('PdfRasterizer: failed to load bundled pdf.js assets', err);
         }
       }

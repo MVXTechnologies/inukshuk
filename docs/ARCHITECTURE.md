@@ -95,12 +95,30 @@ four stages:
   currently gated off behind the `terrain3d` flag). Render loops carry a GL
   "generation" and dispose their scene when the GLView remounts.
 
+## Error reporting ("no silent fails")
+
+- Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'
+  unhandled-promise-rejection tracker, a top-level error boundary around the
+  router root, and explicit `reportError(err, context)` calls from catch blocks
+  that would otherwise swallow user-facing failures.
+- Queue: reports persist to `error-reports.json` (same atomic write path as the
+  other documents) so errors captured offline on a hike survive restarts. Pure
+  logic — fingerprinting, dedupe/merge, rate limiting, issue formatting — lives
+  in `src/core/errors/`; the platform glue in `src/lib/errorReporting` +
+  `src/data/errorQueue.ts`.
+- Delivery: flushed on launch / foreground / capture to GitHub issues on this
+  repo, deduped by a fingerprint marker in the issue title (repeats become a
+  "Seen again" comment) and rate-limited client-side. The API token comes from
+  `extra.errorReportToken` (`ERROR_REPORT_TOKEN` EAS secret, a fine-grained
+  Issues-only PAT); without one, the user is asked to open a pre-filled
+  `issues/new` URL. Users can opt out in Settings → Privacy.
+
 ## State & persistence
 
 | Store                 | Persisted?            | Holds                                                                                                             |
 | --------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, active map, active trail overlays |
-| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs                                                     |
+| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                            |
 | `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                         |
 | `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                    |
 | `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                  |

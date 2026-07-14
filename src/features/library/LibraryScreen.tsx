@@ -8,6 +8,7 @@ import {
   formatPace,
   formatTimestamp,
 } from '@lib/format';
+import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import * as Sharing from 'expo-sharing';
@@ -235,7 +236,8 @@ export function LibraryScreen() {
         const gpx = await storage.readFileText(fileUri);
         const { points } = parseGpx(gpx);
         setTrackPoints((cache) => ({ ...cache, [id]: points }));
-      } catch {
+      } catch (err) {
+        reportError(err, 'track-elevation-load');
         showSnack('Could not load elevation');
         setExpandedTrack(null);
       }

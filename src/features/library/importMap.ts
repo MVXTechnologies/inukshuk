@@ -1,6 +1,7 @@
 import type { MapDocument } from '@core/models';
 import { parseGeoPdf } from '@core/geo/geopdf';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
 
 export type BulkImportResult =
@@ -63,7 +64,9 @@ export async function pickAndImportMaps(): Promise<BulkImportResult> {
   for (const asset of picked.assets) {
     try {
       docs.push(await importOne(asset));
-    } catch {
+    } catch (err) {
+      // Counted in the user-facing "N failed" summary; report the cause too.
+      reportError(err, 'pdf-import');
       failed += 1;
     }
   }

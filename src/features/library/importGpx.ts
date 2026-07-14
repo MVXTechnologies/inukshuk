@@ -2,6 +2,7 @@ import type { Track } from '@core/models';
 import { parseGpx } from '@core/geo/gpx';
 import { buildImportedTrack, snapWaypointsToNotes, type ImportedNote } from '@core/geo/track';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
 
 export interface ImportedTrack {
@@ -109,7 +110,9 @@ export async function pickAndImportGpxFiles(): Promise<BulkGpxImportResult> {
   for (const asset of picked.assets) {
     try {
       items.push(await importOne(asset));
-    } catch {
+    } catch (err) {
+      // Counted in the user-facing "N failed" summary; report the cause too.
+      reportError(err, 'gpx-import');
       failed += 1;
     }
   }

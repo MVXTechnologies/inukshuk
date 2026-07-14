@@ -36,6 +36,8 @@ export interface Settings {
   offlineOnly: boolean;
   /** Display units for distances, elevation, speed and pace. */
   units: Units;
+  /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
+  errorReporting: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -47,6 +49,7 @@ const DEFAULTS: Settings = {
   trailViewMode: '3d',
   offlineOnly: false,
   units: 'metric',
+  errorReporting: true,
 };
 
 interface SettingsState extends Settings {
@@ -71,6 +74,7 @@ function snapshot(s: SettingsState): Settings {
     trailViewMode,
     offlineOnly,
     units,
+    errorReporting,
   } = s;
   return {
     tileUrl,
@@ -81,6 +85,7 @@ function snapshot(s: SettingsState): Settings {
     trailViewMode,
     offlineOnly,
     units,
+    errorReporting,
   };
 }
 

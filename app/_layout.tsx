@@ -1,5 +1,8 @@
+import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
+import { ErrorReportPrompt } from '@features/common/components/ErrorReportPrompt';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
+import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { darkTheme, lightTheme } from '@ui/theme';
@@ -19,8 +22,11 @@ export default function RootLayout() {
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
 
   useEffect(() => {
-    void hydrateLibrary();
-    void hydrateSettings();
+    // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
+    // promise rejections, launch/foreground queue flushes. Idempotent.
+    installErrorReporting();
+    hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
+    hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
   }, [hydrateLibrary, hydrateSettings]);
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
@@ -30,19 +36,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
-          <PdfRasterizerProvider>
-            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: theme.colors.background },
-              }}
-            >
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="trail3d/[id]" />
-            </Stack>
-            <ImportFeedbackSnackbar />
-          </PdfRasterizerProvider>
+          <ErrorBoundary>
+            <PdfRasterizerProvider>
+              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: theme.colors.background },
+                }}
+              >
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="trail3d/[id]" />
+              </Stack>
+              <ImportFeedbackSnackbar />
+              <ErrorReportPrompt />
+            </PdfRasterizerProvider>
+          </ErrorBoundary>
         </PaperProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
