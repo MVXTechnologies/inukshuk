@@ -1,5 +1,6 @@
 import { padBbox } from '@core/geo/terrain';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
+import { reportError } from '@lib/errorReporting';
 import type { MapBasemap } from '@state/mapStore';
 import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -447,8 +448,9 @@ export function Terrain3DLiveView({
           }
         },
       });
-    } catch {
+    } catch (e) {
       if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
+      reportError(e, 'terrain3d-live');
       setStatus('error');
     }
   };

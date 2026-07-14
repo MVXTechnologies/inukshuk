@@ -17,6 +17,7 @@ import {
   formatPace,
   formatSpeed,
 } from '@lib/format';
+import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import type { MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -308,6 +309,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
       });
     } catch (e) {
       if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
+      reportError(e, 'trail3d-terrain');
       setErrMsg(e instanceof Error ? e.message : String(e));
       setStatus('error');
     }

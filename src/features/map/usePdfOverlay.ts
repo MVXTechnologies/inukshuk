@@ -6,6 +6,7 @@ import {
   isDegenerateBBox,
 } from '@core/geo/geomath';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 import { File } from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { usePdfRasterizer } from './PdfRasterizer';
@@ -175,6 +176,7 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
             });
           } catch (err) {
             if (cancelled) return;
+            reportError(err, 'pdf-overlay-render');
             firstError ??= err instanceof Error ? err.message : 'Failed to render a PDF page';
           }
         }

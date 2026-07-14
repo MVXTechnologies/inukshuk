@@ -8,6 +8,7 @@ import {
 import { deleteRegionName, readRegionNames, saveRegionNames } from '@data/regionNames';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
+import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
 /** One basemap layer to download for a region, with its serialized style. */
@@ -98,7 +99,10 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
             },
             (pct, sizeBytes) => set({ progress: { pct, sizeBytes, label } }),
           );
-        } catch {
+        } catch (err) {
+          // The summary error below tells the user which layers failed; the
+          // underlying cause would otherwise be lost — report it.
+          reportError(err, 'offline-region-download');
           failed.push(LAYER_LABEL[layer.basemap]);
         }
       }

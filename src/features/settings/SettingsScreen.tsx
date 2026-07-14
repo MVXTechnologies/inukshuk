@@ -52,6 +52,7 @@ export function SettingsScreen() {
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
+  const errorReporting = useSettingsStore((s) => s.errorReporting);
   const set = useSettingsStore((s) => s.set);
   const reset = useSettingsStore((s) => s.reset);
 
@@ -228,6 +229,25 @@ export function SettingsScreen() {
             <Text variant="bodySmall">
               Bundles every map, trail and note photo into a zip that mirrors your Library folders,
               then opens the share sheet.
+            </Text>
+          </View>
+        </List.Section>
+
+        <Divider />
+
+        <List.Section>
+          <List.Subheader>Privacy</List.Subheader>
+          <List.Item
+            title="Automatic error reporting"
+            description="Report app errors to the developer on GitHub (queued while offline)"
+            right={() => (
+              <Switch value={errorReporting} onValueChange={(v) => set('errorReporting', v)} />
+            )}
+          />
+          <View style={styles.note}>
+            <Text variant="bodySmall">
+              Reports contain only the error details, app version and device model — never your
+              location, maps or trails.
             </Text>
           </View>
         </List.Section>
