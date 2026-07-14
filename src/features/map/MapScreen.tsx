@@ -99,7 +99,7 @@ export function MapScreen() {
 
   const tileUrl = useSettingsStore((s) => s.tileUrl);
 
-  const { permission, location } = useLocationTracking();
+  const { permission, location, unavailableReason } = useLocationTracking();
   const headingForCamera = useHeadingCamera();
 
   const maps = useLibraryStore((s) => s.maps);
@@ -557,6 +557,17 @@ export function MapScreen() {
           actions={[]}
         >
           Location permission denied. Enable it in Settings to see your position and record trails.
+        </Banner>
+      )}
+
+      {permission === 'granted' && unavailableReason !== null && (
+        <Banner
+          visible
+          style={[styles.banner, { top: insets.top + 8 }]}
+          icon="map-marker-off"
+          actions={[]}
+        >
+          {unavailableReason}
         </Banner>
       )}
 
