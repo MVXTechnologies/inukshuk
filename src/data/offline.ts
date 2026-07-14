@@ -73,6 +73,12 @@ export interface OfflineRegion {
   bounds: BoundingBox;
   sizeBytes: number;
   complete: boolean;
+  /**
+   * Top zoom the pack stored tiles for. Absent on packs downloaded before it
+   * was recorded — consumers should assume the shallowest quality option
+   * (`OFFLINE_PACK_FALLBACK_MAX_ZOOM`) so overzoom stays safe.
+   */
+  maxZoom?: number;
 }
 
 // MapLibre LngLatBounds is [west, south, east, north].
@@ -91,6 +97,9 @@ interface PackMeta {
   appId: string;
   label: string;
   basemap: OfflineRegion['basemap'];
+  // Top downloaded zoom — lets the live map overscale past the pack instead of
+  // requesting tiles that were never stored. Absent on pre-existing packs.
+  maxZoom?: number;
 }
 
 function regionFromPack(
@@ -108,6 +117,10 @@ function regionFromPack(
     bounds: { minLng: w, minLat: s, maxLng: e, maxLat: n },
     sizeBytes: status?.completedTileSize ?? 0,
     complete: (status?.percentage ?? 0) >= 100,
+    // Only trust a sane recorded number; legacy packs simply omit it.
+    ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
+      ? { maxZoom: meta.maxZoom }
+      : {}),
   };
 }
 
@@ -125,7 +138,12 @@ export async function createRegionPack(
 ): Promise<void> {
   // OfflinePackCreateOptions has no `name` field — the native layer assigns a UUID.
   // We embed our app-level id in metadata so we can recover it in listRegionPacks().
-  const meta: PackMeta = { appId: args.id, label: args.label, basemap: args.basemap };
+  const meta: PackMeta = {
+    appId: args.id,
+    label: args.label,
+    basemap: args.basemap,
+    maxZoom: args.maxZoom,
+  };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can
   // delete a partially-created pack if the download errors out.
