@@ -97,9 +97,24 @@
 
     <h2>Data we collect</h2>
     <p>
-      <strong>None.</strong> Inukshuk has no user accounts, no analytics, no advertising, and no
-      crash-reporting that identifies you. We do not collect, store, sell, or share your personal
-      data, because none of it ever leaves your device through us.
+      <strong>No personal data.</strong> Inukshuk has no user accounts, no analytics, and no
+      advertising. Your maps, trails, waypoints and photos never leave your device through us. The
+      one thing the app does send on its own is a technical error report, described next.
+    </p>
+
+    <h2>Error reports</h2>
+    <p>
+      When the app hits an error, it records a report and — if error reporting is enabled — sends it
+      automatically so the problem can be fixed. A report contains only technical details: the error
+      message and stack trace, the app version, the operating-system version and device model, and a
+      short list of the actions the app took just before the failure. It contains
+      <strong>no location, no map or trail content, and nothing that identifies you.</strong>
+    </p>
+    <p>
+      Reports are filed as issues in the app's public
+      <a href="https://github.com/marcandrevigneault/inukshuk/issues">GitHub repository</a>, so
+      their technical contents are publicly visible. You can turn this off at any time:
+      <em>Settings → Privacy → Automatic error reporting</em>. With it off, nothing is sent.
     </p>
 
     <h2>Network connections</h2>
@@ -122,10 +137,23 @@
         on Amazon Web Services (the open "Terrain Tiles" dataset) to build the relief mesh.
       </li>
       <li>
+        <strong>Naming a downloaded map area.</strong> When you download an offline map area, the
+        app asks OpenStreetMap's
+        <a href="https://osmfoundation.org/wiki/Privacy_Policy">Nominatim</a> service for the name
+        of the nearest place, so the download can be labelled something memorable ("Sainte-Adèle")
+        instead of a set of coordinates. That request sends the centre coordinates of the area you
+        chose to download — not your own position, and only at the moment you start a download.
+      </li>
+      <li>
         <strong>App updates.</strong> On launch the app asks
         <a href="https://expo.dev/privacy">Expo's update service (EAS Update)</a> whether newer app
         code is available. That request carries basic technical details such as the app version and
         platform — not your location or any personal data.
+      </li>
+      <li>
+        <strong>Error reports.</strong> If automatic error reporting is on, technical error reports
+        are sent to GitHub as described above. They are queued on your device while you are offline
+        and sent when a connection returns.
       </li>
     </ul>
 
@@ -143,8 +171,11 @@
     <h2>Your control and rights</h2>
     <p>
       Because all of your maps and tracks live only on your device, you are in full control: delete
-      individual items in the app, revoke the location permission in your device settings, or
-      uninstall the app to erase everything. There is no server-side copy for us to delete.
+      individual items in the app, revoke the location permission in your device settings, turn off
+      automatic error reporting in Settings, export a copy of everything from
+      <em>Settings → Your data → Download your data</em>, or uninstall the app to erase everything.
+      Apart from the technical error reports described above, there is no server-side copy for us to
+      delete.
     </p>
 
     <h2>Changes to this policy</h2>
