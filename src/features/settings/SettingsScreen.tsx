@@ -1,8 +1,15 @@
+import { planDataArchive } from '@core/export/archivePlan';
+import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
+import * as storage from '@data/storage';
+import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { formatBytes } from '@lib/format';
+import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import Constants from 'expo-constants';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
+  ActivityIndicator,
   Appbar,
   Button,
   Dialog,
@@ -11,11 +18,13 @@ import {
   List,
   Portal,
   SegmentedButtons,
+  Snackbar,
   Switch,
   Text,
   TextInput,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { exportAllData } from './exportAllData';
 import { OfflineMapsSection } from './OfflineMapsSection';
 
 const DISPLACEMENT_OPTIONS = [
@@ -49,6 +58,65 @@ export function SettingsScreen() {
 
   const [tileDialogVisible, setTileDialogVisible] = useState(false);
   const [tileDraft, setTileDraft] = useState('');
+
+  // "Download your data" — everything in the Library as one zip.
+  const maps = useLibraryStore((s) => s.maps);
+  const tracks = useLibraryStore((s) => s.tracks);
+  const folders = useLibraryStore((s) => s.folders);
+  const bundles = useLibraryStore((s) => s.bundles);
+  const activeMapId = useLibraryStore((s) => s.activeMapId);
+  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const exporting = exportProgress !== null;
+  const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
+
+  const exportPlan = useMemo(
+    () => planDataArchive({ folders, maps, tracks }),
+    [folders, maps, tracks],
+  );
+  // Uncompressed total of every planned file — a good upper-bound estimate for
+  // the zip (maps/photos are stored, only the small GPX/JSON parts deflate).
+  const exportSizeBytes = useMemo(
+    () => exportPlan.entries.reduce((sum, e) => sum + storage.fileSizeAt(e.sourceUri), 0),
+    [exportPlan],
+  );
+
+  const exportSubtitle = useMemo(() => {
+    if (exportPlan.entries.length === 0) return 'Your library is empty';
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const parts = [plural(exportPlan.trackCount, 'trail'), plural(exportPlan.mapCount, 'map')];
+    if (exportPlan.photoCount > 0) parts.push(plural(exportPlan.photoCount, 'photo'));
+    return `${parts.join(', ')} · ~${formatBytes(exportSizeBytes)} zip`;
+  }, [exportPlan, exportSizeBytes]);
+
+  const onDownloadData = async () => {
+    if (exporting) return;
+    setExportProgress({ done: 0, total: exportPlan.entries.length });
+    const result = await exportAllData(
+      exportPlan,
+      // Snapshot mirroring what libraryStore persists, if library.json is absent.
+      {
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        maps,
+        tracks,
+        bundles,
+        folders,
+        activeMapId,
+        activeTrackIds,
+      },
+      (done, total) => setExportProgress({ done, total }),
+    );
+    setExportProgress(null);
+    if (result.kind === 'exported') {
+      showSnack(`Your data is ready — ${result.files} file${result.files === 1 ? '' : 's'} zipped`);
+    } else if (result.kind === 'unavailable') {
+      showSnack('Sharing is not available on this device');
+    } else {
+      showSnack(`Export failed: ${result.message}`);
+    }
+  };
 
   const openTileDialog = () => {
     setTileDraft(tileUrl === DEFAULT_TILE_URL ? '' : tileUrl);
@@ -139,6 +207,35 @@ export function SettingsScreen() {
         <Divider />
 
         <List.Section>
+          <List.Subheader>Your data</List.Subheader>
+          <List.Item
+            title="Download your data"
+            description={
+              exporting
+                ? `Building archive… ${Math.min(exportProgress.done + 1, exportProgress.total)}/${exportProgress.total} files`
+                : exportSubtitle
+            }
+            onPress={onDownloadData}
+            disabled={exporting || exportPlan.entries.length === 0}
+            right={(p) =>
+              exporting ? (
+                <ActivityIndicator style={p.style} size={20} />
+              ) : (
+                <List.Icon {...p} icon="download" />
+              )
+            }
+          />
+          <View style={styles.note}>
+            <Text variant="bodySmall">
+              Bundles every map, trail and note photo into a zip that mirrors your Library folders,
+              then opens the share sheet.
+            </Text>
+          </View>
+        </List.Section>
+
+        <Divider />
+
+        <List.Section>
           <List.Subheader>Privacy</List.Subheader>
           <List.Item
             title="Automatic error reporting"
@@ -210,6 +307,14 @@ export function SettingsScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <Snackbar
+        visible={snack !== null}
+        onDismiss={dismissSnack}
+        duration={Number.POSITIVE_INFINITY}
+      >
+        {snack ?? ''}
+      </Snackbar>
     </View>
   );
 }

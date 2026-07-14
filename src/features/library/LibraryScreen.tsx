@@ -1,5 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
-import type { TrackPoint } from '@core/models';
+import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import {
   formatDistance,
@@ -45,6 +45,7 @@ import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { exportLibraryBackup } from './exportBackup';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
+import { mergeLibraryTracks } from './mergeTracks';
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
@@ -117,6 +118,11 @@ export function LibraryScreen() {
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
   const [exportingBackup, setExportingBackup] = useState(false);
+  // Trail multi-select (long-press a trail to enter): ids in selection order,
+  // which is the merge order for untimed tracks.
+  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
+  const [merging, setMerging] = useState(false);
+  const selectionMode = selectedTrackIds.length > 0;
 
   const grouped = groupByFolder(folders, maps, tracks);
 
@@ -241,6 +247,33 @@ export function LibraryScreen() {
         showSnack('Could not load elevation');
         setExpandedTrack(null);
       }
+    }
+  };
+
+  const toggleTrackSelected = (id: string) => {
+    if (selectedTrackIds.length === 0) {
+      showSnack('Select 2 or more trails, then tap the merge button');
+    }
+    setSelectedTrackIds((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
+  };
+
+  const onMergeSelected = async () => {
+    // Resolve in selection order; mergeTracks re-orders by timestamp when all
+    // sources carry one.
+    const chosen = selectedTrackIds
+      .map((id) => tracks.find((t) => t.id === id))
+      .filter((t): t is TrackSummary => t !== undefined);
+    if (chosen.length < 2) return;
+    setMerging(true);
+    try {
+      const { track, fileUri } = await mergeLibraryTracks(chosen);
+      addTrack(track, fileUri);
+      setSelectedTrackIds([]);
+      showSnack(`Merged ${chosen.length} trails into "${track.name}"`);
+    } catch (err) {
+      showSnack(`Merge failed: ${err instanceof Error ? err.message : 'could not read a trail'}`);
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -475,15 +508,39 @@ export function LibraryScreen() {
 
   const renderTrackCard = (t: (typeof tracks)[number]) => {
     const s = t.stats;
+    const selected = selectedTrackIds.includes(t.id);
     return (
-      <Card key={t.id} style={styles.trackCard} mode="contained">
+      <Card
+        key={t.id}
+        style={[
+          styles.trackCard,
+          selected && { borderWidth: 2, borderColor: theme.colors.primary },
+        ]}
+        mode="contained"
+      >
         <View style={styles.trackRow}>
           <Pressable
             style={styles.trackMain}
-            onPress={() => router.navigate(`/trail3d/${t.id}`)}
-            accessibilityLabel={`${t.name} — open 3D view`}
+            // Long-press enters trail selection (for merging); while selecting,
+            // taps toggle membership instead of opening the 3D view.
+            onPress={() =>
+              selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
+            }
+            onLongPress={() => toggleTrackSelected(t.id)}
+            accessibilityLabel={
+              selectionMode
+                ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
+                : `${t.name} — open 3D view, long-press to select`
+            }
           >
-            <View style={styles.trackTitleCol}>
+            {selectionMode && (
+              <Icon
+                source={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+                size={22}
+                color={selected ? theme.colors.primary : theme.colors.onSurfaceVariant}
+              />
+            )}
+            <View style={[styles.trackTitleCol, selectionMode && styles.trackTitleColSelecting]}>
               <Text variant="titleSmall" numberOfLines={1}>
                 {t.name}
               </Text>
@@ -567,20 +624,38 @@ export function LibraryScreen() {
 
   return (
     <View style={styles.fill}>
-      <Appbar.Header>
-        <Appbar.Content title="Library" />
-        <Appbar.Action
-          icon="folder-plus-outline"
-          onPress={() => setNewFolderVisible(true)}
-          accessibilityLabel="New folder"
-        />
-        <Appbar.Action
-          icon="export-variant"
-          onPress={() => void onExportBackup()}
-          disabled={exportingBackup}
-          accessibilityLabel="Export backup"
-        />
-      </Appbar.Header>
+      {selectionMode ? (
+        // Trail selection mode (entered by long-pressing a trail card).
+        <Appbar.Header>
+          <Appbar.Action
+            icon="close"
+            onPress={() => setSelectedTrackIds([])}
+            accessibilityLabel="Exit selection"
+          />
+          <Appbar.Content title={`${selectedTrackIds.length} selected`} />
+          <Appbar.Action
+            icon="call-merge"
+            onPress={() => void onMergeSelected()}
+            disabled={selectedTrackIds.length < 2 || merging}
+            accessibilityLabel="Merge selected trails"
+          />
+        </Appbar.Header>
+      ) : (
+        <Appbar.Header>
+          <Appbar.Content title="Library" />
+          <Appbar.Action
+            icon="folder-plus-outline"
+            onPress={() => setNewFolderVisible(true)}
+            accessibilityLabel="New folder"
+          />
+          <Appbar.Action
+            icon="export-variant"
+            onPress={() => void onExportBackup()}
+            disabled={exportingBackup}
+            accessibilityLabel="Export backup"
+          />
+        </Appbar.Header>
+      )}
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}>
         {maps.length === 0 && tracks.length === 0 && (
@@ -857,6 +932,7 @@ const styles = StyleSheet.create({
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },
   trackMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   trackTitleCol: { flex: 1, paddingVertical: 8, paddingRight: 8 },
+  trackTitleColSelecting: { paddingLeft: 10 },
   mapTitleCol: { flex: 1, paddingVertical: 8, paddingLeft: 10, paddingRight: 8 },
   trackStatsCol: { alignItems: 'flex-end', paddingRight: 2 },
   fabWrap: { position: 'absolute', right: 16 },

@@ -52,7 +52,7 @@ export function sanitizeEntryName(uriOrName: string): string {
 }
 
 /** Claim `path` in `taken`, suffixing `-2`, `-3`, … before the extension on collision. */
-function uniquePath(taken: Set<string>, path: string): string {
+export function uniquePath(taken: Set<string>, path: string): string {
   if (!taken.has(path)) {
     taken.add(path);
     return path;
