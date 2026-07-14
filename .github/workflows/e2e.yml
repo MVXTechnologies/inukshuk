@@ -104,12 +104,19 @@ jobs:
             # tipped the (previously unaccelerated) system process into ANR.
             sleep 20
             adb install -r android/app/build/outputs/apk/release/app-release.apk
-            adb logcat -c || true
-            MAESTRO_RC=0
-            maestro test .maestro/smoke.yaml || MAESTRO_RC=$?
-            adb logcat -d > logcat-full.txt || true
-            adb logcat -d ReactNativeJS:V AndroidRuntime:E ActivityManager:W "*:F" > logcat-js.txt || true
-            exit $MAESTRO_RC
+            RC=0
+            for i in 1 2 3; do
+              adb shell pm clear com.inukshuk.app || true
+              adb logcat -c || true
+              if maestro test .maestro/smoke.yaml; then
+                echo "=== attempt $i PASS ==="
+              else
+                RC=1
+                echo "=== attempt $i FAIL ==="
+                adb logcat -d > "logcat-attempt-$i.txt" || true
+              fi
+            done
+            exit $RC
 
       # Maestro writes screenshots + the UI hierarchy on failure; without this
       # upload every red run is a black box.
@@ -120,6 +127,5 @@ jobs:
           name: maestro-debug
           path: |
             ~/.maestro/tests
-            logcat-full.txt
-            logcat-js.txt
+            logcat-attempt-*.txt
           retention-days: 7
