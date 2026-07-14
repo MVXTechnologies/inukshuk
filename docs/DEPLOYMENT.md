@@ -89,6 +89,59 @@ triggers `ota-update.yml`, which publishes an **EAS Update** to the `production`
 channel; installed apps pick it up on next launch. Native changes (new modules,
 permission changes) still require a full store release.
 
+## Error reporting (one-time, optional but recommended)
+
+Crashes and swallowed failures are captured, queued on disk, and filed as GitHub
+issues **automatically and silently** (`src/lib/errorReporting`). The app never
+asks the user to open GitHub or file anything themselves; without a delivery
+channel configured, reports simply stay queued on the device and nothing is
+shown. Pick **one** of the two channels below.
+
+### A. Embedded fine-grained token (simplest)
+
+Create a **fine-grained personal access token** at _github.com → Settings →
+Developer settings → Personal access tokens → Fine-grained tokens_ with:
+
+- **Repository access**: only `marcandrevigneault/inukshuk`
+- **Repository permissions**: `Issues` → **Read and write** (nothing else)
+
+Then register it as an EAS environment variable, so builds pick it up:
+
+```sh
+eas env:create --name ERROR_REPORT_TOKEN \
+  --value <fine-grained PAT> \
+  --environment production --visibility secret
+```
+
+`app.config.ts` reads `process.env.ERROR_REPORT_TOKEN` into
+`extra.errorReportToken`, so the token is **baked into the shipped binary** at
+build time. Anyone who unpacks the app can extract it — the narrow scope is the
+mitigation: the worst it can do is open/comment on issues in this one repo, and
+it can be revoked and re-issued at any time. Never grant it code, contents, or
+Actions permissions, and never reuse a classic PAT here.
+
+### B. Relay endpoint (no secret in the binary)
+
+Alternatively, host a tiny endpoint that holds the token server-side and set:
+
+```sh
+eas env:create --name ERROR_REPORT_ENDPOINT \
+  --value https://your-relay.example/error-report \
+  --environment production --visibility plaintext
+```
+
+The app then POSTs each report as JSON (`ErrorReportPayload`:
+`{ fingerprint, marker, title, body, comment, report }`) and files nothing
+itself, so no credential ships in the binary at all. The relay forwards
+`title`/`body` to the Issues API, deduping on `marker` (an existing open issue
+with that marker gets `comment` instead of a duplicate). It should return 2xx on
+success; 5xx/429 make the app retry with backoff, 400 makes it drop the report.
+When both variables are set, the endpoint wins.
+
+Users can opt out entirely in _Settings → Privacy → Automatic error reporting_
+(on by default). The row below it shows the pending-report count and can force a
+flush — diagnostics only; it never interrupts anyone.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for        |
@@ -97,4 +150,6 @@ permission changes) still require a full store release.
 | `ASC_API_KEY_P8`              | iOS submit        |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit    |
 
-And in `app.config.ts` env / repo variables: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`.
+And in `app.config.ts` env / repo variables: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`,
+and (EAS environment, not GitHub Actions) `ERROR_REPORT_TOKEN` **or**
+`ERROR_REPORT_ENDPOINT` — see _Error reporting_ above.

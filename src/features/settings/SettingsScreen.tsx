@@ -2,11 +2,17 @@ import { planDataArchive } from '@core/export/archivePlan';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import * as storage from '@data/storage';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import {
+  type ErrorQueueStatus,
+  type FlushResult,
+  flushErrorQueue,
+  getErrorQueueStatus,
+} from '@lib/errorReporting';
 import { formatBytes } from '@lib/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import Constants from 'expo-constants';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -37,6 +43,36 @@ const UNITS_OPTIONS = [
   { value: 'metric', label: 'Metric (km)' },
   { value: 'imperial', label: 'Imperial (mi)' },
 ];
+
+/** One-line outcome of a manual "Send now" flush (shown in a timed snackbar). */
+function describeFlush(result: FlushResult): string {
+  switch (result.status) {
+    case 'delivered':
+      return `Sent ${result.delivered} error report${result.delivered === 1 ? '' : 's'}.`;
+    case 'empty':
+      return 'No pending error reports.';
+    case 'disabled':
+      return 'Automatic error reporting is off.';
+    case 'no-channel':
+      return 'This build cannot file reports; they stay queued on this device.';
+    case 'rate-limited':
+      return 'Daily report limit reached — the rest will be sent later.';
+    case 'backoff':
+    case 'failed':
+      return 'Could not send now — reports stay queued and will retry.';
+  }
+}
+
+/** Sub-line for the (developer-facing) error-report queue row. */
+function describeQueue(status: ErrorQueueStatus): string {
+  const pending =
+    status.queued === 0
+      ? 'No pending reports'
+      : `${status.queued} report${status.queued === 1 ? '' : 's'} waiting to send`;
+  if (status.channel === 'none') return `${pending} · this build cannot file reports`;
+  if (status.lastFailure !== null) return `${pending} · last attempt: ${status.lastFailure}`;
+  return `${pending} · ${status.sentToday} sent today`;
+}
 
 /** A usable raster-tile URL template: http(s) with {z}/{x}/{y} placeholders. */
 function isValidTileUrl(url: string): boolean {
@@ -71,6 +107,32 @@ export function SettingsScreen() {
   );
   const exporting = exportProgress !== null;
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
+
+  // Error-report queue diagnostics. Purely informational: the reporter files
+  // reports on its own in the background and never prompts the user — this row
+  // just makes the queue visible (and lets a developer force a flush).
+  const [queueStatus, setQueueStatus] = useState<ErrorQueueStatus | null>(null);
+  const [sendingReports, setSendingReports] = useState(false);
+
+  const refreshQueueStatus = useCallback(() => {
+    getErrorQueueStatus()
+      .then(setQueueStatus)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(refreshQueueStatus, [refreshQueueStatus]);
+
+  const onSendReports = () => {
+    if (sendingReports) return;
+    setSendingReports(true);
+    flushErrorQueue({ force: true })
+      .then((result) => showSnack(describeFlush(result)))
+      .catch(() => showSnack('Could not send now — reports stay queued and will retry.'))
+      .finally(() => {
+        setSendingReports(false);
+        refreshQueueStatus();
+      });
+  };
 
   const exportPlan = useMemo(
     () => planDataArchive({ folders, maps, tracks }),
@@ -239,15 +301,31 @@ export function SettingsScreen() {
           <List.Subheader>Privacy</List.Subheader>
           <List.Item
             title="Automatic error reporting"
-            description="Report app errors to the developer on GitHub (queued while offline)"
+            description="Send app errors to the developer automatically (queued while offline)"
             right={() => (
               <Switch value={errorReporting} onValueChange={(v) => set('errorReporting', v)} />
             )}
           />
+          {queueStatus !== null && (
+            <List.Item
+              title="Error report queue"
+              description={describeQueue(queueStatus)}
+              onPress={onSendReports}
+              disabled={!errorReporting || sendingReports || queueStatus.queued === 0}
+              right={(p) =>
+                sendingReports ? (
+                  <ActivityIndicator style={p.style} size={20} />
+                ) : (
+                  <List.Icon {...p} icon="send-outline" />
+                )
+              }
+            />
+          )}
           <View style={styles.note}>
             <Text variant="bodySmall">
-              Reports contain only the error details, app version and device model — never your
-              location, maps or trails.
+              Reports are filed in the background — you are never asked to do anything. They contain
+              only the error details, app version and device model — never your location, maps or
+              trails.
             </Text>
           </View>
         </List.Section>

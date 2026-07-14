@@ -3,15 +3,22 @@ import type { ErrorReport } from './types';
 
 /**
  * Formatting of error reports into GitHub issue titles/bodies, "seen again"
- * comments, and the pre-filled `issues/new` URL used when no API token is
- * configured. Pure string building — the HTTP calls live in
- * `src/lib/errorReporting`.
+ * comments, and the JSON payload for the optional relay endpoint. Pure string
+ * building — the HTTP calls live in `src/lib/errorReporting`.
+ *
+ * There is deliberately no "open a pre-filled issue in the browser" URL: the
+ * reporter is fully automatic and must never ask the end user to go to GitHub.
+ * Without a delivery channel the queue simply waits on disk.
  */
 
 const TITLE_MESSAGE_MAX = 80;
 
-/** Keep the manual-report URL comfortably under browser/Android intent limits. */
-const MANUAL_URL_BODY_MAX = 4000;
+/**
+ * GitHub rejects issue/comment bodies over 65 536 characters with a 422 — a
+ * runaway stack would otherwise become a poison pill that blocks the queue. We
+ * cap well under the limit.
+ */
+export const ISSUE_BODY_MAX = 60_000;
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
@@ -66,7 +73,7 @@ export function buildIssueBody(report: ErrorReport): string {
   if (report.breadcrumbs.length > 0) {
     lines.push('', '### Breadcrumbs', '', ...report.breadcrumbs.map((b) => `- ${b}`));
   }
-  return lines.join('\n');
+  return truncate(lines.join('\n'), ISSUE_BODY_MAX);
 }
 
 /** Comment added to the existing issue when the same fingerprint recurs. */
@@ -80,11 +87,27 @@ export function buildSeenAgainComment(report: ErrorReport): string {
 }
 
 /**
- * Pre-filled `issues/new` URL for the manual (token-less) fallback. The body
- * is truncated so the URL stays within what browsers/intents accept.
+ * JSON payload POSTed to the optional relay endpoint (`extra.errorReportEndpoint`),
+ * which files the issue server-side so no GitHub token has to be baked into the
+ * binary. It carries both the raw report and the pre-rendered issue strings, so
+ * a relay can be a dumb proxy (forward `title`/`body`) or do its own formatting.
  */
-export function buildManualReportUrl(repo: string, report: ErrorReport): string {
-  const title = encodeURIComponent(buildIssueTitle(report));
-  const body = encodeURIComponent(truncate(buildIssueBody(report), MANUAL_URL_BODY_MAX));
-  return `https://github.com/${repo}/issues/new?title=${title}&body=${body}`;
+export interface ErrorReportPayload {
+  fingerprint: string;
+  marker: string;
+  title: string;
+  body: string;
+  comment: string;
+  report: ErrorReport;
+}
+
+export function buildReportPayload(report: ErrorReport): ErrorReportPayload {
+  return {
+    fingerprint: report.fingerprint,
+    marker: errorMarker(report.fingerprint),
+    title: buildIssueTitle(report),
+    body: buildIssueBody(report),
+    comment: buildSeenAgainComment(report),
+    report,
+  };
 }

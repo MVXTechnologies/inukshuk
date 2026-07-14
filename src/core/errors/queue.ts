@@ -75,6 +75,32 @@ export function canSendReport(
   return pruneSentHistory(sentHistory, now, windowMs).length < maxPerDay;
 }
 
+// --- retry / backoff ----------------------------------------------------------
+
+/** Delay before the first retry after a transient delivery failure. */
+export const BACKOFF_BASE_MS = 30_000;
+
+/** Ceiling for the exponential backoff (also the offline steady-state period). */
+export const BACKOFF_MAX_MS = 60 * 60 * 1000;
+
+/**
+ * How long to wait before the next delivery attempt after `failures` consecutive
+ * transient failures (offline, 5xx, 429): exponential from
+ * {@link BACKOFF_BASE_MS}, clamped at {@link BACKOFF_MAX_MS}. Deterministic (no
+ * jitter): a single client filing at most a handful of reports a day cannot
+ * thunder anyone, and determinism keeps it testable.
+ */
+export function backoffDelayMs(
+  failures: number,
+  baseMs = BACKOFF_BASE_MS,
+  maxMs = BACKOFF_MAX_MS,
+): number {
+  if (failures <= 0) return 0;
+  // Cap the exponent before shifting so a long-offline session can't overflow.
+  const exponent = Math.min(failures - 1, 20);
+  return Math.min(baseMs * 2 ** exponent, maxMs);
+}
+
 // --- persisted-document sanitization ----------------------------------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {

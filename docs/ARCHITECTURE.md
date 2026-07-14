@@ -116,12 +116,19 @@ four stages:
   logic — fingerprinting, dedupe/merge, rate limiting, issue formatting — lives
   in `src/core/errors/`; the platform glue in `src/lib/errorReporting` +
   `src/data/errorQueue.ts`.
-- Delivery: flushed on launch / foreground / capture to GitHub issues on this
-  repo, deduped by a fingerprint marker in the issue title (repeats become a
-  "Seen again" comment) and rate-limited client-side. The API token comes from
-  `extra.errorReportToken` (`ERROR_REPORT_TOKEN` EAS secret, a fine-grained
-  Issues-only PAT); without one, the user is asked to open a pre-filled
-  `issues/new` URL. Users can opt out in Settings → Privacy.
+- Delivery: flushed on launch / foreground / capture, deduped by a fingerprint
+  marker in the issue title (repeats become a "Seen again" comment) and
+  rate-limited client-side (5/day). Two channels, endpoint first:
+  `extra.errorReportEndpoint` (POST to a relay that holds the token server-side)
+  or `extra.errorReportToken` (a fine-grained Issues-only PAT baked into the
+  binary — see docs/DEPLOYMENT.md § Error reporting). Transient failures
+  (offline, 5xx, 429) back off exponentially, 30 s → 1 h; a report the API
+  refuses outright (422) is dropped rather than left as a poison pill.
+- **Fully silent.** The reporter never renders anything: no dialog, no banner,
+  no "open a GitHub issue" prompt. With no channel configured (local dev, forks)
+  reports just wait on disk. The only user-visible surfaces are the Settings →
+  Privacy opt-out toggle (on by default) and, next to it, a developer-facing
+  queue/"send now" diagnostics row.
 
 ## State & persistence
 
