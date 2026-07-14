@@ -4,6 +4,8 @@ import {
   estimateBytes,
   estimateBytesForBasemaps,
   tileSpanAtZoom,
+  offlinePackMaxZoom,
+  OFFLINE_PACK_FALLBACK_MAX_ZOOM,
 } from './tiles';
 import type { BoundingBox } from '@core/models';
 
@@ -53,4 +55,28 @@ it('estimateBytesForBasemaps sums each basemap at the same tile count', () => {
     estimateBytes(100, 'map') + estimateBytes(100, 'satellite'),
   );
   expect(estimateBytesForBasemaps(100, [])).toBe(0);
+});
+
+describe('offlinePackMaxZoom', () => {
+  it('returns the shallowest max zoom among packs of the requested basemap', () => {
+    const packs = [
+      { basemap: 'map' as const, maxZoom: 17 },
+      { basemap: 'map' as const, maxZoom: 15 },
+      { basemap: 'satellite' as const, maxZoom: 16 },
+    ];
+    expect(offlinePackMaxZoom(packs, 'map')).toBe(15);
+    expect(offlinePackMaxZoom(packs, 'satellite')).toBe(16);
+  });
+
+  it('assumes the fallback zoom for legacy packs without a recorded max zoom', () => {
+    const packs = [{ basemap: 'map' as const }, { basemap: 'map' as const, maxZoom: 17 }];
+    expect(offlinePackMaxZoom(packs, 'map')).toBe(OFFLINE_PACK_FALLBACK_MAX_ZOOM);
+  });
+
+  it('falls back when no packs exist for the basemap', () => {
+    expect(offlinePackMaxZoom([], 'relief')).toBe(OFFLINE_PACK_FALLBACK_MAX_ZOOM);
+    expect(offlinePackMaxZoom([{ basemap: 'map', maxZoom: 17 }], 'relief')).toBe(
+      OFFLINE_PACK_FALLBACK_MAX_ZOOM,
+    );
+  });
 });

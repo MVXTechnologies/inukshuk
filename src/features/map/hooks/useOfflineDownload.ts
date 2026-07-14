@@ -1,3 +1,4 @@
+import { dedupeLabel } from '@core/geo/regionName';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { setOfflineOnly } from '@data/offline';
@@ -8,6 +9,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { buildOsmStyle } from '../mapStyle';
+import { resolveRegionName } from '../regionNaming';
 
 /**
  * Offline-region download orchestration for the map screen: region-select
@@ -95,10 +97,38 @@ export function useOfflineDownload({
     maxZoom: number,
   ) => {
     setSelecting(false);
+    const baseId = storage.newId();
+
+    // Resolve a memorable name for the region (nearest village / named lake)
+    // in the background — the user is online right now by definition. Naming
+    // never blocks or fails the download: the "Offline map" placeholder simply
+    // stays if both geocoders come up empty. All the download's layers share
+    // the resolved name (they're one region to the user).
+    void (async () => {
+      try {
+        const name = await resolveRegionName({
+          lat: (bounds.minLat + bounds.maxLat) / 2,
+          lng: (bounds.minLng + bounds.maxLng) / 2,
+        });
+        if (name === null) return;
+        const store = useOfflineStore.getState();
+        const label = dedupeLabel(
+          name,
+          store.regions.map((r) => r.label),
+        );
+        await store.rename(
+          basemaps.map((bm) => `${baseId}-${bm}`),
+          label,
+        );
+      } catch {
+        // Naming is strictly best-effort.
+      }
+    })();
+
     void (async () => {
       try {
         await useOfflineStore.getState().downloadMany({
-          baseId: storage.newId(),
+          baseId,
           label: 'Offline map',
           bounds,
           minZoom,
