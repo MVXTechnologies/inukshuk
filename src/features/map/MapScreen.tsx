@@ -24,6 +24,7 @@ import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { CompassBadge } from './components/CompassBadge';
+import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RecordControls } from './components/RecordControls';
@@ -286,9 +287,15 @@ export function MapScreen() {
             }}
             // "Rotate map with heading" setting. While following, MapLibre's
             // native 'heading' tracking rotates from the compass (smooth, no
-            // JS churn); otherwise the smoothed + 2°-throttled hook value
-            // drives the bearing. undefined when the setting is off.
+            // JS churn); otherwise the smoothed + throttled hook value drives
+            // the bearing, eased over a short linear transition so successive
+            // updates glide instead of ticking. MapLibre normalizes bearing
+            // transitions to the shortest arc, so 359°→1° turns 2°, not 358°.
+            // undefined when the setting is off.
             bearing={followUser ? undefined : headingForCamera}
+            {...(!followUser && headingForCamera !== undefined
+              ? { duration: 150, easing: 'linear' as const }
+              : {})}
             trackUserLocation={
               followUser ? (headingForCamera !== undefined ? 'heading' : 'default') : undefined
             }
@@ -382,7 +389,11 @@ export function MapScreen() {
               </Marker>
             ))}
 
-          <UserLocation animated accuracy heading />
+          {/* Direction cone under the dot. The built-in `heading` arrow was
+              dropped: it points along the GPS course (garbage while standing
+              still); the cone tracks the smoothed compass instead. */}
+          <HeadingCone location={location} />
+          <UserLocation animated accuracy />
         </Map>
       )}
 

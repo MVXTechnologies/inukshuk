@@ -1,5 +1,7 @@
+import { unwrapDeg } from '@core/signal/heading';
 import { headingToCardinal } from '@lib/format';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View, useAnimatedValue } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { useCompass } from '../useCompass';
@@ -8,6 +10,10 @@ interface CompassBadgeProps {
   /** Called when the badge is tapped (used to reset the map to north). */
   onPress?: () => void;
 }
+
+/** How long the needle eases toward a new heading. Short enough to feel live,
+ * long enough to swallow the gap between throttled updates. */
+const NEEDLE_ANIM_MS = 180;
 
 /**
  * A small floating compass that rotates its needle to the device heading.
@@ -18,10 +24,47 @@ interface CompassBadgeProps {
  * heading update re-renders only this small badge, not the whole map tree.
  * Camera rotation is separate — it uses `useHeadingCamera` / MapLibre's native
  * heading tracking, not this value.
+ *
+ * The needle animates on the native driver toward an **unwrapped** continuous
+ * angle (349° → 361°, not → 1°), so crossing north eases through the boundary
+ * instead of spinning 350° the wrong way.
  */
 export function CompassBadge({ onPress }: CompassBadgeProps) {
-  const heading = useCompass();
+  const sample = useCompass();
   const theme = useTheme();
+  const heading = sample?.headingDeg ?? null;
+
+  // Continuous (unwrapped) heading the needle is animating toward.
+  const continuousRef = useRef<number | null>(null);
+  const rotationAnim = useAnimatedValue(0);
+
+  useEffect(() => {
+    if (heading === null) return;
+    const prev = continuousRef.current;
+    if (prev === null) {
+      continuousRef.current = heading;
+      rotationAnim.setValue(heading);
+      return;
+    }
+    const next = unwrapDeg(prev, heading);
+    continuousRef.current = next;
+    Animated.timing(rotationAnim, {
+      toValue: next,
+      duration: NEEDLE_ANIM_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [heading, rotationAnim]);
+
+  // The arrow points to NORTH: as the device heading increases (you turn
+  // clockwise), north sits counter-clockwise from you, so the needle
+  // counter-rotates. Linear extrapolation makes this valid for any continuous
+  // angle, including negatives and multiples of 360.
+  const rotate = rotationAnim.interpolate({
+    inputRange: [0, 360],
+    outputRange: ['0deg', '-360deg'],
+  });
+
   const deg = heading ?? 0;
   return (
     <Surface style={styles.surface} elevation={3}>
@@ -34,19 +77,11 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
         accessibilityLabel="Reset map to north"
       >
         <View style={styles.content}>
-          <View style={styles.needleWrap}>
-            {/* The arrow points to NORTH: as the device heading increases (you
-                turn clockwise), north sits counter-clockwise from you, so the
-                needle counter-rotates by -heading. */}
-            <MaterialCommunityIcons
-              name="navigation"
-              size={26}
-              color={theme.colors.tertiary}
-              style={{ transform: [{ rotate: `${-deg}deg` }] }}
-            />
-          </View>
+          <Animated.View style={[styles.needleWrap, { transform: [{ rotate }] }]}>
+            <MaterialCommunityIcons name="navigation" size={26} color={theme.colors.tertiary} />
+          </Animated.View>
           <Text variant="labelMedium" style={styles.label}>
-            {heading === null ? '--' : `${Math.round(deg)}° ${headingToCardinal(deg)}`}
+            {heading === null ? '--' : `${Math.round(deg) % 360}° ${headingToCardinal(deg)}`}
           </Text>
         </View>
       </TouchableRipple>
