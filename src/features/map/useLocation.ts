@@ -12,6 +12,12 @@ export interface LocationTracking {
   /** Latest full fix, including altitude/accuracy. */
   lastFix: TrackPoint | null;
   permission: LocationPermission;
+  /**
+   * Set when the OS refused to start the position watch even though permission
+   * was granted — in practice "device location is switched off" (expo-location
+   * rejects with "unsatisfied device settings"). null while the watch is fine.
+   */
+  unavailableReason: string | null;
 }
 
 /**
@@ -26,6 +32,7 @@ export function useLocationTracking(): LocationTracking {
   const [location, setLocation] = useState<LatLng | null>(null);
   const [lastFix, setLastFix] = useState<TrackPoint | null>(null);
   const [permission, setPermission] = useState<LocationPermission>('undetermined');
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
 
   useEffect(() => {
@@ -33,28 +40,45 @@ export function useLocationTracking(): LocationTracking {
     let cancelled = false;
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (cancelled) return;
-      if (status !== 'granted') {
-        setPermission('denied');
-        return;
+      // The whole watch setup is guarded: with permission granted but device
+      // location switched off, watchPositionAsync REJECTS ("Location request
+      // failed due to unsatisfied device settings"). Unguarded, that became an
+      // unhandled rejection at every launch — invisible before the error
+      // reporter existed, and afterwards it queued a report on each launch.
+      // Surface it as state the map can show instead.
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (cancelled) return;
+        if (status !== 'granted') {
+          setPermission('denied');
+          return;
+        }
+        setPermission('granted');
+        sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 1000,
+            distanceInterval: Math.max(1, minDisplacement),
+          },
+          (loc) => {
+            const fix = toTrackPoint(loc);
+            setUnavailableReason(null);
+            setLocation({ latitude: fix.latitude, longitude: fix.longitude });
+            setLastFix(fix);
+            // Recorder filters by status internally. While the background task
+            // feeds the track, the watch only drives the marker.
+            if (!isBackgroundLocationActive()) useRecorderStore.getState().addPoint(fix);
+          },
+        );
+        if (cancelled) sub.remove();
+      } catch (err) {
+        if (cancelled) return;
+        setUnavailableReason(
+          err instanceof Error && /device settings/i.test(err.message)
+            ? 'Location is turned off — switch it on to see your position.'
+            : "Couldn't start location updates.",
+        );
       }
-      setPermission('granted');
-      sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: Math.max(1, minDisplacement),
-        },
-        (loc) => {
-          const fix = toTrackPoint(loc);
-          setLocation({ latitude: fix.latitude, longitude: fix.longitude });
-          setLastFix(fix);
-          // Recorder filters by status internally. While the background task
-          // feeds the track, the watch only drives the marker.
-          if (!isBackgroundLocationActive()) useRecorderStore.getState().addPoint(fix);
-        },
-      );
     })();
 
     return () => {
@@ -63,5 +87,5 @@ export function useLocationTracking(): LocationTracking {
     };
   }, [minDisplacement]);
 
-  return { location, lastFix, permission };
+  return { location, lastFix, permission, unavailableReason };
 }

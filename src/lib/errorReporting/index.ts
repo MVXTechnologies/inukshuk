@@ -148,6 +148,7 @@ function toMessageAndStack(error: unknown): { message: string; stack?: string } 
  * the one entry point the rest of the app should use.
  */
 export function reportError(error: unknown, context?: string, options?: CaptureOptions): void {
+  console.log(`[diag] reportError ctx=${context ?? '?'}: ${String(error).slice(0, 200)}`);
   try {
     if (!reportingEnabled()) return;
     const { message, stack } = toMessageAndStack(error);
@@ -302,5 +303,9 @@ export function installErrorReporting(): void {
     if (state === 'active') void flushErrorQueue().catch(() => undefined);
   });
 
-  void flushErrorQueue().catch(() => undefined);
+  // Deferred launch flush: the queue read + delivery attempt can wait until
+  // well after first interaction — doing it during startup competes with the
+  // initial render/navigation on slow devices (it tipped cold CI emulators
+  // into dropping the first tab tap, the 2026-07-14 e2e flake).
+  setTimeout(() => void flushErrorQueue().catch(() => undefined), 8000);
 }

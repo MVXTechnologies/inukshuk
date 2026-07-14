@@ -104,7 +104,7 @@ jobs:
             # tipped the (previously unaccelerated) system process into ANR.
             sleep 20
             adb install -r android/app/build/outputs/apk/release/app-release.apk
-            maestro test .maestro/smoke.yaml
+            bash .github/scripts/e2e-attempts.sh
 
       # Maestro writes screenshots + the UI hierarchy on failure; without this
       # upload every red run is a black box.
@@ -113,5 +113,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: maestro-debug
-          path: ~/.maestro/tests
+          path: |
+            ~/.maestro/tests
+            logcat-failure.txt
           retention-days: 7
