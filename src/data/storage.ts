@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
 /**
@@ -334,4 +334,78 @@ export function writeCacheBytes(name: string, bytes: Uint8Array): string {
   file.create();
   file.write(bytes);
   return file.uri;
+}
+
+/** Size in bytes of the file at `uri`, or 0 when it does not exist / cannot be read. */
+export function fileSizeAt(uri: string): number {
+  try {
+    return new File(uri).size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Stream a file's bytes through `onChunk` in `chunkSize` slices, without ever
+ * holding the whole file in memory — imported maps can run to tens of MB.
+ * `final` is true exactly once, on the last chunk (an empty file yields a
+ * single empty final chunk).
+ */
+export function readFileChunks(
+  uri: string,
+  chunkSize: number,
+  onChunk: (chunk: Uint8Array, final: boolean) => void,
+): void {
+  const handle = new File(uri).open(FileMode.ReadOnly);
+  try {
+    const total = handle.size ?? 0;
+    if (total === 0) {
+      onChunk(new Uint8Array(0), true);
+      return;
+    }
+    let read = 0;
+    while (read < total) {
+      const chunk = handle.readBytes(Math.min(chunkSize, total - read));
+      read += chunk.length;
+      // A short read means the file shrank underneath us; still emit `final`
+      // exactly once so streaming consumers (zip entries) are always closed.
+      onChunk(chunk, read >= total || chunk.length === 0);
+      if (chunk.length === 0) break;
+    }
+  } finally {
+    handle.close();
+  }
+}
+
+/** Incremental writer into the cache `exports/` staging area (see {@link writeCacheBytes}). */
+export interface CacheFileWriter {
+  uri: string;
+  write(chunk: Uint8Array): void;
+  /** Flush and release the handle. Idempotent. */
+  close(): void;
+}
+
+/**
+ * Open a cache `exports/<name>` file for sequential appends and return a
+ * writer — for archives assembled chunk-by-chunk (streamed zips) that must not
+ * be buffered whole in memory. Callers should {@link deleteFileAt} the uri
+ * once the share sheet resolves.
+ */
+export function createCacheFileWriter(name: string): CacheFileWriter {
+  const dir = new Directory(Paths.cache, 'exports');
+  if (!dir.exists) dir.create({ intermediates: true });
+  const file = new File(dir, name);
+  if (file.exists) file.delete();
+  file.create();
+  const handle = file.open(FileMode.Append);
+  let closed = false;
+  return {
+    uri: file.uri,
+    write: (chunk) => handle.writeBytes(chunk),
+    close: () => {
+      if (closed) return;
+      closed = true;
+      handle.close();
+    },
+  };
 }
