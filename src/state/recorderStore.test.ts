@@ -99,6 +99,36 @@ describe('GPS fix gating in addPoint', () => {
     s.addPoint({ latitude: 46.8, longitude: -71.2, time: 1_000_000 });
     expect(useRecorderStore.getState().points).toHaveLength(1);
   });
+
+  it('tracks the last ACCEPTED fix time/accuracy for the GPS-quality HUD', () => {
+    const s = useRecorderStore.getState();
+    s.start('Freshness');
+    expect(useRecorderStore.getState().lastFixAt).toBeNull();
+
+    s.addPoint(pt({ time: 1_000_000, accuracy: 8 }));
+    expect(useRecorderStore.getState().lastFixAt).toBe(1_000_000);
+    expect(useRecorderStore.getState().lastAccuracyM).toBe(8);
+
+    // A REJECTED fix (teleport) must not advance freshness — that's exactly the
+    // stall the HUD needs to surface.
+    s.addPoint(pt({ time: 1_002_000, latitude: 46.9 }));
+    expect(useRecorderStore.getState().lastFixAt).toBe(1_000_000);
+
+    // An accepted fix without accuracy records null accuracy.
+    s.addPoint({ latitude: 46.800025, longitude: -71.2, time: 1_002_000 });
+    expect(useRecorderStore.getState().lastFixAt).toBe(1_002_000);
+    expect(useRecorderStore.getState().lastAccuracyM).toBeNull();
+  });
+
+  it('resets fix freshness on start', () => {
+    const s = useRecorderStore.getState();
+    s.start('First');
+    s.addPoint(pt({ time: 1_000_000 }));
+    expect(useRecorderStore.getState().lastFixAt).toBe(1_000_000);
+    s.start('Second');
+    expect(useRecorderStore.getState().lastFixAt).toBeNull();
+    expect(useRecorderStore.getState().lastAccuracyM).toBeNull();
+  });
 });
 
 describe('checkpoint + recovery round-trip', () => {

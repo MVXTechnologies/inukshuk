@@ -4,6 +4,7 @@ import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 export type LocationPermission = 'undetermined' | 'granted' | 'denied';
 
@@ -34,6 +35,20 @@ export function useLocationTracking(): LocationTracking {
   const [permission, setPermission] = useState<LocationPermission>('undetermined');
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
+  // Bumped on every foreground so permission + device-location availability are
+  // re-checked and the position watch is re-established. #90: permission or
+  // device location revoked mid-recording used to go undetected — the watch
+  // stopped delivering with no error, so the recorder kept 'recording' while no
+  // points accrued. Re-establishing on foreground makes that a granted→denied
+  // (or device-off) transition the map can surface and the recorder can pause.
+  const [recheck, setRecheck] = useState(0);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setRecheck((n) => n + 1);
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
@@ -85,7 +100,7 @@ export function useLocationTracking(): LocationTracking {
       cancelled = true;
       sub?.remove();
     };
-  }, [minDisplacement]);
+  }, [minDisplacement, recheck]);
 
   return { location, lastFix, permission, unavailableReason };
 }

@@ -46,6 +46,15 @@ interface RecorderState {
   points: TrackPoint[];
   stats: TrackStats;
   waypoints: PendingWaypoint[];
+  /**
+   * Epoch ms of the most recently ACCEPTED fix (null until the first one), and
+   * that fix's reported horizontal accuracy in metres (null when unknown). The
+   * HUD turns these into a GPS-quality warning: the filter silently drops
+   * bad/teleport fixes, so a stalled track otherwise looks identical to a
+   * healthy one. See `@core/geo/track/gpsQuality`.
+   */
+  lastFixAt: number | null;
+  lastAccuracyM: number | null;
 
   start: (name?: string) => void;
   addPoint: (point: TrackPoint) => void;
@@ -101,6 +110,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   points: [],
   stats: EMPTY_STATS,
   waypoints: [],
+  lastFixAt: null,
+  lastAccuracyM: null,
 
   start: (name) => {
     const now = Date.now();
@@ -115,6 +126,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],
+      lastFixAt: null,
+      lastAccuracyM: null,
     });
   },
 
@@ -131,6 +144,10 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       // Live HUD uses the cheap incremental fold; final stats are recomputed
       // exactly on stop().
       stats: reduceStatsWith(stats, prev, point),
+      // Freshness/quality signal for the HUD's GPS indicator (using the fix's
+      // own timestamp so a late-delivered fix reflects its true age).
+      lastFixAt: point.time,
+      lastAccuracyM: point.accuracy ?? null,
     });
     const cp = checkpointOf(get());
     if (cp) checkpoint.maybeWriteCheckpoint(cp); // throttled crash journal
@@ -141,10 +158,13 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     if (status === 'idle') return;
     const merged = mergeTrackPoints(points, incoming, { accept: shouldAcceptFix });
     if (merged === points) return; // nothing new — keep identity, skip the I/O
+    const newest = merged[merged.length - 1];
     set({
       points: merged,
       // Out-of-order inserts invalidate the incremental fold; recompute exactly.
       stats: computeTrackStats(merged),
+      // Fold in the newest merged fix's freshness for the HUD's GPS indicator.
+      ...(newest ? { lastFixAt: newest.time, lastAccuracyM: newest.accuracy ?? null } : {}),
     });
     // Force a checkpoint: the journal these came from is about to be cleared.
     const cp = checkpointOf(get());
@@ -302,6 +322,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],
+      lastFixAt: null,
+      lastAccuracyM: null,
     });
   },
 }));
@@ -346,6 +368,8 @@ export async function initRecorderRecovery(): Promise<boolean> {
     points,
     stats: computeTrackStats(points),
     waypoints: cp.waypoints ?? [],
+    lastFixAt: points[points.length - 1]?.time ?? null,
+    lastAccuracyM: points[points.length - 1]?.accuracy ?? null,
   });
   // The journal is folded in — re-checkpoint the merged session so a second
   // crash cannot lose the background points, then drop the journal.

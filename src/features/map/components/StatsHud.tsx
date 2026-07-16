@@ -1,3 +1,4 @@
+import type { GpsQuality } from '@core/geo/track/gpsQuality';
 import type { TrackStats } from '@core/models';
 import { formatDistance, formatDuration, formatElevation, formatSpeed } from '@lib/format';
 import { StatTile } from '@ui/components/StatTile';
@@ -11,6 +12,12 @@ interface StatsHudProps {
   /** Live wall-clock duration in seconds (ticks independently of GPS fixes). */
   elapsedS: number;
   paused: boolean;
+  /**
+   * Live GPS signal quality. A warning chip shows for 'weak'/'lost' so a
+   * stalled track (the filter silently drops bad fixes) is never mistaken for a
+   * healthy one. Ignored while paused. Defaults to 'good' (no warning).
+   */
+  gpsQuality?: GpsQuality;
 }
 
 /**
@@ -18,7 +25,7 @@ interface StatsHudProps {
  * distance) so it doesn't cover the map; tap the chevron to expand to the full
  * card (time, distance, speed, D+, D-, max alt) and tap again to collapse.
  */
-export function StatsHud({ name, stats, elapsedS, paused }: StatsHudProps) {
+export function StatsHud({ name, stats, elapsedS, paused, gpsQuality = 'good' }: StatsHudProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
 
@@ -29,6 +36,22 @@ export function StatsHud({ name, stats, elapsedS, paused }: StatsHudProps) {
   ) : (
     <View style={[styles.dot, { backgroundColor: theme.colors.error }]} />
   );
+
+  // Weak/lost GPS warning — only meaningful while actively recording (a paused
+  // recording isn't expecting fixes). 'lost' is error-red; 'weak' is tertiary.
+  const showGpsWarn = !paused && (gpsQuality === 'weak' || gpsQuality === 'lost');
+  const gpsColor = gpsQuality === 'lost' ? theme.colors.error : theme.colors.tertiary;
+  const gpsWarn = showGpsWarn ? (
+    <View
+      style={styles.gpsWarn}
+      accessibilityLabel={gpsQuality === 'lost' ? 'No GPS signal' : 'Weak GPS signal'}
+    >
+      <Icon source="satellite-variant" size={14} color={gpsColor} />
+      <Text variant="labelSmall" style={{ color: gpsColor, fontWeight: '700' }}>
+        {gpsQuality === 'lost' ? 'No GPS' : 'Weak GPS'}
+      </Text>
+    </View>
+  ) : null;
 
   if (!expanded) {
     return (
@@ -48,6 +71,7 @@ export function StatsHud({ name, stats, elapsedS, paused }: StatsHudProps) {
             <Text variant="bodyMedium" style={styles.mono}>
               {formatDistance(stats.distanceM)}
             </Text>
+            {gpsWarn}
             <Icon source="chevron-up" size={20} />
           </View>
         </TouchableRipple>
@@ -61,6 +85,7 @@ export function StatsHud({ name, stats, elapsedS, paused }: StatsHudProps) {
         <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
           {name}
         </Text>
+        {gpsWarn}
         {statusMark}
         <IconButton
           icon="chevron-down"
@@ -132,6 +157,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  gpsWarn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   row: {
     flexDirection: 'row',
