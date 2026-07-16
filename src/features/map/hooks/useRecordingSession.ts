@@ -1,3 +1,4 @@
+import { gpsQualityLevel, type GpsQuality } from '@core/geo/track/gpsQuality';
 import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -22,6 +23,8 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const points = useRecorderStore((s) => s.points);
   const startedAt = useRecorderStore((s) => s.startedAt);
   const pausedMs = useRecorderStore((s) => s.pausedMs);
+  const lastFixAt = useRecorderStore((s) => s.lastFixAt);
+  const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const start = useRecorderStore((s) => s.start);
   const pause = useRecorderStore((s) => s.pause);
   const resume = useRecorderStore((s) => s.resume);
@@ -32,6 +35,9 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const removeWaypoint = useRecorderStore((s) => s.removeWaypoint);
 
   const [elapsedS, setElapsedS] = useState(0);
+  // Live GPS-quality level for the HUD. Recomputed each tick (staleness grows
+  // even when no new fix arrives — that IS the signal-loss case).
+  const [gpsQuality, setGpsQuality] = useState<GpsQuality>('acquiring');
 
   // OS-level background location feed while recording (foreground service on
   // Android, background mode on iOS), including the "Allow all the time"
@@ -54,11 +60,17 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // of jumping forward by the whole pause.
   useEffect(() => {
     if (status !== 'recording' || startedAt === null) return;
-    const tick = () => setElapsedS(Math.floor((Date.now() - startedAt - pausedMs) / 1000));
+    const tick = () => {
+      const now = Date.now();
+      setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
+      // Re-evaluate signal quality every second: staleness must climb toward
+      // 'weak'/'lost' while fixes stop arriving, so this can't be event-driven.
+      setGpsQuality(gpsQualityLevel(lastFixAt, now, lastAccuracyM));
+    };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status, startedAt, pausedMs]);
+  }, [status, startedAt, pausedMs, lastFixAt, lastAccuracyM]);
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {
@@ -79,13 +91,22 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   };
 
   const handleStop = async () => {
-    const track = await stop();
-    setElapsedS(0);
-    showSnack(
-      track && track.points.length > 0
-        ? `Saved "${track.name}"`
-        : 'Recording discarded (no points)',
-    );
+    try {
+      const track = await stop();
+      setElapsedS(0);
+      showSnack(
+        track && track.points.length > 0
+          ? `Saved "${track.name}"`
+          : 'Recording discarded (no points)',
+      );
+    } catch {
+      // stop() persists the GPX before it resets the store, so a write failure
+      // (e.g. storage full) rejects with the session STILL intact — status
+      // unchanged, crash checkpoint freshly written, timer still running. Don't
+      // reset the UI as if it saved; tell the user so they can free space and
+      // stop again, and the trail stays recoverable.
+      showSnack('Couldn’t save your trail — storage may be full. Free up space and try again.');
+    }
   };
 
   return {
@@ -95,6 +116,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     points,
     waypoints,
     elapsedS,
+    gpsQuality,
     pause,
     resume,
     startRecording,

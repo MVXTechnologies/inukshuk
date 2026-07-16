@@ -164,6 +164,7 @@ export function MapScreen() {
     points,
     waypoints,
     elapsedS,
+    gpsQuality,
     pause,
     resume,
     startRecording,
@@ -174,6 +175,21 @@ export function MapScreen() {
     bgRationaleVisible,
     respondToBgRationale,
   } = useRecordingSession({ showSnack });
+
+  // #90 — location lost mid-recording. useLocationTracking re-checks permission
+  // and device-location availability on every foreground; if either drops out
+  // while recording, watchPositionAsync stops delivering fixes silently — the
+  // timer keeps running but no points accrue. Auto-pause so the UI stops
+  // implying we're still tracking, surface why (the denied/unavailable Banner
+  // below already explains how to recover), and let the user resume once
+  // location is back. NB: a Banner, not a Portal/Dialog (see #108).
+  const locationLost = permission === 'denied' || unavailableReason !== null;
+  useEffect(() => {
+    if (locationLost && status === 'recording') {
+      pause();
+      showSnack('Location lost — recording paused. Re-enable location to continue.');
+    }
+  }, [locationLost, status, pause, showSnack]);
 
   const {
     selecting,
@@ -589,6 +605,7 @@ export function MapScreen() {
                 stats={stats}
                 elapsedS={elapsedS}
                 paused={status === 'paused'}
+                gpsQuality={gpsQuality}
               />
             )}
             <View style={styles.controlsRow} pointerEvents="box-none">
