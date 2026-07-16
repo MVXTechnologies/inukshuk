@@ -1,6 +1,8 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
+import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
+
 /**
  * Platform-coupled persistence for Inukshuk. Lives outside `src/core` (which stays
  * pure/testable). Uses the SDK 56 File/Directory API.
@@ -34,6 +36,36 @@ export function ensureStorage(): void {
 }
 
 export const newId = (): string => nanoid(12);
+
+/**
+ * Thrown when a write fails because the device is out of storage (ENOSPC /
+ * SQLITE_FULL / OEM phrasings). Distinguishing it lets callers say "you're out
+ * of space" instead of a generic "couldn't save" — the disk-full case is a real
+ * one on this dev's near-full device (#94).
+ */
+export class StorageFullError extends Error {
+  constructor(cause: string) {
+    super('Not enough free space to save — free up space and try again.');
+    this.name = 'StorageFullError';
+    // Keep the raw native reason for logs without leaking it into the UI copy.
+    (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/**
+ * Run a synchronous filesystem write, translating an out-of-space failure into
+ * a {@link StorageFullError} so the cause is named. Other errors pass through
+ * unchanged.
+ */
+function guardWrite<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isOutOfSpaceMessage(message)) throw new StorageFullError(message);
+    throw err;
+  }
+}
 
 /**
  * Copy a picked PDF into app storage under a stable id. Returns the new file
@@ -98,7 +130,7 @@ export function writeOverlayPng(id: string, base64Png: string): string {
   const file = new File(dir, `${id}.png`);
   if (file.exists) file.delete();
   file.create();
-  file.write(base64Png, { encoding: 'base64' });
+  guardWrite(() => file.write(base64Png, { encoding: 'base64' }));
   return file.uri;
 }
 
@@ -238,7 +270,7 @@ export function writeTrackGpx(id: string, gpx: string): string {
   const file = new File(tracksDir(), `${id}.gpx`);
   if (file.exists) file.delete();
   file.create();
-  file.write(gpx);
+  guardWrite(() => file.write(gpx));
   return file.uri;
 }
 
@@ -296,7 +328,7 @@ export function writeJson(name: string, value: unknown): void {
   const staged = new File(Paths.document, `${name}.tmp`);
   if (staged.exists) staged.delete();
   staged.create();
-  staged.write(JSON.stringify(value));
+  guardWrite(() => staged.write(JSON.stringify(value)));
   const file = new File(Paths.document, name);
   if (file.exists) file.delete();
   staged.move(file);

@@ -2,6 +2,7 @@ import StaticServer from '@dr.pogodin/react-native-static-server';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { packZoomRange } from '@core/geo/tiles';
+import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import type { BoundingBox } from '@core/models';
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
@@ -135,6 +136,12 @@ function describeNativeError(message: string, zoomRange: string): string {
   const raw = message.trim();
   const lower = raw.toLowerCase();
   if (raw === '') return `the tile server rejected the request (${zoomRange})`;
+  // Out-of-space writes fail deep in MapLibre's native tile DB (SQLITE_FULL /
+  // ENOSPC). Name the real cause instead of leaving it as a generic failure —
+  // the preflight blocks most of these, but a disk can fill mid-download too.
+  if (isOutOfSpaceMessage(lower)) {
+    return `not enough free space to store the tiles (${zoomRange}) — free up space and retry`;
+  }
   if (lower.includes('tile limit') || lower.includes('tilecountlimit')) {
     return `too many tiles — shrink the area or lower the quality (${zoomRange})`;
   }
