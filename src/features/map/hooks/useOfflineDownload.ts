@@ -1,6 +1,12 @@
 import { dedupeLabel } from '@core/geo/regionName';
 import { screenPointToLngLat, screenRectToBounds, type ScreenRect } from '@core/geo/screenBounds';
-import { overviewZoomFor, packZoomRange, type Basemap } from '@core/geo/tiles';
+import {
+  estimateRegionDownload,
+  overviewZoomFor,
+  packZoomRange,
+  type Basemap,
+} from '@core/geo/tiles';
+import { assessFreeSpaceForWrite } from '@data/diskSpace';
 import { setOfflineOnly } from '@data/offline';
 import * as storage from '@data/storage';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
@@ -161,6 +167,22 @@ export function useOfflineDownload({
 
       const baseId = storage.newId();
       const minZoom = overviewZoomFor(bounds);
+
+      // Low-disk preflight (#94). A region download can run to hundreds of MB;
+      // on a near-full device the tile writes fail deep in MapLibre's native
+      // downloader and collapse into a generic message. Estimate the pack size
+      // the same way the download sheet does (#111) and compare it to the live
+      // free-disk figure BEFORE a single tile is fetched: block outright if it
+      // can't fit, warn-but-allow if it would eat into the last of the space.
+      const { bytes: estimatedBytes } = estimateRegionDownload(bounds, minZoom, maxZoom, basemaps);
+      const budget = assessFreeSpaceForWrite(estimatedBytes);
+      if (budget?.verdict === 'block') {
+        showSnack(budget.message ?? 'Not enough free space for this download');
+        return;
+      }
+      if (budget?.verdict === 'warn' && budget.message) {
+        showSnack(budget.message);
+      }
 
       // Resolve a memorable name for the region (nearest village / named lake)
       // in the background — the user is online right now by definition. Naming
