@@ -23,7 +23,7 @@ import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
-import { BackgroundLocationRationaleDialog } from './components/BackgroundLocationRationaleDialog';
+import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
@@ -35,6 +35,7 @@ import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
 import { toLineFeature } from './geojson';
+import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
@@ -176,20 +177,11 @@ export function MapScreen() {
     respondToBgRationale,
   } = useRecordingSession({ showSnack });
 
-  // #90 — location lost mid-recording. useLocationTracking re-checks permission
-  // and device-location availability on every foreground; if either drops out
-  // while recording, watchPositionAsync stops delivering fixes silently — the
-  // timer keeps running but no points accrue. Auto-pause so the UI stops
-  // implying we're still tracking, surface why (the denied/unavailable Banner
-  // below already explains how to recover), and let the user resume once
-  // location is back. NB: a Banner, not a Portal/Dialog (see #108).
+  // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
+  // loss (debounced in the hook; transient watch re-subscription and the
+  // permission dialog's AppState churn must not pause a healthy recording).
   const locationLost = permission === 'denied' || unavailableReason !== null;
-  useEffect(() => {
-    if (locationLost && status === 'recording') {
-      pause();
-      showSnack('Location lost — recording paused. Re-enable location to continue.');
-    }
-  }, [locationLost, status, pause, showSnack]);
+  useAutoPauseOnLocationLoss(locationLost, showSnack);
 
   const {
     selecting,
@@ -646,10 +638,7 @@ export function MapScreen() {
           take over) and while selecting an offline region. */}
       {status === 'idle' && !selecting && <MapActionsFab onRecord={startRecording} />}
 
-      <BackgroundLocationRationaleDialog
-        visible={bgRationaleVisible}
-        onRespond={respondToBgRationale}
-      />
+      <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
       <WaypointEditorDialog
         waypoint={editWp}
