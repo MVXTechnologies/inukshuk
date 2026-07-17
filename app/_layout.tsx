@@ -27,10 +27,6 @@ export default function RootLayout() {
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
 
   useEffect(() => {
-    console.log('[diag] RootLayout mounted');
-    let beat = 0;
-    const hb = setInterval(() => console.log(`[diag] heartbeat ${++beat}`), 1000);
-    setTimeout(() => clearInterval(hb), 40000);
     // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
     // promise rejections, launch/foreground queue flushes. Idempotent.
     installErrorReporting();
