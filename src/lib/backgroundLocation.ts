@@ -1,9 +1,12 @@
 import { isBackgroundFeedFresh } from '@core/geo/track/backgroundFeed';
+import { backgroundTaskSupported } from '@core/geo/track/backgroundSupport';
 import type { TrackPoint } from '@core/models';
 import * as checkpoint from '@data/recorderCheckpoint';
 import { useRecorderStore } from '@state/recorderStore';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import * as Updates from 'expo-updates';
 
 /**
  * Background trail recording.
@@ -136,7 +139,49 @@ try {
  * updates could not be started (missing permission/manifest entry) — the
  * foreground watch then remains the only feeder.
  */
+/**
+ * True when THIS binary can run the background task without dying. The vc44
+ * (1.0.2) binary lacks RECEIVE_BOOT_COMPLETED, so any backgrounded fix
+ * delivery is a native process death — see @core/geo/track/backgroundSupport.
+ */
+export function canUseBackgroundTask(): boolean {
+  const runtime =
+    typeof Updates.runtimeVersion === 'string' && Updates.runtimeVersion !== ''
+      ? Updates.runtimeVersion
+      : (Constants.expoConfig?.version ?? null);
+  return backgroundTaskSupported(runtime);
+}
+
+/**
+ * Launch-time self-heal, called from the root layout on EVERY app start: if a
+ * previous session (or a crash loop) left the OS-side location task
+ * registered, and this binary cannot survive it (or no interrupted recording
+ * exists to feed), stop it BEFORE the next GPS fix arrives. On the broken
+ * vc44 binary this is the OTA kill-switch that ends the crash loop: the
+ * persisted task registration is what restarts the service on every launch.
+ */
+export async function cleanupBackgroundLocationAtLaunch(): Promise<void> {
+  try {
+    if (!(await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK))) return;
+    if (!canUseBackgroundTask()) {
+      // Broken binary: the task must never run here, recording or not.
+      await stopBackgroundLocationUpdates();
+      return;
+    }
+    // Healthy binary: only clear a task with no interrupted recording behind
+    // it (a stale leftover); a live checkpoint's task keeps journaling.
+    const cp = await checkpoint.readCheckpoint();
+    if (cp?.status !== 'recording') await stopBackgroundLocationUpdates();
+  } catch {
+    /* best effort — never let cleanup interfere with launch */
+  }
+}
+
 export async function startBackgroundLocationUpdates(minDisplacementM: number): Promise<boolean> {
+  // A binary without RECEIVE_BOOT_COMPLETED dies natively on the first
+  // backgrounded fix — never start the task there. The foreground watch stays
+  // the feeder (screen-on recording still works; #120 made that fail-safe).
+  if (!canUseBackgroundTask()) return false;
   headlessDecision = null; // a fresh session invalidates any cached decision
   lastDeliveryAt = null; // confirmation must come from THIS session's deliveries
   try {
@@ -199,6 +244,9 @@ let rationaleDeclinedThisSession = false;
 export async function ensureBackgroundLocationPermission(
   askRationale: () => Promise<boolean>,
 ): Promise<BackgroundPermissionOutcome> {
+  // On a binary that can't run the task, don't walk the user through a
+  // two-step "Allow all the time" flow for a capability that must stay off.
+  if (!canUseBackgroundTask()) return 'skipped';
   try {
     const fg = await Location.getForegroundPermissionsAsync();
     if (!fg.granted) {

@@ -1,8 +1,8 @@
-// Side-effect import FIRST: registers the background-location task
-// (TaskManager.defineTask) at module scope, so a headless launch — Android
-// killing and relaunching the app mid-recording — re-registers the handler
-// before any UI mounts. See src/lib/backgroundLocation.ts.
-import '@lib/backgroundLocation';
+// This import is FIRST deliberately: loading @lib/backgroundLocation
+// registers the background-location task (TaskManager.defineTask) at module
+// scope, so a headless launch — Android killing and relaunching the app
+// mid-recording — re-registers the handler before any UI mounts.
+import { cleanupBackgroundLocationAtLaunch } from '@lib/backgroundLocation';
 
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
@@ -30,6 +30,10 @@ export default function RootLayout() {
     // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
     // promise rejections, launch/foreground queue flushes. Idempotent.
     installErrorReporting();
+    // FIRST, before anything else: if a crashed session (or the vc44 crash
+    // loop — missing RECEIVE_BOOT_COMPLETED) left the OS location task
+    // registered, stop it before the next GPS fix can kill the process.
+    cleanupBackgroundLocationAtLaunch().catch((err) => reportError(err, 'bg-task-cleanup'));
     hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
   }, [hydrateLibrary, hydrateSettings]);

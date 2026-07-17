@@ -41,6 +41,7 @@ export function RecordControls({
         icon="stop"
         size="medium"
         onPress={onStop}
+        accessibilityLabel="Stop recording"
         color={theme.colors.onError}
         style={{ backgroundColor: theme.colors.error }}
       />
