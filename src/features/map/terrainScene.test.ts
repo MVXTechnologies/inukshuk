@@ -1,5 +1,7 @@
+import * as THREE from 'three';
 import type { Heightmap } from './dem';
 import {
+  borderLoopIndices,
   buildTerrain,
   DRAPE_LIFT,
   drapePolyline,
@@ -84,6 +86,69 @@ describe('buildTerrain project/unproject', () => {
         { color: 0xff0000, halfWidth: 0.005 },
       ),
     ).toBeNull();
+  });
+});
+
+describe('buildTerrain analytical overlays + skirt', () => {
+  const terrainMesh = (b: ReturnType<typeof buildTerrain>) => b.group.children[0] as THREE.Mesh;
+  const skirtMesh = (b: ReturnType<typeof buildTerrain>) => b.group.children[1] as THREE.Mesh;
+
+  it('adds metre-space aElevM/aSlopeDeg attributes (flat → slope 0 everywhere)', () => {
+    const hm = flatHm();
+    const build = buildTerrain(hm, []);
+    const geo = terrainMesh(build).geometry;
+    const elev = geo.getAttribute('aElevM');
+    const slope = geo.getAttribute('aSlopeDeg');
+    expect(elev.count).toBe(hm.grid * hm.grid);
+    expect(slope.count).toBe(hm.grid * hm.grid);
+    for (let i = 0; i < elev.count; i++) {
+      expect(elev.getX(i)).toBe(120); // raw metres, NOT the exaggerated mesh y
+      expect(slope.getX(i)).toBe(0);
+    }
+  });
+
+  it('adds a border skirt sharing the terrain material, dropped below the surface', () => {
+    const build = buildTerrain(flatHm(), []);
+    expect(build.group.children.length).toBe(2); // terrain + skirt (no trail line)
+    const skirt = skirtMesh(build);
+    expect(skirt.material).toBe(terrainMesh(build).material);
+    const pos = skirt.geometry.getAttribute('position');
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      minY = Math.min(minY, pos.getY(i));
+      maxY = Math.max(maxY, pos.getY(i));
+    }
+    expect(maxY).toBeCloseTo(0, 9); // top ring on the (flat) surface
+    expect(minY).toBeLessThan(0); // bottom ring extruded down
+  });
+
+  it('exposes an overlay uniforms handle by default, none when injection is off', () => {
+    const hm = flatHm();
+    const injected = buildTerrain(hm, []);
+    expect(injected.overlay).not.toBeNull();
+    expect(injected.overlay!.minH).toBe(hm.minH);
+    expect(injected.overlay!.uniforms.uSlopeOpacity.value).toBe(0); // off until applied
+    const plain = buildTerrain(hm, [], undefined, 1, { injectOverlays: false });
+    expect(plain.overlay).toBeNull();
+  });
+});
+
+describe('borderLoopIndices', () => {
+  it('walks the 3×3 perimeter north→east→south→west without repeats', () => {
+    expect(borderLoopIndices(3)).toEqual([0, 1, 2, 5, 8, 7, 6, 3]);
+  });
+
+  it('covers every border vertex of a larger grid exactly once', () => {
+    const grid = 6;
+    const loop = borderLoopIndices(grid);
+    expect(loop.length).toBe(4 * (grid - 1));
+    expect(new Set(loop).size).toBe(loop.length);
+    for (const idx of loop) {
+      const gx = idx % grid;
+      const gy = Math.floor(idx / grid);
+      expect(gx === 0 || gx === grid - 1 || gy === 0 || gy === grid - 1).toBe(true);
+    }
   });
 });
 

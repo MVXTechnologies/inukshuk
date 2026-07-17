@@ -16,13 +16,24 @@ import {
   positionCameraFromOrbit,
 } from './terrain3d/orbitGestures';
 import {
+  addSkyAndFog,
   addTerrainLights,
   buildMarkerPin,
   createTerrainCamera,
   createTerrainRenderer,
   fetchDrapeTexture,
-  SKY_COLOR,
 } from './terrain3d/sceneSetup';
+import {
+  TerrainOverlayButtons,
+  currentOverlaySettings,
+  useTerrainOverlaySync,
+} from './terrain3d/overlayControls';
+import {
+  applyTerrainOverlaySettings,
+  overlayRenderFailed,
+  supportsStandardDerivatives,
+  type TerrainOverlayHandle,
+} from './terrain3d/terrainMaterial';
 import {
   buildTerrain,
   markerScaleForDistance,
@@ -78,10 +89,11 @@ async function fetchAndBuild(
   anchor: LatLng,
   basemap: MapBasemap,
   maxAnisotropy: number,
+  injectOverlays: boolean,
 ): Promise<Built> {
   const hm = await fetchHeightmap(padBbox(pointBox(anchor), 0, BOX_M));
   const texture = await fetchDrapeTexture(hm.range, basemap);
-  return { ...buildTerrain(hm, [], texture, maxAnisotropy), bbox: hm.bbox };
+  return { ...buildTerrain(hm, [], texture, maxAnisotropy, { injectOverlays }), bbox: hm.bbox };
 }
 
 type Project = (lng: number, lat: number) => THREE.Vector3;
@@ -173,6 +185,9 @@ export function Terrain3DLiveView({
   const [follow, setFollow] = useState(true);
   const [streaming, setStreaming] = useState(false);
   const [recenter, setRecenter] = useState(0);
+  // False once the overlay shader is unavailable (no derivatives / compile
+  // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
+  const [overlaysAvailable, setOverlaysAvailable] = useState(true);
 
   // Latest props read by the render loop / async re-anchor, never during render.
   const locRef = useRef<LatLng | null>(center);
@@ -199,6 +214,10 @@ export function Terrain3DLiveView({
   // Max anisotropy the GL context supports, read once the renderer exists; passed
   // into every terrain build so the drape texture stays sharp at grazing angles.
   const maxAnisoRef = useRef(1);
+  // Analytical-overlay shader state (see terrain3d/terrainMaterial.ts).
+  const injectOkRef = useRef(true);
+  const overlayRef = useRef<TerrainOverlayHandle | null>(null);
+  useTerrainOverlaySync(overlayRef);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   const reanchoringRef = useRef(false);
@@ -267,7 +286,12 @@ export function Terrain3DLiveView({
     const prevUnproject = unprojectRef.current;
     (async () => {
       try {
-        const built = await fetchAndBuild(target, basemapRef.current, maxAnisoRef.current);
+        const built = await fetchAndBuild(
+          target,
+          basemapRef.current,
+          maxAnisoRef.current,
+          injectOkRef.current,
+        );
         const old = groupRef.current;
         scene.add(built.group);
         if (old) {
@@ -280,6 +304,10 @@ export function Terrain3DLiveView({
         unprojectRef.current = built.unproject;
         bboxRef.current = built.bbox;
         anchorRef.current = target;
+        // Same basemap variant → same (already validated) overlay program; just
+        // re-point the uniforms handle at the fresh material.
+        overlayRef.current = built.overlay;
+        if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
         // Keep the camera on the ground point it's looking at right now, mapped
         // into the freshly re-normalised frame — so a pan in flight isn't undone.
         const look = prevUnproject
@@ -353,34 +381,61 @@ export function Terrain3DLiveView({
       // and build the drape texture sharp from the very first frame.
       const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
       maxAnisoRef.current = maxAnisotropy;
+      // fwidth() needs derivatives (contour anti-aliasing); skip the overlay
+      // shader entirely on the rare device without them.
+      injectOkRef.current = supportsStandardDerivatives(gl, renderer.capabilities.isWebGL2);
+      if (!injectOkRef.current) setOverlaysAvailable(false);
 
-      const {
-        group,
-        center: gc,
-        radius,
-        project,
-        unproject,
-        drapeLine,
-        bbox,
-      } = await fetchAndBuild(anchor, basemapRef.current, maxAnisoRef.current);
+      let built = await fetchAndBuild(
+        anchor,
+        basemapRef.current,
+        maxAnisoRef.current,
+        injectOkRef.current,
+      );
       if (gen !== glGenRef.current) {
-        disposeGroup(group);
+        disposeGroup(built.group);
         return; // superseded while loading (remount/unmount)
       }
-      projectRef.current = project;
-      drapeLineRef.current = drapeLine;
-      unprojectRef.current = unproject;
-      bboxRef.current = bbox;
-      anchorRef.current = anchor;
+      const radius = built.radius;
 
       const scene = new THREE.Scene();
       sceneRef.current = scene;
-      // Fade the terrain into the sky at distance so its edges never read as a
-      // floating slab — the mesh appears to extend to a hazy horizon, filling view.
-      scene.fog = new THREE.Fog(SKY_COLOR, radius * 0.7, radius * 2.0);
+      // Gradient sky dome + horizon-tuned fog: terrain fades into the sky at
+      // distance so its edges never read as a floating slab.
+      addSkyAndFog(scene, radius, 0.7, 2.0);
       addTerrainLights(scene);
-      scene.add(group);
-      groupRef.current = group;
+      scene.add(built.group);
+
+      const camera = createTerrainCamera(gl);
+
+      // Device-only blind spot: shader compile failures don't throw in three —
+      // render one guarded frame and fall back to the un-injected material if
+      // the overlay shader can't run on this GPU.
+      if (built.overlay && overlayRenderFailed(renderer, scene, camera)) {
+        reportError(
+          new Error('terrain overlay shader failed — using fallback'),
+          'terrain3d-live-overlay',
+        );
+        injectOkRef.current = false;
+        setOverlaysAvailable(false);
+        scene.remove(built.group);
+        disposeGroup(built.group);
+        built = await fetchAndBuild(anchor, basemapRef.current, maxAnisoRef.current, false);
+        if (gen !== glGenRef.current) {
+          disposeGroup(built.group);
+          return;
+        }
+        scene.add(built.group);
+      }
+      projectRef.current = built.project;
+      drapeLineRef.current = built.drapeLine;
+      unprojectRef.current = built.unproject;
+      bboxRef.current = built.bbox;
+      anchorRef.current = anchor;
+      groupRef.current = built.group;
+      overlayRef.current = built.overlay;
+      if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
+      const gc = built.center;
 
       // Live "you are here" marker: a small coloured head on a short pole, set
       // on the surface — sized like the 2D location puck, not a monument.
@@ -393,7 +448,6 @@ export function Terrain3DLiveView({
       scene.add(marker);
       rebuildOverlays(); // drape trails / recording / waypoints on the surface
 
-      const camera = createTerrainCamera(gl);
       // Immersed, low oblique camera so terrain fills the frame foreground-to-
       // horizon (OutMap/Gaia look). `radius` here is the slab's full-span metric
       // (~2.3); the terrain only extends ~1 unit from centre, so we must sit well
@@ -452,6 +506,7 @@ export function Terrain3DLiveView({
             sceneRef.current = null;
             groupRef.current = null;
             overlaysRef.current = null;
+            overlayRef.current = null;
           }
         },
       });
@@ -514,6 +569,13 @@ export function Terrain3DLiveView({
           <Text style={{ color: theme.colors.onSurfaceVariant }}>Couldn’t load 3D terrain.</Text>
         </View>
       )}
+      {status === 'ready' && (
+        <View style={styles.overlayBar} pointerEvents="box-none">
+          {/* Toggles drive uniforms directly (no rebuild), so they stay enabled
+              even while fresh terrain streams in during a re-anchor. */}
+          <TerrainOverlayButtons available={overlaysAvailable} />
+        </View>
+      )}
       <IconButton
         icon="crosshairs-gps"
         mode="contained"
@@ -555,4 +617,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   recenter: { position: 'absolute', left: 12, bottom: 96 },
+  // Above the recenter button / record controls, clear of the top-right rail.
+  overlayBar: { position: 'absolute', left: 12, right: 12, bottom: 148, alignItems: 'center' },
 });
