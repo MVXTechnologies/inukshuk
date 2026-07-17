@@ -1,0 +1,66 @@
+# Settings walk e2e: scrolls the whole Settings screen and asserts every
+# recently-added surface is present — the Your data export row, the
+# Connections section (Strava, #132), and the Privacy section's automatic
+# error reporting + report queue rows (#110).
+#
+# Deliberately does NOT tap "Download your data": it opens the OS share
+# sheet, which on Android can trap Maestro outside the app. Presence-only.
+# Same for the Strava row: without client credentials in the build it is
+# disabled with subtitle "Strava is not configured in this build" — both the
+# configured and unconfigured subtitles are accepted.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+# Wait for the map screen to fully mount before touching the tab bar — a tab
+# tap fired mid-cold-start can be dropped while the hierarchy is churning.
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Settings(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Keep screen awake.*'
+- assertVisible: 'GPS point spacing.*'
+# iOS merges a row's title + subtitle into ONE accessibility string (Android
+# keeps them separate elements), so every row match below is a wildcard
+# regex — it hits the title element on Android and the merged row on iOS.
+# Your data: export row present (do not tap — share sheet).
+- scrollUntilVisible:
+    element:
+      text: 'Download your data.*'
+    direction: DOWN
+# Connections: the Strava row exists; unconfigured builds show a disabled
+# "Connect Strava" with the not-configured subtitle.
+- scrollUntilVisible:
+    element:
+      text: '(Connect )?Strava.*'
+    direction: DOWN
+- assertVisible: '.*(Strava is not configured in this build|Ask to push saved trails to Strava|Connected).*'
+# Privacy: error reporting toggle + queue row (subtitle is dynamic — count or
+# "No pending reports", suffixed with channel/last-attempt info).
+- scrollUntilVisible:
+    element:
+      text: 'Automatic error reporting.*'
+    direction: DOWN
+- extendedWaitUntil:
+    visible: 'Error report queue.*'
+    timeout: 8000
+# About: bottom of the screen reachable, version row present.
+- scrollUntilVisible:
+    element:
+      text: 'Reset settings'
+    direction: DOWN
+- assertVisible: 'Version.*'

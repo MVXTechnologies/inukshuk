@@ -1,7 +1,30 @@
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
-import { Image, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Image, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
+
+/**
+ * Current iOS keyboard height (0 on Android, where the window resizes
+ * instead). Paper's Dialog is absolutely positioned by its Modal wrapper, so
+ * a plain KeyboardAvoidingView around it has no effect — the dialog must be
+ * shifted explicitly or the keyboard covers its Delete/Done actions.
+ */
+function useIosKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const show = Keyboard.addListener('keyboardWillShow', (e) =>
+      setHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener('keyboardWillHide', () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live
@@ -52,9 +75,18 @@ export function WaypointEditorDialog({
     onSetPhoto(stored);
   };
 
+  const keyboardHeight = useIosKeyboardHeight();
+
   return (
     <Portal>
-      <Dialog visible={waypoint !== null} onDismiss={onSave}>
+      {/* On iOS the auto-focused note input summons a keyboard that would sit
+          on top of the centered dialog's Delete/Done actions, making them
+          unreachable; the margin re-centers the dialog in the space above it. */}
+      <Dialog
+        visible={waypoint !== null}
+        onDismiss={onSave}
+        style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
+      >
         <Dialog.Title>{waypoint?.label ?? 'Waypoint'}</Dialog.Title>
         <Dialog.Content>
           <TextInput

@@ -6,15 +6,27 @@ import { InukshukIcon } from './InukshukIcon';
 interface Props {
   /** Whether the waypoint has a photo attached (shows a small camera badge). */
   hasPhoto?: boolean;
+  /** Accessible name of the pin (the waypoint's label, e.g. "Waypoint 1"). */
+  label?: string;
 }
 
 /**
  * Live recording waypoint marker: an inukshuk glyph in a round badge with a
  * downward pointer whose tip sits on the dropped coordinate (anchor="bottom").
+ *
+ * The pin is visual-only (`pointerEvents="none"` — taps are hit-tested at the
+ * map level, see MapScreen's onMapPress) but it still announces itself to the
+ * accessibility tree: screen readers (and the e2e suite) can locate a pin by
+ * its label even though the touch itself falls through to the map.
  */
-export function WaypointMarkerPin({ hasPhoto }: Props) {
+export function WaypointMarkerPin({ hasPhoto, label }: Props) {
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View
+      style={styles.wrap}
+      pointerEvents="none"
+      accessible={label !== undefined}
+      accessibilityLabel={label}
+    >
       <View style={styles.badge}>
         <InukshukIcon size={20} color="#ffffff" />
         {hasPhoto && (

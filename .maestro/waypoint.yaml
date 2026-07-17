@@ -1,0 +1,103 @@
+# Standalone waypoint e2e (#135): drop a waypoint from the "+" speed-dial,
+# annotate it in the editor dialog, save, then drop a SECOND waypoint and
+# assert the auto-label counter advanced by exactly one ("Waypoint N+1") —
+# which is only true if the first waypoint reached the persisted store.
+#
+# Why not re-open the pin to check the note? Neither driver can target it:
+# Android rasterizes MapLibre Marker children (no view, no a11y node), and on
+# iOS the map view masks its children's accessibility elements from XCUITest.
+# The pin still carries an accessibility label (WaypointMarkerPin) for screen
+# readers; blind coordinate taps were tried and are flaky because the camera
+# follows the runner's alternating geo-fix loop (~86 m oscillation).
+#
+# Portability notes (same rules as smoke.yaml / record.yaml):
+# - Per-platform launchApp permission values (#128).
+# - The editor is a Paper Dialog titled "Waypoint N"; the note input is
+#   labelled "Note"; save is "Done" (there is no "Save" button).
+# - A waypoint needs a GPS fix: if none is ingested yet, "Add waypoint" shows
+#   the "Waiting for a GPS fix…" snackbar instead of the editor — the retry
+#   blocks simply try again.
+# - The note is a single token: iOS autocorrect rewrites multi-word input.
+# - Typing waits for the dialog animation to settle: the iOS driver scrambles
+#   characters typed mid-animation.
+# - hideKeyboard is Android-only (the iOS driver has no dismiss action; the
+#   dialog is keyboard-shifted on iOS so Done stays reachable).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# Open the dial and drop the first waypoint. Retries absorb both the
+# cold-start tap race and the no-fix-yet snackbar path.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          text: 'Map actions'
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          visible: 'Add waypoint'
+          timeout: 10000
+      - tapOn: 'Add waypoint'
+      - extendedWaitUntil:
+          visible: 'Note'
+          timeout: 8000
+# Editor is up ("Waypoint N" — N grows across runs). Remember N, then type a
+# note and save.
+- copyTextFrom: 'Waypoint \d+'
+- evalScript: ${output.n1 = parseInt(maestro.copiedText.replace(/\D+/g, ''))}
+- tapOn: 'Note'
+- waitForAnimationToEnd:
+    timeout: 3000
+- inputText: 'Lookout42'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- tapOn: 'Done'
+- assertNotVisible: 'Done'
+# Drop a second waypoint: its title must be "Waypoint N+1", proving the first
+# one landed in the persisted store (the auto label is derived from it).
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          text: 'Map actions'
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          visible: 'Add waypoint'
+          timeout: 10000
+      - tapOn: 'Add waypoint'
+      - extendedWaitUntil:
+          visible: 'Note'
+          timeout: 8000
+- copyTextFrom: 'Waypoint \d+'
+- evalScript: ${output.n2 = parseInt(maestro.copiedText.replace(/\D+/g, ''))}
+- assertTrue: ${output.n2 === output.n1 + 1}
+# Tidy up: delete the empty second waypoint and confirm the map is back.
+- tapOn: 'Delete'
+- assertNotVisible: 'Delete'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- assertVisible: 'Map actions'

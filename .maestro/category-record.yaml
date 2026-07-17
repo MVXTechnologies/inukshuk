@@ -1,0 +1,119 @@
+# Category-first recording e2e (#136): start a recording, pick a NON-default
+# category (Run) in the start sheet, record real movement, stop, and verify a
+# NEW trail landed in the Library (count delta) with its category set (the
+# Set category dialog opens on it; library-filter.yaml then proves the Run
+# filter actually matches it).
+#
+# Portability notes:
+# - Per-platform launchApp permission values (#128).
+# - The category chips carry accessibilityLabel "Category <Name>[, selected]".
+# - The Start button's visible text is "Start" but its accessibilityLabel is
+#   "Start recording" — match the latter (unambiguous on both platforms).
+# - `travel` simulates ~250 m of movement so the 5 m point-spacing filter
+#   accepts fixes and the recording saves instead of being discarded.
+# - The save is asserted via the "Recorded trails (n)" header count delta,
+#   NOT the "Saved" snackbar: the snackbar lives 3.5 s, and on software-GL
+#   emulators a single Maestro hierarchy poll over the map view can take
+#   longer than that — the count is race-free and rerun-proof.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+# Wait for the map screen to fully mount (generously — cold starts on loaded
+# software-GL emulators can starve the first hierarchy fetches).
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# Baseline trail count (header reads "Recorded trails", "(n)" or "(n/m)").
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- copyTextFrom:
+    text: 'Recorded trails.*'
+- evalScript: ${output.before = parseInt((maestro.copiedText.match(/\((\d+)/) || ['','0'])[1])}
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# Open the dial (retried whole: on a starved emulator the tap can be dropped
+# or the dial can close again before the action list is sampled).
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          text: 'Map actions'
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          visible: 'Record track'
+          timeout: 10000
+- tapOn: 'Record track'
+- extendedWaitUntil:
+    visible: 'What are you recording?'
+    timeout: 10000
+# Pick Run (not the Hike default) so the category assert can't pass by luck.
+- tapOn: 'Category Run(, selected)?'
+- tapOn: 'Start recording'
+# Background-permission rationale card on first record: decline (inline card).
+# Skipped entirely when background location is already granted.
+- runFlow:
+    when:
+      visible: 'Not now'
+    commands:
+      - tapOn: 'Not now'
+- assertVisible: 'Stop recording'
+# ~250 m of simulated movement (4 fixes well past the 5 m spacing filter).
+- travel:
+    points:
+      - 46.8139,-71.2082
+      - 46.8145,-71.2075
+      - 46.8151,-71.2068
+      - 46.8158,-71.2060
+    speed: 25
+- assertVisible: 'Stop recording'
+- tapOn: 'Stop recording'
+# Recorder back to idle…
+- extendedWaitUntil:
+    notVisible: 'Stop recording'
+    timeout: 15000
+- assertVisible: 'Map actions'
+# …and the Library gained exactly one trail: movement was real, so a discard
+# here is a failure.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- copyTextFrom:
+    text: 'Recorded trails.*'
+- evalScript: ${output.after = parseInt((maestro.copiedText.match(/\((\d+)/) || ['','0'])[1])}
+- assertTrue: ${output.after === output.before + 1}
+# The newest trail is the top card; its Set category dialog lists Run —
+# tapping Run is idempotent (the start sheet already set it) and dismisses.
+- tapOn: 'More options'
+- extendedWaitUntil:
+    visible: 'Set category'
+    timeout: 8000
+- tapOn: 'Set category'
+- extendedWaitUntil:
+    visible: 'None'
+    timeout: 8000
+- assertVisible: 'Run'
+- tapOn: 'Run'
+- assertVisible: 'Recorded trails.*'

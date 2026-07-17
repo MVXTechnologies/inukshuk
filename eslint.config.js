@@ -47,6 +47,9 @@ module.exports = [
       'coverage/*',
       'android/*',
       'ios/*',
+      // Agent tooling can leave whole checkouts under .claude/worktrees —
+      // their copied sources must not be linted as part of this repo.
+      '.claude/*',
     ],
   },
 ];
