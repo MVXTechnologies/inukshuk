@@ -1,5 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
-import type { TrackPoint, TrackSummary } from '@core/models';
+import type { TrackPoint, TrackSummary, Waypoint } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import * as storage from '@data/storage';
 import {
@@ -17,7 +17,7 @@ import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -44,8 +44,10 @@ import { bundleCounts } from '@core/library/bundles';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
+import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
+import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
@@ -55,7 +57,11 @@ import { TrackFilterDialog } from './TrackFilterDialog';
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
-type DeleteTarget = { kind: 'map' | 'track' | 'bundle' | 'folder'; id: string; name: string };
+type DeleteTarget = {
+  kind: 'map' | 'track' | 'bundle' | 'folder' | 'waypoint';
+  id: string;
+  name: string;
+};
 
 const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: string) => string }> =
   {
@@ -75,6 +81,10 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
     folder: {
       title: 'Delete folder',
       body: (name) => `Delete folder "${name}"? Its items fall back to Ungrouped.`,
+    },
+    waypoint: {
+      title: 'Delete waypoint',
+      body: (name) => `Delete waypoint "${name}"? Its note and photo are permanently deleted.`,
     },
   };
 
@@ -104,8 +114,12 @@ export function LibraryScreen() {
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
   const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const customCategories = useLibraryStore((s) => s.customCategories);
+  const waypoints = useLibraryStore((s) => s.waypoints);
+  const updateWaypoint = useLibraryStore((s) => s.updateWaypoint);
+  const removeWaypoint = useLibraryStore((s) => s.removeWaypoint);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setInspectIntent = useMapStore((s) => s.setInspectIntent);
+  const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
   const stravaConnected = useStravaStore((s) => s.connection !== null);
 
   const [busy, setBusy] = useState(false);
@@ -118,7 +132,10 @@ export function LibraryScreen() {
   const [newBundleName, setNewBundleName] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
-  const [cardMenu, setCardMenu] = useState<{ kind: 'map' | 'track'; id: string } | null>(null);
+  const [cardMenu, setCardMenu] = useState<{
+    kind: 'map' | 'track' | 'waypoint';
+    id: string;
+  } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -192,6 +209,37 @@ export function LibraryScreen() {
     viewTrack(id);
   };
 
+  // Waypoint editor (same dialog + libraryStore semantics as tapping a pin on
+  // the map). The dialog stays live against the store row while editing, so a
+  // photo picked inside it shows up immediately.
+  const [editWpId, setEditWpId] = useState<string | null>(null);
+  const [wpDraft, setWpDraft] = useState('');
+  const editWaypoint =
+    editWpId === null ? null : (waypoints.find((w) => w.id === editWpId) ?? null);
+
+  const openWaypointEditor = (w: Waypoint) => {
+    setWpDraft(w.note ?? '');
+    setEditWpId(w.id);
+  };
+  const saveWaypoint = () => {
+    if (editWpId) updateWaypoint(editWpId, { note: wpDraft.trim() });
+    setEditWpId(null);
+  };
+  const deleteWaypointFromEditor = () => {
+    if (editWpId) removeWaypoint(editWpId);
+    setEditWpId(null);
+  };
+  const setWaypointPhoto = (uri: string) => {
+    if (editWpId) updateWaypoint(editWpId, { photoUri: uri });
+  };
+
+  // "Show on map": one-shot camera intent the Map tab consumes by flying to
+  // the pin (same pattern as viewTrack's focusBounds).
+  const showWaypointOnMap = (w: Waypoint) => {
+    setFocusWaypoint({ latitude: w.latitude, longitude: w.longitude });
+    router.navigate('/');
+  };
+
   const createBundle = () => {
     const name = newBundleName.trim();
     setNewBundleVisible(false);
@@ -219,6 +267,8 @@ export function LibraryScreen() {
     if (kind === 'map') removeMap(id);
     else if (kind === 'track') removeTrack(id);
     else if (kind === 'bundle') removeBundle(id);
+    else if (kind === 'waypoint')
+      removeWaypoint(id); // photo cleanup is the store's job
     else removeFolder(id);
   };
 
@@ -637,6 +687,80 @@ export function LibraryScreen() {
     );
   };
 
+  // ⋮ / long-press menu for a waypoint row: jump the map to the pin, or delete
+  // (through the same confirm flow as every other Library delete).
+  const waypointMenu = (w: Waypoint) => (
+    <Menu
+      visible={cardMenu?.kind === 'waypoint' && cardMenu.id === w.id}
+      onDismiss={() => setCardMenu(null)}
+      anchor={
+        <IconButton
+          icon="dots-vertical"
+          size={22}
+          onPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
+          accessibilityLabel="More options"
+        />
+      }
+    >
+      <Menu.Item
+        leadingIcon="map-marker-radius-outline"
+        title="Show on map"
+        onPress={() => {
+          setCardMenu(null);
+          showWaypointOnMap(w);
+        }}
+      />
+      <Divider />
+      <Menu.Item
+        leadingIcon="trash-can-outline"
+        title="Delete waypoint"
+        onPress={() => {
+          setCardMenu(null);
+          setConfirmDelete({ kind: 'waypoint', id: w.id, name: w.label });
+        }}
+      />
+    </Menu>
+  );
+
+  const renderWaypointCard = (w: Waypoint) => {
+    const preview = notePreview(w.note);
+    return (
+      <Card key={w.id} style={styles.trackCard} mode="contained">
+        <View style={styles.trackRow}>
+          <Pressable
+            style={styles.trackMain}
+            onPress={() => openWaypointEditor(w)}
+            onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
+            accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
+          >
+            <Icon source="map-marker" size={22} color={theme.colors.onSurfaceVariant} />
+            <View style={styles.mapTitleCol}>
+              <Text variant="titleSmall" numberOfLines={1}>
+                {w.label}
+              </Text>
+              {preview !== null && (
+                <Text
+                  variant="bodySmall"
+                  numberOfLines={1}
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  {preview}
+                </Text>
+              )}
+              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {formatTimestamp(w.createdAt)}
+              </Text>
+            </View>
+            {w.photoUri !== undefined && (
+              <Image source={{ uri: w.photoUri }} style={styles.waypointThumb} />
+            )}
+          </Pressable>
+          {waypointMenu(w)}
+        </View>
+      </Card>
+    );
+  };
+
   // Folder groups (cross-type: each folder shows its maps then its trails).
   const renderFolderGroups = () =>
     grouped.groups.map((g) => {
@@ -872,6 +996,21 @@ export function LibraryScreen() {
                 )}
               </List.Section>,
             ]}
+
+        {/* Standalone waypoints (map "+" speed-dial). Deliberately flat — they
+            stay out of folders for now — and hidden entirely while there are
+            none, so non-users of the feature never see an empty section. */}
+        {waypoints.length > 0 && (
+          <>
+            <Divider />
+            <List.Section>
+              {sectionHeader('waypoints', `Waypoints (${waypoints.length})`)}
+              {collapsed.waypoints
+                ? null
+                : sortWaypointsNewestFirst(waypoints).map(renderWaypointCard)}
+            </List.Section>
+          </>
+        )}
       </ScrollView>
 
       {/* The FAB sits in normal flow inside an absolutely-positioned wrapper.
@@ -984,6 +1123,17 @@ export function LibraryScreen() {
       {/* "Set category" for an existing trail (⋮ menu → Set category). */}
       <SetCategoryDialog trackId={categoryTarget} onDismiss={() => setCategoryTarget(null)} />
 
+      {/* Waypoint note + photo editor (row tap) — the same dialog the map's
+          pins open, dispatching to the same libraryStore actions. */}
+      <WaypointEditorDialog
+        waypoint={editWaypoint}
+        draft={wpDraft}
+        onChangeDraft={setWpDraft}
+        onSave={saveWaypoint}
+        onDelete={deleteWaypointFromEditor}
+        onSetPhoto={setWaypointPhoto}
+      />
+
       {/* Trail filter panel (appbar filter icon). Stays mounted so its draft
           inputs survive close/reopen and keep matching the active filter. */}
       <TrackFilterDialog
@@ -1025,6 +1175,7 @@ const styles = StyleSheet.create({
   trackTitleColSelecting: { paddingLeft: 10 },
   mapTitleCol: { flex: 1, paddingVertical: 8, paddingLeft: 10, paddingRight: 8 },
   trackStatsCol: { alignItems: 'flex-end', paddingRight: 2 },
+  waypointThumb: { width: 44, height: 44, borderRadius: 8, marginRight: 4 },
   fabWrap: { position: 'absolute', right: 16 },
   fab: { borderRadius: 28 },
   filterBadge: { position: 'absolute', top: 4, right: 4 },

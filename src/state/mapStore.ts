@@ -31,6 +31,12 @@ interface MapState {
    * where the inspection state lives.
    */
   inspectIntent: { trackId: string; trim: boolean } | null;
+  /**
+   * One-shot request (from the Library's "Show on map") for the map to fly the
+   * camera to a waypoint's position. Consumed and cleared by the map's camera
+   * controls, like {@link focusBounds}.
+   */
+  focusWaypoint: { latitude: number; longitude: number } | null;
   setFollowUser: (follow: boolean) => void;
   togglePdfOverlay: () => void;
   toggleTrackOverlays: () => void;
@@ -38,6 +44,7 @@ interface MapState {
   setBasemap: (b: MapBasemap) => void;
   setFocusBounds: (b: BoundingBox | null) => void;
   setInspectIntent: (intent: { trackId: string; trim: boolean } | null) => void;
+  setFocusWaypoint: (target: { latitude: number; longitude: number } | null) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -48,8 +55,10 @@ export const useMapStore = create<MapState>((set) => ({
   basemap: 'map',
   focusBounds: null,
   inspectIntent: null,
+  focusWaypoint: null,
   setFocusBounds: (b) => set({ focusBounds: b }),
   setInspectIntent: (intent) => set({ inspectIntent: intent }),
+  setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),
   togglePdfOverlay: () => set((s) => ({ showPdfOverlay: !s.showPdfOverlay })),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
