@@ -12,9 +12,18 @@
  * user saw in the thumb. Going through the shared tile cache also makes the
  * preview work offline once the tile has been seen, and respects offline-only
  * mode (a cache miss falls back to the placeholder instead of fetching).
+ *
+ * The 'map' preview does NOT fetch raw tile.openstreetmap.org: OSM's CDN now
+ * serves the "Access blocked" policy tile (as an HTTP **200** PNG) to app
+ * User-Agents — including our own identifying UA — which is exactly what the
+ * first iOS run rendered (#129). Like the 3D drape (see dem.ts), the preview
+ * uses Esri's permissive World Street Map instead. Downloaded bytes are also
+ * validated (`isValidTileBytes`) so a policy/error tile can neither render nor
+ * stay poisoning the cache.
  */
 
 import { basemapTileUrl } from './mapStyle';
+import { isValidTileBytes } from '@core/geo/tileImage';
 import { centerTileForRegion } from '@core/geo/tiles';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
@@ -41,13 +50,23 @@ interface PreviewTile {
   cacheName: string;
 }
 
+// Street-map preview tiles come from Esri World Street Map (`{z}/{y}/{x}`
+// order), the same key-free service the 3D drape uses — raw OSM blocks app
+// UAs with a policy tile (#129). The cache name is keyed to the source, so
+// any `preview-map-*` entries poisoned by the old OSM fetch are never reused.
+const STREET_PREVIEW_TEMPLATE =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+
 function previewTile(bbox: BoundingBox, basemap: Basemap, tileUrl: string): PreviewTile | null {
-  const template = basemapTileUrl(basemap, tileUrl);
+  const template = basemap === 'map' ? STREET_PREVIEW_TEMPLATE : basemapTileUrl(basemap, tileUrl);
   if (!template) return null;
   const { x, y, z } = centerTileForRegion(bbox);
   return {
     url: template.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)),
-    cacheName: `preview-${basemap}-${z}-${x}-${y}.png`,
+    cacheName:
+      basemap === 'map'
+        ? `preview-mapstreet-${z}-${x}-${y}.png`
+        : `preview-${basemap}-${z}-${x}-${y}.png`,
   };
 }
 
@@ -72,7 +91,12 @@ export function RegionPreviewThumb({ bbox, basemap, tileUrl, size }: Props): Rea
     let cancelled = false;
     (async () => {
       try {
-        const localUri = await storage.downloadToCacheUri(url, cacheName, UA_HEADERS);
+        const localUri = await storage.downloadToCacheUri(
+          url,
+          cacheName,
+          UA_HEADERS,
+          isValidTileBytes,
+        );
         if (!cancelled) setLoaded({ url, localUri });
       } catch {
         // Fetch failed (offline-only cache miss, network error, server block):

@@ -586,7 +586,13 @@ export function MapScreen() {
         showFitControl={overlays.length > 0}
         onFit={fitActiveMap}
         terrain3d={terrain3d}
-        onDownload={beginRegionSelect}
+        // Close any open trail inspector first: the download sheet renders
+        // below the inspector panel in this tree, so starting a download with
+        // the inspector open left the sheet's controls buried under it (#131).
+        onDownload={() => {
+          inspect(null);
+          beginRegionSelect();
+        }}
         downloadDisabled={downloadProgress !== null || status !== 'idle'}
         pdfOverlayCount={overlays.length}
         trackOverlayCount={trackOverlays.length}
@@ -664,8 +670,12 @@ export function MapScreen() {
 
       {/* "+" speed-dial: the recording entry point (and home for future map
           actions). Hidden while a recording is under way (the active controls
-          take over) and while selecting an offline region. */}
-      {status === 'idle' && !selecting && <MapActionsFab onRecord={startRecording} />}
+          take over), while selecting an offline region, and while the trail
+          inspector is open — its trim actions sit exactly where the FAB
+          renders, which left the Overwrite button half-covered (#131). */}
+      {status === 'idle' && !selecting && inspectId === null && (
+        <MapActionsFab onRecord={startRecording} />
+      )}
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
