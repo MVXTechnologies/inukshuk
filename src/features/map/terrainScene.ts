@@ -1,7 +1,14 @@
 import { sampleGridBilinear } from '@core/geo/terrain';
+import {
+  bakeHillshadeIntoRgba,
+  hillshadeFactor,
+  multidirHillshade,
+  slopeDegrees,
+} from '@core/geo/terrainAnalysis';
 import type { TrackPoint } from '@core/models';
 import * as THREE from 'three';
 import type { Heightmap } from './dem';
+import { createTerrainMaterial, type TerrainOverlayHandle } from './terrain3d/terrainMaterial';
 
 /** Hypsometric tint: low green → tan → brown → snow, by normalised elevation. */
 function elevationColor(t: number, out: THREE.Color): void {
@@ -17,6 +24,21 @@ function elevationColor(t: number, out: THREE.Color): void {
   const a = stops[i]!;
   const b = stops[i + 1]!;
   out.setRGB(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f);
+}
+
+/**
+ * Perimeter walk of a `grid`×`grid` vertex lattice as row-major indices: north
+ * row west→east, east column north→south, south row east→west, west column
+ * south→north (a closed loop; the last index connects back to the first).
+ * This orientation makes the skirt quads face outward.
+ */
+export function borderLoopIndices(grid: number): number[] {
+  const idx: number[] = [];
+  for (let gx = 0; gx < grid; gx++) idx.push(gx); // north row (gy = 0)
+  for (let gy = 1; gy < grid; gy++) idx.push(gy * grid + (grid - 1)); // east column
+  for (let gx = grid - 2; gx >= 0; gx--) idx.push((grid - 1) * grid + gx); // south row
+  for (let gy = grid - 2; gy >= 1; gy--) idx.push(gy * grid); // west column
+  return idx;
 }
 
 /** A point on the ground plane, in normalised scene units. */
@@ -63,6 +85,12 @@ export interface TerrainBuild {
    * degenerate paths (fewer than 2 distinct points).
    */
   drapeLine: (path: readonly GroundPoint[], opts: DrapeLineOptions) => THREE.Mesh | null;
+  /**
+   * Live handle on the injected overlay uniforms (slope/contours/hypso), or
+   * null when the overlay shader was not injected (unsupported device or
+   * fallback after a compile failure). See terrain3d/terrainMaterial.ts.
+   */
+  overlay: TerrainOverlayHandle | null;
 }
 
 export interface DrapeLineOptions {
@@ -205,15 +233,86 @@ export function buildDrapedLineMesh(
 }
 
 /**
+ * Skirt geometry for a terrain mesh: every border vertex is duplicated at a
+ * constant `bottomY` (below the lowest terrain point) and side quads connect
+ * the two rings, facing outward. Colour/uv/overlay attributes are copied from
+ * the edge vertices so the walls continue the surface's look.
+ */
+export function buildSkirtGeometry(
+  terrain: THREE.BufferGeometry,
+  grid: number,
+  drop: number,
+): THREE.BufferGeometry {
+  const pos = terrain.getAttribute('position');
+  const col = terrain.getAttribute('color');
+  const uv = terrain.getAttribute('uv');
+  const elev = terrain.getAttribute('aElevM');
+  const slope = terrain.getAttribute('aSlopeDeg');
+  const loop = borderLoopIndices(grid);
+  const n = loop.length;
+  const bottomY = -drop; // terrain min sits at y = 0
+  const positions = new Float32Array(n * 2 * 3);
+  const colors = new Float32Array(n * 2 * 3);
+  const uvs = new Float32Array(n * 2 * 2);
+  const elevs = new Float32Array(n * 2);
+  const slopes = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const src = loop[i]!;
+    for (const [row, y] of [
+      [i, pos.getY(src)],
+      [i + n, bottomY],
+    ] as const) {
+      positions[row * 3] = pos.getX(src);
+      positions[row * 3 + 1] = y;
+      positions[row * 3 + 2] = pos.getZ(src);
+      colors[row * 3] = col.getX(src);
+      colors[row * 3 + 1] = col.getY(src);
+      colors[row * 3 + 2] = col.getZ(src);
+      uvs[row * 2] = uv.getX(src);
+      uvs[row * 2 + 1] = uv.getY(src);
+      elevs[row] = elev.getX(src);
+      slopes[row] = slope.getX(src);
+    }
+  }
+  const indices: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    // Outward-facing winding for the loop orientation of borderLoopIndices.
+    indices.push(i, j, i + n, j, j + n, i + n);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geo.setAttribute('aElevM', new THREE.BufferAttribute(elevs, 1));
+  geo.setAttribute('aSlopeDeg', new THREE.BufferAttribute(slopes, 1));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export interface BuildTerrainOptions {
+  /**
+   * Inject the analytical-overlay shader (slope bands, contours, hypso tints)
+   * into the terrain material. Default true; screens pass false on devices
+   * without derivative support or after a shader compile failure.
+   */
+  injectOverlays?: boolean;
+}
+
+/**
  * Build a real 3D terrain mesh (displaced, lit) from a DEM heightmap, with the
  * GPX trace draped on the surface as a flat line. Coloured by an optional draped
- * texture, else a hypsometric tint. Normalised so its larger side spans 2 units.
+ * texture, else a hypsometric tint — either way with a multidirectional
+ * hillshade baked in (FATMAP-style relief) — plus a border skirt so the slab
+ * never shows its underside. Normalised so its larger side spans 2 units.
  */
 export function buildTerrain(
   hm: Heightmap,
   points: readonly TrackPoint[],
   texture?: TerrainTexture,
   maxAnisotropy = 1,
+  opts: BuildTerrainOptions = {},
 ): TerrainBuild {
   const { data, grid, bbox, minH, maxH } = hm;
   const midLat = (bbox.minLat + bbox.maxLat) / 2;
@@ -256,6 +355,14 @@ export function buildTerrain(
     };
   };
 
+  // Metre-space analysis grids (NOT from the exaggerated mesh — vExag would
+  // corrupt slope by atan(vExag·tanθ)): per-vertex slope for the shader's
+  // slope-band overlay, and a multidirectional hillshade baked into the colours.
+  const cellXm = spanXm / (grid - 1 || 1);
+  const cellZm = spanZm / (grid - 1 || 1);
+  const slopeDeg = slopeDegrees(data, grid, cellXm, cellZm);
+  const hillshade = multidirHillshade(data, grid, cellXm, cellZm);
+
   const positions = new Float32Array(grid * grid * 3);
   const colors = new Float32Array(grid * grid * 3);
   const uvs = new Float32Array(grid * grid * 2);
@@ -270,9 +377,12 @@ export function buildTerrain(
       uvs[idx * 2] = gx / (grid - 1);
       uvs[idx * 2 + 1] = gy / (grid - 1);
       elevationColor((h - minH) / range, color);
-      colors[idx * 3] = color.r;
-      colors[idx * 3 + 1] = color.g;
-      colors[idx * 3 + 2] = color.b;
+      // Bake the hillshade into the hypsometric tint (the drape texture gets
+      // the same treatment below) so relief reads even without a drape.
+      const shade = Math.min(1, hillshadeFactor(hillshade[idx]!));
+      colors[idx * 3] = color.r * shade;
+      colors[idx * 3 + 1] = color.g * shade;
+      colors[idx * 3 + 2] = color.b * shade;
     }
   }
   const indices: number[] = [];
@@ -289,17 +399,20 @@ export function buildTerrain(
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  // Per-vertex metre-space elevation + slope for the overlay shader (aElevM is
+  // the raw heightmap — never reconstructed from the exaggerated mesh y).
+  geo.setAttribute('aElevM', new THREE.BufferAttribute(new Float32Array(data), 1));
+  geo.setAttribute('aSlopeDeg', new THREE.BufferAttribute(slopeDeg, 1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
-  let material: THREE.MeshStandardMaterial;
+  let map: THREE.DataTexture | undefined;
   if (texture) {
-    const tex = new THREE.DataTexture(
-      new Uint8Array(texture.data),
-      texture.width,
-      texture.height,
-      THREE.RGBAFormat,
-    );
+    const pixels = new Uint8Array(texture.data);
+    // Bake the multidirectional hillshade into the drape on CPU — valleys read
+    // dark, ridges pop, and it's free at render time (the FATMAP look).
+    bakeHillshadeIntoRgba(pixels, texture.width, texture.height, hillshade, grid);
+    const tex = new THREE.DataTexture(pixels, texture.width, texture.height, THREE.RGBAFormat);
     // DataTexture defaults are point-sampled (NearestFilter), linear colour space
     // and anisotropy 1 — which makes the drape look blocky, washed-out and smeared
     // at the grazing angles a tilted terrain view is dominated by. Fix all three:
@@ -309,13 +422,24 @@ export function buildTerrain(
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = maxAnisotropy;
     tex.needsUpdate = true;
-    material = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
-  } else {
-    material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+    map = tex;
   }
+  const { material, overlay } = createTerrainMaterial({
+    map,
+    minH,
+    maxH,
+    inject: opts.injectOverlays !== false,
+  });
 
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geo, material));
+
+  // Border skirt: extrude the edge loop straight down so re-anchoring, low
+  // camera angles and slab edges never show the underside. Shares the terrain
+  // material (attributes are copied from the edge vertices, so the walls render
+  // as stretched edge texels and the overlays stay continuous).
+  const skirtDrop = Math.max(0.18, (yOf(maxH) - yOf(minH)) * 0.25);
+  group.add(new THREE.Mesh(buildSkirtGeometry(geo, grid, skirtDrop), material));
 
   // Densify draped lines down to the DEM cell size so they follow the surface.
   const cellSize = Math.max(spanXn, spanZn) / (grid - 1 || 1);
@@ -349,5 +473,6 @@ export function buildTerrain(
     unproject,
     heightAt,
     drapeLine,
+    overlay,
   };
 }

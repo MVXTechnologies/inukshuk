@@ -38,6 +38,16 @@ export interface Settings {
   units: Units;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
+  /** 3D terrain: CalTopo-style slope-angle shading overlay. */
+  terrainSlope: boolean;
+  /** 3D terrain: contour lines overlay. */
+  terrainContours: boolean;
+  /** 3D terrain: hypsometric elevation-tint bands overlay. */
+  terrainHypso: boolean;
+  /** 3D terrain: minor contour interval in metres; 0 = auto (span-based). */
+  terrainContourIntervalM: number;
+  /** Whether the one-time "slope shading is indicative" disclaimer was shown. */
+  slopeDisclaimerShown: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -50,6 +60,11 @@ const DEFAULTS: Settings = {
   offlineOnly: false,
   units: 'metric',
   errorReporting: true,
+  terrainSlope: false,
+  terrainContours: false,
+  terrainHypso: false,
+  terrainContourIntervalM: 0,
+  slopeDisclaimerShown: false,
 };
 
 interface SettingsState extends Settings {
@@ -75,6 +90,11 @@ function snapshot(s: SettingsState): Settings {
     offlineOnly,
     units,
     errorReporting,
+    terrainSlope,
+    terrainContours,
+    terrainHypso,
+    terrainContourIntervalM,
+    slopeDisclaimerShown,
   } = s;
   return {
     tileUrl,
@@ -86,6 +106,11 @@ function snapshot(s: SettingsState): Settings {
     offlineOnly,
     units,
     errorReporting,
+    terrainSlope,
+    terrainContours,
+    terrainHypso,
+    terrainContourIntervalM,
+    slopeDisclaimerShown,
   };
 }
 
