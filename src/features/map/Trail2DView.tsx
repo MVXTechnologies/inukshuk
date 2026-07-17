@@ -1,20 +1,33 @@
 import type { TrackNote, TrackPoint } from '@core/models';
-import { interpolateTrackAtDistance } from '@core/geo/track';
+import type { TrackPointAt } from '@core/geo/track';
+import { numberNotesOnTrack } from '@core/library/notes';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import { useSettingsStore } from '@state/settingsStore';
 import { useMapStore } from '@state/mapStore';
-import { Camera, type CameraRef, GeoJSONSource, Layer, Map } from '@maplibre/maplibre-react-native';
+import { mapColors } from '@ui/theme';
+import {
+  Camera,
+  type CameraRef,
+  GeoJSONSource,
+  Layer,
+  Map,
+  Marker,
+} from '@maplibre/maplibre-react-native';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
+import { NoteNumberBadge } from './components/NoteNumberBadge';
 
 export function Trail2DView({
   points,
   notes,
+  scrubAt,
 }: {
   points: readonly TrackPoint[];
   notes?: readonly TrackNote[];
+  /** Elevation-profile scrub position: draws a marker riding the 2D trace. */
+  scrubAt?: TrackPointAt | null;
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const basemap = useMapStore((s) => s.basemap);
@@ -35,20 +48,26 @@ export function Trail2DView({
     [lngLats],
   );
 
-  const notesFeature = useMemo(() => {
-    const feats = (notes ?? [])
-      .map((n) => {
-        const at = interpolateTrackAtDistance(points, n.distanceM);
-        if (!at) return null;
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [at.longitude, at.latitude] },
-          properties: { label: n.text },
-        };
-      })
-      .filter((f): f is NonNullable<typeof f> => f !== null);
-    return { type: 'FeatureCollection' as const, features: feats };
-  }, [notes, points]);
+  // Notes numbered 1..N in trail order — the SAME numbering the notes list and
+  // the elevation-profile pins use (both go through orderNotes), so a pin on
+  // the map is trivially matched to its row in the list.
+  const numberedNotes = useMemo(() => numberNotesOnTrack(points, notes ?? []), [points, notes]);
+
+  // Scrub marker (see MapScreen's inspect-marker: same shape and colours).
+  const scrubFeature = useMemo(
+    () =>
+      scrubAt
+        ? {
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [scrubAt.longitude, scrubAt.latitude],
+            },
+            properties: {},
+          }
+        : null,
+    [scrubAt],
+  );
 
   const bbox = useMemo(() => (lngLats.length >= 1 ? bboxFromLngLats(lngLats) : null), [lngLats]);
 
@@ -84,18 +103,37 @@ export function Trail2DView({
           paint={{ 'line-color': '#E0312B', 'line-width': 2.6, 'line-opacity': 0.96 }}
         />
       </GeoJSONSource>
-      <GeoJSONSource id="trail-2d-notes" data={notesFeature}>
-        <Layer
-          id="trail-2d-notes-pin"
-          type="circle"
-          paint={{
-            'circle-radius': 6,
-            'circle-color': '#2D3740',
-            'circle-stroke-width': 2.5,
-            'circle-stroke-color': '#FFFFFF',
-          }}
-        />
-      </GeoJSONSource>
+
+      {/* Scrub marker: rides the trace as the elevation profile is scrubbed. */}
+      {scrubFeature && (
+        <GeoJSONSource id="trail-2d-scrub" data={scrubFeature}>
+          <Layer
+            id="trail-2d-scrub-dot"
+            type="circle"
+            paint={{
+              'circle-radius': 7,
+              'circle-color': mapColors.userLocation,
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff',
+            }}
+          />
+        </GeoJSONSource>
+      )}
+
+      {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
+          style declares no glyphs endpoint, so MapLibre text would not render.
+          Visual only — the notes list below the map is the interaction surface
+          (MapLibre's <Marker onPress> doesn't fire on Android anyway). */}
+      {numberedNotes.map((n) => (
+        <Marker
+          key={n.note.id}
+          id={`trail-2d-note-${n.note.id}`}
+          lngLat={[n.longitude, n.latitude]}
+          anchor="center"
+        >
+          <NoteNumberBadge num={n.num} />
+        </Marker>
+      ))}
     </Map>
   );
 }

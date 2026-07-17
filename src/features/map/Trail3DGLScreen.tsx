@@ -111,6 +111,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [draftPhoto, setDraftPhoto] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  // True while a finger is down on the map/terrain box. The whole screen lives
+  // in a ScrollView, which intercepts vertical drags before they reach the
+  // native MapLibre view — pans "sort of" worked, stuttering against the page
+  // scroll (the 3D GLView was immune only because its PanResponder claims the
+  // JS responder). Disabling the scroll for the duration of a touch inside the
+  // box gives the map the full gesture, matching how the main map feels.
+  const [mapGesturing, setMapGesturing] = useState(false);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(2500);
 
   const orbit = useRef({
@@ -421,8 +428,20 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   return (
     <View style={styles.fill}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-        <View style={[styles.glBox, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        scrollEnabled={!mapGesturing}
+      >
+        <View
+          style={[styles.glBox, { paddingTop: insets.top }]}
+          onTouchStart={() => setMapGesturing(true)}
+          onTouchEnd={(e) => {
+            if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
+          }}
+          onTouchCancel={(e) => {
+            if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
+          }}
+        >
           {trailViewMode === '3d' ? (
             <GLView style={styles.fill} onContextCreate={onContextCreate} {...pan.panHandlers} />
           ) : points && points.length > 0 ? (
@@ -430,7 +449,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
             // source created with empty data doesn't reliably pick up a later
             // update, which is why the trace previously appeared only after a
             // 2D/3D toggle forced a remount.
-            <Trail2DView points={points} notes={notes} />
+            <Trail2DView points={points} notes={notes} scrubAt={scrub} />
           ) : (
             <View style={styles.center} pointerEvents="none">
               <ActivityIndicator size="large" />
@@ -511,7 +530,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
                 </Text>
               ) : (
                 <Text variant="bodySmall" style={hintColor}>
-                  Drag the profile to move the marker on the terrain.
+                  Drag the profile to move the marker on the{' '}
+                  {trailViewMode === '3d' ? 'terrain' : 'map'}.
                 </Text>
               )}
             </View>
