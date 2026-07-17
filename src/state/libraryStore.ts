@@ -1,6 +1,7 @@
 import type { Bundle, Folder, MapDocument, Track, TrackNote, TrackSummary } from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { bundleMapActivePages, pruneBundles, toggleId } from '@core/library/bundles';
+import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
   migrateLibraryIndex,
@@ -58,6 +59,12 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   removeFolder: (id: string) => void;
   /** Move a map or trail into a folder, or out of any folder when `folderId` is null. */
   setItemFolder: (kind: 'map' | 'track', itemId: string, folderId: string | null) => void;
+  // Activity categories — built-ins live in @core/library/categories; only
+  // user-defined ones are stored (and persisted) here.
+  /** Create a custom category (name assumed pre-validated); returns its id. */
+  addCustomCategory: (name: string, color: string) => string;
+  /** Set (or clear, with null) a saved trail's activity category. */
+  setTrackCategory: (trackId: string, category: string | null) => void;
   activeMap: () => MapDocument | null;
 }
 
@@ -75,6 +82,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     folders: state.folders,
     activeMapId: state.activeMapId,
     activeTrackIds: state.activeTrackIds,
+    customCategories: state.customCategories,
   } satisfies LibraryIndex);
 }
 
@@ -89,6 +97,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   folders: [],
   activeMapId: null,
   activeTrackIds: [],
+  customCategories: [],
   hydrated: false,
 
   hydrate: () => {
@@ -181,6 +190,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         stats: track.stats,
         fileUri,
         ...(seeded ? { notes: seeded } : {}),
+        ...(track.category ? { category: track.category } : {}),
       };
       const next = { ...s, tracks: [summary, ...s.tracks] };
       persist(next);
@@ -414,6 +424,29 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               ...s,
               tracks: s.tracks.map((t) => (t.id === itemId ? { ...t, folderId: folder } : t)),
             };
+      persist(next);
+      return next;
+    }),
+
+  addCustomCategory: (name, color) => {
+    const id = storage.newId();
+    set((s) => {
+      const category: CustomCategory = { id, name: name.trim(), color, createdAt: Date.now() };
+      const next = { ...s, customCategories: [...s.customCategories, category] };
+      persist(next);
+      return next;
+    });
+    return id;
+  },
+
+  setTrackCategory: (trackId, category) =>
+    set((s) => {
+      const next = {
+        ...s,
+        tracks: s.tracks.map((t) =>
+          t.id === trackId ? { ...t, category: category ?? undefined } : t,
+        ),
+      };
       persist(next);
       return next;
     }),

@@ -1,5 +1,6 @@
 import type { TrackPoint } from '@core/models';
 import * as checkpoint from '@data/recorderCheckpoint';
+import { useLibraryStore } from './libraryStore';
 import {
   initRecorderRecovery,
   resetRecorderRecoveryForTests,
@@ -57,6 +58,7 @@ function simulateCrash() {
   useRecorderStore.setState({
     status: 'idle',
     name: '',
+    category: null,
     startedAt: null,
     pausedMs: 0,
     pausedAt: null,
@@ -359,5 +361,60 @@ describe('lastSavedTrackId (end-of-recording signal for the Strava prompt)', () 
     s.start('Empty');
     await useRecorderStore.getState().stop();
     expect(useRecorderStore.getState().lastSavedTrackId).toBeNull();
+  });
+});
+
+describe('activity category threading', () => {
+  it('start(name, category) carries the category through stop() into the saved track', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Categorized', 'trail-run');
+    expect(useRecorderStore.getState().category).toBe('trail-run');
+
+    useRecorderStore.getState().addPoint(pt({ time: 1_000_000 }));
+    const track = await useRecorderStore.getState().stop();
+    expect(track?.category).toBe('trail-run');
+    // The library summary carries it too (Library colors trails by category).
+    expect(useLibraryStore.getState().tracks.find((t) => t.id === track!.id)?.category).toBe(
+      'trail-run',
+    );
+    // The next session must not inherit it.
+    expect(useRecorderStore.getState().category).toBeNull();
+  });
+
+  it('a category-less start stays uncategorized (no category key on the track)', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Plain');
+    expect(useRecorderStore.getState().category).toBeNull();
+    useRecorderStore.getState().addPoint(pt({ time: 1_000_000 }));
+    const track = await useRecorderStore.getState().stop();
+    expect(track).not.toBeNull();
+    expect(track).not.toHaveProperty('category');
+  });
+
+  it('survives the checkpoint → crash → recovery round-trip', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Crashy ski', 'ski');
+    s.addPoint(pt({ time: 1_000_000 }));
+
+    simulateCrash();
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().category).toBe('ski');
+  });
+
+  it('recovers an OLD checkpoint (no category field) as uncategorized', async () => {
+    // Checkpoints written by builds that predate categories lack the field —
+    // recovery must stay compatible and simply restore uncategorized.
+    checkpoint.writeCheckpoint({
+      status: 'recording',
+      name: 'Legacy hike',
+      startedAt: 999_000,
+      pausedMs: 0,
+      points: [pt({ time: 1_000_000 })],
+      waypoints: [],
+    });
+    resetRecorderRecoveryForTests();
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().category).toBeNull();
+    expect(useRecorderStore.getState().name).toBe('Legacy hike');
   });
 });
