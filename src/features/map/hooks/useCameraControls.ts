@@ -26,6 +26,8 @@ export function useCameraControls({
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const focusBounds = useMapStore((s) => s.focusBounds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
+  const focusWaypoint = useMapStore((s) => s.focusWaypoint);
+  const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
 
   // Consume a one-shot "fit these bounds" request (e.g. "view trail" from the
   // Library) — fly to the trail instead of staying on the user's location.
@@ -39,6 +41,24 @@ export function useCameraControls({
     setFocusBounds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusBounds]);
+
+  // Consume a one-shot "show this waypoint" request (Library → ⋮ → Show on
+  // map): fly to the pin at the same comfortable width the locate button uses.
+  useEffect(() => {
+    if (!focusWaypoint) return;
+    setFollowUser(false);
+    cameraRef.current?.flyTo({
+      center: [focusWaypoint.longitude, focusWaypoint.latitude],
+      zoom: zoomForVisibleWidth(
+        LOCATE_VIEW_WIDTH_M,
+        focusWaypoint.latitude,
+        Dimensions.get('window').width,
+      ),
+      duration: 600,
+    });
+    setFocusWaypoint(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusWaypoint]);
 
   // Union bounds of all active overlays, for the "fit to page" control.
   const overlaysBbox = useMemo<BoundingBox | null>(() => {
