@@ -7,3 +7,4 @@ ios
 assets/pdfjs
 package-lock.json
 .superpowers
+.claude

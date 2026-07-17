@@ -1,0 +1,70 @@
+# Library filter e2e (#136): open the filter dialog from the Library appbar,
+# filter by category, watch the section-header count switch to the
+# "(visible/total)" form, hit the empty state, then Clear all back to normal.
+#
+# Runs AFTER category-record.yaml, which guarantees at least one trail with
+# category Run. Assertions are count-shape based (regexes), not exact counts,
+# so reruns on a device with leftover trails still pass:
+# - Run filter    -> at least one match:   "Recorded trails (n/m)", n >= 1
+# - Snowshoe      -> zero matches always (no flow ever records a Snowshoe):
+#                    "Recorded trails (0/m)" + the no-match empty state
+# - Clear all     -> plain "Recorded trails (m)" and the empty state is gone
+#
+# The filter chips carry accessibilityLabel "Filter category <Name>[, on]".
+# The appbar filter icon is accessibilityLabel "Filter trails" — the SAME
+# string as the dialog title, so post-tap waits key on dialog-only content
+# ("Category", "Apply") instead.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+# Wait for the map screen to fully mount before touching the tab bar — a tab
+# tap fired mid-cold-start can be dropped while the hierarchy is churning.
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: 'Filter trails'
+- extendedWaitUntil:
+    visible: 'Apply'
+    timeout: 8000
+- assertVisible: 'Category'
+# Filter to Run: category-record.yaml's trail must match.
+- tapOn: 'Filter category Run(, on)?'
+- tapOn: 'Apply'
+- assertVisible: 'Recorded trails \([1-9]\d*/\d+\)'
+# Swap the filter to Snowshoe: nothing ever records one -> empty state.
+- tapOn: 'Filter trails'
+- extendedWaitUntil:
+    visible: 'Apply'
+    timeout: 8000
+- tapOn: 'Filter category Run, on'
+- tapOn: 'Filter category Snowshoe(, on)?'
+- tapOn: 'Apply'
+- assertVisible: 'Recorded trails \(0/\d+\)'
+- assertVisible: 'No trails match the filters.*'
+# Clear all applies an empty filter immediately (without dismissing); Cancel
+# then just closes the dialog.
+- tapOn: 'Filter trails'
+- extendedWaitUntil:
+    visible: 'Apply'
+    timeout: 8000
+- tapOn: 'Clear all'
+- tapOn: 'Cancel'
+- assertNotVisible: 'No trails match the filters.*'
+- assertVisible: 'Recorded trails \(\d+\)'

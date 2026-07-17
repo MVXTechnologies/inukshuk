@@ -18,7 +18,12 @@ GEO_PID=$!
 trap 'kill $GEO_PID 2>/dev/null' EXIT
 
 RC=0
-for flow in .maestro/smoke.yaml .maestro/record.yaml; do
+# Order matters: category-record creates the saved (Run) trail that
+# library-filter and trail-view depend on; record.yaml runs last because its
+# save-vs-discard outcome is indeterminate.
+for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
+  .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/settings.yaml \
+  .maestro/record.yaml; do
   adb logcat -c || true
   if maestro test "$flow"; then
     echo "=== $flow PASS ==="

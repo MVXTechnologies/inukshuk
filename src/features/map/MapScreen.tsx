@@ -629,7 +629,7 @@ export function MapScreen() {
               lngLat={[w.longitude, w.latitude]}
               anchor="bottom"
             >
-              <WaypointMarkerPin hasPhoto={!!w.photoUri} />
+              <WaypointMarkerPin hasPhoto={!!w.photoUri} label={w.label} />
             </Marker>
           ))}
 

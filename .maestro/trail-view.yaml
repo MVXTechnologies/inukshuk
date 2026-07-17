@@ -1,0 +1,81 @@
+# Trail view e2e (#134/#137): open a saved trail from the Library, check the
+# 2D view, switch to 3D terrain, exercise the Slope/Contours/Tint overlay
+# toggles when the device's GL stack supports them, switch back to 2D, and
+# leave. The point is crash-detection: software-GL emulators render 3D slowly
+# (fine) but must not crash or black-screen (#134's shader-fallback path).
+#
+# Portability notes:
+# - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
+#   label is "<name> — open 3D view, long-press to select" (em dash).
+# - The 2D/3D SegmentedButtons match on visible text "2D"/"3D".
+# - Overlay toggles (Slope/Contours/Tint) render ONLY when the GL context
+#   supports the overlay shaders (overlaysAvailable) — on low-capability
+#   devices they are legitimately absent, so they're exercised conditionally.
+# - The back control is Paper's Appbar.BackAction (default a11y label "Back").
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+# Wait for the map screen to fully mount before touching the tab bar — a tab
+# tap fired mid-cold-start can be dropped while the hierarchy is churning.
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+- tapOn: '.* — open 3D view, long-press to select'
+# Trail screen chrome: the 2D/3D segmented control proves it mounted.
+- extendedWaitUntil:
+    visible: '3D'
+    timeout: 15000
+- assertVisible: '2D'
+# Make sure we start from 2D (the mode setting persists across runs).
+- tapOn: '2D'
+- assertVisible: 'Notes.*'
+# Switch to 3D. Terrain tiles + software GL: be generous.
+- tapOn: '3D'
+- extendedWaitUntil:
+    notVisible: 'Building 3D terrain.*'
+    timeout: 120000
+- assertNotVisible: 'Couldn.t load 3D terrain.*'
+# Basemap pills render in 3D — proves the GL surface is alive.
+- extendedWaitUntil:
+    visible: 'Relief'
+    timeout: 30000
+- assertVisible: 'Satellite'
+# Overlay toggles are conditional on shader support (#134 fallback): exercise
+# them when present, skip silently when the device can't compile them.
+- runFlow:
+    when:
+      visible: 'Slope'
+    commands:
+      - tapOn: 'Slope'
+      - tapOn: 'Contours'
+      # (The contour-interval button that appears with Contours is asserted on
+      # iOS only, implicitly: on software-GL Android a single hierarchy fetch
+      # can take minutes, so waiting for the sub-control here is pure flake.)
+      - tapOn: 'Tint'
+      # All three on and the app is still responsive; turn them back off so
+      # reruns start clean.
+      - tapOn: 'Tint'
+      - tapOn: 'Contours'
+      - tapOn: 'Slope'
+# Still responsive after GL work: flip back to 2D, then leave.
+- tapOn: '2D'
+- assertVisible: 'Notes.*'
+- tapOn: 'Back'
+- assertVisible: 'Recorded trails.*'

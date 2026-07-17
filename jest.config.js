@@ -2,6 +2,10 @@
 module.exports = {
   preset: 'jest-expo',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  // Agent tooling can leave whole checkouts under .claude/worktrees; without
+  // this, jest sweeps their copied tests into the run (doubling the suite and
+  // importing stale failures).
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/\\.claude/'],
   // Allow Jest to transpile the ESM-shipping RN / Expo / MapLibre packages.
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@maplibre/.*|nanoid|proj4|fast-xml-parser))',
