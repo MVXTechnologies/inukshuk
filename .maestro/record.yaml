@@ -1,0 +1,50 @@
+# Recording lifecycle e2e: start a recording, survive a backgrounding while
+# the location foreground service is live, then stop.
+#
+# This flow exists because of the vc44 (1.0.2) incident: a missing
+# RECEIVE_BOOT_COMPLETED manifest permission made expo-task-manager's
+# persisted-job scheduling THROW natively on any backgrounded fix delivery —
+# killing the process and then crash-looping every launch. The smoke flow
+# never tapped Record, so CI stayed green through an app-bricking bug. The
+# workflow script injects continuous `adb emu geo fix` updates while this
+# runs, so backgrounding here delivers real fixes through the FGS path.
+appId: com.inukshuk.app
+---
+- launchApp:
+    permissions:
+      location: allow
+- assertVisible: 'Map actions'
+# Open the speed-dial. The tap can race first-paint/map-load on cold CI
+# emulators (same class as the smoke flow's tab-tap race): retry until the
+# hierarchy changes, then wait for the dial's action to exist before tapping.
+- tapOn:
+    text: 'Map actions'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Record track'
+    timeout: 10000
+- tapOn: 'Record track'
+# The background-permission rationale card appears on first record (inline
+# card, not a Portal). Decline it: the Android FGS records fine without
+# "Allow all the time", and declining keeps the flow deterministic.
+- runFlow:
+    when:
+      visible: 'Not now'
+    commands:
+      - tapOn: 'Not now'
+# Recording HUD is up: the stop control proves status === 'recording'.
+- assertVisible: 'Stop recording'
+# Background the app with the recording (and its foreground service) live —
+# fixes keep arriving via the geo-fix loop. On a manifest missing
+# RECEIVE_BOOT_COMPLETED this is the exact moment the process dies.
+- pressKey: home
+- waitForAnimationToEnd:
+    timeout: 8000
+- launchApp:
+    stopApp: false
+# Still alive and still recording?
+- assertVisible: 'Stop recording'
+- tapOn: 'Stop recording'
+# Zero or few accepted fixes → discarded; real fixes → saved. Either way the
+# map screen must be interactive again.
+- assertVisible: 'Map actions'

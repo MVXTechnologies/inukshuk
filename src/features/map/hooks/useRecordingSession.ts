@@ -47,9 +47,14 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // One-shot crash recovery: if a previous session died mid-hike, restore its
   // checkpoint as a paused recording and tell the user.
   useEffect(() => {
-    void initRecorderRecovery().then((recovered) => {
-      if (recovered) showSnack('Recovered an interrupted recording — resume or stop to save');
-    });
+    initRecorderRecovery()
+      .then((recovered) => {
+        if (recovered) showSnack('Recovered an interrupted recording — resume or stop to save');
+      })
+      // A corrupt checkpoint must never take the app down at launch. On any
+      // failure the recovery layer discards the bad state (see
+      // initRecorderRecovery) and we start clean rather than crash-looping.
+      .catch(() => showSnack("Couldn't recover the previous recording — starting fresh"));
     // Mount-only: initRecorderRecovery is itself one-shot, and showSnack must
     // not retrigger recovery notices.
     // eslint-disable-next-line react-hooks/exhaustive-deps

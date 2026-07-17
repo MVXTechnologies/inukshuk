@@ -350,33 +350,49 @@ export async function initRecorderRecovery(): Promise<boolean> {
   // Never clobber a live session (e.g. recovery raced a fast manual start).
   if (useRecorderStore.getState().status !== 'idle') return false;
 
-  const cp = await checkpoint.readCheckpoint();
-  if (!cp || !Array.isArray(cp.points)) return false;
+  // A checkpoint/journal written by a crashed session can be malformed. Recovery
+  // runs at launch, so ANY throw here (corrupt JSON, unexpected shape, stats
+  // math on bad points) would reject into app startup — the app must never
+  // crash-loop over unrecoverable state. On failure, discard the bad
+  // checkpoint+journal and start clean.
+  try {
+    const cp = await checkpoint.readCheckpoint();
+    if (!cp || !Array.isArray(cp.points)) return false;
 
-  const journaled = await checkpoint.readBackgroundPoints();
-  const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
-  if (points.length === 0) return false;
+    const journaled = await checkpoint.readBackgroundPoints();
+    const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
+    if (points.length === 0) return false;
 
-  useRecorderStore.setState({
-    status: 'paused',
-    name: cp.name,
-    startedAt: cp.startedAt,
-    pausedMs: cp.pausedMs,
-    // Restored paused-at-now: the dead time between crash and relaunch never
-    // counts as elapsed, and resume() folds the wait correctly.
-    pausedAt: Date.now(),
-    points,
-    stats: computeTrackStats(points),
-    waypoints: cp.waypoints ?? [],
-    lastFixAt: points[points.length - 1]?.time ?? null,
-    lastAccuracyM: points[points.length - 1]?.accuracy ?? null,
-  });
-  // The journal is folded in — re-checkpoint the merged session so a second
-  // crash cannot lose the background points, then drop the journal.
-  const merged = checkpointOf(useRecorderStore.getState());
-  if (merged) checkpoint.writeCheckpoint(merged);
-  checkpoint.clearBackgroundPoints();
-  return true;
+    useRecorderStore.setState({
+      status: 'paused',
+      name: cp.name,
+      startedAt: cp.startedAt,
+      pausedMs: cp.pausedMs,
+      // Restored paused-at-now: the dead time between crash and relaunch never
+      // counts as elapsed, and resume() folds the wait correctly.
+      pausedAt: Date.now(),
+      points,
+      stats: computeTrackStats(points),
+      waypoints: cp.waypoints ?? [],
+      lastFixAt: points[points.length - 1]?.time ?? null,
+      lastAccuracyM: points[points.length - 1]?.accuracy ?? null,
+    });
+    // The journal is folded in — re-checkpoint the merged session so a second
+    // crash cannot lose the background points, then drop the journal.
+    const merged = checkpointOf(useRecorderStore.getState());
+    if (merged) checkpoint.writeCheckpoint(merged);
+    checkpoint.clearBackgroundPoints();
+    return true;
+  } catch (err) {
+    // Unrecoverable state: wipe it so the next launch is clean, and surface it.
+    try {
+      checkpoint.clearCheckpoint();
+      checkpoint.clearBackgroundPoints();
+    } catch {
+      /* best effort */
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  }
 }
 
 /** Reset the one-shot recovery latch. Exported for tests only. */

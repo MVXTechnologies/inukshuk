@@ -1,12 +1,31 @@
 #!/usr/bin/env bash
-# Runs the Maestro smoke flow, capturing full logcat on failure (uploaded as a
-# CI artifact). The 2026-07-14 investigation was blind without device logs:
-# the app rendered fine and the JS thread was alive, so only logcat showed the
-# invisible Portal overlay eating every touch.
+# Runs the Maestro flows, capturing full logcat on failure (uploaded as a CI
+# artifact). The 2026-07-14 investigation was blind without device logs, and
+# the 2026-07-16 vc44 crash-loop shipped because no flow ever tapped Record.
 set -u
-adb logcat -c || true
-if maestro test .maestro/smoke.yaml; then
-  exit 0
-fi
-adb logcat -d > logcat-failure.txt || true
-exit 1
+# Continuous GPS fixes so the recording flow exercises real location
+# deliveries — including through the foreground service while backgrounded,
+# the exact path that killed vc44 (missing RECEIVE_BOOT_COMPLETED).
+(
+  while true; do
+    adb emu geo fix -71.2082 46.8139 >/dev/null 2>&1 || true
+    sleep 2
+    adb emu geo fix -71.2075 46.8145 >/dev/null 2>&1 || true
+    sleep 2
+  done
+) &
+GEO_PID=$!
+trap 'kill $GEO_PID 2>/dev/null' EXIT
+
+RC=0
+for flow in .maestro/smoke.yaml .maestro/record.yaml; do
+  adb logcat -c || true
+  if maestro test "$flow"; then
+    echo "=== $flow PASS ==="
+  else
+    RC=1
+    echo "=== $flow FAIL ==="
+    adb logcat -d > "logcat-failure-$(basename "$flow" .yaml).txt" || true
+  fi
+done
+exit $RC

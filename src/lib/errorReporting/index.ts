@@ -187,7 +187,6 @@ function toMessageAndStack(error: unknown): { message: string; stack?: string } 
  * the one entry point the rest of the app should use.
  */
 export function reportError(error: unknown, context?: string, options?: CaptureOptions): void {
-  console.log(`[diag] reportError ctx=${context ?? '?'}: ${String(error).slice(0, 200)}`);
   try {
     if (!reportingEnabled()) return;
     const { message, stack } = toMessageAndStack(error);

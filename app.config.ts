@@ -76,7 +76,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // (requested in-app with a rationale, only when a recording starts) makes
     // tracking survive aggressive OEM battery management and process restarts.
     // Play's background-location review will require a declaration + demo video.
-    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION'],
+    //
+    // RECEIVE_BOOT_COMPLETED is REQUIRED by expo-task-manager: it schedules its
+    // location jobs with JobInfo.setPersisted(true), and Android throws (a
+    // native, uncatchable process death inside TaskBroadcastReceiver) for any
+    // backgrounded fix delivery if the permission is missing. Its absence in
+    // vc44 (1.0.2) crash-looped the app the moment a recording backgrounded —
+    // do not remove it while the background task exists. Neither the
+    // expo-location nor expo-task-manager config plugin adds it for us.
+    permissions: [
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+      'RECEIVE_BOOT_COMPLETED',
+    ],
     // Let users open a .gpx with Inukshuk from a file manager / browser. File
     // managers are inconsistent about GPX's MIME type, so match by MIME AND by
     // a `.*\\.gpx` path pattern for both content:// and file:// URIs.
