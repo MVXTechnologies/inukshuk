@@ -19,6 +19,22 @@ function elevationColor(t: number, out: THREE.Color): void {
   out.setRGB(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f);
 }
 
+/** A point on the ground plane, in normalised scene units. */
+export interface GroundPoint {
+  x: number;
+  z: number;
+}
+
+/** A ground point draped onto the terrain surface (y = surface height + lift). */
+export interface DrapedPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Terrain surface height (scene units, exaggeration applied) at a ground x/z. */
+export type HeightSampler = (x: number, z: number) => number;
+
 export interface TerrainBuild {
   group: THREE.Group;
   center: THREE.Vector3;
@@ -38,6 +54,21 @@ export interface TerrainBuild {
    * so the live view can re-anchor terrain around it.
    */
   unproject: (x: number, z: number) => { lng: number; lat: number };
+  /** Terrain surface height at a ground x/z (scene units, exaggerated). */
+  heightAt: HeightSampler;
+  /**
+   * Build a flat, terrain-hugging line mesh (a thin ribbon draped on the
+   * surface) for a path given in ground-plane scene coords. Densification and
+   * lift are matched to this terrain's DEM resolution. Returns null for
+   * degenerate paths (fewer than 2 distinct points).
+   */
+  drapeLine: (path: readonly GroundPoint[], opts: DrapeLineOptions) => THREE.Mesh | null;
+}
+
+export interface DrapeLineOptions {
+  color: number;
+  /** Half the ribbon width, in normalised scene units. */
+  halfWidth: number;
 }
 
 /** RGBA texture to drape over the terrain (e.g. stitched OSM tiles). */
@@ -47,9 +78,135 @@ export interface TerrainTexture {
   height: number;
 }
 
+/** Lift a draped line this far above the surface so it never z-fights it. */
+export const DRAPE_LIFT = 0.003;
+
+/**
+ * Drape a ground-plane polyline onto the terrain: densify long segments (so the
+ * line follows the surface's undulations *between* GPS fixes instead of cutting
+ * straight through ridges and hollows) and sample the terrain height at every
+ * point. Consecutive near-duplicate points are dropped so downstream tangent
+ * maths never sees a zero-length segment.
+ */
+export function drapePolyline(
+  path: readonly GroundPoint[],
+  heightAt: HeightSampler,
+  maxSegLen: number,
+  lift = DRAPE_LIFT,
+): DrapedPoint[] {
+  const eps = Math.max(maxSegLen * 1e-3, 1e-9);
+  const out: DrapedPoint[] = [];
+  const push = (x: number, z: number) => {
+    const last = out[out.length - 1];
+    if (last && Math.hypot(x - last.x, z - last.z) < eps) return;
+    out.push({ x, y: heightAt(x, z) + lift, z });
+  };
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i]!;
+    const prev = i > 0 ? path[i - 1]! : null;
+    if (prev) {
+      const len = Math.hypot(p.x - prev.x, p.z - prev.z);
+      const steps = Math.min(64, Math.ceil(len / Math.max(maxSegLen, 1e-9)));
+      for (let s = 1; s < steps; s++) {
+        const f = s / steps;
+        push(prev.x + (p.x - prev.x) * f, prev.z + (p.z - prev.z) * f);
+      }
+    }
+    push(p.x, p.z);
+  }
+  return out;
+}
+
+/**
+ * Triangle-strip data for a flat ribbon laid on the terrain: each draped point
+ * is extruded sideways along the *horizontal* perpendicular of the path
+ * direction, and both edge vertices are re-sampled onto the surface — so the
+ * ribbon lies flat on the local slope (oriented to the ground, never to the
+ * camera) and reads as a 2D line painted on the map.
+ */
+export function ribbonGeometryData(
+  draped: readonly DrapedPoint[],
+  halfWidth: number,
+  heightAt: HeightSampler,
+  lift = DRAPE_LIFT,
+): { positions: Float32Array; indices: number[] } | null {
+  const n = draped.length;
+  if (n < 2) return null;
+  const positions = new Float32Array(n * 2 * 3);
+  let tx = 1;
+  let tz = 0;
+  for (let i = 0; i < n; i++) {
+    const prev = draped[Math.max(0, i - 1)]!;
+    const next = draped[Math.min(n - 1, i + 1)]!;
+    const dx = next.x - prev.x;
+    const dz = next.z - prev.z;
+    const len = Math.hypot(dx, dz);
+    if (len > 1e-12) {
+      tx = dx / len;
+      tz = dz / len;
+    } // else: keep the previous tangent
+    const px = -tz * halfWidth;
+    const pz = tx * halfWidth;
+    const p = draped[i]!;
+    const lx = p.x - px;
+    const lz = p.z - pz;
+    const rx = p.x + px;
+    const rz = p.z + pz;
+    positions[i * 6] = lx;
+    positions[i * 6 + 1] = heightAt(lx, lz) + lift;
+    positions[i * 6 + 2] = lz;
+    positions[i * 6 + 3] = rx;
+    positions[i * 6 + 4] = heightAt(rx, rz) + lift;
+    positions[i * 6 + 5] = rz;
+  }
+  const indices: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2;
+    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+  return { positions, indices };
+}
+
+/**
+ * Scale factor for a world-anchored marker: shrinks proportionally as the
+ * camera closes in (so the marker never balloons to fill the screen) and clamps
+ * at 1 so it keeps its designed world size from further away.
+ */
+export function markerScaleForDistance(dist: number, refDist = 1.6, minScale = 0.35): number {
+  if (!Number.isFinite(dist) || dist <= 0) return minScale;
+  return Math.min(1, Math.max(minScale, dist / refDist));
+}
+
+/**
+ * Build the THREE mesh for a draped line: an unlit (flat-shaded, "painted on
+ * the map") ribbon hugging the terrain, with a polygon offset on top of the
+ * small lift so it never z-fights the surface at grazing angles.
+ */
+export function buildDrapedLineMesh(
+  path: readonly GroundPoint[],
+  heightAt: HeightSampler,
+  maxSegLen: number,
+  opts: DrapeLineOptions,
+): THREE.Mesh | null {
+  const draped = drapePolyline(path, heightAt, maxSegLen);
+  const data = ribbonGeometryData(draped, opts.halfWidth, heightAt);
+  if (!data) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+  geo.setIndex(data.indices);
+  const material = new THREE.MeshBasicMaterial({
+    color: opts.color,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  return new THREE.Mesh(geo, material);
+}
+
 /**
  * Build a real 3D terrain mesh (displaced, lit) from a DEM heightmap, with the
- * GPX trace draped on the surface as a tube. Coloured by an optional draped
+ * GPX trace draped on the surface as a flat line. Coloured by an optional draped
  * texture, else a hypsometric tint. Normalised so its larger side spans 2 units.
  */
 export function buildTerrain(
@@ -77,6 +234,18 @@ export function buildTerrain(
     const h = sampleGridBilinear(data, grid, grid, fx, fyN);
     return new THREE.Vector3((fx - 0.5) * spanXn, yOf(h) + 0.02, (fyN - 0.5) * spanZn);
   };
+
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const heightAt: HeightSampler = (x, z) =>
+    yOf(
+      sampleGridBilinear(
+        data,
+        grid,
+        grid,
+        clamp01(x / (spanXn || 1) + 0.5),
+        clamp01(z / (spanZn || 1) + 0.5),
+      ),
+    );
 
   const unproject = (x: number, z: number): { lng: number; lat: number } => {
     const fx = x / (spanXn || 1) + 0.5;
@@ -148,27 +317,23 @@ export function buildTerrain(
   const group = new THREE.Group();
   group.add(new THREE.Mesh(geo, material));
 
+  // Densify draped lines down to the DEM cell size so they follow the surface.
+  const cellSize = Math.max(spanXn, spanZn) / (grid - 1 || 1);
+  const drapeLine = (path: readonly GroundPoint[], opts: DrapeLineOptions) =>
+    buildDrapedLineMesh(path, heightAt, cellSize, opts);
+
   const slabRadius = Math.max(spanXn, spanZn) * 1.15;
   let trailRadius = slabRadius;
   if (points.length >= 2) {
     const surface = points.map((p) => project(p.longitude, p.latitude));
-    const segs = Math.min(1400, surface.length * 6);
-    // A single red route line, hugging the surface and a touch thicker than a
-    // hairline so it reads as a drawn track, not a thin floating wire. Shaded
-    // (MeshStandard) with red emissive so it stays clearly red in shadow too.
-    const curve = new THREE.CatmullRomCurve3(surface.map((v) => v.clone().setY(v.y + 0.0035)));
-    const tube = new THREE.TubeGeometry(curve, segs, 0.0046, 8, false);
-    group.add(
-      new THREE.Mesh(
-        tube,
-        new THREE.MeshStandardMaterial({
-          color: 0xe01b1b,
-          emissive: 0x6a0a0a,
-          emissiveIntensity: 0.6,
-          roughness: 0.5,
-        }),
-      ),
+    // The route is a flat red line draped on the terrain — a thin ribbon hugging
+    // the surface, unlit so it reads like a 2D line painted on the map rather
+    // than a 3D tube floating above it.
+    const line = drapeLine(
+      surface.map((v) => ({ x: v.x, z: v.z })),
+      { color: 0xe01b1b, halfWidth: 0.0045 },
     );
+    if (line) group.add(line);
     // Half-extent of the trace on the ground plane, for camera framing.
     let r = 0;
     for (const p of surface) r = Math.max(r, Math.hypot(p.x, p.z));
@@ -182,5 +347,7 @@ export function buildTerrain(
     trailRadius,
     project,
     unproject,
+    heightAt,
+    drapeLine,
   };
 }

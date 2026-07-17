@@ -58,8 +58,10 @@ export function buildMarkerPin(opts: {
     new THREE.MeshStandardMaterial({ color: opts.headColor, emissive: opts.headEmissive }),
   );
   head.position.y = opts.height;
+  // Pole thickness follows the head so small pins stay proportionate.
+  const poleR = opts.headRadius * 0.2;
   const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.006, 0.006, opts.height, 8),
+    new THREE.CylinderGeometry(poleR, poleR, opts.height, 8),
     new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x444444 }),
   );
   pole.position.y = opts.height / 2;

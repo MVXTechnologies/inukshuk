@@ -1,5 +1,11 @@
 import type { Heightmap } from './dem';
-import { buildTerrain } from './terrainScene';
+import {
+  buildTerrain,
+  DRAPE_LIFT,
+  drapePolyline,
+  markerScaleForDistance,
+  ribbonGeometryData,
+} from './terrainScene';
 
 // A small, flat heightmap is enough to exercise the planar project/unproject
 // mapping (the x/z ↔ lng/lat transform is independent of elevation).
@@ -38,5 +44,177 @@ describe('buildTerrain project/unproject', () => {
     const v = project(midLng, midLat);
     expect(v.x).toBeCloseTo(0, 6);
     expect(v.z).toBeCloseTo(0, 6);
+  });
+
+  it('exposes a surface height sampler (flat terrain → constant height)', () => {
+    const { heightAt } = buildTerrain(flatHm(), []);
+    // minH === maxH === 120 → the normalised surface sits at y = 0 everywhere.
+    expect(heightAt(0, 0)).toBeCloseTo(0, 9);
+    expect(heightAt(0.4, -0.3)).toBeCloseTo(0, 9);
+    // Clamped outside the slab rather than exploding.
+    expect(heightAt(99, -99)).toBeCloseTo(0, 9);
+  });
+
+  it('drapeLine builds a flat ribbon mesh for a 2-point path', () => {
+    const { drapeLine } = buildTerrain(flatHm(), []);
+    const mesh = drapeLine(
+      [
+        { x: -0.5, z: 0 },
+        { x: 0.5, z: 0 },
+      ],
+      { color: 0xff0000, halfWidth: 0.005 },
+    );
+    expect(mesh).not.toBeNull();
+    const pos = mesh!.geometry.getAttribute('position');
+    // Densified down to the DEM cell size: many pairs of edge vertices, all
+    // hugging the (flat) surface at the small anti-z-fighting lift.
+    expect(pos.count).toBeGreaterThan(4);
+    for (let i = 0; i < pos.count; i++) expect(pos.getY(i)).toBeCloseTo(DRAPE_LIFT, 9);
+  });
+
+  it('drapeLine returns null for degenerate paths', () => {
+    const { drapeLine } = buildTerrain(flatHm(), []);
+    expect(drapeLine([], { color: 0xff0000, halfWidth: 0.005 })).toBeNull();
+    expect(
+      drapeLine(
+        [
+          { x: 0.1, z: 0.1 },
+          { x: 0.1, z: 0.1 },
+        ],
+        { color: 0xff0000, halfWidth: 0.005 },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('drapePolyline', () => {
+  const flat = () => 0;
+
+  it('samples terrain height (+lift) at every point', () => {
+    const slope = (x: number) => 2 * x;
+    const pts = drapePolyline(
+      [
+        { x: 0, z: 0 },
+        { x: 1, z: 0 },
+      ],
+      slope,
+      0.25,
+      0.01,
+    );
+    for (const p of pts) expect(p.y).toBeCloseTo(2 * p.x + 0.01, 9);
+  });
+
+  it('densifies long segments so the line can follow undulations', () => {
+    const pts = drapePolyline(
+      [
+        { x: 0, z: 0 },
+        { x: 1, z: 0 },
+      ],
+      flat,
+      0.25,
+    );
+    expect(pts.length).toBe(5); // 0, .25, .5, .75, 1
+    for (let i = 1; i < pts.length; i++) {
+      const seg = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.z - pts[i - 1]!.z);
+      expect(seg).toBeLessThanOrEqual(0.25 + 1e-9);
+    }
+    // Endpoints preserved.
+    expect(pts[0]).toMatchObject({ x: 0, z: 0 });
+    expect(pts[pts.length - 1]).toMatchObject({ x: 1, z: 0 });
+  });
+
+  it('keeps short segments as-is and drops consecutive duplicates', () => {
+    const pts = drapePolyline(
+      [
+        { x: 0, z: 0 },
+        { x: 0, z: 0 },
+        { x: 0.1, z: 0 },
+      ],
+      flat,
+      0.25,
+    );
+    expect(pts.map((p) => [p.x, p.z])).toEqual([
+      [0, 0],
+      [0.1, 0],
+    ]);
+  });
+});
+
+describe('ribbonGeometryData', () => {
+  const flat = () => 0;
+
+  it('returns null for fewer than 2 points', () => {
+    expect(ribbonGeometryData([], 0.01, flat)).toBeNull();
+    expect(ribbonGeometryData([{ x: 0, y: 0, z: 0 }], 0.01, flat)).toBeNull();
+  });
+
+  it('lays a flat strip perpendicular to the path, on the surface', () => {
+    const draped = drapePolyline(
+      [
+        { x: 0, z: 0 },
+        { x: 1, z: 0 },
+      ],
+      flat,
+      10,
+    );
+    const data = ribbonGeometryData(draped, 0.01, flat, 0.002)!;
+    // Two edge vertices per point, straddling the path along z (the horizontal
+    // perpendicular of a +x path), each re-draped onto the surface + lift.
+    expect(data.positions.length).toBe(draped.length * 6);
+    expect(data.indices.length).toBe((draped.length - 1) * 6);
+    for (let i = 0; i < draped.length; i++) {
+      const [lx, ly, lz] = [
+        data.positions[i * 6]!,
+        data.positions[i * 6 + 1]!,
+        data.positions[i * 6 + 2]!,
+      ];
+      const [rx, ry, rz] = [
+        data.positions[i * 6 + 3]!,
+        data.positions[i * 6 + 4]!,
+        data.positions[i * 6 + 5]!,
+      ];
+      expect(lx).toBeCloseTo(rx, 9); // no spread along the path
+      expect(Math.abs(rz - lz)).toBeCloseTo(0.02, 9); // full width across it
+      expect(ly).toBeCloseTo(0.002, 9);
+      expect(ry).toBeCloseTo(0.002, 9);
+    }
+  });
+
+  it('orients the ribbon to the ground, not the camera: edge heights track the slope', () => {
+    // Path along +x on terrain sloping in z: the two ribbon edges must sit at
+    // *different* heights (lying on the slope), which a camera-facing or
+    // vertical strip would not do.
+    const slopeZ = (_x: number, z: number) => 5 * z;
+    const draped = drapePolyline(
+      [
+        { x: 0, z: 0 },
+        { x: 1, z: 0 },
+      ],
+      slopeZ,
+      10,
+    );
+    const data = ribbonGeometryData(draped, 0.01, slopeZ, 0)!;
+    const lY = data.positions[1]!;
+    const lZ = data.positions[2]!;
+    const rY = data.positions[4]!;
+    const rZ = data.positions[5]!;
+    // Float32Array storage → ~7 significant digits of precision.
+    expect(lY).toBeCloseTo(5 * lZ, 6);
+    expect(rY).toBeCloseTo(5 * rZ, 6);
+    expect(lY).not.toBeCloseTo(rY, 6);
+  });
+});
+
+describe('markerScaleForDistance', () => {
+  it('clamps at 1 from the reference distance outwards', () => {
+    expect(markerScaleForDistance(1.6)).toBe(1);
+    expect(markerScaleForDistance(9)).toBe(1);
+  });
+
+  it('shrinks proportionally as the camera closes in, down to a floor', () => {
+    expect(markerScaleForDistance(0.8)).toBeCloseTo(0.5, 9);
+    expect(markerScaleForDistance(0.1)).toBeCloseTo(0.35, 9);
+    expect(markerScaleForDistance(0)).toBeCloseTo(0.35, 9);
+    expect(markerScaleForDistance(Number.NaN)).toBeCloseTo(0.35, 9);
   });
 });
