@@ -21,6 +21,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
+  Badge,
   Banner,
   Button,
   Card,
@@ -40,6 +41,8 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { bundleCounts } from '@core/library/bundles';
+import { findCategory } from '@core/library/categories';
+import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -47,6 +50,8 @@ import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
+import { SetCategoryDialog } from './SetCategoryDialog';
+import { TrackFilterDialog } from './TrackFilterDialog';
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
@@ -98,6 +103,7 @@ export function LibraryScreen() {
   const removeFolder = useLibraryStore((s) => s.removeFolder);
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
   const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
+  const customCategories = useLibraryStore((s) => s.customCategories);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setInspectIntent = useMapStore((s) => s.setInspectIntent);
   const stravaConnected = useStravaStore((s) => s.connection !== null);
@@ -123,8 +129,16 @@ export function LibraryScreen() {
   const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
   const [merging, setMerging] = useState(false);
   const selectionMode = selectedTrackIds.length > 0;
+  // "Set category" dialog target (opened from a trail's ⋮ menu).
+  const [categoryTarget, setCategoryTarget] = useState<string | null>(null);
+  // Trail filter (appbar filter icon). The criteria are built by the filter
+  // dialog; the pure predicate lives in @core/library/filterTracks.
+  const [filter, setFilter] = useState<TrackFilter>({});
+  const [filterOpen, setFilterOpen] = useState(false);
+  const activeFilterCount = countActiveFilters(filter);
+  const visibleTracks = filterTracks(tracks, filter);
 
-  const grouped = groupByFolder(folders, maps, tracks);
+  const grouped = groupByFolder(folders, maps, visibleTracks);
 
   const onImport = async () => {
     setBusy(true);
@@ -482,6 +496,14 @@ export function LibraryScreen() {
           if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
         }}
       />
+      <Menu.Item
+        leadingIcon="tag-outline"
+        title="Set category"
+        onPress={() => {
+          setCardMenu(null);
+          setCategoryTarget(t.id);
+        }}
+      />
       {folders.length > 0 && (
         <>
           <Divider />
@@ -532,11 +554,15 @@ export function LibraryScreen() {
   const renderTrackCard = (t: (typeof tracks)[number]) => {
     const s = t.stats;
     const selected = selectedTrackIds.includes(t.id);
+    // Activity category: colored left border + icon; uncategorized stays
+    // neutral (no border, no icon). Colors are theme-safe (see categories.ts).
+    const category = findCategory(t.category, customCategories);
     return (
       <Card
         key={t.id}
         style={[
           styles.trackCard,
+          category !== null && { borderLeftWidth: 4, borderLeftColor: category.color },
           selected && { borderWidth: 2, borderColor: theme.colors.primary },
         ]}
         mode="contained"
@@ -563,7 +589,15 @@ export function LibraryScreen() {
                 color={selected ? theme.colors.primary : theme.colors.onSurfaceVariant}
               />
             )}
-            <View style={[styles.trackTitleCol, selectionMode && styles.trackTitleColSelecting]}>
+            {!selectionMode && category !== null && (
+              <Icon source={category.icon} size={22} color={category.color} />
+            )}
+            <View
+              style={[
+                styles.trackTitleCol,
+                (selectionMode || category !== null) && styles.trackTitleColSelecting,
+              ]}
+            >
               <Text variant="titleSmall" numberOfLines={1}>
                 {t.name}
               </Text>
@@ -666,6 +700,21 @@ export function LibraryScreen() {
       ) : (
         <Appbar.Header>
           <Appbar.Content title="Library" />
+          {/* Trail filter: the badge counts active criteria (distance, date,
+              category, …) so a filtered-down list is never mistaken for a
+              small library. */}
+          <View>
+            <Appbar.Action
+              icon="filter-variant"
+              onPress={() => setFilterOpen(true)}
+              accessibilityLabel="Filter trails"
+            />
+            {activeFilterCount > 0 && (
+              <Badge size={16} style={styles.filterBadge}>
+                {activeFilterCount}
+              </Badge>
+            )}
+          </View>
           {/* Exporting the library lives in Settings → "Download your data"
               (maps included); a second entry point here only duplicated it. */}
           <Appbar.Action
@@ -800,15 +849,26 @@ export function LibraryScreen() {
               <List.Section key="trails">
                 {sectionHeader(
                   'trails',
-                  `Recorded trails${tracks.length ? ` (${tracks.length})` : ''}`,
+                  `Recorded trails${
+                    tracks.length
+                      ? activeFilterCount > 0
+                        ? ` (${visibleTracks.length}/${tracks.length})`
+                        : ` (${tracks.length})`
+                      : ''
+                  }`,
                 )}
                 {collapsed.trails ? null : tracks.length === 0 ? (
                   <List.Item
                     title="No trails yet"
                     description="Record one from the Map tab, or import a GPX file via the Import button"
                   />
+                ) : visibleTracks.length === 0 ? (
+                  <List.Item
+                    title="No trails match the filters"
+                    description="Adjust or clear the filters from the appbar's filter icon"
+                  />
                 ) : (
-                  tracks.map(renderTrackCard)
+                  visibleTracks.map(renderTrackCard)
                 )}
               </List.Section>,
             ]}
@@ -921,6 +981,17 @@ export function LibraryScreen() {
         </Dialog>
       </Portal>
 
+      {/* "Set category" for an existing trail (⋮ menu → Set category). */}
+      <SetCategoryDialog trackId={categoryTarget} onDismiss={() => setCategoryTarget(null)} />
+
+      {/* Trail filter panel (appbar filter icon). Stays mounted so its draft
+          inputs survive close/reopen and keep matching the active filter. */}
+      <TrackFilterDialog
+        visible={filterOpen}
+        onDismiss={() => setFilterOpen(false)}
+        onApply={setFilter}
+      />
+
       <Snackbar
         visible={snack !== null}
         onDismiss={dismissSnack}
@@ -956,4 +1027,5 @@ const styles = StyleSheet.create({
   trackStatsCol: { alignItems: 'flex-end', paddingRight: 2 },
   fabWrap: { position: 'absolute', right: 16 },
   fab: { borderRadius: 28 },
+  filterBadge: { position: 'absolute', top: 4, right: 4 },
 });

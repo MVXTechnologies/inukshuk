@@ -24,6 +24,7 @@ import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
+import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
@@ -297,6 +298,12 @@ export function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectTrack, inspectPoints, trimRange, updateTrack, showSnack]);
 
+  // "Record track" intercepts here: the category sheet opens first, and only
+  // its Start button actually begins the recording (owner ask: pick an
+  // activity category BEFORE recording starts).
+  const [pickingCategory, setPickingCategory] = useState(false);
+
+  // Tapping a live waypoint marker opens an editor for its note + photo.
   // Tapping a waypoint marker — a live recording pin or a saved standalone pin
   // — opens the shared editor for its note + photo. The edit target is tagged
   // with its source store so save/delete/photo dispatch to the right one.
@@ -737,9 +744,20 @@ export function MapScreen() {
           take over), while selecting an offline region, and while the trail
           inspector is open — its trim actions sit exactly where the FAB
           renders, which left the Overwrite button half-covered (#131). */}
-      {status === 'idle' && !selecting && inspectId === null && (
-        <MapActionsFab onRecord={startRecording} onAddWaypoint={onAddWaypoint} />
+      {status === 'idle' && !selecting && inspectId === null && !pickingCategory && (
+        <MapActionsFab onRecord={() => setPickingCategory(true)} onAddWaypoint={onAddWaypoint} />
       )}
+
+      {/* Category-first record start: sheet opens on "Record track"; Start
+          actually begins the recording with the chosen category. */}
+      <CategoryStartSheet
+        visible={pickingCategory && status === 'idle'}
+        onStart={(categoryId) => {
+          setPickingCategory(false);
+          startRecording(categoryId);
+        }}
+        onDismiss={() => setPickingCategory(false)}
+      />
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 

@@ -39,6 +39,12 @@ appId: com.inukshuk.app
     visible: 'Record track'
     timeout: 10000
 - tapOn: 'Record track'
+# Category-first recording: an inline sheet asks what activity this is BEFORE
+# the recording begins. Keep the default (Hike) and start.
+- extendedWaitUntil:
+    visible: 'Start recording'
+    timeout: 10000
+- tapOn: 'Start recording'
 # The background-permission rationale card appears on first record (inline
 # card, not a Portal). Decline it: the Android FGS records fine without
 # "Allow all the time", and declining keeps the flow deterministic.

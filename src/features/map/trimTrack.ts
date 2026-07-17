@@ -41,13 +41,17 @@ export async function saveTrimmedCopy(
   const id = storage.newId();
   const xml = buildGpx({ points: kept, metadata: { name }, waypoints });
   const fileUri = storage.writeTrackGpx(id, xml);
-  const track = buildImportedTrack({
-    id,
-    points: kept,
-    name,
-    fallbackName: name,
-    fallbackTime: Date.now(),
-  });
+  const track: Track = {
+    ...buildImportedTrack({
+      id,
+      points: kept,
+      name,
+      fallbackName: name,
+      fallbackTime: Date.now(),
+    }),
+    // The copy is the same activity as its source — keep its category.
+    ...(summary.category ? { category: summary.category } : {}),
+  };
   return { track, fileUri };
 }
 
