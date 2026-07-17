@@ -10,8 +10,29 @@ on the same app version; native changes require a new store build. See
 
 ## [Unreleased]
 
+### Added
+
+- **Scrubbing a trail's elevation profile now moves a marker along the 2D
+  trace.** The trail view's 2D map previously only moved the 3D terrain pin;
+  the 2D line showed nothing. The chart-x → distance → on-trail position
+  mapping is pure core logic (`core/geo/track/scrub.ts`), shared with the
+  main-map trail inspector, and the readout above the profile keeps showing
+  distance / elevation / speed at the scrubbed point. Tapping a note row also
+  jumps the marker to that note.
+- **Trail notes are numbered on the 2D map.** Note pins on the trail view's 2D
+  map now carry the note's number (1..N in trail order —
+  `core/library/notes.ts#numberNotesOnTrack`, the same ordering the notes list
+  and the profile pins use), so a pin on the map is trivially matched to its
+  row in the list. Same fixed badge colours in light and dark mode.
+
 ### Fixed
 
+- **Map gestures in the trail view no longer fight the page scroll.** The trail
+  view is one ScrollView, which intercepted vertical drags before they reached
+  the native MapLibre view, so panning the 2D map stuttered or scrolled the
+  page instead ("works on the main map, not in GPX focus mode"). While a finger
+  is down on the map/terrain box the scroll is disabled, giving the map the
+  whole gesture; the page still scrolls from anywhere below the map.
 - **The offline-download layer previews show the map again.** The little
   per-basemap thumbnails in "Download offline area" fetched their sample tile
   with a bare image request — no `User-Agent` — which OSM's tile usage policy

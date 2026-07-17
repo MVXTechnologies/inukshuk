@@ -18,6 +18,8 @@ export { withDemElevations, type DemGrid } from './demElevations';
 export type { ImportedNote } from './snapWaypoints';
 export { interpolateTrackAtDistance } from './interpolate';
 export type { TrackPointAt } from './interpolate';
+export { scrubProfileAtRatio } from './scrub';
+export type { ProfileScrub } from './scrub';
 
 const DEFAULT_ELEVATION_THRESHOLD_M = 3;
 const DEFAULT_MOVING_SPEED_THRESHOLD_MPS = 0.5;

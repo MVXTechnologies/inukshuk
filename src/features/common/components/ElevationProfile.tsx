@@ -1,6 +1,7 @@
 import {
   buildElevationProfile,
   interpolateTrackAtDistance,
+  scrubProfileAtRatio,
   type TrackPointAt,
 } from '@core/geo/track';
 import type { TrackPoint } from '@core/models';
@@ -124,7 +125,6 @@ export function ElevationProfile({
 
   const { samples, minElevationM, maxElevationM, totalDistanceM } = profile;
   const range = maxElevationM - minElevationM || 1;
-  const lastIdx = samples.length - 1;
 
   const pts =
     width > 0
@@ -163,15 +163,13 @@ export function ElevationProfile({
   // safe (scrub position is read from locationX, not from gesture-state deltas).
   const pan = useMemo(() => {
     const onTouch = (e: GestureResponderEvent) => {
-      if (width <= 0 || samples.length === 0) return;
-      const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / width));
-      const idx = Math.min(lastIdx, Math.max(0, Math.round(ratio * lastIdx)));
-      const s = samples[idx];
-      if (!s) return;
-      setScrub(idx);
-      const at = interpolateTrackAtDistance(points, s.distanceM);
-      setScrubAt(at);
-      onScrub?.(at);
+      if (width <= 0) return;
+      // Pure chart-x → distance → on-trail position mapping (core/geo/track).
+      const res = scrubProfileAtRatio(points, samples, e.nativeEvent.locationX / width);
+      if (!res) return;
+      setScrub(res.sampleIndex);
+      setScrubAt(res.at);
+      onScrub?.(res.at);
     };
     const endScrub = () => {
       setScrub(null);
@@ -190,7 +188,7 @@ export function ElevationProfile({
       onPanResponderRelease: endScrub,
       onPanResponderTerminate: endScrub,
     });
-  }, [width, lastIdx, samples, points, onScrub]);
+  }, [width, samples, points, onScrub]);
 
   // Guard every index read: `scrub` is an index into a PREVIOUS render's
   // samples; if `points` (and thus `samples`) shrinks before the next render,
