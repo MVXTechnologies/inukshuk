@@ -8,17 +8,22 @@ import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, IconButton, Text, useTheme } from 'react-native-paper';
 import * as THREE from 'three';
 import { fetchHeightmap } from './dem';
+import { rayGroundHit, zoomTowardPoint } from '@core/geo/terrainRay';
+import { createCameraDynamics, type FlyTargets } from './terrain3d/cameraDynamics';
 import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
 import {
   clamp,
   createTerrainPanResponder,
   groundPanDelta,
   positionCameraFromOrbit,
+  screenPointRay,
 } from './terrain3d/orbitGestures';
+import { TapQueryChip, queryMarkerOpacity, useTapQuery } from './terrain3d/queryChip';
 import {
   addSkyAndFog,
   addTerrainLights,
   buildMarkerPin,
+  buildQueryMarker,
   createTerrainCamera,
   createTerrainRenderer,
   fetchDrapeTexture,
@@ -38,6 +43,7 @@ import {
   buildTerrain,
   markerScaleForDistance,
   type GroundPoint,
+  type HeightSampler,
   type TerrainBuild,
 } from './terrainScene';
 
@@ -204,6 +210,16 @@ export function Terrain3DLiveView({
   }, [basemap]);
 
   const orbit = useRef({ theta: 0.6, phi: 1.05, radius: 4, center: new THREE.Vector3() });
+  // P2 interaction polish: inertia + fly-to springs, view size for tap/pinch
+  // picking, terrain samplers for zoom-anchoring, collision and tap-to-query.
+  const dyn = useMemo(() => createCameraDynamics(), []);
+  const viewSizeRef = useRef({ w: 0, h: 0 });
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const heightAtRef = useRef<HeightSampler | null>(null);
+  const queryAtRef = useRef<TerrainBuild['queryAt'] | null>(null);
+  const queryMarkerRef = useRef<ReturnType<typeof buildQueryMarker> | null>(null);
+  const queryElapsedMsRef = useRef<number | null>(null);
+  const { info: tapInfo, show: showTapInfo } = useTapQuery();
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
   const drapeLineRef = useRef<DrapeLine | null>(null);
   const unprojectRef = useRef<((x: number, z: number) => { lng: number; lat: number }) | null>(
@@ -302,6 +318,8 @@ export function Terrain3DLiveView({
         projectRef.current = built.project;
         drapeLineRef.current = built.drapeLine;
         unprojectRef.current = built.unproject;
+        heightAtRef.current = built.heightAt;
+        queryAtRef.current = built.queryAt;
         bboxRef.current = built.bbox;
         anchorRef.current = target;
         // Same basemap variant → same (already validated) overlay program; just
@@ -332,41 +350,91 @@ export function Terrain3DLiveView({
     rebuildOverlays(); // reads refs; a no-op until the scene exists
   }, [trails, recordPoints, waypoints]);
 
-  const pan = useMemo(
-    () =>
-      // Refs are read on touch events only, never during render.
-      // eslint-disable-next-line react-hooks/refs
-      createTerrainPanResponder({
-        orbit,
-        // Two fingers, the map-app standard: pinch to zoom (shared), *twist* to
-        // rotate the bearing, drag up/down to tilt. (Twist = the angle between
-        // the two fingers — far more intuitive than the old horizontal-centroid
-        // rotate.)
-        onTwoFinger: (curr, prev) => {
-          const o = orbit.current;
-          let dAng = curr.ang - prev.ang;
-          if (dAng > Math.PI) dAng -= 2 * Math.PI;
-          else if (dAng < -Math.PI) dAng += 2 * Math.PI;
-          o.theta -= dAng;
-          o.phi = clamp(o.phi - (curr.cy - prev.cy) * 0.005, 0.12, 1.25);
-        },
-        // One finger: drag to pan the look-at point across the ground, like
-        // dragging the 2D map. Translating into world space depends on the
-        // current azimuth so "up" is always away from the camera. Panning means
-        // free-look, so it drops follow mode (the camera stops chasing the user).
-        onSingle: (dxPx, dyPx) => {
-          if (followRef.current) {
-            followRef.current = false;
-            setFollow(false);
-          }
-          const o = orbit.current;
-          const { dx, dz } = groundPanDelta(o.theta, o.radius, dxPx, dyPx);
-          o.center.x += dx;
-          o.center.z += dz;
-        },
-      }),
-    [],
-  );
+  const pan = useMemo(() => {
+    // The ground point under a view-local screen position (tap / pinch
+    // centroid), ray-marched against the terrain heightfield.
+    const groundHitAt = (x: number, y: number) => {
+      const camera = cameraRef.current;
+      const heightAt = heightAtRef.current;
+      if (!camera || !heightAt) return null;
+      const { w, h } = viewSizeRef.current;
+      const ray = screenPointRay(camera, x, y, w, h);
+      return ray && rayGroundHit(ray.origin, ray.dir, heightAt);
+    };
+    // Refs are read on touch events only, never during render.
+    // eslint-disable-next-line react-hooks/refs
+    return createTerrainPanResponder({
+      orbit,
+      // Two fingers, the map-app standard: pinch to zoom (shared), *twist* to
+      // rotate the bearing, drag up/down to tilt. (Twist = the angle between
+      // the two fingers — far more intuitive than the old horizontal-centroid
+      // rotate.)
+      onTwoFinger: (curr, prev) => {
+        const o = orbit.current;
+        let dAng = curr.ang - prev.ang;
+        if (dAng > Math.PI) dAng -= 2 * Math.PI;
+        else if (dAng < -Math.PI) dAng += 2 * Math.PI;
+        o.theta -= dAng;
+        o.phi = clamp(o.phi - (curr.cy - prev.cy) * 0.005, 0.12, 1.25);
+      },
+      // One finger: drag to pan the look-at point across the ground, like
+      // dragging the 2D map. Translating into world space depends on the
+      // current azimuth so "up" is always away from the camera. Panning means
+      // free-look, so it drops follow mode (the camera stops chasing the user).
+      onSingle: (dxPx, dyPx) => {
+        if (followRef.current) {
+          followRef.current = false;
+          setFollow(false);
+        }
+        const o = orbit.current;
+        const { dx, dz } = groundPanDelta(o.theta, o.radius, dxPx, dyPx);
+        o.center.x += dx;
+        o.center.z += dz;
+      },
+      // A new touch always wins over coasting/flying camera motion.
+      onGestureStart: () => dyn.interrupt(),
+      // Release inertia: pan/twist keep gliding, decayed in onFrame.
+      onRelease: (vel) => dyn.launchMomentum(vel),
+      // Anchor the pinch-zoom on the ground under the fingers (free-look only —
+      // in follow mode the centre stays glued to the user).
+      onPinch: (scale, cx, cy) => {
+        if (followRef.current) return;
+        const hit = groundHitAt(cx, cy);
+        if (!hit) return;
+        const o = orbit.current;
+        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, scale);
+        o.center.x = c.x;
+        o.center.z = c.z;
+      },
+      // Tap-to-query: elevation + slope chip and a fading crosshair.
+      onTap: (x, y) => {
+        const hit = groundHitAt(x, y);
+        const query = queryAtRef.current;
+        if (!hit || !query) return;
+        showTapInfo(query(hit.x, hit.z));
+        const m = queryMarkerRef.current;
+        if (m) {
+          m.group.position.set(hit.x, hit.y + 0.004, hit.z);
+          m.setOpacity(1);
+          queryElapsedMsRef.current = 0;
+        }
+      },
+      // Double-tap: fly toward the tapped ground point (spring-eased zoom).
+      onDoubleTap: (x, y) => {
+        const o = orbit.current;
+        const s = 0.55;
+        if (followRef.current) {
+          // Stay centred on the user; just close in.
+          dyn.flyTo(o, { radius: clamp(o.radius * s, 0.7, 9) });
+          return;
+        }
+        const hit = groundHitAt(x, y);
+        if (!hit) return;
+        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, s);
+        dyn.flyTo(o, { radius: clamp(o.radius * s, 0.7, 9), centerX: c.x, centerZ: c.z });
+      },
+    });
+  }, [dyn, showTapInfo]);
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
     const gen = ++glGenRef.current;
@@ -407,6 +475,7 @@ export function Terrain3DLiveView({
       scene.add(built.group);
 
       const camera = createTerrainCamera(gl);
+      cameraRef.current = camera;
 
       // Device-only blind spot: shader compile failures don't throw in three —
       // render one guarded frame and fall back to the un-injected material if
@@ -430,6 +499,8 @@ export function Terrain3DLiveView({
       projectRef.current = built.project;
       drapeLineRef.current = built.drapeLine;
       unprojectRef.current = built.unproject;
+      heightAtRef.current = built.heightAt;
+      queryAtRef.current = built.queryAt;
       bboxRef.current = built.bbox;
       anchorRef.current = anchor;
       groupRef.current = built.group;
@@ -446,6 +517,10 @@ export function Terrain3DLiveView({
         height: 0.05,
       });
       scene.add(marker);
+      // Tap-to-query crosshair (hidden until a tap, faded out in onFrame).
+      const queryMarker = buildQueryMarker();
+      queryMarkerRef.current = queryMarker;
+      scene.add(queryMarker.group);
       rebuildOverlays(); // drape trails / recording / waypoints on the surface
 
       // Immersed, low oblique camera so terrain fills the frame foreground-to-
@@ -466,6 +541,18 @@ export function Terrain3DLiveView({
         renderer,
         onFrame: () => {
           const o = orbit.current;
+          const dt = dyn.frameDt(performance.now());
+          // Release inertia: the pan/twist keeps gliding after the finger
+          // lifts, decaying exponentially (dyn.stepMomentum).
+          const mo = dyn.stepMomentum(dt);
+          if (mo) {
+            const { dx, dz } = groundPanDelta(o.theta, o.radius, mo.dx, mo.dy);
+            o.center.x += dx;
+            o.center.z += dz;
+            o.theta -= mo.dTwist;
+          }
+          // Recenter / double-tap fly-to easing.
+          dyn.stepFly(o, dt);
           // Project the live position onto the (possibly re-anchored) surface.
           const loc = locRef.current;
           const b = bboxRef.current;
@@ -482,10 +569,27 @@ export function Terrain3DLiveView({
             // Shrink the marker as the camera closes in so it never balloons.
             marker.scale.setScalar(markerScaleForDistance(camera.position.distanceTo(target)));
             marker.visible = true;
-            // Follow mode: keep the camera centred on the moving user.
-            if (followRef.current) o.center.copy(target);
+            // Follow mode: keep the camera centred on the moving user. While a
+            // recenter fly-to is easing in, steer its centre targets at the
+            // (possibly moving) user instead of snapping.
+            if (followRef.current) {
+              if (dyn.isFlying()) {
+                dyn.retargetCenter(target.x, target.z);
+                o.center.y += (target.y - o.center.y) * Math.min(1, dt * 8);
+              } else {
+                o.center.copy(target);
+              }
+            }
           } else {
             marker.visible = false;
+          }
+          // Fade the tap-to-query crosshair in step with the chip (aged by
+          // accumulated frame time — no wall clock in render-scoped code).
+          if (queryElapsedMsRef.current !== null) {
+            queryElapsedMsRef.current += dt * 1000;
+            const op = queryMarkerOpacity(queryElapsedMsRef.current);
+            queryMarker.setOpacity(op);
+            if (op <= 0) queryElapsedMsRef.current = null;
           }
           // Free-look: when not following, stream fresh terrain around wherever the
           // camera is looking, so panning never slides off the loaded slab into fog.
@@ -499,7 +603,8 @@ export function Terrain3DLiveView({
             const at = { latitude: look.lat, longitude: look.lng };
             if (metresBetween(anchorRef.current, at) > REANCHOR_M) rebuildAround(at);
           }
-          positionCameraFromOrbit(camera, o);
+          // heightAt clamps the eye above the surface (camera-terrain collision).
+          positionCameraFromOrbit(camera, o, heightAtRef.current ?? undefined);
         },
         onDisposed: () => {
           if (sceneRef.current === scene) {
@@ -507,6 +612,8 @@ export function Terrain3DLiveView({
             groupRef.current = null;
             overlaysRef.current = null;
             overlayRef.current = null;
+            cameraRef.current = null;
+            queryMarkerRef.current = null;
           }
         },
       });
@@ -557,8 +664,13 @@ export function Terrain3DLiveView({
         key={`${basemap}:${recenter}`}
         style={styles.fill}
         onContextCreate={onContextCreate}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          viewSizeRef.current = { w: width, h: height };
+        }}
         {...pan.panHandlers}
       />
+      <TapQueryChip info={tapInfo} style={styles.queryChip} />
       {(status === 'loading' || streaming) && (
         <View style={styles.centerOverlay} pointerEvents="none">
           <ActivityIndicator />
@@ -586,13 +698,27 @@ export function Terrain3DLiveView({
           // Retry a failed load; otherwise recenter on the user with a clean
           // default orientation and resume follow — always a visible action (pan
           // with one finger to break out of follow and explore freely again).
+          // Eased by a critically-damped spring (~600 ms) instead of snapping.
           if (status === 'error') {
             setRecenter((n) => n + 1);
             return;
           }
-          orbit.current.theta = 0.6;
-          orbit.current.phi = 1.05;
-          orbit.current.radius = clamp(orbit.current.radius, 0.6, 1.6);
+          const o = orbit.current;
+          const targets: FlyTargets = {
+            theta: 0.6,
+            phi: 1.05,
+            radius: clamp(o.radius, 0.6, 1.6),
+          };
+          const loc = locRef.current;
+          const proj = projectRef.current;
+          const b = bboxRef.current;
+          if (loc && proj && b && inBox(b, loc.longitude, loc.latitude)) {
+            const p = proj(loc.longitude, loc.latitude);
+            targets.centerX = p.x;
+            targets.centerZ = p.z;
+          }
+          dyn.interrupt();
+          dyn.flyTo(o, targets);
           followRef.current = true;
           setFollow(true);
         }}
@@ -619,4 +745,6 @@ const styles = StyleSheet.create({
   recenter: { position: 'absolute', left: 12, bottom: 96 },
   // Above the recenter button / record controls, clear of the top-right rail.
   overlayBar: { position: 'absolute', left: 12, right: 12, bottom: 148, alignItems: 'center' },
+  // Above the overlay toggles so the tap-to-query readout never hides them.
+  queryChip: { position: 'absolute', left: 12, right: 12, bottom: 200 },
 });

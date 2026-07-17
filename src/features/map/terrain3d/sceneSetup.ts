@@ -91,6 +91,36 @@ export function buildMarkerPin(opts: {
 }
 
 /**
+ * The tap-to-query crosshair: a flat ring + cross laid on the terrain where
+ * the user tapped, faded out by the screen via `setOpacity` (1 → 0) after the
+ * elevation/slope chip has been read. Unlit so it reads on any basemap in
+ * either theme; depthWrite off so the fade never punches holes in the terrain.
+ */
+export function buildQueryMarker(): { group: THREE.Group; setOpacity: (o: number) => void } {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xe64a19,
+    transparent: true,
+    depthWrite: false,
+  });
+  const group = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.003, 8, 40), mat);
+  ring.rotation.x = Math.PI / 2; // lay flat on the ground plane
+  const armLen = 0.056;
+  const armW = 0.0028;
+  const armX = new THREE.Mesh(new THREE.BoxGeometry(armLen, armW, armW), mat);
+  const armZ = new THREE.Mesh(new THREE.BoxGeometry(armW, armW, armLen), mat);
+  group.add(ring, armX, armZ);
+  group.visible = false;
+  return {
+    group,
+    setOpacity: (o: number) => {
+      mat.opacity = o;
+      group.visible = o > 0.01;
+    },
+  };
+}
+
+/**
  * Fetch the basemap drape texture for a heightmap's tile range. Returns
  * undefined for 'relief' (the mesh's hypsometric tint IS the relief look, no
  * drape) and on fetch failure (fall back to hypsometric relief).
