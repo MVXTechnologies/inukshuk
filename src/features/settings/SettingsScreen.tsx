@@ -32,6 +32,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exportAllData } from './exportAllData';
 import { OfflineMapsSection } from './OfflineMapsSection';
+import { StravaSection } from './StravaSection';
 
 const DISPLACEMENT_OPTIONS = [
   { value: '2', label: '2 m' },
@@ -302,6 +303,10 @@ export function SettingsScreen() {
             </Text>
           </View>
         </List.Section>
+
+        <Divider />
+
+        <StravaSection showSnack={showSnack} />
 
         <Divider />
 
