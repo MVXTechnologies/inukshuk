@@ -16,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // runtimeVersion follows appVersion — a new version name gives this build its
   // own OTA runtime, so the background-recording JS never lands on older
   // binaries that lack those entries. Existing installs keep their OTA lineage.
-  version: '1.0.2',
+  version: '1.0.3',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -62,7 +62,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // versionCode must keep monotonically increasing on Play (it can't reset) —
     // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 is
     // 1.0.2, see version above.)
-    versionCode: 44,
+    versionCode: 45,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
