@@ -1,5 +1,7 @@
+import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
+import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
 import { create } from 'zustand';
@@ -51,6 +53,15 @@ export interface Settings {
   slopeDisclaimerShown: boolean;
   /** Last activity category picked at record start (the picker's default). */
   lastActivityCategory: string;
+  /**
+   * Last known map position, used to seed the camera on a cold launch so the
+   * map opens where the user last was instead of MapLibre's [0,0] default
+   * ("null island") while waiting for the first GPS fix. `null` = never saved
+   * (migration-safe: files written before this field existed hydrate to null).
+   * Written cheaply — on backgrounding and at most once per minute of fixes
+   * (see `useLocationTracking`) — never per-fix.
+   */
+  lastKnownPosition: LatLng | null;
 }
 
 const DEFAULTS: Settings = {
@@ -69,6 +80,7 @@ const DEFAULTS: Settings = {
   terrainContourIntervalM: 0,
   slopeDisclaimerShown: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
+  lastKnownPosition: null,
 };
 
 interface SettingsState extends Settings {
@@ -100,6 +112,7 @@ function snapshot(s: SettingsState): Settings {
     terrainContourIntervalM,
     slopeDisclaimerShown,
     lastActivityCategory,
+    lastKnownPosition,
   } = s;
   return {
     tileUrl,
@@ -117,6 +130,7 @@ function snapshot(s: SettingsState): Settings {
     terrainContourIntervalM,
     slopeDisclaimerShown,
     lastActivityCategory,
+    lastKnownPosition,
   };
 }
 
@@ -129,6 +143,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
     // fields and wrong-typed values are dropped instead of crashing hydration.
     const next = migrateSettings(saved, DEFAULTS);
+    // migrateSettings only checks `typeof` against the default; with a `null`
+    // default any object-typed junk would slip through — deep-validate here.
+    next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
     setDisplayUnits(next.units);
     set({ ...next, hydrated: true });
   },

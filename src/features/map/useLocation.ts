@@ -1,9 +1,10 @@
+import { shouldPersistPosition } from '@core/geo/lastKnownPosition';
 import type { LatLng, TrackPoint } from '@core/models';
 import { isBackgroundFeedConfirmed, toTrackPoint } from '@lib/backgroundLocation';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 export type LocationPermission = 'undetermined' | 'granted' | 'denied';
@@ -13,6 +14,23 @@ export type LocationPermission = 'undetermined' | 'granted' | 'denied';
  * device location briefly off) left the watch dead until the next foreground —
  * and, while recording, the auto-pause saw a permanent "location lost". */
 export const WATCH_RETRY_MS = 5000;
+
+/**
+ * Persist `pos` as the settings store's last known map position (the cold-start
+ * camera seed — see `@core/geo/lastKnownPosition`). Returns whether the update
+ * was accepted: before hydration it must be refused, because `set()` snapshots
+ * the whole settings state and a pre-hydration write would clobber
+ * settings.json with DEFAULTS. An unchanged position is "accepted" without a
+ * disk write. Callers throttle how often this runs — never call it per-fix.
+ */
+function persistLastKnownPosition(pos: LatLng): boolean {
+  const settings = useSettingsStore.getState();
+  if (!settings.hydrated) return false;
+  const prev = settings.lastKnownPosition;
+  if (prev && prev.latitude === pos.latitude && prev.longitude === pos.longitude) return true;
+  settings.set('lastKnownPosition', pos);
+  return true;
+}
 
 export interface LocationTracking {
   location: LatLng | null;
@@ -51,10 +69,22 @@ export function useLocationTracking(): LocationTracking {
   // points accrued. Re-establishing on foreground makes that a granted→denied
   // (or device-off) transition the map can surface and the recorder can pause.
   const [recheck, setRecheck] = useState(0);
+  // Last-known-position write throttle (cold-start camera seed). The ref holds
+  // when we last wrote so the foreground path writes at most once per interval;
+  // backgrounding flushes the freshest fix unconditionally (one write).
+  const lastPositionWriteAtRef = useRef<number | null>(null);
+  const locationRef = useRef<LatLng | null>(null);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') setRecheck((n) => n + 1);
+      // Going to background/inactive: flush the latest fix so the next cold
+      // start opens the map where the user last was (not null island).
+      if ((state === 'background' || state === 'inactive') && locationRef.current) {
+        if (persistLastKnownPosition(locationRef.current)) {
+          lastPositionWriteAtRef.current = Date.now();
+        }
+      }
     });
     return () => sub.remove();
   }, []);
@@ -96,8 +126,20 @@ export function useLocationTracking(): LocationTracking {
           (loc) => {
             const fix = toTrackPoint(loc);
             setUnavailableReason(null);
-            setLocation({ latitude: fix.latitude, longitude: fix.longitude });
+            const pos = { latitude: fix.latitude, longitude: fix.longitude };
+            locationRef.current = pos;
+            setLocation(pos);
             setLastFix(fix);
+            // Foreground last-position persistence, throttled: the first fix
+            // of the session writes immediately (survives a later crash/kill),
+            // then at most one write per interval while fixes keep flowing.
+            const now = Date.now();
+            if (
+              shouldPersistPosition(lastPositionWriteAtRef.current, now) &&
+              persistLastKnownPosition(pos)
+            ) {
+              lastPositionWriteAtRef.current = now;
+            }
             // Recorder filters by status internally. Only while the background
             // task is CONFIRMED delivering does the watch stand down to just
             // driving the marker — a started-but-silent task must never mute
