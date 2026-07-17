@@ -1,6 +1,15 @@
-import type { Bundle, Folder, MapDocument, Track, TrackNote, TrackSummary } from '@core/models';
+import type {
+  Bundle,
+  Folder,
+  MapDocument,
+  Track,
+  TrackNote,
+  TrackSummary,
+  Waypoint,
+} from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { bundleMapActivePages, pruneBundles, toggleId } from '@core/library/bundles';
+import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
   migrateLibraryIndex,
@@ -58,6 +67,21 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   removeFolder: (id: string) => void;
   /** Move a map or trail into a folder, or out of any folder when `folderId` is null. */
   setItemFolder: (kind: 'map' | 'track', itemId: string, folderId: string | null) => void;
+  // Activity categories — built-ins live in @core/library/categories; only
+  // user-defined ones are stored (and persisted) here.
+  /** Create a custom category (name assumed pre-validated); returns its id. */
+  addCustomCategory: (name: string, color: string) => string;
+  /** Set (or clear, with null) a saved trail's activity category. */
+  setTrackCategory: (trackId: string, category: string | null) => void;
+  // Standalone waypoints — dropped from the map's "+" speed-dial outside any
+  // recording, persisted in the index (a live recording's waypoints live in the
+  // recorder store instead and become trail notes on stop).
+  /** Drop a waypoint at a position; returns its id so the editor can open on it. */
+  addWaypoint: (latitude: number, longitude: number) => string;
+  /** Edit a waypoint's note text and/or photo (empty photoUri removes the photo). */
+  updateWaypoint: (id: string, patch: { note?: string; photoUri?: string }) => void;
+  /** Remove a waypoint and any photo it owns. */
+  removeWaypoint: (id: string) => void;
   activeMap: () => MapDocument | null;
 }
 
@@ -75,6 +99,8 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     folders: state.folders,
     activeMapId: state.activeMapId,
     activeTrackIds: state.activeTrackIds,
+    customCategories: state.customCategories,
+    waypoints: state.waypoints,
   } satisfies LibraryIndex);
 }
 
@@ -89,6 +115,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   folders: [],
   activeMapId: null,
   activeTrackIds: [],
+  customCategories: [],
+  waypoints: [],
   hydrated: false,
 
   hydrate: () => {
@@ -181,6 +209,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         stats: track.stats,
         fileUri,
         ...(seeded ? { notes: seeded } : {}),
+        ...(track.category ? { category: track.category } : {}),
       };
       const next = { ...s, tracks: [summary, ...s.tracks] };
       persist(next);
@@ -414,6 +443,87 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               ...s,
               tracks: s.tracks.map((t) => (t.id === itemId ? { ...t, folderId: folder } : t)),
             };
+      persist(next);
+      return next;
+    }),
+
+  addCustomCategory: (name, color) => {
+    const id = storage.newId();
+    set((s) => {
+      const category: CustomCategory = { id, name: name.trim(), color, createdAt: Date.now() };
+      const next = { ...s, customCategories: [...s.customCategories, category] };
+      persist(next);
+      return next;
+    });
+    return id;
+  },
+
+  addWaypoint: (latitude, longitude) => {
+    const id = storage.newId();
+    set((s) => {
+      // Number past the highest existing auto label so deleting "Waypoint 1"
+      // and dropping a new one never mints a duplicate name.
+      const n =
+        1 +
+        s.waypoints.reduce((max, w) => {
+          const m = /^Waypoint (\d+)$/.exec(w.label);
+          return m ? Math.max(max, Number(m[1])) : max;
+        }, 0);
+      const waypoint: Waypoint = {
+        id,
+        latitude,
+        longitude,
+        label: `Waypoint ${n}`,
+        createdAt: Date.now(),
+      };
+      const next = { ...s, waypoints: [...s.waypoints, waypoint] };
+      persist(next);
+      return next;
+    });
+    return id;
+  },
+
+  setTrackCategory: (trackId, category) =>
+    set((s) => {
+      const next = {
+        ...s,
+        tracks: s.tracks.map((t) =>
+          t.id === trackId ? { ...t, category: category ?? undefined } : t,
+        ),
+      };
+      persist(next);
+      return next;
+    }),
+
+  updateWaypoint: (id, patch) =>
+    set((s) => {
+      const old = s.waypoints.find((w) => w.id === id);
+      // Replacing or clearing a photo: delete the now-orphaned file.
+      if (old?.photoUri && patch.photoUri !== undefined && patch.photoUri !== old.photoUri) {
+        storage.deleteFileAt(old.photoUri);
+      }
+      const next = {
+        ...s,
+        waypoints: s.waypoints.map((w) => {
+          if (w.id !== id) return w;
+          const updated: Waypoint = { ...w };
+          if (patch.note !== undefined) updated.note = patch.note;
+          if (patch.photoUri !== undefined) {
+            if (patch.photoUri) updated.photoUri = patch.photoUri;
+            else delete updated.photoUri;
+          }
+          return updated;
+        }),
+      };
+      persist(next);
+      return next;
+    }),
+
+  removeWaypoint: (id) =>
+    set((s) => {
+      const w = s.waypoints.find((x) => x.id === id);
+      if (w?.photoUri) storage.deleteFileAt(w.photoUri);
+      const next = { ...s, waypoints: s.waypoints.filter((x) => x.id !== id) };
       persist(next);
       return next;
     }),

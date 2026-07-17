@@ -24,6 +24,7 @@ import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
+import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
@@ -107,6 +108,11 @@ export function MapScreen() {
   const tracks = useLibraryStore((s) => s.tracks);
   const addTrack = useLibraryStore((s) => s.addTrack);
   const updateTrack = useLibraryStore((s) => s.updateTrack);
+  // Standalone waypoints (dropped from the "+" speed-dial, no recording needed).
+  const savedWaypoints = useLibraryStore((s) => s.waypoints);
+  const addSavedWaypoint = useLibraryStore((s) => s.addWaypoint);
+  const updateSavedWaypoint = useLibraryStore((s) => s.updateWaypoint);
+  const removeSavedWaypoint = useLibraryStore((s) => s.removeWaypoint);
   const { overlays, error: overlayError } = usePdfOverlays(maps);
   const trackOverlays = useTrackOverlays(tracks);
 
@@ -195,7 +201,11 @@ export function MapScreen() {
     confirmDownload,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack });
 
-  const { fitActiveMap, resetNorth } = useCameraControls({ cameraRef, overlays });
+  const { fitActiveMap, resetNorth, zoomToLocateLevel } = useCameraControls({
+    cameraRef,
+    mapRef,
+    overlays,
+  });
 
   const {
     inspectId,
@@ -288,19 +298,66 @@ export function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectTrack, inspectPoints, trimRange, updateTrack, showSnack]);
 
-  // Tapping a live waypoint marker opens an editor for its note + photo.
-  const [editWpId, setEditWpId] = useState<string | null>(null);
-  const [wpDraft, setWpDraft] = useState('');
-  const editWp = waypoints.find((w) => w.id === editWpId) ?? null;
+  // "Record track" intercepts here: the category sheet opens first, and only
+  // its Start button actually begins the recording (owner ask: pick an
+  // activity category BEFORE recording starts).
+  const [pickingCategory, setPickingCategory] = useState(false);
 
-  const openWaypoint = (id: string, note: string) => {
-    setEditWpId(id);
-    setWpDraft(note);
-  };
+  // Tapping a live waypoint marker opens an editor for its note + photo.
+  // Tapping a waypoint marker — a live recording pin or a saved standalone pin
+  // — opens the shared editor for its note + photo. The edit target is tagged
+  // with its source store so save/delete/photo dispatch to the right one.
+  const [editWp, setEditWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
+  const [wpDraft, setWpDraft] = useState('');
+  const editWaypoint =
+    editWp === null
+      ? null
+      : editWp.source === 'live'
+        ? (waypoints.find((w) => w.id === editWp.id) ?? null)
+        : (savedWaypoints.find((w) => w.id === editWp.id) ?? null);
+
   const saveWaypoint = () => {
-    if (editWpId) updateWaypoint(editWpId, { note: wpDraft.trim() });
-    setEditWpId(null);
+    if (editWp) {
+      const patch = { note: wpDraft.trim() };
+      if (editWp.source === 'live') updateWaypoint(editWp.id, patch);
+      else updateSavedWaypoint(editWp.id, patch);
+    }
+    setEditWp(null);
   };
+  const deleteWaypoint = () => {
+    if (editWp) {
+      if (editWp.source === 'live') removeWaypoint(editWp.id);
+      else removeSavedWaypoint(editWp.id);
+    }
+    setEditWp(null);
+  };
+  const setWaypointPhoto = (uri: string) => {
+    if (!editWp) return;
+    if (editWp.source === 'live') updateWaypoint(editWp.id, { photoUri: uri });
+    else updateSavedWaypoint(editWp.id, { photoUri: uri });
+  };
+
+  // "+" speed-dial → Add waypoint: drop a standalone waypoint at the current
+  // GPS position and open the editor on it right away.
+  const onAddWaypoint = useCallback(() => {
+    if (!location) {
+      showSnack('Waiting for a GPS fix before dropping a waypoint');
+      return;
+    }
+    const id = addSavedWaypoint(location.latitude, location.longitude);
+    setEditWp({ source: 'saved', id });
+    setWpDraft('');
+  }, [location, addSavedWaypoint, showSnack]);
+
+  // Every waypoint pin currently drawn on the 2D map (live pins only exist
+  // while a recording session is up), tagged with its source for tap handling.
+  const visiblePins = useMemo(
+    () => [
+      ...savedWaypoints.map((w) => ({ source: 'saved' as const, ...w })),
+      ...(status !== 'idle' ? waypoints.map((w) => ({ source: 'live' as const, ...w })) : []),
+    ],
+    [savedWaypoints, waypoints, status],
+  );
 
   // Waypoint tap handling. MapLibre's <Marker onPress> doesn't fire on Android,
   // so we hit-test the tap against the waypoint pins ourselves: the Map's onPress
@@ -313,32 +370,35 @@ export function MapScreen() {
     async (e: { nativeEvent?: { point?: [number, number] } }) => {
       const point = e.nativeEvent?.point;
       const map = mapRef.current;
-      if (!point || !map || waypoints.length === 0) return;
+      if (!point || !map || visiblePins.length === 0) return;
       const [px, py] = point;
-      let best: (typeof waypoints)[number] | null = null;
+      let best: (typeof visiblePins)[number] | null = null;
       let bestD = WAYPOINT_HIT_PX;
       try {
         // Project each pin through the real camera — a linear mapping over the
         // visible bounds is wrong the moment the map is rotated or pitched
         // (taps would miss, or open a different waypoint's note).
         const pts = await Promise.all(
-          waypoints.map((wp) => map.project([wp.longitude, wp.latitude])),
+          visiblePins.map((wp) => map.project([wp.longitude, wp.latitude])),
         );
-        for (let i = 0; i < waypoints.length; i++) {
+        for (let i = 0; i < visiblePins.length; i++) {
           const p = pts[i];
           if (!p) continue;
           const d = Math.hypot(px - p[0], py - (p[1] - WAYPOINT_BADGE_OFFSET));
           if (d < bestD) {
             bestD = d;
-            best = waypoints[i] ?? null;
+            best = visiblePins[i] ?? null;
           }
         }
       } catch {
         return; // projection unavailable mid-teardown — ignore the tap
       }
-      if (best) openWaypoint(best.id, best.note ?? '');
+      if (best) {
+        setEditWp({ source: best.source, id: best.id });
+        setWpDraft(best.note ?? '');
+      }
     },
-    [waypoints],
+    [visiblePins],
   );
 
   const trailFeature = useThrottledLineFeature(points);
@@ -544,14 +604,20 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {status !== 'idle' &&
-            waypoints.map((w) => (
-              // Visual only — tap handling is done at the map level (onMapPress);
-              // MapLibre's <Marker onPress> doesn't fire on Android.
-              <Marker key={w.id} id={w.id} lngLat={[w.longitude, w.latitude]} anchor="bottom">
-                <WaypointMarkerPin hasPhoto={!!w.photoUri} />
-              </Marker>
-            ))}
+          {/* Waypoint pins (saved standalone ones always; live ones while a
+              recording session is up). Visual only — tap handling is done at
+              the map level (onMapPress); MapLibre's <Marker onPress> doesn't
+              fire on Android. */}
+          {visiblePins.map((w) => (
+            <Marker
+              key={`${w.source}-${w.id}`}
+              id={`${w.source}-${w.id}`}
+              lngLat={[w.longitude, w.latitude]}
+              anchor="bottom"
+            >
+              <WaypointMarkerPin hasPhoto={!!w.photoUri} />
+            </Marker>
+          ))}
 
           {/* Direction cone under the dot. The built-in `heading` arrow was
               dropped: it points along the GPS course (garbage while standing
@@ -582,7 +648,12 @@ export function MapScreen() {
       {/* Right-side map controls */}
       <MapControlsRail
         top={insets.top + 8}
-        onLocate={() => setFollowUser(true)}
+        onLocate={() => {
+          setFollowUser(true);
+          // Also zoom in to a useful "where am I" level (~2.5 km across);
+          // never zooms out if the user is already closer.
+          if (location) void zoomToLocateLevel(location.latitude);
+        }}
         showFitControl={overlays.length > 0}
         onFit={fitActiveMap}
         terrain3d={terrain3d}
@@ -673,24 +744,30 @@ export function MapScreen() {
           take over), while selecting an offline region, and while the trail
           inspector is open — its trim actions sit exactly where the FAB
           renders, which left the Overwrite button half-covered (#131). */}
-      {status === 'idle' && !selecting && inspectId === null && (
-        <MapActionsFab onRecord={startRecording} />
+      {status === 'idle' && !selecting && inspectId === null && !pickingCategory && (
+        <MapActionsFab onRecord={() => setPickingCategory(true)} onAddWaypoint={onAddWaypoint} />
       )}
+
+      {/* Category-first record start: sheet opens on "Record track"; Start
+          actually begins the recording with the chosen category. */}
+      <CategoryStartSheet
+        visible={pickingCategory && status === 'idle'}
+        onStart={(categoryId) => {
+          setPickingCategory(false);
+          startRecording(categoryId);
+        }}
+        onDismiss={() => setPickingCategory(false)}
+      />
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
       <WaypointEditorDialog
-        waypoint={editWp}
+        waypoint={editWaypoint}
         draft={wpDraft}
         onChangeDraft={setWpDraft}
         onSave={saveWaypoint}
-        onDelete={() => {
-          if (editWpId) removeWaypoint(editWpId);
-          setEditWpId(null);
-        }}
-        onSetPhoto={(uri) => {
-          if (editWpId) updateWaypoint(editWpId, { photoUri: uri });
-        }}
+        onDelete={deleteWaypoint}
+        onSetPhoto={setWaypointPhoto}
       />
 
       <Snackbar

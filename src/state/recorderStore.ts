@@ -38,6 +38,8 @@ export interface PendingWaypoint {
 interface RecorderState {
   status: RecorderStatus;
   name: string;
+  /** Activity category id chosen at record start (see `@core/library/categories`). */
+  category: string | null;
   startedAt: number | null;
   /** Wall time spent paused so far (completed pauses only). */
   pausedMs: number;
@@ -62,7 +64,7 @@ interface RecorderState {
    */
   lastSavedTrackId: string | null;
 
-  start: (name?: string) => void;
+  start: (name?: string, category?: string) => void;
   addPoint: (point: TrackPoint) => void;
   /**
    * Fold points journaled by the background location task into the live
@@ -102,6 +104,7 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
   return {
     status: s.status,
     name: s.name,
+    ...(s.category !== null ? { category: s.category } : {}),
     startedAt: s.startedAt,
     pausedMs: s.pausedMs + (s.pausedAt !== null ? Date.now() - s.pausedAt : 0),
     points: s.points,
@@ -112,6 +115,7 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
 export const useRecorderStore = create<RecorderState>((set, get) => ({
   status: 'idle',
   name: '',
+  category: null,
   startedAt: null,
   pausedMs: 0,
   pausedAt: null,
@@ -122,13 +126,14 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   lastAccuracyM: null,
   lastSavedTrackId: null,
 
-  start: (name) => {
+  start: (name, category) => {
     const now = Date.now();
     // A fresh session supersedes any stale checkpoint from a previous crash.
     checkpoint.clearCheckpoint();
     set({
       status: 'recording',
       name: name?.trim() || defaultName(now),
+      category: category ?? null,
       startedAt: now,
       pausedMs: 0,
       pausedAt: null,
@@ -260,7 +265,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   stop: async () => {
-    const { points, name, startedAt, status, waypoints } = get();
+    const { points, name, category, startedAt, status, waypoints } = get();
     if (status === 'idle' || startedAt === null) return null;
 
     // Last checkpoint before finalizing: a crash during the GPX write below
@@ -278,6 +283,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       status: 'finished',
       points,
       stats: finalStats,
+      // The chosen activity category rides the Track into the library summary.
+      ...(category !== null ? { category } : {}),
     };
 
     if (points.length > 0) {
@@ -309,6 +316,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     set({
       status: 'idle',
       name: '',
+      category: null,
       startedAt: null,
       pausedMs: 0,
       pausedAt: null,
@@ -329,6 +337,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     set({
       status: 'idle',
       name: '',
+      category: null,
       startedAt: null,
       pausedMs: 0,
       pausedAt: null,
@@ -379,6 +388,8 @@ export async function initRecorderRecovery(): Promise<boolean> {
     useRecorderStore.setState({
       status: 'paused',
       name: cp.name,
+      // Old checkpoints (pre-categories) simply restore as uncategorized.
+      category: typeof cp.category === 'string' ? cp.category : null,
       startedAt: cp.startedAt,
       pausedMs: cp.pausedMs,
       // Restored paused-at-now: the dead time between crash and relaunch never

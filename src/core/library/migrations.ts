@@ -1,4 +1,12 @@
-import type { Bundle, Folder, GeoReference, MapDocument, TrackSummary } from '@core/models';
+import type {
+  Bundle,
+  Folder,
+  GeoReference,
+  MapDocument,
+  TrackSummary,
+  Waypoint,
+} from '@core/models';
+import type { CustomCategory } from './categories';
 
 /**
  * Versioned migrations for Inukshuk's persisted JSON documents (`library.json`
@@ -13,7 +21,7 @@ import type { Bundle, Folder, GeoReference, MapDocument, TrackSummary } from '@c
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 2;
+export const LIBRARY_SCHEMA_VERSION = 3;
 /** Current `settings.json` schema. v1 = the unversioned legacy settings. */
 export const SETTINGS_SCHEMA_VERSION = 2;
 
@@ -27,6 +35,10 @@ export interface LibraryIndex {
   activeMapId: string | null;
   /** Ids of saved trails shown as overlays on the main map (persisted, like `activePages`). */
   activeTrackIds: string[];
+  /** Standalone waypoints dropped on the map outside any recording. */
+  waypoints: Waypoint[];
+  /** User-defined activity categories (see `@core/library/categories`). */
+  customCategories: CustomCategory[];
 }
 
 type RawDoc = Record<string, unknown>;
@@ -104,6 +116,16 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // `georeference` → `georeferences[]` normalization runs in the sanitize pass
   // below — it is idempotent and guards junk in any version.)
   1: (doc) => ({ ...doc, schemaVersion: 2, activeTrackIds: asArray(doc.activeTrackIds) }),
+  // v2 → v3: standalone waypoints AND user-defined activity categories joined
+  // the persisted index in the same release; older indexes never stored
+  // either, so both lists start empty. (Tracks' optional `category` needs no
+  // migration — absent simply means uncategorized.)
+  2: (doc) => ({
+    ...doc,
+    schemaVersion: 3,
+    waypoints: asArray(doc.waypoints),
+    customCategories: asArray(doc.customCategories),
+  }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -130,6 +152,16 @@ export function migrateLibraryIndex(raw: unknown): LibraryIndex {
     activeMapId: maps.some((m) => m.id === activeMapId) ? activeMapId : null,
     activeTrackIds: asArray(doc.activeTrackIds).filter(
       (id): id is string => typeof id === 'string' && tracks.some((t) => t.id === id),
+    ),
+    // A waypoint without a finite coordinate can never be drawn or edited —
+    // drop such junk rather than let it reach the map's marker projection.
+    waypoints: recordsWithId<Waypoint>(doc.waypoints).filter(
+      (w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude),
+    ),
+    // Keep only well-formed custom categories: junk entries would render as
+    // broken chips, and a missing color would defeat the theme-safety gate.
+    customCategories: recordsWithId<CustomCategory>(doc.customCategories).filter(
+      (c) => typeof c.name === 'string' && c.name.trim() !== '' && typeof c.color === 'string',
     ),
   };
 }

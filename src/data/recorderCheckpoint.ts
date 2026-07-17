@@ -26,6 +26,8 @@ export const CHECKPOINT_EVERY_MS = 30_000;
 export interface RecorderCheckpoint {
   status: 'recording' | 'paused';
   name: string;
+  /** Activity category id chosen at record start; absent on old checkpoints. */
+  category?: string;
   startedAt: number;
   /** Wall time spent paused, with any in-flight pause folded in at write time. */
   pausedMs: number;

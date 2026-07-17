@@ -60,6 +60,8 @@ export interface Track {
   status: TrackStatus;
   points: TrackPoint[];
   stats: TrackStats;
+  /** Activity category id (see `@core/library/categories`); absent = uncategorized. */
+  category?: string;
 }
 
 /**
@@ -77,4 +79,10 @@ export interface TrackSummary {
   folderId?: string;
   /** User annotations along the trail (added in the GPX editor). */
   notes?: TrackNote[];
+  /**
+   * Activity category: a built-in id or a custom category's id (see
+   * `@core/library/categories`). Absent = uncategorized — tracks saved before
+   * this field existed (or imported GPX) need no migration.
+   */
+  category?: string;
 }

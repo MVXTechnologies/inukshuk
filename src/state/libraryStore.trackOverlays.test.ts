@@ -1,3 +1,5 @@
+import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
+
 import { useLibraryStore } from './libraryStore';
 
 jest.mock('@data/storage', () => ({
@@ -49,7 +51,7 @@ it('toggleTrackOverlay toggles and persists the id with the schema version', () 
   useLibraryStore.getState().toggleTrackOverlay('t2');
   expect(useLibraryStore.getState().activeTrackIds).toEqual(['t2']);
   expect(storage.writeIndex).toHaveBeenLastCalledWith(
-    expect.objectContaining({ schemaVersion: 2, activeTrackIds: ['t2'] }),
+    expect.objectContaining({ schemaVersion: LIBRARY_SCHEMA_VERSION, activeTrackIds: ['t2'] }),
   );
   useLibraryStore.getState().toggleTrackOverlay('t2');
   expect(useLibraryStore.getState().activeTrackIds).toEqual([]);

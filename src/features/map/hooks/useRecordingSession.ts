@@ -90,9 +90,11 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
 
   // Recording and 3D don't mix (3D can crash mid-record), so drop out of 3D when
   // a recording starts — the 3D button is disabled for the duration anyway.
-  const startRecording = () => {
+  // `category` is the activity category picked in the pre-record sheet; it rides
+  // the recorder store through stop() into the saved trail's summary.
+  const startRecording = (category?: string) => {
     if (terrain3d) toggleTerrain3d();
-    start();
+    start(undefined, category);
   };
 
   const handleStop = async () => {

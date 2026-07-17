@@ -69,9 +69,28 @@ describe('migrateLibraryIndex', () => {
     expect(index.activeMapId).toBe('m1');
   });
 
-  it('passes a current v2 index through unchanged', () => {
-    const v2: LibraryIndex = {
+  it('upgrades a v2 index: custom categories start empty, everything else kept', () => {
+    const v2 = {
       schemaVersion: 2,
+      maps: [],
+      tracks: [track('t1'), { ...track('t2'), category: 'hike' }],
+      bundles: [],
+      folders: [],
+      activeMapId: null,
+      activeTrackIds: ['t1'],
+    };
+    const index = migrateLibraryIndex(v2);
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.customCategories).toEqual([]);
+    expect(index.activeTrackIds).toEqual(['t1']);
+    // Per-track categories ride along untouched (absent = uncategorized).
+    expect(index.tracks[0]).not.toHaveProperty('category');
+    expect(index.tracks[1]?.category).toBe('hike');
+  });
+
+  it('passes a current v3 index through unchanged', () => {
+    const v3: LibraryIndex = {
+      schemaVersion: 3,
       maps: [
         {
           id: 'm1',
@@ -84,13 +103,33 @@ describe('migrateLibraryIndex', () => {
           folderId: 'f1',
         },
       ],
-      tracks: [{ ...track('t1'), folderId: 'f1' }],
+      tracks: [{ ...track('t1'), folderId: 'f1', category: 'cat1' }],
       bundles: [{ id: 'b1', name: 'B', mapIds: ['m1'], trackIds: ['t1'], createdAt: 9 }],
       folders: [{ id: 'f1', name: 'F', createdAt: 8 }],
       activeMapId: 'm1',
       activeTrackIds: ['t1'],
+      customCategories: [{ id: 'cat1', name: 'Canoe', color: '#C74FA0', createdAt: 10 }],
+      waypoints: [
+        { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
+      ],
     };
-    expect(migrateLibraryIndex(v2)).toEqual(v2);
+    expect(migrateLibraryIndex(v3)).toEqual(v3);
+  });
+
+  it('upgrades a v2 index: waypoints start empty', () => {
+    const v2 = {
+      schemaVersion: 2,
+      maps: [],
+      tracks: [track('t1')],
+      bundles: [],
+      folders: [],
+      activeMapId: null,
+      activeTrackIds: ['t1'],
+    };
+    const index = migrateLibraryIndex(v2);
+    expect(index.schemaVersion).toBe(3);
+    expect(index.waypoints).toEqual([]);
+    expect(index.activeTrackIds).toEqual(['t1']); // v2 content is retained
   });
 
   it('drops junk fields and entries without throwing', () => {
@@ -102,6 +141,19 @@ describe('migrateLibraryIndex', () => {
       folders: [{ id: 'f1', name: 'F', createdAt: 1 }],
       activeMapId: 7,
       activeTrackIds: ['t1', 't-deleted', 3, null],
+      customCategories: [
+        { id: 'c1', name: 'Canoe', color: '#C74FA0', createdAt: 1 },
+        { id: 'c2', name: '   ', color: '#C74FA0' }, // blank name → dropped
+        { id: 'c3', name: 'No color' }, // missing color → dropped
+        { name: 'no id' },
+        null,
+      ],
+      waypoints: [
+        { id: 'w1', latitude: 46, longitude: -70, label: 'Waypoint 1', createdAt: 1 },
+        { id: 'w-bad-coord', latitude: 'north', longitude: -70 },
+        { latitude: 46, longitude: -70 }, // no id
+        'not a waypoint',
+      ],
       totallyUnknownField: { deep: true },
     });
     expect(index.maps).toHaveLength(1);
@@ -112,6 +164,9 @@ describe('migrateLibraryIndex', () => {
     expect(index.activeMapId).toBeNull();
     // Dangling / non-string overlay ids are pruned.
     expect(index.activeTrackIds).toEqual(['t1']);
+    expect(index.customCategories.map((c) => c.id)).toEqual(['c1']);
+    // Waypoints without an id or a finite coordinate are dropped.
+    expect(index.waypoints.map((w) => w.id)).toEqual(['w1']);
     expect(index).not.toHaveProperty('totallyUnknownField');
   });
 
@@ -131,6 +186,8 @@ describe('migrateLibraryIndex', () => {
         folders: [],
         activeMapId: null,
         activeTrackIds: [],
+        customCategories: [],
+        waypoints: [],
       });
     }
   });
