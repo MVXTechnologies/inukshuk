@@ -79,6 +79,12 @@ export interface TerrainBuild {
   /** Terrain surface height at a ground x/z (scene units, exaggerated). */
   heightAt: HeightSampler;
   /**
+   * Metre-space sample at a ground x/z for tap-to-query: DEM elevation and
+   * Horn slope (from the same analysis grid the slope-band overlay uses — not
+   * the exaggerated mesh, which would inflate slopes by atan(vExag·tanθ)).
+   */
+  queryAt: (x: number, z: number) => { elevM: number; slopeDeg: number };
+  /**
    * Build a flat, terrain-hugging line mesh (a thin ribbon draped on the
    * surface) for a path given in ground-plane scene coords. Densification and
    * lift are matched to this terrain's DEM resolution. Returns null for
@@ -363,6 +369,15 @@ export function buildTerrain(
   const slopeDeg = slopeDegrees(data, grid, cellXm, cellZm);
   const hillshade = multidirHillshade(data, grid, cellXm, cellZm);
 
+  const queryAt = (x: number, z: number): { elevM: number; slopeDeg: number } => {
+    const fx = clamp01(x / (spanXn || 1) + 0.5);
+    const fy = clamp01(z / (spanZn || 1) + 0.5);
+    return {
+      elevM: sampleGridBilinear(data, grid, grid, fx, fy),
+      slopeDeg: sampleGridBilinear(slopeDeg, grid, grid, fx, fy),
+    };
+  };
+
   const positions = new Float32Array(grid * grid * 3);
   const colors = new Float32Array(grid * grid * 3);
   const uvs = new Float32Array(grid * grid * 2);
@@ -472,6 +487,7 @@ export function buildTerrain(
     project,
     unproject,
     heightAt,
+    queryAt,
     drapeLine,
     overlay,
   };

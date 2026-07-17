@@ -1,6 +1,7 @@
 # 3D Terrain Vision — research & phased plan (2026-07-17)
 
-Status: research complete, awaiting owner approval to start P1.
+Status: P1 (shader overlays + baked relief) shipped in #134; P2 (interaction
+polish, §4 items 1–6) implemented on `feat/3d-terrain-p2`; P3 not started.
 Produced from a web survey of Strava/FATMAP, CalTopo, Gaia, PeakVisor and a
 feasibility audit of this repo's three r162 / WebGL1 / expo-gl stack.
 

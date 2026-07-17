@@ -43,17 +43,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
 import { SharingUnavailableError, exportTrailPdf } from '../common/exportTrailPdf';
+import { rayGroundHit, zoomTowardPoint } from '@core/geo/terrainRay';
+import { createCameraDynamics } from './terrain3d/cameraDynamics';
 import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
 import {
+  ORBIT_PHI_PER_PX,
+  ORBIT_THETA_PER_PX,
   clamp,
   createTerrainPanResponder,
   groundPanDelta,
   positionCameraFromOrbit,
+  screenPointRay,
 } from './terrain3d/orbitGestures';
+import { TapQueryChip, queryMarkerOpacity, useTapQuery } from './terrain3d/queryChip';
 import {
   addSkyAndFog,
   addTerrainLights,
   buildMarkerPin,
+  buildQueryMarker,
   createTerrainCamera,
   createTerrainRenderer,
   fetchDrapeTexture,
@@ -69,7 +76,12 @@ import {
   supportsStandardDerivatives,
   type TerrainOverlayHandle,
 } from './terrain3d/terrainMaterial';
-import { buildTerrain, markerScaleForDistance, type TerrainBuild } from './terrainScene';
+import {
+  buildTerrain,
+  markerScaleForDistance,
+  type HeightSampler,
+  type TerrainBuild,
+} from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { Trail2DView } from './Trail2DView';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
@@ -151,6 +163,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
   const maxAnisoRef = useRef(1);
   const scrubRef = useRef<TrackPointAt | null>(null);
+  // P2 interaction polish: inertia + fly-to springs, view size for tap/pinch
+  // picking, terrain samplers for zoom-anchoring, collision and tap-to-query.
+  const dyn = useMemo(() => createCameraDynamics(), []);
+  const viewSizeRef = useRef({ w: 0, h: 0 });
+  const heightAtRef = useRef<HeightSampler | null>(null);
+  const queryAtRef = useRef<TerrainBuild['queryAt'] | null>(null);
+  const queryMarkerRef = useRef<ReturnType<typeof buildQueryMarker> | null>(null);
+  const queryElapsedMsRef = useRef<number | null>(null);
+  const { info: tapInfo, show: showTapInfo } = useTapQuery();
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   // Analytical-overlay shader state: whether injection is usable on this device
@@ -167,35 +188,82 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // not outlive its context (see useGlGeneration).
   const glGenRef = useGlGeneration();
 
-  const pan = useMemo(
-    () =>
-      // Refs are read on touch events only, never during render.
-      // eslint-disable-next-line react-hooks/refs
-      createTerrainPanResponder({
-        orbit,
-        // Two-finger drag (beyond the shared pinch-zoom) pans the look-at point
-        // across the ground (move around the trail a bit), bounded to maxPan
-        // from the trail centre.
-        onTwoFinger: (curr, prev) => {
-          const o = orbit.current;
-          const { dx, dz } = groundPanDelta(
-            o.theta,
-            o.radius,
-            curr.cx - prev.cx,
-            curr.cy - prev.cy,
-          );
-          o.center.x = clamp(o.center.x + dx, o.home.x - o.maxPan, o.home.x + o.maxPan);
-          o.center.z = clamp(o.center.z + dz, o.home.z - o.maxPan, o.home.z + o.maxPan);
-        },
-        // One finger orbits: drag sideways to rotate, up/down to tilt.
-        onSingle: (dxPx, dyPx) => {
-          const o = orbit.current;
-          o.theta -= dxPx * 0.008;
-          o.phi = clamp(o.phi - dyPx * 0.006, 0.12, 1.45);
-        },
-      }),
-    [],
-  );
+  const pan = useMemo(() => {
+    // The ground point under a view-local screen position (tap / pinch
+    // centroid), ray-marched against the terrain heightfield.
+    const groundHitAt = (x: number, y: number) => {
+      const camera = cameraRef.current;
+      const heightAt = heightAtRef.current;
+      if (!camera || !heightAt) return null;
+      const { w, h } = viewSizeRef.current;
+      const ray = screenPointRay(camera, x, y, w, h);
+      return ray && rayGroundHit(ray.origin, ray.dir, heightAt);
+    };
+    const clampPan = (v: number, home: number, maxPan: number) =>
+      clamp(v, home - maxPan, home + maxPan);
+    // Refs are read on touch events only, never during render.
+    // eslint-disable-next-line react-hooks/refs
+    return createTerrainPanResponder({
+      orbit,
+      // Two-finger drag (beyond the shared pinch-zoom) pans the look-at point
+      // across the ground (move around the trail a bit), bounded to maxPan
+      // from the trail centre.
+      onTwoFinger: (curr, prev) => {
+        const o = orbit.current;
+        const { dx, dz } = groundPanDelta(o.theta, o.radius, curr.cx - prev.cx, curr.cy - prev.cy);
+        o.center.x = clampPan(o.center.x + dx, o.home.x, o.maxPan);
+        o.center.z = clampPan(o.center.z + dz, o.home.z, o.maxPan);
+      },
+      // One finger orbits: drag sideways to rotate, up/down to tilt.
+      onSingle: (dxPx, dyPx) => {
+        const o = orbit.current;
+        o.theta -= dxPx * ORBIT_THETA_PER_PX;
+        o.phi = clamp(o.phi - dyPx * ORBIT_PHI_PER_PX, 0.12, 1.45);
+      },
+      // A new touch always wins over coasting/flying camera motion.
+      onGestureStart: () => dyn.interrupt(),
+      // Release inertia: keep orbiting with the drag's velocity, decayed in
+      // onFrame (dyn.stepMomentum).
+      onRelease: (vel) => dyn.launchMomentum(vel),
+      // Anchor the pinch-zoom on the ground under the fingers: scale the
+      // centre's offset from the hit by the same factor as the radius.
+      onPinch: (scale, cx, cy) => {
+        const hit = groundHitAt(cx, cy);
+        if (!hit) return;
+        const o = orbit.current;
+        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, scale);
+        o.center.x = clampPan(c.x, o.home.x, o.maxPan);
+        o.center.z = clampPan(c.z, o.home.z, o.maxPan);
+      },
+      // Tap-to-query: elevation + slope chip and a fading crosshair.
+      onTap: (x, y) => {
+        const hit = groundHitAt(x, y);
+        const query = queryAtRef.current;
+        if (!hit || !query) return;
+        showTapInfo(query(hit.x, hit.z));
+        const m = queryMarkerRef.current;
+        if (m) {
+          m.group.position.set(hit.x, hit.y + 0.004, hit.z);
+          m.setOpacity(1);
+          queryElapsedMsRef.current = 0;
+        }
+      },
+      // Double-tap: fly toward the tapped ground point (same anchored-zoom
+      // maths as the pinch, eased by the spring instead of applied raw).
+      onDoubleTap: (x, y) => {
+        const hit = groundHitAt(x, y);
+        if (!hit) return;
+        const o = orbit.current;
+        const s = 0.55;
+        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, s);
+        dyn.flyTo(o, {
+          radius: clamp(o.radius * s, 0.8, 9),
+          centerX: clampPan(c.x, o.home.x, o.maxPan),
+          centerZ: clampPan(c.z, o.home.z, o.maxPan),
+        });
+      },
+    });
+  }, [dyn, showTapInfo]);
 
   const notes = track?.notes;
   const ordered = useMemo(() => orderNotes(notes ?? []), [notes]);
@@ -331,6 +399,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
       }
       groupRef.current = build.group;
       projectRef.current = build.project;
+      heightAtRef.current = build.heightAt;
+      queryAtRef.current = build.queryAt;
       overlayRef.current = build.overlay;
       if (build.overlay) applyTerrainOverlaySettings(build.overlay, currentOverlaySettings());
 
@@ -344,6 +414,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
       });
       marker.visible = false;
       scene.add(marker);
+      // Tap-to-query crosshair (hidden until a tap, faded out in onFrame).
+      const queryMarker = buildQueryMarker();
+      queryMarkerRef.current = queryMarker;
+      scene.add(queryMarker.group);
       setStatus('ready');
 
       runRenderLoop({
@@ -353,7 +427,26 @@ export function Trail3DGLScreen({ trackId }: Props) {
         camera,
         renderer,
         onFrame: () => {
-          positionCameraFromOrbit(camera, orbit.current);
+          const o = orbit.current;
+          const dt = dyn.frameDt(performance.now());
+          // Release inertia: keep orbiting after the finger lifts, decaying.
+          const m = dyn.stepMomentum(dt);
+          if (m) {
+            o.theta -= m.dx * ORBIT_THETA_PER_PX;
+            o.phi = clamp(o.phi - m.dy * ORBIT_PHI_PER_PX, 0.12, 1.45);
+          }
+          // Double-tap fly-to easing.
+          dyn.stepFly(o, dt);
+          // heightAt clamps the eye above the surface (camera-terrain collision).
+          positionCameraFromOrbit(camera, o, heightAtRef.current ?? undefined);
+          // Fade the tap-to-query crosshair in step with the chip (aged by
+          // accumulated frame time — no wall clock in render-scoped code).
+          if (queryElapsedMsRef.current !== null) {
+            queryElapsedMsRef.current += dt * 1000;
+            const op = queryMarkerOpacity(queryElapsedMsRef.current);
+            queryMarker.setOpacity(op);
+            if (op <= 0) queryElapsedMsRef.current = null;
+          }
           const sc = scrubRef.current;
           if (sc && projectRef.current) {
             marker.position.copy(projectRef.current(sc.longitude, sc.latitude));
@@ -373,6 +466,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
             overlayRef.current = null;
             rendererRef.current = null;
             cameraRef.current = null;
+            queryMarkerRef.current = null;
           }
         },
       });
@@ -429,6 +523,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
       }
       groupRef.current = built.group;
       projectRef.current = built.project;
+      heightAtRef.current = built.heightAt;
+      queryAtRef.current = built.queryAt;
       overlayRef.current = built.overlay;
       if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
     } catch {
@@ -527,7 +623,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
           }}
         >
           {trailViewMode === '3d' ? (
-            <GLView style={styles.fill} onContextCreate={onContextCreate} {...pan.panHandlers} />
+            <GLView
+              style={styles.fill}
+              onContextCreate={onContextCreate}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                viewSizeRef.current = { w: width, h: height };
+              }}
+              {...pan.panHandlers}
+            />
           ) : points && points.length > 0 ? (
             // Mount the 2D map only once points are loaded — a MapLibre GeoJSON
             // source created with empty data doesn't reliably pick up a later
@@ -593,6 +697,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
               </View>
             </View>
           )}
+          {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
         </View>
 
         <View style={styles.viewModeBar}>
@@ -813,6 +918,8 @@ const styles = StyleSheet.create({
   basemapBtn: { borderRadius: 20 },
   basemapLabel: { marginVertical: 4, marginHorizontal: 10 },
   basemapSpin: { marginLeft: 4 },
+  // Above the overlay/basemap pills, centred — clear of the summary card.
+  queryChip: { position: 'absolute', left: 0, right: 0, bottom: 108 },
   scrubRow: { paddingHorizontal: 16, paddingTop: 10 },
   notesHeader: {
     flexDirection: 'row',
