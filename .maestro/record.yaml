@@ -14,7 +14,15 @@ appId: com.inukshuk.app
     permissions:
       location: allow
 - assertVisible: 'Map actions'
-- tapOn: 'Map actions'
+# Open the speed-dial. The tap can race first-paint/map-load on cold CI
+# emulators (same class as the smoke flow's tab-tap race): retry until the
+# hierarchy changes, then wait for the dial's action to exist before tapping.
+- tapOn:
+    text: 'Map actions'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Record track'
+    timeout: 10000
 - tapOn: 'Record track'
 # The background-permission rationale card appears on first record (inline
 # card, not a Portal). Decline it: the Android FGS records fine without
