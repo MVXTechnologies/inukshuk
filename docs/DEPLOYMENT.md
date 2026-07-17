@@ -165,6 +165,61 @@ Users can opt out entirely in _Settings → Privacy → Automatic error reportin
 (on by default). The row below it shows the pending-report count and can force a
 flush — diagnostics only; it never interrupts anyone.
 
+## Strava (one-time, optional)
+
+The Strava integration (Settings → Connections → Connect Strava; "Push to
+Strava?" after saving a recording; "Send to Strava" in the Library ⋮ menu) needs
+a Strava API application. Without the credentials the feature stays visible but
+disabled ("Strava is not configured in this build") — nothing else changes.
+
+### 1. Create the API app
+
+At <https://www.strava.com/settings/api> (log in as the account that owns the
+app), create an application:
+
+- **Category**: whatever fits (e.g. "Mobile App").
+- **Authorization Callback Domain**: exactly `localhost` — the app's OAuth
+  redirect is the custom-scheme URL `inukshuk://localhost/strava-auth`
+  (`STRAVA_REDIRECT_URI` in `src/core/strava/oauth.ts`), and Strava validates
+  only the domain part (`localhost`) against this field. Do **not** enter a
+  scheme or path here.
+
+Note the **Client ID** and **Client Secret** it shows.
+
+### 2. Register the credentials as EAS env vars
+
+```sh
+eas env:create --name STRAVA_CLIENT_ID \
+  --value <client id> \
+  --environment production --visibility plaintext
+
+eas env:create --name STRAVA_CLIENT_SECRET \
+  --value <client secret> \
+  --environment production --visibility secret
+```
+
+`app.config.ts` reads both into `extra.stravaClientId/stravaClientSecret`, so —
+like `ERROR_REPORT_TOKEN` — **the client secret is baked into the shipped
+binary**. This is unavoidable: Strava's token endpoint requires the client
+secret and supports no PKCE. Strava's own mobile guidance tolerates this for
+personal/small apps; the mitigations are the narrow requested scope
+(`activity:write` only), Strava's per-app rate limits, and the ability to
+regenerate the secret at any time (regenerating invalidates old binaries'
+ability to _connect new accounts_; existing connections keep working until
+their refresh token is rejected, at which point the app asks the user to
+reconnect).
+
+New Strava API apps start with an athlete cap of 1 (just the owner); request a
+higher cap from Strava if others should connect.
+
+### 3. Token & data handling (already implemented)
+
+- Tokens (access + rotating refresh token + expiry) and the athlete name are
+  stored on-device in `strava.json` (`src/state/stravaStore.ts`); refresh
+  happens automatically, always keeping the rotated refresh token.
+- Nothing is uploaded without an explicit user action, and _Disconnect_ in
+  Settings also revokes the grant via `/oauth/deauthorize`.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for        |
@@ -175,4 +230,5 @@ flush — diagnostics only; it never interrupts anyone.
 
 And in `app.config.ts` env / repo variables: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`,
 and (EAS environment, not GitHub Actions) `ERROR_REPORT_TOKEN` **or**
-`ERROR_REPORT_ENDPOINT` — see _Error reporting_ above.
+`ERROR_REPORT_ENDPOINT` — see _Error reporting_ above — plus the optional
+`STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` — see _Strava_ above.

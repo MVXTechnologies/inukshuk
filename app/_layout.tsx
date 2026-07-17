@@ -7,9 +7,11 @@ import { cleanupBackgroundLocationAtLaunch } from '@lib/backgroundLocation';
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
+import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useStravaStore } from '@state/stravaStore';
 import { darkTheme, lightTheme } from '@ui/theme';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -25,6 +27,7 @@ export default function RootLayout() {
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  const hydrateStrava = useStravaStore((s) => s.hydrate);
 
   useEffect(() => {
     // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
@@ -36,7 +39,8 @@ export default function RootLayout() {
     cleanupBackgroundLocationAtLaunch().catch((err) => reportError(err, 'bg-task-cleanup'));
     hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
-  }, [hydrateLibrary, hydrateSettings]);
+    hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
+  }, [hydrateLibrary, hydrateSettings, hydrateStrava]);
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
   // (redirectSystemPath), which intercepts the URI before expo-router routes it.
@@ -58,6 +62,7 @@ export default function RootLayout() {
                 <Stack.Screen name="trail3d/[id]" />
               </Stack>
               <ImportFeedbackSnackbar />
+              <StravaPushPrompt />
             </PdfRasterizerProvider>
           </ErrorBoundary>
         </PaperProvider>

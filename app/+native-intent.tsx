@@ -1,5 +1,6 @@
 import { importGpxFromUri } from '@features/library/importGpx';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
+import { handleStravaAuthRedirect } from '@lib/strava';
 import { useImportFeedbackStore } from '@state/importFeedbackStore';
 import { useLibraryStore } from '@state/libraryStore';
 
@@ -23,6 +24,13 @@ export async function redirectSystemPath({
   initial: boolean;
 }): Promise<string> {
   void initial;
+  // Strava OAuth redirect (inukshuk://localhost/strava-auth?code=…): hand the
+  // params to the waiting connect flow (src/lib/strava) and land on Settings —
+  // the raw callback path must never reach routing as an Unmatched Route.
+  if (handleStravaAuthRedirect(path)) {
+    addBreadcrumb('strava oauth redirect received');
+    return '/(tabs)/settings';
+  }
   if (/^(content|file):\/\//i.test(path)) {
     addBreadcrumb('open-with intent received');
     try {

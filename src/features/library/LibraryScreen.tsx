@@ -1,5 +1,6 @@
 import { parseGpx } from '@core/geo/gpx';
 import type { TrackPoint, TrackSummary } from '@core/models';
+import { describeUploadOutcome } from '@core/strava/upload';
 import * as storage from '@data/storage';
 import {
   formatDistance,
@@ -9,8 +10,10 @@ import {
   formatTimestamp,
 } from '@lib/format';
 import { reportError } from '@lib/errorReporting';
+import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
@@ -97,6 +100,7 @@ export function LibraryScreen() {
   const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setInspectIntent = useMapStore((s) => s.setInspectIntent);
+  const stravaConnected = useStravaStore((s) => s.connection !== null);
 
   const [busy, setBusy] = useState(false);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
@@ -262,6 +266,14 @@ export function LibraryScreen() {
     } else {
       showSnack('Sharing is not available on this device');
     }
+  };
+
+  // Push an older saved trail to Strava (the ⋮ menu item only shows while a
+  // Strava account is connected). Outcomes land in the same timed snackbar.
+  const sendToStrava = async (t: TrackSummary) => {
+    showSnack(`Uploading "${t.name}" to Strava…`);
+    const outcome = await uploadTrackToStrava({ id: t.id, name: t.name, fileUri: t.fileUri });
+    showSnack(describeUploadOutcome(outcome, t.name));
   };
 
   const sectionHeader = (key: string, title: string, action?: ReactNode) => (
@@ -442,6 +454,16 @@ export function LibraryScreen() {
           shareTrack(t.fileUri);
         }}
       />
+      {stravaConnected && (
+        <Menu.Item
+          leadingIcon="cloud-upload-outline"
+          title="Send to Strava"
+          onPress={() => {
+            setCardMenu(null);
+            sendToStrava(t);
+          }}
+        />
+      )}
       <Menu.Item
         leadingIcon="content-cut"
         title="Trim"

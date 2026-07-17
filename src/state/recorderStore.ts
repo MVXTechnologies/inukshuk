@@ -55,6 +55,12 @@ interface RecorderState {
    */
   lastFixAt: number | null;
   lastAccuracyM: number | null;
+  /**
+   * Id of the most recently stopped-AND-saved recording, until a consumer
+   * acknowledges it. Observed by the Strava push prompt (features/strava) so
+   * end-of-recording integrations never have to touch the stop path itself.
+   */
+  lastSavedTrackId: string | null;
 
   start: (name?: string) => void;
   addPoint: (point: TrackPoint) => void;
@@ -74,6 +80,8 @@ interface RecorderState {
   resume: () => void;
   /** Finalize: compute authoritative stats, persist GPX, index it, reset. */
   stop: () => Promise<Track | null>;
+  /** Consume {@link lastSavedTrackId} (one prompt per save). */
+  acknowledgeSavedTrack: () => void;
   discard: () => void;
 }
 
@@ -112,6 +120,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   waypoints: [],
   lastFixAt: null,
   lastAccuracyM: null,
+  lastSavedTrackId: null,
 
   start: (name) => {
     const now = Date.now();
@@ -306,9 +315,13 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       points: [],
       stats: EMPTY_STATS,
       waypoints: [],
+      // Signal observers (Strava push prompt) that a trail was just saved.
+      lastSavedTrackId: points.length > 0 ? track.id : null,
     });
     return track;
   },
+
+  acknowledgeSavedTrack: () => set({ lastSavedTrackId: null }),
 
   discard: () => {
     for (const wp of get().waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);

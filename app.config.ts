@@ -194,6 +194,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // See docs/DEPLOYMENT.md § Error reporting.
     errorReportToken: process.env.ERROR_REPORT_TOKEN,
     errorReportEndpoint: process.env.ERROR_REPORT_ENDPOINT,
+    // Strava integration (src/lib/strava). Strava's token exchange has NO PKCE
+    // and requires the client secret, so — like ERROR_REPORT_TOKEN above — the
+    // secret is baked into the binary at build time (EAS secrets:
+    // `eas env:create --name STRAVA_CLIENT_ID ...` / STRAVA_CLIENT_SECRET).
+    // Strava's own mobile guidance tolerates this for personal apps; the
+    // mitigation is the app's narrow scope (activity:write only) and per-app
+    // rate limits. With neither set (local dev, forks) the Settings row shows
+    // "not configured in this build". See docs/DEPLOYMENT.md § Strava.
+    stravaClientId: process.env.STRAVA_CLIENT_ID,
+    stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

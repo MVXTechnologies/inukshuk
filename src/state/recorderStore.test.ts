@@ -339,3 +339,25 @@ describe('checkpoint lifecycle', () => {
     expect(cp.points).toHaveLength(1);
   });
 });
+
+describe('lastSavedTrackId (end-of-recording signal for the Strava prompt)', () => {
+  it('is set to the saved track id on stop() and consumed by acknowledgeSavedTrack()', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Pushable hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    s.addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    const track = await useRecorderStore.getState().stop();
+    expect(track).not.toBeNull();
+    expect(useRecorderStore.getState().lastSavedTrackId).toBe(track!.id);
+
+    useRecorderStore.getState().acknowledgeSavedTrack();
+    expect(useRecorderStore.getState().lastSavedTrackId).toBeNull();
+  });
+
+  it('stays null when the recording had no points (nothing was saved)', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Empty');
+    await useRecorderStore.getState().stop();
+    expect(useRecorderStore.getState().lastSavedTrackId).toBeNull();
+  });
+});
