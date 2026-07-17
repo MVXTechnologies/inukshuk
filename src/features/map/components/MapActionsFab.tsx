@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { FAB, useTheme } from 'react-native-paper';
+import { InukshukIcon } from './InukshukIcon';
 
 interface Props {
   onRecord: () => void;
+  /** Drop a standalone waypoint at the current GPS position (no recording needed). */
+  onAddWaypoint: () => void;
 }
 
 /**
- * The bottom-right "+" speed-dial (start recording today; room for more map
- * actions later — plan a route, drop a destination pin, import…).
+ * The bottom-right "+" speed-dial (start recording, drop a waypoint; room for
+ * more map actions later — plan a route, import…).
  */
-export function MapActionsFab({ onRecord }: Props) {
+export function MapActionsFab({ onRecord, onAddWaypoint }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (
@@ -22,7 +25,17 @@ export function MapActionsFab({ onRecord }: Props) {
       backdropColor="#00000066"
       actions={[
         {
-          icon: 'record-circle',
+          // The app's inukshuk glyph — paper accepts a render function
+          // anywhere a MaterialCommunityIcons name goes.
+          icon: ({ size, color }) => <InukshukIcon size={size} color={color} />,
+          label: 'Add waypoint',
+          onPress: () => {
+            setOpen(false);
+            onAddWaypoint();
+          },
+        },
+        {
+          icon: 'timer-outline',
           label: 'Record track',
           onPress: () => {
             setOpen(false);
