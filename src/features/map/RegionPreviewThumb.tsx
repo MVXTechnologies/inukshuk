@@ -2,17 +2,25 @@
  * RegionPreviewThumb — a small live preview of the drawn region in one basemap
  * style. Rather than spin up a full MapLibre instance per basemap (heavy: 3 GL
  * surfaces alongside the main map), it fetches the single tile that best frames
- * the box and shows it as an Image. Same intent — "see your actual area in this
- * style" — at a fraction of the cost, and it reuses the tiles already cached by
- * the main map.
+ * the box and shows it as an Image.
+ *
+ * The tile is fetched through `storage.downloadBytes`' disk cache with an
+ * app-identifying User-Agent — NOT with a bare RN `<Image source={{ uri }}>`.
+ * A bare RN Image request sends no User-Agent, which OSM's tile usage policy
+ * rejects: the server answers with an "Access blocked" placeholder *image*
+ * (a real 200-ish tile, so `onError` never fires) and that's exactly what the
+ * user saw in the thumb. Going through the shared tile cache also makes the
+ * preview work offline once the tile has been seen, and respects offline-only
+ * mode (a cache miss falls back to the placeholder instead of fetching).
  */
 
 import { basemapTileUrl } from './mapStyle';
 import { centerTileForRegion } from '@core/geo/tiles';
 import type { Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
+import * as storage from '@data/storage';
 import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { Icon, useTheme } from 'react-native-paper';
 
@@ -23,35 +31,72 @@ interface Props {
   size: number;
 }
 
-function previewUri(bbox: BoundingBox, basemap: Basemap, tileUrl: string): string | null {
+// Same self-identification as the 3D DEM/basemap fetches (see dem.ts) — the
+// OSM tile policy requires it, and Esri appreciates it.
+const UA_HEADERS = { 'User-Agent': 'Inukshuk/1.0 (offline trail navigation app)' };
+
+interface PreviewTile {
+  url: string;
+  /** Cache file name — keyed by basemap + z/x/y, like the DEM tile names. */
+  cacheName: string;
+}
+
+function previewTile(bbox: BoundingBox, basemap: Basemap, tileUrl: string): PreviewTile | null {
   const template = basemapTileUrl(basemap, tileUrl);
   if (!template) return null;
   const { x, y, z } = centerTileForRegion(bbox);
-  return template.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+  return {
+    url: template.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)),
+    cacheName: `preview-${basemap}-${z}-${x}-${y}.png`,
+  };
 }
 
 export function RegionPreviewThumb({ bbox, basemap, tileUrl, size }: Props): ReactElement {
   const theme = useTheme();
-  const uri = useMemo(
-    () => (bbox && tileUrl ? previewUri(bbox, basemap, tileUrl) : null),
+  const tile = useMemo(
+    () => (bbox && tileUrl ? previewTile(bbox, basemap, tileUrl) : null),
     [bbox, basemap, tileUrl],
   );
 
-  // Fall back to the placeholder if the tile can't be fetched (e.g. OSM 403s a
-  // bare RN Image request). Tracking the *failed uri* (not a bool) auto-resets
-  // when the target tile changes, without a setState-in-effect.
-  const [failedUri, setFailedUri] = useState<string | null>(null);
-  const showImage = uri !== null && uri !== failedUri;
+  // The local (cache-file) uri of the last successfully fetched tile, tagged
+  // with the remote url it came from so a stale image is never shown for a
+  // different tile. `bbox` changes on every drag frame but the framing tile's
+  // z/x/y is discrete, so the effect keys on the url strings (not the `tile`
+  // object identity) and refetches only when the target tile really changes —
+  // and even then it's usually a disk-cache hit.
+  const [loaded, setLoaded] = useState<{ url: string; localUri: string } | null>(null);
+  const url = tile?.url ?? null;
+  const cacheName = tile?.cacheName ?? null;
+  useEffect(() => {
+    if (url === null || cacheName === null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const localUri = await storage.downloadToCacheUri(url, cacheName, UA_HEADERS);
+        if (!cancelled) setLoaded({ url, localUri });
+      } catch {
+        // Fetch failed (offline-only cache miss, network error, server block):
+        // keep whatever was shown before; the placeholder covers the rest.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url, cacheName]);
+
+  const imageUri = url !== null && loaded !== null && loaded.url === url ? loaded.localUri : null;
 
   const box = { width: size, height: size, borderRadius: 8 };
   return (
     <View style={[styles.frame, box, { borderColor: theme.colors.outlineVariant }]}>
-      {showImage ? (
+      {imageUri !== null ? (
         <Image
-          source={{ uri }}
+          source={{ uri: imageUri }}
           style={[box, styles.image]}
           resizeMode="cover"
-          onError={() => setFailedUri(uri)}
+          // Undecodable cached file (e.g. a truncated write) — drop back to the
+          // placeholder rather than showing a broken image.
+          onError={() => setLoaded(null)}
         />
       ) : (
         <View style={[box, styles.placeholder, { backgroundColor: theme.colors.surfaceVariant }]}>

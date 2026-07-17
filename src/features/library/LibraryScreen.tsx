@@ -96,6 +96,7 @@ export function LibraryScreen() {
   const setItemFolder = useLibraryStore((s) => s.setItemFolder);
   const setActiveTrackIds = useLibraryStore((s) => s.setActiveTrackIds);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
+  const setInspectIntent = useMapStore((s) => s.setInspectIntent);
 
   const [busy, setBusy] = useState(false);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
@@ -164,6 +165,13 @@ export function LibraryScreen() {
     const bbox = tracks.find((t) => t.id === id)?.stats.bbox;
     if (bbox) setFocusBounds(bbox); // center the map on the trail, not the user
     router.navigate('/');
+  };
+
+  // "Trim" menu item: same as "View on map", plus a one-shot intent the Map
+  // screen consumes to open the trail's inspect panel straight into trim mode.
+  const trimTrack = (id: string) => {
+    setInspectIntent({ trackId: id, trim: true });
+    viewTrack(id);
   };
 
   const createBundle = () => {
@@ -277,6 +285,8 @@ export function LibraryScreen() {
   // A per-card overflow menu that handles both organization concerns: moving the
   // item into a folder (exclusive) and toggling its membership in bundles. The
   // menu stays open across taps so several bundles can be picked in one go.
+  // Each organize section only appears once a folder/bundle exists — a section
+  // of nothing but greyed-out placeholders is clutter, not guidance.
   const itemMenu = (kind: 'map' | 'track', id: string, name: string, folderId?: string) => (
     <Menu
       visible={cardMenu?.kind === kind && cardMenu.id === id}
@@ -289,46 +299,46 @@ export function LibraryScreen() {
         />
       }
     >
-      <Menu.Item disabled title="Move to folder" />
-      {folders.length === 0 ? (
-        <Menu.Item disabled title="No folders yet" />
-      ) : (
-        folders.map((f) => (
-          <Menu.Item
-            key={f.id}
-            leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
-            title={f.name}
-            onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
-          />
-        ))
-      )}
-      {folderId !== undefined && (
-        <Menu.Item
-          leadingIcon="folder-off-outline"
-          title="Remove from folder"
-          onPress={() => setItemFolder(kind, id, null)}
-        />
-      )}
-      <Divider />
-      <Menu.Item disabled title="Add to bundle" />
-      {bundles.length === 0 ? (
-        <Menu.Item disabled title="No bundles yet" />
-      ) : (
-        bundles.map((b) => {
-          const inBundle = kind === 'map' ? b.mapIds.includes(id) : b.trackIds.includes(id);
-          return (
+      {folders.length > 0 && (
+        <>
+          <Menu.Item disabled title="Move to folder" />
+          {folders.map((f) => (
             <Menu.Item
-              key={b.id}
-              leadingIcon={inBundle ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              title={b.name}
-              onPress={() =>
-                kind === 'map' ? toggleBundleMap(b.id, id) : toggleBundleTrack(b.id, id)
-              }
+              key={f.id}
+              leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
+              title={f.name}
+              onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
             />
-          );
-        })
+          ))}
+          {folderId !== undefined && (
+            <Menu.Item
+              leadingIcon="folder-off-outline"
+              title="Remove from folder"
+              onPress={() => setItemFolder(kind, id, null)}
+            />
+          )}
+          <Divider />
+        </>
       )}
-      <Divider />
+      {bundles.length > 0 && (
+        <>
+          <Menu.Item disabled title="Add to bundle" />
+          {bundles.map((b) => {
+            const inBundle = kind === 'map' ? b.mapIds.includes(id) : b.trackIds.includes(id);
+            return (
+              <Menu.Item
+                key={b.id}
+                leadingIcon={inBundle ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                title={b.name}
+                onPress={() =>
+                  kind === 'map' ? toggleBundleMap(b.id, id) : toggleBundleTrack(b.id, id)
+                }
+              />
+            );
+          })}
+          <Divider />
+        </>
+      )}
       <Menu.Item
         leadingIcon="trash-can-outline"
         title={kind === 'map' ? 'Delete map' : 'Delete trail'}
@@ -401,6 +411,8 @@ export function LibraryScreen() {
 
   // Full overflow menu for a trail: every secondary action plus folder/bundle
   // membership, so the card itself only needs the profile-peek + this button.
+  // The organize sections only appear once a folder/bundle exists (same rule
+  // as itemMenu): placeholders like "No folders yet" were pure clutter.
   const trackMenu = (t: (typeof tracks)[number]) => (
     <Menu
       visible={cardMenu?.kind === 'track' && cardMenu.id === t.id}
@@ -430,40 +442,58 @@ export function LibraryScreen() {
           shareTrack(t.fileUri);
         }}
       />
-      <Divider />
-      <Menu.Item disabled title="Move to folder" />
-      {folders.length === 0 ? (
-        <Menu.Item disabled title="No folders yet" />
-      ) : (
-        folders.map((f) => (
-          <Menu.Item
-            key={f.id}
-            leadingIcon={t.folderId === f.id ? 'folder-check' : 'folder-outline'}
-            title={f.name}
-            onPress={() => setItemFolder('track', t.id, t.folderId === f.id ? null : f.id)}
-          />
-        ))
+      <Menu.Item
+        leadingIcon="content-cut"
+        title="Trim"
+        onPress={() => {
+          setCardMenu(null);
+          trimTrack(t.id);
+        }}
+      />
+      <Menu.Item
+        leadingIcon="call-merge"
+        title="Merge"
+        onPress={() => {
+          // Enter the multi-select mode (same one long-press opens) with this
+          // trail pre-selected; the user then taps the others and confirms.
+          setCardMenu(null);
+          if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
+        }}
+      />
+      {folders.length > 0 && (
+        <>
+          <Divider />
+          <Menu.Item disabled title="Move to folder" />
+          {folders.map((f) => (
+            <Menu.Item
+              key={f.id}
+              leadingIcon={t.folderId === f.id ? 'folder-check' : 'folder-outline'}
+              title={f.name}
+              onPress={() => setItemFolder('track', t.id, t.folderId === f.id ? null : f.id)}
+            />
+          ))}
+          {t.folderId !== undefined && (
+            <Menu.Item
+              leadingIcon="folder-off-outline"
+              title="Remove from folder"
+              onPress={() => setItemFolder('track', t.id, null)}
+            />
+          )}
+        </>
       )}
-      {t.folderId !== undefined && (
-        <Menu.Item
-          leadingIcon="folder-off-outline"
-          title="Remove from folder"
-          onPress={() => setItemFolder('track', t.id, null)}
-        />
-      )}
-      <Divider />
-      <Menu.Item disabled title="Add to bundle" />
-      {bundles.length === 0 ? (
-        <Menu.Item disabled title="No bundles yet" />
-      ) : (
-        bundles.map((b) => (
-          <Menu.Item
-            key={b.id}
-            leadingIcon={b.trackIds.includes(t.id) ? 'checkbox-marked' : 'checkbox-blank-outline'}
-            title={b.name}
-            onPress={() => toggleBundleTrack(b.id, t.id)}
-          />
-        ))
+      {bundles.length > 0 && (
+        <>
+          <Divider />
+          <Menu.Item disabled title="Add to bundle" />
+          {bundles.map((b) => (
+            <Menu.Item
+              key={b.id}
+              leadingIcon={b.trackIds.includes(t.id) ? 'checkbox-marked' : 'checkbox-blank-outline'}
+              title={b.name}
+              onPress={() => toggleBundleTrack(b.id, t.id)}
+            />
+          ))}
+        </>
       )}
       <Divider />
       <Menu.Item

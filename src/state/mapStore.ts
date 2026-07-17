@@ -24,12 +24,20 @@ interface MapState {
   basemap: MapBasemap;
   /** One-shot request for the map to fit these bounds (e.g. "view trail"). */
   focusBounds: BoundingBox | null;
+  /**
+   * One-shot request (e.g. from the Library's "Trim" menu item) for the map to
+   * open a trail in the inspect panel; `trim: true` additionally enters trim
+   * mode once the trail's points are loaded. Consumed and cleared by MapScreen,
+   * where the inspection state lives.
+   */
+  inspectIntent: { trackId: string; trim: boolean } | null;
   setFollowUser: (follow: boolean) => void;
   togglePdfOverlay: () => void;
   toggleTrackOverlays: () => void;
   toggleTerrain3d: () => void;
   setBasemap: (b: MapBasemap) => void;
   setFocusBounds: (b: BoundingBox | null) => void;
+  setInspectIntent: (intent: { trackId: string; trim: boolean } | null) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -39,7 +47,9 @@ export const useMapStore = create<MapState>((set) => ({
   terrain3d: false,
   basemap: 'map',
   focusBounds: null,
+  inspectIntent: null,
   setFocusBounds: (b) => set({ focusBounds: b }),
+  setInspectIntent: (intent) => set({ inspectIntent: intent }),
   setFollowUser: (follow) => set({ followUser: follow }),
   togglePdfOverlay: () => set((s) => ({ showPdfOverlay: !s.showPdfOverlay })),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
