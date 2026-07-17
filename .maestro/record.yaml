@@ -10,9 +10,24 @@
 # runs, so backgrounding here delivers real fixes through the FGS path.
 appId: com.inukshuk.app
 ---
-- launchApp:
-    permissions:
-      location: allow
+# Per-platform location permission values (#128): Android's driver knows
+# allow/deny/unset (anything else silently maps to `pm revoke`), iOS takes
+# always/inUse/never and rejects "allow". Everything below the launch runs
+# unmodified on both platforms.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
 - assertVisible: 'Map actions'
 # Open the speed-dial. The tap can race first-paint/map-load on cold CI
 # emulators (same class as the smoke flow's tab-tap race): retry until the

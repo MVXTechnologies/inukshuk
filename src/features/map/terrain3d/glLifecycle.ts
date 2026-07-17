@@ -10,6 +10,10 @@ export function disposeGroup(g: THREE.Group): void {
     const mat = m.material as THREE.MeshStandardMaterial | undefined;
     if (mat) {
       mat.map?.dispose();
+      // Overlay ramp textures (terrain3d/terrainMaterial.ts) ride along in
+      // userData because uniforms aren't reachable from a stock material.
+      const extra = mat.userData?.overlayTextures as THREE.Texture[] | undefined;
+      if (extra) for (const t of extra) t.dispose();
       mat.dispose();
     }
   });

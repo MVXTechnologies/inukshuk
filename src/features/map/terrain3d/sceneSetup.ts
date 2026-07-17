@@ -4,9 +4,30 @@ import type { ExpoWebGLRenderingContext } from 'expo-gl';
 import { Renderer } from 'expo-three';
 import * as THREE from 'three';
 import { fetchBasemapTexture, type BasemapTexture } from '../dem';
+import { buildSkyDome } from './terrainMaterial';
 
-/** Sky colour used for the clear colour and the live view's horizon fog. */
-export const SKY_COLOR = 0xcfe0ec;
+/**
+ * Sky-at-the-horizon colour: the sky dome's lowest gradient stop, and the fog
+ * colour terrain fades into — keep the three in sync (SKY_STOPS.horizon in
+ * @core/geo/terrainAnalysis) so the slab edge melts into the sky.
+ */
+export const SKY_COLOR = 0xdfe9f2;
+
+/**
+ * Add the gradient sky dome + matching horizon fog to a terrain scene. Fog
+ * distances scale with the slab radius: the live view sits low in the terrain
+ * (fog closes in fast for the hazy-horizon look); the trail view orbits from
+ * further out, so its fog starts later or the whole trail would wash out.
+ */
+export function addSkyAndFog(
+  scene: THREE.Scene,
+  radius: number,
+  nearMul: number,
+  farMul: number,
+): void {
+  scene.fog = new THREE.Fog(SKY_COLOR, radius * nearMul, radius * farMul);
+  scene.add(buildSkyDome());
+}
 
 /**
  * Create the expo-three renderer for a terrain GLView, sized to the drawing

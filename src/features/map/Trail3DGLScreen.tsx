@@ -51,12 +51,24 @@ import {
   positionCameraFromOrbit,
 } from './terrain3d/orbitGestures';
 import {
+  addSkyAndFog,
   addTerrainLights,
   buildMarkerPin,
   createTerrainCamera,
   createTerrainRenderer,
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
+import {
+  TerrainOverlayButtons,
+  currentOverlaySettings,
+  useTerrainOverlaySync,
+} from './terrain3d/overlayControls';
+import {
+  applyTerrainOverlaySettings,
+  overlayRenderFailed,
+  supportsStandardDerivatives,
+  type TerrainOverlayHandle,
+} from './terrain3d/terrainMaterial';
 import { buildTerrain, markerScaleForDistance, type TerrainBuild } from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { Trail2DView } from './Trail2DView';
@@ -74,8 +86,11 @@ async function buildGroupFor(
   pts: readonly TrackPoint[],
   bm: MapBasemap,
   maxAnisotropy = 1,
+  injectOverlays = true,
 ): Promise<TerrainBuild> {
-  return buildTerrain(hm, pts, await fetchDrapeTexture(hm.range, bm), maxAnisotropy);
+  return buildTerrain(hm, pts, await fetchDrapeTexture(hm.range, bm), maxAnisotropy, {
+    injectOverlays,
+  });
 }
 
 /**
@@ -118,6 +133,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // JS responder). Disabling the scroll for the duration of a touch inside the
   // box gives the map the full gesture, matching how the main map feels.
   const [mapGesturing, setMapGesturing] = useState(false);
+  // False once the overlay shader is unavailable (no derivatives / compile
+  // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
+  const [overlaysAvailable, setOverlaysAvailable] = useState(true);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(2500);
 
   const orbit = useRef({
@@ -135,6 +153,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const scrubRef = useRef<TrackPointAt | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
+  // Analytical-overlay shader state: whether injection is usable on this device
+  // (derivatives support, no compile failure) and the live uniforms handle.
+  const injectOkRef = useRef(true);
+  const overlayRef = useRef<TerrainOverlayHandle | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  useTerrainOverlaySync(overlayRef);
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
   const basemapRef = useRef<MapBasemap>('map');
@@ -252,25 +277,62 @@ export function Trail3DGLScreen({ trackId }: Props) {
       // anisotropy and stay sharp at grazing angles.
       const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
       maxAnisoRef.current = maxAnisotropy;
+      rendererRef.current = renderer;
+      // fwidth() needs derivatives (contour anti-aliasing); skip the overlay
+      // shader entirely on the rare device without them.
+      injectOkRef.current = supportsStandardDerivatives(gl, renderer.capabilities.isWebGL2);
+      if (!injectOkRef.current) setOverlaysAvailable(false);
 
-      const { group, center, trailRadius, project } = await buildGroupFor(
+      let build = await buildGroupFor(
         hm,
         pts,
         basemapRef.current,
         maxAnisoRef.current,
+        injectOkRef.current,
       );
       if (gen !== glGenRef.current) {
-        disposeGroup(group);
+        disposeGroup(build.group);
         return;
       }
-      projectRef.current = project;
 
       const scene = new THREE.Scene();
       sceneRef.current = scene;
-      // Warm key light + soft hemisphere fill (matches the live 3D map).
+      // Warm key light + soft hemisphere fill (matches the live 3D map), plus
+      // the gradient sky dome and horizon fog so the slab edge never shows.
       addTerrainLights(scene);
-      scene.add(group);
-      groupRef.current = group;
+      addSkyAndFog(scene, build.radius, 1.2, 3.8);
+      scene.add(build.group);
+
+      const camera = createTerrainCamera(gl);
+      cameraRef.current = camera;
+      orbit.current.center = build.center.clone();
+      orbit.current.home = build.center.clone();
+      orbit.current.maxPan = Math.max(build.trailRadius * 1.8, 0.5);
+      // Frame the trail (not the whole padded slab) so the surrounding terrain
+      // fills the screen with the trace prominent in the middle.
+      orbit.current.radius = clamp(build.trailRadius * 2.6, 0.8, 9);
+      positionCameraFromOrbit(camera, orbit.current);
+
+      // Device-only blind spot: shader compile failures don't throw in three —
+      // render one guarded frame and fall back to the un-injected material if
+      // the overlay shader can't run on this GPU.
+      if (build.overlay && overlayRenderFailed(renderer, scene, camera)) {
+        reportError(new Error('terrain overlay shader failed — using fallback'), 'trail3d-overlay');
+        injectOkRef.current = false;
+        setOverlaysAvailable(false);
+        scene.remove(build.group);
+        disposeGroup(build.group);
+        build = await buildGroupFor(hm, pts, basemapRef.current, maxAnisoRef.current, false);
+        if (gen !== glGenRef.current) {
+          disposeGroup(build.group);
+          return;
+        }
+        scene.add(build.group);
+      }
+      groupRef.current = build.group;
+      projectRef.current = build.project;
+      overlayRef.current = build.overlay;
+      if (build.overlay) applyTerrainOverlaySettings(build.overlay, currentOverlaySettings());
 
       // A small pin above the surface so the highlighted point is visible
       // without dwarfing the draped trail line.
@@ -282,14 +344,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
       });
       marker.visible = false;
       scene.add(marker);
-
-      const camera = createTerrainCamera(gl);
-      orbit.current.center = center.clone();
-      orbit.current.home = center.clone();
-      orbit.current.maxPan = Math.max(trailRadius * 1.8, 0.5);
-      // Frame the trail (not the whole padded slab) so the surrounding terrain
-      // fills the screen with the trace prominent in the middle.
-      orbit.current.radius = clamp(trailRadius * 2.6, 0.8, 9);
       setStatus('ready');
 
       runRenderLoop({
@@ -316,6 +370,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
           if (sceneRef.current === scene) {
             sceneRef.current = null;
             groupRef.current = null;
+            overlayRef.current = null;
+            rendererRef.current = null;
+            cameraRef.current = null;
           }
         },
       });
@@ -344,14 +401,36 @@ export function Trail3DGLScreen({ trackId }: Props) {
     basemapRef.current = bm;
     setSwitching(true);
     try {
-      const built = await buildGroupFor(hm, ptsRef.current, bm, maxAnisoRef.current);
+      let built = await buildGroupFor(
+        hm,
+        ptsRef.current,
+        bm,
+        maxAnisoRef.current,
+        injectOkRef.current,
+      );
       if (groupRef.current) {
         scene.remove(groupRef.current);
         disposeGroup(groupRef.current);
       }
       scene.add(built.group);
+      // The map- and relief-variants compile different overlay programs, so a
+      // basemap switch can hit a fresh device-only shader failure: validate the
+      // new variant too and fall back to the plain material if it can't run.
+      const renderer = rendererRef.current;
+      const camera = cameraRef.current;
+      if (built.overlay && renderer && camera && overlayRenderFailed(renderer, scene, camera)) {
+        reportError(new Error('terrain overlay shader failed — using fallback'), 'trail3d-overlay');
+        injectOkRef.current = false;
+        setOverlaysAvailable(false);
+        scene.remove(built.group);
+        disposeGroup(built.group);
+        built = await buildGroupFor(hm, ptsRef.current, bm, maxAnisoRef.current, false);
+        scene.add(built.group);
+      }
       groupRef.current = built.group;
       projectRef.current = built.project;
+      overlayRef.current = built.overlay;
+      if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
     } catch {
       showSnack('Could not load that basemap');
     }
@@ -495,20 +574,23 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
           {trailViewMode === '3d' && status === 'ready' && (
             <View style={styles.basemapBar} pointerEvents="box-none">
-              {(['relief', 'map', 'satellite'] as const).map((bm) => (
-                <Button
-                  key={bm}
-                  compact
-                  mode={basemap === bm ? 'contained' : 'contained-tonal'}
-                  onPress={() => applyBasemap(bm)}
-                  disabled={switching}
-                  style={styles.basemapBtn}
-                  labelStyle={styles.basemapLabel}
-                >
-                  {bm === 'relief' ? 'Relief' : bm === 'map' ? 'Map' : 'Satellite'}
-                </Button>
-              ))}
-              {switching && <ActivityIndicator size={18} style={styles.basemapSpin} />}
+              <TerrainOverlayButtons available={overlaysAvailable} disabled={switching} />
+              <View style={styles.basemapRow} pointerEvents="box-none">
+                {(['relief', 'map', 'satellite'] as const).map((bm) => (
+                  <Button
+                    key={bm}
+                    compact
+                    mode={basemap === bm ? 'contained' : 'contained-tonal'}
+                    onPress={() => applyBasemap(bm)}
+                    disabled={switching}
+                    style={styles.basemapBtn}
+                    labelStyle={styles.basemapLabel}
+                  >
+                    {bm === 'relief' ? 'Relief' : bm === 'map' ? 'Map' : 'Satellite'}
+                  </Button>
+                ))}
+                {switching && <ActivityIndicator size={18} style={styles.basemapSpin} />}
+              </View>
             </View>
           )}
         </View>
@@ -688,7 +770,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   pad: { paddingHorizontal: 16 },
-  glBox: { height: 420, backgroundColor: '#cfe0ec' },
+  // Matches SKY_COLOR (the sky dome's horizon stop) so the box never flashes a
+  // mismatched blue while the GL context loads.
+  glBox: { height: 420, backgroundColor: '#dfe9f2' },
   center: {
     position: 'absolute',
     top: 0,
@@ -717,6 +801,10 @@ const styles = StyleSheet.create({
     bottom: 10,
     left: 0,
     right: 0,
+    alignItems: 'center',
+    gap: 8,
+  },
+  basemapRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

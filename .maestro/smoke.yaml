@@ -1,11 +1,31 @@
 # Maestro smoke flow: launches the app and walks the three tabs, asserting the
 # key UI of each is present. Fast end-to-end confidence that navigation, the map
 # screen, and the providers all mount without crashing.
+#
+# Runs on BOTH platforms. Two portability rules (#128):
+# - The location permission value differs per driver: Android knows
+#   allow/deny/unset (anything else — including "always" — silently maps to
+#   `pm revoke`), while iOS takes always/inUse/never and REJECTS "allow".
+#   Hence the per-platform launchApp blocks.
+# - iOS decorates accessibility text (tab labels read "Library, tab, 2 of 3",
+#   headers carry counts like "Recorded trails (1)"), and Maestro matches the
+#   WHOLE string — so taps/asserts use regexes that fit both platforms.
 appId: com.inukshuk.app
 ---
-- launchApp:
-    permissions:
-      location: allow
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
 # The map screen's record entry point is now a "+" speed-dial (not a "Record"
 # button); its accessibility label proves the map screen mounted.
 - assertVisible: 'Map actions'
@@ -16,20 +36,21 @@ appId: com.inukshuk.app
 # that will never change). Retrying until the hierarchy changes absorbs the
 # race without slowing the happy path.
 - tapOn:
-    text: 'Library'
+    text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
-- assertVisible: 'Recorded trails'
+- assertVisible: 'Recorded trails.*'
 - tapOn:
-    text: 'Settings'
+    text: 'Settings(, tab.*)?'
     retryTapIfNoChange: true
-- assertVisible: 'Keep screen awake'
+- assertVisible: 'Keep screen awake.*'
 # Settings has its own "Map" section header that Maestro would tap instead of
-# the tab bar; hop through Library (no exact-"Map" text) before returning.
+# the tab bar; hop through Library (nothing there matches the Map regex — the
+# "Maps (n)" section header doesn't fit it) before returning.
 - tapOn:
-    text: 'Library'
+    text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
 - tapOn:
-    text: 'Map'
+    text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
 # The speed-dial's accessibility label — proves the Map screen itself mounted
 # (asserting 'Map' would match the tab label even if the screen failed).

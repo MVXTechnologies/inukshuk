@@ -2,6 +2,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
+import { singleFlight } from '@core/storage/singleFlight';
 
 /**
  * Platform-coupled persistence for Inukshuk. Lives outside `src/core` (which stays
@@ -221,6 +222,21 @@ function maybeEvictDemCache(dir: Directory): void {
 // DEM-only cache.
 const TILE_CACHE_DIR = 'dem';
 
+/** Thrown by {@link downloadBytes} when the server's 200 body fails `validate`. */
+export class InvalidTileError extends Error {
+  constructor(name: string) {
+    super(`invalid tile response: ${name}`);
+    this.name = 'InvalidTileError';
+  }
+}
+
+// In-flight downloads keyed by cache file name. Concurrent callers of the same
+// tile share ONE download instead of racing on the same destination file —
+// on iOS, expo-file-system checks the destination when the download COMPLETES
+// and throws DestinationAlreadyExistsException if the other racer landed first
+// (FileSystemDownload.swift:160, issue #126). Android tolerated the race.
+const inflightDownloads = new Map<string, Promise<Uint8Array>>();
+
 /**
  * Download a remote file (e.g. a DEM/basemap tile) into the cache and return its
  * raw bytes. Reliable for binary, unlike RN's `fetch().arrayBuffer()`.
@@ -230,13 +246,35 @@ const TILE_CACHE_DIR = 'dem';
  * move: overlapping tiles between map positions are served from disk instead of
  * re-downloaded, which keeps it fast and avoids tripping tile-server rate limits.
  *
+ * Safe for concurrent callers of the same url/name: duplicates await the same
+ * in-flight download (see {@link singleFlight}), and the download itself is
+ * `idempotent` so a leftover/stale destination file is overwritten instead of
+ * throwing `DestinationAlreadyExistsException` on iOS (#126).
+ *
+ * `validate` (optional) inspects the bytes: a cached entry that fails it is
+ * deleted and re-downloaded; a fresh download that fails it is deleted and
+ * rejected with {@link InvalidTileError} — so a policy/error tile served with
+ * HTTP 200 can neither render nor poison the cache (#129).
+ *
  * In offline-only mode ({@link setNetworkAllowed}) cached tiles still serve
  * normally, but a cache miss throws {@link OfflineOnlyError} instead of fetching.
  */
-export async function downloadBytes(
+export function downloadBytes(
   url: string,
   name: string,
   headers?: Record<string, string>,
+  validate?: (bytes: Uint8Array) => boolean,
+): Promise<Uint8Array> {
+  return singleFlight(inflightDownloads, name, () =>
+    downloadBytesUncontended(url, name, headers, validate),
+  );
+}
+
+async function downloadBytesUncontended(
+  url: string,
+  name: string,
+  headers?: Record<string, string>,
+  validate?: (bytes: Uint8Array) => boolean,
 ): Promise<Uint8Array> {
   const dir = new Directory(Paths.cache, TILE_CACHE_DIR);
   if (!dir.exists) dir.create({ intermediates: true });
@@ -244,30 +282,44 @@ export async function downloadBytes(
   if (dest.exists) {
     try {
       const cached = await dest.bytes();
-      if (cached.length > 0) return cached; // cache hit
+      if (cached.length > 0 && (validate === undefined || validate(cached))) {
+        return cached; // cache hit
+      }
     } catch {
       /* unreadable cache entry — fall through and re-download */
     }
-    dest.delete();
+    dest.delete(); // empty, corrupt, or validation-rejected (poisoned) entry
   }
   if (!networkAllowed) throw new OfflineOnlyError(name);
-  await File.downloadFileAsync(url, dest, headers ? { headers } : undefined);
+  // `idempotent`: overwrite a destination that (re)appeared since the check
+  // above — without it iOS throws DestinationAlreadyExistsException (#126).
+  await File.downloadFileAsync(url, dest, { idempotent: true, ...(headers ? { headers } : {}) });
   const bytes = await dest.bytes();
+  if (validate !== undefined && !validate(bytes)) {
+    try {
+      dest.delete();
+    } catch {
+      /* best-effort — the next call's cache validation re-deletes it */
+    }
+    throw new InvalidTileError(name);
+  }
   maybeEvictDemCache(dir);
   return bytes;
 }
 
 /**
- * Like {@link downloadBytes} (same cache, same offline-only behaviour), but
- * returns the cached file's `file://` uri instead of its bytes — for consumers
- * that hand the tile straight to an `<Image>` rather than decoding it.
+ * Like {@link downloadBytes} (same cache, same offline-only + validation
+ * behaviour), but returns the cached file's `file://` uri instead of its bytes —
+ * for consumers that hand the tile straight to an `<Image>` rather than
+ * decoding it.
  */
 export async function downloadToCacheUri(
   url: string,
   name: string,
   headers?: Record<string, string>,
+  validate?: (bytes: Uint8Array) => boolean,
 ): Promise<string> {
-  await downloadBytes(url, name, headers);
+  await downloadBytes(url, name, headers, validate);
   return new File(new Directory(Paths.cache, TILE_CACHE_DIR), name).uri;
 }
 

@@ -64,6 +64,29 @@ EAS manages the distribution certificate and provisioning profile for you
 
 EAS manages the Android upload keystore for you.
 
+## Local iOS builds — machine prerequisites
+
+Building the prebuilt `ios/` workspace locally (`npx expo prebuild -p ios`,
+then `xcodebuild` or a run from Xcode) needs more than Xcode alone (#130):
+
+- **Xcode** (current stable) with its iOS platform/simulators installed.
+- **CocoaPods** — `sudo gem install cocoapods` or `brew install cocoapods`;
+  `pod install` runs as part of `npx expo prebuild -p ios`.
+- **cmake** — `brew install cmake`. **Not bundled with Xcode** and easy to
+  miss: `react-native-static-server`'s pod compiles its native Lighttpd
+  dependency with CMake in a build script phase, and without it the very first
+  `xcodebuild` fails with the cryptic
+  `Script-….sh: line 21: cmake: command not found`. The script phase inherits
+  the invoking shell's `PATH`, so make sure `/opt/homebrew/bin` is on the
+  `PATH` of whatever launches the build (a terminal-launched Xcode or
+  `xcodebuild` from your shell both qualify; GitHub's macOS runners preinstall
+  cmake already).
+- **`DEVELOPER_DIR`** — if `xcode-select -p` points at
+  `/Library/Developer/CommandLineTools`, either
+  `sudo xcode-select -s /Applications/Xcode.app` or export
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` before building;
+  the CLT-only toolchain cannot build iOS apps.
+
 ## Releasing
 
 Once the secrets above exist, a release is just a tag:
