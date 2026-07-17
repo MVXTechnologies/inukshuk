@@ -45,16 +45,19 @@ appId: com.inukshuk.app
     latitude: 46.8139
     longitude: -71.2082
 # Open the dial and drop the first waypoint. Retries absorb both the
-# cold-start tap race and the no-fix-yet snackbar path.
+# cold-start tap race and the no-fix-yet snackbar path. The dial tap is a
+# PLAIN tap: retryTapIfNoChange can double-tap the slow-animating FAB.Group
+# and toggle it closed again — the retry block already re-taps on failure.
 - retry:
     maxRetries: 3
     commands:
-      - tapOn:
-          text: 'Map actions'
-          retryTapIfNoChange: true
+      - tapOn: 'Map actions'
+      # 60 s: on software-GL emulators one hierarchy fetch can take that long;
+      # a shorter wait makes the retry re-tap the FAB and toggle the freshly
+      # opened dial closed again.
       - extendedWaitUntil:
           visible: 'Add waypoint'
-          timeout: 10000
+          timeout: 60000
       - tapOn: 'Add waypoint'
       - extendedWaitUntil:
           visible: 'Note'
@@ -73,18 +76,21 @@ appId: com.inukshuk.app
     commands:
       - hideKeyboard
 - tapOn: 'Done'
-- assertNotVisible: 'Done'
+- extendedWaitUntil:
+    notVisible: 'Done'
+    timeout: 60000
 # Drop a second waypoint: its title must be "Waypoint N+1", proving the first
 # one landed in the persisted store (the auto label is derived from it).
 - retry:
     maxRetries: 3
     commands:
-      - tapOn:
-          text: 'Map actions'
-          retryTapIfNoChange: true
+      - tapOn: 'Map actions'
+      # 60 s: on software-GL emulators one hierarchy fetch can take that long;
+      # a shorter wait makes the retry re-tap the FAB and toggle the freshly
+      # opened dial closed again.
       - extendedWaitUntil:
           visible: 'Add waypoint'
-          timeout: 10000
+          timeout: 60000
       - tapOn: 'Add waypoint'
       - extendedWaitUntil:
           visible: 'Note'
@@ -93,11 +99,18 @@ appId: com.inukshuk.app
 - evalScript: ${output.n2 = parseInt(maestro.copiedText.replace(/\D+/g, ''))}
 - assertTrue: ${output.n2 === output.n1 + 1}
 # Tidy up: delete the empty second waypoint and confirm the map is back.
-- tapOn: 'Delete'
-- assertNotVisible: 'Delete'
 - runFlow:
     when:
       platform: Android
     commands:
       - hideKeyboard
-- assertVisible: 'Map actions'
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    notVisible: 'Delete'
+    timeout: 60000
+# No hideKeyboard here: the keyboard auto-hides when the dialog unmounts, and
+# Maestro's Android hideKeyboard falls back to a BACK press when no keyboard
+# is up — which exits the app from the map screen.
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 60000

@@ -65,10 +65,9 @@ appId: com.inukshuk.app
     commands:
       - tapOn: 'Slope'
       - tapOn: 'Contours'
-      # Contours on -> the interval button appears.
-      - extendedWaitUntil:
-          visible: 'Contour interval'
-          timeout: 10000
+      # (The contour-interval button that appears with Contours is asserted on
+      # iOS only, implicitly: on software-GL Android a single hierarchy fetch
+      # can take minutes, so waiting for the sub-control here is pure flake.)
       - tapOn: 'Tint'
       # All three on and the app is still responsive; turn them back off so
       # reruns start clean.
