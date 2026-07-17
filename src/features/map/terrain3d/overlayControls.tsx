@@ -11,8 +11,9 @@ import {
 
 /**
  * Shared UI + store wiring for the 3D analytical overlays (slope bands,
- * contour lines, hypsometric tint) used by both the trail 3D screen and the
- * live 3D map. State persists in the settings store.
+ * contour lines, hypsometric tint) used by both the trail viewer (via its
+ * TrailViewerRail menus) and the live 3D map (via TerrainOverlayButtons).
+ * State persists in the settings store.
  */
 
 /** Contour-interval choices the interval button cycles through (0 = auto). */
@@ -82,8 +83,8 @@ interface ButtonsProps {
 
 /**
  * The Slope / Contours / Tint toggle buttons + the contour-interval cycler,
- * bound to the settings store. Styled like the basemap pills so they read as
- * one family of 3D view controls in both screens.
+ * bound to the settings store. Used by the live 3D map (the trail viewer
+ * offers the same switches through its overlays menu instead).
  */
 export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
   const slope = useSettingsStore((s) => s.terrainSlope);
@@ -149,7 +150,7 @@ export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
 }
 
 /** The one-time slope disclaimer, floated via Portal above the host screen. */
-function DisclaimerSnackbar({ snackbar }: { snackbar: TimedSnackbar }) {
+export function DisclaimerSnackbar({ snackbar }: { snackbar: TimedSnackbar }) {
   return (
     <Portal>
       <Snackbar

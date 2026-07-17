@@ -19,7 +19,7 @@ import {
 } from '@lib/format';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
-import type { MapBasemap } from '@state/mapStore';
+import { useMapStore, type MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -65,11 +65,8 @@ import {
   createTerrainRenderer,
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
-import {
-  TerrainOverlayButtons,
-  currentOverlaySettings,
-  useTerrainOverlaySync,
-} from './terrain3d/overlayControls';
+import { currentOverlaySettings, useTerrainOverlaySync } from './terrain3d/overlayControls';
+import { TrailViewerRail } from './TrailViewerRail';
 import {
   applyTerrainOverlaySettings,
   overlayRenderFailed,
@@ -130,8 +127,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [demPoints, setDemPoints] = useState<TrackPoint[] | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errMsg, setErrMsg] = useState('');
-  const [basemap, setBasemap] = useState<MapBasemap>('map');
+  // Viewer-local basemap (drives both the 2D map and the 3D drape), seeded from
+  // the main map's choice so opening the viewer looks like the map you came
+  // from; picking in the rail never repaints the main map.
+  const [basemap, setBasemap] = useState<MapBasemap>(() => useMapStore.getState().basemap);
   const [switching, setSwitching] = useState(false);
+  // Measured summary-card height so the control rail sits just below it.
+  const [summaryH, setSummaryH] = useState(64);
   const [scrub, setScrub] = useState<TrackPointAt | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draft, setDraft] = useState('');
@@ -183,7 +185,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   useTerrainOverlaySync(overlayRef);
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
-  const basemapRef = useRef<MapBasemap>('map');
+  const basemapRef = useRef<MapBasemap>(basemap);
   // GL generation: every 2D↔3D toggle remounts the GLView; the render loop must
   // not outlive its context (see useGlGeneration).
   const glGenRef = useGlGeneration();
@@ -488,11 +490,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
   };
 
   const applyBasemap = async (bm: MapBasemap) => {
-    const scene = sceneRef.current;
-    const hm = hmRef.current;
-    if (bm === basemap || !scene || !hm || switching) return;
+    if (bm === basemap || switching) return;
     setBasemap(bm);
     basemapRef.current = bm;
+    const scene = sceneRef.current;
+    const hm = hmRef.current;
+    // No live 3D scene (2D mode, or 3D not built yet): the 2D map restyles from
+    // state and the next 3D build reads basemapRef — nothing to rebuild now.
+    if (!scene || !hm) return;
     setSwitching(true);
     try {
       let built = await buildGroupFor(
@@ -637,7 +642,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
             // source created with empty data doesn't reliably pick up a later
             // update, which is why the trace previously appeared only after a
             // 2D/3D toggle forced a remount.
-            <Trail2DView points={points} notes={notes} scrubAt={scrub} />
+            <Trail2DView points={points} notes={notes} scrubAt={scrub} basemap={basemap} />
           ) : (
             <View style={styles.center} pointerEvents="none">
               <ActivityIndicator size="large" />
@@ -663,7 +668,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
             onPress={() => router.back()}
             style={[styles.back, { top: insets.top + 2 }]}
           />
-          <Surface style={[styles.summary, { top: insets.top + 2 }]} elevation={3}>
+          <Surface
+            style={[styles.summary, { top: insets.top + 2 }]}
+            elevation={3}
+            onLayout={(e) => setSummaryH(e.nativeEvent.layout.height)}
+          >
             <Text variant="titleSmall" numberOfLines={1}>
               {track.name}
             </Text>
@@ -676,27 +685,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
             </View>
           </Surface>
 
-          {trailViewMode === '3d' && status === 'ready' && (
-            <View style={styles.basemapBar} pointerEvents="box-none">
-              <TerrainOverlayButtons available={overlaysAvailable} disabled={switching} />
-              <View style={styles.basemapRow} pointerEvents="box-none">
-                {(['relief', 'map', 'satellite'] as const).map((bm) => (
-                  <Button
-                    key={bm}
-                    compact
-                    mode={basemap === bm ? 'contained' : 'contained-tonal'}
-                    onPress={() => applyBasemap(bm)}
-                    disabled={switching}
-                    style={styles.basemapBtn}
-                    labelStyle={styles.basemapLabel}
-                  >
-                    {bm === 'relief' ? 'Relief' : bm === 'map' ? 'Map' : 'Satellite'}
-                  </Button>
-                ))}
-                {switching && <ActivityIndicator size={18} style={styles.basemapSpin} />}
-              </View>
-            </View>
-          )}
+          <TrailViewerRail
+            top={insets.top + 2 + summaryH + 10}
+            basemap={basemap}
+            onSelectBasemap={applyBasemap}
+            basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
+            overlaysAvailable={overlaysAvailable}
+            overlaysDisabled={switching}
+          />
+          {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
           {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
         </View>
 
@@ -901,25 +898,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  basemapBar: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    gap: 8,
-  },
-  basemapRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  basemapBtn: { borderRadius: 20 },
-  basemapLabel: { marginVertical: 4, marginHorizontal: 10 },
-  basemapSpin: { marginLeft: 4 },
-  // Above the overlay/basemap pills, centred — clear of the summary card.
-  queryChip: { position: 'absolute', left: 0, right: 0, bottom: 108 },
+  // Small basemap-rebuild spinner, bottom-centred where the old pills sat.
+  switchSpin: { position: 'absolute', bottom: 14, alignSelf: 'center', pointerEvents: 'none' },
+  // Centred near the bottom of the viewport — clear of the rail on the right.
+  queryChip: { position: 'absolute', left: 0, right: 0, bottom: 40 },
   scrubRow: { paddingHorizontal: 16, paddingTop: 10 },
   notesHeader: {
     flexDirection: 'row',
