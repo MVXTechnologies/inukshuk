@@ -108,7 +108,7 @@ function regionFromPack(
   packId: string, // native UUID assigned by MapLibre
   metadata: Record<string, unknown>,
   bounds: [number, number, number, number],
-  status?: { percentage: number; completedTileSize: number },
+  status?: { percentage: number; completedTileSize: number; completedResourceSize: number },
 ): OfflineRegion {
   const meta = metadata as Partial<PackMeta>;
   const [w, s, e, n] = bounds;
@@ -117,7 +117,11 @@ function regionFromPack(
     label: (meta.label as string | undefined) ?? 'Region',
     basemap: (meta.basemap as OfflineRegion['basemap'] | undefined) ?? 'map',
     bounds: { minLng: w, minLat: s, maxLng: e, maxLat: n },
-    sizeBytes: status?.completedTileSize ?? 0,
+    // Tile bytes are the number users care about; fall back to the total
+    // resource bytes when the platform reports 0 tile bytes for a pack that
+    // clearly has content (seen on iOS, where tiles were on disk but the
+    // tile-size field of the first status read was 0 — #127).
+    sizeBytes: status ? status.completedTileSize || status.completedResourceSize : 0,
     complete: (status?.percentage ?? 0) >= 100,
     // Only trust a sane recorded number; legacy packs simply omit it.
     ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
@@ -280,11 +284,36 @@ export async function createRegionPack(
   }
 }
 
+/** The subset of MapLibre's OfflinePackStatus that region listing consumes. */
+interface PackStatus {
+  percentage: number;
+  completedTileSize: number;
+  completedResourceSize: number;
+}
+
+/**
+ * Read a pack's status, retrying once when the first answer reports zero
+ * bytes. On iOS the first `status()` after launch races the native layer's
+ * lazy progress computation (`MLNOfflinePack` starts in an Unknown state with
+ * a zeroed progress struct until `requestProgress` completes), which is how a
+ * fully-downloaded pack showed as "0 KB" in Settings (#127). The first call
+ * warms the native progress; the immediate re-query then reads real numbers.
+ * On Android the first answer is already non-zero, so the retry never fires.
+ */
+async function packStatusWithSizeRetry(pack: {
+  status(): Promise<PackStatus>;
+}): Promise<PackStatus | undefined> {
+  const first = await pack.status().catch(() => undefined);
+  if (first && (first.completedTileSize > 0 || first.completedResourceSize > 0)) return first;
+  const second = await pack.status().catch(() => undefined);
+  return second ?? first;
+}
+
 export async function listRegionPacks(): Promise<OfflineRegion[]> {
   const packs = await OfflineManager.getPacks();
   const out: OfflineRegion[] = [];
   for (const p of packs) {
-    const status = await p.status().catch(() => undefined);
+    const status = await packStatusWithSizeRetry(p);
     out.push(
       regionFromPack(p.id, p.metadata, p.bounds as [number, number, number, number], status),
     );

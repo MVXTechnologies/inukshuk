@@ -226,12 +226,67 @@ describe('downloadBytes', () => {
     expect(fsMock.__download).toHaveBeenCalledTimes(1);
   });
 
-  it('passes headers through to the downloader', async () => {
+  it('passes headers through and always downloads idempotently (iOS overwrite, #126)', async () => {
     serveDownload([1]);
     await downloadBytes('https://tiles/3.bin', 'tile-3.bin', { Authorization: 'token' });
     expect(fsMock.__download).toHaveBeenCalledWith('https://tiles/3.bin', expect.anything(), {
+      idempotent: true,
       headers: { Authorization: 'token' },
     });
+
+    serveDownload([2]);
+    await downloadBytes('https://tiles/3b.bin', 'tile-3b.bin');
+    expect(fsMock.__download).toHaveBeenLastCalledWith('https://tiles/3b.bin', expect.anything(), {
+      idempotent: true,
+    });
+  });
+
+  it('deduplicates concurrent downloads of the same tile (#126 cold-cache race)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fsMock.__download.mockImplementation(
+      async (_url: string, dest: { write: (data: Uint8Array) => void }) => {
+        await gate;
+        dest.write(new Uint8Array([1, 2]));
+      },
+    );
+
+    // Two callers race for the same cache file while nothing is on disk yet —
+    // exactly the DestinationAlreadyExistsException scenario on iOS. They must
+    // share ONE download.
+    const a = downloadBytes('https://tiles/7.bin', 'tile-7.bin');
+    const b = downloadBytes('https://tiles/7.bin', 'tile-7.bin');
+    release();
+    expect(Array.from(await a)).toEqual([1, 2]);
+    expect(Array.from(await b)).toEqual([1, 2]);
+    expect(fsMock.__download).toHaveBeenCalledTimes(1);
+
+    // Once settled the key is released: a later call is a plain cache hit.
+    const later = await downloadBytes('https://tiles/7.bin', 'tile-7.bin');
+    expect(Array.from(later)).toEqual([1, 2]);
+    expect(fsMock.__download).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects and deletes a downloaded payload that fails validation (#129)', async () => {
+    serveDownload([9, 9]);
+    const rejectNines = (b: Uint8Array) => b[0] !== 9;
+    await expect(
+      downloadBytes('https://tiles/8.bin', 'tile-8.bin', undefined, rejectNines),
+    ).rejects.toThrow('invalid tile response: tile-8.bin');
+    // The bad payload must not stay behind as a poisoned cache entry.
+    expect(fsMock.__has('/cache/dem/tile-8.bin')).toBe(false);
+  });
+
+  it('re-downloads when a cached entry fails validation (busts a poisoned cache)', async () => {
+    fsMock.__seed('/cache/dem/tile-9.bin', new Uint8Array([9]));
+    serveDownload([1]);
+    const rejectNines = (b: Uint8Array) => b[0] !== 9;
+    const bytes = await downloadBytes('https://tiles/9.bin', 'tile-9.bin', undefined, rejectNines);
+    expect(Array.from(bytes)).toEqual([1]);
+    expect(fsMock.__download).toHaveBeenCalledTimes(1);
+    expect(fsMock.__read('/cache/dem/tile-9.bin')).toEqual(new Uint8Array([1]));
   });
 
   it('offline-only: a cache miss throws OfflineOnlyError, a cache hit still serves', async () => {
