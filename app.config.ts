@@ -84,11 +84,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // vc44 (1.0.2) crash-looped the app the moment a recording backgrounded —
     // do not remove it while the background task exists. Neither the
     // expo-location nor expo-task-manager config plugin adds it for us.
+    // POST_NOTIFICATIONS (Android 13+): without it the recording foreground
+    // service still runs but its "Inukshuk is recording your track"
+    // notification is silently suppressed — users get no indication a
+    // recording is live, and Play's background-location policy expects a
+    // visible notification. Requested at record start (useBackgroundRecording).
     permissions: [
       'ACCESS_COARSE_LOCATION',
       'ACCESS_FINE_LOCATION',
       'ACCESS_BACKGROUND_LOCATION',
       'RECEIVE_BOOT_COMPLETED',
+      'POST_NOTIFICATIONS',
     ],
     // Let users open a .gpx with Inukshuk from a file manager / browser. File
     // managers are inconsistent about GPX's MIME type, so match by MIME AND by
