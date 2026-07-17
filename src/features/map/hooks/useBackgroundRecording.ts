@@ -7,7 +7,24 @@ import {
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState, PermissionsAndroid, Platform } from 'react-native';
+
+/**
+ * Android 13+ suppresses ALL notifications — including the recording
+ * foreground service's — unless POST_NOTIFICATIONS is granted at runtime.
+ * Ask once when a recording starts (the moment the notification matters);
+ * a denial degrades to an invisible-but-running service, never an error.
+ * On binaries whose manifest doesn't declare the permission (≤ vc45 pre-fix)
+ * the request resolves as denied immediately — harmless.
+ */
+async function ensureNotificationPermission(): Promise<void> {
+  if (Platform.OS !== 'android' || Platform.Version < 33) return;
+  try {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  } catch {
+    /* never block recording on the notification prompt */
+  }
+}
 
 export interface BackgroundRecordingControls {
   /** Show the "Allow all the time" rationale dialog. */
@@ -62,6 +79,8 @@ export function useBackgroundRecording({
     }
     let cancelled = false;
     void (async () => {
+      await ensureNotificationPermission();
+      if (cancelled) return;
       const permission = await ensureBackgroundLocationPermission(askRationale);
       if (cancelled) return;
       const started = await startBackgroundLocationUpdates(minDisplacement);
