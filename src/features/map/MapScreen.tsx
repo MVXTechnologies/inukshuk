@@ -1,4 +1,5 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
+import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import type { LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
@@ -100,6 +101,11 @@ export function MapScreen() {
   const mapRef = useRef<MapRef>(null);
 
   const tileUrl = useSettingsStore((s) => s.tileUrl);
+  // Cold-start camera seed: the persisted last known map position. Hydration is
+  // async, so the map mount is gated on `hydrated` below — mounting earlier
+  // would read the default null and seed the camera with nothing.
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
+  const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
 
   const { permission, location, unavailableReason } = useLocationTracking();
   const headingForCamera = useHeadingCamera();
@@ -403,6 +409,12 @@ export function MapScreen() {
 
   const trailFeature = useThrottledLineFeature(points);
 
+  // Camera seed: live fix → persisted last known position → MapLibre default.
+  // `location` covers the 3D→2D remount (the live fix is already in hand);
+  // `lastKnownPosition` covers the cold start, where the first fix may be
+  // minutes away (indoors) — without it the map opened on [0,0], null island.
+  const initialCenter = resolveInitialCenter(location, lastKnownPosition);
+
   // Active saved-trail polylines (lng/lat) to drape on the 3D terrain.
   const trail3dLines = useMemo<readonly LngLat[][]>(
     () =>
@@ -421,7 +433,7 @@ export function MapScreen() {
           recordPoints={points}
           waypoints={waypoints}
         />
-      ) : (
+      ) : !settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
         <Map
           ref={mapRef}
           style={styles.fill}
@@ -446,14 +458,16 @@ export function MapScreen() {
         >
           <Camera
             ref={cameraRef}
-            // Leaving 3D fully remounts <Map>/<Camera>; without a centre here
-            // MapLibre defaults to [0,0] (null island, "middle of the Atlantic").
-            // Seed it from the live location so we re-open on the user's position.
+            // Cold launch and leaving 3D both mount <Map>/<Camera> fresh;
+            // without a centre here MapLibre defaults to [0,0] (null island,
+            // "middle of the Atlantic"). Seed from the live location when we
+            // have one, else the persisted last known position. Once the first
+            // fix lands, follow mode (trackUserLocation below, on by default)
+            // flies the camera to it natively — no manual fly needed, and none
+            // wanted if the user already panned away (which clears followUser).
             initialViewState={{
               zoom: 14,
-              ...(location
-                ? { center: [location.longitude, location.latitude] as [number, number] }
-                : {}),
+              ...(initialCenter ? { center: initialCenter } : {}),
             }}
             // "Rotate map with heading" setting: the map bearing always comes
             // from OUR filtered heading (see useHeadingCamera → useCompass),
