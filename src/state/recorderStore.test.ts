@@ -131,6 +131,44 @@ describe('GPS fix gating in addPoint', () => {
   });
 });
 
+describe('pause / resume feed gating', () => {
+  it('ignores addPoint while paused and accepts again after resume', () => {
+    // Regression guard for the auto-pause interplay (#116): once the location
+    // watch pauses the recording, arriving fixes must be dropped — and a
+    // resume must restore the feed with no residue from the pause.
+    const s = useRecorderStore.getState();
+    s.start('Pausable');
+    s.addPoint(pt({ time: 1_000_000 }));
+
+    useRecorderStore.getState().pause();
+    useRecorderStore.getState().addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    expect(useRecorderStore.getState().points).toHaveLength(1);
+
+    useRecorderStore.getState().resume();
+    useRecorderStore.getState().addPoint(pt({ time: 1_004_000, latitude: 46.80005 }));
+    const after = useRecorderStore.getState();
+    expect(after.status).toBe('recording');
+    expect(after.points.map((p) => p.time)).toEqual([1_000_000, 1_004_000]);
+  });
+
+  it('pause and resume are no-ops in the wrong state (double auto-pause is safe)', () => {
+    const s = useRecorderStore.getState();
+    s.resume(); // idle — nothing to resume
+    expect(useRecorderStore.getState().status).toBe('idle');
+
+    s.start('Steady');
+    useRecorderStore.getState().pause();
+    useRecorderStore.getState().pause(); // repeated auto-pause must not corrupt pausedAt
+    const paused = useRecorderStore.getState();
+    expect(paused.status).toBe('paused');
+    expect(paused.pausedAt).not.toBeNull();
+
+    useRecorderStore.getState().resume();
+    expect(useRecorderStore.getState().status).toBe('recording');
+    expect(useRecorderStore.getState().pausedAt).toBeNull();
+  });
+});
+
 describe('checkpoint + recovery round-trip', () => {
   it('restores an interrupted recording as paused, with points and waypoints', async () => {
     const s = useRecorderStore.getState();

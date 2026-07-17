@@ -23,7 +23,7 @@ import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
-import { BackgroundLocationRationaleDialog } from './components/BackgroundLocationRationaleDialog';
+import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { MapActionsFab } from './components/MapActionsFab';
@@ -35,6 +35,7 @@ import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
 import { toLineFeature } from './geojson';
+import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
@@ -176,20 +177,11 @@ export function MapScreen() {
     respondToBgRationale,
   } = useRecordingSession({ showSnack });
 
-  // #90 — location lost mid-recording. useLocationTracking re-checks permission
-  // and device-location availability on every foreground; if either drops out
-  // while recording, watchPositionAsync stops delivering fixes silently — the
-  // timer keeps running but no points accrue. Auto-pause so the UI stops
-  // implying we're still tracking, surface why (the denied/unavailable Banner
-  // below already explains how to recover), and let the user resume once
-  // location is back. NB: a Banner, not a Portal/Dialog (see #108).
+  // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
+  // loss (debounced in the hook; transient watch re-subscription and the
+  // permission dialog's AppState churn must not pause a healthy recording).
   const locationLost = permission === 'denied' || unavailableReason !== null;
-  useEffect(() => {
-    if (locationLost && status === 'recording') {
-      pause();
-      showSnack('Location lost — recording paused. Re-enable location to continue.');
-    }
-  }, [locationLost, status, pause, showSnack]);
+  useAutoPauseOnLocationLoss(locationLost, showSnack);
 
   const {
     selecting,
@@ -217,6 +209,28 @@ export function MapScreen() {
     cancelTrim,
     changeTrim,
   } = useTrailInspection(tracks);
+
+  // Library → "Trim": a one-shot store intent opens the trail in the inspect
+  // panel and, once its points load, enters trim mode. Consumed here because
+  // the inspection state is local to this screen. The pending trim is keyed by
+  // track id so an inspection switched mid-load never trims the wrong trail.
+  const inspectIntent = useMapStore((s) => s.inspectIntent);
+  const setInspectIntent = useMapStore((s) => s.setInspectIntent);
+  const pendingTrimId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!inspectIntent) return;
+    pendingTrimId.current = inspectIntent.trim ? inspectIntent.trackId : null;
+    inspect(inspectIntent.trackId);
+    setInspectIntent(null);
+    // `inspect` is a stable setter wrapper from the hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectIntent, setInspectIntent]);
+  useEffect(() => {
+    if (!inspectPoints || inspectId === null || inspectId !== pendingTrimId.current) return;
+    pendingTrimId.current = null;
+    if (inspectPoints.length >= 3) beginTrim();
+    else showSnack('This trail is too short to trim');
+  }, [inspectPoints, inspectId, beginTrim, showSnack]);
 
   // Trim tool: live preview segments + the two save paths. The kept window is
   // drawn bright over the trace; the cut ends are dimmed (see below).
@@ -353,7 +367,14 @@ export function MapScreen() {
           style={styles.fill}
           mapStyle={style}
           attribution
-          attributionPosition={{ bottom: 8, left: 8 }}
+          // MapLibre's wordmark logo also defaults to the bottom-left corner,
+          // exactly where the attribution "i" used to sit — the two ornaments
+          // rendered on top of each other. Stack the attribution button above
+          // the logo instead; both must stay visible (OSM/Esri attribution is
+          // a license requirement, and hiding the logo isn't wanted either).
+          attributionPosition={{ bottom: 48, left: 8 }}
+          logo
+          logoPosition={{ bottom: 8, left: 8 }}
           // We draw our own compass badge (top-left), so hide MapLibre's native
           // compass — when the map is rotated it otherwise appears in the top-right,
           // peeking out behind our locate button as a stray dark circle.
@@ -646,10 +667,7 @@ export function MapScreen() {
           take over) and while selecting an offline region. */}
       {status === 'idle' && !selecting && <MapActionsFab onRecord={startRecording} />}
 
-      <BackgroundLocationRationaleDialog
-        visible={bgRationaleVisible}
-        onRespond={respondToBgRationale}
-      />
+      <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
       <WaypointEditorDialog
         waypoint={editWp}

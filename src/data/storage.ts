@@ -216,6 +216,11 @@ function maybeEvictDemCache(dir: Directory): void {
   }
 }
 
+// One shared, evicted cache directory for every raw downloaded tile (DEM,
+// 3D-drape basemap, region-preview). The name is historical: it started as the
+// DEM-only cache.
+const TILE_CACHE_DIR = 'dem';
+
 /**
  * Download a remote file (e.g. a DEM/basemap tile) into the cache and return its
  * raw bytes. Reliable for binary, unlike RN's `fetch().arrayBuffer()`.
@@ -233,7 +238,7 @@ export async function downloadBytes(
   name: string,
   headers?: Record<string, string>,
 ): Promise<Uint8Array> {
-  const dir = new Directory(Paths.cache, 'dem');
+  const dir = new Directory(Paths.cache, TILE_CACHE_DIR);
   if (!dir.exists) dir.create({ intermediates: true });
   const dest = new File(dir, name);
   if (dest.exists) {
@@ -250,6 +255,20 @@ export async function downloadBytes(
   const bytes = await dest.bytes();
   maybeEvictDemCache(dir);
   return bytes;
+}
+
+/**
+ * Like {@link downloadBytes} (same cache, same offline-only behaviour), but
+ * returns the cached file's `file://` uri instead of its bytes — for consumers
+ * that hand the tile straight to an `<Image>` rather than decoding it.
+ */
+export async function downloadToCacheUri(
+  url: string,
+  name: string,
+  headers?: Record<string, string>,
+): Promise<string> {
+  await downloadBytes(url, name, headers);
+  return new File(new Directory(Paths.cache, TILE_CACHE_DIR), name).uri;
 }
 
 /**
