@@ -3,7 +3,7 @@ import type { TrackPointAt } from '@core/geo/track';
 import { numberNotesOnTrack } from '@core/library/notes';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import { useSettingsStore } from '@state/settingsStore';
-import { useMapStore } from '@state/mapStore';
+import { useMapStore, type MapBasemap } from '@state/mapStore';
 import { mapColors } from '@ui/theme';
 import {
   Camera,
@@ -23,15 +23,19 @@ export function Trail2DView({
   points,
   notes,
   scrubAt,
+  basemap,
 }: {
   points: readonly TrackPoint[];
   notes?: readonly TrackNote[];
   /** Elevation-profile scrub position: draws a marker riding the 2D trace. */
   scrubAt?: TrackPointAt | null;
+  /** Viewer-local basemap from the trail rail; falls back to the main map's. */
+  basemap?: MapBasemap;
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
-  const basemap = useMapStore((s) => s.basemap);
-  const style = useMemo(() => buildOsmStyle(tileUrl, false, basemap, true), [tileUrl, basemap]);
+  const mainBasemap = useMapStore((s) => s.basemap);
+  const bm = basemap ?? mainBasemap;
+  const style = useMemo(() => buildOsmStyle(tileUrl, false, bm, true), [tileUrl, bm]);
   const cameraRef = useRef<CameraRef>(null);
 
   const lngLats = useMemo(
