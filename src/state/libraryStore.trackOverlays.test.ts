@@ -1,4 +1,5 @@
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
+
 import { useLibraryStore } from './libraryStore';
 
 jest.mock('@data/storage', () => ({

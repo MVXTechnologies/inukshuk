@@ -1,12 +1,20 @@
 import * as storage from '@data/storage';
-import type { PendingWaypoint } from '@state/recorderStore';
 import * as ImagePicker from 'expo-image-picker';
 import { Image, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
 
+/**
+ * The minimal waypoint shape the editor needs — satisfied by both a live
+ * recording waypoint (`PendingWaypoint`) and a saved standalone `Waypoint`.
+ */
+interface EditableWaypoint {
+  label: string;
+  photoUri?: string;
+}
+
 interface Props {
   /** The waypoint being edited; the dialog is visible while this is non-null. */
-  waypoint: PendingWaypoint | null;
+  waypoint: EditableWaypoint | null;
   /** Current note draft (owned by the caller so it survives photo updates). */
   draft: string;
   onChangeDraft: (text: string) => void;
@@ -18,7 +26,7 @@ interface Props {
   onSetPhoto: (uri: string) => void;
 }
 
-/** Editor dialog for a live waypoint's note + photo (camera or library). */
+/** Editor dialog for a waypoint's note + photo (camera or library). */
 export function WaypointEditorDialog({
   waypoint,
   draft,

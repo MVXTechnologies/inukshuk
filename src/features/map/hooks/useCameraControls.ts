@@ -1,19 +1,26 @@
+import { zoomForVisibleWidth } from '@core/geo/zoomForVisibleWidth';
 import type { BoundingBox } from '@core/models';
-import type { CameraRef } from '@maplibre/maplibre-react-native';
+import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
 import { useMapStore } from '@state/mapStore';
 import { type RefObject, useEffect, useMemo } from 'react';
+import { Dimensions } from 'react-native';
 import { toLngLatBounds } from '../geojson';
+
+/** Locate view target: ~2.5 km of terrain across the screen. */
+const LOCATE_VIEW_WIDTH_M = 2500;
 
 /**
  * Camera-level controls for the 2D map: the one-shot "fit these bounds"
- * request from the Library, the fit-to-active-overlays action, and the
- * compass reset-to-north action.
+ * request from the Library, the fit-to-active-overlays action, the locate
+ * zoom-in, and the compass reset-to-north action.
  */
 export function useCameraControls({
   cameraRef,
+  mapRef,
   overlays,
 }: {
   cameraRef: RefObject<CameraRef | null>;
+  mapRef: RefObject<MapRef | null>;
   overlays: readonly { bbox: BoundingBox }[];
 }) {
   const setFollowUser = useMapStore((s) => s.setFollowUser);
@@ -66,5 +73,27 @@ export function useCameraControls({
     cameraRef.current?.setStop({ bearing: 0, duration: 300 });
   };
 
-  return { fitActiveMap, resetNorth };
+  /**
+   * Locate button: alongside re-enabling follow-user (the caller's job), zoom
+   * IN until roughly {@link LOCATE_VIEW_WIDTH_M} of terrain spans the screen.
+   * Never zooms out — a user who is already closer keeps their zoom.
+   */
+  const zoomToLocateLevel = async (latitude: number) => {
+    const target = zoomForVisibleWidth(
+      LOCATE_VIEW_WIDTH_M,
+      latitude,
+      Dimensions.get('window').width,
+    );
+    let current: number | undefined;
+    try {
+      current = await mapRef.current?.getZoom();
+    } catch {
+      return; // map mid-teardown — leave the zoom alone
+    }
+    if (current !== undefined && target > current) {
+      cameraRef.current?.zoomTo(target, { duration: 600 });
+    }
+  };
+
+  return { fitActiveMap, resetNorth, zoomToLocateLevel };
 }

@@ -70,7 +70,9 @@ four stages:
 - Tracks persist as standard GPX 1.1 in the document directory; the library
   index (`library.json`) keeps lightweight summaries and loads points on demand.
 - Waypoints dropped during recording become distance-anchored trail notes
-  (optionally with photos) on the saved track.
+  (optionally with photos) on the saved track. Waypoints dropped outside a
+  recording (map "+" speed-dial) are standalone: they keep their coordinate
+  and persist in the library index (`waypoints`).
 
 ## Offline maps
 
@@ -135,6 +137,14 @@ four stages:
 | Store                 | Persisted?            | Holds                                                                                                                                                      |
 | --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes + activity categories, custom categories, bundles, folders, active map, active trail overlays |
+| `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                                                                     |
+| `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                                                                  |
+| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                                                             |
+| `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                                                           |
+| `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                                                                                |
+| Store                 | Persisted?            | Holds                                                                                                                                                      |
+| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------                    |
+| `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, standalone waypoints, active map, active trail overlays                    |
 | `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                                                                     |
 | `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                                                                  |
 | `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                                                             |
