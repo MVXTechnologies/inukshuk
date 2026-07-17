@@ -23,7 +23,12 @@ import {
   fetchDrapeTexture,
   SKY_COLOR,
 } from './terrain3d/sceneSetup';
-import { buildTerrain, type TerrainBuild } from './terrainScene';
+import {
+  buildTerrain,
+  markerScaleForDistance,
+  type GroundPoint,
+  type TerrainBuild,
+} from './terrainScene';
 
 interface Props {
   /** Live device location; the surface is built around it and a marker tracks it. */
@@ -80,45 +85,38 @@ async function fetchAndBuild(
 }
 
 type Project = (lng: number, lat: number) => THREE.Vector3;
+type DrapeLine = TerrainBuild['drapeLine'];
 const inBox = (b: BoundingBox, lng: number, lat: number) =>
   lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng;
 
 /**
- * Add a draped polyline (a trail or recording trace) as tube segments, split at
- * the box edges so points outside the loaded terrain don't snap to the border.
+ * Add a polyline (a trail or recording trace) as a flat line draped on the
+ * terrain surface — it reads like a 2D route painted on the map, not a 3D tube
+ * floating above it. Split at the box edges so points outside the loaded
+ * terrain don't snap to the border.
  */
 function addPolyline(
   group: THREE.Group,
   coords: readonly LngLat[],
   project: Project,
+  drapeLine: DrapeLine,
   bbox: BoundingBox,
   color: number,
-  radius: number,
+  halfWidth: number,
 ): void {
-  let run: THREE.Vector3[] = [];
+  let run: GroundPoint[] = [];
   const flush = () => {
     if (run.length >= 2) {
-      // A single coloured route line hugging the surface — shaded with a matching
-      // emissive so it stays clearly its colour (red trail / orange recording).
-      const curve = new THREE.CatmullRomCurve3(run.map((v) => v.clone().setY(v.y + 0.0035)));
-      const tube = new THREE.TubeGeometry(curve, Math.min(900, run.length * 6), radius, 6, false);
-      group.add(
-        new THREE.Mesh(
-          tube,
-          new THREE.MeshStandardMaterial({
-            color,
-            emissive: color,
-            emissiveIntensity: 0.5,
-            roughness: 0.5,
-          }),
-        ),
-      );
+      const line = drapeLine(run, { color, halfWidth });
+      if (line) group.add(line);
     }
     run = [];
   };
   for (const [lng, lat] of coords) {
-    if (inBox(bbox, lng, lat)) run.push(project(lng, lat));
-    else flush();
+    if (inBox(bbox, lng, lat)) {
+      const v = project(lng, lat);
+      run.push({ x: v.x, z: v.z });
+    } else flush();
   }
   flush();
 }
@@ -192,6 +190,7 @@ export function Terrain3DLiveView({
 
   const orbit = useRef({ theta: 0.6, phi: 1.05, radius: 4, center: new THREE.Vector3() });
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
+  const drapeLineRef = useRef<DrapeLine | null>(null);
   const unprojectRef = useRef<((x: number, z: number) => { lng: number; lat: number }) | null>(
     null,
   );
@@ -218,8 +217,9 @@ export function Terrain3DLiveView({
   const rebuildOverlays = () => {
     const scene = sceneRef.current;
     const project = projectRef.current;
+    const drapeLine = drapeLineRef.current;
     const bbox = bboxRef.current;
-    if (!scene || !project || !bbox) return;
+    if (!scene || !project || !drapeLine || !bbox) return;
     const old = overlaysRef.current;
     if (old) {
       scene.remove(old);
@@ -227,16 +227,17 @@ export function Terrain3DLiveView({
     }
     const g = new THREE.Group();
     for (const coords of trailsRef.current)
-      addPolyline(g, coords, project, bbox, TRAIL_COLOR, 0.0042);
+      addPolyline(g, coords, project, drapeLine, bbox, TRAIL_COLOR, 0.0042);
     const rec = recordPointsRef.current;
     if (rec.length >= 2) {
       addPolyline(
         g,
         rec.map((p) => [p.longitude, p.latitude] as LngLat),
         project,
+        drapeLine,
         bbox,
         REC_COLOR,
-        0.011,
+        0.01,
       );
     }
     for (const w of waypointsRef.current) {
@@ -275,6 +276,7 @@ export function Terrain3DLiveView({
         }
         groupRef.current = built.group;
         projectRef.current = built.project;
+        drapeLineRef.current = built.drapeLine;
         unprojectRef.current = built.unproject;
         bboxRef.current = built.bbox;
         anchorRef.current = target;
@@ -358,6 +360,7 @@ export function Terrain3DLiveView({
         radius,
         project,
         unproject,
+        drapeLine,
         bbox,
       } = await fetchAndBuild(anchor, basemapRef.current, maxAnisoRef.current);
       if (gen !== glGenRef.current) {
@@ -365,6 +368,7 @@ export function Terrain3DLiveView({
         return; // superseded while loading (remount/unmount)
       }
       projectRef.current = project;
+      drapeLineRef.current = drapeLine;
       unprojectRef.current = unproject;
       bboxRef.current = bbox;
       anchorRef.current = anchor;
@@ -378,12 +382,13 @@ export function Terrain3DLiveView({
       scene.add(group);
       groupRef.current = group;
 
-      // Live "you are here" marker: a coloured head on a pole, set on the surface.
+      // Live "you are here" marker: a small coloured head on a short pole, set
+      // on the surface — sized like the 2D location puck, not a monument.
       const marker = buildMarkerPin({
-        headRadius: 0.03,
+        headRadius: 0.013,
         headColor: 0x566b33,
         headEmissive: 0x1a240a,
-        height: 0.13,
+        height: 0.05,
       });
       scene.add(marker);
       rebuildOverlays(); // drape trails / recording / waypoints on the surface
@@ -420,6 +425,8 @@ export function Terrain3DLiveView({
           if (inside && projectRef.current && loc) {
             target.copy(projectRef.current(loc.longitude, loc.latitude));
             marker.position.copy(target);
+            // Shrink the marker as the camera closes in so it never balloons.
+            marker.scale.setScalar(markerScaleForDistance(camera.position.distanceTo(target)));
             marker.visible = true;
             // Follow mode: keep the camera centred on the moving user.
             if (followRef.current) o.center.copy(target);

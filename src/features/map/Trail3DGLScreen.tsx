@@ -57,7 +57,7 @@ import {
   createTerrainRenderer,
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
-import { buildTerrain, type TerrainBuild } from './terrainScene';
+import { buildTerrain, markerScaleForDistance, type TerrainBuild } from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { Trail2DView } from './Trail2DView';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
@@ -272,12 +272,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
       scene.add(group);
       groupRef.current = group;
 
-      // A pin that stands above the surface so the highlighted point is obvious.
+      // A small pin above the surface so the highlighted point is visible
+      // without dwarfing the draped trail line.
       const marker = buildMarkerPin({
-        headRadius: 0.032,
+        headRadius: 0.013,
         headColor: 0xffd166,
         headEmissive: 0x7a5200,
-        height: 0.14,
+        height: 0.055,
       });
       marker.visible = false;
       scene.add(marker);
@@ -302,6 +303,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
           const sc = scrubRef.current;
           if (sc && projectRef.current) {
             marker.position.copy(projectRef.current(sc.longitude, sc.latitude));
+            // Shrink the marker as the camera closes in so it never balloons.
+            marker.scale.setScalar(
+              markerScaleForDistance(camera.position.distanceTo(marker.position)),
+            );
             marker.visible = true;
           } else {
             marker.visible = false;

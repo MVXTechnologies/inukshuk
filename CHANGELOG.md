@@ -33,6 +33,18 @@ on the same app version; native changes require a new store build. See
   page instead ("works on the main map, not in GPX focus mode"). While a finger
   is down on the map/terrain box the scroll is disabled, giving the map the
   whole gesture; the page still scrolls from anywhere below the map.
+- **The offline-download layer previews show the map again.** The little
+  per-basemap thumbnails in "Download offline area" fetched their sample tile
+  with a bare image request — no `User-Agent` — which OSM's tile usage policy
+  rejects by serving an "Access blocked" placeholder tile. The preview tile is
+  now fetched with the app's identifying User-Agent through the shared tile
+  cache, so it also survives going offline once seen and respects the
+  "locally downloaded only" switch.
+- **The map attribution "ⓘ" no longer overlaps the MapLibre logo.** Both
+  ornaments defaulted to the same bottom-left corner; the attribution button now
+  sits above the logo, keeping both visible (OSM/Esri attribution is a license
+  requirement).
+
 - **"Download your data" no longer claims success when the share sheet is
   cancelled.** `expo-sharing` resolves identically whether the user completed the
   share or dismissed the sheet (Android reports no outcome), so the export now
@@ -90,6 +102,14 @@ on the same app version; native changes require a new store build. See
   trails and note photos, plus the map PDFs the old in-memory backup had to omit).
 
 ### Added
+
+- **Trim and Merge from a trail's ⋮ menu.** "Trim" jumps to the Map tab with
+  that trail open in the inspect panel, straight into the scissors' trim mode;
+  "Merge" enters the Library's multi-select mode (the one long-pressing a trail
+  opens) with that trail pre-selected — tap the others and confirm. The menu is
+  also decluttered: "Move to folder" and "Add to bundle" only appear once a
+  folder or bundle actually exists, instead of showing greyed-out
+  "No folders/bundles yet" placeholders.
 
 - **Per-page overlay selection.** A multi-page PDF now lists each georeferenced
   page in the Library with a checkbox; any combination of pages (across one or

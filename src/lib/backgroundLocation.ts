@@ -1,3 +1,4 @@
+import { isBackgroundFeedFresh } from '@core/geo/track/backgroundFeed';
 import type { TrackPoint } from '@core/models';
 import * as checkpoint from '@data/recorderCheckpoint';
 import { useRecorderStore } from '@state/recorderStore';
@@ -47,16 +48,41 @@ export function toTrackPoint(loc: Location.LocationObject): TrackPoint {
   };
 }
 
-/** True while the OS task is feeding the recorder — the foreground watch then
- * only drives the on-screen marker (no double points). */
-let active = false;
+/** True once `startLocationUpdatesAsync` resolved for the current session. */
+let taskStarted = false;
+
+/** Epoch ms of the task's last delivery to the live session, null until it
+ * actually delivers. "Start resolved" is NOT proof the task will ever fire —
+ * see the v1.0.2 regression notes on {@link isBackgroundFeedConfirmed}. */
+let lastDeliveryAt: number | null = null;
 
 /** Headless-context decision cache: is there an interrupted recording on disk
  * worth journaling for, or is this task a stale leftover to shut down? */
 let headlessDecision: 'journal' | 'stop' | null = null;
 
-export function isBackgroundLocationActive(): boolean {
-  return active;
+/**
+ * True while the OS task is CONFIRMED to be feeding the recorder (it started
+ * AND delivered recently) — only then does the foreground watch stand down as
+ * a recorder feeder and drive just the on-screen marker.
+ *
+ * v1.0.2 shipped this as "true as soon as startLocationUpdatesAsync resolved".
+ * On devices where the started task then never delivers (Samsung One UI
+ * foreground-service deferral / battery management, or the service dying after
+ * the start call resolves), that muted the foreground feed with nothing taking
+ * over: recording ran, zero points accrued, screen on or off. Fail-safe is the
+ * other way around — double-feeding is deduped by timestamp (GPS filter +
+ * mergePoints), zero-feeding loses the hike.
+ */
+export function isBackgroundFeedConfirmed(): boolean {
+  return taskStarted && isBackgroundFeedFresh(lastDeliveryAt, Date.now());
+}
+
+/** Test-only: reset module state the way a fresh JS process would. */
+export function resetBackgroundLocationForTests(): void {
+  taskStarted = false;
+  lastDeliveryAt = null;
+  headlessDecision = null;
+  rationaleDeclinedThisSession = false;
 }
 
 // defineTask must run at module scope (the task can wake the app headless).
@@ -72,11 +98,18 @@ try {
     if (recorder.status === 'recording') {
       // Live JS: feed the store directly. addPoint gates via the GPS filter
       // (accuracy/teleport/near-duplicate) and checkpoints on a throttle.
+      // Delivery is the only proof the task is alive — record it so the
+      // foreground watch knows it can stand down (see isBackgroundFeedConfirmed).
+      lastDeliveryAt = Date.now();
       for (const loc of locations) recorder.addPoint(toTrackPoint(loc));
       return;
     }
-    // The user paused — drop fixes while the service winds down.
-    if (recorder.status === 'paused') return;
+    // The user paused — drop fixes while the service winds down (but the task
+    // is demonstrably alive, so keep the delivery clock fresh).
+    if (recorder.status === 'paused') {
+      lastDeliveryAt = Date.now();
+      return;
+    }
 
     // status === 'idle': the JS process restarted underneath a live OS task
     // (headless relaunch, or app reopened before crash recovery ran).
@@ -105,6 +138,7 @@ try {
  */
 export async function startBackgroundLocationUpdates(minDisplacementM: number): Promise<boolean> {
   headlessDecision = null; // a fresh session invalidates any cached decision
+  lastDeliveryAt = null; // confirmation must come from THIS session's deliveries
   try {
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
       // Mirror the foreground watch so the track quality does not change when
@@ -125,17 +159,18 @@ export async function startBackgroundLocationUpdates(minDisplacementM: number): 
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
     });
-    active = true;
+    taskStarted = true;
     return true;
   } catch {
-    active = false;
+    taskStarted = false;
     return false;
   }
 }
 
 /** Stop the recording task (recording stopped/paused, or a stale task). */
 export async function stopBackgroundLocationUpdates(): Promise<void> {
-  active = false;
+  taskStarted = false;
+  lastDeliveryAt = null;
   headlessDecision = null;
   try {
     if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) {

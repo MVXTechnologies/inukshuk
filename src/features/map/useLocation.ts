@@ -1,5 +1,5 @@
 import type { LatLng, TrackPoint } from '@core/models';
-import { isBackgroundLocationActive, toTrackPoint } from '@lib/backgroundLocation';
+import { isBackgroundFeedConfirmed, toTrackPoint } from '@lib/backgroundLocation';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Location from 'expo-location';
@@ -7,6 +7,12 @@ import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
 export type LocationPermission = 'undetermined' | 'granted' | 'denied';
+
+/** How long to wait before retrying a failed watch start. Without a retry, a
+ * transient rejection (activity mid-transition after a permission round-trip,
+ * device location briefly off) left the watch dead until the next foreground —
+ * and, while recording, the auto-pause saw a permanent "location lost". */
+export const WATCH_RETRY_MS = 5000;
 
 export interface LocationTracking {
   location: LatLng | null;
@@ -23,11 +29,14 @@ export interface LocationTracking {
 
 /**
  * Requests foreground location permission and watches the device position for
- * the live on-screen marker. While no background task is running it also feeds
- * the recorder (the store ignores points unless its status is 'recording', so
- * feeding it unconditionally is safe); once the background task is active —
- * see `@lib/backgroundLocation`, started by `useBackgroundRecording` — the
- * task is the sole recorder feeder and this watch only drives the marker.
+ * the live on-screen marker. It also feeds the recorder (the store ignores
+ * points unless its status is 'recording', so feeding it unconditionally is
+ * safe) — UNLESS the background task (see `@lib/backgroundLocation`, started
+ * by `useBackgroundRecording`) is CONFIRMED to be delivering fixes itself, in
+ * which case this watch only drives the marker. Confirmation is per-delivery
+ * and decays: a background task that stops delivering hands the feed straight
+ * back to this watch (double points are deduped by timestamp; missing points
+ * are gone forever).
  */
 export function useLocationTracking(): LocationTracking {
   const [location, setLocation] = useState<LatLng | null>(null);
@@ -52,6 +61,7 @@ export function useLocationTracking(): LocationTracking {
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
 
     (async () => {
@@ -62,7 +72,15 @@ export function useLocationTracking(): LocationTracking {
       // reporter existed, and afterwards it queued a report on each launch.
       // Surface it as state the map can show instead.
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        // Only the FIRST run may show the system permission prompt. Re-runs
+        // (every foreground, and the retry below) must passively re-CHECK:
+        // request()ing on each foreground re-prompted a denied-but-askable
+        // user on every app switch, and the prompt itself churns AppState —
+        // prompt → background → active → recheck → prompt again.
+        const { status } =
+          recheck === 0
+            ? await Location.requestForegroundPermissionsAsync()
+            : await Location.getForegroundPermissionsAsync();
         if (cancelled) return;
         if (status !== 'granted') {
           setPermission('denied');
@@ -80,12 +98,22 @@ export function useLocationTracking(): LocationTracking {
             setUnavailableReason(null);
             setLocation({ latitude: fix.latitude, longitude: fix.longitude });
             setLastFix(fix);
-            // Recorder filters by status internally. While the background task
-            // feeds the track, the watch only drives the marker.
-            if (!isBackgroundLocationActive()) useRecorderStore.getState().addPoint(fix);
+            // Recorder filters by status internally. Only while the background
+            // task is CONFIRMED delivering does the watch stand down to just
+            // driving the marker — a started-but-silent task must never mute
+            // the only working feeder (the v1.0.2 no-points regression).
+            if (!isBackgroundFeedConfirmed()) useRecorderStore.getState().addPoint(fix);
           },
         );
-        if (cancelled) sub.remove();
+        if (cancelled) {
+          sub.remove();
+          return;
+        }
+        // The watch is live again — clear any stale failure NOW instead of on
+        // the first fix. With a distance filter a stationary user may not get
+        // a fix for minutes, and #116's auto-pause reads this as "location
+        // still lost", instantly re-pausing every resume.
+        setUnavailableReason(null);
       } catch (err) {
         if (cancelled) return;
         setUnavailableReason(
@@ -93,11 +121,16 @@ export function useLocationTracking(): LocationTracking {
             ? 'Location is turned off — switch it on to see your position.'
             : "Couldn't start location updates.",
         );
+        // Keep trying: device location can come back without an AppState
+        // change (quick-settings toggle), and a recording that auto-paused on
+        // the loss needs the watch alive again before resume can stick.
+        retryTimer = setTimeout(() => setRecheck((n) => n + 1), WATCH_RETRY_MS);
       }
     })();
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       sub?.remove();
     };
   }, [minDisplacement, recheck]);
