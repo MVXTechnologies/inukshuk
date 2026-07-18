@@ -1,16 +1,24 @@
-# Trail view e2e (#134/#137): open a saved trail from the Library, check the
-# 2D view, switch to 3D terrain, exercise the Slope/Contours/Tint overlay
-# toggles when the device's GL stack supports them, switch back to 2D, and
-# leave. The point is crash-detection: software-GL emulators render 3D slowly
-# (fine) but must not crash or black-screen (#134's shader-fallback path).
+# Trail view e2e (#134/#137/#140): open a saved trail from the Library, check
+# the 2D view, switch to 3D terrain, exercise the control rail's basemap and
+# overlay menus when the device's GL stack supports them, switch back to 2D,
+# and leave. The point is crash-detection: software-GL emulators render 3D
+# slowly (fine) but must not crash or black-screen (#134's shader-fallback
+# path).
 #
 # Portability notes:
 # - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
 #   label is "<name> — open 3D view, long-press to select" (em dash).
 # - The 2D/3D SegmentedButtons match on visible text "2D"/"3D".
-# - Overlay toggles (Slope/Contours/Tint) render ONLY when the GL context
-#   supports the overlay shaders (overlaysAvailable) — on low-capability
-#   devices they are legitimately absent, so they're exercised conditionally.
+# - #140 replaced the inline basemap pills + Slope/Contours/Tint bar with a
+#   right-edge rail: a "Trail layers" FAB (basemap menu: Relief/Map/Satellite)
+#   and a "Trail overlays" FAB (Slope / Contours / Elevation tint switches +
+#   contour-interval picker). Both a11y labels are identical on both
+#   platforms. The overlays FAB renders ONLY when the GL context supports the
+#   overlay shaders (overlaysAvailable) — on low-capability devices it is
+#   legitimately absent, so it's exercised conditionally.
+# - The rail menus are Paper Menus: a tap anywhere outside lands on the
+#   dismiss backdrop and only closes the menu (it does NOT reach what's
+#   underneath), so a far-left point tap is a safe dual-platform dismissal.
 # - The back control is Paper's Appbar.BackAction (default a11y label "Back").
 appId: com.inukshuk.app
 ---
@@ -52,28 +60,44 @@ appId: com.inukshuk.app
     notVisible: 'Building 3D terrain.*'
     timeout: 120000
 - assertNotVisible: 'Couldn.t load 3D terrain.*'
-# Basemap pills render in 3D — proves the GL surface is alive.
+# The layers FAB is enabled once the build lands; its menu carries the
+# basemap trio. Assert the choices, then dismiss WITHOUT picking one — a pick
+# would kick off a 3D rebuild that software GL takes minutes to finish.
+# ("Map" is not asserted: it would also match the tab bar's Map tab.)
+- extendedWaitUntil:
+    visible: 'Trail layers'
+    timeout: 30000
+- tapOn: 'Trail layers'
 - extendedWaitUntil:
     visible: 'Relief'
-    timeout: 30000
+    timeout: 60000
 - assertVisible: 'Satellite'
-# Overlay toggles are conditional on shader support (#134 fallback): exercise
-# them when present, skip silently when the device can't compile them.
+- tapOn:
+    point: 10%,50%
+# Overlay switches live in the overlays FAB's menu (#134 fallback keeps the
+# FAB off screen when the shaders can't compile): exercise them when present,
+# skip silently otherwise. The menu stays open across toggles.
 - runFlow:
     when:
-      visible: 'Slope'
+      visible: 'Trail overlays'
     commands:
+      - tapOn: 'Trail overlays'
+      - extendedWaitUntil:
+          visible: 'Elevation tint'
+          timeout: 60000
       - tapOn: 'Slope'
       - tapOn: 'Contours'
-      # (The contour-interval button that appears with Contours is asserted on
-      # iOS only, implicitly: on software-GL Android a single hierarchy fetch
-      # can take minutes, so waiting for the sub-control here is pure flake.)
-      - tapOn: 'Tint'
+      # (The contour-interval rows that appear with Contours are not
+      # exercised: on software-GL Android a single hierarchy fetch can take
+      # minutes, so waiting on the sub-items here is pure flake.)
+      - tapOn: 'Elevation tint'
       # All three on and the app is still responsive; turn them back off so
-      # reruns start clean.
-      - tapOn: 'Tint'
+      # reruns start clean, then close the menu via the backdrop.
+      - tapOn: 'Elevation tint'
       - tapOn: 'Contours'
       - tapOn: 'Slope'
+      - tapOn:
+          point: 10%,50%
 # Still responsive after GL work: flip back to 2D, then leave.
 - tapOn: '2D'
 - assertVisible: 'Notes.*'
