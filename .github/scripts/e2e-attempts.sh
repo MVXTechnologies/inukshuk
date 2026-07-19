@@ -24,7 +24,7 @@ RC=0
 # runs after trail-view since both drive the shared terrain-overlay settings.
 for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
   .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/map-overlays.yaml \
-  .maestro/settings.yaml .maestro/record.yaml; do
+  .maestro/folders.yaml .maestro/settings.yaml .maestro/record.yaml; do
   adb logcat -c || true
   if maestro test "$flow"; then
     echo "=== $flow PASS ==="

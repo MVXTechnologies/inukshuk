@@ -1,0 +1,102 @@
+# Folders e2e (1.3.0): create a folder, move the recorded trail into it via
+# the ⋮ menu, switch the map to folder-visibility mode through the Layers
+# menu's picker, prove the map stays alive, then switch back to type mode and
+# DELETE the folder — the Library's layout flips to folder groups whenever a
+# folder exists, and earlier flows (category-record, library-filter,
+# trail-view) assert the no-folders "Recorded trails" section, so reruns need
+# the folder gone.
+#
+# Portability notes:
+# - Runs after category-record.yaml (needs >= 1 saved trail).
+# - NameDialog's input is uncontrolled; typing then "Create" is race-free.
+# - The trail card's menu anchor label is "More options"; folder rows appear
+#   under a disabled "Move to folder" header inside it.
+# - The Layers menu's "Folders" entry switches the visibility mode and opens
+#   the "Show folders" picker dialog; tapping the "Trails (n)" row switches
+#   back to type mode without disturbing the per-trail activation.
+# - Drag-and-drop is deliberately NOT exercised (long-press-drag across a
+#   scrolling list is flake bait on both drivers); the ⋮ path covers the same
+#   store mutation.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: 'Recorded trails.*'
+# --- Create a folder and move the trail in ---
+- tapOn: 'New folder'
+- extendedWaitUntil:
+    visible: 'Folder name'
+    timeout: 8000
+- waitForAnimationToEnd:
+    timeout: 3000
+- inputText: 'TripA'
+- tapOn: 'Create'
+- extendedWaitUntil:
+    visible: 'TripA.*'
+    timeout: 8000
+- tapOn: 'More options'
+- extendedWaitUntil:
+    visible: 'Move to folder'
+    timeout: 8000
+- tapOn: 'TripA'
+- tapOn:
+    point: 10%,50%
+# The trail now lives in the folder group (header shows a count).
+- assertVisible: 'TripA \(1\)'
+# --- Folder-visibility mode on the map ---
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn: 'Layers'
+- extendedWaitUntil:
+    visible: 'Folders'
+    timeout: 10000
+- tapOn: 'Folders'
+- extendedWaitUntil:
+    visible: 'Show folders'
+    timeout: 10000
+- tapOn: 'TripA'
+- tapOn: 'Done'
+- assertVisible: 'Map actions'
+# Back to type mode: the Trails row exits folder mode without toggling.
+- tapOn: 'Layers'
+- extendedWaitUntil:
+    visible: 'Folders \(1\)'
+    timeout: 10000
+- tapOn: 'Trails \(\d+\)'
+- tapOn:
+    point: 10%,50%
+- assertVisible: 'Map actions'
+# --- Clean up: delete the folder so reruns see the no-folders layout ---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Delete folder'
+- extendedWaitUntil:
+    visible: 'Delete'
+    timeout: 8000
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    visible: 'Recorded trails.*'
+    timeout: 8000

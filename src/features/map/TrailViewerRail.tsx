@@ -66,7 +66,9 @@ export function TrailViewerRail({
         variant={trailViewMode === '3d' ? 'primary' : 'surface'}
         onPress={() => set('trailViewMode', trailViewMode === '3d' ? '2d' : '3d')}
         style={styles.controlFab}
-        accessibilityLabel="3D relief"
+        // State-dependent label: screen readers (and the e2e flows) need to
+        // know which way the toggle will flip before pressing it.
+        accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
       />
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
       {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}

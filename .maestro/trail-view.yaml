@@ -8,7 +8,9 @@
 # Portability notes:
 # - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
 #   label is "<name> — open 3D view, long-press to select" (em dash).
-# - The 2D/3D SegmentedButtons match on visible text "2D"/"3D".
+# - The 2D/3D switch is the rail's video-3d FAB with a STATE-DEPENDENT label
+#   ("Switch to 3D view" / "Switch to 2D view") so the flow can force a known
+#   mode without reading toggle state.
 # - #140 replaced the inline basemap pills + Slope/Contours/Tint bar with a
 #   right-edge rail: a "Trail layers" FAB (basemap menu: Relief/Map/Satellite)
 #   and a "Trail overlays" FAB (Slope / Contours / Elevation tint switches +
@@ -46,16 +48,21 @@ appId: com.inukshuk.app
     retryTapIfNoChange: true
 - assertVisible: 'Recorded trails.*'
 - tapOn: '.* — open 3D view, long-press to select'
-# Trail screen chrome: the 2D/3D segmented control proves it mounted.
+# Trail screen chrome: the mode-toggle FAB proves it mounted.
 - extendedWaitUntil:
-    visible: '3D'
+    visible: 'Switch to (2D|3D) view'
     timeout: 15000
-- assertVisible: '2D'
-# Make sure we start from 2D (the mode setting persists across runs).
-- tapOn: '2D'
+# Make sure we start from 2D (the mode setting persists across runs): the
+# toggle's label says which mode a press ENTERS, so tap it only when it
+# offers 2D.
+- runFlow:
+    when:
+      visible: 'Switch to 2D view'
+    commands:
+      - tapOn: 'Switch to 2D view'
 - assertVisible: 'Notes.*'
 # Switch to 3D. Terrain tiles + software GL: be generous.
-- tapOn: '3D'
+- tapOn: 'Switch to 3D view'
 - extendedWaitUntil:
     notVisible: 'Building 3D terrain.*'
     timeout: 120000
@@ -99,7 +106,7 @@ appId: com.inukshuk.app
       - tapOn:
           point: 10%,50%
 # Still responsive after GL work: flip back to 2D, then leave.
-- tapOn: '2D'
+- tapOn: 'Switch to 2D view'
 - assertVisible: 'Notes.*'
 - tapOn: 'Back'
 - assertVisible: 'Recorded trails.*'
