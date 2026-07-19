@@ -1,0 +1,102 @@
+# Main-map terrain overlays e2e (1.2.0): open the Layers menu, enable Slope +
+# Contours with their selectors (slope-angle floor, contour interval), confirm
+# the 2D map stays alive, then enter 3D via the restored video-3d FAB, wait
+# out the terrain build, and come back. Crash-detection focus, like
+# trail-view.yaml: software-GL emulators render slowly (fine) but must not
+# crash or black-screen.
+#
+# Portability notes:
+# - Runs standalone (needs no saved trail); geo comes from the launch
+#   permission + the workflow's geo-fix feed.
+# - The Layers menu is a paper Menu ("Layers" FAB). Menu items are plain
+#   visible-text matches; selector rows are indented ("   ≥ 35°", "   50 m")
+#   so they never collide with the section toggles.
+# - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
+#   it auto-dismisses and nothing below asserts during that window.
+# - The 3D FAB's a11y label is "3D relief" (restored from 8f200bb). The 3D
+#   overlay bar (Slope/Contours/Tint buttons) renders ONLY when the overlay
+#   shader compiles (overlaysAvailable) — exercised conditionally, same as
+#   trail-view.yaml.
+# - A far-left tap lands on the Menu's dismiss backdrop and only closes the
+#   menu (see trail-view.yaml).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- 2D: enable both overlays and drive both selectors ---
+# Contours FIRST, while Slope is still off: with both sections expanded the
+# menu outgrows an iPhone screen and the interval rows fall below the fold
+# (Maestro can't see them). Toggling Contours alone keeps its rows high.
+- tapOn: 'Layers'
+- extendedWaitUntil:
+    visible: 'Terrain'
+    timeout: 10000
+- tapOn: 'Contours'
+- extendedWaitUntil:
+    visible: '.*50 m'
+    timeout: 10000
+- tapOn: '.*50 m'
+- tapOn: '.*Auto'
+- tapOn: 'Slope'
+# Angle rows appear directly under the Slope toggle, mid-menu on both
+# platforms; pick the 35° floor, then back to All.
+- extendedWaitUntil:
+    visible: '.*≥ 35°'
+    timeout: 10000
+- tapOn: '.*≥ 35°'
+- tapOn: '.*All'
+# Close the menu via the backdrop; the map beneath must still be responsive
+# while the overlay computes (DEM fetch + raster/contour build are async).
+- tapOn:
+    point: 10%,50%
+- assertVisible: 'Map actions'
+# --- 3D: enter via the restored FAB, survive the build, come back ---
+- tapOn: '3D relief'
+# Terrain build downloads DEM + drape tiles and compiles the injected shader;
+# on software GL this is the slow path — generous timeout, then prove alive.
+- extendedWaitUntil:
+    notVisible: 'Building 3D terrain.*'
+    timeout: 120000
+- assertNotVisible: 'Couldn.t load 3D terrain.*'
+# Overlay bar is conditional on shader support; when present, the persisted
+# Slope/Contours toggles from the 2D pass are already ON — flip them off/on to
+# prove the uniforms drive a live material without a crash.
+- runFlow:
+    when:
+      visible: 'Slope'
+    commands:
+      - tapOn: 'Slope'
+      - tapOn: 'Slope'
+      - tapOn: 'Contours'
+      - tapOn: 'Contours'
+# Back to 2D on the same FAB; the map screen must return intact.
+- tapOn: '3D relief'
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# Leave the overlays off so reruns and later flows start from the default map.
+- tapOn: 'Layers'
+- extendedWaitUntil:
+    visible: 'Terrain'
+    timeout: 10000
+- tapOn: 'Slope'
+- tapOn: 'Contours'
+- tapOn:
+    point: 10%,50%
+- assertVisible: 'Map actions'
