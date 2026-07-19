@@ -1,4 +1,5 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
+import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import type { LngLat, TrackPoint } from '@core/models';
@@ -120,8 +121,22 @@ export function MapScreen() {
   const addSavedWaypoint = useLibraryStore((s) => s.addWaypoint);
   const updateSavedWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeSavedWaypoint = useLibraryStore((s) => s.removeWaypoint);
-  const { overlays, error: overlayError } = usePdfOverlays(maps);
-  const trackOverlays = useTrackOverlays(tracks);
+  // Map-visibility modes: 'type' = the classic PDF/Trails switches; 'folders'
+  // = exactly the checked folders' maps, trails and waypoints (pure selectors
+  // in @core/library/visibility).
+  const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
+  const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
+  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+  const shownMaps = useMemo(
+    () => visibleMaps(mapVisibilityMode, visibleFolderIds, maps),
+    [mapVisibilityMode, visibleFolderIds, maps],
+  );
+  const shownTrackIds = useMemo(
+    () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
+    [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
+  );
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps);
+  const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
@@ -375,12 +390,16 @@ export function MapScreen() {
 
   // Every waypoint pin currently drawn on the 2D map (live pins only exist
   // while a recording session is up), tagged with its source for tap handling.
+  // Saved pins respect the folder-visibility mode; live pins always draw.
   const visiblePins = useMemo(
     () => [
-      ...savedWaypoints.map((w) => ({ source: 'saved' as const, ...w })),
+      ...visibleWaypoints(mapVisibilityMode, visibleFolderIds, savedWaypoints).map((w) => ({
+        source: 'saved' as const,
+        ...w,
+      })),
       ...(status !== 'idle' ? waypoints.map((w) => ({ source: 'live' as const, ...w })) : []),
     ],
-    [savedWaypoints, waypoints, status],
+    [savedWaypoints, waypoints, status, mapVisibilityMode, visibleFolderIds],
   );
 
   // Waypoint tap handling. MapLibre's <Marker onPress> doesn't fire on Android,

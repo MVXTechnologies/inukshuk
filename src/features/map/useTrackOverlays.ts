@@ -4,7 +4,6 @@ import * as storage from '@data/storage';
 import type { Feature, LineString } from 'geojson';
 import { useEffect, useState } from 'react';
 import { toLineFeature } from './geojson';
-import { useLibraryStore } from '@state/libraryStore';
 
 export interface TrackOverlay {
   id: string;
@@ -22,8 +21,11 @@ const cacheKey = (t: TrackSummary): string => `${t.id}|${t.stats.pointCount}|${t
  * features are cached by track id + stats so toggling a trail back on is
  * instant while an edited trail reloads. Mirrors `usePdfOverlays`.
  */
-export function useTrackOverlays(tracks: readonly TrackSummary[]): TrackOverlay[] {
-  const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+export function useTrackOverlays(
+  tracks: readonly TrackSummary[],
+  /** Which trails to draw — the caller resolves the visibility mode. */
+  activeTrackIds: readonly string[],
+): TrackOverlay[] {
   const [cache, setCache] = useState<Record<string, Feature<LineString> | null>>({});
 
   const key = activeTrackIds.join('|');
