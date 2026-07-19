@@ -1,14 +1,10 @@
 import type { MapBasemap } from '@state/mapStore';
-import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Divider, FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
+import { FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
 import {
-  CONTOUR_INTERVALS,
   DisclaimerSnackbar,
-  SLOPE_MIN_DEGS,
-  contourIntervalLabel,
-  slopeMinLabel,
+  TerrainOverlayMenuRows,
   useSlopeDisclaimer,
 } from './terrain3d/overlayControls';
 
@@ -119,23 +115,7 @@ function TrailLayersMenu({
  */
 function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const slope = useSettingsStore((s) => s.terrainSlope);
-  const contours = useSettingsStore((s) => s.terrainContours);
-  const hypso = useSettingsStore((s) => s.terrainHypso);
-  const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
-  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
-  const set = useSettingsStore((s) => s.set);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
-
-  const toggles: {
-    key: 'terrainSlope' | 'terrainContours' | 'terrainHypso';
-    title: string;
-    on: boolean;
-  }[] = [
-    { key: 'terrainSlope', title: 'Slope', on: slope },
-    { key: 'terrainContours', title: 'Contours', on: contours },
-    { key: 'terrainHypso', title: 'Elevation tint', on: hypso },
-  ];
 
   return (
     <>
@@ -154,46 +134,7 @@ function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
           />
         }
       >
-        {toggles.map((t) => (
-          <Menu.Item
-            key={t.key}
-            leadingIcon={t.on ? 'checkbox-marked' : 'checkbox-blank-outline'}
-            onPress={() => {
-              const next = !t.on;
-              set(t.key, next);
-              if (t.key === 'terrainSlope' && next) onSlopeEnabled();
-            }}
-            title={t.title}
-          />
-        ))}
-        {slope && (
-          <>
-            <Divider />
-            <Menu.Item disabled title="Slope angle" />
-            {SLOPE_MIN_DEGS.map((d) => (
-              <Menu.Item
-                key={d}
-                trailingIcon={slopeMinDeg === d ? 'check' : undefined}
-                onPress={() => set('terrainSlopeMinDeg', d)}
-                title={slopeMinLabel(d)}
-              />
-            ))}
-          </>
-        )}
-        {contours && (
-          <>
-            <Divider />
-            <Menu.Item disabled title="Contour interval" />
-            {CONTOUR_INTERVALS.map((m) => (
-              <Menu.Item
-                key={m}
-                trailingIcon={intervalM === m ? 'check' : undefined}
-                onPress={() => set('terrainContourIntervalM', m)}
-                title={contourIntervalLabel(m)}
-              />
-            ))}
-          </>
-        )}
+        <TerrainOverlayMenuRows showHypso onSlopeEnabled={onSlopeEnabled} />
       </Menu>
       <DisclaimerSnackbar snackbar={snackbar} />
     </>

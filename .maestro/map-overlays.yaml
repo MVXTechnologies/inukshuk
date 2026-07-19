@@ -40,27 +40,26 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 # --- 2D: enable both overlays and drive both selectors ---
-# Contours FIRST, while Slope is still off: with both sections expanded the
-# menu outgrows an iPhone screen and the interval rows fall below the fold
-# (Maestro can't see them). Toggling Contours alone keeps its rows high.
-- tapOn: 'Layers'
+# The overlays live behind their own rail FAB ("Map overlays", gradient icon —
+# same idiom as the trail viewer). Selectors are compact detent sliders whose
+# ticks carry the option labels as a11y labels, so the menu never outgrows a
+# phone screen (the old stacked-rows menu did, on iPhone).
+- tapOn: 'Map overlays'
 - extendedWaitUntil:
-    visible: 'Terrain'
+    visible: 'Slope'
     timeout: 10000
 - tapOn: 'Contours'
 - extendedWaitUntil:
-    visible: '.*50 m'
+    visible: '50 m'
     timeout: 10000
-- tapOn: '.*50 m'
-- tapOn: '.*Auto'
+- tapOn: '50 m'
+- tapOn: 'Auto'
 - tapOn: 'Slope'
-# Angle rows appear directly under the Slope toggle, mid-menu on both
-# platforms; pick the 35° floor, then back to All.
 - extendedWaitUntil:
-    visible: '.*≥ 35°'
+    visible: '≥ 35°'
     timeout: 10000
-- tapOn: '.*≥ 35°'
-- tapOn: '.*All'
+- tapOn: '≥ 35°'
+- tapOn: 'All'
 # Close the menu via the backdrop; the map beneath must still be responsive
 # while the overlay computes (DEM fetch + raster/contour build are async).
 - tapOn:
@@ -91,9 +90,9 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 # Leave the overlays off so reruns and later flows start from the default map.
-- tapOn: 'Layers'
+- tapOn: 'Map overlays'
 - extendedWaitUntil:
-    visible: 'Terrain'
+    visible: 'Slope'
     timeout: 10000
 - tapOn: 'Slope'
 - tapOn: 'Contours'

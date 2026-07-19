@@ -4,14 +4,6 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Divider, FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
-import {
-  CONTOUR_INTERVALS,
-  DisclaimerSnackbar,
-  SLOPE_MIN_DEGS,
-  contourIntervalLabel,
-  slopeMinLabel,
-  useSlopeDisclaimer,
-} from '../terrain3d/overlayControls';
 
 /** Base-map choices shown in the layers menu, each with its own coloured icon. */
 const BASEMAPS: {
@@ -52,106 +44,61 @@ export function LayersMenu({ pdfOverlayCount, trackOverlayCount }: Props) {
   const basemap = useMapStore((s) => s.basemap);
   const setBasemap = useMapStore((s) => s.setBasemap);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
-  const terrainSlope = useSettingsStore((s) => s.terrainSlope);
-  const terrainContours = useSettingsStore((s) => s.terrainContours);
-  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
-  const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const set = useSettingsStore((s) => s.set);
-  const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
-    <>
-      <Menu
-        visible={open}
-        onDismiss={() => setOpen(false)}
-        anchor={
-          <FAB
-            icon="layers"
-            size="small"
-            variant="surface"
-            onPress={() => setOpen(true)}
-            style={styles.controlFab}
-            accessibilityLabel="Layers"
-          />
-        }
-      >
-        <Menu.Item disabled title="Overlays" />
-        <Menu.Item
-          leadingIcon={showPdfOverlay ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={pdfOverlayCount > 0 ? togglePdfOverlay : undefined}
-          disabled={pdfOverlayCount === 0}
-          title={`PDF (${pdfOverlayCount})`}
+    <Menu
+      visible={open}
+      onDismiss={() => setOpen(false)}
+      anchor={
+        <FAB
+          icon="layers"
+          size="small"
+          variant="surface"
+          onPress={() => setOpen(true)}
+          style={styles.controlFab}
+          accessibilityLabel="Layers"
         />
+      }
+    >
+      <Menu.Item disabled title="Overlays" />
+      <Menu.Item
+        leadingIcon={showPdfOverlay ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={pdfOverlayCount > 0 ? togglePdfOverlay : undefined}
+        disabled={pdfOverlayCount === 0}
+        title={`PDF (${pdfOverlayCount})`}
+      />
+      <Menu.Item
+        leadingIcon={showTrackOverlays ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={trackOverlayCount > 0 ? toggleTrackOverlays : undefined}
+        disabled={trackOverlayCount === 0}
+        title={`Trails (${trackOverlayCount})`}
+      />
+      <Divider />
+      <Menu.Item
+        leadingIcon={offlineOnly ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={() => {
+          const next = !offlineOnly;
+          set('offlineOnly', next);
+          setOfflineOnly(next);
+        }}
+        title="Locally downloaded only"
+      />
+      <Divider />
+      <Menu.Item disabled title="Base map" />
+      {BASEMAPS.map((b) => (
         <Menu.Item
-          leadingIcon={showTrackOverlays ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={trackOverlayCount > 0 ? toggleTrackOverlays : undefined}
-          disabled={trackOverlayCount === 0}
-          title={`Trails (${trackOverlayCount})`}
-        />
-        <Divider />
-        {/* Terrain analysis overlays — the same persisted settings drive the 2D
-          raster/line layers and the 3D shader, so both modes always match.
-          The menu stays open on toggle, like the trail viewer's overlay menu. */}
-        <Menu.Item disabled title="Terrain" />
-        <Menu.Item
-          leadingIcon={terrainSlope ? 'checkbox-marked' : 'checkbox-blank-outline'}
+          key={b.key}
+          leadingIcon={({ size }) => <Icon source={b.icon} size={size} color={b.color(theme)} />}
+          trailingIcon={basemap === b.key ? 'check' : undefined}
           onPress={() => {
-            const next = !terrainSlope;
-            set('terrainSlope', next);
-            if (next) onSlopeEnabled();
+            setBasemap(b.key);
+            setOpen(false);
           }}
-          title="Slope"
+          title={b.label}
         />
-        {terrainSlope &&
-          SLOPE_MIN_DEGS.map((d) => (
-            <Menu.Item
-              key={d}
-              trailingIcon={slopeMinDeg === d ? 'check' : undefined}
-              onPress={() => set('terrainSlopeMinDeg', d)}
-              title={`   ${slopeMinLabel(d)}`}
-            />
-          ))}
-        <Menu.Item
-          leadingIcon={terrainContours ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={() => set('terrainContours', !terrainContours)}
-          title="Contours"
-        />
-        {terrainContours &&
-          CONTOUR_INTERVALS.map((m) => (
-            <Menu.Item
-              key={m}
-              trailingIcon={intervalM === m ? 'check' : undefined}
-              onPress={() => set('terrainContourIntervalM', m)}
-              title={`   ${contourIntervalLabel(m)}`}
-            />
-          ))}
-        <Divider />
-        <Menu.Item
-          leadingIcon={offlineOnly ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={() => {
-            const next = !offlineOnly;
-            set('offlineOnly', next);
-            setOfflineOnly(next);
-          }}
-          title="Locally downloaded only"
-        />
-        <Divider />
-        <Menu.Item disabled title="Base map" />
-        {BASEMAPS.map((b) => (
-          <Menu.Item
-            key={b.key}
-            leadingIcon={({ size }) => <Icon source={b.icon} size={size} color={b.color(theme)} />}
-            trailingIcon={basemap === b.key ? 'check' : undefined}
-            onPress={() => {
-              setBasemap(b.key);
-              setOpen(false);
-            }}
-            title={b.label}
-          />
-        ))}
-      </Menu>
-      <DisclaimerSnackbar snackbar={snackbar} />
-    </>
+      ))}
+    </Menu>
   );
 }
 

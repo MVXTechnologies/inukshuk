@@ -1,8 +1,9 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Portal, Snackbar } from 'react-native-paper';
+import { Button, Menu, Portal, Snackbar } from 'react-native-paper';
 import { useTimedSnackbar, type TimedSnackbar } from '../../common/useTimedSnackbar';
+import { DetentSlider } from '../components/DetentSlider';
 import {
   applyTerrainOverlaySettings,
   type TerrainOverlayHandle,
@@ -88,6 +89,74 @@ export function useSlopeDisclaimer(): { snackbar: TimedSnackbar; onSlopeEnabled:
     snackbar.show(SLOPE_DISCLAIMER);
   };
   return { snackbar, onSlopeEnabled };
+}
+
+/**
+ * Menu rows for the terrain overlays, shared by the main map's overlays menu
+ * and the trail viewer's: a checkbox Menu.Item per layer with a compact
+ * DetentSlider row (angle floor / contour interval) below it while enabled —
+ * five stacked selector Menu.Items per section outgrew small screens.
+ * `onSlopeEnabled` comes from {@link useSlopeDisclaimer}; the host renders the
+ * DisclaimerSnackbar itself.
+ */
+export function TerrainOverlayMenuRows({
+  showHypso,
+  onSlopeEnabled,
+}: {
+  /** Include the Elevation tint row (3D-only layer; the trail viewer wants it). */
+  showHypso: boolean;
+  onSlopeEnabled: () => void;
+}) {
+  const slope = useSettingsStore((s) => s.terrainSlope);
+  const contours = useSettingsStore((s) => s.terrainContours);
+  const hypso = useSettingsStore((s) => s.terrainHypso);
+  const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
+  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
+  const set = useSettingsStore((s) => s.set);
+
+  return (
+    <>
+      <Menu.Item
+        leadingIcon={slope ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={() => {
+          const next = !slope;
+          set('terrainSlope', next);
+          if (next) onSlopeEnabled();
+        }}
+        title="Slope"
+      />
+      {slope && (
+        <View style={styles.sliderRow}>
+          <DetentSlider
+            detents={SLOPE_MIN_DEGS.map((d) => ({ value: d, label: slopeMinLabel(d) }))}
+            selected={slopeMinDeg}
+            onSelect={(d) => set('terrainSlopeMinDeg', d)}
+          />
+        </View>
+      )}
+      <Menu.Item
+        leadingIcon={contours ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={() => set('terrainContours', !contours)}
+        title="Contours"
+      />
+      {contours && (
+        <View style={styles.sliderRow}>
+          <DetentSlider
+            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+            selected={intervalM}
+            onSelect={(m) => set('terrainContourIntervalM', m)}
+          />
+        </View>
+      )}
+      {showHypso && (
+        <Menu.Item
+          leadingIcon={hypso ? 'checkbox-marked' : 'checkbox-blank-outline'}
+          onPress={() => set('terrainHypso', !hypso)}
+          title="Elevation tint"
+        />
+      )}
+    </>
+  );
 }
 
 interface ButtonsProps {
@@ -208,4 +277,6 @@ const styles = StyleSheet.create({
   },
   btn: { borderRadius: 20 },
   label: { marginVertical: 4, marginHorizontal: 8, fontSize: 12 },
+  // Aligns the slider under a Menu.Item's title (past the 40dp leading icon).
+  sliderRow: { paddingLeft: 56, paddingRight: 16, paddingBottom: 6 },
 });

@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { FAB } from 'react-native-paper';
 import { LayersMenu } from './LayersMenu';
+import { MapOverlaysMenu } from './MapOverlaysMenu';
 
 interface Props {
   /** Distance from the top of the screen (safe-area inset + margin). */
@@ -79,6 +80,7 @@ export function MapControlsRail({
         />
       )}
       <LayersMenu pdfOverlayCount={pdfOverlayCount} trackOverlayCount={trackOverlayCount} />
+      <MapOverlaysMenu />
     </View>
   );
 }
