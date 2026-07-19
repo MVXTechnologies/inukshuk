@@ -5,7 +5,12 @@
 # filter actually matches it).
 #
 # Portability notes:
-# - Per-platform launchApp permission values (#128).
+# - Per-platform launchApp permission values (#128). Android also pre-grants
+#   notifications: since the manifest declares POST_NOTIFICATIONS (the vc46
+#   fix), a fresh API 33+ install pops the system "send you notifications?"
+#   dialog on the first "Start recording" — it occludes the whole app window
+#   from the accessibility tree, so an unhandled prompt strands the flow AND
+#   leaves a live recording that breaks every later flow's launch assert.
 # - The category chips carry accessibilityLabel "Category <Name>[, selected]".
 # - The Start button's visible text is "Start" but its accessibilityLabel is
 #   "Start recording" — match the latter (unambiguous on both platforms).
@@ -24,6 +29,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: allow
+            notifications: allow
 - runFlow:
     when:
       platform: iOS

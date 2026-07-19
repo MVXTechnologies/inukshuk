@@ -13,7 +13,10 @@ appId: com.inukshuk.app
 # Per-platform location permission values (#128): Android's driver knows
 # allow/deny/unset (anything else silently maps to `pm revoke`), iOS takes
 # always/inUse/never and rejects "allow". Everything below the launch runs
-# unmodified on both platforms.
+# unmodified on both platforms. Android pre-grants notifications, else the
+# POST_NOTIFICATIONS system prompt (fresh API 33+ installs, declared since
+# vc46) occludes the app right after "Start recording" — see
+# category-record.yaml.
 - runFlow:
     when:
       platform: Android
@@ -21,6 +24,7 @@ appId: com.inukshuk.app
       - launchApp:
           permissions:
             location: allow
+            notifications: allow
 - runFlow:
     when:
       platform: iOS
