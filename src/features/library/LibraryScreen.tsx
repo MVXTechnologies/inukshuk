@@ -51,6 +51,8 @@ import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
 import { NameDialog } from './NameDialog';
+import { DragGhost } from './DragGhost';
+import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 
@@ -141,6 +143,36 @@ export function LibraryScreen() {
   const visibleTracks = filterTracks(tracks, filter);
 
   const grouped = groupByFolder(folders, maps, visibleTracks, waypoints);
+
+  // Drag-and-drop moves: each card's grip handle drags a ghost chip onto a
+  // folder (or Ungrouped) header. The ⋮ move-to-folder menu remains for
+  // one-handed use. Handles render only once a folder exists.
+  const {
+    dragging,
+    hovered: dragHovered,
+    ghost: dragGhost,
+    registerTarget,
+    handleProps,
+    scrollRef: dragScrollRef,
+    onScroll: onDragScroll,
+    onWindowHeight: onDragWindowHeight,
+  } = useDragToFolder({
+    onDrop: (item, target) => {
+      setItemFolder(item.kind, item.id, target);
+      const folderName = target === null ? null : folders.find((f) => f.id === target)?.name;
+      showSnack(folderName ? `Moved to "${folderName}"` : 'Removed from folder');
+    },
+  });
+  const dragHandle = (item: DragItem) =>
+    hasFolders ? (
+      <View
+        style={styles.dragHandle}
+        {...handleProps(item)}
+        accessibilityLabel={`Drag ${item.label} to a folder`}
+      >
+        <Icon source="drag-vertical" size={20} color={theme.colors.onSurfaceVariant} />
+      </View>
+    ) : null;
 
   const onImport = async () => {
     setBusy(true);
@@ -308,9 +340,25 @@ export function LibraryScreen() {
     showSnack(describeUploadOutcome(outcome, t.name));
   };
 
-  const sectionHeader = (key: string, title: string, action?: ReactNode) => (
+  const sectionHeader = (
+    key: string,
+    title: string,
+    action?: ReactNode,
+    dropTarget?: string | null,
+  ) => (
     <TouchableRipple onPress={() => toggleSection(key)} accessibilityRole="button">
-      <View style={styles.sectionHeaderRow}>
+      <View
+        ref={dropTarget === undefined ? undefined : registerTarget(dropTarget)}
+        style={[
+          styles.sectionHeaderRow,
+          dropTarget !== undefined &&
+            dragging !== null &&
+            dragHovered === dropTarget && {
+              backgroundColor: theme.colors.secondaryContainer,
+              borderRadius: 8,
+            },
+        ]}
+      >
         <View style={styles.sectionHeaderLeft}>
           <Icon
             source={collapsed[key] ? 'chevron-right' : 'chevron-down'}
@@ -380,6 +428,7 @@ export function LibraryScreen() {
     return (
       <Card key={m.id} style={styles.trackCard} mode="contained">
         <View style={styles.trackRow}>
+          {dragHandle({ kind: 'map', id: m.id, label: m.name })}
           <Pressable
             style={styles.trackMain}
             onPress={() => openMap(m.id)}
@@ -551,6 +600,7 @@ export function LibraryScreen() {
         mode="contained"
       >
         <View style={styles.trackRow}>
+          {dragHandle({ kind: 'track', id: t.id, label: t.name })}
           <Pressable
             style={styles.trackMain}
             // Long-press enters trail selection (for merging); while selecting,
@@ -689,6 +739,7 @@ export function LibraryScreen() {
     return (
       <Card key={w.id} style={styles.trackCard} mode="contained">
         <View style={styles.trackRow}>
+          {dragHandle({ kind: 'waypoint', id: w.id, label: w.label })}
           <Pressable
             style={styles.trackMain}
             onPress={() => openWaypointEditor(w)}
@@ -749,11 +800,12 @@ export function LibraryScreen() {
                 accessibilityLabel="Delete folder"
               />
             </View>,
+            g.folder.id,
           )}
           {collapsed[key] ? null : count === 0 ? (
             <List.Item
               title="Empty folder"
-              description="Use a map or trail's ⋮ menu to move it here"
+              description="Drag an item's grip here, or use its ⋮ menu"
             />
           ) : (
             [
@@ -818,7 +870,14 @@ export function LibraryScreen() {
         </Appbar.Header>
       )}
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}>
+      <ScrollView
+        ref={dragScrollRef}
+        scrollEnabled={dragging === null}
+        onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={32}
+        onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+      >
         {maps.length === 0 && tracks.length === 0 && (
           <Banner visible icon="map-search-outline" style={styles.banner}>
             Import a georeferenced PDF map to get started, then record trails from the Map tab.
@@ -831,7 +890,7 @@ export function LibraryScreen() {
           ? // With folders: one cross-type "Ungrouped" catch-all for leftovers.
             ungroupedCount > 0 && (
               <List.Section>
-                {sectionHeader('ungrouped', `Ungrouped (${ungroupedCount})`)}
+                {sectionHeader('ungrouped', `Ungrouped (${ungroupedCount})`, undefined, null)}
                 {collapsed.ungrouped
                   ? null
                   : [
@@ -936,6 +995,18 @@ export function LibraryScreen() {
         </Menu>
       </View>
 
+      <DragGhost
+        dragging={dragging}
+        ghost={dragGhost}
+        backgroundColor={theme.colors.inverseSurface}
+        color={theme.colors.inverseOnSurface}
+        renderLabel={(label, color) => (
+          <Text variant="labelLarge" numberOfLines={1} style={{ color, maxWidth: 220 }}>
+            {label}
+          </Text>
+        )}
+      />
+
       <Portal>
         <NameDialog
           visible={newFolderVisible}
@@ -1022,6 +1093,7 @@ const styles = StyleSheet.create({
   trackCard: { marginHorizontal: 12, marginVertical: 6 },
   loader: { paddingVertical: 24 },
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },
+  dragHandle: { paddingVertical: 14, paddingRight: 6, marginLeft: -6 },
   trackMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   // The title column flexes into whatever the stats column leaves, but keeps a
   // readable floor; the stats column shrinks (wrapping its lines) rather than
