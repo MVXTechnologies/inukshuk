@@ -651,14 +651,22 @@ export function LibraryScreen() {
               <Text variant="titleSmall" numberOfLines={1}>
                 {t.name}
               </Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={{ color: theme.colors.onSurfaceVariant }}
+              >
                 {formatTimestamp(t.startedAt)}
               </Text>
             </View>
             <View style={styles.trackStatsCol}>
+              {/* NBSP inside each value+unit pair: when the shrinking stats
+                  column wraps this line, the break lands between stats, never
+                  orphaning a unit onto its own line. */}
               <Text variant="labelSmall">
-                {formatDistance(s.distanceM)} · ↑{formatElevation(s.ascentM)} ↓
-                {formatElevation(s.descentM)}
+                {formatDistance(s.distanceM).replace(' ', ' ')} ·{' '}
+                {`↑${formatElevation(s.ascentM)}`.replace(' ', ' ')}{' '}
+                {`↓${formatElevation(s.descentM)}`.replace(' ', ' ')}
               </Text>
               <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
                 {formatDuration(s.durationS)} · {formatPace(s.avgSpeedMps)}
@@ -1171,10 +1179,15 @@ const styles = StyleSheet.create({
   loader: { paddingVertical: 24 },
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },
   trackMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  trackTitleCol: { flex: 1, paddingVertical: 8, paddingRight: 8 },
+  // The title column flexes into whatever the stats column leaves, but keeps a
+  // readable floor; the stats column shrinks (wrapping its lines) rather than
+  // crushing the title. Without the floor, a dense imported GPX (long stats +
+  // category icon) squeezed the title to ~1 character and the un-clamped date
+  // wrapped per-character into a very tall card.
+  trackTitleCol: { flex: 1, minWidth: 96, paddingVertical: 8, paddingRight: 8 },
   trackTitleColSelecting: { paddingLeft: 10 },
   mapTitleCol: { flex: 1, paddingVertical: 8, paddingLeft: 10, paddingRight: 8 },
-  trackStatsCol: { alignItems: 'flex-end', paddingRight: 2 },
+  trackStatsCol: { flexShrink: 1, alignItems: 'flex-end', paddingRight: 2 },
   waypointThumb: { width: 44, height: 44, borderRadius: 8, marginRight: 4 },
   fabWrap: { position: 'absolute', right: 16 },
   fab: { borderRadius: 28 },
