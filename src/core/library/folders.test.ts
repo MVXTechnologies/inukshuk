@@ -1,4 +1,4 @@
-import type { Folder, MapDocument, TrackSummary } from '@core/models';
+import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { folderItemCount, groupByFolder } from './folders';
 
@@ -15,6 +15,15 @@ const map = (id: string, folderId?: string): MapDocument =>
     activePages: [],
     folderId,
   }) as MapDocument;
+
+const wp = (id: string, folderId?: string): Waypoint => ({
+  id,
+  latitude: 46,
+  longitude: -71,
+  label: `wp-${id}`,
+  createdAt: 0,
+  ...(folderId !== undefined ? { folderId } : {}),
+});
 
 const track = (id: string, folderId?: string): TrackSummary =>
   ({
@@ -41,7 +50,7 @@ describe('groupByFolder', () => {
     const maps = [map('m1', 'B'), map('m2', 'A')];
     const tracks = [track('t1', 'A'), track('t2', 'B')];
 
-    const { groups } = groupByFolder(folders, maps, tracks);
+    const { groups } = groupByFolder(folders, maps, tracks, []);
 
     expect(groups.map((g) => g.folder.id)).toEqual(['A', 'B']); // folders order, not item order
     expect(groups[0]!.maps.map((m) => m.id)).toEqual(['m2']);
@@ -51,14 +60,17 @@ describe('groupByFolder', () => {
   });
 
   it('sends items with no folderId to the ungrouped leftovers, preserving order', () => {
-    const { groups, ungroupedMaps, ungroupedTracks } = groupByFolder(
+    const { groups, ungroupedMaps, ungroupedTracks, ungroupedWaypoints } = groupByFolder(
       [folder('A', 'Alpha')],
       [map('m1'), map('m2', 'A'), map('m3')],
       [track('t1')],
+      [wp('w1'), wp('w2', 'A')],
     );
     expect(groups[0]!.maps.map((m) => m.id)).toEqual(['m2']);
     expect(ungroupedMaps.map((m) => m.id)).toEqual(['m1', 'm3']);
     expect(ungroupedTracks.map((t) => t.id)).toEqual(['t1']);
+    expect(groups[0]!.waypoints.map((w) => w.id)).toEqual(['w2']);
+    expect(ungroupedWaypoints.map((w) => w.id)).toEqual(['w1']);
   });
 
   it('treats a dangling folderId (deleted folder) as ungrouped', () => {
@@ -66,24 +78,26 @@ describe('groupByFolder', () => {
       [folder('A', 'Alpha')],
       [map('m1', 'GONE')],
       [],
+      [],
     );
     expect(groups[0]!.maps).toHaveLength(0);
     expect(ungroupedMaps.map((m) => m.id)).toEqual(['m1']);
   });
 
   it('keeps empty folders as empty groups', () => {
-    const { groups } = groupByFolder([folder('A', 'Alpha'), folder('B', 'Bravo')], [], []);
+    const { groups } = groupByFolder([folder('A', 'Alpha'), folder('B', 'Bravo')], [], [], []);
     expect(groups).toHaveLength(2);
     expect(folderItemCount(groups[0]!)).toBe(0);
     expect(folderItemCount(groups[1]!)).toBe(0);
   });
 
-  it('counts maps + trails together', () => {
+  it('counts maps + trails + waypoints together', () => {
     const { groups } = groupByFolder(
       [folder('A', 'Alpha')],
       [map('m1', 'A')],
       [track('t1', 'A'), track('t2', 'A')],
+      [wp('w1', 'A')],
     );
-    expect(folderItemCount(groups[0]!)).toBe(3);
+    expect(folderItemCount(groups[0]!)).toBe(4);
   });
 });

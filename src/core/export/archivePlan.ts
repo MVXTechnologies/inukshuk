@@ -96,10 +96,13 @@ export interface DataArchiveInput {
  * The `library.json` slot at the archive root is reserved for the caller.
  */
 export function planDataArchive(input: DataArchiveInput): ArchivePlan {
+  // Waypoints live in library.json only (no per-waypoint files to pack), so
+  // the archive tree ignores their folder assignment.
   const { groups, ungroupedMaps, ungroupedTracks } = groupByFolder(
     input.folders,
     input.maps,
     input.tracks,
+    [],
   );
 
   const entries: ArchiveEntry[] = [];

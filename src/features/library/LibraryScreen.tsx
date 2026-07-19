@@ -140,7 +140,7 @@ export function LibraryScreen() {
   const activeFilterCount = countActiveFilters(filter);
   const visibleTracks = filterTracks(tracks, filter);
 
-  const grouped = groupByFolder(folders, maps, visibleTracks);
+  const grouped = groupByFolder(folders, maps, visibleTracks, waypoints);
 
   const onImport = async () => {
     setBusy(true);
@@ -651,6 +651,27 @@ export function LibraryScreen() {
           showWaypointOnMap(w);
         }}
       />
+      {folders.length > 0 && (
+        <>
+          <Divider />
+          <Menu.Item disabled title="Move to folder" />
+          {folders.map((f) => (
+            <Menu.Item
+              key={f.id}
+              leadingIcon={w.folderId === f.id ? 'folder-check' : 'folder-outline'}
+              title={f.name}
+              onPress={() => setItemFolder('waypoint', w.id, w.folderId === f.id ? null : f.id)}
+            />
+          ))}
+          {w.folderId !== undefined && (
+            <Menu.Item
+              leadingIcon="folder-off-outline"
+              title="Remove from folder"
+              onPress={() => setItemFolder('waypoint', w.id, null)}
+            />
+          )}
+        </>
+      )}
       <Divider />
       <Menu.Item
         leadingIcon="trash-can-outline"
@@ -735,14 +756,21 @@ export function LibraryScreen() {
               description="Use a map or trail's ⋮ menu to move it here"
             />
           ) : (
-            [...g.maps.map(renderMapCard), ...g.tracks.map(renderTrackCard)]
+            [
+              ...g.maps.map(renderMapCard),
+              ...g.tracks.map(renderTrackCard),
+              ...sortWaypointsNewestFirst(g.waypoints).map(renderWaypointCard),
+            ]
           )}
         </List.Section>
       );
     });
 
   const hasFolders = folders.length > 0;
-  const ungroupedCount = grouped.ungroupedMaps.length + grouped.ungroupedTracks.length;
+  const ungroupedCount =
+    grouped.ungroupedMaps.length +
+    grouped.ungroupedTracks.length +
+    grouped.ungroupedWaypoints.length;
 
   return (
     <View style={styles.fill}>
@@ -809,6 +837,9 @@ export function LibraryScreen() {
                   : [
                       ...grouped.ungroupedMaps.map(renderMapCard),
                       ...grouped.ungroupedTracks.map(renderTrackCard),
+                      ...sortWaypointsNewestFirst(grouped.ungroupedWaypoints).map(
+                        renderWaypointCard,
+                      ),
                     ]}
               </List.Section>
             )
@@ -850,10 +881,11 @@ export function LibraryScreen() {
               </List.Section>,
             ]}
 
-        {/* Standalone waypoints (map "+" speed-dial). Deliberately flat — they
-            stay out of folders for now — and hidden entirely while there are
-            none, so non-users of the feature never see an empty section. */}
-        {waypoints.length > 0 && (
+        {/* Standalone waypoints (map "+" speed-dial). With folders, waypoints
+            live inside their folder groups / Ungrouped like everything else;
+            this flat section only renders in the no-folders layout. Hidden
+            entirely while there are none. */}
+        {!hasFolders && waypoints.length > 0 && (
           <>
             <Divider />
             <List.Section>
