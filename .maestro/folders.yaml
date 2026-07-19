@@ -49,6 +49,11 @@ appId: com.inukshuk.app
     timeout: 3000
 - inputText: 'TripA'
 - tapOn: 'Create'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - extendedWaitUntil:
     visible: 'TripA.*'
     timeout: 8000
@@ -56,7 +61,9 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Move to folder'
     timeout: 8000
-- tapOn: 'TripA'
+# "Move to TripA" — the menu row's distinct a11y label; plain "TripA" would
+# also match the folder section header sitting earlier in the tree.
+- tapOn: 'Move to TripA'
 - tapOn:
     point: 10%,50%
 # The trail now lives in the folder group (header shows a count).

@@ -397,6 +397,9 @@ export function LibraryScreen() {
               key={f.id}
               leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
               title={f.name}
+              // Distinct from the folder section header's text (screen readers
+              // and the e2e driver would otherwise hit the header first).
+              accessibilityLabel={`Move to ${f.name}`}
               onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
             />
           ))}
@@ -559,6 +562,7 @@ export function LibraryScreen() {
               key={f.id}
               leadingIcon={t.folderId === f.id ? 'folder-check' : 'folder-outline'}
               title={f.name}
+              accessibilityLabel={`Move to ${f.name}`}
               onPress={() => setItemFolder('track', t.id, t.folderId === f.id ? null : f.id)}
             />
           ))}
@@ -710,6 +714,7 @@ export function LibraryScreen() {
               key={f.id}
               leadingIcon={w.folderId === f.id ? 'folder-check' : 'folder-outline'}
               title={f.name}
+              accessibilityLabel={`Move to ${f.name}`}
               onPress={() => setItemFolder('waypoint', w.id, w.folderId === f.id ? null : f.id)}
             />
           ))}
