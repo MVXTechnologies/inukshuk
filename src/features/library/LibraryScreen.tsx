@@ -36,7 +36,6 @@ import {
   Portal,
   Snackbar,
   Text,
-  TextInput,
   TouchableRipple,
   useTheme,
 } from 'react-native-paper';
@@ -52,6 +51,7 @@ import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
+import { NameDialog } from './NameDialog';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 
@@ -129,7 +129,6 @@ export function LibraryScreen() {
   const [trackPoints, setTrackPoints] = useState<Record<string, TrackPoint[]>>({});
   const [editingBundle, setEditingBundle] = useState<string | null>(null);
   const [newBundleVisible, setNewBundleVisible] = useState(false);
-  const [newBundleName, setNewBundleName] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
@@ -138,7 +137,6 @@ export function LibraryScreen() {
   } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [newFolderVisible, setNewFolderVisible] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
   // Trail multi-select (long-press a trail to enter): ids in selection order,
@@ -240,23 +238,19 @@ export function LibraryScreen() {
     router.navigate('/');
   };
 
-  const createBundle = () => {
-    const name = newBundleName.trim();
+  const createBundle = (name: string) => {
     setNewBundleVisible(false);
-    setNewBundleName('');
     const id = addBundle(name || 'New bundle');
     setEditingBundle(id); // open it so the user can pick members right away
   };
 
-  const createFolder = () => {
-    const name = newFolderName.trim();
+  const createFolder = (name: string) => {
     setNewFolderVisible(false);
-    setNewFolderName('');
     addFolder(name || 'New folder');
   };
 
-  const commitRenameFolder = () => {
-    if (renamingFolder) renameFolder(renamingFolder.id, renamingFolder.name);
+  const commitRenameFolder = (name: string) => {
+    if (renamingFolder && name) renameFolder(renamingFolder.id, name);
     setRenamingFolder(null);
   };
 
@@ -1060,56 +1054,31 @@ export function LibraryScreen() {
       </View>
 
       <Portal>
-        <Dialog visible={newBundleVisible} onDismiss={() => setNewBundleVisible(false)}>
-          <Dialog.Title>New bundle</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Bundle name"
-              value={newBundleName}
-              onChangeText={setNewBundleName}
-              autoFocus
-              onSubmitEditing={createBundle}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setNewBundleVisible(false)}>Cancel</Button>
-            <Button onPress={createBundle}>Create</Button>
-          </Dialog.Actions>
-        </Dialog>
+        <NameDialog
+          visible={newBundleVisible}
+          title="New bundle"
+          label="Bundle name"
+          onDismiss={() => setNewBundleVisible(false)}
+          onSubmit={createBundle}
+        />
 
-        <Dialog visible={newFolderVisible} onDismiss={() => setNewFolderVisible(false)}>
-          <Dialog.Title>New folder</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Folder name"
-              value={newFolderName}
-              onChangeText={setNewFolderName}
-              autoFocus
-              onSubmitEditing={createFolder}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setNewFolderVisible(false)}>Cancel</Button>
-            <Button onPress={createFolder}>Create</Button>
-          </Dialog.Actions>
-        </Dialog>
+        <NameDialog
+          visible={newFolderVisible}
+          title="New folder"
+          label="Folder name"
+          onDismiss={() => setNewFolderVisible(false)}
+          onSubmit={createFolder}
+        />
 
-        <Dialog visible={renamingFolder !== null} onDismiss={() => setRenamingFolder(null)}>
-          <Dialog.Title>Rename folder</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Folder name"
-              value={renamingFolder?.name ?? ''}
-              onChangeText={(name) => setRenamingFolder((f) => (f ? { ...f, name } : f))}
-              autoFocus
-              onSubmitEditing={commitRenameFolder}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setRenamingFolder(null)}>Cancel</Button>
-            <Button onPress={commitRenameFolder}>Rename</Button>
-          </Dialog.Actions>
-        </Dialog>
+        <NameDialog
+          visible={renamingFolder !== null}
+          title="Rename folder"
+          label="Folder name"
+          confirmLabel="Rename"
+          initialValue={renamingFolder?.name ?? ''}
+          onDismiss={() => setRenamingFolder(null)}
+          onSubmit={commitRenameFolder}
+        />
 
         {/* Single confirm flow for every destructive delete (map/trail/bundle/folder). */}
         <Dialog visible={confirmDelete !== null} onDismiss={() => setConfirmDelete(null)}>
