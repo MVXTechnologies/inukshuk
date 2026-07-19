@@ -21,7 +21,9 @@ export function MapActionsFab({ onRecord, onAddWaypoint }: Props) {
       visible
       icon={open ? 'close' : 'plus'}
       color={theme.colors.onTertiary}
-      fabStyle={{ backgroundColor: theme.colors.tertiary }}
+      // Circular like every rail FAB (paper's MD3 default is a squircle), and
+      // actions pulled tighter to the dial.
+      fabStyle={{ backgroundColor: theme.colors.tertiary, borderRadius: 28 }}
       backdropColor="#00000066"
       actions={[
         {
@@ -29,6 +31,7 @@ export function MapActionsFab({ onRecord, onAddWaypoint }: Props) {
           // anywhere a MaterialCommunityIcons name goes.
           icon: ({ size, color }) => <InukshukIcon size={size} color={color} />,
           label: 'Add waypoint',
+          containerStyle: { marginVertical: -2 },
           onPress: () => {
             setOpen(false);
             onAddWaypoint();
@@ -37,6 +40,7 @@ export function MapActionsFab({ onRecord, onAddWaypoint }: Props) {
         {
           icon: 'timer-outline',
           label: 'Record track',
+          containerStyle: { marginVertical: -2 },
           onPress: () => {
             setOpen(false);
             onRecord();

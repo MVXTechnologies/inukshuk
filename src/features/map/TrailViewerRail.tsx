@@ -1,4 +1,5 @@
 import type { MapBasemap } from '@state/mapStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
@@ -53,8 +54,20 @@ export function TrailViewerRail({
   overlaysAvailable,
   overlaysDisabled,
 }: Props) {
+  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
+  const set = useSettingsStore((s) => s.set);
   return (
     <View style={[styles.rail, { top }]} pointerEvents="box-none">
+      {/* 2D↔3D toggle — a rail FAB like the main map's, replacing the wide
+          segmented bar that used to sit under the viewport. */}
+      <FAB
+        icon="video-3d"
+        size="small"
+        variant={trailViewMode === '3d' ? 'primary' : 'surface'}
+        onPress={() => set('trailViewMode', trailViewMode === '3d' ? '2d' : '3d')}
+        style={styles.controlFab}
+        accessibilityLabel="3D relief"
+      />
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
       {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
     </View>

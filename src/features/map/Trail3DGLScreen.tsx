@@ -32,7 +32,6 @@ import {
   Dialog,
   IconButton,
   Portal,
-  SegmentedButtons,
   Snackbar,
   Surface,
   Text,
@@ -120,7 +119,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
 
   const trailViewMode = useSettingsStore((s) => s.trailViewMode);
-  const setSetting = useSettingsStore((s) => s.set);
 
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
   // Same points but with each altitude replaced by the terrain (DEM) height the
@@ -770,17 +768,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
           {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
         </View>
 
-        <View style={styles.viewModeBar}>
-          <SegmentedButtons
-            value={trailViewMode}
-            onValueChange={(v) => setSetting('trailViewMode', v as '2d' | '3d')}
-            buttons={[
-              { value: '2d', label: '2D', icon: 'map-outline' },
-              { value: '3d', label: '3D', icon: 'video-3d' },
-            ]}
-          />
-        </View>
-
         {points && (
           <>
             <View style={styles.scrubRow}>
@@ -1004,5 +991,4 @@ const styles = StyleSheet.create({
   photoPreviewWrap: { marginTop: 10, alignItems: 'flex-start' },
   photoPreview: { width: '100%', height: 160, borderRadius: 8 },
   photoFull: { width: '100%', height: 360 },
-  viewModeBar: { paddingHorizontal: 16, paddingVertical: 10 },
 });
