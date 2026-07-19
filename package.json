@@ -9,6 +9,7 @@
     "@maplibre/maplibre-react-native": "^11.3.6",
     "expo": "~56.0.16",
     "expo-asset": "^56.0.17",
+    "expo-clipboard": "~56.0.4",
     "expo-constants": "~56.0.18",
     "expo-dev-client": "~56.0.23",
     "expo-document-picker": "~56.0.4",

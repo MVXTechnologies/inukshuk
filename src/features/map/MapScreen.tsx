@@ -36,6 +36,10 @@ import { StatsHud } from './components/StatsHud';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
+import { WaypointViewerCard } from './components/WaypointViewerCard';
+import { formatLatLng } from '@core/geo/formatCoords';
+import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
 import { toLineFeature } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
@@ -348,12 +352,19 @@ export function MapScreen() {
   // with its source store so save/delete/photo dispatch to the right one.
   const [editWp, setEditWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
   const [wpDraft, setWpDraft] = useState('');
-  const editWaypoint =
-    editWp === null
-      ? null
-      : editWp.source === 'live'
-        ? (waypoints.find((w) => w.id === editWp.id) ?? null)
-        : (savedWaypoints.find((w) => w.id === editWp.id) ?? null);
+  // Read-only viewer target (pin tap). Editing is an explicit step from it.
+  const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
+  const findWp = useCallback(
+    (ref: { source: 'live' | 'saved'; id: string } | null) =>
+      ref === null
+        ? null
+        : ref.source === 'live'
+          ? (waypoints.find((w) => w.id === ref.id) ?? null)
+          : (savedWaypoints.find((w) => w.id === ref.id) ?? null),
+    [waypoints, savedWaypoints],
+  );
+  const editWaypoint = findWp(editWp);
+  const viewWaypoint = findWp(viewWp);
 
   const saveWaypoint = () => {
     if (editWp) {
@@ -437,8 +448,15 @@ export function MapScreen() {
         return; // projection unavailable mid-teardown — ignore the tap
       }
       if (best) {
-        setEditWp({ source: best.source, id: best.id });
-        setWpDraft(best.note ?? '');
+        // Pin tap opens the read-only viewer; a second tap on the same pin
+        // (or the card's ✕) closes it. Editing is the card's explicit step.
+        setViewWp((cur) =>
+          cur?.id === best.id && cur.source === best.source
+            ? null
+            : { source: best.source, id: best.id },
+        );
+      } else {
+        setViewWp(null); // tapping empty map dismisses the viewer
       }
     },
     [visiblePins],
@@ -706,7 +724,11 @@ export function MapScreen() {
               lngLat={[w.longitude, w.latitude]}
               anchor="bottom"
             >
-              <WaypointMarkerPin hasPhoto={!!w.photoUri} label={w.label} />
+              <WaypointMarkerPin
+                hasPhoto={!!w.photoUri}
+                label={w.label}
+                selected={viewWp?.id === w.id && viewWp.source === w.source}
+              />
             </Marker>
           ))}
 
@@ -853,6 +875,42 @@ export function MapScreen() {
       />
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
+
+      {/* Read-only waypoint viewer (pin tap): coordinates/note/photo with copy
+          actions. Hidden while the trail inspector or the editor is up so the
+          bottom edge never stacks two cards. */}
+      {inspectTrack === null && editWaypoint === null && (
+        <WaypointViewerCard
+          waypoint={viewWaypoint}
+          onCopyCoords={() => {
+            if (!viewWaypoint) return;
+            void Clipboard.setStringAsync(
+              formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+            );
+            showSnack('Coordinates copied');
+          }}
+          onCopyNote={() => {
+            if (!viewWaypoint?.note) return;
+            void Clipboard.setStringAsync(viewWaypoint.note);
+            showSnack('Note copied');
+          }}
+          onSharePhoto={() => {
+            const uri = viewWaypoint?.photoUri;
+            if (!uri) return;
+            void (async () => {
+              if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+              else showSnack('Sharing is not available on this device');
+            })();
+          }}
+          onEdit={() => {
+            if (!viewWp) return;
+            setEditWp(viewWp);
+            setWpDraft(viewWaypoint?.note ?? '');
+            setViewWp(null);
+          }}
+          onClose={() => setViewWp(null)}
+        />
+      )}
 
       <WaypointEditorDialog
         waypoint={editWaypoint}

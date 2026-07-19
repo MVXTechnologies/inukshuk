@@ -8,6 +8,8 @@ interface Props {
   hasPhoto?: boolean;
   /** Accessible name of the pin (the waypoint's label, e.g. "Waypoint 1"). */
   label?: string;
+  /** Highlight while the viewer card is open on this waypoint: ring + scale. */
+  selected?: boolean;
 }
 
 /**
@@ -19,15 +21,16 @@ interface Props {
  * accessibility tree: screen readers (and the e2e suite) can locate a pin by
  * its label even though the touch itself falls through to the map.
  */
-export function WaypointMarkerPin({ hasPhoto, label }: Props) {
+export function WaypointMarkerPin({ hasPhoto, label, selected }: Props) {
   return (
     <View
-      style={styles.wrap}
+      style={[styles.wrap, selected && styles.wrapSelected]}
       pointerEvents="none"
       accessible={label !== undefined}
       accessibilityLabel={label}
+      accessibilityState={selected !== undefined ? { selected } : undefined}
     >
-      <View style={styles.badge}>
+      <View style={[styles.badge, selected && styles.badgeSelected]}>
         <InukshukIcon size={20} color="#ffffff" />
         {hasPhoto && (
           <View style={styles.photoDot}>
@@ -41,8 +44,19 @@ export function WaypointMarkerPin({ hasPhoto, label }: Props) {
 }
 
 const BADGE = 34;
+const SELECT_RING = '#FFD54F'; // amber ring — unmistakable on any basemap
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
+  // transform-scale (not layout) keeps the pointer tip on the coordinate.
+  wrapSelected: { transform: [{ scale: 1.2 }] },
+  badgeSelected: {
+    borderColor: SELECT_RING,
+    borderWidth: 3,
+    shadowColor: SELECT_RING,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 8,
+  },
   badge: {
     width: BADGE,
     height: BADGE,
