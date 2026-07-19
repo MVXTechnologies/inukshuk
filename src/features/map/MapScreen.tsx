@@ -47,6 +47,7 @@ import { buildOsmStyle } from './mapStyle';
 import { overwriteWithTrim, saveTrimmedCopy } from './trimTrack';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
+import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackOverlays } from './useTrackOverlays';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -127,6 +128,7 @@ export function MapScreen() {
   const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
+  const toggleTerrain3d = useMapStore((s) => s.toggleTerrain3d);
   const basemap = useMapStore((s) => s.basemap);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
@@ -212,6 +214,17 @@ export function MapScreen() {
     mapRef,
     overlays,
   });
+
+  // 2D slope/contour overlays, recomputed as the camera settles on new bounds.
+  // In 3D the terrain shader draws the same analysis from the same settings.
+  const terrainOverlays2d = useTerrainOverlays2D({
+    mapRef,
+    boundsVersion,
+    active: !terrain3d && settingsHydrated,
+  });
+  useEffect(() => {
+    if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
+  }, [terrainOverlays2d.error, showOverlaySnack]);
 
   const {
     inspectId,
@@ -507,6 +520,43 @@ export function MapScreen() {
               </ImageSource>
             ))}
 
+          {/* Terrain overlays sit above the (near-opaque) PDF maps — they're
+              explicit user toggles — and below trails/markers. The slope
+              raster keeps NEAREST resampling so band edges stay hard when the
+              256-cell grid is stretched over the viewport (the CalTopo look);
+              opacity matches the 3D shader's SLOPE_OPACITY. */}
+          {terrainOverlays2d.slope && (
+            <ImageSource
+              id="slope2d"
+              url={terrainOverlays2d.slope.uri}
+              coordinates={terrainOverlays2d.slope.coordinates}
+            >
+              <Layer
+                id="slope2d-layer"
+                type="raster"
+                paint={{ 'raster-opacity': 0.62, 'raster-resampling': 'nearest' }}
+              />
+            </ImageSource>
+          )}
+          {terrainOverlays2d.contours && (
+            <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
+              <Layer
+                id="contours2d-minor-line"
+                type="line"
+                paint={{ 'line-color': '#4a3b2a', 'line-opacity': 0.5, 'line-width': 1 }}
+              />
+            </GeoJSONSource>
+          )}
+          {terrainOverlays2d.contours && (
+            <GeoJSONSource id="contours2d-major" data={terrainOverlays2d.contours.major}>
+              <Layer
+                id="contours2d-major-line"
+                type="line"
+                paint={{ 'line-color': '#4a3b2a', 'line-opacity': 0.75, 'line-width': 1.8 }}
+              />
+            </GeoJSONSource>
+          )}
+
           {showTrackOverlays &&
             trackOverlays.map((t) =>
               // While trimming, the inspected trail is drawn by the preview
@@ -671,6 +721,8 @@ export function MapScreen() {
         showFitControl={overlays.length > 0}
         onFit={fitActiveMap}
         terrain3d={terrain3d}
+        onToggle3d={toggleTerrain3d}
+        toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
         // Close any open trail inspector first: the download sheet renders
         // below the inspector panel in this tree, so starting a download with
         // the inspector open left the sheet's controls buried under it (#131).

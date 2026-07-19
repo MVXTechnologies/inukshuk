@@ -23,6 +23,13 @@ export function contourIntervalLabel(m: number): string {
   return m === 0 ? 'Auto' : `${m} m`;
 }
 
+/** Slope-angle floor choices — the CalTopo band boundaries (27 = all bands). */
+export const SLOPE_MIN_DEGS = [27, 30, 32, 35, 45] as const;
+
+export function slopeMinLabel(deg: number): string {
+  return deg === 27 ? 'All' : `≥ ${deg}°`;
+}
+
 export const SLOPE_DISCLAIMER = 'Slope shading is indicative — not for avalanche decision-making.';
 
 /** Snapshot the persisted overlay settings (non-reactive; for post-build use). */
@@ -33,6 +40,7 @@ export function currentOverlaySettings(): TerrainOverlaySettings {
     contours: s.terrainContours,
     hypso: s.terrainHypso,
     contourIntervalM: s.terrainContourIntervalM,
+    slopeMinDeg: s.terrainSlopeMinDeg,
   };
 }
 
@@ -49,11 +57,19 @@ export function useTerrainOverlaySync(
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const contourIntervalM = useSettingsStore((s) => s.terrainContourIntervalM);
+  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   useEffect(() => {
     const handle = overlayRef.current;
-    if (handle) applyTerrainOverlaySettings(handle, { slope, contours, hypso, contourIntervalM });
-  }, [slope, contours, hypso, contourIntervalM, overlayRef]);
-  return { slope, contours, hypso, contourIntervalM };
+    if (handle)
+      applyTerrainOverlaySettings(handle, {
+        slope,
+        contours,
+        hypso,
+        contourIntervalM,
+        slopeMinDeg,
+      });
+  }, [slope, contours, hypso, contourIntervalM, slopeMinDeg, overlayRef]);
+  return { slope, contours, hypso, contourIntervalM, slopeMinDeg };
 }
 
 /**
@@ -91,6 +107,7 @@ export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
+  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const set = useSettingsStore((s) => s.set);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
@@ -127,6 +144,23 @@ export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
           {t.label}
         </Button>
       ))}
+      {slope && (
+        <Button
+          compact
+          icon="angle-acute"
+          mode="contained-tonal"
+          disabled={disabled}
+          onPress={() => {
+            const i = SLOPE_MIN_DEGS.indexOf(slopeMinDeg as (typeof SLOPE_MIN_DEGS)[number]);
+            set('terrainSlopeMinDeg', SLOPE_MIN_DEGS[(i + 1) % SLOPE_MIN_DEGS.length]!);
+          }}
+          style={styles.btn}
+          labelStyle={styles.label}
+          accessibilityLabel="Slope angle"
+        >
+          {slopeMinLabel(slopeMinDeg)}
+        </Button>
+      )}
       {contours && (
         <Button
           compact

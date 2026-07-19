@@ -6,7 +6,9 @@ import { Divider, FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-
 import {
   CONTOUR_INTERVALS,
   DisclaimerSnackbar,
+  SLOPE_MIN_DEGS,
   contourIntervalLabel,
+  slopeMinLabel,
   useSlopeDisclaimer,
 } from './terrain3d/overlayControls';
 
@@ -121,6 +123,7 @@ function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
+  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const set = useSettingsStore((s) => s.set);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
@@ -163,6 +166,20 @@ function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
             title={t.title}
           />
         ))}
+        {slope && (
+          <>
+            <Divider />
+            <Menu.Item disabled title="Slope angle" />
+            {SLOPE_MIN_DEGS.map((d) => (
+              <Menu.Item
+                key={d}
+                trailingIcon={slopeMinDeg === d ? 'check' : undefined}
+                onPress={() => set('terrainSlopeMinDeg', d)}
+                title={slopeMinLabel(d)}
+              />
+            ))}
+          </>
+        )}
         {contours && (
           <>
             <Divider />

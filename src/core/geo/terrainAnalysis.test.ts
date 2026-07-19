@@ -14,6 +14,7 @@ import {
   SLOPE_BANDS,
   slopeBandColor,
   slopeDegrees,
+  slopeOverlayRgba,
   slopeRampRgba,
   smoothstep,
 } from './terrainAnalysis';
@@ -261,6 +262,46 @@ describe('hillshade baking', () => {
     const rgba = new Uint8Array(4 * 4).fill(250);
     bakeHillshadeIntoRgba(rgba, 2, 2, new Float32Array([1, 1, 1, 1]), 2);
     for (let i = 0; i < 4; i++) expect(rgba[i * 4]).toBeLessThanOrEqual(255);
+  });
+});
+
+describe('slopeOverlayRgba', () => {
+  // A west→east ramp rising `rise` metres per cell: every interior cell slopes
+  // at atan(rise / cellXm).
+  const ramp = (grid: number, risePerCellM: number): Float32Array => {
+    const data = new Float32Array(grid * grid);
+    for (let y = 0; y < grid; y++)
+      for (let x = 0; x < grid; x++) data[y * grid + x] = x * risePerCellM;
+    return data;
+  };
+
+  it('leaves a flat grid fully transparent', () => {
+    const rgba = slopeOverlayRgba(new Float32Array(64).fill(500), 8, 30, 30, 27);
+    expect(rgba.every((v) => v === 0)).toBe(true);
+  });
+
+  it('paints interior cells with the band colour of their slope', () => {
+    // rise 20 m over 30 m ground → atan(2/3) ≈ 33.7° → the 32° band.
+    const grid = 9;
+    const rgba = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27);
+    const centre = (4 * grid + 4) * 4;
+    const [r, g, b, a] = slopeBandColor(Math.atan(20 / 30) * (180 / Math.PI));
+    expect([rgba[centre], rgba[centre + 1], rgba[centre + 2], rgba[centre + 3]]).toEqual([
+      r,
+      g,
+      b,
+      a,
+    ]);
+  });
+
+  it('hides bands below the selected floor', () => {
+    // ≈33.7° cells: visible at floor 27°/32°, transparent at floor 35°.
+    const grid = 9;
+    const centre = (4 * grid + 4) * 4;
+    const at32 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 32);
+    expect(at32[centre + 3]).toBe(255);
+    const at35 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 35);
+    expect(at35[centre + 3]).toBe(0);
   });
 });
 

@@ -11,6 +11,9 @@ interface Props {
   onFit: () => void;
   /** Hide the download control while the 3D view is up. */
   terrain3d: boolean;
+  onToggle3d: () => void;
+  /** Disable 3D entry while recording / selecting a region / downloading. */
+  toggle3dDisabled: boolean;
   onDownload: () => void;
   downloadDisabled: boolean;
   pdfOverlayCount: number;
@@ -24,6 +27,8 @@ export function MapControlsRail({
   showFitControl,
   onFit,
   terrain3d,
+  onToggle3d,
+  toggle3dDisabled,
   onDownload,
   downloadDisabled,
   pdfOverlayCount,
@@ -47,10 +52,19 @@ export function MapControlsRail({
           style={styles.controlFab}
         />
       )}
-      {/* 3D relief temporarily pulled back — the live-3D experience isn't where
-          we want it yet. The Terrain3DLiveView code stays in the tree (gated off
-          via the `terrain3d` store flag, which nothing toggles now) so it's ready
-          to re-enable once the camera/gesture feel is dialed in. */}
+      {/* 3D relief — re-enabled for 1.2.0 now that terrain P2 (#137) shipped
+          the camera/gesture polish it was pulled back to wait for (8f200bb). */}
+      <FAB
+        icon="video-3d"
+        size="small"
+        variant={terrain3d ? 'primary' : 'surface'}
+        onPress={onToggle3d}
+        // 3D is unstable while recording and meaningless while selecting or
+        // downloading an offline region — disable it in those states.
+        disabled={toggle3dDisabled}
+        style={styles.controlFab}
+        accessibilityLabel="3D relief"
+      />
       {!terrain3d && (
         <FAB
           icon="tray-arrow-down"

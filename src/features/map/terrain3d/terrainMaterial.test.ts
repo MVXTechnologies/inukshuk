@@ -92,7 +92,7 @@ describe('terrain overlay shader injection (against the pinned three build)', ()
   it('registers the ramp textures for disposal and a stable program cache key', () => {
     const { material } = build();
     expect(material.userData.overlayTextures).toHaveLength(2);
-    expect(material.customProgramCacheKey()).toBe('inukshuk-terrain-overlay-v1');
+    expect(material.customProgramCacheKey()).toBe('inukshuk-terrain-overlay-v2');
   });
 });
 
@@ -106,6 +106,7 @@ describe('applyTerrainOverlaySettings', () => {
       contours: true,
       hypso: true,
       contourIntervalM: 0,
+      slopeMinDeg: 27,
     });
     expect(h.uniforms.uSlopeOpacity.value).toBeGreaterThan(0);
     expect(h.uniforms.uHypsoOpacity.value).toBeGreaterThan(0);
@@ -115,6 +116,7 @@ describe('applyTerrainOverlaySettings', () => {
       contours: false,
       hypso: false,
       contourIntervalM: 0,
+      slopeMinDeg: 27,
     });
     expect(h.uniforms.uSlopeOpacity.value).toBe(0);
     expect(h.uniforms.uHypsoOpacity.value).toBe(0);
@@ -128,6 +130,7 @@ describe('applyTerrainOverlaySettings', () => {
       contours: true,
       hypso: false,
       contourIntervalM: 0,
+      slopeMinDeg: 27,
     });
     expect(h.uniforms.uContourInterval.value).toBe(25); // span 500 → 25 m
     applyTerrainOverlaySettings(h, {
@@ -135,8 +138,22 @@ describe('applyTerrainOverlaySettings', () => {
       contours: true,
       hypso: false,
       contourIntervalM: 100,
+      slopeMinDeg: 27,
     });
     expect(h.uniforms.uContourInterval.value).toBe(100);
+  });
+
+  it('forwards the slope-angle floor to the shader uniform', () => {
+    const h = handle();
+    expect(h.uniforms.uSlopeMinDeg.value).toBe(27); // default = all bands
+    applyTerrainOverlaySettings(h, {
+      slope: true,
+      contours: false,
+      hypso: false,
+      contourIntervalM: 0,
+      slopeMinDeg: 35,
+    });
+    expect(h.uniforms.uSlopeMinDeg.value).toBe(35);
   });
 });
 
