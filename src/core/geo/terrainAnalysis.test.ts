@@ -2,12 +2,14 @@ import {
   aspectDegrees,
   autoContourInterval,
   bakeHillshadeIntoRgba,
+  contourShadeForLuminance,
   contourStrength,
   fract,
   hillshadeFactor,
   hypsoBandStart,
   hypsoColor,
   hypsoRampRgba,
+  luminance601,
   multidirHillshade,
   skyGradientColor,
   SKY_STOPS,
@@ -302,6 +304,28 @@ describe('slopeOverlayRgba', () => {
     expect(at32[centre + 3]).toBe(255);
     const at35 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 35);
     expect(at35[centre + 3]).toBe(0);
+  });
+});
+
+describe('contourShadeForLuminance', () => {
+  it('is white over dark surfaces and black over bright ones', () => {
+    expect(contourShadeForLuminance(0)).toBe(1);
+    expect(contourShadeForLuminance(0.2)).toBe(1); // below the dark threshold
+    expect(contourShadeForLuminance(1)).toBe(0);
+    expect(contourShadeForLuminance(0.8)).toBe(0); // above the bright threshold
+  });
+
+  it('transitions smoothly and monotonically between the thresholds', () => {
+    const mid = contourShadeForLuminance(0.5);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    expect(contourShadeForLuminance(0.4)).toBeGreaterThan(contourShadeForLuminance(0.6));
+  });
+
+  it('luminance601 weights green highest', () => {
+    expect(luminance601(1, 1, 1)).toBeCloseTo(1);
+    expect(luminance601(0, 1, 0)).toBeGreaterThan(luminance601(1, 0, 0));
+    expect(luminance601(1, 0, 0)).toBeGreaterThan(luminance601(0, 0, 1));
   });
 });
 

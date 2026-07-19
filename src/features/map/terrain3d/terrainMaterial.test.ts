@@ -92,7 +92,7 @@ describe('terrain overlay shader injection (against the pinned three build)', ()
   it('registers the ramp textures for disposal and a stable program cache key', () => {
     const { material } = build();
     expect(material.userData.overlayTextures).toHaveLength(2);
-    expect(material.customProgramCacheKey()).toBe('inukshuk-terrain-overlay-v2');
+    expect(material.customProgramCacheKey()).toBe('inukshuk-terrain-overlay-v3');
   });
 });
 

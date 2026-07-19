@@ -293,6 +293,22 @@ export function contourStrength(
 }
 
 /**
+ * Contrast-adaptive contour shade for the surface luminance under the line:
+ * white over dark imagery (forest, shadow), black over bright imagery (snow,
+ * bare rock), smooth in between — so contours stay readable on a satellite
+ * drape. `lum` is Rec.601 luminance in [0,1]; returns the grey level [0,1]
+ * (1 = white line). The 3D shader transcribes this; keep them in lockstep.
+ */
+export function contourShadeForLuminance(lum: number): number {
+  return 1 - smoothstep(0.35, 0.65, clamp01(lum));
+}
+
+/** Rec.601 luminance of an RGB colour in [0,1] channels. */
+export function luminance601(r: number, g: number, b: number): number {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
  * Hypsometric band base elevation drawn at `elevM` (the shader tints by the
  * band's *start* elevation, giving flat "isobar-like" steps).
  */

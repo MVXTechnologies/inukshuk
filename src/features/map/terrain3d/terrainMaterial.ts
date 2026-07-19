@@ -127,7 +127,14 @@ if (uContourOpacity > 0.0) {
   float majorS = 1.0 - smoothstep(0.8 * wpx, 2.2 * wpx, dMajor);
   minorS *= 1.0 - smoothstep(0.25, 0.5, wpx / uContourInterval);
   float contourA = max(majorS * 0.55, minorS * 0.3) * uContourOpacity;
-  diffuseColor.rgb = mix(diffuseColor.rgb, uContourColor, contourA);
+  // Mirror of contourShadeForLuminance: contrast-adaptive line shade — white
+  // over dark drape pixels (forest/shadow on satellite), black over bright
+  // ones (snow, bare rock), blended with the base tint so light basemaps
+  // keep their warm brown look.
+  float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+  float shade = 1.0 - smoothstep(0.35, 0.65, lum);
+  vec3 contourCol = mix(uContourColor * 0.35, max(uContourColor, vec3(0.85)), shade);
+  diffuseColor.rgb = mix(diffuseColor.rgb, contourCol, contourA);
 }
 `;
 
@@ -211,7 +218,7 @@ export function createTerrainMaterial(opts: CreateTerrainMaterialOptions): {
   };
   // One stable cache key per injected variant (three still keys on map/vertex-
   // colour defines), so basemap switches reuse the compiled program.
-  material.customProgramCacheKey = () => 'inukshuk-terrain-overlay-v2';
+  material.customProgramCacheKey = () => 'inukshuk-terrain-overlay-v3';
   material.userData.overlayTextures = [slopeTex, hypsoTex];
 
   return { material, overlay: { uniforms, minH: opts.minH, maxH: opts.maxH } };

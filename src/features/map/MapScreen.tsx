@@ -583,21 +583,53 @@ export function MapScreen() {
               />
             </ImageSource>
           )}
+          {/* Contours must contrast with the ground: white over satellite
+              imagery (mostly dark), the warm brown over the light map/relief
+              basemaps — each with a thin opposite-shade halo so lines stay
+              readable across mixed terrain (line layers can't sample the
+              raster beneath, so this is per-basemap, not per-pixel; the 3D
+              shader does the true per-pixel version). */}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
               <Layer
+                id="contours2d-minor-halo"
+                type="line"
+                paint={{
+                  'line-color': basemap === 'satellite' ? '#000000' : '#FFFFFF',
+                  'line-opacity': 0.35,
+                  'line-width': 2.2,
+                }}
+              />
+              <Layer
                 id="contours2d-minor-line"
                 type="line"
-                paint={{ 'line-color': '#4a3b2a', 'line-opacity': 0.5, 'line-width': 1 }}
+                paint={{
+                  'line-color': basemap === 'satellite' ? '#FFFFFF' : '#4a3b2a',
+                  'line-opacity': basemap === 'satellite' ? 0.8 : 0.5,
+                  'line-width': 1,
+                }}
               />
             </GeoJSONSource>
           )}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-major" data={terrainOverlays2d.contours.major}>
               <Layer
+                id="contours2d-major-halo"
+                type="line"
+                paint={{
+                  'line-color': basemap === 'satellite' ? '#000000' : '#FFFFFF',
+                  'line-opacity': 0.45,
+                  'line-width': 3.2,
+                }}
+              />
+              <Layer
                 id="contours2d-major-line"
                 type="line"
-                paint={{ 'line-color': '#4a3b2a', 'line-opacity': 0.75, 'line-width': 1.8 }}
+                paint={{
+                  'line-color': basemap === 'satellite' ? '#FFFFFF' : '#4a3b2a',
+                  'line-opacity': basemap === 'satellite' ? 0.95 : 0.75,
+                  'line-width': 1.8,
+                }}
               />
             </GeoJSONSource>
           )}
