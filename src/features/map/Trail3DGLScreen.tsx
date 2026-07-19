@@ -5,7 +5,7 @@ import {
   withDemElevations,
   type TrackPointAt,
 } from '@core/geo/track';
-import { orderNotes } from '@core/library/notes';
+import { numberNotesOnTrack, orderNotes, type NumberedTrailNote } from '@core/library/notes';
 import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
@@ -80,6 +80,7 @@ import {
   type TerrainBuild,
 } from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
+import { NoteNumberBadge } from './components/NoteNumberBadge';
 import { Trail2DView } from './Trail2DView';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -165,6 +166,16 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
   const maxAnisoRef = useRef(1);
   const scrubRef = useRef<TrackPointAt | null>(null);
+  // Numbered note badges floated over the GL surface (parity with the 2D
+  // view's Marker pins): screen positions are projected in the render loop at
+  // ~8 Hz and only committed to state when they actually moved, so an idle
+  // camera causes zero re-renders.
+  const [noteBadges, setNoteBadges] = useState<{ id: string; num: number; x: number; y: number }[]>(
+    [],
+  );
+  const noteBadgesRef = useRef<{ id: string; num: number; x: number; y: number }[]>([]);
+  const numberedNotesRef = useRef<NumberedTrailNote[]>([]);
+  const noteAccumRef = useRef(0);
   // P2 interaction polish: inertia + fly-to springs, view size for tap/pinch
   // picking, terrain samplers for zoom-anchoring, collision and tap-to-query.
   const dyn = useMemo(() => createCameraDynamics(), []);
@@ -296,6 +307,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
       cancelled = true;
     };
   }, [fileUri]);
+
+  // Note→coordinate resolution for the 3D badges, kept in a ref because the
+  // render loop (a long-lived closure) is what projects them each tick.
+  useEffect(() => {
+    numberedNotesRef.current = numberNotesOnTrack(points ?? [], notes ?? []);
+  }, [points, notes]);
+  // Stale positions from a torn-down scene are hidden by the render gate below
+  // (badges draw only while 3D is up and ready); the loop overwrites them
+  // within one throttle tick when 3D resumes.
 
   // Sample the terrain (DEM) under each point so the profile reads the same
   // surface the 3D view drapes the trail on. Reuses the heightmap the GL context
@@ -459,6 +479,43 @@ export function Trail3DGLScreen({ trackId }: Props) {
             marker.visible = true;
           } else {
             marker.visible = false;
+          }
+          // Numbered note badges: project trail-note anchors to screen space at
+          // ~8 Hz and commit only real movement (idle camera → no re-renders).
+          noteAccumRef.current += dt;
+          if (noteAccumRef.current >= 0.12) {
+            noteAccumRef.current = 0;
+            const pr = projectRef.current;
+            const { w, h } = viewSizeRef.current;
+            const list = numberedNotesRef.current;
+            const next: { id: string; num: number; x: number; y: number }[] = [];
+            if (pr && w > 0 && list.length > 0) {
+              camera.updateMatrixWorld();
+              for (const n of list) {
+                const v = pr(n.longitude, n.latitude);
+                v.project(camera);
+                // Drop points behind the camera or well outside the frustum.
+                if (v.z < 1 && Math.abs(v.x) <= 1.05 && Math.abs(v.y) <= 1.05) {
+                  next.push({
+                    id: n.note.id,
+                    num: n.num,
+                    x: ((v.x + 1) / 2) * w,
+                    y: ((1 - v.y) / 2) * h,
+                  });
+                }
+              }
+            }
+            const prev = noteBadgesRef.current;
+            let changed = next.length !== prev.length;
+            for (let i = 0; !changed && i < next.length; i++) {
+              const a = next[i]!;
+              const b = prev[i]!;
+              changed = a.id !== b.id || Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5;
+            }
+            if (changed) {
+              noteBadgesRef.current = next;
+              setNoteBadges(next);
+            }
           }
         },
         onDisposed: () => {
@@ -648,6 +705,22 @@ export function Trail3DGLScreen({ trackId }: Props) {
               <ActivityIndicator size="large" />
             </View>
           )}
+          {/* Numbered note circles over the 3D terrain — the same badges the 2D
+              map pins on the trace, projected to screen space each render tick.
+              Visual only, like 2D: the notes list below is the interaction
+              surface. Offset by half the 24dp badge so the circle centres on
+              the anchor. */}
+          {trailViewMode === '3d' &&
+            status === 'ready' &&
+            noteBadges.map((b) => (
+              <View
+                key={b.id}
+                pointerEvents="none"
+                style={[styles.noteBadge3d, { left: b.x - 12, top: b.y - 12 }]}
+              >
+                <NoteNumberBadge num={b.num} />
+              </View>
+            ))}
           {trailViewMode === '3d' && status === 'loading' && (
             <View style={styles.center} pointerEvents="none">
               <ActivityIndicator size="large" />
@@ -902,6 +975,7 @@ const styles = StyleSheet.create({
   switchSpin: { position: 'absolute', bottom: 14, alignSelf: 'center', pointerEvents: 'none' },
   // Centred near the bottom of the viewport — clear of the rail on the right.
   queryChip: { position: 'absolute', left: 0, right: 0, bottom: 40 },
+  noteBadge3d: { position: 'absolute' },
   scrubRow: { paddingHorizontal: 16, paddingTop: 10 },
   notesHeader: {
     flexDirection: 'row',
