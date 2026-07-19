@@ -137,6 +137,21 @@ describe('parseGpx hand-written input', () => {
     expect(doc.metadata.time).toBe(Date.parse('2024-03-03T12:00:00Z'));
   });
 
+  it('falls back to <trk><name> when metadata has none (Garmin/Strava exports)', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><name>Ultra du bout du monde</name>
+      <trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    const doc = parseGpx(xml);
+    expect(doc.metadata.name).toBe('Ultra du bout du monde');
+  });
+
+  it('prefers <metadata><name> over <trk><name>', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <metadata><name>Doc name</name></metadata>
+      <trk><name>Track name</name><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).metadata.name).toBe('Doc name');
+  });
+
   it('reads a direct <speed> child of trkpt', () => {
     const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
       <trk><trkseg>

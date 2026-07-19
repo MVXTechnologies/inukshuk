@@ -199,6 +199,12 @@ export function parseGpx(xml: string): GpxDocument {
     const n = textOf(gpx['name']);
     if (n !== undefined) metadata.name = n;
   }
+  // Garmin/Strava exports name the <trk>, not the document — last fallback.
+  if (metadata.name === undefined) {
+    const firstTrk = asArray<AnyRecord>(gpx['trk'])[0];
+    const n = firstTrk ? textOf(firstTrk['name']) : undefined;
+    if (n !== undefined) metadata.name = n;
+  }
 
   const points: TrackPoint[] = [];
 
