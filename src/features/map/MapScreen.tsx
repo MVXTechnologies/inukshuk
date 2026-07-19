@@ -216,10 +216,15 @@ export function MapScreen() {
   });
 
   // 2D slope/contour overlays, recomputed as the camera settles on new bounds.
+  // Driven by its own counter bumped on EVERY region change — refreshBounds's
+  // boundsVersion only advances for a flat north-up camera (its offline-select
+  // contract), which froze the overlays on a rotated/pitched map: pan all you
+  // want, nothing recomputed until the layer was toggled off and on.
   // In 3D the terrain shader draws the same analysis from the same settings.
+  const [regionVersion, setRegionVersion] = useState(0);
   const terrainOverlays2d = useTerrainOverlays2D({
     mapRef,
-    boundsVersion,
+    boundsVersion: regionVersion,
     active: !terrain3d && settingsHydrated,
   });
   useEffect(() => {
@@ -466,7 +471,10 @@ export function MapScreen() {
           compass={false}
           touchPitch
           onPress={onMapPress}
-          onRegionDidChange={() => void refreshBounds()}
+          onRegionDidChange={() => {
+            setRegionVersion((v) => v + 1);
+            void refreshBounds();
+          }}
           onLayout={onMapLayout}
         >
           <Camera

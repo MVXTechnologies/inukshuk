@@ -15,10 +15,11 @@ import { fetchHeightmap } from './dem';
  * cached Terrarium DEM the 3D terrain uses and bound to the same persisted
  * settings — so 2D and 3D always show the same analysis.
  *
- * Recomputes when the camera settles on a new region (`boundsVersion`, bumped
- * by onRegionDidChange via the offline-download hook's flat-camera bounds
- * cache) or when any overlay setting changes. Results cover the DEM's
- * tile-aligned bbox (≥ the viewport), so small pans often need no recompute.
+ * Recomputes when the camera settles on a new region (`boundsVersion`: the
+ * host bumps it on EVERY onRegionDidChange — rotated/pitched cameras
+ * included, their bounds just cover a larger trapezoid bbox) or when any
+ * overlay setting changes. Results cover the DEM's tile-aligned bbox (≥ the
+ * viewport), so small pans often need no recompute.
  */
 
 /** ImageSource corners: [TL, TR, BR, BL] as [lng, lat]. */
