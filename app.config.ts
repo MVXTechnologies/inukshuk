@@ -11,13 +11,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.1.0: 3D terrain P2, trail-viewer control rail, Library waypoints section,
-  // GPX file-open, POST_NOTIFICATIONS manifest declaration (native change ⇒
-  // store release, not OTA). runtimeVersion follows appVersion — a new version
-  // name gives this build its own OTA runtime, so 1.1.0 JS never lands on older
-  // binaries that lack the new manifest entries. Existing installs keep their
-  // OTA lineage.
-  version: '1.1.0',
+  // 1.2.0: main-map terrain overlays — slope bands with an angle selector and
+  // contour lines with an interval selector, in 2D (DEM raster + marching-
+  // squares GeoJSON) and 3D (the restored video-3d entry + shader floor).
+  // runtimeVersion follows appVersion — the new version name opens 1.2.0's own
+  // OTA runtime lineage. Existing installs keep theirs.
+  version: '1.2.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -62,8 +61,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.inukshuk.app',
     // versionCode must keep monotonically increasing on Play (it can't reset) —
     // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 was
-    // 1.0.2; vc45 was 1.0.3; vc46 is 1.1.0, see version above.)
-    versionCode: 46,
+    // 1.0.2; vc45 was 1.0.3; vc46 was 1.1.0; vc47 is 1.2.0, see version above.)
+    versionCode: 47,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
