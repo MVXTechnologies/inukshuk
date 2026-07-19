@@ -11,12 +11,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // Bumped to 1.0.2 for background recording: it adds ACCESS_BACKGROUND_LOCATION
-  // + the iOS location background mode (native manifest/plist changes), and
-  // runtimeVersion follows appVersion — a new version name gives this build its
-  // own OTA runtime, so the background-recording JS never lands on older
-  // binaries that lack those entries. Existing installs keep their OTA lineage.
-  version: '1.0.3',
+  // 1.1.0: 3D terrain P2, trail-viewer control rail, Library waypoints section,
+  // GPX file-open, POST_NOTIFICATIONS manifest declaration (native change ⇒
+  // store release, not OTA). runtimeVersion follows appVersion — a new version
+  // name gives this build its own OTA runtime, so 1.1.0 JS never lands on older
+  // binaries that lack the new manifest entries. Existing installs keep their
+  // OTA lineage.
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -60,9 +61,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.inukshuk.app',
     // versionCode must keep monotonically increasing on Play (it can't reset) —
-    // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 is
-    // 1.0.2, see version above.)
-    versionCode: 45,
+    // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 was
+    // 1.0.2; vc45 was 1.0.3; vc46 is 1.1.0, see version above.)
+    versionCode: 46,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
