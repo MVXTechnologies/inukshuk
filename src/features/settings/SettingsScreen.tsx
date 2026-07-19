@@ -100,7 +100,8 @@ export function SettingsScreen() {
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
   const folders = useLibraryStore((s) => s.folders);
-  const bundles = useLibraryStore((s) => s.bundles);
+  const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
+  const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const activeMapId = useLibraryStore((s) => s.activeMapId);
   const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(
@@ -164,8 +165,9 @@ export function SettingsScreen() {
         schemaVersion: LIBRARY_SCHEMA_VERSION,
         maps,
         tracks,
-        bundles,
         folders,
+        mapVisibilityMode,
+        visibleFolderIds,
         activeMapId,
         activeTrackIds,
       },

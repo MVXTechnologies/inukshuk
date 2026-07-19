@@ -16,5 +16,7 @@ export interface Waypoint {
   note?: string;
   /** Absolute file:// uri of an attached photo stored in app storage, if any. */
   photoUri?: string;
+  /** Owning folder, like maps/trails; absent = Ungrouped. */
+  folderId?: string;
   createdAt: number;
 }

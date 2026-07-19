@@ -36,7 +36,6 @@ beforeAll(async () => {
     schemaVersion: 2, // pre-categories index — migration seeds customCategories
     maps: [],
     tracks: [track('t1'), track('t2')],
-    bundles: [],
     folders: [],
     activeMapId: null,
     activeTrackIds: [],

@@ -33,8 +33,7 @@ const track = (id: string) => ({ id, name: id, startedAt: 1, stats, fileUri: `fi
 const legacyIndex = {
   maps: [],
   tracks: [track('t1'), track('t2')],
-  bundles: [{ id: 'b1', name: 'B', mapIds: [], trackIds: ['t1', 't-deleted'], createdAt: 1 }],
-  folders: [],
+  folders: [{ id: 'f1', name: 'Alps', createdAt: 1 }],
   activeMapId: null,
 };
 
@@ -57,12 +56,35 @@ it('toggleTrackOverlay toggles and persists the id with the schema version', () 
   expect(useLibraryStore.getState().activeTrackIds).toEqual([]);
 });
 
-it('activateBundle turns on member trails itself, skipping deleted ones', () => {
-  useLibraryStore.getState().activateBundle('b1');
-  expect(useLibraryStore.getState().activeTrackIds).toEqual(['t1']);
+it('folder visibility mode + selection toggle and persist', () => {
+  const s0 = useLibraryStore.getState();
+  expect(s0.mapVisibilityMode).toBe('type');
+  s0.setMapVisibilityMode('folders');
+  expect(useLibraryStore.getState().mapVisibilityMode).toBe('folders');
+  useLibraryStore.getState().toggleVisibleFolder('f1');
+  useLibraryStore.getState().toggleVisibleFolder('ungrouped');
+  expect(useLibraryStore.getState().visibleFolderIds).toEqual(['f1', 'ungrouped']);
   expect(storage.writeIndex).toHaveBeenLastCalledWith(
-    expect.objectContaining({ activeTrackIds: ['t1'] }),
+    expect.objectContaining({
+      mapVisibilityMode: 'folders',
+      visibleFolderIds: ['f1', 'ungrouped'],
+    }),
   );
+  useLibraryStore.getState().toggleVisibleFolder('f1');
+  expect(useLibraryStore.getState().visibleFolderIds).toEqual(['ungrouped']);
+  useLibraryStore.getState().setMapVisibilityMode('type');
+});
+
+it('removeFolder clears item folderIds and the visible selection', () => {
+  useLibraryStore.getState().toggleVisibleFolder('f1');
+  const wpId = useLibraryStore.getState().addWaypoint(46.8, -71.2);
+  useLibraryStore.getState().setItemFolder('waypoint', wpId, 'f1');
+  expect(useLibraryStore.getState().waypoints.find((w) => w.id === wpId)?.folderId).toBe('f1');
+  useLibraryStore.getState().removeFolder('f1');
+  const after = useLibraryStore.getState();
+  expect(after.waypoints.find((w) => w.id === wpId)?.folderId).toBeUndefined();
+  expect(after.visibleFolderIds).not.toContain('f1');
+  useLibraryStore.getState().removeWaypoint(wpId);
 });
 
 it('removeTrack prunes the deleted trail from the overlay set', () => {

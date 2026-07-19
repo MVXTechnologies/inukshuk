@@ -30,11 +30,13 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 1: Relocate `toggleId`; delete bundles from core; migration v3→v4
 
 **Files:**
+
 - Create: `src/core/library/toggleId.ts` + `src/core/library/toggleId.test.ts`
 - Delete: `src/core/models/bundle.ts`, `src/core/library/bundles.ts`, `src/core/library/bundles.test.ts`
 - Modify: `src/core/models/index.ts` (drop bundle export), `src/core/library/migrations.ts`, `src/core/library/migrations.test.ts`
 
 **Interfaces:**
+
 - Produces: `toggleId(ids: readonly string[], id: string): string[]` (unchanged semantics, new home).
 - Produces: `LibraryIndex` without `bundles`, with `mapVisibilityMode: 'type' | 'folders'` and `visibleFolderIds: string[]`; `LIBRARY_SCHEMA_VERSION = 4`; upgrader `3: (doc) => ({ ...doc, bundles: undefined, mapVisibilityMode: 'type', visibleFolderIds: [], schemaVersion: 4 })` (strip via destructure, not `undefined` field). `migrateLibraryIndex` sanitizes: mode defaults `'type'` unless exactly `'folders'`; `visibleFolderIds` filtered to strings.
 
@@ -46,10 +48,12 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 2: libraryStore — drop bundle state, add visibility state, waypoint folders
 
 **Files:**
+
 - Modify: `src/state/libraryStore.ts`, `src/state/libraryStore.trackOverlays.test.ts`, `src/state/libraryStore.hydration.test.ts`, `src/state/libraryStore.categories.test.ts`
 - Modify: `src/core/models/waypoint.ts` (`folderId?: string`)
 
 **Interfaces:**
+
 - Removes: `bundles`, `addBundle`, `renameBundle`, `removeBundle`, `toggleBundleMap`, `toggleBundleTrack`, `activateBundle`, `pruneBundles` calls in `removeMap`/`removeTrack`.
 - Produces: `mapVisibilityMode: 'type' | 'folders'`; `visibleFolderIds: string[]`; `setMapVisibilityMode(mode: 'type' | 'folders'): void`; `toggleVisibleFolder(id: string): void` (uses `toggleId`; `'ungrouped'` is a valid pseudo-id); `setItemFolder(kind: 'map' | 'track' | 'waypoint', itemId, folderId | null)`; `removeFolder` also clears waypoint folderIds; persist() writes the new fields.
 
@@ -59,6 +63,7 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 3: SettingsScreen export + LibraryScreen bundle removal
 
 **Files:**
+
 - Modify: `src/features/settings/SettingsScreen.tsx` (drop `bundles` from the export snapshot; `exportAllData` typing follows `LibraryIndex`), `src/features/settings/exportAllData.ts` if it names bundles.
 - Modify: `src/features/library/LibraryScreen.tsx` — remove: `bundleCounts` import, bundle store hooks, `editingBundle`/`newBundleVisible` state, `createBundle`, `onActivateBundle`, `'bundle'` from `DeleteTarget` + copy map, the Bundles `List.Section` (≈861-945), "Add to bundle" blocks in both item menus, the bundle `NameDialog`.
 
@@ -67,10 +72,12 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 4: Folders grow waypoints (core + Library UI)
 
 **Files:**
+
 - Modify: `src/core/library/folders.ts` + `folders.test.ts`
 - Modify: `src/features/library/LibraryScreen.tsx`
 
 **Interfaces:**
+
 - Produces: `FolderGroup { folder, maps, tracks, waypoints }`; `groupByFolder(folders, maps, tracks, waypoints): FolderGrouping` (grouping gains `ungroupedWaypoints`); `folderItemCount` counts all three.
 
 - [ ] folders tests first (grouping + counts with waypoints; unknown folderId → ungrouped). Implement. Green.
@@ -79,11 +86,13 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 5: Visibility filtering (core) + MapScreen/LayersMenu modes
 
 **Files:**
+
 - Create: `src/core/library/visibility.ts` + `visibility.test.ts`
 - Create: `src/features/map/components/FolderPickerDialog.tsx`
 - Modify: `src/features/map/useTrackOverlays.ts` (accept `activeIds: readonly string[]` as a param instead of reading the store), `src/features/map/MapScreen.tsx`, `src/features/map/components/LayersMenu.tsx`
 
 **Interfaces:**
+
 - Produces (core): `UNGROUPED_FOLDER_ID = 'ungrouped'`;
   `visibleMaps(mode, visibleFolderIds, maps): MapDocument[]` (type mode → all);
   `visibleTrackIds(mode, visibleFolderIds, tracks, activeTrackIds): string[]`
@@ -98,12 +107,14 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 6: Waypoint viewer card + pin highlight (+ expo-clipboard)
 
 **Files:**
+
 - Create: `src/features/map/components/WaypointViewerCard.tsx`
 - Create: `src/core/geo/formatCoords.ts` + `formatCoords.test.ts`
 - Modify: `src/features/map/MapScreen.tsx`, `src/features/map/components/WaypointMarkerPin.tsx`
 - Modify: `package.json` via `npx expo install expo-clipboard`
 
 **Interfaces:**
+
 - Produces (core): `formatLatLng(lat: number, lng: number): string` → `46.81394, -71.20820` (5 decimals, comma-space).
 - Produces (UI): `WaypointViewerCard { waypoint: { label, latitude, longitude, note?, photoUri? } | null, onCopyCoords, onCopyNote, onSharePhoto, onEdit, onClose }` — bottom Surface card (styled like TrailInspectPanel), copy buttons hidden when their field is absent, Edit opens the existing editor.
 - `WaypointMarkerPin` gains `selected?: boolean` → highlight ring + 1.15 scale.
@@ -115,18 +126,21 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 7: Trail viewer — 3D rail FAB replaces the segmented bar
 
 **Files:**
+
 - Modify: `src/features/map/TrailViewerRail.tsx` (new top FAB `video-3d`, `variant={mode==='3d'?'primary':'surface'}`, a11y "3D relief", onPress toggles `trailViewMode`), `src/features/map/Trail3DGLScreen.tsx` (remove `viewModeBar` SegmentedButtons block + styles).
-- Modify: `.maestro/trail-view.yaml` (replace `tapOn: '2D'` / `tapOn: '3D'` with `tapOn: '3D relief'`; the "Notes.*" 2D assertions follow the toggle).
+- Modify: `.maestro/trail-view.yaml` (replace `tapOn: '2D'` / `tapOn: '3D'` with `tapOn: '3D relief'`; the "Notes.\*" 2D assertions follow the toggle).
 
 - [ ] Implement; `npm run check` green. Commit (E2E verified in Task 9).
 
 ### Task 8: Drag-and-drop cards onto folder headers
 
 **Files:**
+
 - Create: `src/features/library/useDragToFolder.ts`
 - Modify: `src/features/library/LibraryScreen.tsx`
 
 **Interfaces:**
+
 - Produces: `useDragToFolder({ onDrop(kind, itemId, folderId | null) })` returning
   `{ panHandlers(kind, itemId), registerDropTarget(folderId | null) → onLayout ref, dragState: { active, x, y, label } | null, scrollRef }`.
 - Behavior: long-press (350 ms) on a card arms the drag (PanResponder claims the responder); an absolutely-positioned ghost chip follows the finger (RN Animated.ValueXY, no re-render per move); folder headers + the Ungrouped header register their measured rects and highlight while hovered; release inside a rect → `onDrop` → `setItemFolder`; release elsewhere cancels. Near top/bottom edges the ScrollView auto-scrolls (`scrollTo` with interval while hovering the edge zones). ScrollView gets `scrollEnabled={!dragState}`.
@@ -137,6 +151,7 @@ expo-clipboard (new), Jest, Maestro.
 ### Task 9: E2E updates + full suites
 
 **Files:**
+
 - Modify: `.maestro/waypoint.yaml` (pin tap now opens the viewer: assert coordinates text `46\.8.*` + "Copy", tap "Edit" to reach the editor steps), `.maestro/trail-view.yaml` (Task 7), `.maestro/library-filter.yaml` if it brushed bundles (recon says no).
 - Add folder-mode coverage to a new `.maestro/folders.yaml`: create folder (Library), move the recorded trail into it via ⋮, Layers→(map overlays untouched) LayersMenu "Folders…" → check the folder → map alive → back to type mode. Wire into `e2e-attempts.sh` before settings.
 

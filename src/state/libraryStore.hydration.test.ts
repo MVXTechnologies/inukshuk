@@ -71,7 +71,6 @@ it('hydrate is single-flight: concurrent calls read the index once', async () =>
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps: [],
     tracks: [persisted],
-    bundles: [],
     folders: [],
     activeMapId: null,
     activeTrackIds: ['saved'],

@@ -1,11 +1,4 @@
-import type {
-  Bundle,
-  Folder,
-  GeoReference,
-  MapDocument,
-  TrackSummary,
-  Waypoint,
-} from '@core/models';
+import type { Folder, GeoReference, MapDocument, TrackSummary, Waypoint } from '@core/models';
 import type { CustomCategory } from './categories';
 
 /**
@@ -21,7 +14,10 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 3;
+export const LIBRARY_SCHEMA_VERSION = 4;
+
+/** How the map picks visible overlays: by item type toggles, or by folder. */
+export type MapVisibilityMode = 'type' | 'folders';
 /** Current `settings.json` schema. v1 = the unversioned legacy settings. */
 export const SETTINGS_SCHEMA_VERSION = 2;
 
@@ -30,8 +26,11 @@ export interface LibraryIndex {
   schemaVersion: number;
   maps: MapDocument[];
   tracks: TrackSummary[];
-  bundles: Bundle[];
   folders: Folder[];
+  /** Map-visibility mode; folder selection applies only in 'folders' mode. */
+  mapVisibilityMode: MapVisibilityMode;
+  /** Folder ids (plus the 'ungrouped' pseudo-id) shown in 'folders' mode. */
+  visibleFolderIds: string[];
   activeMapId: string | null;
   /** Ids of saved trails shown as overlays on the main map (persisted, like `activePages`). */
   activeTrackIds: string[];
@@ -126,6 +125,13 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
     waypoints: asArray(doc.waypoints),
     customCategories: asArray(doc.customCategories),
   }),
+  // v3 → v4: bundles removed (folders absorbed their "show this set" job via
+  // the new folder-visibility fields). Persisted bundles are dropped outright
+  // — the user's call; items always kept their own folderId.
+  3: (doc) => {
+    const { bundles: _dropped, ...rest } = doc;
+    return { ...rest, schemaVersion: 4, mapVisibilityMode: 'type', visibleFolderIds: [] };
+  },
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -147,8 +153,11 @@ export function migrateLibraryIndex(raw: unknown): LibraryIndex {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps,
     tracks,
-    bundles: recordsWithId<Bundle>(doc.bundles),
     folders: recordsWithId<Folder>(doc.folders),
+    mapVisibilityMode: doc.mapVisibilityMode === 'folders' ? 'folders' : 'type',
+    visibleFolderIds: asArray(doc.visibleFolderIds).filter(
+      (id): id is string => typeof id === 'string',
+    ),
     activeMapId: maps.some((m) => m.id === activeMapId) ? activeMapId : null,
     activeTrackIds: asArray(doc.activeTrackIds).filter(
       (id): id is string => typeof id === 'string' && tracks.some((t) => t.id === id),

@@ -7,7 +7,7 @@ import type { Folder, MapDocument, TrackSummary } from '@core/models';
  * every imported map (PDF), every trail (GPX) and every note photo, laid out to
  * mirror how the Library organizes items.
  *
- * Structure ("folders organize, bundles activate"): each Library folder becomes
+ * Structure (folders organize — and, since 1.3.0, activate): each Library folder becomes
  * a top-level directory in the archive; items with no folder sit at the archive
  * root, exactly like the Library's Ungrouped section. Bundles are additive
  * collections (an item can belong to several), not places — so they do NOT

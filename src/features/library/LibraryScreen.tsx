@@ -39,7 +39,6 @@ import {
   TouchableRipple,
   useTheme,
 } from 'react-native-paper';
-import { bundleCounts } from '@core/library/bundles';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
@@ -58,7 +57,7 @@ import { TrackFilterDialog } from './TrackFilterDialog';
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
 type DeleteTarget = {
-  kind: 'map' | 'track' | 'bundle' | 'folder' | 'waypoint';
+  kind: 'map' | 'track' | 'folder' | 'waypoint';
   id: string;
   name: string;
 };
@@ -73,10 +72,6 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
       title: 'Delete trail',
       body: (name) =>
         `Delete trail "${name}"? Its GPX file, notes and photos are permanently deleted.`,
-    },
-    bundle: {
-      title: 'Delete bundle',
-      body: (name) => `Delete bundle "${name}"? Its maps and trails stay in the library.`,
     },
     folder: {
       title: 'Delete folder',
@@ -101,12 +96,6 @@ export function LibraryScreen() {
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
   const addTrack = useLibraryStore((s) => s.addTrack);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
-  const bundles = useLibraryStore((s) => s.bundles);
-  const addBundle = useLibraryStore((s) => s.addBundle);
-  const removeBundle = useLibraryStore((s) => s.removeBundle);
-  const toggleBundleMap = useLibraryStore((s) => s.toggleBundleMap);
-  const toggleBundleTrack = useLibraryStore((s) => s.toggleBundleTrack);
-  const activateBundle = useLibraryStore((s) => s.activateBundle);
   const folders = useLibraryStore((s) => s.folders);
   const addFolder = useLibraryStore((s) => s.addFolder);
   const renameFolder = useLibraryStore((s) => s.renameFolder);
@@ -127,8 +116,6 @@ export function LibraryScreen() {
   const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
   const [expandedMap, setExpandedMap] = useState<string | null>(null);
   const [trackPoints, setTrackPoints] = useState<Record<string, TrackPoint[]>>({});
-  const [editingBundle, setEditingBundle] = useState<string | null>(null);
-  const [newBundleVisible, setNewBundleVisible] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
@@ -238,12 +225,6 @@ export function LibraryScreen() {
     router.navigate('/');
   };
 
-  const createBundle = (name: string) => {
-    setNewBundleVisible(false);
-    const id = addBundle(name || 'New bundle');
-    setEditingBundle(id); // open it so the user can pick members right away
-  };
-
   const createFolder = (name: string) => {
     setNewFolderVisible(false);
     addFolder(name || 'New folder');
@@ -260,16 +241,9 @@ export function LibraryScreen() {
     setConfirmDelete(null);
     if (kind === 'map') removeMap(id);
     else if (kind === 'track') removeTrack(id);
-    else if (kind === 'bundle') removeBundle(id);
     else if (kind === 'waypoint')
       removeWaypoint(id); // photo cleanup is the store's job
     else removeFolder(id);
-  };
-
-  const onActivateBundle = (id: string, name: string) => {
-    activateBundle(id); // turns on member maps' page overlays + member trails
-    showSnack(`Activated "${name}"`);
-    router.navigate('/');
   };
 
   const toggleElevation = async (id: string, fileUri: string) => {
@@ -352,11 +326,9 @@ export function LibraryScreen() {
     </TouchableRipple>
   );
 
-  // A per-card overflow menu that handles both organization concerns: moving the
-  // item into a folder (exclusive) and toggling its membership in bundles. The
-  // menu stays open across taps so several bundles can be picked in one go.
-  // Each organize section only appears once a folder/bundle exists — a section
-  // of nothing but greyed-out placeholders is clutter, not guidance.
+  // A per-card overflow menu for organization: moving the item into a folder
+  // (exclusive). The folder section only appears once a folder exists — a
+  // section of nothing but greyed-out placeholders is clutter, not guidance.
   const itemMenu = (kind: 'map' | 'track', id: string, name: string, folderId?: string) => (
     <Menu
       visible={cardMenu?.kind === kind && cardMenu.id === id}
@@ -387,25 +359,6 @@ export function LibraryScreen() {
               onPress={() => setItemFolder(kind, id, null)}
             />
           )}
-          <Divider />
-        </>
-      )}
-      {bundles.length > 0 && (
-        <>
-          <Menu.Item disabled title="Add to bundle" />
-          {bundles.map((b) => {
-            const inBundle = kind === 'map' ? b.mapIds.includes(id) : b.trackIds.includes(id);
-            return (
-              <Menu.Item
-                key={b.id}
-                leadingIcon={inBundle ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                title={b.name}
-                onPress={() =>
-                  kind === 'map' ? toggleBundleMap(b.id, id) : toggleBundleTrack(b.id, id)
-                }
-              />
-            );
-          })}
           <Divider />
         </>
       )}
@@ -567,20 +520,6 @@ export function LibraryScreen() {
               onPress={() => setItemFolder('track', t.id, null)}
             />
           )}
-        </>
-      )}
-      {bundles.length > 0 && (
-        <>
-          <Divider />
-          <Menu.Item disabled title="Add to bundle" />
-          {bundles.map((b) => (
-            <Menu.Item
-              key={b.id}
-              leadingIcon={b.trackIds.includes(t.id) ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              title={b.name}
-              onPress={() => toggleBundleTrack(b.id, t.id)}
-            />
-          ))}
         </>
       )}
       <Divider />
@@ -858,94 +797,6 @@ export function LibraryScreen() {
           </Banner>
         )}
 
-        <List.Section>
-          {sectionHeader(
-            'bundles',
-            `Bundles${bundles.length ? ` (${bundles.length})` : ''}`,
-            <Button compact icon="plus" onPress={() => setNewBundleVisible(true)}>
-              New
-            </Button>,
-          )}
-          {collapsed.bundles ? null : bundles.length === 0 ? (
-            <List.Item
-              title="No bundles yet"
-              description="Group maps & trails to activate a whole set in one tap"
-            />
-          ) : (
-            bundles.map((b) => {
-              const counts = bundleCounts(b, maps, tracks);
-              const editing = editingBundle === b.id;
-              return (
-                <Card key={b.id} style={styles.trackCard} mode="contained">
-                  <Card.Title
-                    title={b.name}
-                    subtitle={`${counts.maps} map(s) · ${counts.tracks} trail(s)`}
-                    left={(p) => <List.Icon {...p} icon="folder-multiple" />}
-                    right={() => (
-                      <View style={styles.rowEnd}>
-                        <IconButton
-                          icon="layers"
-                          onPress={() => onActivateBundle(b.id, b.name)}
-                          disabled={counts.maps + counts.tracks === 0}
-                          accessibilityLabel={`Activate bundle ${b.name}`}
-                        />
-                        <IconButton
-                          icon={editing ? 'chevron-up' : 'pencil-outline'}
-                          onPress={() => setEditingBundle(editing ? null : b.id)}
-                          accessibilityLabel={
-                            editing ? `Close bundle ${b.name}` : `Edit bundle ${b.name}`
-                          }
-                        />
-                        <IconButton
-                          icon="trash-can-outline"
-                          onPress={() =>
-                            setConfirmDelete({ kind: 'bundle', id: b.id, name: b.name })
-                          }
-                          accessibilityLabel={`Delete bundle ${b.name}`}
-                        />
-                      </View>
-                    )}
-                  />
-                  {editing && (
-                    <Card.Content>
-                      <Text variant="labelMedium" style={styles.overlayLabel}>
-                        Maps in this bundle
-                      </Text>
-                      {maps.length === 0 && <Text variant="bodySmall">No maps imported yet</Text>}
-                      {maps.map((m) => (
-                        <Checkbox.Item
-                          key={m.id}
-                          label={m.name}
-                          position="leading"
-                          status={b.mapIds.includes(m.id) ? 'checked' : 'unchecked'}
-                          onPress={() => toggleBundleMap(b.id, m.id)}
-                          style={styles.checkboxItem}
-                        />
-                      ))}
-                      <Text variant="labelMedium" style={styles.overlayLabel}>
-                        Trails in this bundle
-                      </Text>
-                      {tracks.length === 0 && <Text variant="bodySmall">No trails yet</Text>}
-                      {tracks.map((t) => (
-                        <Checkbox.Item
-                          key={t.id}
-                          label={t.name}
-                          position="leading"
-                          status={b.trackIds.includes(t.id) ? 'checked' : 'unchecked'}
-                          onPress={() => toggleBundleTrack(b.id, t.id)}
-                          style={styles.checkboxItem}
-                        />
-                      ))}
-                    </Card.Content>
-                  )}
-                </Card>
-              );
-            })
-          )}
-        </List.Section>
-
-        <Divider />
-
         {renderFolderGroups()}
 
         {hasFolders
@@ -1054,14 +905,6 @@ export function LibraryScreen() {
       </View>
 
       <Portal>
-        <NameDialog
-          visible={newBundleVisible}
-          title="New bundle"
-          label="Bundle name"
-          onDismiss={() => setNewBundleVisible(false)}
-          onSubmit={createBundle}
-        />
-
         <NameDialog
           visible={newFolderVisible}
           title="New folder"

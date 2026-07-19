@@ -88,9 +88,9 @@ describe('migrateLibraryIndex', () => {
     expect(index.tracks[1]?.category).toBe('hike');
   });
 
-  it('passes a current v3 index through unchanged', () => {
-    const v3: LibraryIndex = {
-      schemaVersion: 3,
+  it('passes a current v4 index through unchanged', () => {
+    const v4: LibraryIndex = {
+      schemaVersion: 4,
       maps: [
         {
           id: 'm1',
@@ -104,8 +104,9 @@ describe('migrateLibraryIndex', () => {
         },
       ],
       tracks: [{ ...track('t1'), folderId: 'f1', category: 'cat1' }],
-      bundles: [{ id: 'b1', name: 'B', mapIds: ['m1'], trackIds: ['t1'], createdAt: 9 }],
       folders: [{ id: 'f1', name: 'F', createdAt: 8 }],
+      mapVisibilityMode: 'folders',
+      visibleFolderIds: ['f1'],
       activeMapId: 'm1',
       activeTrackIds: ['t1'],
       customCategories: [{ id: 'cat1', name: 'Canoe', color: '#C74FA0', createdAt: 10 }],
@@ -113,7 +114,7 @@ describe('migrateLibraryIndex', () => {
         { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
       ],
     };
-    expect(migrateLibraryIndex(v3)).toEqual(v3);
+    expect(migrateLibraryIndex(v4)).toEqual(v4);
   });
 
   it('upgrades a v2 index: waypoints start empty', () => {
@@ -127,7 +128,7 @@ describe('migrateLibraryIndex', () => {
       activeTrackIds: ['t1'],
     };
     const index = migrateLibraryIndex(v2);
-    expect(index.schemaVersion).toBe(3);
+    expect(index.schemaVersion).toBe(4);
     expect(index.waypoints).toEqual([]);
     expect(index.activeTrackIds).toEqual(['t1']); // v2 content is retained
   });
@@ -159,7 +160,7 @@ describe('migrateLibraryIndex', () => {
     expect(index.maps).toHaveLength(1);
     expect(index.maps[0]?.activePages).toEqual([0]); // defaulted from georeferences
     expect(index.tracks.map((t) => t.id)).toEqual(['t1']);
-    expect(index.bundles).toEqual([]);
+    expect(index).not.toHaveProperty('bundles');
     expect(index.folders).toHaveLength(1);
     expect(index.activeMapId).toBeNull();
     // Dangling / non-string overlay ids are pruned.
@@ -168,6 +169,48 @@ describe('migrateLibraryIndex', () => {
     // Waypoints without an id or a finite coordinate are dropped.
     expect(index.waypoints.map((w) => w.id)).toEqual(['w1']);
     expect(index).not.toHaveProperty('totallyUnknownField');
+  });
+
+  it('v3 → v4 drops bundles and seeds the folder-visibility fields', () => {
+    const v3 = {
+      schemaVersion: 3,
+      maps: [],
+      tracks: [track('t1')],
+      bundles: [{ id: 'b1', name: 'Trip', mapIds: [], trackIds: ['t1'], createdAt: 1 }],
+      folders: [{ id: 'f1', name: 'Alps', createdAt: 1 }],
+      activeMapId: null,
+      activeTrackIds: [],
+      waypoints: [],
+      customCategories: [],
+    };
+    const index = migrateLibraryIndex(v3);
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index).not.toHaveProperty('bundles');
+    expect(index.mapVisibilityMode).toBe('type');
+    expect(index.visibleFolderIds).toEqual([]);
+    expect(index.folders).toEqual([{ id: 'f1', name: 'Alps', createdAt: 1 }]);
+  });
+
+  it('sanitizes junk visibility fields to safe defaults', () => {
+    const junk = {
+      schemaVersion: 4,
+      mapVisibilityMode: 'everything',
+      visibleFolderIds: ['f1', 7, null, 'ungrouped'],
+    };
+    const index = migrateLibraryIndex(junk);
+    expect(index.mapVisibilityMode).toBe('type');
+    expect(index.visibleFolderIds).toEqual(['f1', 'ungrouped']);
+  });
+
+  it('keeps a valid folder visibility selection through migration', () => {
+    const v4 = {
+      schemaVersion: 4,
+      mapVisibilityMode: 'folders',
+      visibleFolderIds: ['f1'],
+    };
+    const index = migrateLibraryIndex(v4);
+    expect(index.mapVisibilityMode).toBe('folders');
+    expect(index.visibleFolderIds).toEqual(['f1']);
   });
 
   it('prunes an activeMapId that no longer matches a map', () => {
@@ -182,8 +225,9 @@ describe('migrateLibraryIndex', () => {
         schemaVersion: LIBRARY_SCHEMA_VERSION,
         maps: [],
         tracks: [],
-        bundles: [],
         folders: [],
+        mapVisibilityMode: 'type',
+        visibleFolderIds: [],
         activeMapId: null,
         activeTrackIds: [],
         customCategories: [],
