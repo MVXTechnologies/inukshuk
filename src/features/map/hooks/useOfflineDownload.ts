@@ -7,6 +7,7 @@ import {
   type Basemap,
 } from '@core/geo/tiles';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
+import type { BoundingBox } from '@core/models';
 import { setOfflineOnly } from '@data/offline';
 import * as storage from '@data/storage';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
@@ -123,18 +124,15 @@ export function useOfflineDownload({
     setMapSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
   }, []);
 
-  const beginRegionSelect = () => {
-    // "Locally downloaded only" cuts MapLibre's network process-wide, which
-    // would stall a download (it can't fetch tiles). Rather than fight that
-    // at runtime, require the user to turn it off first.
-    if (offlineOnly) {
-      showSnack("Turn off 'Locally downloaded only' to download a new area");
-      return;
-    }
-    // The region box maps screen→geo through the visible bounds, which is only
-    // valid for a north-up, unpitched 2D map — so flatten the camera and seed the
-    // bounds cache only AFTER the flatten has settled (refreshBounds ignores a
-    // non-flat camera anyway; the overlay retries until the first bounds land).
+  /**
+   * Flatten the camera and (re)seed the screen→geo bounds cache. The region
+   * box maps screen→geo through the visible bounds, which is only valid for a
+   * north-up, unpitched 2D map — so seed only AFTER the flatten has settled
+   * (refreshBounds ignores a non-flat camera anyway; the overlay retries
+   * until the first bounds land). Shared by the download selector and the
+   * map maker's region step.
+   */
+  const prepareRegionGeometry = () => {
     boundsRef.current = null;
     void (async () => {
       await cameraRef.current
@@ -143,6 +141,23 @@ export function useOfflineDownload({
       await delay(FLATTEN_MS);
       await refreshBounds();
     })();
+  };
+
+  /** Resolve a drawn screen rect against freshly-read flat bounds. */
+  const resolveRegionRect = async (rect: ScreenRect): Promise<BoundingBox | null> => {
+    const visible = await flatBounds();
+    return (visible && screenRectToBounds(rect, mapSize, visible)) || null;
+  };
+
+  const beginRegionSelect = () => {
+    // "Locally downloaded only" cuts MapLibre's network process-wide, which
+    // would stall a download (it can't fetch tiles). Rather than fight that
+    // at runtime, require the user to turn it off first.
+    if (offlineOnly) {
+      showSnack("Turn off 'Locally downloaded only' to download a new area");
+      return;
+    }
+    prepareRegionGeometry();
     setSelecting(true);
   };
 
@@ -158,8 +173,7 @@ export function useOfflineDownload({
     setSelecting(false);
 
     void (async () => {
-      const visible = await flatBounds();
-      const bounds = visible && screenRectToBounds(rect, mapSize, visible);
+      const bounds = await resolveRegionRect(rect);
       if (!bounds) {
         showSnack('Could not read the map area — try again');
         return;
@@ -240,5 +254,7 @@ export function useOfflineDownload({
     beginRegionSelect,
     cancelRegionSelect,
     confirmDownload,
+    prepareRegionGeometry,
+    resolveRegionRect,
   };
 }

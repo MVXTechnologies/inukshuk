@@ -109,8 +109,7 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
   }
 
   const maxBarM = mapRect.w * 0.4 * metersPerPt;
-  const meters =
-    [...SCALE_BAR_METERS].reverse().find((m) => m <= maxBarM) ?? SCALE_BAR_METERS[0];
+  const meters = [...SCALE_BAR_METERS].reverse().find((m) => m <= maxBarM) ?? SCALE_BAR_METERS[0];
   const scaleBar = {
     meters,
     widthPt: meters / metersPerPt,

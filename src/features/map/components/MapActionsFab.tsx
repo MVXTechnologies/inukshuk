@@ -12,22 +12,25 @@ interface Props {
    * download — a second download would stop the first's loopback server.
    */
   onDownload?: () => void;
+  /** Open the map maker (region box → options → PDF). Omitted in 3D. */
+  onMakeMap?: () => void;
 }
 
 /**
  * The bottom-right "+" speed-dial (start recording, drop a waypoint; room for
  * more map actions later — plan a route, import…).
  */
-export function MapActionsFab({ onRecord, onAddWaypoint, onDownload }: Props) {
+export function MapActionsFab({ onRecord, onAddWaypoint, onDownload, onMakeMap }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
 
-  const propsRef = useRef({ onRecord, onAddWaypoint, onDownload });
+  const propsRef = useRef({ onRecord, onAddWaypoint, onDownload, onMakeMap });
   useEffect(() => {
-    propsRef.current = { onRecord, onAddWaypoint, onDownload };
+    propsRef.current = { onRecord, onAddWaypoint, onDownload, onMakeMap };
   });
 
   const hasDownload = onDownload !== undefined;
+  const hasMakeMap = onMakeMap !== undefined;
   // Paper's FAB.Group restarts its open/close animation whenever the `actions`
   // array changes identity (the animation effect lists `actions` as a dep).
   // MapScreen re-renders many times a second while the compass or GPS ticks,
@@ -36,6 +39,19 @@ export function MapActionsFab({ onRecord, onAddWaypoint, onDownload }: Props) {
   // handlers read the live callbacks through propsRef.
   const actions = useMemo(
     () => [
+      ...(hasMakeMap
+        ? [
+            {
+              icon: 'map-plus',
+              label: 'Make a map',
+              containerStyle: { marginVertical: -2 },
+              onPress: () => {
+                setOpen(false);
+                propsRef.current.onMakeMap?.();
+              },
+            },
+          ]
+        : []),
       ...(hasDownload
         ? [
             {
@@ -72,7 +88,7 @@ export function MapActionsFab({ onRecord, onAddWaypoint, onDownload }: Props) {
         },
       },
     ],
-    [hasDownload],
+    [hasDownload, hasMakeMap],
   );
 
   return (

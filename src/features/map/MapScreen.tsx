@@ -2,7 +2,7 @@ import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
-import type { LngLat, TrackPoint } from '@core/models';
+import type { BoundingBox, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
 import {
@@ -26,6 +26,9 @@ import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
+import { MakeMapSheet, type MakeMapProgress } from './mapmaker/MakeMapSheet';
+import { makeMap } from './mapmaker/makeMap';
+import type { ComposeHandle, MakeMapOptions } from './mapmaker/composeMapPdf';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
@@ -227,6 +230,8 @@ export function MapScreen() {
     beginRegionSelect,
     cancelRegionSelect,
     confirmDownload,
+    prepareRegionGeometry,
+    resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack });
 
   const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
@@ -361,6 +366,44 @@ export function MapScreen() {
   // its Start button actually begins the recording (owner ask: pick an
   // activity category BEFORE recording starts).
   const [pickingCategory, setPickingCategory] = useState(false);
+
+  // --- Map maker (1.4.0): region box → options sheet → compose → Library ---
+  const [makeMapState, setMakeMapState] = useState<
+    | null
+    | { phase: 'select' }
+    | { phase: 'options'; bbox: BoundingBox }
+    | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress }
+  >(null);
+  const makeMapHandleRef = useRef<ComposeHandle>({ aborted: false });
+  const startMakeMap = useCallback(
+    (bbox: BoundingBox, options: MakeMapOptions) => {
+      const handle: ComposeHandle = { aborted: false };
+      makeMapHandleRef.current = handle;
+      setMakeMapState({ phase: 'generating', bbox, progress: { phase: 'tiles', frac: 0 } });
+      void makeMap(
+        bbox,
+        options,
+        (phase, frac) => {
+          if (!handle.aborted)
+            setMakeMapState((s) =>
+              s?.phase === 'generating' ? { ...s, progress: { phase, frac } } : s,
+            );
+        },
+        handle,
+      )
+        .then((doc) => {
+          setMakeMapState(null);
+          showSnack(`"${doc.name}" saved to the library`);
+        })
+        .catch((err: unknown) => {
+          if (handle.aborted) return;
+          setMakeMapState({ phase: 'options', bbox });
+          const message = err instanceof Error ? err.message : 'unknown error';
+          showSnack(`Couldn't make the map: ${message}`);
+        });
+    },
+    [showSnack],
+  );
 
   // Tapping a live waypoint marker opens an editor for its note + photo.
   // Tapping a waypoint marker — a live recording pin or a saved standalone pin
@@ -800,6 +843,38 @@ export function MapScreen() {
         />
       )}
 
+      {/* Map maker: the same box selector in its bare variant, then options */}
+      {makeMapState?.phase === 'select' && !terrain3d && (
+        <RegionSelectOverlay
+          variant="makeMap"
+          toGeo={toGeo}
+          boundsVersion={boundsVersion}
+          activeBasemap={basemap}
+          tileUrl={tileUrl}
+          onCancel={() => setMakeMapState(null)}
+          onConfirm={(rect) => {
+            void resolveRegionRect(rect).then((bbox) => {
+              if (bbox) setMakeMapState({ phase: 'options', bbox });
+              else {
+                setMakeMapState(null);
+                showSnack('Could not read the map area — try again');
+              }
+            });
+          }}
+        />
+      )}
+      {(makeMapState?.phase === 'options' || makeMapState?.phase === 'generating') && (
+        <MakeMapSheet
+          bbox={makeMapState.bbox}
+          progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
+          onCreate={(options) => startMakeMap(makeMapState.bbox, options)}
+          onCancel={() => {
+            makeMapHandleRef.current.aborted = true;
+            setMakeMapState(null);
+          }}
+        />
+      )}
+
       {/* Top-left compass. The badge subscribes to the compass itself so the
           rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
@@ -906,23 +981,37 @@ export function MapScreen() {
           take over), while selecting an offline region, and while the trail
           inspector is open — its trim actions sit exactly where the FAB
           renders, which left the Overwrite button half-covered (#131). */}
-      {status === 'idle' && !selecting && inspectId === null && !pickingCategory && (
-        <MapActionsFab
-          onRecord={() => setPickingCategory(true)}
-          onAddWaypoint={onAddWaypoint}
-          // Close any open trail inspector first: the download sheet renders
-          // below the inspector panel in this tree, so starting a download
-          // with the inspector open left its controls buried under it (#131).
-          onDownload={
-            terrain3d || downloadProgress !== null || status !== 'idle'
-              ? undefined
-              : () => {
-                  inspect(null);
-                  beginRegionSelect();
-                }
-          }
-        />
-      )}
+      {status === 'idle' &&
+        !selecting &&
+        makeMapState === null &&
+        inspectId === null &&
+        !pickingCategory && (
+          <MapActionsFab
+            onRecord={() => setPickingCategory(true)}
+            onAddWaypoint={onAddWaypoint}
+            // Close any open trail inspector first: the download sheet renders
+            // below the inspector panel in this tree, so starting a download
+            // with the inspector open left its controls buried under it (#131).
+            onDownload={
+              terrain3d || downloadProgress !== null || status !== 'idle'
+                ? undefined
+                : () => {
+                    inspect(null);
+                    beginRegionSelect();
+                  }
+            }
+            // The region box needs the flat 2D map, like the download selector.
+            onMakeMap={
+              terrain3d
+                ? undefined
+                : () => {
+                    inspect(null);
+                    setMakeMapState({ phase: 'select' });
+                    prepareRegionGeometry();
+                  }
+            }
+          />
+        )}
 
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}

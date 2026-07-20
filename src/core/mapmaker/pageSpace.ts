@@ -1,4 +1,4 @@
-import type { BoundingBox, LngLat } from '@core/models';
+import type { LngLat } from '@core/models';
 import type { Position } from 'geojson';
 import type { MadeMapLayout } from './layout';
 

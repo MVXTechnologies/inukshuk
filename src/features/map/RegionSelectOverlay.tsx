@@ -55,6 +55,12 @@ interface Props {
    */
   onConfirm: (rect: ScreenRect, basemaps: Basemap[], maxZoom: number) => void;
   onCancel: () => void;
+  /**
+   * 'download' (default) shows layers/quality/estimate and gates on the tile
+   * cap; 'makeMap' is just the box — the map maker's options sheet handles
+   * everything else, so the confirm button says "Next" and passes no layers.
+   */
+  variant?: 'download' | 'makeMap';
 }
 
 /** Rectangle in screen-space pixels, relative to the overlay's top-left. */
@@ -99,8 +105,10 @@ export function RegionSelectOverlay({
   tileUrl,
   onConfirm,
   onCancel,
+  variant = 'download',
 }: Props): ReactElement {
   const theme = useTheme();
+  const makeMapMode = variant === 'makeMap';
 
   // Overlay dimensions, populated via onLayout.
   const overlaySize = useRef({ w: 0, h: 0 });
@@ -364,11 +372,17 @@ export function RegionSelectOverlay({
   // ---------------------------------------------------------------------------
 
   const handleConfirm = useCallback(() => {
+    // makeMap mode confirms the box alone — layers/quality/cap are the
+    // download sheet's concerns.
+    if (makeMapMode) {
+      if (geo) onConfirm({ ...boxRef.current }, [], 0);
+      return;
+    }
     if (!geo || noneSelected || tooLarge) return;
     // Hand back the SCREEN rect: the owner converts it against freshly-read map
     // bounds so the downloaded area is exactly the drawn one.
     onConfirm({ ...boxRef.current }, selectedBasemaps, maxZoom);
-  }, [geo, noneSelected, tooLarge, onConfirm, selectedBasemaps, maxZoom]);
+  }, [geo, noneSelected, tooLarge, onConfirm, selectedBasemaps, maxZoom, makeMapMode]);
 
   // ---------------------------------------------------------------------------
   // Render.
@@ -471,66 +485,72 @@ export function RegionSelectOverlay({
       {/* Compact bottom sheet */}
       <Surface style={styles.sheet} elevation={4}>
         <Text variant="titleSmall" style={styles.title}>
-          Download offline area
+          {makeMapMode ? 'Make a map — choose the area' : 'Download offline area'}
         </Text>
 
         {/* Layer pickers with live previews */}
-        <View style={styles.layersRow}>
-          {LAYERS.map((layer) => {
-            const on = selected[layer.key];
-            return (
-              <Pressable
-                key={layer.key}
-                onPress={() => toggleLayer(layer.key)}
-                style={styles.layer}
-              >
-                <View>
-                  <RegionPreviewThumb
-                    bbox={geo?.bbox ?? null}
-                    basemap={layer.key}
-                    tileUrl={tileUrl}
-                    size={THUMB}
-                  />
-                  <View
-                    style={[
-                      styles.check,
-                      {
-                        backgroundColor: on ? theme.colors.primary : 'rgba(0,0,0,0.35)',
-                        borderColor: theme.colors.surface,
-                      },
-                    ]}
-                  >
-                    {on && <Icon source="check" size={14} color={theme.colors.onPrimary} />}
-                  </View>
-                  {on && (
-                    <View
-                      style={[styles.selectedRing, { borderColor: theme.colors.primary }]}
-                      pointerEvents="none"
+        {makeMapMode ? null : (
+          <View style={styles.layersRow}>
+            {LAYERS.map((layer) => {
+              const on = selected[layer.key];
+              return (
+                <Pressable
+                  key={layer.key}
+                  onPress={() => toggleLayer(layer.key)}
+                  style={styles.layer}
+                >
+                  <View>
+                    <RegionPreviewThumb
+                      bbox={geo?.bbox ?? null}
+                      basemap={layer.key}
+                      tileUrl={tileUrl}
+                      size={THUMB}
                     />
-                  )}
-                </View>
-                <Text variant="labelSmall" style={styles.layerLabel}>
-                  {layer.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                    <View
+                      style={[
+                        styles.check,
+                        {
+                          backgroundColor: on ? theme.colors.primary : 'rgba(0,0,0,0.35)',
+                          borderColor: theme.colors.surface,
+                        },
+                      ]}
+                    >
+                      {on && <Icon source="check" size={14} color={theme.colors.onPrimary} />}
+                    </View>
+                    {on && (
+                      <View
+                        style={[styles.selectedRing, { borderColor: theme.colors.primary }]}
+                        pointerEvents="none"
+                      />
+                    )}
+                  </View>
+                  <Text variant="labelSmall" style={styles.layerLabel}>
+                    {layer.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* Quality */}
-        <SegmentedButtons
-          value={quality}
-          onValueChange={(v) => setQuality(v as Quality)}
-          density="small"
-          buttons={QUALITY_BUTTONS}
-          style={styles.quality}
-        />
+        {makeMapMode ? null : (
+          <SegmentedButtons
+            value={quality}
+            onValueChange={(v) => setQuality(v as Quality)}
+            density="small"
+            buttons={QUALITY_BUTTONS}
+            style={styles.quality}
+          />
+        )}
 
         {/* Estimate + actions */}
-        <Text variant="bodyMedium" style={styles.summary}>
-          {summary}
-        </Text>
-        {fittingQuality !== undefined && (
+        {makeMapMode ? null : (
+          <Text variant="bodyMedium" style={styles.summary}>
+            {summary}
+          </Text>
+        )}
+        {!makeMapMode && fittingQuality !== undefined && (
           <Button
             mode="contained-tonal"
             compact
@@ -540,7 +560,7 @@ export function RegionSelectOverlay({
             {`Use ${QUALITY_BUTTONS.find((b) => b.value === fittingQuality)?.label} quality instead`}
           </Button>
         )}
-        {capNote !== null && (
+        {!makeMapMode && capNote !== null && (
           <Text
             variant="labelSmall"
             style={[styles.summary, { color: theme.colors.onSurfaceVariant }]}
@@ -555,10 +575,10 @@ export function RegionSelectOverlay({
           <Button
             mode="contained"
             onPress={handleConfirm}
-            disabled={!canDownload}
+            disabled={makeMapMode ? geo === null : !canDownload}
             style={styles.actionBtn}
           >
-            Download
+            {makeMapMode ? 'Next' : 'Download'}
           </Button>
         </View>
       </Surface>

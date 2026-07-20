@@ -41,8 +41,10 @@ describe('cropRasterToBbox', () => {
     const lngB = ((300 * 256 + 300) / (1024 * 256)) * 360 - 180;
     const yPx = 352 * 256 + 60;
     const yPx2 = 352 * 256 + 200;
-    const latTop = (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * yPx) / (1024 * 256)));
-    const latBot = (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * yPx2) / (1024 * 256)));
+    const latTop =
+      (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * yPx) / (1024 * 256)));
+    const latBot =
+      (180 / Math.PI) * Math.atan(Math.sinh(Math.PI - (2 * Math.PI * yPx2) / (1024 * 256)));
     const bbox: BoundingBox = { minLng: lngA, maxLng: lngB, minLat: latBot, maxLat: latTop };
 
     const crop = cropRasterToBbox(raster, RANGE, bbox);
