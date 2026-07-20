@@ -3,8 +3,8 @@
 CalTopo-style custom map export: pick a region and layers on the live map,
 and the app composes a **georeferenced PDF** that drops into the Library's
 imported PDFs — activatable offline with live position tracking, exactly like
-any GeoPDF imported from outside. The app already knows how to *read*
-georeferenced PDFs; this teaches it to *write* them.
+any GeoPDF imported from outside. The app already knows how to _read_
+georeferenced PDFs; this teaches it to _write_ them.
 
 ## Decisions (user-approved 2026-07-19)
 
@@ -21,13 +21,13 @@ georeferenced PDFs; this teaches it to *write* them.
 
 1. "+" dial gains **Make a map** (`map-plus` icon), available while idle.
 2. Region select — same drag-box idiom as the offline download (reused
-   component, different confirm strip: *Next* instead of *Download*).
+   component, different confirm strip: _Next_ instead of _Download_).
 3. Options sheet: map name (default from region geocode, like offline
    regions), basemap picker, contours toggle + interval, slope toggle,
    "Include my tracks & waypoints" toggle, page format (A4 / Letter;
    orientation auto-follows the region's aspect).
 4. Progress (determinate: tiles → compose → write) with cancel. On success:
-   snackbar "Map saved to Library" + *View* action.
+   snackbar "Map saved to Library" + _View_ action.
 
 ## Architecture
 
