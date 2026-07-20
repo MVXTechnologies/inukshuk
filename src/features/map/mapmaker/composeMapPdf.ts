@@ -69,6 +69,16 @@ export interface ComposeHandle {
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+/**
+ * Strip characters WinAnsi (CP1252) can't encode — pdf-lib's standard-14
+ * fonts throw mid-compose otherwise ("WinAnsi cannot encode ..."), which is
+ * exactly how "≈" in the scale label killed every make until E2E caught it.
+ * Applied to every string drawn with a standard font (the user-typed map
+ * name above all).
+ */
+const winAnsiSafe = (s: string) =>
+  s.replace(/[^\x20-\x7E\xA0-\xFF€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/g, '');
+
 /** Distance from the frame's bottom edge down to the footer baseline. */
 const BOTTOM_TEXT_OFFSET = 62;
 
@@ -237,7 +247,8 @@ export async function composeMapPdf(
 
   // --- margin strip --------------------------------------------------------
   const stripTop = mapRect.y - 10;
-  page.drawText(options.name, { x: mapRect.x, y: stripTop - 14, size: 14, font: bold, color: INK });
+  const title = winAnsiSafe(options.name).trim() || 'My map';
+  page.drawText(title, { x: mapRect.x, y: stripTop - 14, size: 14, font: bold, color: INK });
 
   // Scale bar with end ticks and the approx print scale.
   const barY = stripTop - 34;
@@ -264,7 +275,7 @@ export async function composeMapPdf(
     font,
     color: INK,
   });
-  page.drawText(`≈ 1:${layout.approxScaleDenom.toLocaleString('en-US')}`, {
+  page.drawText(`Scale 1:${layout.approxScaleDenom.toLocaleString('en-US')}`, {
     x: mapRect.x,
     y: barY - 16,
     size: 9,
