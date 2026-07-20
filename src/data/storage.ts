@@ -335,6 +335,16 @@ export async function readFileText(uri: string): Promise<string> {
   return new File(uri).text();
 }
 
+/** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
+export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
+  ensureStorage();
+  const file = new File(mapsDir(), `${id}.pdf`);
+  if (file.exists) file.delete();
+  file.create();
+  guardWrite(() => file.write(bytes));
+  return file.uri;
+}
+
 /** Write a GPX (or any text) document and return its uri. */
 export function writeTrackGpx(id: string, gpx: string): string {
   ensureStorage();

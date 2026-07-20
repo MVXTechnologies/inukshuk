@@ -9,10 +9,16 @@ export type BulkImportResult =
   | { kind: 'canceled' }
   | { kind: 'error'; message: string };
 
-/** Copy + parse one picked PDF asset into a MapDocument (throws on failure). */
-async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<MapDocument> {
-  const id = storage.newId();
-  const fileUri = await storage.importPdf(asset.uri, id);
+/**
+ * Parse a PDF already sitting in app storage into a MapDocument (throws on
+ * failure, deleting the stored file so it can't orphan). Shared by the picker
+ * import below and the map maker's generated PDFs.
+ */
+export async function mapDocumentFromStoredPdf(
+  id: string,
+  fileUri: string,
+  name: string,
+): Promise<MapDocument> {
   let parsed: ReturnType<typeof parseGeoPdf>;
   try {
     const bytes = await storage.readFileBytes(fileUri);
@@ -25,7 +31,7 @@ async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<Map
   }
   return {
     id,
-    name: asset.name?.replace(/\.pdf$/i, '') ?? 'Map',
+    name,
     fileUri,
     importedAt: Date.now(),
     pageCount: parsed.pageCount,
@@ -37,6 +43,13 @@ async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<Map
         ? undefined
         : (parsed.warnings[0] ?? 'No georeferencing found in this PDF.'),
   };
+}
+
+/** Copy + parse one picked PDF asset into a MapDocument (throws on failure). */
+async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<MapDocument> {
+  const id = storage.newId();
+  const fileUri = await storage.importPdf(asset.uri, id);
+  return mapDocumentFromStoredPdf(id, fileUri, asset.name?.replace(/\.pdf$/i, '') ?? 'Map');
 }
 
 /**
