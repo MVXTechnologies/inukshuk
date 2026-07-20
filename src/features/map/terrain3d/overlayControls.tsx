@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Menu, Portal, Snackbar } from 'react-native-paper';
 import { useTimedSnackbar, type TimedSnackbar } from '../../common/useTimedSnackbar';
 import { DetentSlider } from '../components/DetentSlider';
+import { RangeSlider } from '../components/RangeSlider';
 import {
   applyTerrainOverlaySettings,
   type TerrainOverlayHandle,
@@ -24,13 +25,6 @@ export function contourIntervalLabel(m: number): string {
   return m === 0 ? 'Auto' : `${m} m`;
 }
 
-/** Slope-angle floor choices — the CalTopo band boundaries (27 = all bands). */
-export const SLOPE_MIN_DEGS = [27, 30, 32, 35, 45] as const;
-
-export function slopeMinLabel(deg: number): string {
-  return deg === 27 ? 'All' : `≥ ${deg}°`;
-}
-
 export const SLOPE_DISCLAIMER = 'Slope shading is indicative — not for avalanche decision-making.';
 
 /** Snapshot the persisted overlay settings (non-reactive; for post-build use). */
@@ -42,6 +36,7 @@ export function currentOverlaySettings(): TerrainOverlaySettings {
     hypso: s.terrainHypso,
     contourIntervalM: s.terrainContourIntervalM,
     slopeMinDeg: s.terrainSlopeMinDeg,
+    slopeMaxDeg: s.terrainSlopeMaxDeg,
   };
 }
 
@@ -59,6 +54,7 @@ export function useTerrainOverlaySync(
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const contourIntervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
+  const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   useEffect(() => {
     const handle = overlayRef.current;
     if (handle)
@@ -68,9 +64,10 @@ export function useTerrainOverlaySync(
         hypso,
         contourIntervalM,
         slopeMinDeg,
+        slopeMaxDeg,
       });
-  }, [slope, contours, hypso, contourIntervalM, slopeMinDeg, overlayRef]);
-  return { slope, contours, hypso, contourIntervalM, slopeMinDeg };
+  }, [slope, contours, hypso, contourIntervalM, slopeMinDeg, slopeMaxDeg, overlayRef]);
+  return { slope, contours, hypso, contourIntervalM, slopeMinDeg, slopeMaxDeg };
 }
 
 /**
@@ -112,8 +109,12 @@ export function TerrainOverlayMenuRows({
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
+  const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const set = useSettingsStore((s) => s.set);
 
+  // Every selector row renders ALWAYS (dimmed while its toggle is off): paper's
+  // Menu measures its content once at open and never re-anchors, so rows that
+  // appear after a toggle push the menu bottom off screen until it's reopened.
   return (
     <>
       <Menu.Item
@@ -125,29 +126,33 @@ export function TerrainOverlayMenuRows({
         }}
         title="Slope"
       />
-      {slope && (
-        <View style={styles.sliderRow}>
-          <DetentSlider
-            detents={SLOPE_MIN_DEGS.map((d) => ({ value: d, label: slopeMinLabel(d) }))}
-            selected={slopeMinDeg}
-            onSelect={(d) => set('terrainSlopeMinDeg', d)}
-          />
-        </View>
-      )}
+      <View style={styles.sliderRow}>
+        <RangeSlider
+          min={0}
+          max={90}
+          lo={slopeMinDeg}
+          hi={slopeMaxDeg}
+          disabled={!slope}
+          accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
+          onChange={(newLo, newHi) => {
+            set('terrainSlopeMinDeg', newLo);
+            set('terrainSlopeMaxDeg', newHi);
+          }}
+        />
+      </View>
       <Menu.Item
         leadingIcon={contours ? 'checkbox-marked' : 'checkbox-blank-outline'}
         onPress={() => set('terrainContours', !contours)}
         title="Contours"
       />
-      {contours && (
-        <View style={styles.sliderRow}>
-          <DetentSlider
-            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-            selected={intervalM}
-            onSelect={(m) => set('terrainContourIntervalM', m)}
-          />
-        </View>
-      )}
+      <View style={[styles.sliderRow, !contours && styles.sliderRowDisabled]}>
+        <DetentSlider
+          detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+          selected={intervalM}
+          onSelect={(m) => set('terrainContourIntervalM', m)}
+          disabled={!contours}
+        />
+      </View>
       {showHypso && (
         <Menu.Item
           leadingIcon={hypso ? 'checkbox-marked' : 'checkbox-blank-outline'}
@@ -176,7 +181,6 @@ export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
-  const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const set = useSettingsStore((s) => s.set);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
@@ -213,23 +217,6 @@ export function TerrainOverlayButtons({ disabled, available }: ButtonsProps) {
           {t.label}
         </Button>
       ))}
-      {slope && (
-        <Button
-          compact
-          icon="angle-acute"
-          mode="contained-tonal"
-          disabled={disabled}
-          onPress={() => {
-            const i = SLOPE_MIN_DEGS.indexOf(slopeMinDeg as (typeof SLOPE_MIN_DEGS)[number]);
-            set('terrainSlopeMinDeg', SLOPE_MIN_DEGS[(i + 1) % SLOPE_MIN_DEGS.length]!);
-          }}
-          style={styles.btn}
-          labelStyle={styles.label}
-          accessibilityLabel="Slope angle"
-        >
-          {slopeMinLabel(slopeMinDeg)}
-        </Button>
-      )}
       {contours && (
         <Button
           compact
@@ -279,4 +266,5 @@ const styles = StyleSheet.create({
   label: { marginVertical: 4, marginHorizontal: 8, fontSize: 12 },
   // Aligns the slider under a Menu.Item's title (past the 40dp leading icon).
   sliderRow: { paddingLeft: 56, paddingRight: 16, paddingBottom: 6 },
+  sliderRowDisabled: { opacity: 0.35 },
 });

@@ -296,6 +296,16 @@ describe('slopeOverlayRgba', () => {
     ]);
   });
 
+  it('hides slopes above the selected ceiling', () => {
+    // ≈33.7° cells: visible with max 90, transparent with max 30.
+    const grid = 9;
+    const centre = (4 * grid + 4) * 4;
+    const upTo90 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27, 90);
+    expect(upTo90[centre + 3]).toBe(255);
+    const upTo30 = slopeOverlayRgba(ramp(grid, 20), grid, 30, 30, 27, 30);
+    expect(upTo30[centre + 3]).toBe(0);
+  });
+
   it('hides bands below the selected floor', () => {
     // ≈33.7° cells: visible at floor 27°/32°, transparent at floor 35°.
     const grid = 9;

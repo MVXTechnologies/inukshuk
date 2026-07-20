@@ -2,7 +2,7 @@ import { zoomForVisibleWidth } from '@core/geo/zoomForVisibleWidth';
 import type { BoundingBox } from '@core/models';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
 import { useMapStore } from '@state/mapStore';
-import { type RefObject, useEffect, useMemo } from 'react';
+import { type RefObject, useEffect } from 'react';
 import { Dimensions } from 'react-native';
 import { toLngLatBounds } from '../geojson';
 
@@ -60,31 +60,13 @@ export function useCameraControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusWaypoint]);
 
-  // Union bounds of all active overlays, for the "fit to page" control.
-  const overlaysBbox = useMemo<BoundingBox | null>(() => {
-    if (overlays.length === 0) return null;
-    return overlays.reduce<BoundingBox | null>(
-      (acc, o) =>
-        acc === null
-          ? o.bbox
-          : {
-              minLat: Math.min(acc.minLat, o.bbox.minLat),
-              minLng: Math.min(acc.minLng, o.bbox.minLng),
-              maxLat: Math.max(acc.maxLat, o.bbox.maxLat),
-              maxLng: Math.max(acc.maxLng, o.bbox.maxLng),
-            },
-      null,
-    );
-  }, [overlays]);
-
-  const fitActiveMap = () => {
-    if (overlaysBbox) {
-      setFollowUser(false);
-      cameraRef.current?.fitBounds(toLngLatBounds(overlaysBbox), {
-        duration: 600,
-        padding: { top: 48, right: 48, bottom: 48, left: 48 },
-      });
-    }
+  /** Fly the camera to one overlay's bounds (the fit FAB's PDF tour). */
+  const fitOverlayBounds = (bbox: BoundingBox) => {
+    setFollowUser(false);
+    cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
+      duration: 600,
+      padding: { top: 48, right: 48, bottom: 48, left: 48 },
+    });
   };
 
   // Tapping the compass snaps the map back to north (bearing 0), keeping the
@@ -115,5 +97,5 @@ export function useCameraControls({
     }
   };
 
-  return { fitActiveMap, resetNorth, zoomToLocateLevel };
+  return { fitOverlayBounds, resetNorth, zoomToLocateLevel };
 }

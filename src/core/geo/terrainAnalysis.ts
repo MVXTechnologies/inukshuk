@@ -187,8 +187,8 @@ export function slopeBandColor(slopeDeg: number): [number, number, number, numbe
 /**
  * RGBA overlay image (grid × grid) of the slope bands for a heightmap, for the
  * 2D map's slope raster: each cell gets its band colour, fully transparent
- * below `minDeg` (the slope-angle selector's floor — 27° shows every band).
- * Opacity is left to the map layer so 2D matches the 3D shader's blend.
+ * outside the [minDeg, maxDeg] window (the range slider; 27–90 shows every
+ * band). Opacity is left to the map layer so 2D matches the 3D shader's blend.
  */
 export function slopeOverlayRgba(
   data: ArrayLike<number>,
@@ -196,12 +196,13 @@ export function slopeOverlayRgba(
   cellXm: number,
   cellZm: number,
   minDeg: number,
+  maxDeg = 90,
 ): Uint8Array {
   const slope = slopeDegrees(data, grid, cellXm, cellZm);
   const out = new Uint8Array(grid * grid * 4);
   for (let i = 0; i < slope.length; i++) {
     const deg = slope[i]!;
-    if (deg < minDeg) continue; // stays transparent
+    if (deg < minDeg || deg > maxDeg) continue; // stays transparent
     const [r, g, b, a] = slopeBandColor(deg);
     out[i * 4] = r;
     out[i * 4 + 1] = g;

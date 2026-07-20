@@ -228,11 +228,16 @@ export function MapScreen() {
     confirmDownload,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack });
 
-  const { fitActiveMap, resetNorth, zoomToLocateLevel } = useCameraControls({
+  const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
     mapRef,
     overlays,
   });
+  // Rotation index for the fit FAB's PDF tour (reset when the set changes).
+  const fitCycleRef = useRef(0);
+  useEffect(() => {
+    fitCycleRef.current = 0;
+  }, [overlays.length]);
 
   // 2D slope/contour overlays, recomputed as the camera settles on new bounds.
   // Driven by its own counter bumped on EVERY region change — refreshBounds's
@@ -800,18 +805,17 @@ export function MapScreen() {
           if (location) void zoomToLocateLevel(location.latitude);
         }}
         showFitControl={overlays.length > 0}
-        onFit={fitActiveMap}
+        // Each press focuses the NEXT active PDF overlay, wrapping around —
+        // with several maps loaded, repeated taps tour them all. A single
+        // overlay behaves like the old fit-to-map.
+        onFit={() => {
+          const overlay = overlays[fitCycleRef.current % overlays.length];
+          fitCycleRef.current += 1;
+          if (overlay) fitOverlayBounds(overlay.bbox);
+        }}
         terrain3d={terrain3d}
         onToggle3d={toggleTerrain3d}
         toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
-        // Close any open trail inspector first: the download sheet renders
-        // below the inspector panel in this tree, so starting a download with
-        // the inspector open left the sheet's controls buried under it (#131).
-        onDownload={() => {
-          inspect(null);
-          beginRegionSelect();
-        }}
-        downloadDisabled={downloadProgress !== null || status !== 'idle'}
         pdfOverlayCount={overlays.length}
         trackOverlayCount={trackOverlays.length}
       />
@@ -892,7 +896,21 @@ export function MapScreen() {
           inspector is open — its trim actions sit exactly where the FAB
           renders, which left the Overwrite button half-covered (#131). */}
       {status === 'idle' && !selecting && inspectId === null && !pickingCategory && (
-        <MapActionsFab onRecord={() => setPickingCategory(true)} onAddWaypoint={onAddWaypoint} />
+        <MapActionsFab
+          onRecord={() => setPickingCategory(true)}
+          onAddWaypoint={onAddWaypoint}
+          // Close any open trail inspector first: the download sheet renders
+          // below the inspector panel in this tree, so starting a download
+          // with the inspector open left its controls buried under it (#131).
+          onDownload={
+            terrain3d || downloadProgress !== null || status !== 'idle'
+              ? undefined
+              : () => {
+                  inspect(null);
+                  beginRegionSelect();
+                }
+          }
+        />
       )}
 
       {/* Category-first record start: sheet opens on "Record track"; Start

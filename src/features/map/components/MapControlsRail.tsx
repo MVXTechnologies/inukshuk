@@ -10,13 +10,10 @@ interface Props {
   /** Shown only when at least one PDF overlay is active. */
   showFitControl: boolean;
   onFit: () => void;
-  /** Hide the download control while the 3D view is up. */
   terrain3d: boolean;
   onToggle3d: () => void;
   /** Disable 3D entry while recording / selecting a region / downloading. */
   toggle3dDisabled: boolean;
-  onDownload: () => void;
-  downloadDisabled: boolean;
   pdfOverlayCount: number;
   trackOverlayCount: number;
 }
@@ -30,8 +27,6 @@ export function MapControlsRail({
   terrain3d,
   onToggle3d,
   toggle3dDisabled,
-  onDownload,
-  downloadDisabled,
   pdfOverlayCount,
   trackOverlayCount,
 }: Props) {
@@ -66,19 +61,6 @@ export function MapControlsRail({
         style={styles.controlFab}
         accessibilityLabel="3D relief"
       />
-      {!terrain3d && (
-        <FAB
-          icon="tray-arrow-down"
-          size="small"
-          variant="surface"
-          onPress={onDownload}
-          // Block re-entry while a download is running (a second download would
-          // stop the first's loopback server mid-flight), and while recording.
-          disabled={downloadDisabled}
-          style={styles.controlFab}
-          accessibilityLabel="Download offline area"
-        />
-      )}
       <LayersMenu pdfOverlayCount={pdfOverlayCount} trackOverlayCount={trackOverlayCount} />
       <MapOverlaysMenu />
     </View>

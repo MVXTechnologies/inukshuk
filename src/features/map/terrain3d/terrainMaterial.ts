@@ -36,6 +36,7 @@ export interface TerrainOverlayUniforms {
   uHypsoRamp: THREE.IUniform<THREE.Texture>;
   uSlopeOpacity: THREE.IUniform<number>;
   uSlopeMinDeg: THREE.IUniform<number>;
+  uSlopeMaxDeg: THREE.IUniform<number>;
   uHypsoOpacity: THREE.IUniform<number>;
   uContourOpacity: THREE.IUniform<number>;
   uContourInterval: THREE.IUniform<number>;
@@ -62,8 +63,9 @@ export interface TerrainOverlaySettings {
   hypso: boolean;
   /** Minor contour interval in metres; 0 = auto (span-based 10/25/50/100). */
   contourIntervalM: number;
-  /** Lowest slope band drawn, in degrees (27 = every CalTopo band). */
+  /** Slope window drawn, in degrees (27–90 = every CalTopo band). */
   slopeMinDeg: number;
+  slopeMaxDeg: number;
 }
 
 const VERT_DECLS = /* glsl */ `
@@ -83,6 +85,7 @@ uniform sampler2D uSlopeRamp;
 uniform sampler2D uHypsoRamp;
 uniform float uSlopeOpacity;
 uniform float uSlopeMinDeg;
+uniform float uSlopeMaxDeg;
 uniform float uHypsoOpacity;
 uniform float uContourOpacity;
 uniform float uContourInterval;
@@ -113,8 +116,8 @@ if (uSlopeOpacity > 0.0) {
   // step() hides bands under the slope-angle selector's floor (uSlopeMinDeg);
   // the 0.01 epsilon keeps a band's own floor value inside the band.
   vec4 slopeC = texture2D(uSlopeRamp, vec2(clamp(vSlopeDeg / 90.0, 0.0, 1.0), 0.5));
-  float aboveFloor = step(uSlopeMinDeg - 0.01, vSlopeDeg);
-  diffuseColor.rgb = mix(diffuseColor.rgb, slopeC.rgb, slopeC.a * uSlopeOpacity * aboveFloor);
+  float inWindow = step(uSlopeMinDeg - 0.01, vSlopeDeg) * step(vSlopeDeg, uSlopeMaxDeg + 0.01);
+  diffuseColor.rgb = mix(diffuseColor.rgb, slopeC.rgb, slopeC.a * uSlopeOpacity * inWindow);
 }
 if (uContourOpacity > 0.0) {
   // Mirror of contourStrength: fwidth-anti-aliased isolines with the minor
@@ -195,6 +198,7 @@ export function createTerrainMaterial(opts: CreateTerrainMaterialOptions): {
     uHypsoRamp: { value: hypsoTex },
     uSlopeOpacity: { value: 0 },
     uSlopeMinDeg: { value: 27 },
+    uSlopeMaxDeg: { value: 90 },
     uHypsoOpacity: { value: 0 },
     uContourOpacity: { value: 0 },
     uContourInterval: { value: autoContourInterval(span) },
@@ -218,7 +222,7 @@ export function createTerrainMaterial(opts: CreateTerrainMaterialOptions): {
   };
   // One stable cache key per injected variant (three still keys on map/vertex-
   // colour defines), so basemap switches reuse the compiled program.
-  material.customProgramCacheKey = () => 'inukshuk-terrain-overlay-v3';
+  material.customProgramCacheKey = () => 'inukshuk-terrain-overlay-v4';
   material.userData.overlayTextures = [slopeTex, hypsoTex];
 
   return { material, overlay: { uniforms, minH: opts.minH, maxH: opts.maxH } };
@@ -234,6 +238,7 @@ export function applyTerrainOverlaySettings(
   const u = handle.uniforms;
   u.uSlopeOpacity.value = s.slope ? SLOPE_OPACITY : 0;
   u.uSlopeMinDeg.value = s.slopeMinDeg;
+  u.uSlopeMaxDeg.value = s.slopeMaxDeg;
   u.uHypsoOpacity.value = s.hypso ? HYPSO_OPACITY : 0;
   u.uContourOpacity.value = s.contours ? 1 : 0;
   u.uContourInterval.value = interval;

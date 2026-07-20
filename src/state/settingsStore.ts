@@ -50,10 +50,11 @@ export interface Settings {
   /** 3D terrain: minor contour interval in metres; 0 = auto (span-based). */
   terrainContourIntervalM: number;
   /**
-   * Slope overlay: lowest band drawn, in degrees (2D raster and 3D shader).
-   * 27 = every CalTopo band (the default look); 45 = only the purple extreme.
+   * Slope overlay window, in degrees (2D raster and 3D shader): only slopes
+   * within [min, max] are painted. 27–90 = every CalTopo band (default look).
    */
   terrainSlopeMinDeg: number;
+  terrainSlopeMaxDeg: number;
   /** Whether the one-time "slope shading is indicative" disclaimer was shown. */
   slopeDisclaimerShown: boolean;
   /** Last activity category picked at record start (the picker's default). */
@@ -84,6 +85,7 @@ const DEFAULTS: Settings = {
   terrainHypso: false,
   terrainContourIntervalM: 0,
   terrainSlopeMinDeg: 27,
+  terrainSlopeMaxDeg: 90,
   slopeDisclaimerShown: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   lastKnownPosition: null,
@@ -117,6 +119,7 @@ function snapshot(s: SettingsState): Settings {
     terrainHypso,
     terrainContourIntervalM,
     terrainSlopeMinDeg,
+    terrainSlopeMaxDeg,
     slopeDisclaimerShown,
     lastActivityCategory,
     lastKnownPosition,
@@ -136,6 +139,7 @@ function snapshot(s: SettingsState): Settings {
     terrainHypso,
     terrainContourIntervalM,
     terrainSlopeMinDeg,
+    terrainSlopeMaxDeg,
     slopeDisclaimerShown,
     lastActivityCategory,
     lastKnownPosition,

@@ -9,7 +9,8 @@
 # - Runs standalone (needs no saved trail); geo comes from the launch
 #   permission + the workflow's geo-fix feed.
 # - The Layers menu is a paper Menu ("Layers" FAB). Menu items are plain
-#   visible-text matches; selector rows are indented ("   ≥ 35°", "   50 m")
+#   visible-text matches; the slope window is a two-thumb range slider (its
+#   value label "27–90°" is asserted, not dragged — thumb pans are flake bait)
 #   so they never collide with the section toggles.
 # - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
 #   it auto-dismisses and nothing below asserts during that window.
@@ -55,11 +56,10 @@ appId: com.inukshuk.app
 - tapOn: '50 m'
 - tapOn: 'Auto'
 - tapOn: 'Slope'
+# The range slider renders its committed window; default = every band.
 - extendedWaitUntil:
-    visible: '≥ 35°'
+    visible: '27–90°'
     timeout: 10000
-- tapOn: '≥ 35°'
-- tapOn: 'All'
 # Close the menu via the backdrop; the map beneath must still be responsive
 # while the overlay computes (DEM fetch + raster/contour build are async).
 - tapOn:

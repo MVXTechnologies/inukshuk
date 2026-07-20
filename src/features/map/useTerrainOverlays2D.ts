@@ -53,6 +53,7 @@ export function useTerrainOverlays2D({
   const contoursOn = useSettingsStore((s) => s.terrainContours);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
+  const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
 
   const [state, setState] = useState<TerrainOverlays2D>({
     slope: null,
@@ -95,6 +96,7 @@ export function useTerrainOverlays2D({
           contoursOn,
           intervalM,
           slopeMinDeg,
+          slopeMaxDeg,
         ].join('|');
         if (key === coveredRef.current) return;
 
@@ -109,7 +111,7 @@ export function useTerrainOverlays2D({
             const mPerDegLng = 111320 * Math.cos((midLat * Math.PI) / 180);
             const cellXm = ((hm.bbox.maxLng - hm.bbox.minLng) * mPerDegLng) / (GRID - 1);
             const cellZm = ((hm.bbox.maxLat - hm.bbox.minLat) * mPerDegLat) / (GRID - 1);
-            const rgba = slopeOverlayRgba(hm.data, GRID, cellXm, cellZm, slopeMinDeg);
+            const rgba = slopeOverlayRgba(hm.data, GRID, cellXm, cellZm, slopeMinDeg, slopeMaxDeg);
             const buf = rgba.buffer.slice(
               rgba.byteOffset,
               rgba.byteOffset + rgba.byteLength,
@@ -145,7 +147,7 @@ export function useTerrainOverlays2D({
       })();
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [enabled, slopeOn, contoursOn, intervalM, slopeMinDeg, boundsVersion, mapRef]);
+  }, [enabled, slopeOn, contoursOn, intervalM, slopeMinDeg, slopeMaxDeg, boundsVersion, mapRef]);
 
   if (!enabled) return { slope: null, contours: null, error: null };
   return {
