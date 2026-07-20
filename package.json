@@ -35,7 +35,7 @@
     "jpeg-js": "^0.4.4",
     "nanoid": "^5.1.16",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^3.11.174",
+    "pdfjs-dist": "^6.1.200",
     "proj4": "^2.20.9",
     "react": "19.2.3",
     "react-native": "0.85.3",
