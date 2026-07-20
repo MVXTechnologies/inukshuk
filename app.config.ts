@@ -16,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // actions (expo-clipboard — the native change forcing this store release),
   // trail-viewer 3D rail FAB. runtimeVersion follows appVersion — 1.3.0 opens
   // its own OTA runtime lineage. Existing installs keep theirs.
-  version: '1.3.0',
+  version: '1.4.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -61,9 +61,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.inukshuk.app',
     // versionCode must keep monotonically increasing on Play (it can't reset) —
     // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 was
-    // 1.0.2; vc45 was 1.0.3; vc46 was 1.1.0; vc47 was 1.2.0; vc48 is 1.3.0,
+    // 1.0.2; vc45 was 1.0.3; vc46 was 1.1.0; vc47 was 1.2.0; vc48 was 1.3.0;
     // see version above.)
-    versionCode: 48,
+    versionCode: 49, // vc49 is 1.4.0 (see version above)
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only

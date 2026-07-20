@@ -80,7 +80,7 @@ const winAnsiSafe = (s: string) =>
   s.replace(/[^\x20-\x7E\xA0-\xFF€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/g, '');
 
 /** Distance from the frame's bottom edge down to the footer baseline. */
-const BOTTOM_TEXT_OFFSET = 62;
+const BOTTOM_TEXT_OFFSET = 76;
 
 const CONTOUR_MINOR = rgb(0.55, 0.35, 0.15);
 const CONTOUR_MAJOR = rgb(0.45, 0.27, 0.1);
