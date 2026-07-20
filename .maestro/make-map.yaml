@@ -52,12 +52,17 @@ appId: com.inukshuk.app
     visible: '.*saved to the library.*'
     timeout: 180000
 # The made map must now exist in the Library, named with the default prefix.
-- tapOn: 'Library'
+# (iOS labels tab items "Library, tab, N of M" — same regex as every flow.)
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'My map .*'
     timeout: 15000
 # Back to the map tab so later flows start from the usual place.
-- tapOn: 'Map'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000
