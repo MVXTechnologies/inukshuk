@@ -110,4 +110,15 @@ describe('contourFeatures', () => {
       }
     }
   });
+
+  it('quantizes vertices to 6 decimals (bridge-payload size)', () => {
+    const hm = cone(33, 400);
+    const { minor, major } = contourFeatures(hm, 0);
+    for (const line of [...minor.geometry.coordinates, ...major.geometry.coordinates]) {
+      for (const [lng, lat] of line) {
+        expect(Math.round(lng! * 1e6) / 1e6).toBe(lng!);
+        expect(Math.round(lat! * 1e6) / 1e6).toBe(lat!);
+      }
+    }
+  });
 });

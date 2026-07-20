@@ -20,6 +20,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
@@ -246,10 +247,20 @@ export function MapScreen() {
   // want, nothing recomputed until the layer was toggled off and on.
   // In 3D the terrain shader draws the same analysis from the same settings.
   const [regionVersion, setRegionVersion] = useState(0);
+  // Tab screens stay mounted, so without a focus gate the overlay pipeline
+  // kept fetching DEM tiles and contouring in the background after switching
+  // to Library/Settings.
+  const [screenFocused, setScreenFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
   const terrainOverlays2d = useTerrainOverlays2D({
     mapRef,
     boundsVersion: regionVersion,
-    active: !terrain3d && settingsHydrated,
+    active: !terrain3d && settingsHydrated && screenFocused,
   });
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);

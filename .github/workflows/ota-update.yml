@@ -39,4 +39,11 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
       - run: npm ci
       - name: Publish OTA update to the production channel
+        # ERROR_REPORT_TOKEN must be present when app.config.ts is evaluated
+        # here: clients read `extra` from the LATEST update's manifest, not the
+        # store build, so an OTA published without it silently disables
+        # automatic error reports for every updated install. (Empty/missing is
+        # harmless — the app treats '' as no channel and just queues.)
+        env:
+          ERROR_REPORT_TOKEN: ${{ secrets.ERROR_REPORT_TOKEN }}
         run: eas update --auto --branch production --non-interactive

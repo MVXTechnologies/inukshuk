@@ -130,9 +130,13 @@ function chainSegments(segments: [EdgePoint, EdgePoint][]): EdgePoint[][] {
 export function contourFeatures(hm: ContourGrid, requestedIntervalM: number): ContourFeatures {
   const { data, grid, bbox } = hm;
   const intervalM = effectiveContourInterval(hm.maxH - hm.minH, requestedIntervalM);
+  // 6 decimals ≈ 0.11 m — far finer than a grid cell, and it halves the
+  // serialized GeoJSON (full-precision doubles print ~17 digits), which is
+  // what MapLibre's ShapeSource ships across the bridge on every recompute.
+  const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
   const toLngLat = (p: EdgePoint): Position => [
-    bbox.minLng + (p.x / (grid - 1)) * (bbox.maxLng - bbox.minLng),
-    bbox.maxLat - (p.y / (grid - 1)) * (bbox.maxLat - bbox.minLat),
+    round6(bbox.minLng + (p.x / (grid - 1)) * (bbox.maxLng - bbox.minLng)),
+    round6(bbox.maxLat - (p.y / (grid - 1)) * (bbox.maxLat - bbox.minLat)),
   ];
 
   const minor: Position[][] = [];

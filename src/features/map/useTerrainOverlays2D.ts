@@ -67,8 +67,13 @@ export function useTerrainOverlays2D({
 
   useEffect(() => {
     if (!enabled) {
-      // Invalidate the coverage key so re-enabling recomputes; the stale state
-      // object is hidden by the `enabled` guard on the return value below.
+      // Invalidate the coverage key so re-enabling recomputes, and bump the
+      // request id so any in-flight pipeline bails at its next checkpoint —
+      // otherwise leaving the map screen (tabs keep it mounted) let a pending
+      // DEM fetch run on into the full slope/contour compute in the
+      // background. The stale state object is hidden by the `enabled` guard
+      // on the return value below.
+      reqIdRef.current += 1;
       coveredRef.current = '';
       return;
     }
@@ -100,6 +105,16 @@ export function useTerrainOverlays2D({
         ].join('|');
         if (key === coveredRef.current) return;
 
+        // The slope raster, PNG encode and contour extraction each block the
+        // JS thread for a noticeable chunk on-device; yielding between stages
+        // keeps touches responsive and gives an abandoned request (new region,
+        // screen left) a checkpoint to bail at instead of finishing for
+        // nothing.
+        const stale = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return reqId !== reqIdRef.current;
+        };
+
         try {
           const hm = await fetchHeightmap(bounds, GRID);
           if (reqId !== reqIdRef.current) return;
@@ -111,12 +126,22 @@ export function useTerrainOverlays2D({
             const mPerDegLng = 111320 * Math.cos((midLat * Math.PI) / 180);
             const cellXm = ((hm.bbox.maxLng - hm.bbox.minLng) * mPerDegLng) / (GRID - 1);
             const cellZm = ((hm.bbox.maxLat - hm.bbox.minLat) * mPerDegLat) / (GRID - 1);
+            if (await stale()) return;
             const rgba = slopeOverlayRgba(hm.data, GRID, cellXm, cellZm, slopeMinDeg, slopeMaxDeg);
-            const buf = rgba.buffer.slice(
-              rgba.byteOffset,
-              rgba.byteOffset + rgba.byteLength,
-            ) as ArrayBuffer;
-            const png = new Uint8Array(UPNG.encode([buf], GRID, GRID, 0));
+            if (await stale()) return;
+            const png = new Uint8Array(
+              UPNG.encode(
+                [
+                  rgba.buffer.slice(
+                    rgba.byteOffset,
+                    rgba.byteOffset + rgba.byteLength,
+                  ) as ArrayBuffer,
+                ],
+                GRID,
+                GRID,
+                0,
+              ),
+            );
             // Alternate between two file names: MapLibre caches by URL, so
             // rewriting one fixed path would keep showing the stale image.
             const uri = storage.writeOverlayPng(`slope2d-${reqId % 2}`, bytesToBase64(png));
@@ -131,6 +156,7 @@ export function useTerrainOverlays2D({
             };
           }
 
+          if (await stale()) return;
           const contours = contoursOn ? contourFeatures(hm, intervalM) : null;
           if (reqId !== reqIdRef.current) return;
           coveredRef.current = key;
