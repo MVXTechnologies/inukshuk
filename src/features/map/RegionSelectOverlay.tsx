@@ -212,6 +212,20 @@ export function RegionSelectOverlay({
   const noneSelected = selectedBasemaps.length === 0;
   const tooLarge = totalTiles > MAX_TILES;
   const canDownload = geo !== null && !noneSelected && !tooLarge;
+  // When the box is too large at this quality, offer the highest quality that
+  // fits as a one-tap fix — "Too large" alone made people shrink the box when
+  // one notch coarser usually covers the same area (4× fewer tiles per notch).
+  const fittingQuality =
+    tooLarge && geo && !noneSelected
+      ? QUALITY_BUTTONS.map((b) => b.value)
+          .filter((q) => QUALITY_ZOOM[q] < maxZoom)
+          .reverse()
+          .find(
+            (q) =>
+              estimateRegionDownload(geo.bbox, geo.minZoom, QUALITY_ZOOM[q], selectedBasemaps)
+                .tiles <= MAX_TILES,
+          )
+      : undefined;
 
   const toggleLayer = useCallback((key: Basemap) => {
     setSelected((s) => ({ ...s, [key]: !s[key] }));
@@ -363,7 +377,9 @@ export function RegionSelectOverlay({
   const summary = noneSelected
     ? 'Select at least one layer'
     : tooLarge
-      ? 'Too large — shrink the box or lower the quality'
+      ? fittingQuality
+        ? `Too large at ${QUALITY_BUTTONS.find((b) => b.value === quality)?.label} quality`
+        : 'Too large — shrink the box'
       : geo === null
         ? 'Calculating…'
         : `≈ ${totalTiles.toLocaleString()} tiles · ${formatBytes(totalBytes)}`;
@@ -514,6 +530,16 @@ export function RegionSelectOverlay({
         <Text variant="bodyMedium" style={styles.summary}>
           {summary}
         </Text>
+        {fittingQuality !== undefined && (
+          <Button
+            mode="contained-tonal"
+            compact
+            onPress={() => setQuality(fittingQuality)}
+            style={styles.fitQualityBtn}
+          >
+            {`Use ${QUALITY_BUTTONS.find((b) => b.value === fittingQuality)?.label} quality instead`}
+          </Button>
+        )}
         {capNote !== null && (
           <Text
             variant="labelSmall"
@@ -604,6 +630,7 @@ const styles = StyleSheet.create({
   layerLabel: { textAlign: 'center' },
   quality: { marginTop: 2 },
   summary: { textAlign: 'center' },
+  fitQualityBtn: { alignSelf: 'center' },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
   actionBtn: { minWidth: 120 },
 });
