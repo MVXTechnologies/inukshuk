@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FAB, useTheme } from 'react-native-paper';
 import { InukshukIcon } from './InukshukIcon';
 
@@ -21,6 +21,60 @@ interface Props {
 export function MapActionsFab({ onRecord, onAddWaypoint, onDownload }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+
+  const propsRef = useRef({ onRecord, onAddWaypoint, onDownload });
+  useEffect(() => {
+    propsRef.current = { onRecord, onAddWaypoint, onDownload };
+  });
+
+  const hasDownload = onDownload !== undefined;
+  // Paper's FAB.Group restarts its open/close animation whenever the `actions`
+  // array changes identity (the animation effect lists `actions` as a dep).
+  // MapScreen re-renders many times a second while the compass or GPS ticks,
+  // so building this array inline restarted the stagger mid-flight over and
+  // over and the dial crawled open in slow motion. Keep the identity stable;
+  // handlers read the live callbacks through propsRef.
+  const actions = useMemo(
+    () => [
+      ...(hasDownload
+        ? [
+            {
+              icon: 'tray-arrow-down',
+              label: 'Download offline area',
+              containerStyle: { marginVertical: -2 },
+              onPress: () => {
+                setOpen(false);
+                propsRef.current.onDownload?.();
+              },
+            },
+          ]
+        : []),
+      {
+        // The app's inukshuk glyph — paper accepts a render function
+        // anywhere a MaterialCommunityIcons name goes.
+        icon: ({ size, color }: { size: number; color: string }) => (
+          <InukshukIcon size={size} color={color} />
+        ),
+        label: 'Add waypoint',
+        containerStyle: { marginVertical: -2 },
+        onPress: () => {
+          setOpen(false);
+          propsRef.current.onAddWaypoint();
+        },
+      },
+      {
+        icon: 'timer-outline',
+        label: 'Record track',
+        containerStyle: { marginVertical: -2 },
+        onPress: () => {
+          setOpen(false);
+          propsRef.current.onRecord();
+        },
+      },
+    ],
+    [hasDownload],
+  );
+
   return (
     <FAB.Group
       open={open}
@@ -31,41 +85,7 @@ export function MapActionsFab({ onRecord, onAddWaypoint, onDownload }: Props) {
       // actions pulled tighter to the dial.
       fabStyle={{ backgroundColor: theme.colors.tertiary, borderRadius: 28 }}
       backdropColor="#00000066"
-      actions={[
-        ...(onDownload
-          ? [
-              {
-                icon: 'tray-arrow-down',
-                label: 'Download offline area',
-                containerStyle: { marginVertical: -2 },
-                onPress: () => {
-                  setOpen(false);
-                  onDownload();
-                },
-              },
-            ]
-          : []),
-        {
-          // The app's inukshuk glyph — paper accepts a render function
-          // anywhere a MaterialCommunityIcons name goes.
-          icon: ({ size, color }) => <InukshukIcon size={size} color={color} />,
-          label: 'Add waypoint',
-          containerStyle: { marginVertical: -2 },
-          onPress: () => {
-            setOpen(false);
-            onAddWaypoint();
-          },
-        },
-        {
-          icon: 'timer-outline',
-          label: 'Record track',
-          containerStyle: { marginVertical: -2 },
-          onPress: () => {
-            setOpen(false);
-            onRecord();
-          },
-        },
-      ]}
+      actions={actions}
       onStateChange={({ open: o }) => setOpen(o)}
       accessibilityLabel="Map actions"
     />
