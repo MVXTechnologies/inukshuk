@@ -93,6 +93,12 @@ appId: com.inukshuk.app
           visible: 'Elevation tint'
           timeout: 60000
       - tapOn: 'Slope'
+      # First-ever Slope enable fires the one-time disclaimer snackbar; its
+      # Portal mount can transiently hide the menu from the a11y tree on a
+      # loaded emulator — re-await the row instead of tapping blind.
+      - extendedWaitUntil:
+          visible: 'Contours'
+          timeout: 15000
       - tapOn: 'Contours'
       # (The contour-interval rows that appear with Contours are not
       # exercised: on software-GL Android a single hierarchy fetch can take
