@@ -3,6 +3,7 @@ import type { BoundingBox, LngLat, MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
+import * as Location from 'expo-location';
 import { mapDocumentFromStoredPdf } from '../../library/importMap';
 import {
   composeMapPdf,
@@ -49,7 +50,28 @@ export async function makeMap(
     return { index: n ? Number(n) : i + 1, pos: [w.longitude, w.latitude] as LngLat };
   });
 
-  const bytes = await composeMapPdf({ bbox, options, tracks, waypoints }, onProgress, handle);
+  // Magnetic declination for the compass rose, straight off the device
+  // compass (the OS runs the real geomagnetic model): true − magnetic
+  // heading, normalized to ±180. Unavailable (emulator, no sensor, compass
+  // off) degrades to a true-north-only rose.
+  let declinationDeg: number | null = null;
+  if (options.compass) {
+    try {
+      const heading = await Location.getHeadingAsync();
+      if (heading.trueHeading >= 0 && heading.magHeading >= 0) {
+        const d = heading.trueHeading - heading.magHeading;
+        declinationDeg = ((d + 540) % 360) - 180;
+      }
+    } catch {
+      // No compass — omit the magnetic arrow.
+    }
+  }
+
+  const bytes = await composeMapPdf(
+    { bbox, options: { ...options, declinationDeg }, tracks, waypoints },
+    onProgress,
+    handle,
+  );
   const id = storage.newId();
   const fileUri = storage.writeMapPdfBytes(id, bytes);
   let doc: MapDocument;

@@ -165,20 +165,37 @@ export function MapScreen() {
   // outside the downloaded regions with an opaque theme-matched fill (white in
   // light mode, the app background in dark mode) — downloaded areas show
   // through holes in the mask; trails/markers/location still draw on top.
+  const uiStyle = useSettingsStore((s) => s.uiStyle);
+  const markedTrailsOverlay = useSettingsStore((s) => s.markedTrailsOverlay);
   const style = useMemo(() => {
-    const options = offlineOnly
-      ? {
-          rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
-          downloadedMask: {
-            data: buildDownloadedMask(
-              offlineRegions.filter((r) => r.basemap === basemap).map((r) => r.bounds),
-            ),
-            color: theme.dark ? theme.colors.background : '#FFFFFF',
-          },
-        }
-      : {};
+    const options = {
+      // The 'edge' UI style washes the raster into pastels to match its chrome.
+      pastel: uiStyle === 'edge',
+      // Waymarked Trails routes overlay (network-only; hidden offline-only).
+      markedTrails: markedTrailsOverlay && !offlineOnly,
+      ...(offlineOnly
+        ? {
+            rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
+            downloadedMask: {
+              data: buildDownloadedMask(
+                offlineRegions.filter((r) => r.basemap === basemap).map((r) => r.bounds),
+              ),
+              color: theme.dark ? theme.colors.background : '#FFFFFF',
+            },
+          }
+        : {}),
+    };
     return buildOsmStyle(tileUrl, false, basemap, true, options);
-  }, [tileUrl, basemap, offlineOnly, offlineRegions, theme.dark, theme.colors.background]);
+  }, [
+    tileUrl,
+    basemap,
+    offlineOnly,
+    offlineRegions,
+    theme.dark,
+    theme.colors.background,
+    uiStyle,
+    markedTrailsOverlay,
+  ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
