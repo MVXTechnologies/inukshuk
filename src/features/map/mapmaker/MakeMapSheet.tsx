@@ -154,8 +154,16 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
         </Text>
       </View>
 
-      {/* The drawer: tabbed controls + actions. */}
-      <Surface style={styles.drawer} elevation={4}>
+      {/* The drawer: tabbed controls + actions. A plain View, NOT paper's
+          Surface: Surface's iOS shadow nesting leaves its content wrapper
+          unconstrained, collapsing the flex column (actions jumped under the
+          tabs and the rows vanished). */}
+      <View
+        style={[
+          styles.drawer,
+          { backgroundColor: theme.colors.elevation?.level2 ?? theme.colors.surface },
+        ]}
+      >
         <SegmentedButtons
           value={tab}
           onValueChange={(v) => setTab(v as DrawerTab)}
@@ -243,7 +251,7 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
             Create
           </Button>
         </View>
-      </Surface>
+      </View>
     </View>
   );
 }
@@ -288,6 +296,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 14,
     paddingBottom: 10,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
   },
   tabs: { marginBottom: 6 },
   drawerScroll: { flex: 1 },
