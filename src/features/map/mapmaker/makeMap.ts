@@ -57,8 +57,14 @@ export async function makeMap(
   let declinationDeg: number | null = null;
   if (options.compass) {
     try {
-      const heading = await Location.getHeadingAsync();
-      if (heading.trueHeading >= 0 && heading.magHeading >= 0) {
+      // getHeadingAsync NEVER RESOLVES on magnetometer-less devices (it waits
+      // for a reading that can't come) — race it with a short timeout or the
+      // whole compose hangs at "Making…" forever.
+      const heading = await Promise.race([
+        Location.getHeadingAsync(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (heading && heading.trueHeading >= 0 && heading.magHeading >= 0) {
         const d = heading.trueHeading - heading.magHeading;
         declinationDeg = ((d + 540) % 360) - 180;
       }
