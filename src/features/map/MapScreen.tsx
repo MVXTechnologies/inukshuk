@@ -898,30 +898,35 @@ export function MapScreen() {
         <CompassBadge onPress={resetNorth} />
       </View>
 
-      {/* Right-side map controls */}
-      <MapControlsRail
-        top={insets.top + 8}
-        onLocate={() => {
-          setFollowUser(true);
-          // Also zoom in to a useful "where am I" level (~2.5 km across);
-          // never zooms out if the user is already closer.
-          if (location) void zoomToLocateLevel(location.latitude);
-        }}
-        showFitControl={overlays.length > 0}
-        // Each press focuses the NEXT active PDF overlay, wrapping around —
-        // with several maps loaded, repeated taps tour them all. A single
-        // overlay behaves like the old fit-to-map.
-        onFit={() => {
-          const overlay = overlays[fitCycleRef.current % overlays.length];
-          fitCycleRef.current += 1;
-          if (overlay) fitOverlayBounds(overlay.bbox);
-        }}
-        terrain3d={terrain3d}
-        onToggle3d={toggleTerrain3d}
-        toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
-        pdfOverlayCount={overlays.length}
-        trackOverlayCount={trackOverlays.length}
-      />
+      {/* Right-side map controls. Unmounted while the map-maker editor is up:
+          its desk/drawer covers the rail visually, but a covered rail would
+          still sit in the accessibility tree — screen readers (and E2E) could
+          reach a hidden "Layers" behind the drawer's Layers tab. */}
+      {makeMapState === null && (
+        <MapControlsRail
+          top={insets.top + 8}
+          onLocate={() => {
+            setFollowUser(true);
+            // Also zoom in to a useful "where am I" level (~2.5 km across);
+            // never zooms out if the user is already closer.
+            if (location) void zoomToLocateLevel(location.latitude);
+          }}
+          showFitControl={overlays.length > 0}
+          // Each press focuses the NEXT active PDF overlay, wrapping around —
+          // with several maps loaded, repeated taps tour them all. A single
+          // overlay behaves like the old fit-to-map.
+          onFit={() => {
+            const overlay = overlays[fitCycleRef.current % overlays.length];
+            fitCycleRef.current += 1;
+            if (overlay) fitOverlayBounds(overlay.bbox);
+          }}
+          terrain3d={terrain3d}
+          onToggle3d={toggleTerrain3d}
+          toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
+          pdfOverlayCount={overlays.length}
+          trackOverlayCount={trackOverlays.length}
+        />
+      )}
 
       {permission === 'denied' && (
         <Banner
