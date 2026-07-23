@@ -1,5 +1,8 @@
+import { useSettingsStore } from '@state/settingsStore';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FAB } from 'react-native-paper';
+import { EdgePill } from './EdgePill';
 import { LayersMenu } from './LayersMenu';
 import { MapOverlaysMenu } from './MapOverlaysMenu';
 
@@ -18,7 +21,7 @@ interface Props {
   trackOverlayCount: number;
 }
 
-/** Right-side map controls: locate, fit-to-overlays, offline download, layers. */
+/** Right-side map controls: locate, fit-to-overlays, 3D, layers, overlays. */
 export function MapControlsRail({
   top,
   onLocate,
@@ -30,8 +33,64 @@ export function MapControlsRail({
   pdfOverlayCount,
   trackOverlayCount,
 }: Props) {
+  const uiStyle = useSettingsStore((s) => s.uiStyle);
+  // 'minimal' style: the rail rests as a single chevron; tapping it unfolds
+  // the buttons and the chevron flips to fold them away again.
+  const [minimalOpen, setMinimalOpen] = useState(false);
+
+  // 'edge' style: half-pills flush with the screen edge, packed tight — the
+  // rail shrinks to a sliver of the map compared to the floating FAB column.
+  if (uiStyle === 'edge') {
+    return (
+      <View style={[styles.edgeRail, { top }]} pointerEvents="box-none">
+        <EdgePill icon="crosshairs-gps" label="Locate" onPress={onLocate} />
+        {showFitControl && <EdgePill icon="fit-to-page-outline" label="Fit map" onPress={onFit} />}
+        <EdgePill
+          icon="video-3d"
+          label="3D relief"
+          onPress={onToggle3d}
+          active={terrain3d}
+          disabled={toggle3dDisabled}
+          accessibilityLabel="3D relief"
+        />
+        <LayersMenu
+          pdfOverlayCount={pdfOverlayCount}
+          trackOverlayCount={trackOverlayCount}
+          edgeAnchor
+        />
+        <MapOverlaysMenu edgeAnchor />
+      </View>
+    );
+  }
+
+  // 'minimal' style: everything folded behind one small chevron until asked.
+  if (uiStyle === 'minimal' && !minimalOpen) {
+    return (
+      <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
+        <FAB
+          icon="chevron-left"
+          size="small"
+          variant="surface"
+          onPress={() => setMinimalOpen(true)}
+          style={styles.controlFab}
+          accessibilityLabel="Map controls"
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
+      {uiStyle === 'minimal' && (
+        <FAB
+          icon="chevron-right"
+          size="small"
+          variant="surface"
+          onPress={() => setMinimalOpen(false)}
+          style={styles.controlFab}
+          accessibilityLabel="Hide map controls"
+        />
+      )}
       <FAB
         icon="crosshairs-gps"
         size="small"
@@ -70,4 +129,5 @@ export function MapControlsRail({
 const styles = StyleSheet.create({
   rightControls: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
   controlFab: { borderRadius: 24 },
+  edgeRail: { position: 'absolute', right: 0, gap: 4, alignItems: 'flex-end' },
 });

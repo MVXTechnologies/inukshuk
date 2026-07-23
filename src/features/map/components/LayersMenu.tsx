@@ -1,6 +1,7 @@
 import { setOfflineOnly } from '@data/offline';
 import { useLibraryStore } from '@state/libraryStore';
 import { FolderPickerDialog } from './FolderPickerDialog';
+import { EdgePill } from './EdgePill';
 import { type MapBasemap, useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
@@ -29,13 +30,15 @@ interface Props {
   pdfOverlayCount: number;
   /** Number of saved-trail overlays available to toggle. */
   trackOverlayCount: number;
+  /** Render the 'edge' UI style's half-pill anchor instead of the FAB. */
+  edgeAnchor?: boolean;
 }
 
 /**
  * The layers FAB + menu: overlay toggles (PDF pages, saved trails), the
  * "locally downloaded only" network switch, and the base-map picker.
  */
-export function LayersMenu({ pdfOverlayCount, trackOverlayCount }: Props) {
+export function LayersMenu({ pdfOverlayCount, trackOverlayCount, edgeAnchor }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
@@ -60,14 +63,18 @@ export function LayersMenu({ pdfOverlayCount, trackOverlayCount }: Props) {
         visible={open}
         onDismiss={() => setOpen(false)}
         anchor={
-          <FAB
-            icon="layers"
-            size="small"
-            variant="surface"
-            onPress={() => setOpen(true)}
-            style={styles.controlFab}
-            accessibilityLabel="Layers"
-          />
+          edgeAnchor ? (
+            <EdgePill icon="layers" label="Layers" onPress={() => setOpen(true)} />
+          ) : (
+            <FAB
+              icon="layers"
+              size="small"
+              variant="surface"
+              onPress={() => setOpen(true)}
+              style={styles.controlFab}
+              accessibilityLabel="Layers"
+            />
+          )
         }
       >
         {/* Overlay visibility is a MODE: the classic type toggles (PDF/Trails,

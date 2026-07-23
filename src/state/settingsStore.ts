@@ -4,6 +4,7 @@ import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migratio
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
+import type { UiStyle } from '@ui/theme';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
@@ -39,6 +40,12 @@ export interface Settings {
   offlineOnly: boolean;
   /** Display units for distances, elevation, speed and pace. */
   units: Units;
+  /** App theme: follow the OS ('system') or force light/dark. */
+  themeMode: 'system' | 'light' | 'dark';
+  /** Visual identity: classic brand look, quiet minimal, or the pastel edge style. */
+  uiStyle: UiStyle;
+  /** Waymarked Trails hiking-routes overlay on the main map. */
+  markedTrailsOverlay: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -79,6 +86,9 @@ const DEFAULTS: Settings = {
   trailViewMode: '3d',
   offlineOnly: false,
   units: 'metric',
+  themeMode: 'system',
+  uiStyle: 'classic',
+  markedTrailsOverlay: false,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -113,6 +123,9 @@ function snapshot(s: SettingsState): Settings {
     trailViewMode,
     offlineOnly,
     units,
+    themeMode,
+    uiStyle,
+    markedTrailsOverlay,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -133,6 +146,9 @@ function snapshot(s: SettingsState): Settings {
     trailViewMode,
     offlineOnly,
     units,
+    themeMode,
+    uiStyle,
+    markedTrailsOverlay,
     errorReporting,
     terrainSlope,
     terrainContours,

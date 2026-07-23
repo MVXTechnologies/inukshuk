@@ -11,6 +11,7 @@ import {
 import { formatBytes } from '@lib/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
+import type { UiStyle } from '@ui/theme';
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
@@ -89,6 +90,8 @@ export function SettingsScreen() {
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
+  const themeMode = useSettingsStore((s) => s.themeMode);
+  const uiStyle = useSettingsStore((s) => s.uiStyle);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
   const set = useSettingsStore((s) => s.set);
   const reset = useSettingsStore((s) => s.reset);
@@ -244,6 +247,33 @@ export function SettingsScreen() {
               value={units}
               onValueChange={(v) => set('units', v === 'imperial' ? 'imperial' : 'metric')}
               buttons={UNITS_OPTIONS}
+            />
+          </View>
+          <List.Item title="Theme" description="Follow the system, or force light / dark" />
+          <View style={styles.segment}>
+            <SegmentedButtons
+              value={themeMode}
+              onValueChange={(v) => set('themeMode', v as 'system' | 'light' | 'dark')}
+              buttons={[
+                { value: 'system', label: 'System' },
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+              ]}
+            />
+          </View>
+          <List.Item
+            title="App style"
+            description="Classic brand look, quiet Minimal, or the pastel Edge style"
+          />
+          <View style={styles.segment}>
+            <SegmentedButtons
+              value={uiStyle}
+              onValueChange={(v) => set('uiStyle', v as UiStyle)}
+              buttons={[
+                { value: 'classic', label: 'Classic' },
+                { value: 'minimal', label: 'Minimal' },
+                { value: 'edge', label: 'Edge' },
+              ]}
             />
           </View>
         </List.Section>
