@@ -29,7 +29,17 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-- tapOn: 'Map actions'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Make a map'
+          commands:
+            - tapOn: 'Map actions'
+      - extendedWaitUntil:
+          visible: 'Make a map'
+          timeout: 60000
 - tapOn: 'Make a map'
 # Step 1: the bare region selector (no layers/quality — just the box + Next).
 - extendedWaitUntil:
@@ -41,11 +51,24 @@ appId: com.inukshuk.app
     visible: 'Next'
     timeout: 10000
 - tapOn: 'Next'
-# Step 2: options sheet with defaults (Map basemap, A4, contours on).
+# Step 2: the desk & drawer editor — live preview up top, tabbed drawer
+# below. Walk all three tabs (Layers is the default), then Create with the
+# defaults (Map basemap, A4, contours + grid + compass on).
+- extendedWaitUntil:
+    visible: 'Contour lines'
+    timeout: 15000
+- tapOn: 'Page'
 - extendedWaitUntil:
     visible: 'Map name'
-    timeout: 10000
-- assertVisible: 'Contour lines'
+    timeout: 8000
+- tapOn: 'Extras'
+- extendedWaitUntil:
+    visible: 'Gridlines'
+    timeout: 8000
+- tapOn: 'Layers'
+- extendedWaitUntil:
+    visible: 'Contour lines'
+    timeout: 8000
 - tapOn: 'Create'
 # Compose runs for real — tiles, DEM, PDF. Success lands as a snackbar.
 - extendedWaitUntil:

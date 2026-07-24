@@ -12,7 +12,7 @@ import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
-import { darkTheme, lightTheme } from '@ui/theme';
+import { resolveTheme } from '@ui/theme';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -22,8 +22,14 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'dark' ? darkTheme : lightTheme;
+  const osScheme = useColorScheme();
+  // User theme choice ('system' follows the OS). Before hydration this reads
+  // the default 'system', so a forced theme applies one render after launch —
+  // visually a non-event because the splash still covers the first frames.
+  const themeMode = useSettingsStore((s) => s.themeMode);
+  const uiStyle = useSettingsStore((s) => s.uiStyle);
+  const scheme = themeMode === 'system' ? (osScheme ?? 'light') : themeMode;
+  const theme = resolveTheme(uiStyle, scheme === 'dark' ? 'dark' : 'light');
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);

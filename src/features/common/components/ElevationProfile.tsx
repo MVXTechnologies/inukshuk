@@ -21,6 +21,7 @@ import Svg, {
   Line,
   LinearGradient,
   Path,
+  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
@@ -42,40 +43,62 @@ interface Props {
   selectedDistanceM?: number | null;
 }
 
-/** Pace colour ramp: 0 = slow (red) → 0.5 = amber → 1 = fast (green). */
-function paceColor(t: number): string {
-  const stops = [
-    [0xd7, 0x30, 0x27],
-    [0xfd, 0xae, 0x61],
-    [0x1a, 0x98, 0x50],
-  ];
+// ---------------------------------------------------------------------------
+// Colour ramps (shared by the curve stroke and the colourbar legend)
+// ---------------------------------------------------------------------------
+
+type RampStop = [number, number, number];
+
+function rampColor(stops: RampStop[], t: number): string {
   const x = Math.max(0, Math.min(1, t));
-  const seg = x < 0.5 ? 0 : 1;
-  const local = x < 0.5 ? x / 0.5 : (x - 0.5) / 0.5;
+  const pos = x * (stops.length - 1);
+  const seg = Math.min(stops.length - 2, Math.floor(pos));
+  const local = pos - seg;
   const a = stops[seg]!;
   const b = stops[seg + 1]!;
   const c = a.map((v, i) => Math.round(v + (b[i]! - v) * local));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-/** Build SVG path `d` strings (line + closed area) from screen-space points. */
-function buildPaths(
-  pts: { x: number; y: number }[],
-  height: number,
-): { line: string; area: string } {
-  if (pts.length < 2) return { line: '', area: '' };
-  const line = pts
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(' ');
-  const area = `${line} L${pts[pts.length - 1]!.x.toFixed(1)} ${height} L${pts[0]!.x.toFixed(1)} ${height} Z`;
-  return { line, area };
+/** Grade: steep descent = blue → flat = sage → steep climb = red. */
+const GRADE_STOPS: RampStop[] = [
+  [0x3b, 0x7c, 0xb8],
+  [0x8a, 0xb0, 0x6c],
+  [0xe0, 0xa1, 0x3c],
+  [0xc6, 0x2f, 0x2f],
+];
+
+/** Grade colour domain (± %, clamped) — beyond this everything reads "steep". */
+const GRADE_LIMIT = 25;
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+
+/** Catmull-Rom → cubic Bézier: the smooth curve through the sample points. */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  let d = `M${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
 }
 
 /**
- * Elevation-vs-distance profile rendered with react-native-svg: a smooth line
- * with a gradient fill or a grid backdrop (user-selectable, persisted). Touch and
- * drag to scrub — a marker rides the line and the readout shows elevation,
- * distance and grade at that point.
+ * Elevation-vs-distance profile: the altitude curve (smoothed, soft area
+ * fill) with its EDGE stroked in a metric colour — pace for timed trails, or
+ * grade — and a labelled colourbar underneath so the colours are actually
+ * interpretable. Touch and drag to scrub; a marker rides the line and the
+ * readout shows elevation, distance, grade and pace at that point.
  */
 export function ElevationProfile({
   points,
@@ -91,10 +114,9 @@ export function ElevationProfile({
   const [scrub, setScrub] = useState<number | null>(null);
   const [scrubAt, setScrubAt] = useState<TrackPointAt | null>(null);
 
-  // Speed at each profile sample (for the 'pace' colouring), + its range. Uses the
-  // recorded GPS speed when present, else derives it from the time elapsed between
-  // adjacent samples — so timed GPX imports (which rarely carry a speed field)
-  // still get a pace gradient instead of falling back to the plain elevation fill.
+  // Speed at each profile sample, + its range. Uses the recorded GPS speed
+  // when present, else derives it from time between samples — so timed GPX
+  // imports (which rarely carry a speed field) still get pace colouring.
   const speeds = useMemo<(number | undefined)[]>(() => {
     if (!profile.hasElevation) return [];
     const ats = profile.samples.map((s) => interpolateTrackAtDistance(points, s.distanceM));
@@ -126,45 +148,82 @@ export function ElevationProfile({
   const { samples, minElevationM, maxElevationM, totalDistanceM } = profile;
   const range = maxElevationM - minElevationM || 1;
 
+  // The altitude edge is coloured by grade; pace draws as its own second
+  // curve in the same figure (dual-axis, up = faster) whenever the trail has
+  // timing — no mode toggle, all three at once.
+  const showPace = speedRange !== null;
+
   const pts =
     width > 0
       ? samples.map((s) => ({
           x: (s.distanceM / (totalDistanceM || 1)) * width,
-          y: CHART_HEIGHT - ((s.elevationM - minElevationM) / range) * (CHART_HEIGHT - 6) - 3,
+          y: CHART_HEIGHT - ((s.elevationM - minElevationM) / range) * (CHART_HEIGHT - 14) - 6,
         }))
       : [];
-  const paths = buildPaths(pts, CHART_HEIGHT);
+  const linePath = smoothPath(pts);
+  const areaPath =
+    pts.length >= 2
+      ? `${linePath} L${pts[pts.length - 1]!.x.toFixed(1)} ${CHART_HEIGHT} L${pts[0]!.x.toFixed(1)} ${CHART_HEIGHT} Z`
+      : '';
   const xFor = (d: number) =>
     (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * width;
 
-  // Hachure ticks: faint vertical strokes from the curve to the baseline, spaced
-  // closer where the grade is steeper — a topographic-style steepness cue.
-  const ticks: { x: number; y: number }[] = [];
-  const BASE_SPACING = 11;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1]!;
-    const b = pts[i]!;
-    const seg = b.x - a.x;
-    if (seg <= 0) continue;
-    const steep = Math.min(5, Math.abs(b.y - a.y) / seg);
-    const spacing = BASE_SPACING / (1 + steep * 2.2);
-    for (let x = a.x; x < b.x; x += spacing) {
-      ticks.push({ x, y: a.y + (b.y - a.y) * ((x - a.x) / seg) });
-    }
+  /** Grade (%) of the sample segment ending at i, clamped for colouring. */
+  const gradeAt = (i: number): number => {
+    if (i === 0) return 0;
+    const a = samples[i - 1];
+    const b = samples[i];
+    if (!a || !b) return 0;
+    const dd = b.distanceM - a.distanceM;
+    return dd > 0 ? ((b.elevationM - a.elevationM) / dd) * 100 : 0;
+  };
+
+  /** Grade colour of the segment ending at sample i. */
+  const segmentColor = (i: number): string => {
+    const g = gradeAt(i);
+    return rampColor(GRADE_STOPS, (g + GRADE_LIMIT) / (2 * GRADE_LIMIT));
+  };
+
+  // Pace curve: speed mapped so UP = faster (the Strava idiom), broken where
+  // no timing exists, sharing the distance axis with the altitude curve.
+  const pacePts: { x: number; y: number }[][] = [];
+  if (showPace && speedRange && width > 0) {
+    let run: { x: number; y: number }[] = [];
+    samples.forEach((smp, i) => {
+      const sp = speeds[i];
+      if (sp === undefined || !Number.isFinite(sp)) {
+        if (run.length >= 2) pacePts.push(run);
+        run = [];
+        return;
+      }
+      const t = (sp - speedRange.lo) / (speedRange.hi - speedRange.lo);
+      run.push({
+        x: (smp.distanceM / (totalDistanceM || 1)) * width,
+        y: CHART_HEIGHT - 14 - t * (CHART_HEIGHT - 40) - 6,
+      });
+    });
+    if (run.length >= 2) pacePts.push(run);
   }
+
+  // Elevation gridlines: three round-number levels between min and max.
+  const gridLevels = useMemo(() => {
+    const step = range / 4;
+    const nice = 10 ** Math.floor(Math.log10(step || 1));
+    const inc = Math.max(nice, Math.ceil(step / nice) * nice);
+    const out: number[] = [];
+    for (let e = Math.ceil(minElevationM / inc) * inc; e < maxElevationM; e += inc) out.push(e);
+    return out.slice(0, 4);
+  }, [minElevationM, maxElevationM, range]);
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   // Drive scrubbing through a PanResponder. It claims the gesture on touch and
   // refuses to yield it (onPanResponderTerminationRequest=false) while blocking
   // the native responder, so a parent ScrollView can't hijack the touch when the
-  // finger drifts vertically — scrubbing keeps working off-axis. The View holds
-  // the responder for the whole gesture, so rebinding handlers per render is
-  // safe (scrub position is read from locationX, not from gesture-state deltas).
+  // finger drifts vertically — scrubbing keeps working off-axis.
   const pan = useMemo(() => {
     const onTouch = (e: GestureResponderEvent) => {
       if (width <= 0) return;
-      // Pure chart-x → distance → on-trail position mapping (core/geo/track).
       const res = scrubProfileAtRatio(points, samples, e.nativeEvent.locationX / width);
       if (!res) return;
       setScrub(res.sampleIndex);
@@ -190,34 +249,17 @@ export function ElevationProfile({
     });
   }, [width, samples, points, onScrub]);
 
-  // Guard every index read: `scrub` is an index into a PREVIOUS render's
-  // samples; if `points` (and thus `samples`) shrinks before the next render,
-  // a bare `samples[scrub]!` would be undefined and crash on `.elevationM`.
+  // Guard every index read: `scrub` indexes a PREVIOUS render's samples.
   const active = scrub === null ? null : (samples[scrub] ?? null);
   const marker = scrub === null ? null : (pts[scrub] ?? null);
-  // Grade between the scrubbed sample and the previous one.
-  const grade =
-    scrub === null || scrub === 0
-      ? null
-      : (() => {
-          const a = samples[scrub - 1];
-          const b = samples[scrub];
-          if (!a || !b) return null;
-          const dd = b.distanceM - a.distanceM;
-          return dd > 0 ? ((b.elevationM - a.elevationM) / dd) * 100 : 0;
-        })();
+  const grade = scrub === null || scrub === 0 ? null : gradeAt(scrub);
 
   const lineColor = theme.colors.primary;
-  // Pace at the scrubbed point: the same per-sample speed that colours the
-  // gradient (GPS speed, or derived from time), so the readout shows pace even
-  // for trails without a recorded speed field.
   const activeSpeed =
     scrub !== null && speeds[scrub] !== undefined && Number.isFinite(speeds[scrub])
       ? speeds[scrub]
       : scrubAt?.speed;
 
-  // Rendered after all hooks so hook order stays stable across trails with and
-  // without elevation data.
   if (!profile.hasElevation) {
     return (
       <View style={styles.container}>
@@ -227,6 +269,8 @@ export function ElevationProfile({
       </View>
     );
   }
+
+  const BAR_H = 8;
 
   return (
     <View style={styles.container}>
@@ -266,64 +310,94 @@ export function ElevationProfile({
         {width > 0 && (
           <Svg width={width} height={CHART_HEIGHT}>
             <Defs>
-              {/* Pace fill: a horizontal gradient coloured by speed at each sample
-                  (red slow → green fast), painting the whole elevation area. */}
-              {speedRange && (
-                <LinearGradient
-                  id="paceFill"
-                  x1="0"
-                  y1="0"
-                  x2={width}
-                  y2="0"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  {samples.map((s, i) => {
-                    const sp = speeds[i];
-                    const t =
-                      sp === undefined
-                        ? 0.5
-                        : (sp - speedRange.lo) / (speedRange.hi - speedRange.lo);
-                    return (
-                      <Stop
-                        key={`p${i}`}
-                        offset={s.distanceM / (totalDistanceM || 1)}
-                        stopColor={paceColor(t)}
-                        stopOpacity={0.92}
-                      />
-                    );
-                  })}
-                </LinearGradient>
-              )}
               <LinearGradient id="elevFill" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={lineColor} stopOpacity={0.6} />
-                <Stop offset="1" stopColor={lineColor} stopOpacity={0.28} />
+                <Stop offset="0" stopColor={lineColor} stopOpacity={0.35} />
+                <Stop offset="1" stopColor={lineColor} stopOpacity={0.06} />
               </LinearGradient>
             </Defs>
 
-            {/* Solid fill: pace gradient when speed is known, else the elevation
-                gradient — plus a crisp line tracing the profile edge. */}
-            <Path d={paths.area} fill={speedRange ? 'url(#paceFill)' : 'url(#elevFill)'} />
+            {/* Altitude: the smooth shape with a quiet fill... */}
+            <Path d={areaPath} fill="url(#elevFill)" />
 
-            {/* Steepness hachures: denser strokes on steeper ground. */}
-            {ticks.map((tk, i) => (
-              <Line
-                key={`hx${i}`}
-                x1={tk.x}
-                y1={tk.y}
-                x2={tk.x}
-                y2={CHART_HEIGHT}
-                stroke={theme.colors.onSurface}
-                strokeWidth={0.75}
-                opacity={0.13}
+            {/* Elevation gridlines with labels, inside the frame. */}
+            {gridLevels.map((e) => {
+              const y = CHART_HEIGHT - ((e - minElevationM) / range) * (CHART_HEIGHT - 14) - 6;
+              return (
+                <Fragment key={`g${e}`}>
+                  <Line
+                    x1={0}
+                    y1={y}
+                    x2={width}
+                    y2={y}
+                    stroke={theme.colors.onSurface}
+                    strokeWidth={0.5}
+                    opacity={0.12}
+                  />
+                  <SvgText
+                    x={4}
+                    y={y - 2.5}
+                    fontSize={8}
+                    fill={theme.colors.onSurfaceVariant}
+                    textAnchor="start"
+                    opacity={0.8}
+                  >
+                    {formatElevation(e)}
+                  </SvgText>
+                </Fragment>
+              );
+            })}
+
+            {/* ...and the metric riding its edge: pace or grade, segment by
+                segment along the curve. */}
+            {pts.slice(1).map((p, i) => {
+              const a = pts[i]!;
+              return (
+                <Line
+                  key={`s${i}`}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke={segmentColor(i + 1)}
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                />
+              );
+            })}
+
+            {/* Pace: the second curve, sharing the distance axis. */}
+            {pacePts.map((run, i) => (
+              <Path
+                key={`pc${i}`}
+                d={smoothPath(run)}
+                stroke={theme.colors.tertiary}
+                strokeWidth={2.2}
+                strokeOpacity={0.95}
+                fill="none"
               />
             ))}
-            <Path
-              d={paths.line}
-              stroke={speedRange ? theme.colors.onSurface : lineColor}
-              strokeWidth={2}
-              strokeOpacity={speedRange ? 0.5 : 1}
-              fill="none"
-            />
+            {showPace && speedRange && (
+              <>
+                <SvgText
+                  x={width - 4}
+                  y={16}
+                  fontSize={8}
+                  fill={theme.colors.tertiary}
+                  textAnchor="end"
+                >
+                  {`fast ${formatPace(speedRange.hi)}`}
+                </SvgText>
+                <SvgText
+                  x={width - 4}
+                  y={CHART_HEIGHT - 6}
+                  fontSize={8}
+                  fill={theme.colors.tertiary}
+                  textAnchor="end"
+                >
+                  {`slow ${formatPace(speedRange.lo)}`}
+                </SvgText>
+              </>
+            )}
 
             {/* Persistent cursor: where a new note will be anchored. */}
             {selectedDistanceM != null && (
@@ -353,8 +427,6 @@ export function ElevationProfile({
                     opacity={0.25}
                   />
                   <Circle cx={x} cy={10} r={8} fill={lineColor} />
-                  {/* onPrimary, not #fff: dark mode's primary is a light sage and
-                      white numerals vanish on it (theme.test.ts gates the pair). */}
                   <SvgText
                     x={x}
                     y={13.5}
@@ -383,7 +455,7 @@ export function ElevationProfile({
                 <Circle
                   cx={marker.x}
                   cy={marker.y}
-                  r={5}
+                  r={5.5}
                   fill={lineColor}
                   stroke={theme.colors.onPrimary}
                   strokeWidth={1.5}
@@ -394,9 +466,52 @@ export function ElevationProfile({
         )}
       </View>
 
+      {/* The colourbar: what the altitude edge's colours MEAN (grade), plus a
+          swatch for the pace curve when it's plotted. */}
+      <View style={styles.legendBlock}>
+        {width > 0 && (
+          <Svg width={width} height={BAR_H}>
+            <Defs>
+              <LinearGradient id="legend" x1="0" y1="0" x2="1" y2="0">
+                {GRADE_STOPS.map((stop, i, arr) => (
+                  <Stop
+                    key={`l${i}`}
+                    offset={i / (arr.length - 1)}
+                    stopColor={`rgb(${stop[0]},${stop[1]},${stop[2]})`}
+                  />
+                ))}
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width={width} height={BAR_H} rx={BAR_H / 2} fill="url(#legend)" />
+          </Svg>
+        )}
+        <View style={styles.legendLabels}>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            −{GRADE_LIMIT}% descent
+          </Text>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            Grade
+          </Text>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            climb +{GRADE_LIMIT}%
+          </Text>
+        </View>
+        {showPace && (
+          <View style={styles.paceLegend}>
+            <View style={[styles.paceSwatch, { backgroundColor: theme.colors.tertiary }]} />
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Pace (up = faster)
+            </Text>
+          </View>
+        )}
+      </View>
+
       <View style={styles.axisRow}>
         <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
           0
+        </Text>
+        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {formatDistance(totalDistanceM / 2)}
         </Text>
         <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
           {formatDistance(totalDistanceM)}
@@ -411,5 +526,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
   readout: { minHeight: 18 },
   chart: { height: CHART_HEIGHT, borderRadius: 10, overflow: 'hidden' },
+  legendBlock: { gap: 3 },
+  legendLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  paceLegend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  paceSwatch: { width: 18, height: 3, borderRadius: 1.5 },
   axisRow: { flexDirection: 'row', justifyContent: 'space-between' },
 });

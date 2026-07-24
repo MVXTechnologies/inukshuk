@@ -1,7 +1,12 @@
-import { StyleSheet, View } from 'react-native';
+import { useSettingsStore } from '@state/settingsStore';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { FAB } from 'react-native-paper';
-import { LayersMenu } from './LayersMenu';
-import { MapOverlaysMenu } from './MapOverlaysMenu';
+import { useSlopeDisclaimer } from '../terrain3d/overlayControls';
+import { EdgeExpandingMenu } from './EdgeExpandingMenu';
+import { EdgePill } from './EdgePill';
+import { BasemapMenu, BasemapRows } from './LayersMenu';
+import { MapOverlaysMenu, OverlaysDialogs, OverlaysRows } from './MapOverlaysMenu';
 
 interface Props {
   /** Distance from the top of the screen (safe-area inset + margin). */
@@ -18,20 +23,55 @@ interface Props {
   trackOverlayCount: number;
 }
 
-/** Right-side map controls: locate, fit-to-overlays, offline download, layers. */
-export function MapControlsRail({
-  top,
-  onLocate,
-  showFitControl,
-  onFit,
-  terrain3d,
-  onToggle3d,
-  toggle3dDisabled,
-  pdfOverlayCount,
-  trackOverlayCount,
-}: Props) {
+/** Right-side map controls: locate, fit, 3D, base map, overlays. */
+export function MapControlsRail(props: Props) {
+  const uiStyle = useSettingsStore((s) => s.uiStyle);
+  // 'minimal' style: the rail rests as a single chevron; tapping it unfolds
+  // the buttons and the chevron flips to fold them away again.
+  const [minimalOpen, setMinimalOpen] = useState(false);
+
+  if (uiStyle === 'edge') return <EdgeRail {...props} />;
+
+  const {
+    top,
+    onLocate,
+    showFitControl,
+    onFit,
+    terrain3d,
+    onToggle3d,
+    toggle3dDisabled,
+    pdfOverlayCount,
+    trackOverlayCount,
+  } = props;
+
+  // 'minimal' style: everything folded behind one small chevron until asked.
+  if (uiStyle === 'minimal' && !minimalOpen) {
+    return (
+      <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
+        <FAB
+          icon="chevron-left"
+          size="small"
+          variant="surface"
+          onPress={() => setMinimalOpen(true)}
+          style={styles.controlFab}
+          accessibilityLabel="Map controls"
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
+      {uiStyle === 'minimal' && (
+        <FAB
+          icon="chevron-right"
+          size="small"
+          variant="surface"
+          onPress={() => setMinimalOpen(false)}
+          style={styles.controlFab}
+          accessibilityLabel="Hide map controls"
+        />
+      )}
       <FAB
         icon="crosshairs-gps"
         size="small"
@@ -61,13 +101,97 @@ export function MapControlsRail({
         style={styles.controlFab}
         accessibilityLabel="3D relief"
       />
-      <LayersMenu pdfOverlayCount={pdfOverlayCount} trackOverlayCount={trackOverlayCount} />
-      <MapOverlaysMenu />
+      <BasemapMenu />
+      <MapOverlaysMenu
+        pdfOverlayCount={pdfOverlayCount}
+        trackOverlayCount={trackOverlayCount}
+        showHypso={terrain3d}
+      />
     </View>
+  );
+}
+
+/**
+ * 'edge' style: static half-pill actions (nothing to choose from — no
+ * expansion), and two expanding menus that unfold horizontally then
+ * vertically, all flush with the screen edge. One menu open at a time; a
+ * transparent backdrop closes it.
+ */
+function EdgeRail({
+  top,
+  onLocate,
+  showFitControl,
+  onFit,
+  terrain3d,
+  onToggle3d,
+  toggle3dDisabled,
+  pdfOverlayCount,
+  trackOverlayCount,
+}: Props) {
+  const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays'>(null);
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const [networksOpen, setNetworksOpen] = useState(false);
+  const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
+
+  return (
+    <>
+      {openMenu !== null && <Pressable style={styles.backdrop} onPress={() => setOpenMenu(null)} />}
+      <View style={[styles.edgeRail, { top }]} pointerEvents="box-none">
+        <EdgePill icon="crosshairs-gps" label="Locate" onPress={onLocate} />
+        {showFitControl && <EdgePill icon="fit-to-page-outline" label="Fit map" onPress={onFit} />}
+        <EdgePill
+          icon="video-3d"
+          label="3D relief"
+          onPress={onToggle3d}
+          active={terrain3d}
+          disabled={toggle3dDisabled}
+          accessibilityLabel="3D relief"
+        />
+        <EdgeExpandingMenu
+          icon="image-filter-hdr"
+          label="Base map"
+          open={openMenu === 'basemap'}
+          onToggle={(o) => setOpenMenu(o ? 'basemap' : null)}
+        >
+          <BasemapRows onPicked={() => setOpenMenu(null)} />
+        </EdgeExpandingMenu>
+        <EdgeExpandingMenu
+          icon="gradient-vertical"
+          label="Overlays"
+          accessibilityLabel="Map overlays"
+          open={openMenu === 'overlays'}
+          onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
+        >
+          <OverlaysRows
+            pdfOverlayCount={pdfOverlayCount}
+            trackOverlayCount={trackOverlayCount}
+            showHypso={terrain3d}
+            onSlopeEnabled={onSlopeEnabled}
+            onOpenFolders={() => {
+              setOpenMenu(null);
+              setFoldersOpen(true);
+            }}
+            onOpenTrailNetworks={() => {
+              setOpenMenu(null);
+              setNetworksOpen(true);
+            }}
+          />
+        </EdgeExpandingMenu>
+      </View>
+      <OverlaysDialogs
+        foldersOpen={foldersOpen}
+        onFoldersDismiss={() => setFoldersOpen(false)}
+        networksOpen={networksOpen}
+        onNetworksDismiss={() => setNetworksOpen(false)}
+        snackbar={snackbar}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   rightControls: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
   controlFab: { borderRadius: 24 },
+  edgeRail: { position: 'absolute', right: 0, gap: 4, alignItems: 'flex-end', zIndex: 5 },
+  backdrop: { ...StyleSheet.absoluteFill, zIndex: 4 },
 });

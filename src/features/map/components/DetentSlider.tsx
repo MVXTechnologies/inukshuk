@@ -66,7 +66,7 @@ export function DetentSlider<V>({ detents, selected, onSelect, width = 116, disa
           </Pressable>
         ))}
       </View>
-      <Text variant="labelSmall" style={[styles.valueLabel, { color: theme.colors.primary }]}>
+      <Text variant="labelMedium" style={[styles.valueLabel, { color: theme.colors.primary }]}>
         {current.label}
       </Text>
     </View>
@@ -87,5 +87,5 @@ const styles = StyleSheet.create({
     marginLeft: -3,
     marginTop: -3,
   },
-  valueLabel: { minWidth: 34, textAlign: 'right' },
+  valueLabel: { minWidth: 56, textAlign: 'right' },
 });

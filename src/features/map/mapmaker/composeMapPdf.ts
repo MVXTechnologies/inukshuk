@@ -5,7 +5,11 @@ import { clampTileRange, tileRangeForBbox } from '@core/geo/terrain';
 import { layoutMadeMap, RASTER_LONG_EDGE_PX, type PageFormat } from '@core/mapmaker/layout';
 import { pageProjector, projectLines, type PagePoint } from '@core/mapmaker/pageSpace';
 import { cropRasterToBbox } from '@core/mapmaker/cropRaster';
+import { formatGratLabel, graticuleForBbox } from '@core/mapmaker/graticule';
+import { blendRgbaOver } from '@core/mapmaker/rasterDraw';
+import type { Position } from 'geojson';
 import type { BoundingBox, CornerCoordinates, LngLat } from '@core/models';
+import type { TrailNetworkId } from '@core/geo/trailNetworks';
 import { Buffer } from 'buffer';
 import jpeg from 'jpeg-js';
 import {
@@ -23,7 +27,7 @@ import {
   LineCapStyle,
 } from 'pdf-lib';
 import UPNG from 'upng-js';
-import { fetchBasemapTexture, fetchHeightmap, type DrapeSource } from '../dem';
+import { fetchBasemapTexture, fetchHeightmap, fetchTrailsTexture, type DrapeSource } from '../dem';
 
 // jpeg-js's ENCODER returns `Buffer.from(...)` whenever `module` is defined
 // (always, under Metro) — Hermes has no Buffer global, so provide one before
@@ -49,7 +53,21 @@ export interface MakeMapOptions {
   slope: boolean;
   slopeMinDeg: number;
   slopeMaxDeg: number;
+  /** Opacity of the slope shading layer, 0..1. */
+  slopeOpacity: number;
   includeUserData: boolean;
+  /** Marked-trail databases composited over the basemap (empty = none). */
+  markedTrailsNetworks: TrailNetworkId[];
+  markedTrailsOpacity: number;
+  /** Lat/lng graticule with edge labels. */
+  grid: boolean;
+  /** Compass rose (true north; magnetic north too when declination known). */
+  compass: boolean;
+  /**
+   * Magnetic declination at the region (degrees east-positive), from the
+   * device compass at compose time; null = unknown, magnetic arrow omitted.
+   */
+  declinationDeg: number | null;
 }
 
 export interface ComposeInput {
@@ -86,6 +104,7 @@ const CONTOUR_MINOR = rgb(0.55, 0.35, 0.15);
 const CONTOUR_MAJOR = rgb(0.45, 0.27, 0.1);
 const TRACK_COLOR = rgb(0.85, 0.15, 0.15);
 const INK = rgb(0.15, 0.15, 0.15);
+const GRID_COLOR = rgb(0.25, 0.35, 0.55);
 
 export async function composeMapPdf(
   input: ComposeInput,
@@ -104,9 +123,22 @@ export async function composeMapPdf(
   );
   const texture = await fetchBasemapTexture(range, options.basemap);
   if (handle.aborted) throw new Error('aborted');
-  onProgress('tiles', 1);
+  onProgress('tiles', 0.7);
   await nextTask();
   const baseRaster = cropRasterToBbox(texture, range, drawBbox);
+  for (const network of options.markedTrailsNetworks) {
+    // Each checked trail database composited straight into the basemap
+    // raster: the routes become part of the printed base image, under the
+    // vector layers.
+    const trails = await fetchTrailsTexture(range, network);
+    if (handle.aborted) throw new Error('aborted');
+    await nextTask();
+    const trailsCrop = cropRasterToBbox(trails, range, drawBbox);
+    if (trailsCrop.width === baseRaster.width && trailsCrop.height === baseRaster.height) {
+      blendRgbaOver(baseRaster.data, trailsCrop.data, options.markedTrailsOpacity);
+    }
+  }
+  onProgress('tiles', 1);
 
   // --- terrain layers ------------------------------------------------------
   let slopePng: Uint8Array | null = null;
@@ -179,7 +211,7 @@ export async function composeMapPdf(
       y: mapRect.y,
       width: mapRect.w,
       height: mapRect.h,
-      opacity: 0.55,
+      opacity: options.slopeOpacity,
     });
   }
 
@@ -204,6 +236,47 @@ export async function composeMapPdf(
     strokeLines(contourLines.minor, 0.4, CONTOUR_MINOR);
     strokeLines(contourLines.major, 0.9, CONTOUR_MAJOR);
     await nextTask();
+  }
+
+  // Lat/lng graticule: thin lines across the frame with coordinate labels
+  // just inside the west and south edges — the paper-topo idiom.
+  if (options.grid) {
+    const grat = graticuleForBbox(drawBbox);
+    const meridianLines: Position[][] = grat.meridians.map((lng) => [
+      [lng, drawBbox.minLat],
+      [lng, drawBbox.maxLat],
+    ]);
+    const parallelLines: Position[][] = grat.parallels.map((lat) => [
+      [drawBbox.minLng, lat],
+      [drawBbox.maxLng, lat],
+    ]);
+    strokeLines(projectLines(layout, [...meridianLines, ...parallelLines]), 0.35, GRID_COLOR);
+    // Coordinate indications AROUND the border, quad-sheet style: longitudes
+    // just below the bottom neatline, latitudes in the left margin beside
+    // their parallel.
+    const project = pageProjector(layout);
+    for (const lng of grat.meridians) {
+      const p = project([lng, drawBbox.minLat]);
+      const label = formatGratLabel(lng, 'lng');
+      page.drawText(label, {
+        x: p.x - font.widthOfTextAtSize(label, 6) / 2,
+        y: mapRect.y - 8,
+        size: 6,
+        font,
+        color: INK,
+      });
+    }
+    for (const lat of grat.parallels) {
+      const p = project([drawBbox.minLng, lat]);
+      const label = formatGratLabel(lat, 'lat');
+      page.drawText(label, {
+        x: mapRect.x - font.widthOfTextAtSize(label, 6) - 3,
+        y: p.y - 2,
+        size: 6,
+        font,
+        color: INK,
+      });
+    }
   }
 
   if (options.includeUserData) {
@@ -250,53 +323,106 @@ export async function composeMapPdf(
   const title = winAnsiSafe(options.name).trim() || 'My map';
   page.drawText(title, { x: mapRect.x, y: stripTop - 14, size: 14, font: bold, color: INK });
 
-  // Scale bar with end ticks and the approx print scale.
-  const barY = stripTop - 34;
+  // Classic black-and-white alternating scale bar (4 segments) with end
+  // labels — the paper-topo idiom, replacing the plain line of v1.
+  const barY = stripTop - 36;
   const bar = layout.scaleBar;
-  page.pushOperators(
-    pushGraphicsState(),
-    setLineWidth(1.2),
-    setStrokingColor(INK),
-    moveTo(mapRect.x, barY),
-    lineTo(mapRect.x + bar.widthPt, barY),
-    stroke(),
-    moveTo(mapRect.x, barY - 3),
-    lineTo(mapRect.x, barY + 3),
-    stroke(),
-    moveTo(mapRect.x + bar.widthPt, barY - 3),
-    lineTo(mapRect.x + bar.widthPt, barY + 3),
-    stroke(),
-    popGraphicsState(),
-  );
-  page.drawText(bar.label, {
-    x: mapRect.x + bar.widthPt + 6,
-    y: barY - 3,
-    size: 9,
+  const BAR_H = 5;
+  const SEGMENTS = 4;
+  const segW = bar.widthPt / SEGMENTS;
+  for (let i = 0; i < SEGMENTS; i++) {
+    page.drawRectangle({
+      x: mapRect.x + i * segW,
+      y: barY,
+      width: segW,
+      height: BAR_H,
+      color: i % 2 === 0 ? INK : rgb(1, 1, 1),
+      borderColor: INK,
+      borderWidth: 0.6,
+    });
+  }
+  page.drawText('0', { x: mapRect.x - 2, y: barY + BAR_H + 3, size: 7, font, color: INK });
+  const halfLabel = bar.meters / 2 >= 1000 ? `${bar.meters / 2000} km` : `${bar.meters / 2} m`;
+  page.drawText(halfLabel, {
+    x: mapRect.x + bar.widthPt / 2 - font.widthOfTextAtSize(halfLabel, 7) / 2,
+    y: barY + BAR_H + 3,
+    size: 7,
     font,
     color: INK,
   });
-  page.drawText(`Scale 1:${layout.approxScaleDenom.toLocaleString('en-US')}`, {
+  page.drawText(bar.label, {
+    x: mapRect.x + bar.widthPt - font.widthOfTextAtSize(bar.label, 7) / 2,
+    y: barY + BAR_H + 3,
+    size: 7,
+    font,
+    color: INK,
+  });
+  page.drawText(`Scale 1:${layout.scaleDenom.toLocaleString('en-US')}`, {
     x: mapRect.x,
-    y: barY - 16,
+    y: barY - 12,
     size: 9,
     font,
     color: INK,
   });
 
-  // North arrow (maps are always north-up): triangle + N at the right edge.
-  const nx = mapRect.x + mapRect.w - 16;
-  page.drawSvgPath('M 0 0 L 5 -14 L 10 0 Z', {
-    x: nx - 5,
-    y: stripTop - 16,
-    color: INK,
-  });
-  page.drawText('N', { x: nx - 3.5, y: stripTop - 30, size: 10, font: bold, color: INK });
+  // Compass: true-north arrow, and the magnetic-north arrow splayed by the
+  // declination captured from the device compass (labelled like a USGS quad).
+  const nx = mapRect.x + mapRect.w - 20;
+  if (options.compass) {
+    const cy = stripTop - 30;
+    const LEN = 22;
+    page.pushOperators(
+      pushGraphicsState(),
+      setLineWidth(1),
+      setStrokingColor(INK),
+      moveTo(nx, cy),
+      lineTo(nx, cy + LEN),
+      stroke(),
+      popGraphicsState(),
+    );
+    page.drawSvgPath('M 0 0 L 3 8 L 6 0 Z', { x: nx - 3, y: cy + LEN + 8, color: INK });
+    page.drawText('N', {
+      x: nx - 3,
+      y: cy + LEN + 10,
+      size: 8,
+      font: bold,
+      color: INK,
+    });
+    if (options.declinationDeg !== null) {
+      const rad = (options.declinationDeg * Math.PI) / 180;
+      const mx = nx + Math.sin(rad) * LEN;
+      const my = cy + Math.cos(rad) * LEN;
+      page.pushOperators(
+        pushGraphicsState(),
+        setLineWidth(0.8),
+        setStrokingColor(rgb(0.4, 0.4, 0.4)),
+        moveTo(nx, cy),
+        lineTo(mx, my),
+        stroke(),
+        popGraphicsState(),
+      );
+      page.drawText('MN', { x: mx + 2, y: my - 2, size: 6.5, font, color: rgb(0.4, 0.4, 0.4) });
+      const decLabel = `${Math.abs(options.declinationDeg).toFixed(1)}°${options.declinationDeg >= 0 ? 'E' : 'W'}`;
+      page.drawText(decLabel, {
+        x: nx - 34,
+        y: cy - 2,
+        size: 6.5,
+        font,
+        color: rgb(0.4, 0.4, 0.4),
+      });
+    }
+  } else {
+    // Plain north triangle when the rose is off (maps are always north-up).
+    page.drawSvgPath('M 0 0 L 5 -14 L 10 0 Z', { x: nx - 5, y: stripTop - 16, color: INK });
+    page.drawText('N', { x: nx - 3.5, y: stripTop - 30, size: 10, font: bold, color: INK });
+  }
 
   // Footer: layers recipe + attribution + date.
   const parts: string[] = [];
   if (contourLines) parts.push(`Contours every ${effectiveIntervalM} m`);
   if (slopePng) parts.push(`Slope ${options.slopeMinDeg}–${options.slopeMaxDeg}°`);
   parts.push(options.basemap === 'satellite' ? 'Imagery © Esri' : 'Map © Esri');
+  if (options.markedTrailsNetworks.length > 0) parts.push('Routes © Waymarked Trails');
   parts.push(`Made with Inukshuk · ${new Date().toISOString().slice(0, 10)}`);
   page.drawText(parts.join('  ·  '), {
     x: mapRect.x,

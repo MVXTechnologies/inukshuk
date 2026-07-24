@@ -33,15 +33,20 @@ appId: com.inukshuk.app
           permissions:
             location: always
 - assertVisible: 'Map actions'
-# Open the speed-dial. The tap can race first-paint/map-load on cold CI
-# emulators (same class as the smoke flow's tab-tap race): retry until the
-# hierarchy changes, then wait for the dial's action to exist before tapping.
-- tapOn:
-    text: 'Map actions'
-    retryTapIfNoChange: true
-- extendedWaitUntil:
-    visible: 'Record track'
-    timeout: 10000
+# Open the speed-dial with the GUARDED idiom (tap only while the actions
+# aren't visible) — retryTapIfNoChange double-tapped the slow-animating
+# FAB.Group on CI and toggled it closed again.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Record track'
+          commands:
+            - tapOn: 'Map actions'
+      - extendedWaitUntil:
+          visible: 'Record track'
+          timeout: 60000
 - tapOn: 'Record track'
 # Category-first recording: an inline sheet asks what activity this is BEFORE
 # the recording begins. Keep the default (Hike) and start.

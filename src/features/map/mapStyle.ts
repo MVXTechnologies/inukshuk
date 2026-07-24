@@ -1,6 +1,7 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { Feature, Polygon } from 'geojson';
 
 /**
@@ -64,6 +65,28 @@ const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
   },
 };
 
+/**
+ * The 'edge' UI style's pastel treatment: wash the raster toward soft, light
+ * tones (heavy desaturation + a lifted black point) so the map reads like a
+ * pastel illustration under the pastel chrome. Satellite imagery stays true.
+ */
+const PASTEL_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
+  map: {
+    // Toward the logo's paper-and-sage palette: strong desaturation with a
+    // lifted black point melts OSM's poppy colours into cream/sage pastels
+    // that sit naturally next to the Edge chrome.
+    'raster-saturation': -0.45,
+    'raster-contrast': -0.06,
+    'raster-brightness-min': 0.16,
+    'raster-brightness-max': 1,
+  },
+  relief: {
+    'raster-saturation': -0.4,
+    'raster-contrast': -0.05,
+    'raster-brightness-min': 0.13,
+  },
+};
+
 /** Basemaps that get a shaded-relief hillshade blended under the live 2D map. */
 const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
 
@@ -104,6 +127,10 @@ export interface OsmStyleOptions {
    * `buildDownloadedMask`); `color` should suit the app theme.
    */
   downloadedMask?: { data: Feature<Polygon>; color: string };
+  /** Pastel raster wash for the 'edge' UI style. */
+  pastel?: boolean;
+  /** Checked marked-trail databases, each draped as its own tile overlay. */
+  markedTrailsNetworks?: readonly TrailNetworkId[];
 }
 
 /**
@@ -134,11 +161,41 @@ export function buildOsmStyle(
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
+      ...Object.fromEntries(
+        (options.markedTrailsNetworks ?? []).map((n) => [
+          `wmt-${n}`,
+          {
+            type: 'raster' as const,
+            tiles: [trailNetworkTileUrl(n)],
+            tileSize: 256,
+            maxzoom: 17,
+            attribution: '© Waymarked Trails',
+          },
+        ]),
+      ),
     },
     layers: [
       // Warm paper backdrop that shows through while tiles load and at the edges.
-      { id: 'background', type: 'background', paint: { 'background-color': '#E6DFCF' } },
-      { id: 'osm', type: 'raster', source: 'osm', paint: RASTER_PAINT[basemap] ?? {} },
+      {
+        id: 'background',
+        type: 'background',
+        paint: { 'background-color': options.pastel ? '#F2ECE0' : '#E6DFCF' },
+      },
+      {
+        id: 'osm',
+        type: 'raster',
+        source: 'osm',
+        paint: (options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {},
+      },
+      // Marked-trail networks, each its own layer over the basemap (only
+      // requested networks get a source — keeps offline packs and 3D drapes
+      // free of network-only layers).
+      ...(options.markedTrailsNetworks ?? []).map((n) => ({
+        id: `marked-trails-${n}`,
+        type: 'raster' as const,
+        source: `wmt-${n}`,
+        paint: { 'raster-opacity': 0.85 },
+      })),
     ],
   };
 

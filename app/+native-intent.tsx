@@ -1,4 +1,5 @@
 import { importGpxFromUri } from '@features/library/importGpx';
+import * as storage from '@data/storage';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { handleStravaAuthRedirect } from '@lib/strava';
 import { useImportFeedbackStore } from '@state/importFeedbackStore';
@@ -39,14 +40,31 @@ export async function redirectSystemPath({
       // index built from the empty initial state and wipe the library.
       await useLibraryStore.getState().hydrate();
       const { track, fileUri, notes } = await importGpxFromUri(path, 'Imported trail');
+      // Dedupe: re-opening a file that's already in the library must not
+      // clone it — match on name + point count + distance (a re-export of
+      // the same recording), drop the fresh copy, and open the EXISTING one.
+      const existing = useLibraryStore
+        .getState()
+        .tracks.find(
+          (t) =>
+            t.name === track.name &&
+            t.stats.pointCount === track.stats.pointCount &&
+            Math.abs(t.stats.distanceM - track.stats.distanceM) < 1,
+        );
+      if (existing) {
+        storage.deleteFileAt(fileUri);
+        useImportFeedbackStore.getState().show(`${existing.name} is already in your library`);
+        return `/trail3d/${existing.id}`;
+      }
       useLibraryStore.getState().addTrack(track, fileUri, notes);
       useImportFeedbackStore.getState().show(`Imported ${track.name}`);
+      // Straight to the trail's focused view — not a Library detour.
+      return `/trail3d/${track.id}`;
     } catch (err) {
       reportError(err, 'open-with-import');
       useImportFeedbackStore.getState().show('Could not import that file');
+      return '/(tabs)/library';
     }
-    // Land on the Library regardless, so the opened URI never reaches routing.
-    return '/(tabs)/library';
   }
   return path;
 }
