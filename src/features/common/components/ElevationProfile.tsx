@@ -366,7 +366,7 @@ export function ElevationProfile({
             </Text>
             {drawElev && grade !== null && (
               <Text variant="bodySmall" style={{ color: gradeColor(grade) }}>
-                {`  ·  ${grade >= 0 ? '+' : ''}${grade.toFixed(0)}%`}
+                {`  ·  ${formatGrade(grade)}`}
               </Text>
             )}
             {drawPace && activeSpeed !== undefined && activeSpeed > 0 && (
@@ -492,7 +492,9 @@ export function ElevationProfile({
               />
             ))}
             {drawHr && hrRange && (
-              <SvgText x={width - 4} y={26} fontSize={8} fill={HR_COLOR} textAnchor="end">
+              // Top-left of the plot: the top-right corner belongs to the pace
+              // "fast" label.
+              <SvgText x={AXIS_LEFT + 4} y={16} fontSize={8} fill={HR_COLOR} textAnchor="start">
                 {`${Math.round(hrRange.lo)}–${Math.round(hrRange.hi)} bpm`}
               </SvgText>
             )}
@@ -602,6 +604,12 @@ export function ElevationProfile({
       </View>
     </View>
   );
+}
+
+/** Signed whole-percent grade, with -0 normalized so a flat reads "0%". */
+function formatGrade(g: number): string {
+  const r = Math.round(g) === 0 ? 0 : Math.round(g);
+  return `${r > 0 ? '+' : ''}${r}%`;
 }
 
 /** Min/max over the defined values; null when fewer than 2 (no useful curve). */

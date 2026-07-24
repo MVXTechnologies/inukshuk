@@ -3,8 +3,10 @@ import { buildGpx } from '@core/geo/gpx';
 import { computeTrackStats, reduceStatsWith } from '@core/geo/track';
 import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
+import { findCategory } from '@core/library/categories';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
+import * as Location from 'expo-location';
 import { create } from 'zustand';
 import { useLibraryStore } from './libraryStore';
 
@@ -92,6 +94,53 @@ function defaultName(now: number): string {
   return `Trail ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d
     .toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     .replace(/\s/g, '')}`;
+}
+
+/** "Morning" / "Afternoon" / "Evening" / "Night" for the auto title. */
+function timeOfDay(ms: number): string {
+  const h = new Date(ms).getHours();
+  if (h >= 5 && h < 12) return 'Morning';
+  if (h < 17) return 'Afternoon';
+  if (h < 21) return 'Evening';
+  return 'Night';
+}
+
+/**
+ * Fire-and-forget after a save: upgrade a date-based auto name to
+ * "<Time-of-day> <activity> · <place>" via reverse geocoding (Strava idiom —
+ * the Library card already shows the date on its own line). Never blocks the
+ * save (geocoding needs network); bails if the user has renamed the track in
+ * the meantime (the post-save rename prompt races this) or the geocoder is
+ * unavailable — the date-based default stands. The place lookup is raced
+ * against a timeout: like getHeadingAsync, geocoder calls can hang forever on
+ * some devices rather than reject.
+ */
+async function upgradeAutoName(
+  trackId: string,
+  expectedName: string,
+  startedAt: number,
+  categoryId: string | null,
+  first: TrackPoint,
+): Promise<void> {
+  let place: string | null = null;
+  try {
+    const geo = await Promise.race([
+      Location.reverseGeocodeAsync({ latitude: first.latitude, longitude: first.longitude }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+    const a = geo?.[0];
+    place = a?.city ?? a?.district ?? a?.subregion ?? a?.region ?? null;
+  } catch {
+    // Offline / no geocoder — still upgrade to the time-of-day title below.
+  }
+  const lib = useLibraryStore.getState();
+  const current = lib.tracks.find((t) => t.id === trackId);
+  if (!current || current.name !== expectedName) return;
+  const category = findCategory(categoryId ?? undefined, lib.customCategories);
+  const activity = category ? category.name.toLowerCase() : 'trail';
+  lib.updateTrack(trackId, {
+    name: `${timeOfDay(startedAt)} ${activity}${place ? ` · ${place}` : ''}`,
+  });
 }
 
 /**
@@ -295,6 +344,11 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       const fileUri = storage.writeTrackGpx(track.id, gpx);
       const lib = useLibraryStore.getState();
       lib.addTrack(track, fileUri);
+      // Auto-named recording → try for a friendlier region title, async.
+      const first = points[0];
+      if (first && name === defaultName(startedAt)) {
+        void upgradeAutoName(track.id, name, startedAt, category, first);
+      }
       // Materialize live waypoints as notes on the saved trail (their typed note,
       // or the auto label), carrying any photo, clamped to the final track length.
       for (const wp of waypoints) {
