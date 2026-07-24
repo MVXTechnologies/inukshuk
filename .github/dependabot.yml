@@ -46,6 +46,11 @@ updates:
       # with `npx expo install --fix` during an SDK upgrade.
       - dependency-name: 'eslint-config-expo'
         update-types: ['version-update:semver-major']
+      # eslint itself is locked to what eslint-config-expo's plugins support:
+      # ESLint 10 removed context.getFilename(), which crashes the pinned
+      # eslint-plugin-react (see PR #148). Moves with the SDK upgrade too.
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
       - dependency-name: 'jest'
       - dependency-name: 'jest-*'
       - dependency-name: '@types/jest'
