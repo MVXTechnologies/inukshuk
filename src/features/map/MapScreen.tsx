@@ -166,6 +166,9 @@ export function MapScreen() {
   // light mode, the app background in dark mode) — downloaded areas show
   // through holes in the mask; trails/markers/location still draw on top.
   const uiStyle = useSettingsStore((s) => s.uiStyle);
+  // 'minimal' style: chevron-rail unfold state lives here because the "+"
+  // dial hides with the rest of the controls until the rail is out.
+  const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   const style = useMemo(() => {
     const options = {
@@ -927,6 +930,8 @@ export function MapScreen() {
           toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
           pdfOverlayCount={overlays.length}
           trackOverlayCount={trackOverlays.length}
+          minimalOpen={minimalControlsOpen}
+          onMinimalOpenChange={setMinimalControlsOpen}
         />
       )}
 
@@ -1009,6 +1014,8 @@ export function MapScreen() {
         !selecting &&
         makeMapState === null &&
         inspectId === null &&
+        // Minimal style folds the "+" dial away with the rest of the controls.
+        (uiStyle !== 'minimal' || minimalControlsOpen) &&
         !pickingCategory && (
           <MapActionsFab
             onRecord={() => setPickingCategory(true)}

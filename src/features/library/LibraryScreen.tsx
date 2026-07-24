@@ -814,7 +814,9 @@ export function LibraryScreen() {
             />
           ) : (
             [
-              ...g.maps.map(renderMapCard),
+              // Trail filters are about trails — maps drop out of results
+              // while any filter is active.
+              ...(activeFilterCount > 0 ? [] : g.maps.map(renderMapCard)),
               ...g.tracks.map(renderTrackCard),
               ...sortWaypointsNewestFirst(g.waypoints).map(renderWaypointCard),
             ]
@@ -899,7 +901,7 @@ export function LibraryScreen() {
                 {collapsed.ungrouped
                   ? null
                   : [
-                      ...grouped.ungroupedMaps.map(renderMapCard),
+                      ...(activeFilterCount > 0 ? [] : grouped.ungroupedMaps.map(renderMapCard)),
                       ...grouped.ungroupedTracks.map(renderTrackCard),
                       ...sortWaypointsNewestFirst(grouped.ungroupedWaypoints).map(
                         renderWaypointCard,
@@ -909,15 +911,24 @@ export function LibraryScreen() {
             )
           : // No folders yet: keep the familiar Maps + Recorded-trails split.
             [
-              <List.Section key="maps">
-                {sectionHeader('maps', `Maps${maps.length ? ` (${maps.length})` : ''}`)}
-                {collapsed.maps ? null : maps.length === 0 ? (
-                  <List.Item title="No maps yet" description="Tap the PDF icon to import one" />
-                ) : (
-                  maps.map(renderMapCard)
-                )}
-              </List.Section>,
-              <Divider key="maps-divider" />,
+              // Trail filters are about trails: the Maps section steps aside
+              // entirely while any filter is active.
+              ...(activeFilterCount > 0
+                ? []
+                : [
+                    <List.Section key="maps">
+                      {sectionHeader('maps', `Maps${maps.length ? ` (${maps.length})` : ''}`)}
+                      {collapsed.maps ? null : maps.length === 0 ? (
+                        <List.Item
+                          title="No maps yet"
+                          description="Tap the PDF icon to import one"
+                        />
+                      ) : (
+                        maps.map(renderMapCard)
+                      )}
+                    </List.Section>,
+                    <Divider key="maps-divider" />,
+                  ]),
               <List.Section key="trails">
                 {sectionHeader(
                   'trails',

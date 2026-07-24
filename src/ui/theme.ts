@@ -28,10 +28,12 @@ export const lightTheme: MD3Theme = {
     onSecondary: '#FFFFFF',
     secondaryContainer: '#D6DBE0',
     onSecondaryContainer: '#161C22',
-    tertiary: RIVER_DEEP,
-    onTertiary: '#FFFFFF',
-    tertiaryContainer: '#CDE5F5',
-    onTertiaryContainer: '#001E2E',
+    // Softened to the Edge family's pastel river (user call): the "+" dial
+    // and compass wear this, and the deep slate read too heavy next to them.
+    tertiary: '#AECCDF',
+    onTertiary: '#17303F',
+    tertiaryContainer: '#D6E7F1',
+    onTertiaryContainer: '#142A38',
     background: CREAM,
     surface: '#FBF8F2',
     surfaceVariant: '#E3DDD0',
@@ -187,6 +189,19 @@ export const edgeDarkTheme: MD3Theme = {
     outline: '#8B94A0',
     error: '#FFB4AB',
   },
+};
+
+/**
+ * The edge rail's pill chrome. One fixed dark slab in BOTH colour schemes
+ * (user call): the pills sit over map tiles, not themed surfaces, so a single
+ * charcoal reads consistently; engagement is signalled by the pastel-river
+ * ink — the same blue as the "+" dial and the edge tab selection.
+ */
+export const edgePill = {
+  background: '#262D35',
+  ink: '#E6EAEF',
+  active: '#AECCDF',
+  muted: '#77808C',
 };
 
 /** The MD3 theme for a UI style + resolved colour scheme. */

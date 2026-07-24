@@ -127,8 +127,47 @@ function chainSegments(segments: [EdgePoint, EdgePoint][]): EdgePoint[][] {
  * inside the grid's elevation range, split into minor/major MultiLineStrings
  * (major = every {@link CONTOUR_MAJOR_EVERY}th level) in lng/lat coordinates.
  */
+/**
+ * One 3×3 box-blur pass over the height grid (edges clamped). Urban/forested
+ * areas of the surface DEM carry metre-scale noise (buildings, canopy) that
+ * marching squares faithfully renders as dense scribbled tangles on flat
+ * ground (the Plains-of-Abraham artifact); a light smooth erases the noise
+ * while barely moving real terrain contours.
+ */
+function smoothed(data: ArrayLike<number>, grid: number): Float32Array {
+  const out = new Float32Array(grid * grid);
+  for (let y = 0; y < grid; y++) {
+    for (let x = 0; x < grid; x++) {
+      let sum = 0;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= grid) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= grid) continue;
+          sum += data[yy * grid + xx] as number;
+          n++;
+        }
+      }
+      out[y * grid + x] = sum / n;
+    }
+  }
+  return out;
+}
+
+/**
+ * Nudge a contour level off exact data values. Terrarium heights are
+ * multiples of 1/256 m and levels are clean multiples of the interval, so a
+ * flat plateau can sit EXACTLY on a level — every cell edge then becomes an
+ * ambiguous crossing and the chained result is a tangle. 1e-4 m is far below
+ * both the data quantum and any visual significance.
+ */
+const LEVEL_NUDGE = 1e-4;
+
 export function contourFeatures(hm: ContourGrid, requestedIntervalM: number): ContourFeatures {
-  const { data, grid, bbox } = hm;
+  const { grid, bbox } = hm;
+  const data = smoothed(hm.data, grid);
   const intervalM = effectiveContourInterval(hm.maxH - hm.minH, requestedIntervalM);
   // 6 decimals ≈ 0.11 m — far finer than a grid cell, and it halves the
   // serialized GeoJSON (full-precision doubles print ~17 digits), which is
@@ -144,7 +183,8 @@ export function contourFeatures(hm: ContourGrid, requestedIntervalM: number): Co
   const at = (x: number, y: number) => data[y * grid + x] as number;
 
   const firstLevel = Math.ceil(hm.minH / intervalM) * intervalM;
-  for (let level = firstLevel; level <= hm.maxH; level += intervalM) {
+  for (let labelLevel = firstLevel; labelLevel <= hm.maxH; labelLevel += intervalM) {
+    const level = labelLevel + LEVEL_NUDGE;
     const segments: [EdgePoint, EdgePoint][] = [];
     for (let y = 0; y < grid - 1; y++) {
       for (let x = 0; x < grid - 1; x++) {
@@ -206,8 +246,12 @@ export function contourFeatures(hm: ContourGrid, requestedIntervalM: number): Co
       }
     }
     if (segments.length === 0) continue;
-    const lines = chainSegments(segments).map((line) => line.map(toLngLat));
-    const isMajor = Math.round(level / intervalM) % CONTOUR_MAJOR_EVERY === 0;
+    // Micro-rings (a couple of cells around a lone noise bump) are clutter,
+    // not terrain — drop chains that never leave a 4-point footprint.
+    const lines = chainSegments(segments)
+      .filter((line) => line.length > 4)
+      .map((line) => line.map(toLngLat));
+    const isMajor = Math.round(labelLevel / intervalM) % CONTOUR_MAJOR_EVERY === 0;
     (isMajor ? major : minor).push(...lines);
   }
 
