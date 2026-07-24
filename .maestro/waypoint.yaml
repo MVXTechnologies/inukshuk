@@ -45,16 +45,19 @@ appId: com.inukshuk.app
     latitude: 46.8139
     longitude: -71.2082
 # Open the dial and drop the first waypoint. Retries absorb both the
-# cold-start tap race and the no-fix-yet snackbar path. The dial tap is a
-# PLAIN tap: retryTapIfNoChange can double-tap the slow-animating FAB.Group
-# and toggle it closed again — the retry block already re-taps on failure.
+# cold-start tap race and the no-fix-yet snackbar path. The dial tap is
+# GUARDED (only when the actions aren't visible): a blind re-tap on retry
+# toggled a slow-but-open dial closed again — with four actions the CI
+# software-GL hierarchy fetch got slow enough to hit that trap nightly.
 - retry:
     maxRetries: 3
     commands:
-      - tapOn: 'Map actions'
-      # 60 s: on software-GL emulators one hierarchy fetch can take that long;
-      # a shorter wait makes the retry re-tap the FAB and toggle the freshly
-      # opened dial closed again.
+      - runFlow:
+          when:
+            notVisible: 'Add waypoint'
+          commands:
+            - tapOn: 'Map actions'
+      # 60 s: on software-GL emulators one hierarchy fetch can take that long.
       - extendedWaitUntil:
           visible: 'Add waypoint'
           timeout: 60000

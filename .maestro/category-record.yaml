@@ -59,16 +59,17 @@ appId: com.inukshuk.app
 - setLocation:
     latitude: 46.8139
     longitude: -71.2082
-# Open the dial (retried whole: on a starved emulator the tap can be dropped
-# or the dial can close again before the action list is sampled). Plain tap:
-# retryTapIfNoChange can double-tap the slow-animating FAB.Group and toggle
-# it closed again — the retry block already re-taps on failure.
+# Open the dial (retried whole; the tap is GUARDED — only when the actions
+# aren't already visible — so a retry can never toggle an open dial closed).
 - retry:
     maxRetries: 3
     commands:
-      - tapOn: 'Map actions'
-      # 60 s for the same reason as waypoint.yaml: don't re-tap (and re-toggle)
-      # the dial just because a hierarchy fetch is slow.
+      - runFlow:
+          when:
+            notVisible: 'Record track'
+          commands:
+            - tapOn: 'Map actions'
+      # 60 s for the same reason as waypoint.yaml.
       - extendedWaitUntil:
           visible: 'Record track'
           timeout: 60000
