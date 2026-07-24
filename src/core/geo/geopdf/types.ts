@@ -28,15 +28,7 @@ export type PdfDict = { kind: 'dict'; entries: Map<string, PdfValue> };
 export type PdfArray = PdfValue[];
 
 export type PdfValue =
-  | number
-  | string
-  | boolean
-  | null
-  | PdfName
-  | PdfRef
-  | PdfArray
-  | PdfDict
-  | PdfStream;
+  number | string | boolean | null | PdfName | PdfRef | PdfArray | PdfDict | PdfStream;
 
 // These guards accept `PdfValue | undefined` so callers can pass the result of a
 // Map.get()/index access directly. They already reject `undefined` at runtime via

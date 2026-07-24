@@ -12,8 +12,8 @@ new `File`/`Directory`/`Paths` API (not the legacy `readAsStringAsync` API).
 ## Conventions
 
 - **Keep `src/core/**`pure** — no`react-native`/`expo`imports there. It's the
-unit-tested logic layer (georeferencing, GPX, track math) with a coverage gate.
-Platform code goes in`src/data`(persistence),`src/state`(Zustand),`src/features` (screens/hooks).
+  unit-tested logic layer (georeferencing, GPX, track math) with a coverage gate.
+  Platform code goes in`src/data`(persistence),`src/state`(Zustand),`src/features` (screens/hooks).
 - **Path aliases**: `@core`, `@data`, `@state`, `@features`, `@ui`, `@lib`, `@/`.
   Declared in `tsconfig.json` + `jest.config.js` — keep them in sync.
 - **Strict TS**: `strict` + `noUncheckedIndexedAccess`. Index access is

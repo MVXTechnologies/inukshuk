@@ -35,15 +35,8 @@ export function MapControlsRail(props: Props) {
 
   if (uiStyle === 'edge') return <EdgeRail {...props} />;
 
-  const {
-    top,
-    onLocate,
-    showFitControl,
-    onFit,
-    terrain3d,
-    pdfOverlayCount,
-    trackOverlayCount,
-  } = props;
+  const { top, onLocate, showFitControl, onFit, terrain3d, pdfOverlayCount, trackOverlayCount } =
+    props;
 
   // 'minimal' style: everything folded behind one small chevron until asked.
   if (uiStyle === 'minimal' && !minimalOpen) {

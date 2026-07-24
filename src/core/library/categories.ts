@@ -108,8 +108,7 @@ export function categoryColor(
 }
 
 export type CategoryNameValidation =
-  | { ok: true; name: string }
-  | { ok: false; reason: 'empty' | 'too-long' | 'duplicate' };
+  { ok: true; name: string } | { ok: false; reason: 'empty' | 'too-long' | 'duplicate' };
 
 /**
  * Validate a new custom category's name: trimmed, non-empty, bounded, and not

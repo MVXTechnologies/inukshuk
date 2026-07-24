@@ -11,9 +11,7 @@ import { strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
  * closed" — the caller must never claim the data was saved anywhere.
  */
 export type ExportAllDataResult =
-  | { kind: 'shared' }
-  | { kind: 'unavailable' }
-  | { kind: 'error'; message: string };
+  { kind: 'shared' } | { kind: 'unavailable' } | { kind: 'error'; message: string };
 
 export interface ExportAllDataCallbacks {
   /** Ticks once per planned file while the archive is being written. */
