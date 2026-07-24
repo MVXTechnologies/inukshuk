@@ -28,11 +28,7 @@ import {
   createTerrainRenderer,
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
-import {
-  TerrainOverlayButtons,
-  currentOverlaySettings,
-  useTerrainOverlaySync,
-} from './terrain3d/overlayControls';
+import { currentOverlaySettings, useTerrainOverlaySync } from './terrain3d/overlayControls';
 import {
   applyTerrainOverlaySettings,
   overlayRenderFailed,
@@ -193,7 +189,10 @@ export function Terrain3DLiveView({
   const [recenter, setRecenter] = useState(0);
   // False once the overlay shader is unavailable (no derivatives / compile
   // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
-  const [overlaysAvailable, setOverlaysAvailable] = useState(true);
+  // Shader-overlay availability still tracked (drives nothing visible since
+  // the 3D button bar moved into the shared Overlays menu, but the menu's
+  // toggles silently no-op when injection failed — worth keeping the signal).
+  const [, setOverlaysAvailable] = useState(true);
 
   // Latest props read by the render loop / async re-anchor, never during render.
   const locRef = useRef<LatLng | null>(center);
@@ -679,13 +678,6 @@ export function Terrain3DLiveView({
       {status === 'error' && (
         <View style={styles.centerOverlay} pointerEvents="none">
           <Text style={{ color: theme.colors.onSurfaceVariant }}>Couldn’t load 3D terrain.</Text>
-        </View>
-      )}
-      {status === 'ready' && (
-        <View style={styles.overlayBar} pointerEvents="box-none">
-          {/* Toggles drive uniforms directly (no rebuild), so they stay enabled
-              even while fresh terrain streams in during a re-anchor. */}
-          <TerrainOverlayButtons available={overlaysAvailable} />
         </View>
       )}
       <IconButton

@@ -1,6 +1,7 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { Feature, Polygon } from 'geojson';
 
 /**
@@ -128,8 +129,8 @@ export interface OsmStyleOptions {
   downloadedMask?: { data: Feature<Polygon>; color: string };
   /** Pastel raster wash for the 'edge' UI style. */
   pastel?: boolean;
-  /** Waymarked Trails hiking-routes overlay above the base raster. */
-  markedTrails?: boolean;
+  /** Checked marked-trail databases, each draped as its own tile overlay. */
+  markedTrailsNetworks?: readonly TrailNetworkId[];
 }
 
 /**
@@ -160,17 +161,18 @@ export function buildOsmStyle(
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
-      ...(options.markedTrails
-        ? {
-            wmt: {
-              type: 'raster' as const,
-              tiles: ['https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              maxzoom: 17,
-              attribution: '© Waymarked Trails',
-            },
-          }
-        : {}),
+      ...Object.fromEntries(
+        (options.markedTrailsNetworks ?? []).map((n) => [
+          `wmt-${n}`,
+          {
+            type: 'raster' as const,
+            tiles: [trailNetworkTileUrl(n)],
+            tileSize: 256,
+            maxzoom: 17,
+            attribution: '© Waymarked Trails',
+          },
+        ]),
+      ),
     },
     layers: [
       // Warm paper backdrop that shows through while tiles load and at the edges.
@@ -185,19 +187,15 @@ export function buildOsmStyle(
         source: 'osm',
         paint: (options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {},
       },
-      // Waymarked Trails hiking routes, blended over the basemap. The source
-      // is added unconditionally below only when requested (keeps offline
-      // packs and 3D drapes free of a network-only layer).
-      ...(options.markedTrails
-        ? [
-            {
-              id: 'marked-trails',
-              type: 'raster' as const,
-              source: 'wmt',
-              paint: { 'raster-opacity': 0.85 },
-            },
-          ]
-        : []),
+      // Marked-trail networks, each its own layer over the basemap (only
+      // requested networks get a source — keeps offline packs and 3D drapes
+      // free of network-only layers).
+      ...(options.markedTrailsNetworks ?? []).map((n) => ({
+        id: `marked-trails-${n}`,
+        type: 'raster' as const,
+        source: `wmt-${n}`,
+        paint: { 'raster-opacity': 0.85 },
+      })),
     ],
   };
 

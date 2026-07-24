@@ -8,6 +8,7 @@ import {
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
+import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
 import jpeg from 'jpeg-js';
@@ -127,9 +128,6 @@ export interface BasemapTexture {
   height: number;
 }
 
-/** Waymarked Trails hiking overlay (transparent PNG tiles, © Waymarked Trails). */
-export const MARKED_TRAILS_TILE_URL = 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png';
-
 /**
  * Stitch the Waymarked Trails hiking overlay for a tile range, PRESERVING
  * tile alpha (unlike {@link fetchBasemapTexture}, which flattens to opaque) —
@@ -137,7 +135,10 @@ export const MARKED_TRAILS_TILE_URL = 'https://tile.waymarkedtrails.org/hiking/{
  * that fails to download stays fully transparent rather than failing the
  * whole overlay (route coverage is spotty by nature).
  */
-export async function fetchTrailsTexture(range: TileRange): Promise<BasemapTexture> {
+export async function fetchTrailsTexture(
+  range: TileRange,
+  network: TrailNetworkId,
+): Promise<BasemapTexture> {
   const fullW = (range.maxX - range.minX + 1) * TILE;
   const fullH = (range.maxY - range.minY + 1) * TILE;
   const out = new Uint8Array(fullW * fullH * 4);
@@ -151,11 +152,12 @@ export async function fetchTrailsTexture(range: TileRange): Promise<BasemapTextu
         (async () => {
           let rgba: Uint8Array;
           try {
-            const url = MARKED_TRAILS_TILE_URL.replace('{z}', String(range.z))
+            const url = trailNetworkTileUrl(network)
+              .replace('{z}', String(range.z))
               .replace('{x}', String(tx))
               .replace('{y}', String(ty));
             rgba = decodeTileRGBA(
-              await storage.downloadBytes(url, `wmt-${range.z}-${tx}-${ty}.png`, UA),
+              await storage.downloadBytes(url, `wmt-${network}-${range.z}-${tx}-${ty}.png`, UA),
             );
           } catch {
             return; // transparent hole

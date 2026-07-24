@@ -18,12 +18,23 @@ export function FolderPickerDialog({ visible, onDismiss }: Props) {
   const folders = useLibraryStore((s) => s.folders);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const toggleVisibleFolder = useLibraryStore((s) => s.toggleVisibleFolder);
+  const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
+  const setMapVisibilityMode = useLibraryStore((s) => s.setMapVisibilityMode);
+  const showEverything = mapVisibilityMode === 'type';
 
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss}>
-        <Dialog.Title>Show folders</Dialog.Title>
+        <Dialog.Title>Show on the map</Dialog.Title>
         <Dialog.Content>
+          {/* The escape hatch back to show-all: with the PDF/Trails toggles
+              retired, this row IS type mode. */}
+          <Checkbox.Item
+            label="Everything"
+            position="leading"
+            status={showEverything ? 'checked' : 'unchecked'}
+            onPress={() => setMapVisibilityMode(showEverything ? 'folders' : 'type')}
+          />
           {folders.length === 0 && (
             <Text variant="bodyMedium">
               No folders yet — create one in the Library to group maps, trails and waypoints.
@@ -35,14 +46,20 @@ export function FolderPickerDialog({ visible, onDismiss }: Props) {
               label={f.name}
               position="leading"
               status={visibleFolderIds.includes(f.id) ? 'checked' : 'unchecked'}
-              onPress={() => toggleVisibleFolder(f.id)}
+              onPress={() => {
+                setMapVisibilityMode('folders');
+                toggleVisibleFolder(f.id);
+              }}
             />
           ))}
           <Checkbox.Item
             label="Ungrouped"
             position="leading"
             status={visibleFolderIds.includes(UNGROUPED_FOLDER_ID) ? 'checked' : 'unchecked'}
-            onPress={() => toggleVisibleFolder(UNGROUPED_FOLDER_ID)}
+            onPress={() => {
+              setMapVisibilityMode('folders');
+              toggleVisibleFolder(UNGROUPED_FOLDER_ID);
+            }}
           />
         </Dialog.Content>
         <Dialog.Actions>

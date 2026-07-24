@@ -166,13 +166,13 @@ export function MapScreen() {
   // light mode, the app background in dark mode) — downloaded areas show
   // through holes in the mask; trails/markers/location still draw on top.
   const uiStyle = useSettingsStore((s) => s.uiStyle);
-  const markedTrailsOverlay = useSettingsStore((s) => s.markedTrailsOverlay);
+  const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   const style = useMemo(() => {
     const options = {
       // The 'edge' UI style washes the raster into pastels to match its chrome.
       pastel: uiStyle === 'edge',
-      // Waymarked Trails routes overlay (network-only; hidden offline-only).
-      markedTrails: markedTrailsOverlay && !offlineOnly,
+      // Marked-trail networks (network-only; hidden while offline-only).
+      markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
       ...(offlineOnly
         ? {
             rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
@@ -194,7 +194,7 @@ export function MapScreen() {
     theme.dark,
     theme.colors.background,
     uiStyle,
-    markedTrailsOverlay,
+    markedTrailsNetworks,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -282,7 +282,9 @@ export function MapScreen() {
   const terrainOverlays2d = useTerrainOverlays2D({
     mapRef,
     boundsVersion: regionVersion,
-    active: !terrain3d && settingsHydrated && screenFocused,
+    // offlineOnly also disables these: DEM-derived layers drape over the
+    // downloaded-only mask's blank void, which reads as garbage.
+    active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly,
   });
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);

@@ -1,7 +1,7 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Menu, Portal, Snackbar } from 'react-native-paper';
+import { Button, Icon, Menu, Portal, Snackbar, Text, TouchableRipple } from 'react-native-paper';
 import { useTimedSnackbar, type TimedSnackbar } from '../../common/useTimedSnackbar';
 import { DetentSlider } from '../components/DetentSlider';
 import { RangeSlider } from '../components/RangeSlider';
@@ -90,11 +90,12 @@ export function useSlopeDisclaimer(): { snackbar: TimedSnackbar; onSlopeEnabled:
 
 /**
  * Menu rows for the terrain overlays, shared by the main map's overlays menu
- * and the trail viewer's: a checkbox Menu.Item per layer with a compact
- * DetentSlider row (angle floor / contour interval) below it while enabled —
- * five stacked selector Menu.Items per section outgrew small screens.
- * `onSlopeEnabled` comes from {@link useSlopeDisclaimer}; the host renders the
- * DisclaimerSnackbar itself.
+ * and the trail viewer's. Each layer is ONE compact row: checkbox + title on
+ * the left, its selector (slope range / contour interval) inline on the
+ * RIGHT — stacked selector rows ate too much vertical space. Rows render
+ * their sliders ALWAYS (dimmed while off): paper's Menu measures its content
+ * once at open and never re-anchors. `onSlopeEnabled` comes from
+ * {@link useSlopeDisclaimer}; the host renders the DisclaimerSnackbar itself.
  */
 export function TerrainOverlayMenuRows({
   showHypso,
@@ -112,46 +113,59 @@ export function TerrainOverlayMenuRows({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const set = useSettingsStore((s) => s.set);
 
-  // Every selector row renders ALWAYS (dimmed while its toggle is off): paper's
-  // Menu measures its content once at open and never re-anchors, so rows that
-  // appear after a toggle push the menu bottom off screen until it's reopened.
   return (
     <>
-      <Menu.Item
-        leadingIcon={slope ? 'checkbox-marked' : 'checkbox-blank-outline'}
-        onPress={() => {
-          const next = !slope;
-          set('terrainSlope', next);
-          if (next) onSlopeEnabled();
-        }}
-        title="Slope"
-      />
-      <View style={styles.sliderRow}>
-        <RangeSlider
-          min={0}
-          max={90}
-          lo={slopeMinDeg}
-          hi={slopeMaxDeg}
-          disabled={!slope}
-          accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
-          onChange={(newLo, newHi) => {
-            set('terrainSlopeMinDeg', newLo);
-            set('terrainSlopeMaxDeg', newHi);
+      <View style={styles.layerRow}>
+        <TouchableRipple
+          onPress={() => {
+            const next = !slope;
+            set('terrainSlope', next);
+            if (next) onSlopeEnabled();
           }}
-        />
+          style={styles.layerToggle}
+          accessibilityLabel="Slope"
+        >
+          <View style={styles.layerLabelBox}>
+            <Icon source={slope ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} />
+            <Text variant="bodyLarge">Slope</Text>
+          </View>
+        </TouchableRipple>
+        <View style={styles.rightCol}>
+          <RangeSlider
+            min={0}
+            max={90}
+            width={100}
+            lo={slopeMinDeg}
+            hi={slopeMaxDeg}
+            disabled={!slope}
+            accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
+            onChange={(newLo, newHi) => {
+              set('terrainSlopeMinDeg', newLo);
+              set('terrainSlopeMaxDeg', newHi);
+            }}
+          />
+        </View>
       </View>
-      <Menu.Item
-        leadingIcon={contours ? 'checkbox-marked' : 'checkbox-blank-outline'}
-        onPress={() => set('terrainContours', !contours)}
-        title="Contours"
-      />
-      <View style={[styles.sliderRow, !contours && styles.sliderRowDisabled]}>
-        <DetentSlider
-          detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-          selected={intervalM}
-          onSelect={(m) => set('terrainContourIntervalM', m)}
-          disabled={!contours}
-        />
+      <View style={styles.layerRow}>
+        <TouchableRipple
+          onPress={() => set('terrainContours', !contours)}
+          style={styles.layerToggle}
+          accessibilityLabel="Contours"
+        >
+          <View style={styles.layerLabelBox}>
+            <Icon source={contours ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} />
+            <Text variant="bodyLarge">Contours</Text>
+          </View>
+        </TouchableRipple>
+        <View style={[styles.rightCol, !contours && styles.sliderRowDisabled]}>
+          <DetentSlider
+            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+            selected={intervalM}
+            onSelect={(m) => set('terrainContourIntervalM', m)}
+            disabled={!contours}
+            width={100}
+          />
+        </View>
       </View>
       {showHypso && (
         <Menu.Item
@@ -264,7 +278,16 @@ const styles = StyleSheet.create({
   },
   btn: { borderRadius: 20 },
   label: { marginVertical: 4, marginHorizontal: 8, fontSize: 12 },
-  // Aligns the slider under a Menu.Item's title (past the 40dp leading icon).
-  sliderRow: { paddingLeft: 56, paddingRight: 16, paddingBottom: 6 },
+  layerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 12,
+    minWidth: 300,
+  },
+  layerToggle: { paddingVertical: 10, paddingLeft: 12, paddingRight: 6 },
+  layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Shared right column: both sliders' tracks and value labels line up.
+  rightCol: { width: 170, alignItems: 'flex-end' },
   sliderRowDisabled: { opacity: 0.35 },
 });

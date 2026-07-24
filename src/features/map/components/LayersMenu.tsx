@@ -1,153 +1,130 @@
-import { setOfflineOnly } from '@data/offline';
-import { useLibraryStore } from '@state/libraryStore';
-import { FolderPickerDialog } from './FolderPickerDialog';
-import { EdgePill } from './EdgePill';
+import type { BoundingBox } from '@core/models';
 import { type MapBasemap, useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useState } from 'react';
-import { StyleSheet } from 'react-native';
-import { Divider, FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
+import { useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { FAB, Icon, Menu, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { RegionPreviewThumb } from '../RegionPreviewThumb';
+import { EdgePill } from './EdgePill';
 
-/** Base-map choices shown in the layers menu, each with its own coloured icon. */
-const BASEMAPS: {
-  key: MapBasemap;
-  label: string;
-  icon: string;
-  color: (t: MD3Theme) => string;
-}[] = [
-  { key: 'relief', label: 'Relief', icon: 'image-filter-hdr', color: () => '#9C6B3F' },
-  { key: 'map', label: 'Map', icon: 'map', color: (t) => t.colors.primary },
-  {
-    key: 'satellite',
-    label: 'Satellite',
-    icon: 'satellite-variant',
-    color: (t) => t.colors.tertiary,
-  },
+/** Base-map choices. */
+const BASEMAPS: { key: MapBasemap; label: string }[] = [
+  { key: 'relief', label: 'Relief' },
+  { key: 'map', label: 'Map' },
+  { key: 'satellite', label: 'Satellite' },
 ];
 
-interface Props {
-  /** Number of georeferenced PDF overlays available to toggle. */
-  pdfOverlayCount: number;
-  /** Number of saved-trail overlays available to toggle. */
-  trackOverlayCount: number;
-  /** Render the 'edge' UI style's half-pill anchor instead of the FAB. */
-  edgeAnchor?: boolean;
-}
-
 /**
- * The layers FAB + menu: overlay toggles (PDF pages, saved trails), the
- * "locally downloaded only" network switch, and the base-map picker.
+ * The base-map rows (Relief / Map / Satellite), shared by the classic menu
+ * and the edge rail's expanding panel — each with a small live thumbnail of
+ * the user's own area in that style (same cached-tile previews as the
+ * download sheet). Everything else that used to share this menu now lives in
+ * the Overlays menu — the mountain button is ONLY about which ground you
+ * stand on.
  */
-export function LayersMenu({ pdfOverlayCount, trackOverlayCount, edgeAnchor }: Props) {
+export function BasemapRows({ onPicked }: { onPicked?: () => void }) {
   const theme = useTheme();
-  const [open, setOpen] = useState(false);
-  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-
-  const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
-  const setMapVisibilityMode = useLibraryStore((s) => s.setMapVisibilityMode);
-  const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
-  const typeMode = mapVisibilityMode === 'type';
-
-  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
-  const togglePdfOverlay = useMapStore((s) => s.togglePdfOverlay);
-  const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
-  const toggleTrackOverlays = useMapStore((s) => s.toggleTrackOverlays);
   const basemap = useMapStore((s) => s.basemap);
   const setBasemap = useMapStore((s) => s.setBasemap);
-  const offlineOnly = useSettingsStore((s) => s.offlineOnly);
-  const set = useSettingsStore((s) => s.set);
+  const tileUrl = useSettingsStore((s) => s.tileUrl);
+  const lastKnown = useSettingsStore((s) => s.lastKnownPosition);
+
+  // Thumbnail region: a small box around wherever the user last was — the
+  // preview should show THEIR terrain, not a canned sample. Null (never
+  // located) degrades to the thumb's placeholder glyph.
+  const thumbBbox = useMemo<BoundingBox | null>(
+    () =>
+      lastKnown
+        ? {
+            minLng: lastKnown.longitude - 0.02,
+            maxLng: lastKnown.longitude + 0.02,
+            minLat: lastKnown.latitude - 0.02,
+            maxLat: lastKnown.latitude + 0.02,
+          }
+        : null,
+    [lastKnown],
+  );
 
   return (
     <>
-      <Menu
-        visible={open}
-        onDismiss={() => setOpen(false)}
-        anchor={
-          edgeAnchor ? (
-            <EdgePill icon="layers" label="Layers" onPress={() => setOpen(true)} />
-          ) : (
-            <FAB
-              icon="layers"
-              size="small"
-              variant="surface"
-              onPress={() => setOpen(true)}
-              style={styles.controlFab}
-              accessibilityLabel="Layers"
-            />
-          )
-        }
-      >
-        {/* Overlay visibility is a MODE: the classic type toggles (PDF/Trails,
-          everything imported) or folder mode (exactly the checked folders'
-          items). Tapping a type row while in folder mode switches back to
-          type WITHOUT toggling, so the previous selection reappears as-was. */}
-        <Menu.Item disabled title="Overlays" />
-        <Menu.Item
-          leadingIcon={typeMode && showPdfOverlay ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={
-            pdfOverlayCount > 0 || !typeMode
-              ? () => {
-                  if (typeMode) togglePdfOverlay();
-                  else setMapVisibilityMode('type');
-                }
-              : undefined
-          }
-          disabled={pdfOverlayCount === 0 && typeMode}
-          title={`PDF (${pdfOverlayCount})`}
-        />
-        <Menu.Item
-          leadingIcon={typeMode && showTrackOverlays ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={
-            trackOverlayCount > 0 || !typeMode
-              ? () => {
-                  if (typeMode) toggleTrackOverlays();
-                  else setMapVisibilityMode('type');
-                }
-              : undefined
-          }
-          disabled={trackOverlayCount === 0 && typeMode}
-          title={`Trails (${trackOverlayCount})`}
-        />
-        <Menu.Item
-          leadingIcon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
-          trailingIcon={typeMode ? undefined : 'check'}
-          onPress={() => {
-            setMapVisibilityMode('folders');
-            setOpen(false);
-            setFolderPickerOpen(true);
-          }}
-          title={typeMode ? 'Folders' : `Folders (${visibleFolderIds.length})`}
-        />
-        <Divider />
-        <Menu.Item
-          leadingIcon={offlineOnly ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          onPress={() => {
-            const next = !offlineOnly;
-            set('offlineOnly', next);
-            setOfflineOnly(next);
-          }}
-          title="Locally downloaded only"
-        />
-        <Divider />
-        <Menu.Item disabled title="Base map" />
-        {BASEMAPS.map((b) => (
-          <Menu.Item
+      {BASEMAPS.map((b) => {
+        const selected = basemap === b.key;
+        return (
+          <TouchableRipple
             key={b.key}
-            leadingIcon={({ size }) => <Icon source={b.icon} size={size} color={b.color(theme)} />}
-            trailingIcon={basemap === b.key ? 'check' : undefined}
             onPress={() => {
               setBasemap(b.key);
-              setOpen(false);
+              onPicked?.();
             }}
-            title={b.label}
-          />
-        ))}
-      </Menu>
-      <FolderPickerDialog visible={folderPickerOpen} onDismiss={() => setFolderPickerOpen(false)} />
+            accessibilityLabel={b.label}
+            style={styles.bmRow}
+          >
+            <View style={styles.bmInner}>
+              <View style={styles.bmLabelBox}>
+                {selected && <Icon source="check" size={16} />}
+                <Text variant="bodyLarge">{b.label}</Text>
+              </View>
+              {/* The banner: a thin, full-width strip of the user's own area
+                  in this style. */}
+              <View
+                style={[
+                  styles.bmBanner,
+                  selected && { borderWidth: 2, borderColor: theme.colors.primary },
+                ]}
+              >
+                <RegionPreviewThumb
+                  bbox={thumbBbox}
+                  basemap={b.key}
+                  tileUrl={tileUrl}
+                  size={30}
+                  width={150}
+                  height={30}
+                />
+              </View>
+            </View>
+          </TouchableRipple>
+        );
+      })}
     </>
+  );
+}
+
+/**
+ * The mountain FAB + base-map menu (classic/minimal styles; the edge rail
+ * renders {@link BasemapRows} in its own expanding panel instead).
+ */
+export function BasemapMenu({ edgeAnchor }: { edgeAnchor?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Menu
+      visible={open}
+      onDismiss={() => setOpen(false)}
+      anchor={
+        edgeAnchor ? (
+          <EdgePill icon="image-filter-hdr" label="Base map" onPress={() => setOpen(true)} />
+        ) : (
+          <FAB
+            icon="image-filter-hdr"
+            size="small"
+            variant="surface"
+            onPress={() => setOpen(true)}
+            style={styles.controlFab}
+            accessibilityLabel="Base map"
+          />
+        )
+      }
+    >
+      <BasemapRows onPicked={() => setOpen(false)} />
+    </Menu>
   );
 }
 
 const styles = StyleSheet.create({
   controlFab: { borderRadius: 24 },
+  // minWidth stretches the row inside the content-sized paper Menu so the
+  // banner is a real strip, not a sliver.
+  bmRow: { paddingVertical: 7, paddingHorizontal: 12, minWidth: 308 },
+  bmInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bmLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 110 },
+  bmBanner: { flex: 1, borderRadius: 7, overflow: 'hidden', height: 30 },
 });
