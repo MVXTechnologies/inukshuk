@@ -49,7 +49,13 @@ export const BUILT_IN_CATEGORIES: readonly CategoryDefinition[] = [
   { id: 'walk', name: 'Walk', icon: 'walk', color: '#2E9B8F', builtIn: true },
   // Untimed imported GPX (a planned route, someone else's trace) — so a
   // timeless file never masquerades as a recorded run.
-  { id: 'navigation', name: 'Navigation trail', icon: 'map-marker-path', color: '#5C7A99', builtIn: true },
+  {
+    id: 'navigation',
+    name: 'Navigation trail',
+    icon: 'map-marker-path',
+    color: '#5C7A99',
+    builtIn: true,
+  },
   { id: 'other', name: 'Other', icon: 'compass-outline', color: '#8A8B8C', builtIn: true },
 ];
 

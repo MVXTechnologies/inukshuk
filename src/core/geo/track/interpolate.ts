@@ -13,6 +13,8 @@ export interface TrackPointAt {
   speed?: number;
   /** Interpolated timestamp (epoch ms), if recorded. */
   time?: number;
+  /** Interpolated heart rate (bpm), if the track carries HR samples. */
+  heartRateBpm?: number;
 }
 
 /** Linear interpolation of two optional numbers (undefined-safe). */
@@ -42,6 +44,7 @@ export function interpolateTrackAtDistance(
       elevation: first.altitude,
       speed: first.speed,
       time: first.time,
+      heartRateBpm: first.heartRateBpm,
     };
   }
 
@@ -60,6 +63,7 @@ export function interpolateTrackAtDistance(
         elevation: lerpOpt(a.altitude, b.altitude, t),
         speed: lerpOpt(a.speed, b.speed, t),
         time: lerpOpt(a.time, b.time, t),
+        heartRateBpm: lerpOpt(a.heartRateBpm, b.heartRateBpm, t),
       };
     }
     cum += seg;
@@ -74,5 +78,6 @@ export function interpolateTrackAtDistance(
     elevation: last.altitude,
     speed: last.speed,
     time: last.time,
+    heartRateBpm: last.heartRateBpm,
   };
 }

@@ -11,10 +11,11 @@ export default function TabsLayout() {
   // bar); Edge keeps icons but colours the active tab in the pastel-river
   // blue of the "+" dial instead of sage.
   const minimal = uiStyle === 'minimal';
-  const icon =
-    (name: keyof typeof MaterialCommunityIcons.glyphMap) =>
-    ({ color, size }: { color: ColorValue; size: number }) =>
+  const icon = (name: keyof typeof MaterialCommunityIcons.glyphMap) => {
+    const TabIcon = ({ color, size }: { color: ColorValue; size: number }) =>
       minimal ? null : <MaterialCommunityIcons name={name} color={color} size={size} />;
+    return TabIcon;
+  };
 
   return (
     <Tabs

@@ -14,6 +14,8 @@ export interface TrackPoint {
   altitudeAccuracy?: number;
   /** Instantaneous ground speed in m/s reported by GPS, if available. */
   speed?: number;
+  /** Heart rate in beats/min, from GPX Garmin TrackPointExtension imports. */
+  heartRateBpm?: number;
 }
 
 /** Derived statistics for a sequence of {@link TrackPoint}s. */

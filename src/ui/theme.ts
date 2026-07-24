@@ -12,7 +12,6 @@ import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
 // sage (#93A25E) and river (#5C93B7) so white text meets contrast on them.
 const INUKSHUK = '#2D3740'; // charcoal-navy — the stone figure, our primary mark
 const FOLIAGE_DEEP = '#566B33'; // deepened sage — green surfaces
-const RIVER_DEEP = '#3E7BA0'; // deepened river — accents / route line
 const STONE = '#8A8B8C'; // mountain grey
 const CREAM = '#F2ECE0'; // warm paper — app background
 
@@ -60,10 +59,12 @@ export const darkTheme: MD3Theme = {
     onSecondary: '#243039',
     secondaryContainer: '#3B4750',
     onSecondaryContainer: '#D6DBE0',
-    tertiary: '#8FC0E4',
-    onTertiary: '#00344D',
-    tertiaryContainer: '#245068',
-    onTertiaryContainer: '#C7E7FF',
+    // Matched to the Edge family's pastel river so the "+" dial and compass
+    // wear the same blue across styles (user call).
+    tertiary: '#AECCDF',
+    onTertiary: '#122B3A',
+    tertiaryContainer: '#2E4756',
+    onTertiaryContainer: '#D6E7F1',
     background: '#12150F',
     surface: '#1B1E17',
     surfaceVariant: '#43483E',
