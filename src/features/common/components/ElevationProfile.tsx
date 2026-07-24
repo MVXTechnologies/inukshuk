@@ -241,6 +241,25 @@ export function ElevationProfile({
     drawPace && speedRange && width > 0 ? curveRuns(speeds, speedRange.lo, speedRange.hi) : [];
   const hrRuns = drawHr && hrRange && width > 0 ? curveRuns(hrs, hrRange.lo, hrRange.hi) : [];
 
+  /** Mean of the defined samples (the reference the dotted avg line marks). */
+  const meanOf = (vals: (number | undefined)[]): number | null => {
+    let sum = 0;
+    let n = 0;
+    for (const v of vals) {
+      if (v === undefined || !Number.isFinite(v)) continue;
+      sum += v;
+      n++;
+    }
+    return n > 0 ? sum / n : null;
+  };
+  const speedAvg = drawPace ? meanOf(speeds) : null;
+  const hrAvg = drawHr ? meanOf(hrs) : null;
+  /** Y of a value on a secondary curve's normalized band. */
+  const bandY = (v: number, lo: number, hi: number) => {
+    const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
+    return CHART_HEIGHT - 14 - t * (CHART_HEIGHT - 40) - 6;
+  };
+
   // Elevation gridlines: three round-number levels between min and max.
   const gridLevels = useMemo(() => {
     const step = range / 4;
@@ -469,30 +488,31 @@ export function ElevationProfile({
                 fill="none"
               />
             ))}
-            {/* Pace axis: just the top/bottom values (up = faster is evident),
-                angled like the distance ticks, living in the right margin so
-                the curves never run over them. */}
-            {drawPace && speedRange && (
+            {/* Pace reference: a dotted line at the AVERAGE, its value in the
+                right margin — one number that means something, instead of a
+                min/max the curve shape already shows. */}
+            {drawPace && speedRange && speedAvg !== null && (
               <>
+                <Line
+                  x1={AXIS_LEFT}
+                  y1={bandY(speedAvg, speedRange.lo, speedRange.hi)}
+                  x2={width - AXIS_RIGHT}
+                  y2={bandY(speedAvg, speedRange.lo, speedRange.hi)}
+                  stroke={PACE_COLOR}
+                  strokeWidth={1}
+                  strokeDasharray="2,4"
+                  strokeOpacity={0.85}
+                />
                 <SvgText
-                  x={width - AXIS_RIGHT + 6}
-                  y={14}
+                  x={width - AXIS_RIGHT + 3}
+                  y={bandY(speedAvg, speedRange.lo, speedRange.hi) + 3}
                   fontSize={8}
                   fill={PACE_COLOR}
                   textAnchor="start"
-                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} 14)`}
                 >
-                  {formatPace(speedRange.hi)}
-                </SvgText>
-                <SvgText
-                  x={width - AXIS_RIGHT + 6}
-                  y={CHART_HEIGHT - 22}
-                  fontSize={8}
-                  fill={PACE_COLOR}
-                  textAnchor="start"
-                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} ${CHART_HEIGHT - 22})`}
-                >
-                  {formatPace(speedRange.lo)}
+                  {/* Unit dropped so the value fits the clear right margin —
+                      the readout spells the /km. */}
+                  {formatPace(speedAvg).replace(/\/km$|\/mi$/, '')}
                 </SvgText>
               </>
             )}
@@ -508,34 +528,34 @@ export function ElevationProfile({
                 fill="none"
               />
             ))}
-            {/* HR axis, mirroring pace: top/bottom bpm angled in the left
-                gutter's free corners, clear of curves and elevation labels. */}
-            {drawHr && hrRange && (
+            {/* HR reference, mirroring pace: dotted average line, value in the
+                left gutter. */}
+            {drawHr && hrRange && hrAvg !== null && (
               <>
+                <Line
+                  x1={AXIS_LEFT}
+                  y1={bandY(hrAvg, hrRange.lo, hrRange.hi)}
+                  x2={width - AXIS_RIGHT}
+                  y2={bandY(hrAvg, hrRange.lo, hrRange.hi)}
+                  stroke={HR_COLOR}
+                  strokeWidth={1}
+                  strokeDasharray="2,4"
+                  strokeOpacity={0.85}
+                />
                 <SvgText
-                  x={AXIS_LEFT - 6}
-                  y={34}
+                  x={AXIS_LEFT - 3}
+                  y={bandY(hrAvg, hrRange.lo, hrRange.hi) + 3}
                   fontSize={8}
                   fill={HR_COLOR}
                   textAnchor="end"
-                  transform={`rotate(45 ${AXIS_LEFT - 6} 34)`}
                 >
-                  {`${Math.round(hrRange.hi)} bpm`}
-                </SvgText>
-                <SvgText
-                  x={AXIS_LEFT - 6}
-                  y={CHART_HEIGHT - 16}
-                  fontSize={8}
-                  fill={HR_COLOR}
-                  textAnchor="end"
-                  transform={`rotate(45 ${AXIS_LEFT - 6} ${CHART_HEIGHT - 16})`}
-                >
-                  {`${Math.round(hrRange.lo)} bpm`}
+                  {`${Math.round(hrAvg)} bpm`}
                 </SvgText>
               </>
             )}
 
-            {/* Distance ticks, tilted 45° in the band below the plot. */}
+            {/* Distance ticks, horizontal in the band below the plot (angled
+                labels kept clipping at the card edge — user call). */}
             <Line
               x1={AXIS_LEFT}
               y1={CHART_HEIGHT}
@@ -558,14 +578,7 @@ export function ElevationProfile({
                     strokeWidth={0.5}
                     opacity={0.35}
                   />
-                  <SvgText
-                    x={x + 2}
-                    y={CHART_HEIGHT + 12}
-                    fontSize={8}
-                    fill={dim}
-                    textAnchor="start"
-                    transform={`rotate(45 ${x + 2} ${CHART_HEIGHT + 12})`}
-                  >
+                  <SvgText x={x} y={CHART_HEIGHT + 14} fontSize={8} fill={dim} textAnchor="middle">
                     {formatDistance(d)}
                   </SvgText>
                 </Fragment>
