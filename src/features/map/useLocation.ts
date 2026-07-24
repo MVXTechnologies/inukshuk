@@ -117,36 +117,51 @@ export function useLocationTracking(): LocationTracking {
           return;
         }
         setPermission('granted');
-        sub = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.BestForNavigation,
-            timeInterval: 1000,
-            distanceInterval: Math.max(1, minDisplacement),
-          },
-          (loc) => {
-            const fix = toTrackPoint(loc);
-            setUnavailableReason(null);
-            const pos = { latitude: fix.latitude, longitude: fix.longitude };
-            locationRef.current = pos;
-            setLocation(pos);
-            setLastFix(fix);
-            // Foreground last-position persistence, throttled: the first fix
-            // of the session writes immediately (survives a later crash/kill),
-            // then at most one write per interval while fixes keep flowing.
-            const now = Date.now();
-            if (
-              shouldPersistPosition(lastPositionWriteAtRef.current, now) &&
-              persistLastKnownPosition(pos)
-            ) {
-              lastPositionWriteAtRef.current = now;
-            }
-            // Recorder filters by status internally. Only while the background
-            // task is CONFIRMED delivering does the watch stand down to just
-            // driving the marker — a started-but-silent task must never mute
-            // the only working feeder (the v1.0.2 no-points regression).
-            if (!isBackgroundFeedConfirmed()) useRecorderStore.getState().addPoint(fix);
-          },
-        );
+        // High accuracy first, degrading on "unsatisfied device settings":
+        // that rejection doesn't always mean location is off — Play services'
+        // settings gate also fails it when the device can't satisfy the
+        // HIGH_ACCURACY criteria (no network provider, stale/absent GMS — CI
+        // emulator images, de-Googled phones). A Balanced watch still gets
+        // GPS fixes there, which beats banner-and-nothing.
+        const watch = async (accuracy: Location.Accuracy) =>
+          Location.watchPositionAsync(
+            {
+              accuracy,
+              timeInterval: 1000,
+              distanceInterval: Math.max(1, minDisplacement),
+            },
+            (loc) => onFix(loc),
+          );
+        const onFix = (loc: Location.LocationObject) => {
+          const fix = toTrackPoint(loc);
+          setUnavailableReason(null);
+          const pos = { latitude: fix.latitude, longitude: fix.longitude };
+          locationRef.current = pos;
+          setLocation(pos);
+          setLastFix(fix);
+          // Foreground last-position persistence, throttled: the first fix
+          // of the session writes immediately (survives a later crash/kill),
+          // then at most one write per interval while fixes keep flowing.
+          const now = Date.now();
+          if (
+            shouldPersistPosition(lastPositionWriteAtRef.current, now) &&
+            persistLastKnownPosition(pos)
+          ) {
+            lastPositionWriteAtRef.current = now;
+          }
+          // Recorder filters by status internally. Only while the background
+          // task is CONFIRMED delivering does the watch stand down to just
+          // driving the marker — a started-but-silent task must never mute
+          // the only working feeder (the v1.0.2 no-points regression).
+          if (!isBackgroundFeedConfirmed()) useRecorderStore.getState().addPoint(fix);
+        };
+        try {
+          sub = await watch(Location.Accuracy.BestForNavigation);
+        } catch (err) {
+          if (cancelled) return;
+          if (!(err instanceof Error && /device settings/i.test(err.message))) throw err;
+          sub = await watch(Location.Accuracy.Balanced);
+        }
         if (cancelled) {
           sub.remove();
           return;
