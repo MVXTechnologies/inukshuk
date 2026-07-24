@@ -75,25 +75,30 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-- tapOn: 'Layers'
+# Content visibility lives in the Overlays menu's picker (the PDF/Trails
+# type toggles are retired; "Everything" in the picker is the way back).
+- tapOn: 'Map overlays'
 - extendedWaitUntil:
-    visible: 'Folders'
+    visible: 'Content.*'
     timeout: 10000
-- tapOn: 'Folders'
+- tapOn: 'Content.*'
 - extendedWaitUntil:
-    visible: 'Show folders'
+    visible: 'Show on the map'
     timeout: 10000
 - tapOn: 'TripA'
 - tapOn: 'Done'
 - assertVisible: 'Map actions'
-# Back to type mode: the Trails row exits folder mode without toggling.
-- tapOn: 'Layers'
+# Back to show-everything via the picker's Everything row.
+- tapOn: 'Map overlays'
 - extendedWaitUntil:
-    visible: 'Folders \(1\)'
+    visible: 'Content: 1 folder'
     timeout: 10000
-- tapOn: 'Trails \(\d+\)'
-- tapOn:
-    point: 10%,50%
+- tapOn: 'Content.*'
+- extendedWaitUntil:
+    visible: 'Everything'
+    timeout: 10000
+- tapOn: 'Everything'
+- tapOn: 'Done'
 - assertVisible: 'Map actions'
 # --- Clean up: delete the folder so reruns see the no-folders layout ---
 - tapOn:

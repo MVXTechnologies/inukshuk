@@ -8,6 +8,7 @@ import {
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
+import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
 import jpeg from 'jpeg-js';
@@ -125,6 +126,54 @@ export interface BasemapTexture {
   data: Uint8Array;
   width: number;
   height: number;
+}
+
+/**
+ * Stitch the Waymarked Trails hiking overlay for a tile range, PRESERVING
+ * tile alpha (unlike {@link fetchBasemapTexture}, which flattens to opaque) —
+ * the result is composited over a basemap raster by the map maker. A tile
+ * that fails to download stays fully transparent rather than failing the
+ * whole overlay (route coverage is spotty by nature).
+ */
+export async function fetchTrailsTexture(
+  range: TileRange,
+  network: TrailNetworkId,
+): Promise<BasemapTexture> {
+  const fullW = (range.maxX - range.minX + 1) * TILE;
+  const fullH = (range.maxY - range.minY + 1) * TILE;
+  const out = new Uint8Array(fullW * fullH * 4);
+
+  const jobs: Promise<void>[] = [];
+  for (let ty = range.minY; ty <= range.maxY; ty++) {
+    for (let tx = range.minX; tx <= range.maxX; tx++) {
+      const ox = (tx - range.minX) * TILE;
+      const oy = (ty - range.minY) * TILE;
+      jobs.push(
+        (async () => {
+          let rgba: Uint8Array;
+          try {
+            const url = trailNetworkTileUrl(network)
+              .replace('{z}', String(range.z))
+              .replace('{x}', String(tx))
+              .replace('{y}', String(ty));
+            rgba = decodeTileRGBA(
+              await storage.downloadBytes(url, `wmt-${network}-${range.z}-${tx}-${ty}.png`, UA),
+            );
+          } catch {
+            return; // transparent hole
+          }
+          for (let y = 0; y < TILE; y++) {
+            out.set(
+              rgba.subarray(y * TILE * 4, (y * TILE + TILE) * 4),
+              ((oy + y) * fullW + ox) * 4,
+            );
+          }
+        })(),
+      );
+    }
+  }
+  await Promise.all(jobs);
+  return { data: out, width: fullW, height: fullH };
 }
 
 /**

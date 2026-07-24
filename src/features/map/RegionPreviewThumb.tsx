@@ -37,7 +37,10 @@ interface Props {
   bbox: BoundingBox | null;
   basemap: Basemap;
   tileUrl: string;
+  /** Square edge (px) — or pass width/height for a banner crop. */
   size: number;
+  width?: number;
+  height?: number;
 }
 
 // Same self-identification as the 3D DEM/basemap fetches (see dem.ts) — the
@@ -70,7 +73,14 @@ function previewTile(bbox: BoundingBox, basemap: Basemap, tileUrl: string): Prev
   };
 }
 
-export function RegionPreviewThumb({ bbox, basemap, tileUrl, size }: Props): ReactElement {
+export function RegionPreviewThumb({
+  bbox,
+  basemap,
+  tileUrl,
+  size,
+  width,
+  height,
+}: Props): ReactElement {
   const theme = useTheme();
   const tile = useMemo(
     () => (bbox && tileUrl ? previewTile(bbox, basemap, tileUrl) : null),
@@ -110,7 +120,7 @@ export function RegionPreviewThumb({ bbox, basemap, tileUrl, size }: Props): Rea
 
   const imageUri = url !== null && loaded !== null && loaded.url === url ? loaded.localUri : null;
 
-  const box = { width: size, height: size, borderRadius: 8 };
+  const box = { width: width ?? size, height: height ?? size, borderRadius: 8 };
   return (
     <View style={[styles.frame, box, { borderColor: theme.colors.outlineVariant }]}>
       {imageUri !== null ? (

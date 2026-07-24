@@ -1,5 +1,12 @@
 import { contrastRatio } from '@core/color/contrast';
-import { darkTheme, lightTheme } from './theme';
+import {
+  darkTheme,
+  edgeDarkTheme,
+  edgeLightTheme,
+  lightTheme,
+  minimalDarkTheme,
+  minimalLightTheme,
+} from './theme';
 
 /**
  * Legibility gate. This is an outdoor trail app, so we hold text to AAA (7:1) for
@@ -12,6 +19,10 @@ const AA = 4.5;
 describe.each([
   ['light', lightTheme],
   ['dark', darkTheme],
+  ['minimal light', minimalLightTheme],
+  ['minimal dark', minimalDarkTheme],
+  ['edge light', edgeLightTheme],
+  ['edge dark', edgeDarkTheme],
 ])('%s theme contrast', (_name, theme) => {
   const c = theme.colors;
 

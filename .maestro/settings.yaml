@@ -34,6 +34,16 @@ appId: com.inukshuk.app
     retryTapIfNoChange: true
 - assertVisible: 'Keep screen awake.*'
 - assertVisible: 'GPS point spacing.*'
+# Display: theme switcher — force Dark, prove the screen survives the theme
+# swap, then back to System so reruns and later flows see the default look.
+- scrollUntilVisible:
+    element:
+      text: 'Theme.*'
+    direction: DOWN
+- tapOn: 'Dark'
+- assertVisible: 'Theme.*'
+- tapOn: 'System'
+- assertVisible: 'Theme.*'
 # iOS merges a row's title + subtitle into ONE accessibility string (Android
 # keeps them separate elements), so every row match below is a wildcard
 # regex — it hits the title element on Android and the merged row on iOS.

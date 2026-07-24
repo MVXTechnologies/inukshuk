@@ -15,6 +15,7 @@ import {
   NATIVE_MAX_ZOOM,
   type Basemap,
 } from '@core/geo/tiles';
+import { layoutMadeMap } from '@core/mapmaker/layout';
 import type { BoundingBox } from '@core/models';
 import { formatBytes } from '@lib/format';
 import type { ReactElement } from 'react';
@@ -371,6 +372,12 @@ export function RegionSelectOverlay({
   // Confirm.
   // ---------------------------------------------------------------------------
 
+  // The exact print scale this box will generate (the layout snaps to
+  // standard denominators, so this is always a whole ratio) — shown live
+  // while dragging so the user can chase a target like 1:25,000. A4 is the
+  // sheet's default format; Letter shifts it at most one step.
+  const makeMapScaleDenom = makeMapMode && geo ? layoutMadeMap(geo.bbox, 'a4').scaleDenom : null;
+
   const handleConfirm = useCallback(() => {
     // makeMap mode confirms the box alone — layers/quality/cap are the
     // download sheet's concerns.
@@ -545,7 +552,13 @@ export function RegionSelectOverlay({
         )}
 
         {/* Estimate + actions */}
-        {makeMapMode ? null : (
+        {makeMapMode ? (
+          <Text variant="bodyMedium" style={styles.summary}>
+            {makeMapScaleDenom !== null
+              ? `Prints at 1:${makeMapScaleDenom.toLocaleString('en-US')}`
+              : 'Calculating…'}
+          </Text>
+        ) : (
           <Text variant="bodyMedium" style={styles.summary}>
             {summary}
           </Text>
