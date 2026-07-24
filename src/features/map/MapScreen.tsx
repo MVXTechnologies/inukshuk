@@ -151,7 +151,6 @@ export function MapScreen() {
   const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
-  const toggleTerrain3d = useMapStore((s) => s.toggleTerrain3d);
   const basemap = useMapStore((s) => s.basemap);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
@@ -926,8 +925,6 @@ export function MapScreen() {
             if (overlay) fitOverlayBounds(overlay.bbox);
           }}
           terrain3d={terrain3d}
-          onToggle3d={toggleTerrain3d}
-          toggle3dDisabled={status !== 'idle' || selecting || downloadProgress !== null}
           pdfOverlayCount={overlays.length}
           trackOverlayCount={trackOverlays.length}
           minimalOpen={minimalControlsOpen}

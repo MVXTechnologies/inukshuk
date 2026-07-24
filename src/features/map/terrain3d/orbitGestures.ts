@@ -108,6 +108,15 @@ const DOUBLE_TAP_SLOP_PX = 60;
 const STALE_VELOCITY_MS = 120;
 /** New-sample weight when smoothing gesture velocity across move events. */
 const VELOCITY_SMOOTHING = 0.65;
+/**
+ * Pinch activation deadband: the cumulative finger-distance change (ratio vs
+ * the gesture's start) that turns zooming on. A two-finger SLIDE always has a
+ * few px of distance jitter; without the deadband every slide frame also
+ * applied a zoom step, and the anchored-zoom recentring fought the pan — the
+ * "two-finger move sometimes doesn't work, worse zoomed in" feel. Once
+ * crossed, the gesture zooms for its remainder (slide-then-pinch still works).
+ */
+const PINCH_ACTIVATE_RATIO = 0.06;
 
 const wrapPi = (a: number) => (a > Math.PI ? a - 2 * Math.PI : a < -Math.PI ? a + 2 * Math.PI : a);
 
@@ -177,6 +186,10 @@ export function createTerrainPanResponder({
     vTwist: 0,
     moved: false,
     multi: false,
+    // Pinch deadband bookkeeping: finger distance when the two-finger phase
+    // began, and whether zooming has activated for this gesture.
+    dist0: 0,
+    pinching: false,
   };
   let lastTap: { t: number; x: number; y: number } | null = null;
   let pendingTap: ReturnType<typeof setTimeout> | null = null;
@@ -228,6 +241,8 @@ export function createTerrainPanResponder({
       gp.vTwist = 0;
       gp.moved = false;
       gp.multi = false;
+      gp.dist0 = 0;
+      gp.pinching = false;
       onGestureStart?.();
     },
     onPanResponderMove: (e, g) => {
@@ -243,18 +258,26 @@ export function createTerrainPanResponder({
           cx: (t[0].pageX + t[1].pageX) / 2,
           cy: (t[0].pageY + t[1].pageY) / 2,
         };
+        if (gp.dist0 === 0) gp.dist0 = curr.dist;
         if (gp.dist > 0) {
-          const o = orbit.current;
-          const oldRadius = o.radius;
-          o.radius = clamp(oldRadius * (gp.dist / curr.dist), 0.8, 9);
-          const scale = o.radius / oldRadius;
-          if (onPinch && Math.abs(scale - 1) > 1e-4) {
-            // Centroid in view-local coords, so screens can unproject it.
-            onPinch(
-              scale,
-              (t[0].locationX + t[1].locationX) / 2,
-              (t[0].locationY + t[1].locationY) / 2,
-            );
+          // Zoom only once the pinch intent is clear (see PINCH_ACTIVATE_RATIO)
+          // so a plain two-finger slide is a pure pan.
+          if (!gp.pinching && Math.abs(curr.dist / gp.dist0 - 1) > PINCH_ACTIVATE_RATIO) {
+            gp.pinching = true;
+          }
+          if (gp.pinching) {
+            const o = orbit.current;
+            const oldRadius = o.radius;
+            o.radius = clamp(oldRadius * (gp.dist / curr.dist), 0.8, 9);
+            const scale = o.radius / oldRadius;
+            if (onPinch && Math.abs(scale - 1) > 1e-4) {
+              // Centroid in view-local coords, so screens can unproject it.
+              onPinch(
+                scale,
+                (t[0].locationX + t[1].locationX) / 2,
+                (t[0].locationY + t[1].locationY) / 2,
+              );
+            }
           }
           const dAng = wrapPi(curr.ang - gp.ang);
           const instTwist = dAng / dtS;
@@ -288,6 +311,9 @@ export function createTerrainPanResponder({
         gp.y = g.moveY;
         gp.single = true;
         gp.dist = 0;
+        // Re-baseline the deadband if a second finger lands again later.
+        gp.dist0 = 0;
+        gp.pinching = false;
         gp.vTwist = 0;
       }
       if (Math.hypot(g.dx, g.dy) > TAP_SLOP_PX) gp.moved = true;
