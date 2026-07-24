@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, useTheme } from 'react-native-paper';
 
 /**
- * The 'edge' UI style's map control: a half-pill flush against the right
- * screen edge (rounded only on its left side). At rest it shows just the
- * icon; touching it springs it open leftwards, revealing its label, and it
- * settles shut on release. Pills stack nearly edge-to-edge vertically so the
- * whole rail occupies a fraction of the map the classic FABs did.
+ * The 'edge' UI style's plain action button: a half-pill flush against the
+ * right screen edge (rounded only on its left side). Static width — action
+ * pills (locate, fit, 3D) have nothing to choose from, so they don't expand;
+ * menus use {@link EdgeExpandingMenu} instead. Press feedback is a small
+ * squeeze toward the edge.
  */
 
 interface Props {
@@ -21,72 +21,35 @@ interface Props {
 }
 
 const HEIGHT = 42;
-const COLLAPSED = 52;
-const EXPANDED = 150;
-
-/** How long an expanded pill keeps showing its title before settling shut. */
-const HOLD_OPEN_MS = 2600;
+const WIDTH = 52;
 
 export function EdgePill({ icon, label, onPress, active, disabled, accessibilityLabel }: Props) {
   const theme = useTheme();
-  const [anim] = useState(() => new Animated.Value(0));
-  // Expansion springs live in callbacks only; the refs mirror mount state and
-  // the pending auto-collapse so a press after unmount can't drive a dead
-  // Animated node and re-presses restart the hold-open window.
-  const mounted = useRef(true);
-  const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-      if (collapseTimer.current) clearTimeout(collapseTimer.current);
-    };
-  }, []);
+  const [squeeze] = useState(() => new Animated.Value(0));
 
   const spring = (to: number) =>
-    Animated.spring(anim, {
+    Animated.spring(squeeze, {
       toValue: to,
-      speed: 22,
-      bounciness: to === 1 ? 7 : 2,
-      // Width animation — layout property, JS driver required.
-      useNativeDriver: false,
+      speed: 30,
+      bounciness: 6,
+      useNativeDriver: true,
     }).start();
-
-  // The title STAYS once expanded: the pill springs open on touch and holds
-  // its label for a beat after release instead of snapping shut underneath
-  // the finger — re-touching within the window restarts it.
-  const scheduleCollapse = () => {
-    if (collapseTimer.current) clearTimeout(collapseTimer.current);
-    collapseTimer.current = setTimeout(() => {
-      if (mounted.current) spring(0);
-    }, HOLD_OPEN_MS);
-  };
-
-  const width = anim.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED, EXPANDED] });
-  const labelOpacity = anim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 0, 1] });
 
   const background = active ? theme.colors.primaryContainer : theme.colors.surface;
   const ink = active ? theme.colors.onPrimaryContainer : theme.colors.onSurface;
+  const scale = squeeze.interpolate({ inputRange: [0, 1], outputRange: [1, 0.92] });
 
   return (
-    <Animated.View style={[styles.pill, { width, backgroundColor: background }]}>
+    <Animated.View style={[styles.pill, { backgroundColor: background, transform: [{ scale }] }]}>
       <Pressable
         style={styles.press}
         disabled={disabled}
-        onPressIn={() => {
-          if (collapseTimer.current) clearTimeout(collapseTimer.current);
-          spring(1);
-        }}
-        onPressOut={scheduleCollapse}
+        onPressIn={() => spring(1)}
+        onPressOut={() => spring(0)}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? label}
       >
-        <Animated.View style={[styles.labelBox, { opacity: labelOpacity }]}>
-          <Text variant="labelLarge" style={{ color: ink }} numberOfLines={1}>
-            {label}
-          </Text>
-        </Animated.View>
         <Icon source={icon} size={22} color={disabled ? theme.colors.outline : ink} />
       </Pressable>
     </Animated.View>
@@ -96,9 +59,9 @@ export function EdgePill({ icon, label, onPress, active, disabled, accessibility
 const styles = StyleSheet.create({
   pill: {
     height: HEIGHT,
+    width: WIDTH,
     borderTopLeftRadius: HEIGHT / 2,
     borderBottomLeftRadius: HEIGHT / 2,
-    // Flush with the screen edge: square on the right, soft on the left.
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
     elevation: 3,
@@ -110,11 +73,8 @@ const styles = StyleSheet.create({
   },
   press: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingRight: 15,
-    gap: 8,
+    justifyContent: 'center',
+    paddingRight: 3,
   },
-  labelBox: { flexShrink: 1 },
 });
