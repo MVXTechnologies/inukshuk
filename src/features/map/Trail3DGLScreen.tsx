@@ -138,6 +138,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [draft, setDraft] = useState('');
   const [draftPhoto, setDraftPhoto] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  // Note badge tapped on the trail (2D pin or 3D projected circle): shows the
+  // note text + photo in place, without hunting for its row in the list below.
+  const [viewingNoteId, setViewingNoteId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   // True while a finger is down on the map/terrain box. The whole screen lives
   // in a ScrollView, which intercepts vertical drags before they reach the
@@ -697,7 +700,13 @@ export function Trail3DGLScreen({ trackId }: Props) {
             // source created with empty data doesn't reliably pick up a later
             // update, which is why the trace previously appeared only after a
             // 2D/3D toggle forced a remount.
-            <Trail2DView points={points} notes={notes} scrubAt={scrub} basemap={basemap} />
+            <Trail2DView
+              points={points}
+              notes={notes}
+              scrubAt={scrub}
+              basemap={basemap}
+              onNotePress={setViewingNoteId}
+            />
           ) : (
             <View style={styles.center} pointerEvents="none">
               <ActivityIndicator size="large" />
@@ -705,19 +714,23 @@ export function Trail3DGLScreen({ trackId }: Props) {
           )}
           {/* Numbered note circles over the 3D terrain — the same badges the 2D
               map pins on the trace, projected to screen space each render tick.
-              Visual only, like 2D: the notes list below is the interaction
-              surface. Offset by half the 24dp badge so the circle centres on
-              the anchor. */}
+              Tapping one opens the note viewer; the badges sit above the GL
+              pan-responder surface, so their touches win over camera gestures.
+              Offset by half the 24dp badge so the circle centres on the
+              anchor. */}
           {trailViewMode === '3d' &&
             status === 'ready' &&
             noteBadges.map((b) => (
-              <View
+              <Pressable
                 key={b.id}
-                pointerEvents="none"
+                onPress={() => setViewingNoteId(b.id)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Note ${b.num}`}
                 style={[styles.noteBadge3d, { left: b.x - 12, top: b.y - 12 }]}
               >
                 <NoteNumberBadge num={b.num} />
-              </View>
+              </Pressable>
             ))}
           {trailViewMode === '3d' && status === 'loading' && (
             <View style={styles.center} pointerEvents="none">
@@ -916,6 +929,47 @@ export function Trail3DGLScreen({ trackId }: Props) {
             <Button onPress={() => setViewingPhoto(null)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
+
+        {/* Viewer for a note badge tapped on the trail (2D pin / 3D circle). */}
+        {(() => {
+          const idx = ordered.findIndex((n) => n.id === viewingNoteId);
+          const note = idx >= 0 ? ordered[idx] : undefined;
+          return (
+            <Dialog visible={note !== undefined} onDismiss={() => setViewingNoteId(null)}>
+              {note && (
+                <>
+                  <Dialog.Title>
+                    Note {idx + 1} · {formatDistance(note.distanceM)}
+                  </Dialog.Title>
+                  <Dialog.Content>
+                    <Text variant="bodyMedium">{note.text}</Text>
+                    {note.photoUri && (
+                      <Image
+                        source={{ uri: note.photoUri }}
+                        style={styles.notePhotoView}
+                        resizeMode="contain"
+                      />
+                    )}
+                  </Dialog.Content>
+                  <Dialog.Actions>
+                    <Button
+                      icon="pencil-outline"
+                      onPress={() => {
+                        setViewingNoteId(null);
+                        setDraft(note.text);
+                        setDraftPhoto(note.photoUri ?? null);
+                        setEditing({ mode: 'edit', noteId: note.id });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button onPress={() => setViewingNoteId(null)}>Close</Button>
+                  </Dialog.Actions>
+                </>
+              )}
+            </Dialog>
+          );
+        })()}
       </Portal>
 
       <Snackbar
@@ -991,4 +1045,5 @@ const styles = StyleSheet.create({
   photoPreviewWrap: { marginTop: 10, alignItems: 'flex-start' },
   photoPreview: { width: '100%', height: 160, borderRadius: 8 },
   photoFull: { width: '100%', height: 360 },
+  notePhotoView: { width: '100%', height: 240, marginTop: 12, borderRadius: 8 },
 });
