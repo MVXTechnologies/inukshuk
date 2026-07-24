@@ -41,6 +41,11 @@ updates:
       - dependency-name: 'react-native-*'
       - dependency-name: '@react-native/*'
       - dependency-name: 'babel-preset-expo'
+      # eslint-config-expo's major tracks the Expo SDK major (57.x targets SDK
+      # 57): the pin gate rejects any independent bump (see PR #76). It moves
+      # with `npx expo install --fix` during an SDK upgrade.
+      - dependency-name: 'eslint-config-expo'
+        update-types: ['version-update:semver-major']
       - dependency-name: 'jest'
       - dependency-name: 'jest-*'
       - dependency-name: '@types/jest'
