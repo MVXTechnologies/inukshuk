@@ -15,6 +15,14 @@ updates:
       - dependency-name: 'react'
       - dependency-name: 'react-dom'
       - dependency-name: 'react-test-renderer'
+      # pdf.js is BUNDLED as committed WebView assets (assets/pdfjs/*.pdfjs,
+      # v3 legacy builds exposing window.pdfjsLib); the npm package only pins
+      # the provenance of those assets. pdf.js v4+ ships ESM builds without
+      # the global our WebView loader needs, so a major bump here is a real
+      # migration (regenerate assets + revalidate the device-only rasterizer
+      # pipeline), not a dependency update. See PR #72's closing note.
+      - dependency-name: 'pdfjs-dist'
+        update-types: ['version-update:semver-major']
       # three must stay on r162. expo-gl provides a WebGL 1 context, and three
       # r163+ dropped WebGL 1 support, so the 3D terrain view (expo-three
       # Renderer over GLView) breaks on newer three. See #39 (the pin) and #62
