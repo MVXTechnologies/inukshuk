@@ -469,19 +469,30 @@ export function ElevationProfile({
                 fill="none"
               />
             ))}
+            {/* Pace axis: just the top/bottom values (up = faster is evident),
+                angled like the distance ticks, living in the right margin so
+                the curves never run over them. */}
             {drawPace && speedRange && (
               <>
-                <SvgText x={width - 4} y={16} fontSize={8} fill={PACE_COLOR} textAnchor="end">
-                  {`fast ${formatPace(speedRange.hi)}`}
-                </SvgText>
                 <SvgText
-                  x={width - 4}
-                  y={CHART_HEIGHT - 6}
+                  x={width - AXIS_RIGHT + 6}
+                  y={14}
                   fontSize={8}
                   fill={PACE_COLOR}
-                  textAnchor="end"
+                  textAnchor="start"
+                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} 14)`}
                 >
-                  {`slow ${formatPace(speedRange.lo)}`}
+                  {formatPace(speedRange.hi)}
+                </SvgText>
+                <SvgText
+                  x={width - AXIS_RIGHT + 6}
+                  y={CHART_HEIGHT - 22}
+                  fontSize={8}
+                  fill={PACE_COLOR}
+                  textAnchor="start"
+                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} ${CHART_HEIGHT - 22})`}
+                >
+                  {formatPace(speedRange.lo)}
                 </SvgText>
               </>
             )}
@@ -497,12 +508,31 @@ export function ElevationProfile({
                 fill="none"
               />
             ))}
+            {/* HR axis, mirroring pace: top/bottom bpm angled in the left
+                gutter's free corners, clear of curves and elevation labels. */}
             {drawHr && hrRange && (
-              // Top-left of the plot: the top-right corner belongs to the pace
-              // "fast" label.
-              <SvgText x={AXIS_LEFT + 4} y={16} fontSize={8} fill={HR_COLOR} textAnchor="start">
-                {`${Math.round(hrRange.lo)}–${Math.round(hrRange.hi)} bpm`}
-              </SvgText>
+              <>
+                <SvgText
+                  x={AXIS_LEFT - 6}
+                  y={34}
+                  fontSize={8}
+                  fill={HR_COLOR}
+                  textAnchor="end"
+                  transform={`rotate(45 ${AXIS_LEFT - 6} 34)`}
+                >
+                  {`${Math.round(hrRange.hi)} bpm`}
+                </SvgText>
+                <SvgText
+                  x={AXIS_LEFT - 6}
+                  y={CHART_HEIGHT - 16}
+                  fontSize={8}
+                  fill={HR_COLOR}
+                  textAnchor="end"
+                  transform={`rotate(45 ${AXIS_LEFT - 6} ${CHART_HEIGHT - 16})`}
+                >
+                  {`${Math.round(hrRange.lo)} bpm`}
+                </SvgText>
+              </>
             )}
 
             {/* Distance ticks, tilted 45° in the band below the plot. */}
