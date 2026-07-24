@@ -99,6 +99,12 @@ jobs:
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
+            # Location SERVICES must be on or Maestro's setLocation feeds a fix
+            # the OS never delivers: the app shows "Location is turned off",
+            # waypoint drops no-op and recording captures zero points — the
+            # exact nightly failure cascade (waypoint → category-record → every
+            # fixture-dependent flow).
+            adb shell cmd location set-location-enabled true
             # Let system_server finish its post-boot work before loading it
             # further — installing + launching immediately after boot is what
             # tipped the (previously unaccelerated) system process into ANR.
