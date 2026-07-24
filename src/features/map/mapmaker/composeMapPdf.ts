@@ -9,6 +9,7 @@ import { formatGratLabel, graticuleForBbox } from '@core/mapmaker/graticule';
 import { blendRgbaOver } from '@core/mapmaker/rasterDraw';
 import type { Position } from 'geojson';
 import type { BoundingBox, CornerCoordinates, LngLat } from '@core/models';
+import type { TrailNetworkId } from '@core/geo/trailNetworks';
 import { Buffer } from 'buffer';
 import jpeg from 'jpeg-js';
 import {
@@ -55,8 +56,8 @@ export interface MakeMapOptions {
   /** Opacity of the slope shading layer, 0..1. */
   slopeOpacity: number;
   includeUserData: boolean;
-  /** Waymarked Trails hiking overlay composited over the basemap. */
-  markedTrails: boolean;
+  /** Marked-trail databases composited over the basemap (empty = none). */
+  markedTrailsNetworks: TrailNetworkId[];
   markedTrailsOpacity: number;
   /** Lat/lng graticule with edge labels. */
   grid: boolean;
@@ -125,10 +126,11 @@ export async function composeMapPdf(
   onProgress('tiles', 0.7);
   await nextTask();
   const baseRaster = cropRasterToBbox(texture, range, drawBbox);
-  if (options.markedTrails) {
-    // Waymarked Trails composited straight into the basemap raster: the routes
-    // become part of the printed base image, under the vector layers.
-    const trails = await fetchTrailsTexture(range);
+  for (const network of options.markedTrailsNetworks) {
+    // Each checked trail database composited straight into the basemap
+    // raster: the routes become part of the printed base image, under the
+    // vector layers.
+    const trails = await fetchTrailsTexture(range, network);
     if (handle.aborted) throw new Error('aborted');
     await nextTask();
     const trailsCrop = cropRasterToBbox(trails, range, drawBbox);
@@ -249,25 +251,30 @@ export async function composeMapPdf(
       [drawBbox.maxLng, lat],
     ]);
     strokeLines(projectLines(layout, [...meridianLines, ...parallelLines]), 0.35, GRID_COLOR);
+    // Coordinate indications AROUND the border, quad-sheet style: longitudes
+    // just below the bottom neatline, latitudes in the left margin beside
+    // their parallel.
     const project = pageProjector(layout);
     for (const lng of grat.meridians) {
       const p = project([lng, drawBbox.minLat]);
-      page.drawText(formatGratLabel(lng, 'lng'), {
-        x: p.x + 2,
-        y: mapRect.y + 4,
+      const label = formatGratLabel(lng, 'lng');
+      page.drawText(label, {
+        x: p.x - font.widthOfTextAtSize(label, 6) / 2,
+        y: mapRect.y - 8,
         size: 6,
         font,
-        color: GRID_COLOR,
+        color: INK,
       });
     }
     for (const lat of grat.parallels) {
       const p = project([drawBbox.minLng, lat]);
-      page.drawText(formatGratLabel(lat, 'lat'), {
-        x: mapRect.x + 3,
-        y: p.y + 2,
+      const label = formatGratLabel(lat, 'lat');
+      page.drawText(label, {
+        x: mapRect.x - font.widthOfTextAtSize(label, 6) - 3,
+        y: p.y - 2,
         size: 6,
         font,
-        color: GRID_COLOR,
+        color: INK,
       });
     }
   }
@@ -350,7 +357,7 @@ export async function composeMapPdf(
     font,
     color: INK,
   });
-  page.drawText(`Scale 1:${layout.approxScaleDenom.toLocaleString('en-US')}`, {
+  page.drawText(`Scale 1:${layout.scaleDenom.toLocaleString('en-US')}`, {
     x: mapRect.x,
     y: barY - 12,
     size: 9,
@@ -415,7 +422,7 @@ export async function composeMapPdf(
   if (contourLines) parts.push(`Contours every ${effectiveIntervalM} m`);
   if (slopePng) parts.push(`Slope ${options.slopeMinDeg}–${options.slopeMaxDeg}°`);
   parts.push(options.basemap === 'satellite' ? 'Imagery © Esri' : 'Map © Esri');
-  if (options.markedTrails) parts.push('Routes © Waymarked Trails');
+  if (options.markedTrailsNetworks.length > 0) parts.push('Routes © Waymarked Trails');
   parts.push(`Made with Inukshuk · ${new Date().toISOString().slice(0, 10)}`);
   page.drawText(parts.join('  ·  '), {
     x: mapRect.x,

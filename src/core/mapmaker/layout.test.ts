@@ -1,4 +1,4 @@
-import { layoutMadeMap, PAGE_FORMATS } from './layout';
+import { layoutMadeMap, PAGE_FORMATS, SCALE_DENOMS } from './layout';
 import type { BoundingBox } from '@core/models';
 
 // Québec-ish latitude; ~11 km wide × ~5.5 km tall (wider than tall).
@@ -33,13 +33,16 @@ describe('layoutMadeMap', () => {
     expect(gw / gh).toBeCloseTo(l.mapRect.w / l.mapRect.h, 2);
   });
 
-  it('computes a self-consistent scale', () => {
+  it('snaps to an exact standard print scale that still fits the region', () => {
     const l = layoutMadeMap(WIDE, 'a4');
+    // The denominator is a catalogued standard, and metersPerPt derives from
+    // it EXACTLY (1 pt = 0.0254/72 m on paper).
+    expect(SCALE_DENOMS).toContain(l.scaleDenom);
+    expect(l.metersPerPt).toBeCloseTo(l.scaleDenom * (0.0254 / 72), 9);
+    // The drawn region at that scale spans the frame exactly and still
+    // contains the request.
     expect(l.mapRect.w * l.metersPerPt).toBeCloseTo(groundWidthM(l.drawBbox), 0);
-    // approx label rounded to ≤2 significant digits of the real denominator.
-    const real = l.metersPerPt / 0.0003527778; // meters per point → 1:N
-    expect(l.approxScaleDenom / real).toBeGreaterThan(0.8);
-    expect(l.approxScaleDenom / real).toBeLessThan(1.25);
+    expect(groundWidthM(l.drawBbox)).toBeGreaterThanOrEqual(groundWidthM(WIDE) - 1);
   });
 
   it('caps the raster long edge at 4096 px and stays as sharp as the cap allows', () => {

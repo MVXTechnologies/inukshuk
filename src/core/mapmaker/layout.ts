@@ -27,7 +27,7 @@ export const PAGE_FORMATS: Record<PageFormat, PageSpec> = {
 };
 
 /** Side/top margin and the taller bottom strip that carries the legend. */
-export const MARGIN_PT = 24;
+export const MARGIN_PT = 30;
 export const BOTTOM_STRIP_PT = 88;
 
 /** Long-edge cap for the stitched basemap raster (memory: 4096² RGBA = 64 MB). */
@@ -46,12 +46,18 @@ export interface MadeMapLayout {
   /** Requested bbox expanded (centre-anchored) to the map frame's aspect. */
   drawBbox: BoundingBox;
   metersPerPt: number;
-  /** Print-scale denominator for the label, rounded to 2 significant digits. */
-  approxScaleDenom: number;
+  /** EXACT print-scale denominator the layout is snapped to (e.g. 25000). */
+  scaleDenom: number;
   /** Zoom whose tiles render the frame as sharp as the raster cap allows. */
   rasterZoom: number;
   scaleBar: { meters: number; widthPt: number; label: string };
 }
+
+/** Standard print-scale denominators the layout snaps to (exact scales). */
+export const SCALE_DENOMS = [
+  1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000, 40000, 50000, 75000, 100000, 150000,
+  200000, 250000, 500000, 1000000,
+] as const;
 
 const SCALE_BAR_METERS = [
   100, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000, 100000,
@@ -76,12 +82,24 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
     h: page.heightPt - BOTTOM_STRIP_PT - MARGIN_PT,
   };
 
-  // Expand the bbox (never shrink) to the frame's aspect, centre-anchored.
+  // Aspect-fit the request, then snap to an EXACT clean print scale (the
+  // CalTopo/USGS way): take the tightest fit's ratio, step UP to the next
+  // standard denominator, and derive the drawn region from that exact scale —
+  // the region always fits (never crops), the page just shows a bit more
+  // margin, and the printed "1:25,000" is literally true instead of a
+  // rounded label.
   const frameAspect = mapRect.w / mapRect.h;
   let spanLngM = groundW;
   let spanLatM = groundH;
   if (groundW / groundH > frameAspect) spanLatM = groundW / frameAspect;
   else spanLngM = groundH * frameAspect;
+  const fitScaleDenom = spanLngM / mapRect.w / M_PER_PT;
+  const scaleDenom =
+    SCALE_DENOMS.find((d) => d >= fitScaleDenom - 1e-9) ?? SCALE_DENOMS[SCALE_DENOMS.length - 1]!;
+  const metersPerPt = scaleDenom * M_PER_PT;
+  spanLngM = metersPerPt * mapRect.w;
+  spanLatM = metersPerPt * mapRect.h;
+
   const cLng = (bbox.minLng + bbox.maxLng) / 2;
   const halfLng = spanLngM / (M_PER_DEG * cosLat) / 2;
   const halfLat = spanLatM / M_PER_DEG / 2;
@@ -93,11 +111,6 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
     minLat: Math.min(latMid - halfLat, bbox.minLat),
     maxLat: Math.max(latMid + halfLat, bbox.maxLat),
   };
-
-  const metersPerPt = spanLngM / mapRect.w;
-  const scaleDenom = metersPerPt / M_PER_PT;
-  const magnitude = 10 ** Math.floor(Math.log10(scaleDenom) - 1);
-  const approxScaleDenom = Math.round(scaleDenom / magnitude) * magnitude;
 
   // Sharpest zoom whose raster for the frame stays under the long-edge cap.
   const longEdgeM = Math.max(spanLngM, spanLatM);
@@ -116,5 +129,5 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
     label: meters >= 1000 ? `${meters / 1000} km` : `${meters} m`,
   };
 
-  return { format, page, mapRect, drawBbox, metersPerPt, approxScaleDenom, rasterZoom, scaleBar };
+  return { format, page, mapRect, drawBbox, metersPerPt, scaleDenom, rasterZoom, scaleBar };
 }

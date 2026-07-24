@@ -82,7 +82,11 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
     slopeMaxDeg: settings.terrainSlopeMaxDeg,
     slopeOpacity,
     includeUserData,
-    markedTrails,
+    markedTrailsNetworks: markedTrails
+      ? settings.markedTrailsNetworks.length > 0
+        ? settings.markedTrailsNetworks
+        : ['hiking']
+      : [],
     markedTrailsOpacity,
     grid,
     compass,
@@ -149,7 +153,10 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
             <ActivityIndicator size="small" />
           </View>
         )}
-        <Text variant="labelMedium" style={styles.deskCaption}>
+        <Text
+          variant="labelMedium"
+          style={[styles.deskCaption, { color: theme.dark ? '#efe9dc' : '#4a453a' }]}
+        >
           {preview.error ? 'Preview unavailable — check connection' : caption}
         </Text>
       </View>
@@ -285,7 +292,7 @@ const styles = StyleSheet.create({
   pageImage: { flex: 1 },
   pageEmpty: { flex: 1, backgroundColor: '#eee' },
   previewSpinner: { position: 'absolute', top: 42, right: 22 },
-  deskCaption: { marginTop: 10, opacity: 0.9, color: '#efe9dc' },
+  deskCaption: { marginTop: 10, opacity: 0.9 },
   drawer: {
     position: 'absolute',
     left: 0,

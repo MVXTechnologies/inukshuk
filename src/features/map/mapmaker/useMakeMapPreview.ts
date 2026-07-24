@@ -67,7 +67,7 @@ export function useMakeMapPreview(bbox: BoundingBox, options: MakeMapOptions): M
     options.slopeMinDeg,
     options.slopeMaxDeg,
     options.slopeOpacity,
-    options.markedTrails,
+    options.markedTrailsNetworks.join(','),
     options.markedTrailsOpacity,
     options.grid,
     bbox.minLng,
@@ -96,8 +96,8 @@ export function useMakeMapPreview(bbox: BoundingBox, options: MakeMapOptions): M
           // Line weights track the raster size so contours stay proportionate.
           const lineScale = Math.max(1, Math.round(raster.width / 500));
 
-          if (options.markedTrails) {
-            const trails = await fetchTrailsTexture(range);
+          for (const network of options.markedTrailsNetworks) {
+            const trails = await fetchTrailsTexture(range, network);
             if (reqId !== reqIdRef.current) return;
             const crop = cropRasterToBbox(trails, range, drawBbox);
             if (crop.width === raster.width && crop.height === raster.height) {
@@ -185,7 +185,7 @@ export function useMakeMapPreview(bbox: BoundingBox, options: MakeMapOptions): M
             uri: `data:image/png;base64,${bytesToBase64(png)}`,
             width: raster.width,
             height: raster.height,
-            scaleDenom: layout.approxScaleDenom,
+            scaleDenom: layout.scaleDenom,
             contourIntervalM,
             loading: false,
             error: null,
