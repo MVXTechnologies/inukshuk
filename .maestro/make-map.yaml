@@ -29,7 +29,17 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-- tapOn: 'Map actions'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Make a map'
+          commands:
+            - tapOn: 'Map actions'
+      - extendedWaitUntil:
+          visible: 'Make a map'
+          timeout: 60000
 - tapOn: 'Make a map'
 # Step 1: the bare region selector (no layers/quality — just the box + Next).
 - extendedWaitUntil:
