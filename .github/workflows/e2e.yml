@@ -87,6 +87,12 @@ jobs:
           api-level: 34
           arch: x86_64
           profile: pixel_6
+          # google_apis, not AOSP: the default image has no fused/network
+          # location provider, so expo-location's watch throws "location
+          # services are disabled" even with services enabled — the app then
+          # shows its 'Location is turned off' banner and every GPS-dependent
+          # flow no-ops (waypoint drops, recordings).
+          target: google_apis
           # Headless, software GPU, no snapshots/boot-anim — the stable combo for
           # ubuntu-latest CI emulators (avoids GPU/snapshot races at boot).
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
@@ -105,6 +111,8 @@ jobs:
             # exact nightly failure cascade (waypoint → category-record → every
             # fixture-dependent flow).
             adb shell cmd location set-location-enabled true
+            adb shell settings put secure location_providers_allowed +gps || true
+            adb shell settings put secure location_providers_allowed +network || true
             # Let system_server finish its post-boot work before loading it
             # further — installing + launching immediately after boot is what
             # tipped the (previously unaccelerated) system process into ANR.
