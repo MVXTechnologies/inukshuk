@@ -58,7 +58,7 @@ jobs:
       # don't exist at checkout, see #77). Keyed on the lockfile since the
       # native deps derive from the RN/Expo packages.
       - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
@@ -105,7 +105,7 @@ jobs:
       # Caches downloaded pod artifacts (not the generated Pods/ dir, which
       # depends on the prebuild output) — keyed on the lockfile like Gradle.
       - name: Cache CocoaPods downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
