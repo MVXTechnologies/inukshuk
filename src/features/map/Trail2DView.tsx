@@ -14,7 +14,7 @@ import {
   Marker,
 } from '@maplibre/maplibre-react-native';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
@@ -24,6 +24,7 @@ export function Trail2DView({
   notes,
   scrubAt,
   basemap,
+  onNotePress,
 }: {
   points: readonly TrackPoint[];
   notes?: readonly TrackNote[];
@@ -31,6 +32,8 @@ export function Trail2DView({
   scrubAt?: TrackPointAt | null;
   /** Viewer-local basemap from the trail rail; falls back to the main map's. */
   basemap?: MapBasemap;
+  /** Called with the note id when a numbered pin is tapped. */
+  onNotePress?: (noteId: string) => void;
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const mainBasemap = useMapStore((s) => s.basemap);
@@ -126,8 +129,8 @@ export function Trail2DView({
 
       {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
           style declares no glyphs endpoint, so MapLibre text would not render.
-          Visual only — the notes list below the map is the interaction surface
-          (MapLibre's <Marker onPress> doesn't fire on Android anyway). */}
+          Tap handling goes through a Pressable CHILD, not <Marker onPress> —
+          the marker-level handler doesn't fire on Android. */}
       {numberedNotes.map((n) => (
         <Marker
           key={n.note.id}
@@ -135,7 +138,15 @@ export function Trail2DView({
           lngLat={[n.longitude, n.latitude]}
           anchor="center"
         >
-          <NoteNumberBadge num={n.num} />
+          <Pressable
+            onPress={onNotePress ? () => onNotePress(n.note.id) : undefined}
+            disabled={!onNotePress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Note ${n.num}`}
+          >
+            <NoteNumberBadge num={n.num} />
+          </Pressable>
         </Marker>
       ))}
     </Map>

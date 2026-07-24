@@ -1,3 +1,4 @@
+import { edgePill } from '@ui/theme';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Animated, LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
@@ -59,14 +60,14 @@ export function EdgeExpandingMenu({
   const labelOpacity = width.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 0, 1] });
 
   const surface = theme.colors.elevation?.level2 ?? theme.colors.surface;
+  // The pill matches the action pills' fixed dark slab; open state shows in
+  // the pastel-river ink (the "+" dial blue), not a fill change.
+  const ink = open ? edgePill.active : edgePill.ink;
 
   return (
     <View style={styles.host}>
       <Animated.View
-        style={[
-          styles.pill,
-          { width: pillWidth, backgroundColor: open ? theme.colors.primaryContainer : surface },
-        ]}
+        style={[styles.pill, { width: pillWidth, backgroundColor: edgePill.background }]}
       >
         <Pressable
           style={styles.press}
@@ -75,19 +76,11 @@ export function EdgeExpandingMenu({
           accessibilityLabel={accessibilityLabel ?? label}
         >
           <Animated.View style={{ opacity: labelOpacity }}>
-            <Text
-              variant="labelLarge"
-              numberOfLines={1}
-              style={{ color: open ? theme.colors.onPrimaryContainer : theme.colors.onSurface }}
-            >
+            <Text variant="labelLarge" numberOfLines={1} style={{ color: ink }}>
               {label}
             </Text>
           </Animated.View>
-          <Icon
-            source={icon}
-            size={22}
-            color={open ? theme.colors.onPrimaryContainer : theme.colors.onSurface}
-          />
+          <Icon source={icon} size={22} color={ink} />
         </Pressable>
       </Animated.View>
       {rendered && <View style={[styles.panel, { backgroundColor: surface }]}>{children}</View>}

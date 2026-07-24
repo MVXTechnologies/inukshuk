@@ -180,6 +180,40 @@ describe('parseGpx hand-written input', () => {
     const back = parseGpx(buildGpx({ points })).points;
     expect(back[0]!.speed).toBe(4.125);
   });
+
+  it('reads gpxtpx:hr from a Garmin TrackPointExtension', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lat="1" lon="2"><extensions>
+          <gpxtpx:TrackPointExtension><gpxtpx:hr>142</gpxtpx:hr></gpxtpx:TrackPointExtension>
+        </extensions></trkpt>
+        <trkpt lat="1" lon="2"><extensions>
+          <ns3:TrackPointExtension><ns3:hr>151</ns3:hr></ns3:TrackPointExtension>
+        </extensions></trkpt>
+        <trkpt lat="1" lon="2"/>
+      </trkseg></trk></gpx>`;
+    const pts = parseGpx(xml).points;
+    expect(pts[0]!.heartRateBpm).toBe(142);
+    expect(pts[1]!.heartRateBpm).toBe(151);
+    expect(pts[2]!.heartRateBpm).toBeUndefined();
+  });
+
+  it('drops zero/negative heart rates (sensor dropouts)', () => {
+    const xml = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <trk><trkseg>
+        <trkpt lat="1" lon="2"><extensions>
+          <gpxtpx:TrackPointExtension><gpxtpx:hr>0</gpxtpx:hr></gpxtpx:TrackPointExtension>
+        </extensions></trkpt>
+      </trkseg></trk></gpx>`;
+    expect(parseGpx(xml).points[0]!.heartRateBpm).toBeUndefined();
+  });
+
+  it('round-trips heart rate via buildGpx and declares the gpxtpx namespace', () => {
+    const points: TrackPoint[] = [{ latitude: 1, longitude: 2, time: 0, heartRateBpm: 137 }];
+    const xml = buildGpx({ points });
+    expect(xml).toContain('xmlns:gpxtpx');
+    expect(parseGpx(xml).points[0]!.heartRateBpm).toBe(137);
+  });
 });
 
 describe('parseGpx waypoints', () => {

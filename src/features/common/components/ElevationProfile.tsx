@@ -5,28 +5,39 @@ import {
   type TrackPointAt,
 } from '@core/geo/track';
 import type { TrackPoint } from '@core/models';
-import { formatDistance, formatElevation, formatPace, formatSpeed } from '@lib/format';
+import { formatDistance, formatElevation, formatPace } from '@lib/format';
 import { Fragment, useMemo, useState } from 'react';
 import {
   PanResponder,
+  Pressable,
   StyleSheet,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from 'react-native-paper';
 import Svg, {
   Circle,
   Defs,
   Line,
   LinearGradient,
   Path,
-  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
 
+/** Height of the plot area (the tilted x-tick band hangs below it). */
 const CHART_HEIGHT = 140;
+/** Band under the plot for the 45°-tilted distance ticks. */
+const X_AXIS_H = 30;
+/** Left gutter reserved for the elevation labels, clear of the curve. */
+const AXIS_LEFT = 38;
+/**
+ * Right margin of the plot. The card clips at its rounded edge
+ * (overflow: hidden), so the last tilted tick label and the curves' final
+ * strokes need room to finish inside it.
+ */
+const AXIS_RIGHT = 34;
 
 interface Props {
   points: readonly TrackPoint[];
@@ -44,7 +55,7 @@ interface Props {
 }
 
 // ---------------------------------------------------------------------------
-// Colour ramps (shared by the curve stroke and the colourbar legend)
+// Colours
 // ---------------------------------------------------------------------------
 
 type RampStop = [number, number, number];
@@ -71,6 +82,13 @@ const GRADE_STOPS: RampStop[] = [
 /** Grade colour domain (± %, clamped) — beyond this everything reads "steep". */
 const GRADE_LIMIT = 25;
 
+// Fixed series colours (not themed): they must match their readout text and
+// stay readable on the surfaceVariant chart panel in both colour schemes.
+const PACE_COLOR = '#4E97C9';
+const HR_COLOR = '#E0526A';
+/** Active state for the series toggles — the requested light blue. */
+const TOGGLE_ACTIVE = '#6FB1DC';
+
 // ---------------------------------------------------------------------------
 // Geometry
 // ---------------------------------------------------------------------------
@@ -93,12 +111,24 @@ function smoothPath(pts: { x: number; y: number }[]): string {
   return d;
 }
 
+/** Round-number distance ticks: enough of them to be useful, never crowded. */
+function distanceTicks(totalM: number): number[] {
+  if (totalM <= 0) return [];
+  const stepsM = [100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000];
+  const step = stepsM.find((s) => totalM / s <= 8) ?? 100_000;
+  const out: number[] = [];
+  for (let d = step; d < totalM; d += step) out.push(d);
+  // Label the very end too, unless it would collide with the last round tick.
+  if (out.length === 0 || totalM - out[out.length - 1]! > step * 0.4) out.push(totalM);
+  return out;
+}
+
 /**
- * Elevation-vs-distance profile: the altitude curve (smoothed, soft area
- * fill) with its EDGE stroked in a metric colour — pace for timed trails, or
- * grade — and a labelled colourbar underneath so the colours are actually
- * interpretable. Touch and drag to scrub; a marker rides the line and the
- * readout shows elevation, distance, grade and pace at that point.
+ * Elevation-vs-distance profile with up to three series sharing the distance
+ * axis: the altitude curve (soft fill, edge stroked by grade colour), the pace
+ * curve (up = faster) and the heart-rate curve — each behind its own toggle in
+ * the header (mountain / shoe / heart, all on by default). Touch and drag to
+ * scrub; the readout colours each value like its curve.
  */
 export function ElevationProfile({
   points,
@@ -113,14 +143,19 @@ export function ElevationProfile({
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<number | null>(null);
   const [scrubAt, setScrubAt] = useState<TrackPointAt | null>(null);
+  // Series visibility (item 7): mountain / shoe / heart, all on by default.
+  const [showElev, setShowElev] = useState(true);
+  const [showPaceCurve, setShowPaceCurve] = useState(true);
+  const [showHrCurve, setShowHrCurve] = useState(true);
 
-  // Speed at each profile sample, + its range. Uses the recorded GPS speed
-  // when present, else derives it from time between samples — so timed GPX
-  // imports (which rarely carry a speed field) still get pace colouring.
-  const speeds = useMemo<(number | undefined)[]>(() => {
-    if (!profile.hasElevation) return [];
+  // Speed and heart rate at each profile sample. Speed prefers the recorded
+  // GPS value and falls back to time-between-samples, so timed GPX imports
+  // (which rarely carry a speed field) still get a pace curve.
+  const { speeds, hrs } = useMemo(() => {
+    if (!profile.hasElevation)
+      return { speeds: [] as (number | undefined)[], hrs: [] as (number | undefined)[] };
     const ats = profile.samples.map((s) => interpolateTrackAtDistance(points, s.distanceM));
-    return profile.samples.map((s, i) => {
+    const speeds = profile.samples.map((s, i) => {
       const sp = ats[i]?.speed;
       if (sp !== undefined && Number.isFinite(sp) && sp >= 0) return sp;
       const prev = ats[i - 1];
@@ -132,31 +167,33 @@ export function ElevationProfile({
       }
       return undefined;
     });
+    const hrs = ats.map((at) => {
+      const hr = at?.heartRateBpm;
+      return hr !== undefined && Number.isFinite(hr) && hr > 0 ? hr : undefined;
+    });
+    return { speeds, hrs };
   }, [points, profile]);
-  const speedRange = useMemo(() => {
-    const vals = speeds.filter((v): v is number => v !== undefined && Number.isFinite(v) && v >= 0);
-    if (vals.length < 2) return null;
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const v of vals) {
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    return hi > lo ? { lo, hi } : null;
-  }, [speeds]);
+
+  const speedRange = useMemo(() => rangeOf(speeds), [speeds]);
+  const hrRange = useMemo(() => rangeOf(hrs), [hrs]);
 
   const { samples, minElevationM, maxElevationM, totalDistanceM } = profile;
   const range = maxElevationM - minElevationM || 1;
 
-  // The altitude edge is coloured by grade; pace draws as its own second
-  // curve in the same figure (dual-axis, up = faster) whenever the trail has
-  // timing — no mode toggle, all three at once.
-  const showPace = speedRange !== null;
+  const hasPace = speedRange !== null;
+  const hasHr = hrRange !== null;
+  const drawElev = showElev;
+  const drawPace = hasPace && showPaceCurve;
+  const drawHr = hasHr && showHrCurve;
+
+  const plotW = Math.max(0, width - AXIS_LEFT - AXIS_RIGHT);
+  const xFor = (d: number) =>
+    AXIS_LEFT + (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * plotW;
 
   const pts =
     width > 0
       ? samples.map((s) => ({
-          x: (s.distanceM / (totalDistanceM || 1)) * width,
+          x: xFor(s.distanceM),
           y: CHART_HEIGHT - ((s.elevationM - minElevationM) / range) * (CHART_HEIGHT - 14) - 6,
         }))
       : [];
@@ -165,8 +202,6 @@ export function ElevationProfile({
     pts.length >= 2
       ? `${linePath} L${pts[pts.length - 1]!.x.toFixed(1)} ${CHART_HEIGHT} L${pts[0]!.x.toFixed(1)} ${CHART_HEIGHT} Z`
       : '';
-  const xFor = (d: number) =>
-    (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * width;
 
   /** Grade (%) of the sample segment ending at i, clamped for colouring. */
   const gradeAt = (i: number): number => {
@@ -178,32 +213,33 @@ export function ElevationProfile({
     return dd > 0 ? ((b.elevationM - a.elevationM) / dd) * 100 : 0;
   };
 
-  /** Grade colour of the segment ending at sample i. */
-  const segmentColor = (i: number): string => {
-    const g = gradeAt(i);
-    return rampColor(GRADE_STOPS, (g + GRADE_LIMIT) / (2 * GRADE_LIMIT));
-  };
+  const gradeColor = (g: number): string =>
+    rampColor(GRADE_STOPS, (g + GRADE_LIMIT) / (2 * GRADE_LIMIT));
 
-  // Pace curve: speed mapped so UP = faster (the Strava idiom), broken where
-  // no timing exists, sharing the distance axis with the altitude curve.
-  const pacePts: { x: number; y: number }[][] = [];
-  if (showPace && speedRange && width > 0) {
+  /** Secondary curve (pace / HR): normalized runs broken where data is absent. */
+  const curveRuns = (
+    vals: (number | undefined)[],
+    lo: number,
+    hi: number,
+  ): { x: number; y: number }[][] => {
+    const runs: { x: number; y: number }[][] = [];
     let run: { x: number; y: number }[] = [];
     samples.forEach((smp, i) => {
-      const sp = speeds[i];
-      if (sp === undefined || !Number.isFinite(sp)) {
-        if (run.length >= 2) pacePts.push(run);
+      const v = vals[i];
+      if (v === undefined || !Number.isFinite(v)) {
+        if (run.length >= 2) runs.push(run);
         run = [];
         return;
       }
-      const t = (sp - speedRange.lo) / (speedRange.hi - speedRange.lo);
-      run.push({
-        x: (smp.distanceM / (totalDistanceM || 1)) * width,
-        y: CHART_HEIGHT - 14 - t * (CHART_HEIGHT - 40) - 6,
-      });
+      const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
+      run.push({ x: xFor(smp.distanceM), y: CHART_HEIGHT - 14 - t * (CHART_HEIGHT - 40) - 6 });
     });
-    if (run.length >= 2) pacePts.push(run);
-  }
+    if (run.length >= 2) runs.push(run);
+    return runs;
+  };
+  const paceRuns =
+    drawPace && speedRange && width > 0 ? curveRuns(speeds, speedRange.lo, speedRange.hi) : [];
+  const hrRuns = drawHr && hrRange && width > 0 ? curveRuns(hrs, hrRange.lo, hrRange.hi) : [];
 
   // Elevation gridlines: three round-number levels between min and max.
   const gridLevels = useMemo(() => {
@@ -215,6 +251,8 @@ export function ElevationProfile({
     return out.slice(0, 4);
   }, [minElevationM, maxElevationM, range]);
 
+  const ticks = useMemo(() => distanceTicks(totalDistanceM), [totalDistanceM]);
+
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   // Drive scrubbing through a PanResponder. It claims the gesture on touch and
@@ -223,8 +261,10 @@ export function ElevationProfile({
   // finger drifts vertically — scrubbing keeps working off-axis.
   const pan = useMemo(() => {
     const onTouch = (e: GestureResponderEvent) => {
-      if (width <= 0) return;
-      const res = scrubProfileAtRatio(points, samples, e.nativeEvent.locationX / width);
+      const plot = width - AXIS_LEFT - AXIS_RIGHT;
+      if (plot <= 0) return;
+      const ratio = (e.nativeEvent.locationX - AXIS_LEFT) / plot;
+      const res = scrubProfileAtRatio(points, samples, ratio);
       if (!res) return;
       setScrub(res.sampleIndex);
       setScrubAt(res.at);
@@ -259,6 +299,7 @@ export function ElevationProfile({
     scrub !== null && speeds[scrub] !== undefined && Number.isFinite(speeds[scrub])
       ? speeds[scrub]
       : scrubAt?.speed;
+  const activeHr = scrub !== null ? hrs[scrub] : undefined;
 
   if (!profile.hasElevation) {
     return (
@@ -270,7 +311,21 @@ export function ElevationProfile({
     );
   }
 
-  const BAR_H = 8;
+  const svgH = CHART_HEIGHT + X_AXIS_H;
+  const dim = theme.colors.onSurfaceVariant;
+
+  const seriesToggle = (icon: string, on: boolean, toggle: () => void, label: string) => (
+    <Pressable
+      onPress={toggle}
+      hitSlop={6}
+      accessibilityRole="togglebutton"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={label}
+      style={[styles.toggle, on && styles.toggleOn]}
+    >
+      <Icon source={icon} size={16} color={on ? TOGGLE_ACTIVE : dim} />
+    </Pressable>
+  );
 
   return (
     <View style={styles.container}>
@@ -281,22 +336,58 @@ export function ElevationProfile({
         <Text variant="labelMedium" style={{ color: theme.colors.error }}>
           ↓ {formatElevation(descentM)}
         </Text>
-        <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+        <Text variant="labelMedium" style={[styles.headerRange, { color: dim }]}>
           {formatElevation(minElevationM)}–{formatElevation(maxElevationM)}
         </Text>
+        {/* Series toggles (top-right of the graph): mountain / shoe / heart. */}
+        <View style={styles.toggles}>
+          {seriesToggle(
+            'image-filter-hdr',
+            showElev,
+            () => setShowElev((v) => !v),
+            'Altitude curve',
+          )}
+          {hasPace &&
+            seriesToggle(
+              'shoe-print',
+              showPaceCurve,
+              () => setShowPaceCurve((v) => !v),
+              'Pace curve',
+            )}
+          {hasHr &&
+            seriesToggle(
+              'heart-pulse',
+              showHrCurve,
+              () => setShowHrCurve((v) => !v),
+              'Heart-rate curve',
+            )}
+        </View>
       </View>
 
       <View style={styles.readout}>
         {active ? (
-          <Text variant="bodySmall" style={{ color: theme.colors.primary }}>
-            {formatElevation(active.elevationM)} @ {formatDistance(active.distanceM)}
-            {grade !== null ? ` · ${grade >= 0 ? '+' : ''}${grade.toFixed(0)}%` : ''}
-            {activeSpeed !== undefined && activeSpeed > 0
-              ? ` · ${formatPace(activeSpeed)} · ${formatSpeed(activeSpeed)}`
-              : ''}
+          <Text variant="bodySmall">
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurface }}>
+              {formatElevation(active.elevationM)} @ {formatDistance(active.distanceM)}
+            </Text>
+            {drawElev && grade !== null && (
+              <Text variant="bodySmall" style={{ color: gradeColor(grade) }}>
+                {`  ·  ${formatGrade(grade)}`}
+              </Text>
+            )}
+            {drawPace && activeSpeed !== undefined && activeSpeed > 0 && (
+              <Text variant="bodySmall" style={{ color: PACE_COLOR }}>
+                {`  ·  ${formatPace(activeSpeed)}`}
+              </Text>
+            )}
+            {drawHr && activeHr !== undefined && (
+              <Text variant="bodySmall" style={{ color: HR_COLOR }}>
+                {`  ·  ${Math.round(activeHr)} bpm`}
+              </Text>
+            )}
           </Text>
         ) : (
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          <Text variant="bodySmall" style={{ color: dim }}>
             Touch the graph to read elevation
           </Text>
         )}
@@ -308,7 +399,7 @@ export function ElevationProfile({
         {...pan.panHandlers}
       >
         {width > 0 && (
-          <Svg width={width} height={CHART_HEIGHT}>
+          <Svg width={width} height={svgH}>
             <Defs>
               <LinearGradient id="elevFill" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0" stopColor={lineColor} stopOpacity={0.35} />
@@ -317,87 +408,169 @@ export function ElevationProfile({
             </Defs>
 
             {/* Altitude: the smooth shape with a quiet fill... */}
-            <Path d={areaPath} fill="url(#elevFill)" />
+            {drawElev && <Path d={areaPath} fill="url(#elevFill)" />}
 
-            {/* Elevation gridlines with labels, inside the frame. */}
-            {gridLevels.map((e) => {
-              const y = CHART_HEIGHT - ((e - minElevationM) / range) * (CHART_HEIGHT - 14) - 6;
-              return (
-                <Fragment key={`g${e}`}>
+            {/* Elevation gridlines; labels live in the left gutter, clear of
+                the curve. */}
+            {drawElev &&
+              gridLevels.map((e) => {
+                const y = CHART_HEIGHT - ((e - minElevationM) / range) * (CHART_HEIGHT - 14) - 6;
+                return (
+                  <Fragment key={`g${e}`}>
+                    <Line
+                      x1={AXIS_LEFT}
+                      y1={y}
+                      x2={width}
+                      y2={y}
+                      stroke={theme.colors.onSurface}
+                      strokeWidth={0.5}
+                      opacity={0.12}
+                    />
+                    <SvgText
+                      x={AXIS_LEFT - 5}
+                      y={y + 2.5}
+                      fontSize={8}
+                      fill={dim}
+                      textAnchor="end"
+                      opacity={0.9}
+                    >
+                      {formatElevation(e)}
+                    </SvgText>
+                  </Fragment>
+                );
+              })}
+
+            {/* ...with the grade riding its edge, segment by segment. */}
+            {drawElev &&
+              pts.slice(1).map((p, i) => {
+                const a = pts[i]!;
+                return (
                   <Line
-                    x1={0}
-                    y1={y}
-                    x2={width}
-                    y2={y}
-                    stroke={theme.colors.onSurface}
-                    strokeWidth={0.5}
-                    opacity={0.12}
+                    key={`s${i}`}
+                    x1={a.x}
+                    y1={a.y}
+                    x2={p.x}
+                    y2={p.y}
+                    stroke={gradeColor(gradeAt(i + 1))}
+                    strokeWidth={3.5}
+                    strokeLinecap="round"
                   />
-                  <SvgText
-                    x={4}
-                    y={y - 2.5}
-                    fontSize={8}
-                    fill={theme.colors.onSurfaceVariant}
-                    textAnchor="start"
-                    opacity={0.8}
-                  >
-                    {formatElevation(e)}
-                  </SvgText>
-                </Fragment>
-              );
-            })}
+                );
+              })}
 
-            {/* ...and the metric riding its edge: pace or grade, segment by
-                segment along the curve. */}
-            {pts.slice(1).map((p, i) => {
-              const a = pts[i]!;
-              return (
-                <Line
-                  key={`s${i}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={p.x}
-                  y2={p.y}
-                  stroke={segmentColor(i + 1)}
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                />
-              );
-            })}
-
-            {/* Pace: the second curve, sharing the distance axis. */}
-            {pacePts.map((run, i) => (
+            {/* Pace: second curve sharing the distance axis, up = faster. */}
+            {paceRuns.map((run, i) => (
               <Path
                 key={`pc${i}`}
                 d={smoothPath(run)}
-                stroke={theme.colors.tertiary}
+                stroke={PACE_COLOR}
                 strokeWidth={2.2}
                 strokeOpacity={0.95}
                 fill="none"
               />
             ))}
-            {showPace && speedRange && (
+            {/* Pace axis: just the top/bottom values (up = faster is evident),
+                angled like the distance ticks, living in the right margin so
+                the curves never run over them. */}
+            {drawPace && speedRange && (
               <>
                 <SvgText
-                  x={width - 4}
-                  y={16}
+                  x={width - AXIS_RIGHT + 6}
+                  y={14}
                   fontSize={8}
-                  fill={theme.colors.tertiary}
-                  textAnchor="end"
+                  fill={PACE_COLOR}
+                  textAnchor="start"
+                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} 14)`}
                 >
-                  {`fast ${formatPace(speedRange.hi)}`}
+                  {formatPace(speedRange.hi)}
                 </SvgText>
                 <SvgText
-                  x={width - 4}
-                  y={CHART_HEIGHT - 6}
+                  x={width - AXIS_RIGHT + 6}
+                  y={CHART_HEIGHT - 22}
                   fontSize={8}
-                  fill={theme.colors.tertiary}
-                  textAnchor="end"
+                  fill={PACE_COLOR}
+                  textAnchor="start"
+                  transform={`rotate(45 ${width - AXIS_RIGHT + 6} ${CHART_HEIGHT - 22})`}
                 >
-                  {`slow ${formatPace(speedRange.lo)}`}
+                  {formatPace(speedRange.lo)}
                 </SvgText>
               </>
             )}
+
+            {/* Heart rate: third curve, same normalized band. */}
+            {hrRuns.map((run, i) => (
+              <Path
+                key={`hr${i}`}
+                d={smoothPath(run)}
+                stroke={HR_COLOR}
+                strokeWidth={2}
+                strokeOpacity={0.9}
+                fill="none"
+              />
+            ))}
+            {/* HR axis, mirroring pace: top/bottom bpm angled in the left
+                gutter's free corners, clear of curves and elevation labels. */}
+            {drawHr && hrRange && (
+              <>
+                <SvgText
+                  x={AXIS_LEFT - 6}
+                  y={34}
+                  fontSize={8}
+                  fill={HR_COLOR}
+                  textAnchor="end"
+                  transform={`rotate(45 ${AXIS_LEFT - 6} 34)`}
+                >
+                  {`${Math.round(hrRange.hi)} bpm`}
+                </SvgText>
+                <SvgText
+                  x={AXIS_LEFT - 6}
+                  y={CHART_HEIGHT - 16}
+                  fontSize={8}
+                  fill={HR_COLOR}
+                  textAnchor="end"
+                  transform={`rotate(45 ${AXIS_LEFT - 6} ${CHART_HEIGHT - 16})`}
+                >
+                  {`${Math.round(hrRange.lo)} bpm`}
+                </SvgText>
+              </>
+            )}
+
+            {/* Distance ticks, tilted 45° in the band below the plot. */}
+            <Line
+              x1={AXIS_LEFT}
+              y1={CHART_HEIGHT}
+              x2={width}
+              y2={CHART_HEIGHT}
+              stroke={theme.colors.onSurface}
+              strokeWidth={0.5}
+              opacity={0.2}
+            />
+            {ticks.map((d) => {
+              const x = xFor(d);
+              return (
+                <Fragment key={`t${d}`}>
+                  <Line
+                    x1={x}
+                    y1={CHART_HEIGHT}
+                    x2={x}
+                    y2={CHART_HEIGHT + 4}
+                    stroke={theme.colors.onSurface}
+                    strokeWidth={0.5}
+                    opacity={0.35}
+                  />
+                  <SvgText
+                    x={x + 2}
+                    y={CHART_HEIGHT + 12}
+                    fontSize={8}
+                    fill={dim}
+                    textAnchor="start"
+                    transform={`rotate(45 ${x + 2} ${CHART_HEIGHT + 12})`}
+                  >
+                    {formatDistance(d)}
+                  </SvgText>
+                </Fragment>
+              );
+            })}
 
             {/* Persistent cursor: where a new note will be anchored. */}
             {selectedDistanceM != null && (
@@ -465,70 +638,45 @@ export function ElevationProfile({
           </Svg>
         )}
       </View>
-
-      {/* The colourbar: what the altitude edge's colours MEAN (grade), plus a
-          swatch for the pace curve when it's plotted. */}
-      <View style={styles.legendBlock}>
-        {width > 0 && (
-          <Svg width={width} height={BAR_H}>
-            <Defs>
-              <LinearGradient id="legend" x1="0" y1="0" x2="1" y2="0">
-                {GRADE_STOPS.map((stop, i, arr) => (
-                  <Stop
-                    key={`l${i}`}
-                    offset={i / (arr.length - 1)}
-                    stopColor={`rgb(${stop[0]},${stop[1]},${stop[2]})`}
-                  />
-                ))}
-              </LinearGradient>
-            </Defs>
-            <Rect x={0} y={0} width={width} height={BAR_H} rx={BAR_H / 2} fill="url(#legend)" />
-          </Svg>
-        )}
-        <View style={styles.legendLabels}>
-          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            −{GRADE_LIMIT}% descent
-          </Text>
-          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            Grade
-          </Text>
-          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            climb +{GRADE_LIMIT}%
-          </Text>
-        </View>
-        {showPace && (
-          <View style={styles.paceLegend}>
-            <View style={[styles.paceSwatch, { backgroundColor: theme.colors.tertiary }]} />
-            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Pace (up = faster)
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.axisRow}>
-        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          0
-        </Text>
-        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          {formatDistance(totalDistanceM / 2)}
-        </Text>
-        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          {formatDistance(totalDistanceM)}
-        </Text>
-      </View>
     </View>
   );
 }
 
+/** Signed whole-percent grade, with -0 normalized so a flat reads "0%". */
+function formatGrade(g: number): string {
+  const r = Math.round(g) === 0 ? 0 : Math.round(g);
+  return `${r > 0 ? '+' : ''}${r}%`;
+}
+
+/** Min/max over the defined values; null when fewer than 2 (no useful curve). */
+function rangeOf(vals: (number | undefined)[]): { lo: number; hi: number } | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  let n = 0;
+  for (const v of vals) {
+    if (v === undefined || !Number.isFinite(v) || v < 0) continue;
+    n++;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return n >= 2 && hi > lo ? { lo, hi } : null;
+}
+
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 10, gap: 8 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerRange: { flexGrow: 1 },
+  toggles: { flexDirection: 'row', gap: 6 },
+  toggle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleOn: { borderColor: TOGGLE_ACTIVE },
   readout: { minHeight: 18 },
-  chart: { height: CHART_HEIGHT, borderRadius: 10, overflow: 'hidden' },
-  legendBlock: { gap: 3 },
-  legendLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  paceLegend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  paceSwatch: { width: 18, height: 3, borderRadius: 1.5 },
-  axisRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  chart: { height: CHART_HEIGHT + X_AXIS_H, borderRadius: 10, overflow: 'hidden' },
 });

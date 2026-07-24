@@ -12,7 +12,6 @@ import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
 // sage (#93A25E) and river (#5C93B7) so white text meets contrast on them.
 const INUKSHUK = '#2D3740'; // charcoal-navy — the stone figure, our primary mark
 const FOLIAGE_DEEP = '#566B33'; // deepened sage — green surfaces
-const RIVER_DEEP = '#3E7BA0'; // deepened river — accents / route line
 const STONE = '#8A8B8C'; // mountain grey
 const CREAM = '#F2ECE0'; // warm paper — app background
 
@@ -28,10 +27,12 @@ export const lightTheme: MD3Theme = {
     onSecondary: '#FFFFFF',
     secondaryContainer: '#D6DBE0',
     onSecondaryContainer: '#161C22',
-    tertiary: RIVER_DEEP,
-    onTertiary: '#FFFFFF',
-    tertiaryContainer: '#CDE5F5',
-    onTertiaryContainer: '#001E2E',
+    // Softened to the Edge family's pastel river (user call): the "+" dial
+    // and compass wear this, and the deep slate read too heavy next to them.
+    tertiary: '#AECCDF',
+    onTertiary: '#17303F',
+    tertiaryContainer: '#D6E7F1',
+    onTertiaryContainer: '#142A38',
     background: CREAM,
     surface: '#FBF8F2',
     surfaceVariant: '#E3DDD0',
@@ -58,10 +59,12 @@ export const darkTheme: MD3Theme = {
     onSecondary: '#243039',
     secondaryContainer: '#3B4750',
     onSecondaryContainer: '#D6DBE0',
-    tertiary: '#8FC0E4',
-    onTertiary: '#00344D',
-    tertiaryContainer: '#245068',
-    onTertiaryContainer: '#C7E7FF',
+    // Matched to the Edge family's pastel river so the "+" dial and compass
+    // wear the same blue across styles (user call).
+    tertiary: '#AECCDF',
+    onTertiary: '#122B3A',
+    tertiaryContainer: '#2E4756',
+    onTertiaryContainer: '#D6E7F1',
     background: '#12150F',
     surface: '#1B1E17',
     surfaceVariant: '#43483E',
@@ -187,6 +190,19 @@ export const edgeDarkTheme: MD3Theme = {
     outline: '#8B94A0',
     error: '#FFB4AB',
   },
+};
+
+/**
+ * The edge rail's pill chrome. One fixed dark slab in BOTH colour schemes
+ * (user call): the pills sit over map tiles, not themed surfaces, so a single
+ * charcoal reads consistently; engagement is signalled by the pastel-river
+ * ink — the same blue as the "+" dial and the edge tab selection.
+ */
+export const edgePill = {
+  background: '#262D35',
+  ink: '#E6EAEF',
+  active: '#AECCDF',
+  muted: '#77808C',
 };
 
 /** The MD3 theme for a UI style + resolved colour scheme. */

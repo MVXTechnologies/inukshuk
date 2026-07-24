@@ -20,7 +20,17 @@ const CUSTOM: CustomCategory[] = [
 describe('built-in categories', () => {
   it('includes the expected activities with unique ids, icons and colors', () => {
     const names = BUILT_IN_CATEGORIES.map((c) => c.name);
-    expect(names).toEqual(['Hike', 'Run', 'Trail Run', 'Bike', 'Ski', 'Snowshoe', 'Walk', 'Other']);
+    expect(names).toEqual([
+      'Hike',
+      'Run',
+      'Trail Run',
+      'Bike',
+      'Ski',
+      'Snowshoe',
+      'Walk',
+      'Navigation trail',
+      'Other',
+    ]);
     expect(new Set(BUILT_IN_CATEGORIES.map((c) => c.id)).size).toBe(BUILT_IN_CATEGORIES.length);
     expect(new Set(BUILT_IN_CATEGORIES.map((c) => c.color)).size).toBe(BUILT_IN_CATEGORIES.length);
     for (const c of BUILT_IN_CATEGORIES) {

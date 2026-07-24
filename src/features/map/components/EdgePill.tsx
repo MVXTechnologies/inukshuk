@@ -1,6 +1,7 @@
+import { edgePill } from '@ui/theme';
 import { useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
-import { Icon, useTheme } from 'react-native-paper';
+import { Icon } from 'react-native-paper';
 
 /**
  * The 'edge' UI style's plain action button: a half-pill flush against the
@@ -24,7 +25,6 @@ const HEIGHT = 42;
 const WIDTH = 52;
 
 export function EdgePill({ icon, label, onPress, active, disabled, accessibilityLabel }: Props) {
-  const theme = useTheme();
   const [squeeze] = useState(() => new Animated.Value(0));
 
   const spring = (to: number) =>
@@ -35,12 +35,14 @@ export function EdgePill({ icon, label, onPress, active, disabled, accessibility
       useNativeDriver: true,
     }).start();
 
-  const background = active ? theme.colors.primaryContainer : theme.colors.surface;
-  const ink = active ? theme.colors.onPrimaryContainer : theme.colors.onSurface;
+  // One dark slab in both schemes; engagement shows in the ink, not the fill.
+  const ink = active ? edgePill.active : edgePill.ink;
   const scale = squeeze.interpolate({ inputRange: [0, 1], outputRange: [1, 0.92] });
 
   return (
-    <Animated.View style={[styles.pill, { backgroundColor: background, transform: [{ scale }] }]}>
+    <Animated.View
+      style={[styles.pill, { backgroundColor: edgePill.background, transform: [{ scale }] }]}
+    >
       <Pressable
         style={styles.press}
         disabled={disabled}
@@ -50,7 +52,7 @@ export function EdgePill({ icon, label, onPress, active, disabled, accessibility
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? label}
       >
-        <Icon source={icon} size={22} color={disabled ? theme.colors.outline : ink} />
+        <Icon source={icon} size={22} color={disabled ? edgePill.muted : ink} />
       </Pressable>
     </Animated.View>
   );

@@ -39,6 +39,13 @@ describe('interpolateTrackAtDistance', () => {
     expect(end.latitude).toBeCloseTo(45.002, 6);
   });
 
+  it('interpolates heart rate at the segment midpoint', () => {
+    const pts = [pt(45, -73, { heartRateBpm: 120 }), pt(45, -72.998, { heartRateBpm: 140 })];
+    const full = interpolateTrackAtDistance(pts, 1e9)!;
+    const mid = interpolateTrackAtDistance(pts, full.distanceM / 2)!;
+    expect(mid.heartRateBpm).toBeCloseTo(130, 1);
+  });
+
   it('carries elevation through a segment when only one endpoint has it', () => {
     const pts = [pt(45, -73, { altitude: 100 }), pt(45, -72.999)];
     const full = interpolateTrackAtDistance(pts, 1e9)!;

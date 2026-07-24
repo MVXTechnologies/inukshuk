@@ -125,6 +125,30 @@ const extractSpeed = (raw: AnyRecord): number | undefined => {
   return ext && typeof ext === 'object' ? findSpeedDeep(ext as AnyRecord) : undefined;
 };
 
+/**
+ * Heart rate (bpm) from a trkpt's `<extensions>`: `gpxtpx:hr` in Garmin's
+ * TrackPointExtension is the de-facto standard, but watches also emit `ns3:hr`
+ * or a spelled-out `heartrate`, so match the local name at any depth.
+ */
+const findHrDeep = (obj: AnyRecord): number | undefined => {
+  for (const [k, v] of Object.entries(obj)) {
+    if (/(^|:)(hr|heartrate)$/i.test(k)) {
+      const n = toNum(textOf(v));
+      if (n !== undefined) return n;
+    }
+    if (v && typeof v === 'object') {
+      const n = findHrDeep(v as AnyRecord);
+      if (n !== undefined) return n;
+    }
+  }
+  return undefined;
+};
+
+const extractHeartRate = (raw: AnyRecord): number | undefined => {
+  const ext = raw['extensions'];
+  return ext && typeof ext === 'object' ? findHrDeep(ext as AnyRecord) : undefined;
+};
+
 const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
@@ -141,6 +165,8 @@ const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   };
   if (altitude !== undefined) point.altitude = altitude;
   if (speed !== undefined && speed >= 0) point.speed = speed;
+  const hr = extractHeartRate(raw);
+  if (hr !== undefined && hr > 0) point.heartRateBpm = hr;
   return point;
 };
 
@@ -274,6 +300,11 @@ export function buildGpx(args: {
     if (p.speed !== undefined && Number.isFinite(p.speed) && p.speed >= 0) {
       node['speed'] = round(p.speed, 3);
     }
+    if (p.heartRateBpm !== undefined && Number.isFinite(p.heartRateBpm) && p.heartRateBpm > 0) {
+      node['extensions'] = {
+        'gpxtpx:TrackPointExtension': { 'gpxtpx:hr': Math.round(p.heartRateBpm) },
+      };
+    }
     return node;
   });
 
@@ -287,6 +318,9 @@ export function buildGpx(args: {
     [`${ATTR_PREFIX}creator`]: 'Inukshuk',
     [`${ATTR_PREFIX}xmlns`]: GPX_NS,
   };
+  if (points.some((p) => p.heartRateBpm !== undefined)) {
+    gpx[`${ATTR_PREFIX}xmlns:gpxtpx`] = 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1';
+  }
   if (Object.keys(metaNode).length > 0) gpx['metadata'] = metaNode;
   // <wpt> must precede <trk> in the GPX 1.1 sequence.
   if (waypoints && waypoints.length > 0) {

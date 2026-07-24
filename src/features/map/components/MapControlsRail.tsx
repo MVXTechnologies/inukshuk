@@ -21,14 +21,19 @@ interface Props {
   toggle3dDisabled: boolean;
   pdfOverlayCount: number;
   trackOverlayCount: number;
+  /**
+   * 'minimal' style: whether the chevron rail is unfolded. Owned by MapScreen
+   * because the "+" dial is also gated on it — in minimal, the dial only shows
+   * while the controls are out.
+   */
+  minimalOpen: boolean;
+  onMinimalOpenChange: (open: boolean) => void;
 }
 
 /** Right-side map controls: locate, fit, 3D, base map, overlays. */
 export function MapControlsRail(props: Props) {
   const uiStyle = useSettingsStore((s) => s.uiStyle);
-  // 'minimal' style: the rail rests as a single chevron; tapping it unfolds
-  // the buttons and the chevron flips to fold them away again.
-  const [minimalOpen, setMinimalOpen] = useState(false);
+  const { minimalOpen, onMinimalOpenChange } = props;
 
   if (uiStyle === 'edge') return <EdgeRail {...props} />;
 
@@ -52,7 +57,7 @@ export function MapControlsRail(props: Props) {
           icon="chevron-left"
           size="small"
           variant="surface"
-          onPress={() => setMinimalOpen(true)}
+          onPress={() => onMinimalOpenChange(true)}
           style={styles.controlFab}
           accessibilityLabel="Map controls"
         />
@@ -67,7 +72,7 @@ export function MapControlsRail(props: Props) {
           icon="chevron-right"
           size="small"
           variant="surface"
-          onPress={() => setMinimalOpen(false)}
+          onPress={() => onMinimalOpenChange(false)}
           style={styles.controlFab}
           accessibilityLabel="Hide map controls"
         />

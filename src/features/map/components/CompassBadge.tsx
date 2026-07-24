@@ -79,7 +79,10 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
 
   const deg = heading ?? 0;
   return (
-    <Surface style={styles.surface} elevation={3}>
+    <Surface
+      style={[styles.surface, { backgroundColor: theme.colors.elevation?.level2 }]}
+      elevation={3}
+    >
       <TouchableRipple
         onPress={onPress}
         disabled={!onPress}

@@ -496,6 +496,7 @@ export function LibraryScreen() {
         <IconButton
           icon="dots-vertical"
           size={22}
+          style={styles.trackAction}
           onPress={() => setCardMenu({ kind: 'track', id: t.id })}
           accessibilityLabel="More options"
         />
@@ -645,24 +646,25 @@ export function LibraryScreen() {
               >
                 {formatTimestamp(t.startedAt)}
               </Text>
-            </View>
-            <View style={styles.trackStatsCol}>
-              {/* NBSP inside each value+unit pair: when the shrinking stats
-                  column wraps this line, the break lands between stats, never
-                  orphaning a unit onto its own line. */}
-              <Text variant="labelSmall">
-                {formatDistance(s.distanceM).replace(' ', ' ')} ·{' '}
-                {`↑${formatElevation(s.ascentM)}`.replace(' ', ' ')}{' '}
-                {`↓${formatElevation(s.descentM)}`.replace(' ', ' ')}
-              </Text>
-              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {formatDuration(s.durationS)} · {formatPace(s.avgSpeedMps)}
+              {/* One full-width stats line under the date (a right-hand stats
+                  column fights long titles for width). Untimed trails
+                  (navigation GPX) have no meaningful duration/pace — omitted. */}
+              <Text variant="labelSmall" numberOfLines={1}>
+                {[
+                  formatDistance(s.distanceM),
+                  ...(s.durationS > 0
+                    ? [formatDuration(s.durationS), formatPace(s.avgSpeedMps)]
+                    : []),
+                  `↑${formatElevation(s.ascentM)}`,
+                  `↓${formatElevation(s.descentM)}`,
+                ].join(' · ')}
               </Text>
             </View>
           </Pressable>
           <IconButton
             icon={expandedTrack === t.id ? 'chevron-up' : 'chart-areaspline'}
             size={22}
+            style={styles.trackAction}
             onPress={() => toggleElevation(t.id, t.fileUri)}
             accessibilityLabel="Elevation profile"
           />
@@ -814,7 +816,9 @@ export function LibraryScreen() {
             />
           ) : (
             [
-              ...g.maps.map(renderMapCard),
+              // Trail filters are about trails — maps drop out of results
+              // while any filter is active.
+              ...(activeFilterCount > 0 ? [] : g.maps.map(renderMapCard)),
               ...g.tracks.map(renderTrackCard),
               ...sortWaypointsNewestFirst(g.waypoints).map(renderWaypointCard),
             ]
@@ -899,7 +903,7 @@ export function LibraryScreen() {
                 {collapsed.ungrouped
                   ? null
                   : [
-                      ...grouped.ungroupedMaps.map(renderMapCard),
+                      ...(activeFilterCount > 0 ? [] : grouped.ungroupedMaps.map(renderMapCard)),
                       ...grouped.ungroupedTracks.map(renderTrackCard),
                       ...sortWaypointsNewestFirst(grouped.ungroupedWaypoints).map(
                         renderWaypointCard,
@@ -909,15 +913,24 @@ export function LibraryScreen() {
             )
           : // No folders yet: keep the familiar Maps + Recorded-trails split.
             [
-              <List.Section key="maps">
-                {sectionHeader('maps', `Maps${maps.length ? ` (${maps.length})` : ''}`)}
-                {collapsed.maps ? null : maps.length === 0 ? (
-                  <List.Item title="No maps yet" description="Tap the PDF icon to import one" />
-                ) : (
-                  maps.map(renderMapCard)
-                )}
-              </List.Section>,
-              <Divider key="maps-divider" />,
+              // Trail filters are about trails: the Maps section steps aside
+              // entirely while any filter is active.
+              ...(activeFilterCount > 0
+                ? []
+                : [
+                    <List.Section key="maps">
+                      {sectionHeader('maps', `Maps${maps.length ? ` (${maps.length})` : ''}`)}
+                      {collapsed.maps ? null : maps.length === 0 ? (
+                        <List.Item
+                          title="No maps yet"
+                          description="Tap the PDF icon to import one"
+                        />
+                      ) : (
+                        maps.map(renderMapCard)
+                      )}
+                    </List.Section>,
+                    <Divider key="maps-divider" />,
+                  ]),
               <List.Section key="trails">
                 {sectionHeader(
                   'trails',
@@ -1100,15 +1113,14 @@ const styles = StyleSheet.create({
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },
   dragHandle: { paddingVertical: 14, paddingRight: 6, marginLeft: -6 },
   trackMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  // The title column flexes into whatever the stats column leaves, but keeps a
-  // readable floor; the stats column shrinks (wrapping its lines) rather than
-  // crushing the title. Without the floor, a dense imported GPX (long stats +
-  // category icon) squeezed the title to ~1 character and the un-clamped date
-  // wrapped per-character into a very tall card.
-  trackTitleCol: { flex: 1, minWidth: 96, paddingVertical: 8, paddingRight: 8 },
+  // Single column: title, date, then one full-width stats line. (The old
+  // right-hand stats column fought long titles for width — see the crush bug.)
+  trackTitleCol: { flex: 1, paddingVertical: 6, paddingRight: 4 },
   trackTitleColSelecting: { paddingLeft: 10 },
   mapTitleCol: { flex: 1, paddingVertical: 8, paddingLeft: 10, paddingRight: 8 },
-  trackStatsCol: { flexShrink: 1, alignItems: 'flex-end', paddingRight: 2 },
+  // Squeeze the profile-peek and ⋮ buttons together (IconButton's default
+  // margins pushed them apart and padded the card).
+  trackAction: { marginHorizontal: -2, marginVertical: 0 },
   waypointThumb: { width: 44, height: 44, borderRadius: 8, marginRight: 4 },
   fabWrap: { position: 'absolute', right: 16 },
   fab: { borderRadius: 28 },

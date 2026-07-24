@@ -111,6 +111,9 @@ jobs:
             # exact nightly failure cascade (waypoint → category-record → every
             # fixture-dependent flow).
             adb shell cmd location set-location-enabled true
+            # Belt-and-braces: the legacy secure settings some services still
+            # read. 3 = HIGH_ACCURACY. All harmless where ignored.
+            adb shell settings put secure location_mode 3
             adb shell settings put secure location_providers_allowed +gps || true
             adb shell settings put secure location_providers_allowed +network || true
             # Let system_server finish its post-boot work before loading it
