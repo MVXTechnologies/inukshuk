@@ -33,7 +33,7 @@
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "jpeg-js": "^0.4.4",
-    "nanoid": "^5.1.16",
+    "nanoid": "^6.0.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "proj4": "^2.20.9",
