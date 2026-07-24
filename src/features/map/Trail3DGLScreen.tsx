@@ -748,8 +748,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
               ) : null}
             </View>
           )}
+          {/* Floating over the map/terrain — needs its own dark disc to stay
+              visible on light tiles (user call; the bare arrow disappeared). */}
           <Appbar.BackAction
             onPress={() => router.back()}
+            color="#E6EAEF"
             style={[styles.back, { top: insets.top + 2 }]}
           />
           <Surface
@@ -1001,7 +1004,13 @@ const styles = StyleSheet.create({
   },
   loadingText: { opacity: 0.8 },
   errDetail: { paddingHorizontal: 24, textAlign: 'center' },
-  back: { position: 'absolute', left: 4, margin: 0 },
+  back: {
+    position: 'absolute',
+    left: 4,
+    margin: 0,
+    backgroundColor: 'rgba(38, 45, 53, 0.88)',
+    borderRadius: 24,
+  },
   summary: {
     position: 'absolute',
     left: 60,

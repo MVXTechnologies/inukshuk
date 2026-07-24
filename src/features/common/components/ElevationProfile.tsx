@@ -32,6 +32,12 @@ const CHART_HEIGHT = 140;
 const X_AXIS_H = 30;
 /** Left gutter reserved for the elevation labels, clear of the curve. */
 const AXIS_LEFT = 38;
+/**
+ * Right margin of the plot. The card clips at its rounded edge
+ * (overflow: hidden), so the last tilted tick label and the curves' final
+ * strokes need room to finish inside it.
+ */
+const AXIS_RIGHT = 34;
 
 interface Props {
   points: readonly TrackPoint[];
@@ -180,7 +186,7 @@ export function ElevationProfile({
   const drawPace = hasPace && showPaceCurve;
   const drawHr = hasHr && showHrCurve;
 
-  const plotW = Math.max(0, width - AXIS_LEFT);
+  const plotW = Math.max(0, width - AXIS_LEFT - AXIS_RIGHT);
   const xFor = (d: number) =>
     AXIS_LEFT + (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * plotW;
 
@@ -255,7 +261,7 @@ export function ElevationProfile({
   // finger drifts vertically — scrubbing keeps working off-axis.
   const pan = useMemo(() => {
     const onTouch = (e: GestureResponderEvent) => {
-      const plot = width - AXIS_LEFT;
+      const plot = width - AXIS_LEFT - AXIS_RIGHT;
       if (plot <= 0) return;
       const ratio = (e.nativeEvent.locationX - AXIS_LEFT) / plot;
       const res = scrubProfileAtRatio(points, samples, ratio);
