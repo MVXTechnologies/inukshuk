@@ -11,10 +11,11 @@ import {
   GeoJSONSource,
   Layer,
   Map,
+  type MapRef,
   Marker,
 } from '@maplibre/maplibre-react-native';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
@@ -40,6 +41,7 @@ export function Trail2DView({
   const bm = basemap ?? mainBasemap;
   const style = useMemo(() => buildOsmStyle(tileUrl, false, bm, true), [tileUrl, bm]);
   const cameraRef = useRef<CameraRef>(null);
+  const mapRef = useRef<MapRef>(null);
 
   const lngLats = useMemo(
     () => points.map((p) => [p.longitude, p.latitude] as [number, number]),
@@ -93,8 +95,49 @@ export function Trail2DView({
     fitToTrail();
   }, [fitToTrail]);
 
+  // Pin taps are hit-tested at the MAP level, same as MapScreen's waypoint
+  // pins: <Marker onPress> doesn't fire on Android, and a Pressable child
+  // proved unreliable across devices too. The tap's pixel point is compared
+  // against each pin projected through the real camera.
+  const NOTE_HIT_PX = 48;
+  const onMapPress = useCallback(
+    async (e: { nativeEvent?: { point?: [number, number] } }) => {
+      const point = e.nativeEvent?.point;
+      const map = mapRef.current;
+      if (!onNotePress || !point || !map || numberedNotes.length === 0) return;
+      const [px, py] = point;
+      let bestId: string | null = null;
+      let bestD = NOTE_HIT_PX;
+      try {
+        const pts = await Promise.all(
+          numberedNotes.map((n) => map.project([n.longitude, n.latitude])),
+        );
+        for (let i = 0; i < numberedNotes.length; i++) {
+          const p = pts[i];
+          if (!p) continue;
+          const d = Math.hypot(px - p[0], py - p[1]);
+          if (d < bestD) {
+            bestD = d;
+            bestId = numberedNotes[i]!.note.id;
+          }
+        }
+      } catch {
+        return; // projection unavailable mid-teardown — ignore the tap
+      }
+      if (bestId) onNotePress(bestId);
+    },
+    [numberedNotes, onNotePress],
+  );
+
   return (
-    <Map style={styles.fill} mapStyle={style} compass={false} onDidFinishLoadingMap={fitToTrail}>
+    <Map
+      ref={mapRef}
+      style={styles.fill}
+      mapStyle={style}
+      compass={false}
+      onDidFinishLoadingMap={fitToTrail}
+      onPress={onMapPress}
+    >
       <Camera ref={cameraRef} />
       <GeoJSONSource id="trail-2d" data={lineFeature}>
         <Layer
@@ -129,8 +172,7 @@ export function Trail2DView({
 
       {/* Numbered note pins. Markers (RN views), not a symbol layer: the raster
           style declares no glyphs endpoint, so MapLibre text would not render.
-          Tap handling goes through a Pressable CHILD, not <Marker onPress> —
-          the marker-level handler doesn't fire on Android. */}
+          Visual only — taps land through onMapPress's hit-test above. */}
       {numberedNotes.map((n) => (
         <Marker
           key={n.note.id}
@@ -138,15 +180,7 @@ export function Trail2DView({
           lngLat={[n.longitude, n.latitude]}
           anchor="center"
         >
-          <Pressable
-            onPress={onNotePress ? () => onNotePress(n.note.id) : undefined}
-            disabled={!onNotePress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Note ${n.num}`}
-          >
-            <NoteNumberBadge num={n.num} />
-          </Pressable>
+          <NoteNumberBadge num={n.num} />
         </Marker>
       ))}
     </Map>
