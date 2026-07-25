@@ -46,6 +46,10 @@ export default function TabsLayout() {
         options={{ title: 'Library', tabBarIcon: icon('folder-multiple-outline') }}
       />
       <Tabs.Screen
+        name="dashboard"
+        options={{ title: 'Dashboard', tabBarIcon: icon('chart-timeline-variant') }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{ title: 'Settings', tabBarIcon: icon('cog-outline') }}
       />

@@ -23,8 +23,9 @@ RC=0
 # save-vs-discard outcome is indeterminate. map-overlays needs no fixtures but
 # runs after trail-view since both drive the shared terrain-overlay settings.
 for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
-  .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/map-overlays.yaml \
-  .maestro/make-map.yaml .maestro/folders.yaml .maestro/settings.yaml .maestro/record.yaml; do
+  .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/dashboard.yaml \
+  .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/folders.yaml \
+  .maestro/settings.yaml .maestro/record.yaml; do
   adb logcat -c || true
   if maestro test "$flow"; then
     echo "=== $flow PASS ==="
