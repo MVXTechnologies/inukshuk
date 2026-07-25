@@ -34,8 +34,11 @@ export function DashboardScreen() {
   const [period, setPeriod] = useState<DashboardPeriod>('7d');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   // The graph's selected bucket, counted FROM THE END (newest = 0) so the
-  // default selection survives period switches without an effect.
-  const [selectedFromEnd, setSelectedFromEnd] = useState(0);
+  // default selection survives period switches without an effect. null =
+  // "auto": the newest bucket WITH data (a fresh dashboard reading "No
+  // activities" because today is empty was a terrible first impression),
+  // falling back to the newest bucket.
+  const [selectedFromEnd, setSelectedFromEnd] = useState<number | null>(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   // Frozen at mount: the aggregation window only shifts at midnight, and a
   // per-render Date.now() is impure under the render rules anyway.
@@ -50,7 +53,13 @@ export function DashboardScreen() {
     () => aggregateBuckets(tracks, period, now, categoryId),
     [tracks, period, now, categoryId],
   );
-  const selectedIndex = Math.max(0, buckets.length - 1 - selectedFromEnd);
+  const autoFromEnd = (() => {
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (buckets[i]!.trackIds.length > 0) return buckets.length - 1 - i;
+    }
+    return 0;
+  })();
+  const selectedIndex = Math.max(0, buckets.length - 1 - (selectedFromEnd ?? autoFromEnd));
   const selected = buckets[selectedIndex];
 
   const monthEntries = useMemo(
@@ -188,7 +197,7 @@ export function DashboardScreen() {
           value={period}
           onValueChange={(v) => {
             setPeriod(v as DashboardPeriod);
-            setSelectedFromEnd(0);
+            setSelectedFromEnd(null);
           }}
           density="small"
           style={styles.periods}
@@ -218,7 +227,7 @@ export function DashboardScreen() {
             onPress={() => {
               setCategoryId(null);
               setCategoryMenuOpen(false);
-              setSelectedFromEnd(0);
+              setSelectedFromEnd(null);
             }}
           />
           {allCategories([...customCategories]).map((c) => (
@@ -229,7 +238,7 @@ export function DashboardScreen() {
               onPress={() => {
                 setCategoryId(c.id);
                 setCategoryMenuOpen(false);
-                setSelectedFromEnd(0);
+                setSelectedFromEnd(null);
               }}
             />
           ))}

@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   chevron: { margin: 0 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 6 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: {
     width: `${100 / 7}%`,
     minHeight: 44,
