@@ -1,0 +1,84 @@
+# Dashboard/profile view e2e (1.5.0): the period graph shows real data from
+# the suite's fixture trail, the period selector and category filter drive the
+# readout, and the month calendar taps through to the trail viewer.
+#
+# Portability notes:
+# - MUST run after category-record.yaml: its freshly recorded Run trail
+#   (recorded "today") is the fixture — deterministically inside every period
+#   window and on today's calendar cell.
+# - The tab may read "Dashboard" (classic/edge) or "Dashboard, tab, N of 4"
+#   (a11y) — and in minimal style it's text-only; the regex covers both.
+# - The readout distance uses formatDistance ("N.N km" / "N m"); assert a
+#   loose distance regex, not an exact value (GPS fix jitter varies the sum).
+# - The negative filter case (Ski) proves the filter is real: the suite never
+#   records a Ski activity, so the readout must flip to "No activities".
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Dashboard(, tab.*)?'
+- extendedWaitUntil:
+    visible: 'Activity graph'
+    timeout: 15000
+# Default readout: newest bucket holds today's fixture trail → real distance.
+- assertVisible: '.*(km|\d+ m).*'
+# Period switch keeps a data-bearing readout (the trail is in every window).
+- tapOn: 'Past 3 months'
+- assertVisible: 'Activity graph'
+- assertVisible: '.*(km|\d+ m).*'
+# Category filter: the fixture is a Run.
+- tapOn: 'Filter by category'
+- extendedWaitUntil:
+    visible: 'Trail Run'
+    timeout: 10000
+- tapOn:
+    text: 'Run'
+    index: 0
+- assertVisible: '.*(km|\d+ m).*'
+# Calendar: today's cell carries at least one activity; tapping opens the
+# trail (single) or the picker (multiple — take the first row).
+- tapOn: '.*: [1-9] activit.*'
+- runFlow:
+    when:
+      visible: 'Activities on.*'
+    commands:
+      # First row: recorded names are either the region auto-title
+      # ("Afternoon run · Québec") or the date default ("Trail Jul 24 ...").
+      - tapOn:
+          text: '(Morning|Afternoon|Evening|Night|Trail).*'
+          index: 0
+- extendedWaitUntil:
+    visible: 'Notes.*'
+    timeout: 30000
+# The trail viewer's floating back arrow (paper BackAction default label);
+# 'back' the Maestro command is Android-only.
+- tapOn: 'Back'
+- extendedWaitUntil:
+    visible: 'Activity graph'
+    timeout: 15000
+# Negative filter: no Ski activity exists → empty readout, calendar intact.
+- tapOn: 'Filter by category'
+- extendedWaitUntil:
+    visible: 'Ski'
+    timeout: 10000
+- tapOn: 'Ski'
+- extendedWaitUntil:
+    visible: 'No activities'
+    timeout: 10000
