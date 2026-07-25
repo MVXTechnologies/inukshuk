@@ -9,7 +9,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Polygon, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 
 /**
  * The dashboard's period graph: one circle per bucket (day or week), y =
@@ -190,7 +190,15 @@ export function ActivityGraph({
             />
           )}
 
-          {/* Soft columns filling activity days down to the baseline. */}
+          {/* The area under the trend line — the triangles the graph forms —
+              filled softly, plus a slightly stronger column on activity days. */}
+          {buckets.length >= 2 && (
+            <Polygon
+              points={`${line} ${xFor(buckets.length - 1).toFixed(1)},${baseline} ${xFor(0).toFixed(1)},${baseline}`}
+              fill={accent}
+              opacity={0.14}
+            />
+          )}
           {buckets.map((b, i) =>
             b.trackIds.length === 0 ? null : (
               <Rect
@@ -201,7 +209,7 @@ export function ActivityGraph({
                 height={Math.max(0, baseline - yFor(b))}
                 rx={barW / 3}
                 fill={accent}
-                opacity={0.18}
+                opacity={0.16}
               />
             ),
           )}
