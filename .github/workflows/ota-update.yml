@@ -13,6 +13,16 @@ on:
       - 'package.json'
       - 'app.config.ts'
   workflow_dispatch:
+    inputs:
+      app_version_override:
+        description: >
+          Publish this update for an OLDER runtime by overriding the app
+          version (e.g. "1.4.0"). Needed after a version bump: pushes to main
+          publish only for the NEW runtime, and installs still on the previous
+          store build stop receiving fixes unless their runtime is re-published
+          too (the runtime-lineage trap). Leave empty for the current version.
+        required: false
+        default: ''
 
 jobs:
   guard:
@@ -38,6 +48,12 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
       - run: npm ci
+      - name: Apply app version override (legacy-runtime publish)
+        if: github.event.inputs.app_version_override != ''
+        run: |
+          v="${{ github.event.inputs.app_version_override }}"
+          sed -i "s/^  version: '.*',$/  version: '$v',/" app.config.ts
+          grep -n "version: '$v'" app.config.ts
       - name: Publish OTA update to the production channel
         # ERROR_REPORT_TOKEN must be present when app.config.ts is evaluated
         # here: clients read `extra` from the LATEST update's manifest, not the
