@@ -1,9 +1,8 @@
 # Main-map terrain overlays e2e (1.2.0): open the Layers menu, enable Slope +
-# Contours with their selectors (slope-angle floor, contour interval), confirm
-# the 2D map stays alive, then enter 3D via the restored video-3d FAB, wait
-# out the terrain build, and come back. Crash-detection focus, like
-# trail-view.yaml: software-GL emulators render slowly (fine) but must not
-# crash or black-screen.
+# Contours with their selectors (slope-angle floor, contour interval) and
+# confirm the 2D map stays alive. Crash-detection focus, like trail-view.yaml.
+# (The main-map 3D segment was removed with the 2026-07-24 rollback — the
+# focused trail viewer's 3D is covered by trail-view.yaml.)
 #
 # Portability notes:
 # - Runs standalone (needs no saved trail); geo comes from the launch
@@ -14,10 +13,6 @@
 #   so they never collide with the section toggles.
 # - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
 #   it auto-dismisses and nothing below asserts during that window.
-# - The 3D FAB's a11y label is "3D relief" (restored from 8f200bb). The 3D
-#   overlay bar (Slope/Contours/Tint buttons) renders ONLY when the overlay
-#   shader compiles (overlaysAvailable) — exercised conditionally, same as
-#   trail-view.yaml.
 # - A far-left tap lands on the Menu's dismiss backdrop and only closes the
 #   menu (see trail-view.yaml).
 appId: com.inukshuk.app
@@ -67,30 +62,6 @@ appId: com.inukshuk.app
 - tapOn:
     point: 10%,50%
 - assertVisible: 'Map actions'
-# --- 3D: enter via the restored FAB, survive the build, come back ---
-- tapOn: '3D relief'
-# Terrain build downloads DEM + drape tiles and compiles the injected shader;
-# on software GL this is the slow path — generous timeout, then prove alive.
-- extendedWaitUntil:
-    notVisible: 'Building 3D terrain.*'
-    timeout: 120000
-- assertNotVisible: 'Couldn.t load 3D terrain.*'
-# Overlay bar is conditional on shader support; when present, the persisted
-# Slope/Contours toggles from the 2D pass are already ON — flip them off/on to
-# prove the uniforms drive a live material without a crash.
-- runFlow:
-    when:
-      visible: 'Slope'
-    commands:
-      - tapOn: 'Slope'
-      - tapOn: 'Slope'
-      - tapOn: 'Contours'
-      - tapOn: 'Contours'
-# Back to 2D on the same FAB; the map screen must return intact.
-- tapOn: '3D relief'
-- extendedWaitUntil:
-    visible: 'Map actions'
-    timeout: 30000
 # Leave the overlays off so reruns and later flows start from the default map.
 - tapOn: 'Map overlays'
 - extendedWaitUntil:

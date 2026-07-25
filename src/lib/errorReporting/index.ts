@@ -88,9 +88,7 @@ function extraString(key: 'errorReportToken' | 'errorReportEndpoint'): string | 
 
 /** How queued reports get delivered in this build, if at all. */
 export type DeliveryChannel =
-  | { kind: 'endpoint'; endpoint: string }
-  | { kind: 'github'; token: string }
-  | { kind: 'none' };
+  { kind: 'endpoint'; endpoint: string } | { kind: 'github'; token: string } | { kind: 'none' };
 
 /** The relay endpoint wins when both are configured (no secret in the binary). */
 export function deliveryChannel(): DeliveryChannel {

@@ -164,9 +164,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
     radius: 4,
     center: new THREE.Vector3(),
     // Trail centre the camera was framed on, and how far the look-at point may be
-    // panned from it (two-finger drag) so you can move around a bit, not fly off.
+    // panned from it (two-finger drag) so you can move around, not fly off.
+    // 1.6: enough to reach the terrain tile's corners when zoomed in (the old
+    // 1.0 hit the clamp mid-slide, which read as the pan "not working").
     home: new THREE.Vector3(),
-    maxPan: 1,
+    maxPan: 1.6,
   });
   const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
   const maxAnisoRef = useRef(1);

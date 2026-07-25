@@ -15,10 +15,8 @@ interface Props {
   /** Shown only when at least one PDF overlay is active. */
   showFitControl: boolean;
   onFit: () => void;
+  /** Still threaded through: gates the hypso row in the overlays menu. */
   terrain3d: boolean;
-  onToggle3d: () => void;
-  /** Disable 3D entry while recording / selecting a region / downloading. */
-  toggle3dDisabled: boolean;
   pdfOverlayCount: number;
   trackOverlayCount: number;
   /**
@@ -30,24 +28,15 @@ interface Props {
   onMinimalOpenChange: (open: boolean) => void;
 }
 
-/** Right-side map controls: locate, fit, 3D, base map, overlays. */
+/** Right-side map controls: locate, fit, base map, overlays. */
 export function MapControlsRail(props: Props) {
   const uiStyle = useSettingsStore((s) => s.uiStyle);
   const { minimalOpen, onMinimalOpenChange } = props;
 
   if (uiStyle === 'edge') return <EdgeRail {...props} />;
 
-  const {
-    top,
-    onLocate,
-    showFitControl,
-    onFit,
-    terrain3d,
-    onToggle3d,
-    toggle3dDisabled,
-    pdfOverlayCount,
-    trackOverlayCount,
-  } = props;
+  const { top, onLocate, showFitControl, onFit, terrain3d, pdfOverlayCount, trackOverlayCount } =
+    props;
 
   // 'minimal' style: everything folded behind one small chevron until asked.
   if (uiStyle === 'minimal' && !minimalOpen) {
@@ -93,19 +82,10 @@ export function MapControlsRail(props: Props) {
           style={styles.controlFab}
         />
       )}
-      {/* 3D relief — re-enabled for 1.2.0 now that terrain P2 (#137) shipped
-          the camera/gesture polish it was pulled back to wait for (8f200bb). */}
-      <FAB
-        icon="video-3d"
-        size="small"
-        variant={terrain3d ? 'primary' : 'surface'}
-        onPress={onToggle3d}
-        // 3D is unstable while recording and meaningless while selecting or
-        // downloading an offline region — disable it in those states.
-        disabled={toggle3dDisabled}
-        style={styles.controlFab}
-        accessibilityLabel="3D relief"
-      />
+      {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
+          working so well ... until we figure it out"). The focused trail
+          viewer keeps its 3D. To restore, re-add the video-3d FAB here (and
+          its EdgePill in EdgeRail) — everything behind terrain3d still works. */}
       <BasemapMenu />
       <MapOverlaysMenu
         pdfOverlayCount={pdfOverlayCount}
@@ -128,8 +108,6 @@ function EdgeRail({
   showFitControl,
   onFit,
   terrain3d,
-  onToggle3d,
-  toggle3dDisabled,
   pdfOverlayCount,
   trackOverlayCount,
 }: Props) {
@@ -144,14 +122,8 @@ function EdgeRail({
       <View style={[styles.edgeRail, { top }]} pointerEvents="box-none">
         <EdgePill icon="crosshairs-gps" label="Locate" onPress={onLocate} />
         {showFitControl && <EdgePill icon="fit-to-page-outline" label="Fit map" onPress={onFit} />}
-        <EdgePill
-          icon="video-3d"
-          label="3D relief"
-          onPress={onToggle3d}
-          active={terrain3d}
-          disabled={toggle3dDisabled}
-          accessibilityLabel="3D relief"
-        />
+        {/* 3D pill removed with the main-map 3D rollback — see the classic
+            rail's note. */}
         <EdgeExpandingMenu
           icon="image-filter-hdr"
           label="Base map"
