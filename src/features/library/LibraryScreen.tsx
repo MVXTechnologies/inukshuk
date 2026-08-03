@@ -109,7 +109,6 @@ export function LibraryScreen() {
   const updateWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeWaypoint = useLibraryStore((s) => s.removeWaypoint);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
-  const setInspectIntent = useMapStore((s) => s.setInspectIntent);
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
   const stravaConnected = useStravaStore((s) => s.connection !== null);
 
@@ -219,11 +218,11 @@ export function LibraryScreen() {
     router.navigate('/');
   };
 
-  // "Trim" menu item: same as "View on map", plus a one-shot intent the Map
-  // screen consumes to open the trail's inspect panel straight into trim mode.
+  // "Trim" menu item: opens the trail viewer straight into its Trim mode
+  // (the `trim=1` param it reads on mount) — trimming lives in the focused
+  // viewer now, not the map's inspect panel.
   const trimTrack = (id: string) => {
-    setInspectIntent({ trackId: id, trim: true });
-    viewTrack(id);
+    router.push(`/trail3d/${id}?trim=1`);
   };
 
   // Waypoint editor (same dialog + libraryStore semantics as tapping a pin on

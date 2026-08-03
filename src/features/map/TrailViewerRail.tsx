@@ -44,6 +44,9 @@ interface Props {
   overlaysAvailable: boolean;
   /** Disable the overlay switches while the terrain is rebuilding. */
   overlaysDisabled?: boolean;
+  /** Opens the trim tool over the docked profile below. Omit to hide the FAB
+   * (e.g. the trail has too few points to trim). */
+  onTrim?: () => void;
 }
 
 export function TrailViewerRail({
@@ -53,6 +56,7 @@ export function TrailViewerRail({
   basemapDisabled,
   overlaysAvailable,
   overlaysDisabled,
+  onTrim,
 }: Props) {
   const trailViewMode = useSettingsStore((s) => s.trailViewMode);
   const set = useSettingsStore((s) => s.set);
@@ -70,6 +74,16 @@ export function TrailViewerRail({
         // know which way the toggle will flip before pressing it.
         accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
       />
+      {onTrim && (
+        <FAB
+          icon="content-cut"
+          size="small"
+          variant="surface"
+          onPress={onTrim}
+          style={styles.controlFab}
+          accessibilityLabel="Trim trail"
+        />
+      )}
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
       {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
     </View>
