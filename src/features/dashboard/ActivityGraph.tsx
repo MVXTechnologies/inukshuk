@@ -9,13 +9,13 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import Svg, { Circle, Line, Polygon, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
 
 /**
  * The dashboard's period graph: one circle per bucket (day or week), y =
  * distance normalized to the period's max. Unselected buckets are hollow;
  * the selected one is filled with a paler aura plus a full-height marker
- * line; activity days also fill a soft column down to the baseline. Distance
+ * line; the area under the trend line fills down to the baseline. Distance
  * gridlines label the y axis in the left gutter; day/month labels run along
  * the x axis. Touch or drag snaps selection to the nearest bucket and — unlike
  * the elevation profile's transient scrub — the selection PERSISTS on release.
@@ -104,7 +104,6 @@ export function ActivityGraph({
 
   const line = buckets.map((b, i) => `${xFor(i).toFixed(1)},${yFor(b).toFixed(1)}`).join(' ');
   const levels = gridLevels(maxDistance);
-  const barW = Math.max(r * 1.6, daily ? 10 : buckets.length <= 13 ? 8 : 3);
 
   /**
    * X labels: daily periods label every day by day-of-month (month name on
@@ -191,27 +190,14 @@ export function ActivityGraph({
           )}
 
           {/* The area under the trend line — the triangles the graph forms —
-              filled softly, plus a slightly stronger column on activity days. */}
+              filled softly. No per-day columns: they'd overlap the triangle
+              fill and read as a second, conflicting shape. */}
           {buckets.length >= 2 && (
             <Polygon
               points={`${line} ${xFor(buckets.length - 1).toFixed(1)},${baseline} ${xFor(0).toFixed(1)},${baseline}`}
               fill={accent}
               opacity={0.14}
             />
-          )}
-          {buckets.map((b, i) =>
-            b.trackIds.length === 0 ? null : (
-              <Rect
-                key={`bar${b.startMs}`}
-                x={xFor(i) - barW / 2}
-                y={yFor(b)}
-                width={barW}
-                height={Math.max(0, baseline - yFor(b))}
-                rx={barW / 3}
-                fill={accent}
-                opacity={0.16}
-              />
-            ),
           )}
 
           {/* Trend line under the circles so sparse periods still read. */}
