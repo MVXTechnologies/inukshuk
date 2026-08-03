@@ -585,11 +585,16 @@ export function MapScreen() {
         return;
       }
 
-      // No waypoint pin hit — route through the heat lookup.
+      // No waypoint pin hit — route through the heat lookup, but only when
+      // trail overlays are actually shown: with the master switch off, no
+      // trail geometry is on screen (rendering is gated the same way, ~line
+      // 801), so a tap there must fall through to plain deselect rather than
+      // reopening the inspect panel/carousel for a hidden trail.
       const lngLatArr = e.nativeEvent?.lngLat;
-      const at = lngLatArr
-        ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] })
-        : { trackIds: [], hot: false };
+      const at =
+        lngLatArr && showTrackOverlays
+          ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] })
+          : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
         inspect(null); // opening the carousel hides the inspect panel
         setHeatSelection({
@@ -605,7 +610,7 @@ export function MapScreen() {
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
     },
-    [visiblePins, trackHeat, inspect],
+    [visiblePins, trackHeat, inspect, showTrackOverlays],
   );
 
   const trailFeature = useThrottledLineFeature(points);

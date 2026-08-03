@@ -36,8 +36,11 @@ const cacheKey = (t: TrackSummary): string => `${t.id}|${t.stats.pointCount}|${t
  * Combines every shown trail's GPX into one heat-shaded FeatureCollection
  * (cold/hot LineString runs, data-driven by category colour) plus a tap
  * lookup for "what's under this point". Navigation trails (imported/planned
- * routes) are traced and rendered but always cold and never contribute to
- * `heatAt`'s results — only performed activities count toward overlap.
+ * routes) are traced and rendered but always cold and never count toward
+ * hot-overlap — only performed activities contribute to `hot`. Every
+ * rendered trail (navigation included) is still tap-inspectable: `heatAt`
+ * looks up `trackIds` from a second, all-trails index (`tapIndex`) and
+ * `hot` from the performed-only index (`index`).
  *
  * Per-track GPX parse + cell trace is cached by id + stats (like
  * `useTrackOverlays`), so toggling a trail back on is instant; an edited
@@ -97,9 +100,9 @@ export function useTrackHeat(
   // palette) keeps `collection` referentially stable across that churn, so
   // MapLibre's GeoJSONSource doesn't re-diff/re-upload geometry every frame,
   // and avoids re-walking every point of every shown trail per render.
-  const { collection, index, performedIds } = useMemo(() => {
-    const performed = new Set<string>();
+  const { collection, index, tapIndex } = useMemo(() => {
     const heatInputs: HeatTrackInput[] = [];
+    const tapInputs: HeatTrackInput[] = [];
     const built: {
       id: string;
       categoryId: string;
@@ -128,13 +131,17 @@ export function useTrackHeat(
         hotColorHex,
       });
 
+      // The tap index covers every rendered trail — navigation included —
+      // so any visible trail is inspectable, not just performed ones.
+      tapInputs.push({ id, categoryId, dilated: entry.trace.dilated });
+
       if (isPerformedActivity(t)) {
-        performed.add(id);
         heatInputs.push({ id, categoryId, dilated: entry.trace.dilated });
       }
     }
 
     const heatIndex = buildHeatIndex(heatInputs);
+    const tapIndex = buildHeatIndex(tapInputs);
 
     let coll: FeatureCollection<LineString, HeatRunProperties> | null = null;
     if (built.length > 0) {
@@ -152,14 +159,18 @@ export function useTrackHeat(
       coll = { type: 'FeatureCollection', features };
     }
 
-    return { collection: coll, index: heatIndex, performedIds: performed };
+    return { collection: coll, index: heatIndex, tapIndex };
   }, [cache, tracks, shownTrackIds, customCategories]);
 
   const heatAt = (lngLat: { lng: number; lat: number }): { trackIds: string[]; hot: boolean } => {
     const cell = cellAt(lngLat.lng, lngLat.lat);
-    const { trackIds, hot } = trailsNear(index, cell);
-    const filtered = trackIds.filter((id) => performedIds.has(id));
-    const sorted = [...filtered].sort((a, b) => {
+    // trackIds: every rendered trail near the tap (navigation included) —
+    // tap-inspect must work regardless of performed/navigation status.
+    const { trackIds } = trailsNear(tapIndex, cell);
+    // hot: performed-only overlap — the carousel/heat-shading semantics are
+    // unchanged, so a spot is only "hot" when >= 2 performed trails overlap.
+    const { hot } = trailsNear(index, cell);
+    const sorted = [...trackIds].sort((a, b) => {
       const ta = tracks.find((x) => x.id === a)?.startedAt ?? 0;
       const tb = tracks.find((x) => x.id === b)?.startedAt ?? 0;
       return tb - ta;
