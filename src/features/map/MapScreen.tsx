@@ -57,6 +57,7 @@ import { overwriteWithTrim, saveTrimmedCopy } from './trimTrack';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
+import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -151,7 +152,18 @@ export function MapScreen() {
     [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
   );
   const { overlays, error: overlayError } = usePdfOverlays(shownMaps);
+  // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
+  // controls-rail overlay count — only the 2D per-trail render block was
+  // replaced by the combined heat source (trackHeat), so this call stays.
   const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
+  const trackHeat = useTrackHeat(tracks, shownTrackIds);
+  // Tap-selected heat spot (set by Task 9's onMapPress routing); staying null
+  // here just picks focusedTrackId back to the inspected trail.
+  const [heatSelection] = useState<{
+    lngLat: { lng: number; lat: number };
+    trackIds: string[];
+    focusedIdx: number;
+  } | null>(null);
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
@@ -566,6 +578,15 @@ export function MapScreen() {
     [showTrackOverlays, trackOverlays],
   );
 
+  // Which trail the heat layers highlight: a tap-selected trail (Task 9) wins,
+  // otherwise fall back to whichever trail is open in the inspect panel.
+  // dimOthers only kicks in once a heat selection exists (a spot with more
+  // than one trail underneath it) — plain inspection doesn't dim the rest.
+  const focusedTrackId = heatSelection
+    ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
+    : inspectId;
+  const dimOthers = heatSelection !== null;
+
   return (
     <View style={styles.fill}>
       {terrain3d ? (
@@ -725,31 +746,50 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {showTrackOverlays &&
-            trackOverlays.map((t) =>
-              // While trimming, the inspected trail is drawn by the preview
-              // sources below instead (kept segment bright, cut ends dimmed).
-              trimPreview && t.id === inspectId ? null : (
-                <GeoJSONSource
-                  key={t.id}
-                  id={`track-${t.id}`}
-                  data={t.feature}
-                  onPress={() => inspect(inspectId === t.id ? null : t.id)}
-                >
-                  <Layer
-                    id={`track-${t.id}-line`}
-                    type="line"
-                    layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                    paint={{
-                      'line-color':
-                        inspectId === t.id ? mapColors.trackOverlayActive : mapColors.trackOverlay,
-                      'line-width': inspectId === t.id ? 6 : 4,
-                      'line-opacity': 0.9,
-                    }}
-                  />
-                </GeoJSONSource>
-              ),
-            )}
+          {/* Combined heat source: every shown trail's GPX in one
+              FeatureCollection, colour-coded per category with hot/cold runs
+              (see useTrackHeat). Layer order matters — glow under trace under
+              the focused-trail highlight. Tap routing lands in Task 9; the
+              per-trail onPress this replaced is gone until then. */}
+          {showTrackOverlays && trackHeat.collection && (
+            <GeoJSONSource id="tracks-heat" data={trackHeat.collection}>
+              <Layer
+                id="tracks-heat-glow"
+                type="line"
+                filter={['==', ['get', 'hot'], true]}
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': ['get', 'color'],
+                  'line-width': ['step', ['get', 'count'], 10, 3, 13, 5, 16],
+                  'line-blur': 6,
+                  'line-opacity': 0.35,
+                }}
+              />
+              <Layer
+                id="tracks-heat-line"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': ['get', 'color'],
+                  'line-width': [
+                    'case',
+                    ['==', ['get', 'hot'], true],
+                    ['step', ['get', 'count'], 5, 3, 6, 5, 7],
+                    4,
+                  ],
+                  'line-opacity': dimOthers
+                    ? ['case', ['==', ['get', 'trackId'], focusedTrackId ?? ''], 1, 0.25]
+                    : 1,
+                }}
+              />
+              <Layer
+                id="tracks-heat-focus"
+                type="line"
+                filter={['==', ['get', 'trackId'], focusedTrackId ?? '']}
+                paint={{ 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': 1 }}
+              />
+            </GeoJSONSource>
+          )}
 
           {/* Trim preview: dimmed dashed cut ends under a bright kept segment. */}
           {trimPreview?.cutHead && (
