@@ -60,14 +60,19 @@ appId: com.inukshuk.app
     direction: DOWN
 - assertVisible: '.*(Strava is not configured in this build|Ask to push saved trails to Strava|Connected).*'
 # Privacy: error reporting toggle + queue row (subtitle is dynamic — count or
-# "No pending reports", suffixed with channel/last-attempt info).
+# "No pending reports", suffixed with channel/last-attempt info). Scroll until
+# the QUEUE row itself is visible: scrolling to the section title stops the
+# moment it peeks above the tab bar, leaving the queue row off-screen — the
+# 2026-08-03 nightly failed exactly there on both the run and its retry.
 - scrollUntilVisible:
     element:
       text: 'Automatic error reporting.*'
     direction: DOWN
-- extendedWaitUntil:
-    visible: 'Error report queue.*'
-    timeout: 8000
+- scrollUntilVisible:
+    element:
+      text: 'Error report queue.*'
+    direction: DOWN
+- assertVisible: 'Error report queue.*'
 # About: bottom of the screen reachable, version row present.
 - scrollUntilVisible:
     element:
