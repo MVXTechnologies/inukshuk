@@ -1,0 +1,329 @@
+# Heatmap e2e: a second Run over the same simulated path as
+# category-record's makes the shared stretch hot; tapping it opens the
+# vertical activity carousel; focusing + tapping a card opens the viewer.
+#
+# MUST run after category-record.yaml (its Run trail is the first overlap
+# partner). The camera follows the user location (the geo fixes), so after
+# saving, the overlapping trace sits at the screen centre — the 40%..60%
+# tap grid below is a deliberately generous net around it (heat lookup has
+# a one-cell fat-finger ring).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# Record the second Run — same steps as category-record.yaml's record/save
+# block (selectors copied verbatim, its extendedWaitUntil timeouts unchanged).
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# Open the dial (retried whole; the tap is GUARDED — only when the actions
+# aren't already visible — so a retry can never toggle an open dial closed).
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Record track'
+          commands:
+            - tapOn: 'Map actions'
+      # 60 s for the same reason as waypoint.yaml.
+      - extendedWaitUntil:
+          visible: 'Record track'
+          timeout: 60000
+- tapOn: 'Record track'
+- extendedWaitUntil:
+    visible: 'What are you recording?'
+    timeout: 10000
+# Pick Run (not the Hike default) so the recorded track matches
+# category-record's overlap partner.
+- tapOn: 'Category Run(, selected)?'
+- tapOn: 'Start recording'
+# Background-permission rationale card on first record: decline (inline card).
+# Skipped entirely when background location is already granted.
+- runFlow:
+    when:
+      visible: 'Not now'
+    commands:
+      - tapOn: 'Not now'
+- assertVisible: 'Stop recording'
+# ~250 m of simulated movement (4 fixes well past the 5 m spacing filter) —
+# the exact same path category-record.yaml walked, so the two trails overlap.
+- travel:
+    points:
+      - 46.8139,-71.2082
+      - 46.8145,-71.2075
+      - 46.8151,-71.2068
+      - 46.8158,-71.2060
+    speed: 25
+- assertVisible: 'Stop recording'
+- tapOn: 'Stop recording'
+# Recorder back to idle…
+- extendedWaitUntil:
+    notVisible: 'Stop recording'
+    timeout: 15000
+- assertVisible: 'Map actions'
+# Neither recording is shown on the map yet — a fresh trail only draws once
+# it's "active", and 'type' mode's activation is single-select (Library's
+# "View on map" replaces, it doesn't add), so there's no way to activate BOTH
+# trails through it. Switch to folder-visibility mode and check "Ungrouped"
+# instead (same picker folders.yaml exercises): both trails have no folder,
+# so this shows them together in one shot — the two-track overlap heat needs.
+# "Ungrouped" is a CHECKBOX (tapOn toggles it), so this whole thing is only
+# correct if it starts unchecked. It's whatever a previous run left it at, so
+# retry the open→toggle→verify→(re-toggle if wrong) cycle: each pass flips
+# the checkbox once, and re-checking "Content: 1 folder" after closing the
+# dialog catches a miss (see the animation note below) and tries again —
+# self-correcting regardless of starting state.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Content.*'
+          timeout: 10000
+      - tapOn: 'Content.*'
+      - extendedWaitUntil:
+          visible: 'Show on the map'
+          timeout: 10000
+      # The dialog's own enter animation must settle before tapping —
+      # mid-animation the accessibility tree's reported bounds don't match
+      # the transformed on-screen position yet, so a tap here can silently
+      # miss the checkbox.
+      - waitForAnimationToEnd:
+          timeout: 3000
+      - tapOn: 'Ungrouped'
+      - tapOn: 'Done'
+      - assertVisible: 'Map actions'
+      - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Content: 1 folder'
+          timeout: 10000
+      - tapOn:
+          point: 10%,50%
+# The heat GPX-load effect is async (reads + parses both trails' files); give
+# it a beat before probing for the rendered heat layer.
+- waitForAnimationToEnd:
+    timeout: 3000
+# Both recordings started at this exact fix (the "setLocation" above, before
+# either dial-open), so it's where their traces overlap. The background
+# geo-fix loop (outside this flow) keeps nudging the followed camera between
+# its two points every ~2 s — re-issue the shared start fix right before
+# tapping so the followed camera (and the tap grid below) is centred on it,
+# not wherever the loop's other point last left it.
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# 'follow user' pans the camera to a fresh fix rather than snapping — give
+# the pan its own beat to finish, on top of the GPX-load wait above, or the
+# tap grid below chases a camera that's still mid-animation toward centre.
+- waitForAnimationToEnd:
+    timeout: 2000
+# After save the map shows both runs overlapping near the centre — empirically
+# a little up-and-left of dead-centre (verified interactively: the hot spot's
+# on-screen offset from a 1080x2400 device's true centre came out around
+# (-30, -84) px, i.e. roughly (47%, 47%), not (50%, 50%) — the heat lookup's
+# "one-cell fat-finger ring" is only ~25-30 px wide on screen at this zoom, so
+# a coarse 45/55 diagonal net can straddle it without ever landing inside it.
+# Try centre, then a dense 1%-step cluster around that measured offset, then
+# fall back to a wider 40%..60% net in case a run's overlap lands elsewhere.
+- tapOn:
+    point: '50%,50%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '47%,47%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '46%,46%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '48%,46%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '46%,47%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '48%,47%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '46%,48%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '47%,48%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '48%,48%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '45%,45%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '55%,55%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '45%,55%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '55%,45%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '40%,50%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '60%,50%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '50%,40%'
+- runFlow:
+    when:
+      notVisible: 'Activities here'
+    commands:
+      - tapOn:
+          point: '50%,60%'
+- extendedWaitUntil:
+    visible: 'Activities here'
+    timeout: 10000
+# Two cards minimum (both are auto-titled "<TimeOfDay> run · <place>" or
+# date-defaulted "Trail …").
+- assertVisible:
+    text: 'Activity: .*'
+    index: 1
+# Tap the focused (first) card → trail viewer.
+- tapOn:
+    text: 'Activity: .*'
+    index: 0
+- extendedWaitUntil:
+    visible: 'Notes.*'
+    timeout: 30000
+- tapOn: 'Back'
+# 'Map actions' is NOT a reliable pop-complete signal here: the map's tab
+# screen is frozen, not unmounted, underneath the trail-viewer stack screen,
+# so its FAB is already in the accessibility tree — and reports "visible" —
+# while the trail viewer is still sliding out on top. Gate on the departing
+# screen's own (unique) content going away instead, THEN confirm we're back.
+- extendedWaitUntil:
+    notVisible: 'Export PDF'
+    timeout: 15000
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
+# The departing 3D trail viewer's three.js/GL teardown starves the JS thread
+# for several seconds after the screen itself is gone from the hierarchy —
+# NOT a fixed-length transition animation. Verified on-device: reverting
+# visibility can't be moved BEFORE the viewer trip instead (the obvious fix),
+# because 'type'/"Everything" mode only shows `activeTrackIds` — see
+# visibility.ts's `visibleTrackIds` — and a fresh recording's save path never
+# populates that set, so both trails would vanish and the later heat re-tap
+# would have nothing to hit. So the revert stays last, but every wait below
+# is generously widened for a slow (not hung) JS thread rather than assuming
+# a short, fixed settle.
+- waitForAnimationToEnd:
+    timeout: 5000
+# The heat carousel opened before the card tap is NEVER torn down by
+# navigating into the trail viewer: `trail3d/[id]` is a SIBLING stack screen
+# (app/_layout.tsx), so the tab stack — MapScreen included — stays mounted
+# underneath, and `heatSelection` is plain MapScreen-local state that only
+# `onClose`/an empty-track effect ever clears (HeatPointCarousel.tsx). Back
+# lands us on a map screen where the carousel is still fully showing its
+# cards — and, since it mounts after (so paints over) the top-right FAB rail
+# in MapScreen's JSX, it physically intercepts taps meant for those buttons.
+# Verified on-device: without this dismiss, the cleanup's "Map overlays" tap
+# actually landed on the still-visible focused card underneath and bounced
+# straight back into the trail viewer. Close it via its own button first.
+- runFlow:
+    when:
+      visible: 'Close activities'
+    commands:
+      - tapOn: 'Close activities'
+      - extendedWaitUntil:
+          notVisible: 'Activities here'
+          timeout: 5000
+# Restore 'type' visibility mode so later flows (library-filter, trail-view,
+# map-overlays, folders, …) see the app's default state, same as folders.yaml
+# does at the end of its own run. "Everything" is also a checkbox (its
+# onPress toggles 'type' <-> 'folders'), so same self-correcting retry as the
+# setup block above — timeouts widened (30 s on the two post-tap waits) to
+# absorb the post-viewer JS-thread stall instead of racing it.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Content.*'
+          timeout: 30000
+      - tapOn: 'Content.*'
+      - extendedWaitUntil:
+          visible: 'Everything'
+          timeout: 15000
+      - waitForAnimationToEnd:
+          timeout: 3000
+      - tapOn: 'Everything'
+      - tapOn: 'Done'
+      - assertVisible: 'Map actions'
+      - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Content: everything'
+          timeout: 30000
+      - tapOn:
+          point: 10%,50%
+- assertVisible: 'Map actions'
