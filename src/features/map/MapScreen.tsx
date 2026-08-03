@@ -124,6 +124,13 @@ export function MapScreen() {
   // NPEs on the native thread — a process crash a JS .catch() cannot intercept
   // (the launch-race crash behind the 07-30 nightly and local blank screens).
   const [mapLoaded, setMapLoaded] = useState(false);
+  // Pre-selection camera, captured just before the first selection-driven
+  // camera fit (see the inspect-fit effect below) so a later FULL deselect
+  // can glide smoothly back to it. Switching the selection from one trail to
+  // another must NOT overwrite this — it only ever holds the view from
+  // before selection started, until a deselect consumes and clears it.
+  // Written only inside event handlers/effects, never during render.
+  const restoreCameraRef = useRef<{ center: LngLat; zoom: number } | null>(null);
 
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   // Cold-start camera seed: the persisted last known map position. Hydration is
@@ -335,19 +342,50 @@ export function MapScreen() {
     const bbox = inspectTrack?.stats.bbox;
     if (!inspectId || !inspectPoints || !bbox) return;
     setFollowUser(false);
-    cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
-      duration: 600,
-      padding: {
-        top: insets.top + 80,
-        left: 40,
-        right: 40,
-        bottom: INSPECT_PANEL_H_ESTIMATE + 40,
-      },
-    });
+    const bounds = toLngLatBounds(bbox);
+    const padding = {
+      top: insets.top + 80,
+      left: 40,
+      right: 40,
+      bottom: INSPECT_PANEL_H_ESTIMATE + 40,
+    };
+    const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
+    // Capture the camera as it stood BEFORE this selection-driven fit — but
+    // only once per selection "session" (the ref-is-null check): switching
+    // from one selected trail to another must not clobber the true
+    // pre-selection view held for the eventual deselect glide-back (see
+    // restoreCameraOnDeselect). Gated on mapLoaded — see its declaration
+    // comment (ungated getViewState NPEs on the native thread).
+    if (restoreCameraRef.current === null && mapLoaded) {
+      void mapRef.current
+        ?.getViewState()
+        .then((vs) => {
+          restoreCameraRef.current = { center: vs.center, zoom: vs.zoom };
+        })
+        .catch(() => {
+          // map mid-teardown — skip capturing; the deselect glide-back just
+          // won't fire this one time.
+        })
+        .finally(fit);
+    } else {
+      fit();
+    }
     // `setFollowUser` is a stable setter wrapper; `insets.top` is effectively
     // constant per device/orientation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectId, inspectPoints, inspectTrack]);
+
+  // Glide the camera back to its pre-selection view on a FULL deselect (the
+  // effect above is the only thing that ever populates restoreCameraRef) —
+  // called from the three close paths below (inspect-panel close, carousel
+  // close, cold-tap deselect), never when merely switching the selected
+  // trail. Clears the ref so a redundant deselect is a no-op.
+  const restoreCameraOnDeselect = useCallback(() => {
+    const prev = restoreCameraRef.current;
+    if (!prev) return;
+    restoreCameraRef.current = null;
+    void cameraRef.current?.setStop({ center: prev.center, zoom: prev.zoom, duration: 600 });
+  }, []);
 
   // "Record track" intercepts here: the category sheet opens first, and only
   // its Start button actually begins the recording (owner ask: pick an
@@ -539,13 +577,15 @@ export function MapScreen() {
       } else {
         // Empty/cold tap: deselect both the carousel and any open inspect
         // panel (item 7 — tapping empty map while a trail is selected
-        // deselects it, same as tapping empty space anywhere else).
+        // deselects it, same as tapping empty space anywhere else), and
+        // glide the camera back to its pre-selection view.
         setHeatSelection(null);
         inspect(null);
+        restoreCameraOnDeselect();
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
     },
-    [visiblePins, trackHeat, inspect, showTrackOverlays],
+    [visiblePins, trackHeat, inspect, showTrackOverlays, restoreCameraOnDeselect],
   );
 
   const trailFeature = useThrottledLineFeature(points);
@@ -1035,7 +1075,10 @@ export function MapScreen() {
         <TrailInspectPanel
           track={inspectTrack}
           points={inspectPoints}
-          onClose={() => inspect(null)}
+          onClose={() => {
+            inspect(null);
+            restoreCameraOnDeselect();
+          }}
           onScrub={setMarkerAt}
           onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
         />
@@ -1060,7 +1103,10 @@ export function MapScreen() {
             });
           }}
           onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
-          onClose={() => setHeatSelection(null)}
+          onClose={() => {
+            setHeatSelection(null);
+            restoreCameraOnDeselect();
+          }}
           topInset={insets.top}
         />
       )}

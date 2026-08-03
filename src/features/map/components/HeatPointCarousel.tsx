@@ -18,7 +18,7 @@ interface Props {
   topInset: number;
 }
 
-const CARD_H = 56;
+const CARD_H = 84;
 /** Vertical distance between card centres in the stack: a neighbour peeks
  * only ~25% of its height out from behind the focused card. */
 const PEEK = Math.round(CARD_H * 0.25);
@@ -170,11 +170,11 @@ export function HeatPointCarousel({
         >
           <Icon
             source={category?.icon ?? 'circle-medium'}
-            size={16}
+            size={22}
             color={category?.color ?? theme.colors.onSurfaceVariant}
           />
           <View style={styles.cardText}>
-            <Text variant="labelMedium" numberOfLines={1}>
+            <Text variant="titleSmall" numberOfLines={1}>
               {t.name}
             </Text>
             <Text
@@ -184,7 +184,7 @@ export function HeatPointCarousel({
             >
               {formatTimestamp(t.startedAt)}
             </Text>
-            <Text variant="labelSmall" numberOfLines={1}>
+            <Text variant="labelMedium" numberOfLines={1}>
               {[
                 formatDistance(t.stats.distanceM),
                 ...(untimed ? [] : [formatDuration(t.stats.durationS)]),
@@ -287,11 +287,11 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     height: CARD_H,
     borderRadius: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     borderWidth: 2,
   },
-  cardText: { flex: 1, gap: 1 },
+  cardText: { flex: 1, gap: 3 },
 });
