@@ -109,6 +109,13 @@ export function MapScreen() {
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
+  // True only between onDidFinishLoadingMap and the next onWillStartLoadingMap
+  // (which also fires when a remounted <Map> — e.g. back from 3D — starts
+  // loading, re-arming the gate). Every mapRef.getViewState() must be gated on
+  // this: called before the native view is initialized, MLRNMapView.getCenter
+  // NPEs on the native thread — a process crash a JS .catch() cannot intercept
+  // (the launch-race crash behind the 07-30 nightly and local blank screens).
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   // Cold-start camera seed: the persisted last known map position. Hydration is
@@ -251,7 +258,7 @@ export function MapScreen() {
     confirmDownload,
     prepareRegionGeometry,
     resolveRegionRect,
-  } = useOfflineDownload({ mapRef, cameraRef, showSnack });
+  } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
 
   const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
@@ -286,7 +293,9 @@ export function MapScreen() {
     boundsVersion: regionVersion,
     // offlineOnly also disables these: DEM-derived layers drape over the
     // downloaded-only mask's blank void, which reads as garbage.
-    active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly,
+    // mapLoaded: the pipeline opens with getViewState — see the state's
+    // declaration comment (native crash if called before the map loads).
+    active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
   });
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
@@ -588,6 +597,8 @@ export function MapScreen() {
           compass={false}
           touchPitch
           onPress={onMapPress}
+          onWillStartLoadingMap={() => setMapLoaded(false)}
+          onDidFinishLoadingMap={() => setMapLoaded(true)}
           onRegionDidChange={() => {
             setRegionVersion((v) => v + 1);
             void refreshBounds();

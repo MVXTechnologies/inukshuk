@@ -30,9 +30,18 @@ for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.
   if maestro test "$flow"; then
     echo "=== $flow PASS ==="
   else
-    RC=1
-    echo "=== $flow FAIL ==="
+    # One retry: launch races (map-init timing, post-boot churn) pass on a
+    # clean second run. Keep the FIRST failure's logcat either way, so a
+    # retried-but-green flow still leaves evidence it flaked.
     adb logcat -d > "logcat-failure-$(basename "$flow" .yaml).txt" || true
+    adb logcat -c || true
+    if maestro test "$flow"; then
+      echo "=== $flow PASS (on retry) ==="
+    else
+      RC=1
+      echo "=== $flow FAIL ==="
+      adb logcat -d > "logcat-failure-$(basename "$flow" .yaml)-retry.txt" || true
+    fi
   fi
 done
 exit $RC

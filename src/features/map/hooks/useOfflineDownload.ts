@@ -40,10 +40,17 @@ export function useOfflineDownload({
   mapRef,
   cameraRef,
   showSnack,
+  mapLoaded,
 }: {
   mapRef: RefObject<MapRef | null>;
   cameraRef: RefObject<CameraRef | null>;
   showSnack: (message: string) => void;
+  /**
+   * Gates every getViewState() call: before the map finishes loading,
+   * MLRNMapView.getCenter NPEs on the native thread and crashes the process —
+   * the JS .catch() below never sees it (launch race, 07-30 nightly).
+   */
+  mapLoaded: boolean;
 }) {
   const [mapSize, setMapSize] = useState({ w: 0, h: 0 });
   const [selecting, setSelecting] = useState(false);
@@ -72,6 +79,7 @@ export function useOfflineDownload({
   const [boundsVersion, setBoundsVersion] = useState(0);
 
   const refreshBounds = useCallback(async () => {
+    if (!mapLoaded) return;
     const view = await mapRef.current?.getViewState().catch(() => undefined);
     if (!view || !isFlat(view.bearing, view.pitch)) return;
     const next = view.bounds as [number, number, number, number];
@@ -79,7 +87,7 @@ export function useOfflineDownload({
     if (prev && prev.every((v, i) => v === next[i])) return;
     boundsRef.current = next;
     setBoundsVersion((v) => v + 1);
-  }, [mapRef]);
+  }, [mapRef, mapLoaded]);
 
   /**
    * The visible bounds of a flat, north-up camera — flattening it first if the
@@ -87,6 +95,7 @@ export function useOfflineDownload({
    * won't report a flat viewport (nothing trustworthy to convert the box with).
    */
   const flatBounds = useCallback(async (): Promise<[number, number, number, number] | null> => {
+    if (!mapLoaded) return null;
     const view = await mapRef.current?.getViewState().catch(() => undefined);
     if (view && !isFlat(view.bearing, view.pitch)) {
       await cameraRef.current
@@ -96,7 +105,7 @@ export function useOfflineDownload({
     }
     await refreshBounds();
     return boundsRef.current;
-  }, [mapRef, cameraRef, refreshBounds]);
+  }, [mapRef, cameraRef, refreshBounds, mapLoaded]);
 
   // Screen point (px) → [lng, lat], synchronously, from the cached flat bounds.
   const toGeo = useCallback(
