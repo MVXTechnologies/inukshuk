@@ -12,7 +12,7 @@ import * as storage from '@data/storage';
 import { useLibraryStore } from '@state/libraryStore';
 import { mapColors } from '@ui/theme';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface TrackHeat {
   /** One FeatureCollection of ALL visible trails' run features. */
@@ -41,8 +41,12 @@ const cacheKey = (t: TrackSummary): string => `${t.id}|${t.stats.pointCount}|${t
  *
  * Per-track GPX parse + cell trace is cached by id + stats (like
  * `useTrackOverlays`), so toggling a trail back on is instant; an edited
- * trail (new point count/distance) reloads. The recompute effect depends
- * only on `[tracks, shownTrackIds]` — never on camera state.
+ * trail (new point count/distance) reloads. The GPX-load effect depends only
+ * on `[key, tracks]` (`key` = shownTrackIds joined) and the derived
+ * `collection`/index is `useMemo`'d over `[cache, tracks, shownTrackIds,
+ * customCategories]` — neither recomputes on camera state or unrelated
+ * re-renders (e.g. GPS ticks), so `collection`'s object identity is stable
+ * across those.
  */
 export function useTrackHeat(
   tracks: readonly TrackSummary[],
@@ -87,57 +91,69 @@ export function useTrackHeat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tracks]);
 
-  const performedIds = new Set<string>();
-  const heatInputs: HeatTrackInput[] = [];
-  const built: {
-    id: string;
-    categoryId: string;
-    points: TrackPoint[];
-    trace: CellTrace;
-    coldColor: string;
-    hotColorHex: string;
-  }[] = [];
+  // The host (MapScreen) re-renders on GPS ticks and camera moves, neither of
+  // which changes the heat data — memoizing against the actual inputs (the
+  // GPX cache, the track list, the shown-id set and the custom-category
+  // palette) keeps `collection` referentially stable across that churn, so
+  // MapLibre's GeoJSONSource doesn't re-diff/re-upload geometry every frame,
+  // and avoids re-walking every point of every shown trail per render.
+  const { collection, index, performedIds } = useMemo(() => {
+    const performed = new Set<string>();
+    const heatInputs: HeatTrackInput[] = [];
+    const built: {
+      id: string;
+      categoryId: string;
+      points: TrackPoint[];
+      trace: CellTrace;
+      coldColor: string;
+      hotColorHex: string;
+    }[] = [];
 
-  for (const id of shownTrackIds) {
-    const t = tracks.find((x) => x.id === id);
-    if (!t) continue;
-    const entry = cache[cacheKey(t)];
-    if (!entry) continue;
+    for (const id of shownTrackIds) {
+      const t = tracks.find((x) => x.id === id);
+      if (!t) continue;
+      const entry = cache[cacheKey(t)];
+      if (!entry) continue;
 
-    const categoryId = t.category ?? 'uncategorized';
-    const coldColor = categoryColor(t.category, customCategories) ?? mapColors.trackOverlay;
-    const hotColorHex = hotColor(coldColor);
+      const categoryId = t.category ?? 'uncategorized';
+      const coldColor = categoryColor(t.category, customCategories) ?? mapColors.trackOverlay;
+      const hotColorHex = hotColor(coldColor);
 
-    built.push({
-      id,
-      categoryId,
-      points: entry.points,
-      trace: entry.trace,
-      coldColor,
-      hotColorHex,
-    });
+      built.push({
+        id,
+        categoryId,
+        points: entry.points,
+        trace: entry.trace,
+        coldColor,
+        hotColorHex,
+      });
 
-    if (isPerformedActivity(t)) {
-      performedIds.add(id);
-      heatInputs.push({ id, categoryId, dilated: entry.trace.dilated });
+      if (isPerformedActivity(t)) {
+        performed.add(id);
+        heatInputs.push({ id, categoryId, dilated: entry.trace.dilated });
+      }
     }
-  }
 
-  const index = buildHeatIndex(heatInputs);
+    const heatIndex = buildHeatIndex(heatInputs);
 
-  let collection: FeatureCollection<LineString, HeatRunProperties> | null = null;
-  if (built.length > 0) {
-    const features: Feature<LineString, HeatRunProperties>[] = [];
-    for (const b of built) {
-      // Navigation trails' categoryId never appears in the index (they're
-      // excluded from heatInputs above), so hotCountAt naturally returns 0
-      // for them and every run comes out cold — no special-casing needed.
-      const countAt = (cellKeyStr: string) => hotCountAt(index, cellKeyStr, b.categoryId);
-      const runs = splitHeatRuns(b.trace.perPoint, countAt);
-      features.push(...runFeatures(b.id, b.categoryId, b.points, runs, b.coldColor, b.hotColorHex));
+    let coll: FeatureCollection<LineString, HeatRunProperties> | null = null;
+    if (built.length > 0) {
+      const features: Feature<LineString, HeatRunProperties>[] = [];
+      for (const b of built) {
+        // Navigation trails' categoryId never appears in the index (they're
+        // excluded from heatInputs above), so hotCountAt naturally returns 0
+        // for them and every run comes out cold — no special-casing needed.
+        const countAt = (cellKeyStr: string) => hotCountAt(heatIndex, cellKeyStr, b.categoryId);
+        const runs = splitHeatRuns(b.trace.perPoint, countAt);
+        features.push(
+          ...runFeatures(b.id, b.categoryId, b.points, runs, b.coldColor, b.hotColorHex),
+        );
+      }
+      coll = { type: 'FeatureCollection', features };
     }
-    collection = { type: 'FeatureCollection', features };
-  }
+
+    return { collection: coll, index: heatIndex, performedIds: performed };
+  }, [cache, tracks, shownTrackIds, customCategories]);
 
   const heatAt = (lngLat: { lng: number; lat: number }): { trackIds: string[]; hot: boolean } => {
     const cell = cellAt(lngLat.lng, lngLat.lat);
