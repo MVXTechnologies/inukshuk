@@ -105,6 +105,12 @@ jobs:
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
+            # Never render ANR/crash dialogs. The google_apis image's post-boot
+            # GMS churn ANRs Pixel Launcher on this software-GPU runner often
+            # enough that a "Pixel Launcher isn't responding" dialog sat above
+            # the app in the a11y tree and failed EVERY flow's first assert on
+            # 6 of the 7 red nightlies between 07-25 and 08-02.
+            adb shell settings put global hide_error_dialogs 1
             # Location SERVICES must be on or Maestro's setLocation feeds a fix
             # the OS never delivers: the app shows "Location is turned off",
             # waypoint drops no-op and recording captures zero points — the
