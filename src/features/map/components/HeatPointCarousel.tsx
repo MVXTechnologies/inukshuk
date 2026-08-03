@@ -252,9 +252,11 @@ export function HeatPointCarousel({
 }
 
 const styles = StyleSheet.create({
+  // Top-left, tucked under the compass badge (user preference — the
+  // right edge belongs to the FAB rail).
   container: {
     position: 'absolute',
-    right: 8,
+    left: 8,
     width: 200,
     borderRadius: 14,
     paddingHorizontal: 8,
