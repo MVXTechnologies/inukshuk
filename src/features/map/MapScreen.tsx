@@ -341,8 +341,18 @@ export function MapScreen() {
     if (!inspectIntent) return;
     pendingTrimId.current = inspectIntent.trim ? inspectIntent.trackId : null;
     inspect(inspectIntent.trackId);
+    // The Map tab stays mounted across tab switches, so a carousel left open
+    // from an earlier heat-spot tap would otherwise still be sitting there
+    // when this Library-driven intent opens the inspect panel — violating
+    // the mutual-exclusivity the tap-routing path (onMapPress) enforces. This
+    // effect only ever runs in response to a one-shot external intent
+    // (consumed via setInspectIntent(null) below), not a subscription loop,
+    // so the direct setState here is intentional, not the effect anti-pattern
+    // the rule normally guards against.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHeatSelection(null);
     setInspectIntent(null);
-    // `inspect` is a stable setter wrapper from the hook.
+    // `inspect` and `setHeatSelection` are stable setter wrappers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectIntent, setInspectIntent]);
   useEffect(() => {
