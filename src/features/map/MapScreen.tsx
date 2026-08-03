@@ -46,7 +46,7 @@ import { formatLatLng } from '@core/geo/formatCoords';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
-import { toLineFeature } from './geojson';
+import { toLineFeature, toLngLatBounds } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
@@ -54,7 +54,6 @@ import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import { buildOsmStyle } from './mapStyle';
-import { overwriteWithTrim, saveTrimmedCopy } from './trimTrack';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
@@ -68,6 +67,13 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 // new fixes, whichever comes first.
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
+
+// Sane constant matching TrailInspectPanel's compact height (header row +
+// ElevationProfile + bottom safe-area padding) after item 6's paddings
+// audit — used to pad the camera fit-to-trail above the panel (item 4).
+// Generous on purpose: a slightly larger pad is a smaller trail on-screen,
+// never a trail hidden under the panel.
+const INSPECT_PANEL_H_ESTIMATE = 300;
 
 /**
  * Throttled `toLineFeature(points)`. Between rebuilds the previous feature
@@ -131,8 +137,6 @@ export function MapScreen() {
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
-  const addTrack = useLibraryStore((s) => s.addTrack);
-  const updateTrack = useLibraryStore((s) => s.updateTrack);
   // Standalone waypoints (dropped from the "+" speed-dial, no recording needed).
   const savedWaypoints = useLibraryStore((s) => s.waypoints);
   const addSavedWaypoint = useLibraryStore((s) => s.addWaypoint);
@@ -177,6 +181,7 @@ export function MapScreen() {
   const basemap = useMapStore((s) => s.basemap);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const offlineRegions = useOfflineStore((s) => s.regions);
   // 2D base style with shaded-relief hillshade for the outdoor/topo look;
   // hillshade-3D was replaced by the real 3D terrain surface.
@@ -317,106 +322,32 @@ export function MapScreen() {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
 
-  const {
-    inspectId,
-    inspectTrack,
-    inspectPoints,
-    markerAt,
-    setMarkerAt,
-    inspect,
-    trimRange,
-    beginTrim,
-    cancelTrim,
-    changeTrim,
-  } = useTrailInspection(tracks);
+  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
+    useTrailInspection(tracks);
 
-  // Library → "Trim": a one-shot store intent opens the trail in the inspect
-  // panel and, once its points load, enters trim mode. Consumed here because
-  // the inspection state is local to this screen. The pending trim is keyed by
-  // track id so an inspection switched mid-load never trims the wrong trail.
-  const inspectIntent = useMapStore((s) => s.inspectIntent);
-  const setInspectIntent = useMapStore((s) => s.setInspectIntent);
-  const pendingTrimId = useRef<string | null>(null);
+  // Trail inspect panel v4: fit the camera to the inspected trail's bbox in
+  // the space ABOVE the (now-compact) panel, once its points load. Trimming
+  // moved to the focused trail viewer (Trail3DGLScreen) — see its own
+  // ?trim=1 handling — so `inspectId` is now only ever set by a MAP tap
+  // (onMapPress below); the Library's "View on map" action uses focusBounds
+  // instead and never opens this panel.
   useEffect(() => {
-    if (!inspectIntent) return;
-    pendingTrimId.current = inspectIntent.trim ? inspectIntent.trackId : null;
-    inspect(inspectIntent.trackId);
-    // The Map tab stays mounted across tab switches, so a carousel left open
-    // from an earlier heat-spot tap would otherwise still be sitting there
-    // when this Library-driven intent opens the inspect panel — violating
-    // the mutual-exclusivity the tap-routing path (onMapPress) enforces. This
-    // effect only ever runs in response to a one-shot external intent
-    // (consumed via setInspectIntent(null) below), not a subscription loop,
-    // so the direct setState here is intentional, not the effect anti-pattern
-    // the rule normally guards against.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setHeatSelection(null);
-    setInspectIntent(null);
-    // `inspect` and `setHeatSelection` are stable setter wrappers.
+    const bbox = inspectTrack?.stats.bbox;
+    if (!inspectId || !inspectPoints || !bbox) return;
+    setFollowUser(false);
+    cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
+      duration: 600,
+      padding: {
+        top: insets.top + 80,
+        left: 40,
+        right: 40,
+        bottom: INSPECT_PANEL_H_ESTIMATE + 40,
+      },
+    });
+    // `setFollowUser` is a stable setter wrapper; `insets.top` is effectively
+    // constant per device/orientation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspectIntent, setInspectIntent]);
-  useEffect(() => {
-    if (!inspectPoints || inspectId === null || inspectId !== pendingTrimId.current) return;
-    pendingTrimId.current = null;
-    if (inspectPoints.length >= 3) beginTrim();
-    else showSnack('This trail is too short to trim');
-  }, [inspectPoints, inspectId, beginTrim, showSnack]);
-
-  // Trim tool: live preview segments + the two save paths. The kept window is
-  // drawn bright over the trace; the cut ends are dimmed (see below).
-  const [trimSaving, setTrimSaving] = useState(false);
-  const trimPreview = useMemo(() => {
-    if (!trimRange || !inspectPoints) return null;
-    const { start, end } = trimRange;
-    return {
-      // Cut segments share their boundary point with the kept one — no gaps.
-      cutHead: toLineFeature(inspectPoints.slice(0, start + 1)),
-      kept: toLineFeature(inspectPoints.slice(start, end + 1)),
-      cutTail: toLineFeature(inspectPoints.slice(end)),
-    };
-  }, [trimRange, inspectPoints]);
-
-  const onSaveTrimCopy = useCallback(async () => {
-    if (!inspectTrack || !inspectPoints || !trimRange) return;
-    setTrimSaving(true);
-    try {
-      const { track, fileUri } = await saveTrimmedCopy(
-        inspectTrack,
-        inspectPoints,
-        trimRange.start,
-        trimRange.end,
-      );
-      addTrack(track, fileUri);
-      showSnack(`Saved "${track.name}" to the library`);
-      cancelTrim();
-    } catch (err) {
-      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
-    } finally {
-      setTrimSaving(false);
-    }
-  }, [inspectTrack, inspectPoints, trimRange, addTrack, showSnack, cancelTrim]);
-
-  const onOverwriteTrim = useCallback(async () => {
-    if (!inspectTrack || !inspectPoints || !trimRange) return;
-    setTrimSaving(true);
-    try {
-      const { patch } = await overwriteWithTrim(
-        inspectTrack,
-        inspectPoints,
-        trimRange.start,
-        trimRange.end,
-      );
-      updateTrack(inspectTrack.id, patch);
-      showSnack(`Trimmed "${inspectTrack.name}"`);
-      inspect(null); // points on disk changed — drop the stale inspection
-    } catch (err) {
-      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
-    } finally {
-      setTrimSaving(false);
-    }
-    // `inspect` is a stable setter wrapper from the hook.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspectTrack, inspectPoints, trimRange, updateTrack, showSnack]);
+  }, [inspectId, inspectPoints, inspectTrack]);
 
   // "Record track" intercepts here: the category sheet opens first, and only
   // its Start button actually begins the recording (owner ask: pick an
@@ -606,7 +537,11 @@ export function MapScreen() {
         setHeatSelection(null); // a single-trail tap hides the carousel
         inspect(at.trackIds[0] ?? null);
       } else {
-        setHeatSelection(null); // empty/cold tap: deselect
+        // Empty/cold tap: deselect both the carousel and any open inspect
+        // panel (item 7 — tapping empty map while a trail is selected
+        // deselects it, same as tapping empty space anywhere else).
+        setHeatSelection(null);
+        inspect(null);
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
     },
@@ -628,14 +563,14 @@ export function MapScreen() {
     [showTrackOverlays, trackOverlays],
   );
 
-  // Which trail the heat layers highlight: a tap-selected trail (Task 9) wins,
-  // otherwise fall back to whichever trail is open in the inspect panel.
-  // dimOthers only kicks in once a heat selection exists (a spot with more
-  // than one trail underneath it) — plain inspection doesn't dim the rest.
+  // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
+  // otherwise whichever trail is open in the inspect panel. When ANY trail is
+  // selected, every other trail is hidden outright (not dimmed) via the lines
+  // layer's filter below — see item 1's selection-visibility rule.
   const focusedTrackId = heatSelection
     ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
     : inspectId;
-  const dimOthers = heatSelection !== null;
+  const hasSelection = heatSelection !== null || inspectId !== null;
 
   return (
     <View style={styles.fill}>
@@ -796,49 +731,74 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {/* Combined heat source: every shown trail's GPX in one
-              FeatureCollection, colour-coded per category with hot/cold runs
-              (see useTrackHeat). Layer order matters — glow under trace under
-              the focused-trail highlight. Tapping a "hot" spot routes through
-              onMapPress below to open the HeatPointCarousel; the per-trail
-              onPress this replaced is gone for good — the map-level hit-test
-              (heatAt) is the only way in now. */}
-          {showTrackOverlays && trackHeat.collection && (
-            <GeoJSONSource id="tracks-heat" data={trackHeat.collection}>
+          {/* Heatmap density: a native MapLibre `heatmap` layer under the
+              trail lines, built from sampled points of performed trails only
+              (useTrackHeat.heatPoints — bounded feature count regardless of
+              how many/long the shown trails are). Soft, blurry, semi-
+              transparent orange, diffuse enough at low zoom that trail
+              clusters within a few km read as one region. Drawn BEFORE the
+              lines below so it sits beneath them. */}
+          {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
+            <GeoJSONSource id="tracks-heat-points" data={trackHeat.heatPoints}>
               <Layer
-                id="tracks-heat-glow"
-                type="line"
-                filter={['==', ['get', 'hot'], true]}
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                id="tracks-heatmap"
+                type="heatmap"
                 paint={{
-                  'line-color': ['get', 'color'],
-                  'line-width': ['step', ['get', 'count'], 10, 3, 13, 5, 16],
-                  'line-blur': 6,
-                  'line-opacity': 0.35,
-                }}
-              />
-              <Layer
-                id="tracks-heat-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': ['get', 'color'],
-                  'line-width': [
-                    'case',
-                    ['==', ['get', 'hot'], true],
-                    ['step', ['get', 'count'], 5, 3, 6, 5, 7],
-                    4,
+                  'heatmap-weight': 1,
+                  'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+                  'heatmap-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['heatmap-density'],
+                    0,
+                    'rgba(255,140,0,0)',
+                    0.2,
+                    'rgba(255,140,0,0.12)',
+                    0.5,
+                    'rgba(255,120,0,0.22)',
+                    0.8,
+                    'rgba(255,100,0,0.3)',
+                    1,
+                    'rgba(255,80,0,0.35)',
                   ],
-                  'line-opacity': dimOthers
-                    ? ['case', ['==', ['get', 'trackId'], focusedTrackId ?? ''], 1, 0.25]
-                    : 1,
+                  'heatmap-radius': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    0,
+                    70,
+                    9,
+                    45,
+                    13,
+                    22,
+                    18,
+                    10,
+                  ],
+                  'heatmap-opacity': 0.5,
                 }}
               />
+            </GeoJSONSource>
+          )}
+
+          {/* Trail lines: every shown trail as a thin, clean, category-
+              coloured LineString — no glow layer, no width stepping (see
+              useTrackHeat). When a trail is selected (a tap-selected heat
+              spot OR the inspect panel), every OTHER trail is hidden
+              outright via the filter below, not dimmed. Tapping a "hot" spot
+              routes through onMapPress below to open the HeatPointCarousel;
+              the per-trail onPress this replaced is gone for good — the
+              map-level hit-test (heatAt) is the only way in now. */}
+          {showTrackOverlays && trackHeat.lines && (
+            <GeoJSONSource id="tracks-lines" data={trackHeat.lines}>
               <Layer
-                id="tracks-heat-focus"
+                id="tracks-lines-layer"
                 type="line"
-                filter={['==', ['get', 'trackId'], focusedTrackId ?? '']}
-                paint={{ 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': 1 }}
+                filter={hasSelection ? ['==', ['get', 'trackId'], focusedTrackId ?? ''] : true}
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': ['get', 'color'],
+                  'line-width': ['case', ['==', ['get', 'trackId'], focusedTrackId ?? ''], 4, 3],
+                }}
               />
             </GeoJSONSource>
           )}
@@ -866,52 +826,6 @@ export function MapScreen() {
                   'circle-color': 'transparent',
                   'circle-stroke-width': 2.5,
                   'circle-stroke-color': theme.colors.primary,
-                }}
-              />
-            </GeoJSONSource>
-          )}
-
-          {/* Trim preview: dimmed dashed cut ends under a bright kept segment. */}
-          {trimPreview?.cutHead && (
-            <GeoJSONSource id="trim-cut-head" data={trimPreview.cutHead}>
-              <Layer
-                id="trim-cut-head-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': mapColors.trimCut,
-                  'line-width': 4,
-                  'line-opacity': 0.6,
-                  'line-dasharray': [1.5, 1.5],
-                }}
-              />
-            </GeoJSONSource>
-          )}
-          {trimPreview?.cutTail && (
-            <GeoJSONSource id="trim-cut-tail" data={trimPreview.cutTail}>
-              <Layer
-                id="trim-cut-tail-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': mapColors.trimCut,
-                  'line-width': 4,
-                  'line-opacity': 0.6,
-                  'line-dasharray': [1.5, 1.5],
-                }}
-              />
-            </GeoJSONSource>
-          )}
-          {trimPreview?.kept && (
-            <GeoJSONSource id="trim-kept" data={trimPreview.kept}>
-              <Layer
-                id="trim-kept-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': mapColors.trimKept,
-                  'line-width': 6,
-                  'line-opacity': 0.95,
                 }}
               />
             </GeoJSONSource>
@@ -1123,13 +1037,7 @@ export function MapScreen() {
           points={inspectPoints}
           onClose={() => inspect(null)}
           onScrub={setMarkerAt}
-          trim={trimRange}
-          onBeginTrim={beginTrim}
-          onCancelTrim={cancelTrim}
-          onChangeTrim={changeTrim}
-          onSaveTrimCopy={() => void onSaveTrimCopy()}
-          onOverwriteTrim={() => void onOverwriteTrim()}
-          trimSaving={trimSaving}
+          onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
         />
       )}
 

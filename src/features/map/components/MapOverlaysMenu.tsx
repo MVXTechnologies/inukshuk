@@ -43,6 +43,7 @@ export function OverlaysRows({
   const typeMode = mapVisibilityMode === 'type';
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const networks = useSettingsStore((s) => s.markedTrailsNetworks);
+  const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const set = useSettingsStore((s) => s.set);
 
   return (
@@ -64,6 +65,11 @@ export function OverlaysRows({
         leadingIcon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
         onPress={onOpenTrailNetworks}
         title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
+      />
+      <Menu.Item
+        leadingIcon={showHeatmap ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        onPress={() => set('showHeatmap', !showHeatmap)}
+        title="Heatmap"
       />
       <Divider />
       <Menu.Item

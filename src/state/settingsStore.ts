@@ -47,6 +47,8 @@ export interface Settings {
   uiStyle: UiStyle;
   /** Checked marked-trail databases draped on the main map (empty = off). */
   markedTrailsNetworks: TrailNetworkId[];
+  /** Native MapLibre heatmap density layer under the trail lines. */
+  showHeatmap: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -90,6 +92,7 @@ const DEFAULTS: Settings = {
   themeMode: 'system',
   uiStyle: 'classic',
   markedTrailsNetworks: [],
+  showHeatmap: true,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -127,6 +130,7 @@ function snapshot(s: SettingsState): Settings {
     themeMode,
     uiStyle,
     markedTrailsNetworks,
+    showHeatmap,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -150,6 +154,7 @@ function snapshot(s: SettingsState): Settings {
     themeMode,
     uiStyle,
     markedTrailsNetworks,
+    showHeatmap,
     errorReporting,
     terrainSlope,
     terrainContours,
