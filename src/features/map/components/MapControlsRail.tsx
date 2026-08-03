@@ -72,6 +72,7 @@ export function MapControlsRail(props: Props) {
         variant="surface"
         onPress={onLocate}
         style={styles.controlFab}
+        accessibilityLabel="Locate"
       />
       {showFitControl && (
         <FAB

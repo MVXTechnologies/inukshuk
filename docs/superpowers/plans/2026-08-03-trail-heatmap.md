@@ -63,10 +63,11 @@ import { HEAT_CELL_M, cellAt, cellKey, ringKeys } from './grid';
 
 describe('heat grid', () => {
   it('two points ~10 m apart share a cell; ~60 m apart do not', () => {
-    // At lat 46.8, 0.0001° lat ≈ 11 m.
-    const a = cellAt(-71.2082, 46.8139);
-    const near = cellAt(-71.2082, 46.81395); // ~6 m north
-    const far = cellAt(-71.2082, 46.8145); // ~67 m north
+    // Mid-cell base: at 25 m cells this row spans lat 46.813915–46.814140,
+    // so both points sit safely inside it (boundary-straddling data flaked).
+    const a = cellAt(-71.2082, 46.814);
+    const near = cellAt(-71.2082, 46.81404); // ~4.5 m north, same cell
+    const far = cellAt(-71.2082, 46.8145); // ~56 m north
     expect(cellKey(near)).toBe(cellKey(a));
     expect(cellKey(far)).not.toBe(cellKey(a));
   });

@@ -19,11 +19,14 @@ trap 'kill $GEO_PID 2>/dev/null' EXIT
 
 RC=0
 # Order matters: category-record creates the saved (Run) trail that
-# library-filter and trail-view depend on; record.yaml runs last because its
-# save-vs-discard outcome is indeterminate. map-overlays needs no fixtures but
-# runs after trail-view since both drive the shared terrain-overlay settings.
+# heatmap, library-filter and trail-view depend on. heatmap records a SECOND
+# Run over the same simulated path right after, so the two trails overlap
+# deterministically for the heat-tap assertion. record.yaml runs last because
+# its save-vs-discard outcome is indeterminate. map-overlays needs no
+# fixtures but runs after trail-view since both drive the shared
+# terrain-overlay settings.
 for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
-  .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/dashboard.yaml \
+  .maestro/heatmap.yaml .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/dashboard.yaml \
   .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/folders.yaml \
   .maestro/settings.yaml .maestro/record.yaml; do
   adb logcat -c || true
