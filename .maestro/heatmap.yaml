@@ -7,6 +7,16 @@
 # saving, the overlapping trace sits at the screen centre — the 40%..60%
 # tap grid below is a deliberately generous net around it (heat lookup has
 # a one-cell fat-finger ring).
+#
+# Also runs after waypoint.yaml in the full suite, which drops "Waypoint 1"
+# at the exact fix (46.8139, -71.2082) both this flow's and category-record's
+# recordings start from — i.e. right where the heat tap-grid aims.
+# MapScreen's tap routing checks waypoint pins BEFORE the heat lookup, and
+# on-device probing confirmed the pin's hit box at this zoom fully contains
+# the heat "hot" zone around that point (taps biased well outside the pin's
+# hit radius land past the whole trail too — there's no dead zone between
+# them to aim for). So the flow deletes that pin before recording, rather
+# than trying to out-aim it.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -27,6 +37,42 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
+# Delete waypoint.yaml's leftover "Waypoint 1" pin (see header note) before
+# it can collide with the heat tap-grid below. Waypoints render in the
+# default 'type' visibility mode unconditionally (visibility.ts), so this
+# works regardless of what a prior flow left `mapVisibilityMode` at. Tap
+# where on-device probing confirmed the pin sits; if it's already gone (a
+# standalone rerun of just this flow, or a re-run after a prior partial
+# failure already deleted it), the tap lands on nothing and this is a no-op —
+# `onMapPress` only opens the viewer when a pin is actually hit.
+- tapOn:
+    point: '55%,40%'
+- runFlow:
+    when:
+      visible: 'Close waypoint'
+    commands:
+      - tapOn: 'Edit waypoint'
+      - extendedWaitUntil:
+          visible: 'Note'
+          timeout: 8000
+      # The Note field autoFocuses the instant this dialog opens, popping the
+      # keyboard — and on Android the window RESIZES (not just pads) to make
+      # room, which shifts Delete/Done to a new on-screen position after the
+      # fact. A tap timed before that resize settles lands wherever Delete
+      # used to be, not where it now is (verified on-device: the dialog was
+      # still open, with the keyboard up, after this exact miss). Same
+      # Android-only hideKeyboard-before-tap idiom waypoint.yaml itself uses
+      # ahead of its own "Delete" tap.
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - hideKeyboard
+      - tapOn: 'Delete'
+      - extendedWaitUntil:
+          notVisible: 'Delete'
+          timeout: 8000
+- assertVisible: 'Map actions'
 # Record the second Run — same steps as category-record.yaml's record/save
 # block (selectors copied verbatim, its extendedWaitUntil timeouts unchanged).
 - setLocation:
