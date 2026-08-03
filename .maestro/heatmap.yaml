@@ -282,11 +282,13 @@ appId: com.inukshuk.app
 # The heat carousel opened before the card tap is NEVER torn down by
 # navigating into the trail viewer: `trail3d/[id]` is a SIBLING stack screen
 # (app/_layout.tsx), so the tab stack — MapScreen included — stays mounted
-# underneath, and `heatSelection` is plain MapScreen-local state that only
-# `onClose`/an empty-track effect ever clears (HeatPointCarousel.tsx). Back
-# lands us on a map screen where the carousel is still fully showing its
-# cards — and, since it mounts after (so paints over) the top-right FAB rail
-# in MapScreen's JSX, it physically intercepts taps meant for those buttons.
+# underneath, and `heatSelection` is plain MapScreen-local state. It IS
+# cleared at several other sites (the carousel's own onClose, a later
+# single-trail/cold map tap, the Library-driven inspect-intent effect) — just
+# not by the trail-viewer round trip this flow just took, so it's still set
+# and the carousel is still fully showing its cards when Back lands us on the
+# map — and, since it mounts after (so paints over) the top-right FAB rail in
+# MapScreen's JSX, it physically intercepts taps meant for those buttons.
 # Verified on-device: without this dismiss, the cleanup's "Map overlays" tap
 # actually landed on the still-visible focused card underneath and bounced
 # straight back into the trail viewer. Close it via its own button first.
@@ -304,6 +306,18 @@ appId: com.inukshuk.app
 # onPress toggles 'type' <-> 'folders'), so same self-correcting retry as the
 # setup block above — timeouts widened (30 s on the two post-tap waits) to
 # absorb the post-viewer JS-thread stall instead of racing it.
+#
+# Tapping "Everything" only calls setMapVisibilityMode('type')
+# (FolderPickerDialog.tsx) — it does NOT touch `visibleFolderIds`, which is a
+# separate persisted field (library.json) only `toggleVisibleFolder` ever
+# mutates. So the "Ungrouped" checkbox the setup block above checked would
+# otherwise stay checked (and stay persisted) forever, even in 'type' mode
+# where it's simply unused — until a LATER flow in the same CI job switches
+# to 'folders' mode itself (folders.yaml ticking "TripA"), at which point the
+# stale "ungrouped" entry silently joins that flow's own selection and skews
+# its "Content: N folder(s)" count assertions. Uncheck "Ungrouped" (same tap
+# that checked it — it's a toggle) BEFORE flipping back to "Everything", so
+# both persisted fields return to their pre-flow state.
 - retry:
     maxRetries: 3
     commands:
@@ -317,6 +331,7 @@ appId: com.inukshuk.app
           timeout: 15000
       - waitForAnimationToEnd:
           timeout: 3000
+      - tapOn: 'Ungrouped'
       - tapOn: 'Everything'
       - tapOn: 'Done'
       - assertVisible: 'Map actions'
