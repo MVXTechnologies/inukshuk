@@ -2,15 +2,8 @@ import { findCategory } from '@core/library/categories';
 import type { TrackSummary } from '@core/models';
 import { formatDistance, formatDuration, formatTimestamp } from '@lib/format';
 import { useLibraryStore } from '@state/libraryStore';
-import { useCallback, useEffect, useRef } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
 
 interface Props {
@@ -26,25 +19,27 @@ interface Props {
 }
 
 const CARD_H = 64;
-const GAP = 8;
-const MAX_VISIBLE = 4;
+/** Vertical distance between card centres in the stack: neighbours sit one
+ * slot above/below the focused card, leaving ~3/4 of their height visible. */
+const SLOT = Math.round(CARD_H * 0.75);
+/** Swipe distance that commits a one-card step on release. */
+const SWIPE_STEP = 24;
 
 /**
- * Right-edge carousel opened by tapping a "hot" (overlapping) spot on the
- * heat-shaded trail layers. Lists every trail under the tap, newest first;
- * the focused card drives which trail's `tracks-heat-focus` layer highlights
- * on the map (see MapScreen). Tapping the already-focused card opens it
- * (`onOpenTrail`); tapping any other card just focuses it.
+ * Right-edge activity deck opened by tapping a "hot" (overlapping) spot on
+ * the heat-shaded trail layers. A 3D vertical carousel: the focused card in
+ * front, its neighbours peeking ~3/4-visible behind it (newer above — the
+ * list is newest-at-top — older below), slightly shrunk and dimmed for
+ * depth. Swiping animates the whole stack (a spring drives every card's
+ * translate/scale/opacity off one animated index); chevrons appear only
+ * when a neighbour exists in that direction — bounded, never circular.
+ * Tapping a peeking card focuses it; tapping the focused card opens it.
+ * The focused card drives which trail's `tracks-heat-focus` layer
+ * highlights on the map (see MapScreen).
  *
- * A plain themed `View`, NOT paper's `Surface`: an absolutely-positioned
- * Surface's iOS shadow nesting leaves its content wrapper unconstrained,
- * collapsing internal flex columns (the map-maker drawer bug, #131-adjacent).
- * This component sidesteps that entirely with an explicit `maxHeight` on the
- * ScrollView instead of `flex: 1`, same as `CategoryStartSheet`'s chip list.
- *
- * NOT a paper `Portal`/`Dialog` either — see `CategoryStartSheet`'s doc
- * comment: an invisible Portal overlay can soft-lock touches on devices with
- * animations disabled. This is a conditionally-mounted absolute view instead.
+ * A plain themed `View`, NOT paper's `Surface` (iOS absolute-Surface flex
+ * collapse) and NOT a `Portal`/`Dialog` (invisible-overlay touch swallow
+ * with animations off) — see CategoryStartSheet's doc comments.
  */
 export function HeatPointCarousel({
   trackIds,
@@ -57,35 +52,152 @@ export function HeatPointCarousel({
 }: Props) {
   const theme = useTheme();
   const customCategories = useLibraryStore((s) => s.customCategories);
-  const scrollRef = useRef<ScrollView>(null);
 
   const items = trackIds
     .map((id) => tracks.find((t) => t.id === id))
     .filter((t): t is TrackSummary => t !== undefined);
+  const count = items.length;
+  const clamped = Math.max(0, Math.min(focusedIdx, count - 1));
 
-  // Keep the scroll position in sync when focus changes from outside the
-  // ScrollView's own momentum handler (e.g. tapping a non-focused card, or
-  // the initial open at focusedIdx 0).
+  // One animated "float index" positions every card: card i sits at
+  // (i - anim) slots from centre. The spring chases focusedIdx; the pan
+  // handler drags it continuously for the carousel feel.
+  const [anim] = useState(() => new Animated.Value(0));
   useEffect(() => {
-    scrollRef.current?.scrollTo({ y: focusedIdx * (CARD_H + GAP), animated: true });
-  }, [focusedIdx]);
+    Animated.spring(anim, {
+      toValue: clamped,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 80,
+    }).start();
+  }, [clamped, anim]);
 
   // A track backing the tapped spot vanished (deleted/trimmed) while the
-  // carousel was open — nothing left to show, so close it instead of
-  // rendering an empty stack the user can't dismiss any other way.
+  // deck was open — nothing left to show, so close it instead of rendering
+  // an empty stack the user can't dismiss any other way.
   useEffect(() => {
-    if (items.length === 0) onClose();
-  }, [items.length, onClose]);
+    if (count === 0) onClose();
+  }, [count, onClose]);
 
-  const handleMomentumEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const idx = Math.round(e.nativeEvent.contentOffset.y / (CARD_H + GAP));
-      onFocus(Math.max(0, Math.min(idx, items.length - 1)));
-    },
-    [onFocus, items.length],
+  // Drag moves the stack live (one step max per gesture, rubber-banded at
+  // the ends); release either commits the step via onFocus — the spring
+  // then settles on the new index — or springs back. Recreated when
+  // focus/count change (the ElevationProfile recipe) so callbacks always
+  // close over current values.
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) =>
+          Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+        onPanResponderMove: (_e, g) => {
+          const raw = clamped - g.dy / SLOT;
+          const lo = Math.max(0, clamped - 1);
+          const hi = Math.min(count - 1, clamped + 1);
+          // Soft clamp: allow a 20% overshoot at the hard ends for feel.
+          anim.setValue(Math.max(lo - 0.2, Math.min(hi + 0.2, raw)));
+        },
+        onPanResponderRelease: (_e, g) => {
+          let target = clamped;
+          if (g.dy <= -SWIPE_STEP && clamped < count - 1) target = clamped + 1;
+          else if (g.dy >= SWIPE_STEP && clamped > 0) target = clamped - 1;
+          if (target !== clamped) onFocus(target);
+          // Same index: spring back from wherever the drag left the stack.
+          else
+            Animated.spring(anim, {
+              toValue: clamped,
+              useNativeDriver: true,
+              friction: 9,
+              tension: 80,
+            }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(anim, {
+            toValue: clamped,
+            useNativeDriver: true,
+            friction: 9,
+            tension: 80,
+          }).start();
+        },
+      }),
+    [clamped, count, onFocus, anim],
   );
 
-  if (items.length === 0) return null;
+  if (count === 0) return null;
+  const focusedItem = items[clamped];
+  if (!focusedItem) return null;
+
+  const card = (t: TrackSummary, idx: number) => {
+    const category = findCategory(t.category, customCategories);
+    const untimed = t.stats.durationS <= 0;
+    const focused = idx === clamped;
+    const translateY = anim.interpolate({
+      inputRange: [idx - 1, idx, idx + 1],
+      outputRange: [SLOT, 0, -SLOT],
+      extrapolate: 'extend',
+    });
+    const scale = anim.interpolate({
+      inputRange: [idx - 1, idx, idx + 1],
+      outputRange: [0.88, 1, 0.88],
+      extrapolate: 'clamp',
+    });
+    const opacity = anim.interpolate({
+      inputRange: [idx - 1, idx, idx + 1],
+      outputRange: [0.55, 1, 0.55],
+      extrapolate: 'clamp',
+    });
+    return (
+      <Animated.View
+        key={t.id}
+        style={[
+          styles.cardSlot,
+          { transform: [{ translateY }, { scale }], opacity, zIndex: focused ? 2 : 1 },
+        ]}
+      >
+        <Pressable
+          onPress={() => (focused ? onOpenTrail(t.id) : onFocus(idx))}
+          accessibilityLabel={`Activity: ${t.name}`}
+          style={[
+            styles.card,
+            {
+              backgroundColor: focused
+                ? theme.colors.elevation.level3
+                : theme.colors.elevation.level1,
+              borderColor: focused ? theme.colors.primary : 'transparent',
+            },
+          ]}
+        >
+          <Icon
+            source={category?.icon ?? 'circle-medium'}
+            size={18}
+            color={category?.color ?? theme.colors.onSurfaceVariant}
+          />
+          <View style={styles.cardText}>
+            <Text variant="labelMedium" numberOfLines={1}>
+              {t.name}
+            </Text>
+            <Text
+              variant="labelSmall"
+              numberOfLines={1}
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
+              {formatTimestamp(t.startedAt)}
+            </Text>
+            <Text variant="labelSmall" numberOfLines={1}>
+              {[
+                formatDistance(t.stats.distanceM),
+                ...(untimed ? [] : [formatDuration(t.stats.durationS)]),
+              ].join(' · ')}
+            </Text>
+          </View>
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
+  // Render the focused card and its immediate neighbours; the focused card
+  // comes FIRST in the tree (a11y index 0 — the E2E contract taps it to
+  // open the viewer) but sits on top visually via zIndex.
+  const rendered = [clamped, clamped - 1, clamped + 1].filter((i) => i >= 0 && i < count);
 
   return (
     <View
@@ -95,7 +207,10 @@ export function HeatPointCarousel({
       ]}
       accessibilityLabel="Activities here"
     >
-      <View style={styles.closeRow}>
+      <View style={styles.headerRow}>
+        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {`${clamped + 1} of ${count}`}
+        </Text>
         <IconButton
           icon="close"
           size={16}
@@ -104,68 +219,47 @@ export function HeatPointCarousel({
           accessibilityLabel="Close activities"
         />
       </View>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={CARD_H + GAP}
-        decelerationRate="fast"
-        onMomentumScrollEnd={handleMomentumEnd}
-      >
-        {items.map((t, idx) => {
-          const category = findCategory(t.category, customCategories);
-          const focused = idx === focusedIdx;
-          const untimed = t.stats.durationS <= 0;
-          return (
-            <Pressable
-              key={t.id}
-              onPress={() => (focused ? onOpenTrail(t.id) : onFocus(idx))}
-              accessibilityLabel={`Activity: ${t.name}`}
-              style={[
-                styles.card,
-                { backgroundColor: theme.colors.elevation.level3 },
-                focused && { borderColor: theme.colors.primary },
-              ]}
-            >
-              <Icon
-                source={category?.icon ?? 'circle-medium'}
-                size={18}
-                color={category?.color ?? theme.colors.onSurfaceVariant}
-              />
-              <View style={styles.cardText}>
-                <Text variant="labelMedium" numberOfLines={1}>
-                  {t.name}
-                </Text>
-                <Text
-                  variant="labelSmall"
-                  numberOfLines={1}
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  {formatTimestamp(t.startedAt)}
-                </Text>
-                <Text variant="labelSmall" numberOfLines={1}>
-                  {[
-                    formatDistance(t.stats.distanceM),
-                    ...(untimed ? [] : [formatDuration(t.stats.durationS)]),
-                  ].join(' · ')}
-                </Text>
-              </View>
-            </Pressable>
-          );
+      <View style={styles.arrowRow}>
+        {clamped > 0 && (
+          <IconButton
+            icon="chevron-up"
+            size={18}
+            style={styles.arrow}
+            onPress={() => onFocus(clamped - 1)}
+            accessibilityLabel="Newer activity"
+          />
+        )}
+      </View>
+      <View style={styles.deck} {...pan.panHandlers}>
+        {rendered.map((i) => {
+          const t = items[i];
+          return t ? card(t, i) : null;
         })}
-      </ScrollView>
+      </View>
+      <View style={styles.arrowRow}>
+        {clamped < count - 1 && (
+          <IconButton
+            icon="chevron-down"
+            size={18}
+            style={styles.arrow}
+            onPress={() => onFocus(clamped + 1)}
+            accessibilityLabel="Older activity"
+          />
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Top-left, tucked under the compass badge (user preference — the
+  // right edge belongs to the FAB rail).
   container: {
     position: 'absolute',
-    right: 8,
+    left: 8,
     width: 200,
     borderRadius: 14,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
     paddingBottom: 4,
     elevation: 8,
     shadowColor: '#000',
@@ -173,10 +267,20 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
-  closeRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingLeft: 8,
+  },
   closeBtn: { margin: 0 },
-  scroll: { maxHeight: CARD_H * MAX_VISIBLE + GAP * (MAX_VISIBLE - 1) },
-  scrollContent: { gap: GAP, paddingHorizontal: 4, paddingBottom: 4 },
+  arrowRow: { height: 22, alignItems: 'center', justifyContent: 'center' },
+  arrow: { margin: 0, height: 22, width: 44 },
+  // Tall enough for the focused card plus a 3/4-visible neighbour on each
+  // side; every card lives in the same centred slot and is displaced by the
+  // animated transforms alone.
+  deck: { height: CARD_H + SLOT * 2, justifyContent: 'center' },
+  cardSlot: { position: 'absolute', left: 0, right: 0, top: SLOT },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -185,7 +289,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     borderWidth: 2,
-    borderColor: 'transparent',
   },
   cardText: { flex: 1, gap: 1 },
 });

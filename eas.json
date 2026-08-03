@@ -23,10 +23,11 @@
   "submit": {
     "production": {
       "ios": {
+        "ascAppId": "6797629589",
         "ascApiKeyPath": "./asc-api-key.p8",
-        "ascApiKeyId": "REPLACE_WITH_ASC_KEY_ID",
-        "ascApiKeyIssuerId": "REPLACE_WITH_ASC_ISSUER_ID",
-        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+        "ascApiKeyId": "KLFW83ZF9L",
+        "ascApiKeyIssuerId": "f0545d6d-5e26-4ce1-80bf-175634644141",
+        "appleTeamId": "8S5UZVMQFA"
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
