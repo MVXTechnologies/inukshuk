@@ -20,7 +20,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
@@ -33,6 +33,7 @@ import { BackgroundLocationRationale } from './components/BackgroundLocationRati
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
+import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapActionsFab } from './components/MapActionsFab';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RecordControls } from './components/RecordControls';
@@ -157,9 +158,12 @@ export function MapScreen() {
   // replaced by the combined heat source (trackHeat), so this call stays.
   const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
   const trackHeat = useTrackHeat(tracks, shownTrackIds);
-  // Tap-selected heat spot (set by Task 9's onMapPress routing); staying null
-  // here just picks focusedTrackId back to the inspected trail.
-  const [heatSelection] = useState<{
+  const router = useRouter();
+  // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
+  // lands on a "hot" spot with 2+ trails underneath it): drives the
+  // HeatPointCarousel and which trail the heat layers highlight/dim. Null
+  // just falls back to whichever trail is open in the inspect panel.
+  const [heatSelection, setHeatSelection] = useState<{
     lngLat: { lng: number; lat: number };
     trackIds: string[];
     focusedIdx: number;
@@ -521,32 +525,44 @@ export function MapScreen() {
   // at its bottom tip, so its badge sits ~BADGE_OFFSET px above the coordinate.
   const WAYPOINT_BADGE_OFFSET = 45;
   const WAYPOINT_HIT_PX = 60;
+  // Tap-routing priority (this handler, in order): waypoint pin hit → the
+  // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
+  // spot (2+ trails, overlapping) opens the carousel, a single cold trail
+  // opens the inspect panel, and an empty spot deselects both.
+  //
+  // The event's real (runtime + typings) shape is `nativeEvent: { lngLat:
+  // [lng, lat]; point: [x, y]; ... }` — flat tuples, NOT the GeoJSON
+  // `{ geometry: { coordinates } }` shape one might expect from a "feature
+  // press" event. Confirmed against
+  // node_modules/@maplibre/maplibre-react-native's PressEvent type.
   const onMapPress = useCallback(
-    async (e: { nativeEvent?: { point?: [number, number] } }) => {
+    async (e: { nativeEvent?: { point?: [number, number]; lngLat?: [number, number] } }) => {
       const point = e.nativeEvent?.point;
       const map = mapRef.current;
-      if (!point || !map || visiblePins.length === 0) return;
+      if (!point || !map) return;
       const [px, py] = point;
       let best: (typeof visiblePins)[number] | null = null;
-      let bestD = WAYPOINT_HIT_PX;
-      try {
-        // Project each pin through the real camera — a linear mapping over the
-        // visible bounds is wrong the moment the map is rotated or pitched
-        // (taps would miss, or open a different waypoint's note).
-        const pts = await Promise.all(
-          visiblePins.map((wp) => map.project([wp.longitude, wp.latitude])),
-        );
-        for (let i = 0; i < visiblePins.length; i++) {
-          const p = pts[i];
-          if (!p) continue;
-          const d = Math.hypot(px - p[0], py - (p[1] - WAYPOINT_BADGE_OFFSET));
-          if (d < bestD) {
-            bestD = d;
-            best = visiblePins[i] ?? null;
+      if (visiblePins.length > 0) {
+        let bestD = WAYPOINT_HIT_PX;
+        try {
+          // Project each pin through the real camera — a linear mapping over the
+          // visible bounds is wrong the moment the map is rotated or pitched
+          // (taps would miss, or open a different waypoint's note).
+          const pts = await Promise.all(
+            visiblePins.map((wp) => map.project([wp.longitude, wp.latitude])),
+          );
+          for (let i = 0; i < visiblePins.length; i++) {
+            const p = pts[i];
+            if (!p) continue;
+            const d = Math.hypot(px - p[0], py - (p[1] - WAYPOINT_BADGE_OFFSET));
+            if (d < bestD) {
+              bestD = d;
+              best = visiblePins[i] ?? null;
+            }
           }
+        } catch {
+          return; // projection unavailable mid-teardown — ignore the tap
         }
-      } catch {
-        return; // projection unavailable mid-teardown — ignore the tap
       }
       if (best) {
         // Pin tap opens the read-only viewer; a second tap on the same pin
@@ -556,11 +572,30 @@ export function MapScreen() {
             ? null
             : { source: best.source, id: best.id },
         );
-      } else {
-        setViewWp(null); // tapping empty map dismisses the viewer
+        return;
       }
+
+      // No waypoint pin hit — route through the heat lookup.
+      const lngLatArr = e.nativeEvent?.lngLat;
+      const at = lngLatArr
+        ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] })
+        : { trackIds: [], hot: false };
+      if (lngLatArr && at.hot && at.trackIds.length >= 2) {
+        inspect(null); // opening the carousel hides the inspect panel
+        setHeatSelection({
+          lngLat: { lng: lngLatArr[0], lat: lngLatArr[1] },
+          trackIds: at.trackIds,
+          focusedIdx: 0,
+        });
+      } else if (at.trackIds.length === 1) {
+        setHeatSelection(null); // a single-trail tap hides the carousel
+        inspect(at.trackIds[0] ?? null);
+      } else {
+        setHeatSelection(null); // empty/cold tap: deselect
+      }
+      setViewWp(null); // tapping empty map dismisses the waypoint viewer
     },
-    [visiblePins],
+    [visiblePins, trackHeat, inspect],
   );
 
   const trailFeature = useThrottledLineFeature(points);
@@ -749,8 +784,10 @@ export function MapScreen() {
           {/* Combined heat source: every shown trail's GPX in one
               FeatureCollection, colour-coded per category with hot/cold runs
               (see useTrackHeat). Layer order matters — glow under trace under
-              the focused-trail highlight. Tap routing lands in Task 9; the
-              per-trail onPress this replaced is gone until then. */}
+              the focused-trail highlight. Tapping a "hot" spot routes through
+              onMapPress below to open the HeatPointCarousel; the per-trail
+              onPress this replaced is gone for good — the map-level hit-test
+              (heatAt) is the only way in now. */}
           {showTrackOverlays && trackHeat.collection && (
             <GeoJSONSource id="tracks-heat" data={trackHeat.collection}>
               <Layer
@@ -787,6 +824,34 @@ export function MapScreen() {
                 type="line"
                 filter={['==', ['get', 'trackId'], focusedTrackId ?? '']}
                 paint={{ 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': 1 }}
+              />
+            </GeoJSONSource>
+          )}
+
+          {/* Ring marker at the tapped heat spot, shown only while the
+              carousel is open — same one-feature GeoJSONSource + circle
+              pattern as the inspect-marker dot below. */}
+          {heatSelection && (
+            <GeoJSONSource
+              id="heat-tap-marker"
+              data={{
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: [heatSelection.lngLat.lng, heatSelection.lngLat.lat],
+                },
+                properties: {},
+              }}
+            >
+              <Layer
+                id="heat-tap-marker-ring"
+                type="circle"
+                paint={{
+                  'circle-radius': 9,
+                  'circle-color': 'transparent',
+                  'circle-stroke-width': 2.5,
+                  'circle-stroke-color': theme.colors.primary,
+                }}
               />
             </GeoJSONSource>
           )}
@@ -1050,6 +1115,30 @@ export function MapScreen() {
           onSaveTrimCopy={() => void onSaveTrimCopy()}
           onOverwriteTrim={() => void onOverwriteTrim()}
           trimSaving={trimSaving}
+        />
+      )}
+
+      {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
+          (onMapPress above). Mutually exclusive with TrailInspectPanel — the
+          two setters clear each other, never both open at once. */}
+      {heatSelection && (
+        <HeatPointCarousel
+          trackIds={heatSelection.trackIds}
+          tracks={tracks}
+          focusedIdx={heatSelection.focusedIdx}
+          onFocus={(idx) => {
+            setHeatSelection((cur) => {
+              if (!cur) return cur;
+              // Bound-check against the current trail count — the dim
+              // expression above indexes trackIds[focusedIdx] and must never
+              // see an out-of-range index.
+              const clamped = Math.max(0, Math.min(idx, cur.trackIds.length - 1));
+              return { ...cur, focusedIdx: clamped };
+            });
+          }}
+          onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
+          onClose={() => setHeatSelection(null)}
+          topInset={insets.top}
         />
       )}
 
