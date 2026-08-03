@@ -38,41 +38,41 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 # Delete waypoint.yaml's leftover "Waypoint 1" pin (see header note) before
-# it can collide with the heat tap-grid below. Waypoints render in the
-# default 'type' visibility mode unconditionally (visibility.ts), so this
-# works regardless of what a prior flow left `mapVisibilityMode` at. Tap
-# where on-device probing confirmed the pin sits; if it's already gone (a
-# standalone rerun of just this flow, or a re-run after a prior partial
-# failure already deleted it), the tap lands on nothing and this is a no-op —
-# `onMapPress` only opens the viewer when a pin is actually hit.
-- tapOn:
-    point: '55%,40%'
+# it can collide with the heat tap-grid below — via the LIBRARY, not a map
+# tap: the pin's on-screen position depends on whatever camera zoom/centre a
+# prior flow persisted, and a fixed-point map tap missed it as soon as the
+# suite context changed (2026-08-03_123837 run: pin alive on top of the
+# overlap zone at tap time). The Library card is position-independent.
+# Self-healing: on a fresh install (standalone rerun) no waypoint card
+# exists and the whole block is skipped. In suite context the list is short
+# (1 trail, 1 waypoint) so no scrolling is needed.
+- tapOn: 'Library(, tab.*)?'
+- extendedWaitUntil:
+    visible: 'Import'
+    timeout: 15000
 - runFlow:
     when:
-      visible: 'Close waypoint'
+      visible: 'Waypoint 1.*'
     commands:
-      - tapOn: 'Edit waypoint'
+      # Long-press opens the card's ⋮ menu (its a11y label documents this).
+      - longPressOn: 'Waypoint 1.*'
       - extendedWaitUntil:
-          visible: 'Note'
+          visible: 'Delete waypoint'
           timeout: 8000
-      # The Note field autoFocuses the instant this dialog opens, popping the
-      # keyboard — and on Android the window RESIZES (not just pads) to make
-      # room, which shifts Delete/Done to a new on-screen position after the
-      # fact. A tap timed before that resize settles lands wherever Delete
-      # used to be, not where it now is (verified on-device: the dialog was
-      # still open, with the keyboard up, after this exact miss). Same
-      # Android-only hideKeyboard-before-tap idiom waypoint.yaml itself uses
-      # ahead of its own "Delete" tap.
-      - runFlow:
-          when:
-            platform: Android
-          commands:
-            - hideKeyboard
+      - tapOn: 'Delete waypoint'
+      # Confirm dialog: title 'Delete waypoint', buttons Cancel / Delete —
+      # 'Delete' matches only the button (Maestro text match is exact).
+      - extendedWaitUntil:
+          visible: 'Cancel'
+          timeout: 8000
       - tapOn: 'Delete'
       - extendedWaitUntil:
-          notVisible: 'Delete'
+          notVisible: 'Cancel'
           timeout: 8000
-- assertVisible: 'Map actions'
+- tapOn: 'Map(, tab.*)?'
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
 # Record the second Run — same steps as category-record.yaml's record/save
 # block (selectors copied verbatim, its extendedWaitUntil timeouts unchanged).
 - setLocation:
@@ -108,15 +108,114 @@ appId: com.inukshuk.app
     commands:
       - tapOn: 'Not now'
 - assertVisible: 'Stop recording'
-# ~250 m of simulated movement (4 fixes well past the 5 m spacing filter) —
-# the exact same path category-record.yaml walked, so the two trails overlap.
-- travel:
-    points:
-      - 46.8139,-71.2082
-      - 46.8145,-71.2075
-      - 46.8151,-71.2068
-      - 46.8158,-71.2060
-    speed: 25
+# Root-caused via source read (src/core/geo/track/gpsFilter.ts): the recorder
+# drops any fix implying > MAX_SPEED_MPS (40 m/s) from the previously ACCEPTED
+# point. The background geo-fix loop (outside this flow, alternates the same
+# two fixes below every ~2 s) implies ~42.5 m/s between them — just over the
+# cap — so nearly every one of its own jumps gets rejected, and on-device
+# evidence showed maestro's own `travel:` command (as configured here, on
+# this Maestro version) also does NOT pace its fixes anywhere near its
+# nominal `speed:`/distance in real wall-clock time (a `travel:` across this
+# same ~85 m leg completed in ~2 s, not the ~3.4 s that 25 m/s implies), so
+# its fixes get discarded by the same filter. Net effect verified two ways —
+# a full heatmap.yaml run and an isolated, unmodified category-record.yaml
+# run (which shares this exact travel step) — both times the recorded trail
+# collapsed to "5 m", i.e. essentially nothing beyond the starting fix, so
+# the two trails never share a real overlapping segment and no heat renders.
+#
+# Fix (scoped to this flow's own recording only — category-record.yaml and
+# the shared geo loop are untouched): drive the walk ourselves with explicit
+# setLocation + settle-wait pairs, fully paced by this flow rather than by
+# maestro's travel timing. Interpolate the same short A<->B leg the geo loop
+# also cycles (so any of the loop's own A/B injections land ON this path,
+# not off it) in ~10.6 m steps; at the settle wait's observed real duration
+# (~0.9-2.4 s per this flow's own prior instrumentation), that's well under
+# the 40 m/s cap even in a worst case. Walk A -> B -> A so there's a dense
+# cluster of real, accepted points right at the shared start fix, maximising
+# the odds of landing in the same ~25 m heat grid cell (HEAT_CELL_M,
+# src/core/heat/grid.ts) as category-record's own (possibly still short)
+# trail there.
+- setLocation:
+    latitude: 46.813975
+    longitude: -71.2081125
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.81405
+    longitude: -71.208025
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.814125
+    longitude: -71.2079375
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8142
+    longitude: -71.20785
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.814275
+    longitude: -71.2077625
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8143500
+    longitude: -71.207675
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.814425
+    longitude: -71.2075875
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8145
+    longitude: -71.2075
+- waitForAnimationToEnd:
+    timeout: 1500
+# ...and back, so the shared start fix collects a dense cluster of points.
+- setLocation:
+    latitude: 46.814425
+    longitude: -71.2075875
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8143500
+    longitude: -71.207675
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.814275
+    longitude: -71.2077625
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8142
+    longitude: -71.20785
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.814125
+    longitude: -71.2079375
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.81405
+    longitude: -71.208025
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.813975
+    longitude: -71.2081125
+- waitForAnimationToEnd:
+    timeout: 1500
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+- waitForAnimationToEnd:
+    timeout: 1500
 - assertVisible: 'Stop recording'
 - tapOn: 'Stop recording'
 # Recorder back to idle…
@@ -163,9 +262,14 @@ appId: com.inukshuk.app
       - tapOn:
           point: 10%,50%
 # The heat GPX-load effect is async (reads + parses both trails' files); give
-# it a beat before probing for the rendered heat layer.
+# it a beat before probing for the rendered heat layer. Widened from 3000 to
+# 5000 as a low-risk safety margin — the original report's own unresolved
+# iteration 8 ("no heat rendered" with visibility otherwise confirmed
+# correct) suspected this load racing the wait; the primary fix for the
+# no-heat failure this session is the paced setLocation walk above, but this
+# costs nothing extra to widen too.
 - waitForAnimationToEnd:
-    timeout: 3000
+    timeout: 5000
 # Both recordings started at this exact fix (the "setLocation" above, before
 # either dial-open), so it's where their traces overlap. The background
 # geo-fix loop (outside this flow) keeps nudging the followed camera between
@@ -178,6 +282,45 @@ appId: com.inukshuk.app
 # 'follow user' pans the camera to a fresh fix rather than snapping — give
 # the pan its own beat to finish, on top of the GPX-load wait above, or the
 # tap grid below chases a camera that's still mid-animation toward centre.
+- waitForAnimationToEnd:
+    timeout: 2000
+# smoke.yaml (suite flow #1) can leave the camera zoomed out to fit an entire
+# city — camera position+zoom persist via settingsStore, and nothing above
+# normalizes zoom back in. At that zoom the ~85 m overlap between the two
+# recorded trails is sub-pixel, so no tap-grid point below could ever land on
+# a heat cell (this is what broke the full 12-flow suite even though the
+# isolated/quad runs, which never ran after smoke.yaml, passed).
+#
+# Locate re-centres on the user but does NOT reliably zoom: onLocate engages
+# follow mode and issues zoomToLocateLevel in the same tick, and the
+# follow-engage fly cancels the concurrent zoomTo (verified in the
+# 2026-08-03_121830 run: 'Locate' tap COMPLETED, camera still city-wide at
+# the tap grid). Known app-level race, tracked as a follow-up. So: tap Locate
+# for the recentre, then zoom IN deterministically with native double-tap
+# zoom (one level each, relative — over-zooming is harmless because the
+# trail passes through the centred user location, but too-far-out is fatal).
+# Double-taps land dead-centre, ON the recentred user dot: MapLibre anchors
+# double-tap zoom at the tap point, so an off-centre anchor would compound
+# drift each zoom and push the trail off-screen. Centre = the trail itself.
+# (Double-taps cannot open the carousel: MapLibre fires onPress only via
+# onSingleTapConfirmed, after the double-tap window.)
+- tapOn: 'Locate'
+- waitForAnimationToEnd:
+    timeout: 2000
+- doubleTapOn:
+    point: '50%,50%'
+- waitForAnimationToEnd:
+    timeout: 1500
+- doubleTapOn:
+    point: '50%,50%'
+- waitForAnimationToEnd:
+    timeout: 1500
+- doubleTapOn:
+    point: '50%,50%'
+- waitForAnimationToEnd:
+    timeout: 1500
+- doubleTapOn:
+    point: '50%,50%'
 - waitForAnimationToEnd:
     timeout: 2000
 # After save the map shows both runs overlapping near the centre — empirically
