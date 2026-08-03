@@ -42,7 +42,7 @@ overkill for a 25 m visual).
   physical path wobbling 10–20 m apart still meet. The dilated set is for
   matching; the undilated per-point trace is for run-splitting.
 - **Heat index** (`index.ts`): `buildHeatIndex(tracks: {id, categoryId,
-  cells}[])` → `Map<cellKey, Map<categoryId, Set<trackId>>>`. A cell is hot
+cells}[])` → `Map<cellKey, Map<categoryId, Set<trackId>>>`. A cell is hot
   for a category when ≥ 2 distinct same-category trails touch it. Intensity
   of a cell = that count. Navigation-category tracks are excluded by the
   caller (`isPerformedActivity` from `@core/dashboard/aggregate` is the
