@@ -26,4 +26,16 @@ describe('splitHeatRuns', () => {
     expect(splitHeatRuns([], countFor({}))).toEqual([]);
     expect(splitHeatRuns(['a'], countFor({}))).toEqual([]);
   });
+
+  it('merges trailing single-point hot run into cold predecessor', () => {
+    const runs = splitHeatRuns(['h', 'a'], countFor({ h: 3 }));
+    expect(runs).toEqual([{ startIdx: 0, endIdx: 1, count: 3 }]);
+    expect(runs.every((r) => r.endIdx - r.startIdx >= 1)).toBe(true);
+  });
+
+  it('merges trailing single-point cold run into hot predecessor', () => {
+    const runs = splitHeatRuns(['a', 'a', 'h'], countFor({ h: 2 }));
+    expect(runs).toEqual([{ startIdx: 0, endIdx: 2, count: 2 }]);
+    expect(runs.every((r) => r.endIdx - r.startIdx >= 1)).toBe(true);
+  });
 });

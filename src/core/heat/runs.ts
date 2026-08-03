@@ -44,15 +44,15 @@ export function splitHeatRuns(
     count = c;
   }
   runs.push({ startIdx: start, endIdx: perPoint.length - 1, count: hot ? count : 1 });
-  // A leading run of a single point (possible when the state flips at i=1)
-  // cannot form a LineString — merge it forward.
-  const first = runs[0];
-  const second = runs[1];
-  if (first && second && first.startIdx === first.endIdx) {
-    runs.splice(0, 2, {
-      startIdx: first.startIdx,
-      endIdx: second.endIdx,
-      count: Math.max(first.count, second.count),
+  // A trailing run of a single point (when a transition lands exactly on the
+  // last index) cannot form a LineString — merge it backward into its predecessor.
+  const last = runs[runs.length - 1];
+  const penultimate = runs[runs.length - 2];
+  if (last && penultimate && last.startIdx === last.endIdx) {
+    runs.splice(-2, 2, {
+      startIdx: penultimate.startIdx,
+      endIdx: last.endIdx,
+      count: Math.max(penultimate.count, last.count),
     });
   }
   return runs;
