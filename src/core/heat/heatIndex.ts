@@ -13,6 +13,13 @@ export type HeatIndex = Map<string, Map<string, Set<string>>>;
 /** Track insertion order for each HeatIndex instance */
 const insertionOrders = new WeakMap<HeatIndex, Map<string, number>>();
 
+/**
+ * Builds a heat index from tracks. The returned Map instance is coupled to an
+ * internal WeakMap that tracks track insertion order. Pass the exact Map
+ * returned by this function to trailsNear to guarantee trackIds are in input
+ * insertion order. An index built or filtered any other way falls back to
+ * ring-scan order.
+ */
 export function buildHeatIndex(tracks: readonly HeatTrackInput[]): HeatIndex {
   const index: HeatIndex = new Map();
   const insertionOrder = new Map<string, number>();
@@ -50,6 +57,9 @@ export function hotCountAt(index: HeatIndex, key: string, categoryId: string): n
 /**
  * Everything at (or one cell around) a tap: all trail ids in the ring in
  * insertion order, and whether any single category runs >= 2 trails there.
+ * trackIds ordering (input insertion order) is only guaranteed for the exact
+ * Map instance returned by buildHeatIndex; an index built or filtered any
+ * other way falls back to ring-scan order.
  */
 export function trailsNear(index: HeatIndex, cell: Cell): { trackIds: string[]; hot: boolean } {
   const idOrder = insertionOrders.get(index) ?? new Map();
@@ -63,10 +73,11 @@ export function trailsNear(index: HeatIndex, cell: Cell): { trackIds: string[]; 
     const byCategory = index.get(key);
     if (!byCategory) continue;
     for (const [categoryId, ids] of byCategory) {
-      if (!categoryCounts.has(categoryId)) {
-        categoryCounts.set(categoryId, new Set());
+      let categoryIds = categoryCounts.get(categoryId);
+      if (!categoryIds) {
+        categoryIds = new Set();
+        categoryCounts.set(categoryId, categoryIds);
       }
-      const categoryIds = categoryCounts.get(categoryId)!;
       for (const id of ids) {
         categoryIds.add(id);
         if (!seen.has(id)) {
