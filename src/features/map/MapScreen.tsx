@@ -170,7 +170,21 @@ export function MapScreen() {
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
   const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
-  const trackHeat = useTrackHeat(tracks, shownTrackIds);
+  // When the heatmap toggle is on, the heat layer + tap-carousel must source
+  // EVERY track in the library, not just whatever the current visibility
+  // mode/folder filters/activeTrackIds happen to show ("if heatmap is
+  // selected, it shouldn't need the trace to be shown"). When it's off this
+  // collapses to exactly shownTrackIds, so useTrackHeat's behavior — and its
+  // GPX-load footprint — is byte-for-byte the pre-this-feature one: "when
+  // heatmap is OFF, nothing changes". showHeatmap itself is declared below
+  // (with the rest of the map-store/settings-store reads); read it here too
+  // since allTrackIds must be computed before useTrackHeat is called.
+  const showHeatmap = useSettingsStore((s) => s.showHeatmap);
+  const allTrackIds = useMemo(
+    () => (showHeatmap ? tracks.map((t) => t.id) : shownTrackIds),
+    [showHeatmap, tracks, shownTrackIds],
+  );
+  const trackHeat = useTrackHeat(tracks, shownTrackIds, allTrackIds);
   const router = useRouter();
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
@@ -190,7 +204,6 @@ export function MapScreen() {
   const basemap = useMapStore((s) => s.basemap);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
-  const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const offlineRegions = useOfflineStore((s) => s.regions);
   // 2D base style with shaded-relief hillshade for the outdoor/topo look;
   // hillshade-3D was replaced by the real 3D terrain surface.
@@ -569,9 +582,13 @@ export function MapScreen() {
 
       // No waypoint pin hit — route through the heat lookup, but only when
       // trail overlays are actually shown: with the master switch off, no
-      // trail geometry is on screen (rendering is gated the same way, ~line
-      // 801), so a tap there must fall through to plain deselect rather than
-      // reopening the inspect panel/carousel for a hidden trail.
+      // trail/heat geometry is on screen at all (rendering is gated the same
+      // way below), so a tap there must fall through to plain deselect. This
+      // is the master switch only — heatAt itself (and the heatmap layer) is
+      // NOT gated on any individual trail's trace visibility, so a hot spot
+      // opens the carousel (and a single non-hot tap opens inspect for a
+      // shown trail) regardless of the current visibility mode/folder
+      // filters/activeTrackIds; see useTrackHeat.
       const lngLatArr = e.nativeEvent?.lngLat;
       const at =
         lngLatArr && showTrackOverlays
@@ -624,6 +641,17 @@ export function MapScreen() {
     ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
     : inspectId;
   const hasSelection = heatSelection !== null || inspectId !== null;
+
+  // The focused trail's own geometry, looked up independent of shown-trail
+  // membership: a hot-spot carousel selection can point at a globally-
+  // qualifying trail whose trace is currently hidden (Content: everything,
+  // nothing active) — "clickability" of the heatmap means that trail must
+  // still be able to draw its highlight. Drawn as its own layer below,
+  // separate from the shown-trails source, so it renders regardless.
+  const focusLine = useMemo(
+    () => (focusedTrackId ? trackHeat.lineFor(focusedTrackId) : null),
+    [focusedTrackId, trackHeat],
+  );
 
   return (
     <View style={styles.fill}>
@@ -785,13 +813,15 @@ export function MapScreen() {
           )}
 
           {/* Heatmap density: a native MapLibre `heatmap` layer under the
-              trail lines, built from sampled points of performed trails only
-              (useTrackHeat.heatPoints — bounded feature count regardless of
-              how many/long the shown trails are). Tight dots/streaks at
-              province/city zoom (small radius, low intensity — DENSITY
-              carries the "hot" signal, not blob size), growing into a
-              corridor wash as you zoom toward street level. Capped at a
-              warm orange (no dark/red-brown top) and faded slightly above
+              trail lines, built from sampled points of EVERY qualifying
+              trail in the library (useTrackHeat.heatPoints — global while
+              the toggle is on, independent of visibility mode/folder
+              filters/activeTrackIds, bounded feature count regardless of how
+              many/long those trails are — see qualifiesForHeat). Tight
+              dots/streaks at province/city zoom (small radius, low intensity
+              — DENSITY carries the "hot" signal, not blob size), growing
+              into a corridor wash as you zoom toward street level. Capped at
+              a warm orange (no dark/red-brown top) and faded slightly above
               z15 once the trail lines themselves carry the detail. Drawn
               BEFORE the lines below so it sits beneath them. */}
           {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
@@ -849,22 +879,45 @@ export function MapScreen() {
           {/* Trail lines: every shown trail as a thin, clean, category-
               coloured LineString — no glow layer, no width stepping (see
               useTrackHeat). When a trail is selected (a tap-selected heat
-              spot OR the inspect panel), every OTHER trail is hidden
-              outright via the filter below, not dimmed. Tapping a "hot" spot
-              routes through onMapPress below to open the HeatPointCarousel;
-              the per-trail onPress this replaced is gone for good — the
-              map-level hit-test (heatAt) is the only way in now. */}
+              spot OR the inspect panel), every trail from THIS shown-trails
+              source is hidden outright (not dimmed) — the focused trail's
+              highlight is drawn by the dedicated "focused-trail" layer just
+              below instead, since a hot-spot selection can point at a
+              trail outside the shown set (heatmap clickability works even
+              with traces hidden). Tapping a "hot" spot routes through
+              onMapPress below to open the HeatPointCarousel; the per-trail
+              onPress this replaced is gone for good — the map-level hit-test
+              (heatAt) is the only way in now. */}
           {showTrackOverlays && trackHeat.lines && (
             <GeoJSONSource id="tracks-lines" data={trackHeat.lines}>
               <Layer
                 id="tracks-lines-layer"
                 type="line"
-                filter={hasSelection ? ['==', ['get', 'trackId'], focusedTrackId ?? ''] : true}
+                filter={hasSelection ? false : true}
                 layout={{ 'line-cap': 'round', 'line-join': 'round' }}
                 paint={{
                   'line-color': ['get', 'color'],
-                  'line-width': ['case', ['==', ['get', 'trackId'], focusedTrackId ?? ''], 4, 3],
+                  'line-width': 3,
                 }}
+              />
+            </GeoJSONSource>
+          )}
+
+          {/* Focused-trail highlight: the selected trail's own geometry
+              (useTrackHeat.lineFor), drawn independent of whether it's in
+              the shown-trails source above — this is what makes a hot-spot
+              carousel tap "clickable" even with traces hidden entirely
+              (Content: everything, nothing active). Not gated on
+              showTrackOverlays: a selection can only exist from a tap that
+              already required trail overlays / the heatmap, so this layer
+              simply follows whether there's a trail to draw. */}
+          {focusLine && (
+            <GeoJSONSource id="focused-trail-line" data={focusLine}>
+              <Layer
+                id="focused-trail-line-layer"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
               />
             </GeoJSONSource>
           )}
