@@ -29,13 +29,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'com.inukshuk.app',
     // Must increase for every TestFlight upload of the same version (Apple
     // rejects duplicate version+build pairs). 1 = first 1.5.0 upload.
-    buildNumber: '2',
+    buildNumber: '4',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
       // this; declared explicitly so the requirement is visible here.
       UIBackgroundModes: ['location'],
       ITSAppUsesNonExemptEncryption: false,
+      // ITMS-90737: apps declaring CFBundleDocumentTypes must state whether
+      // they open documents in place. Inukshuk IMPORTS (copies) GPX into its
+      // own storage — it never edits the source file — so false is correct.
+      LSSupportsOpeningDocumentsInPlace: false,
       // Allow cleartext to loopback only, for the in-app HTTP server that serves the
       // MapLibre style during an offline-region download (see src/data/offline.ts).
       NSAppTransportSecurity: {
