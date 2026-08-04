@@ -29,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: 'com.inukshuk.app',
     // Must increase for every TestFlight upload of the same version (Apple
     // rejects duplicate version+build pairs). 1 = first 1.5.0 upload.
-    buildNumber: '2',
+    buildNumber: '3',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
