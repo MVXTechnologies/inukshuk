@@ -1,6 +1,7 @@
 import { parseGpx } from '@core/geo/gpx';
 import {
   computeTrackStats,
+  haversineMeters,
   interpolateTrackAtDistance,
   withDemElevations,
   type TrackPointAt,
@@ -22,7 +23,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
@@ -80,7 +81,9 @@ import {
 } from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
+import { TrimRangeSlider } from './components/TrimRangeSlider';
 import { Trail2DView } from './Trail2DView';
+import { overwriteWithTrim, saveTrimmedCopy, type TrimRange } from './trimTrack';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
 interface Props {
@@ -117,7 +120,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const theme = useTheme();
   const hintColor = { color: theme.colors.onSurfaceVariant };
   const router = useRouter();
+  // Library's "Trim" menu item routes here with ?trim=1 to enter trim mode
+  // as soon as this trail's points are loaded (see the effect below).
+  const { trim: trimParam } = useLocalSearchParams<{ trim?: string }>();
   const track = useLibraryStore((s) => s.tracks.find((t) => t.id === trackId));
+  const addTrack = useLibraryStore((s) => s.addTrack);
+  const updateTrack = useLibraryStore((s) => s.updateTrack);
   const addTrackNote = useLibraryStore((s) => s.addTrackNote);
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
@@ -157,6 +165,18 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
   const [overlaysAvailable, setOverlaysAvailable] = useState(true);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(2500);
+
+  // Trim tool (ported from the map's inspect panel — #polish item 5): a kept
+  // [start, end] point window over the docked profile, live-previewed by the
+  // slider itself; the two save paths reuse trimTrack.ts's persistence.
+  const [trimRange, setTrimRange] = useState<TrimRange | null>(null);
+  const [trimSaving, setTrimSaving] = useState(false);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  // Bumped after an overwrite trim to force the GLView to remount and rebuild
+  // the terrain from the freshly-trimmed GPX file (onContextCreate re-reads
+  // fileUri from disk on every mount).
+  const [glReloadGen, setGlReloadGen] = useState(0);
+  const pendingTrimRef = useRef(trimParam === '1');
 
   const orbit = useRef({
     theta: 0.6,
@@ -329,6 +349,75 @@ export function Trail3DGLScreen({ trackId }: Props) {
     };
   }, [fileUri]);
 
+  // Consume the one-shot ?trim=1 intent (Library's "Trim" menu item) once
+  // this trail's points have loaded — mirrors the old inspect-panel's
+  // pendingTrimId effect, just local to this screen instead of MapScreen.
+  // This only ever fires once per screen instance, gated by the ref above
+  // (consumed, not a subscription loop), so the direct setState here is the
+  // same precedented exception MapScreen's old inspectIntent effect used.
+  useEffect(() => {
+    if (!pendingTrimRef.current || !points) return;
+    pendingTrimRef.current = false;
+    if (points.length >= 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTrimRange({ start: 0, end: points.length - 1 });
+    } else showSnack('This trail is too short to trim');
+  }, [points, showSnack]);
+
+  // Re-read the (possibly just-overwritten) GPX file from disk — used after
+  // an overwrite trim so the 2D trace/profile reflect the new geometry
+  // without a full screen remount.
+  const reloadPoints = async () => {
+    if (!fileUri) return;
+    try {
+      const gpx = await storage.readFileText(fileUri);
+      setPoints(parseGpx(gpx).points);
+    } catch {
+      /* the trail stays on its pre-reload points; the trim itself already saved */
+    }
+  };
+
+  const beginTrim = () => {
+    if (points && points.length >= 3) setTrimRange({ start: 0, end: points.length - 1 });
+  };
+  const cancelTrim = () => setTrimRange(null);
+  const changeTrim = (start: number, end: number) => setTrimRange({ start, end });
+
+  const onSaveTrimCopy = async () => {
+    if (!track || !points || !trimRange) return;
+    setTrimSaving(true);
+    try {
+      const { track: copy, fileUri: copyUri } = await saveTrimmedCopy(
+        track,
+        points,
+        trimRange.start,
+        trimRange.end,
+      );
+      addTrack(copy, copyUri);
+      showSnack(`Saved "${copy.name}" to the library`);
+      setTrimRange(null);
+    } catch (err) {
+      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
+    }
+    setTrimSaving(false);
+  };
+
+  const onOverwriteTrim = async () => {
+    if (!track || !points || !trimRange) return;
+    setTrimSaving(true);
+    try {
+      const { patch } = await overwriteWithTrim(track, points, trimRange.start, trimRange.end);
+      updateTrack(track.id, patch);
+      await reloadPoints();
+      if (trailViewMode === '3d') setGlReloadGen((g) => g + 1);
+      showSnack(`Trimmed "${track.name}"`);
+      setTrimRange(null);
+    } catch (err) {
+      showSnack(`Trim failed: ${err instanceof Error ? err.message : 'could not save'}`);
+    }
+    setTrimSaving(false);
+  };
+
   // Note→coordinate resolution for the 3D badges; mirrored into a ref because
   // the render loop (a long-lived closure) is what projects them each frame.
   const numberedNotes = useMemo(
@@ -369,6 +458,23 @@ export function Trail3DGLScreen({ trackId }: Props) {
     () => (demPoints ? computeTrackStats(demPoints) : null),
     [demPoints],
   );
+
+  // Cumulative distance at each point for the trim tool's "keeping X of Y"
+  // readout — O(n) once per point-set, then a subtraction per slider move.
+  const cumM = useMemo(() => {
+    const pts = points ?? [];
+    const out = new Array<number>(pts.length);
+    let d = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[i - 1];
+      const cur = pts[i];
+      if (i > 0 && prev && cur) d += haversineMeters(prev, cur);
+      out[i] = d;
+    }
+    return out;
+  }, [points]);
+  const keptM = trimRange ? (cumM[trimRange.end] ?? 0) - (cumM[trimRange.start] ?? 0) : 0;
+  const totalM = cumM.length > 0 ? (cumM[cumM.length - 1] ?? 0) : 0;
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
     const gen = ++glGenRef.current;
@@ -702,6 +808,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         >
           {trailViewMode === '3d' ? (
             <GLView
+              key={`gl-${glReloadGen}`}
               style={styles.fill}
               onContextCreate={onContextCreate}
               onLayout={(e) => {
@@ -808,6 +915,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
             basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
             overlaysAvailable={overlaysAvailable}
             overlaysDisabled={switching}
+            onTrim={!trimRange && points && points.length >= 3 ? beginTrim : undefined}
           />
           {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
           {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
@@ -816,7 +924,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
         {points && (
           <>
             <View style={styles.scrubRow}>
-              {scrub ? (
+              {trimRange ? (
+                <Text variant="titleSmall">Trim trail</Text>
+              ) : scrub ? (
                 <Text variant="bodySmall">
                   {formatDistance(scrub.distanceM)}
                   {scrub.elevation !== undefined ? ` · ${formatElevation(scrub.elevation)}` : ''}
@@ -829,14 +939,58 @@ export function Trail3DGLScreen({ trackId }: Props) {
                 </Text>
               )}
             </View>
-            <ElevationProfile
-              points={profilePoints}
-              ascentM={s.ascentM}
-              descentM={s.descentM}
-              markers={markers}
-              selectedDistanceM={scrub?.distanceM ?? null}
-              onScrub={onScrub}
-            />
+
+            {trimRange ? (
+              <View style={styles.trimBody}>
+                <Text variant="bodySmall" style={hintColor}>
+                  Drag the handles to shorten the trail from either end. The highlighted segment is
+                  kept.
+                </Text>
+                <TrimRangeSlider
+                  count={points.length}
+                  start={trimRange.start}
+                  end={trimRange.end}
+                  onChange={changeTrim}
+                />
+                <Text variant="labelMedium">
+                  Keeping {formatDistance(keptM)} of {formatDistance(totalM)} ·{' '}
+                  {trimRange.end - trimRange.start + 1} of {points.length} points
+                </Text>
+                <View style={styles.trimActions}>
+                  <Button onPress={cancelTrim} disabled={trimSaving}>
+                    Cancel
+                  </Button>
+                  <View style={styles.trimSaveActions}>
+                    <Button
+                      mode="outlined"
+                      icon="content-save-plus-outline"
+                      onPress={() => void onSaveTrimCopy()}
+                      disabled={trimSaving}
+                      loading={trimSaving}
+                    >
+                      Save as copy
+                    </Button>
+                    <Button
+                      mode="contained"
+                      icon="content-save-outline"
+                      onPress={() => setConfirmOverwrite(true)}
+                      disabled={trimSaving}
+                    >
+                      Overwrite
+                    </Button>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <ElevationProfile
+                points={profilePoints}
+                ascentM={s.ascentM}
+                descentM={s.descentM}
+                markers={markers}
+                selectedDistanceM={scrub?.distanceM ?? null}
+                onScrub={onScrub}
+              />
+            )}
 
             <View style={styles.notesHeader}>
               <Text variant="titleSmall" style={styles.notesTitle}>
@@ -914,6 +1068,27 @@ export function Trail3DGLScreen({ trackId }: Props) {
       </ScrollView>
 
       <Portal>
+        <Dialog visible={confirmOverwrite} onDismiss={() => setConfirmOverwrite(false)}>
+          <Dialog.Title>Overwrite trail</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              {`Replace "${track.name}" with the trimmed segment? The cut portions (and any notes on them) are permanently removed.`}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmOverwrite(false)}>Cancel</Button>
+            <Button
+              textColor={theme.colors.error}
+              onPress={() => {
+                setConfirmOverwrite(false);
+                void onOverwriteTrim();
+              }}
+            >
+              Overwrite
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={editing !== null} onDismiss={() => setEditing(null)}>
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
@@ -1060,6 +1235,14 @@ const styles = StyleSheet.create({
   // badge's white ring so the pair reads as one pin.
   noteStem: { width: 2, height: 14, backgroundColor: '#FFFFFF', opacity: 0.9 },
   scrubRow: { paddingHorizontal: 16, paddingTop: 10 },
+  trimBody: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 6, gap: 6 },
+  trimActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  trimSaveActions: { flexDirection: 'row', gap: 8 },
   notesHeader: {
     flexDirection: 'row',
     alignItems: 'center',

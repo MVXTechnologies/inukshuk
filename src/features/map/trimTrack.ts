@@ -13,6 +13,12 @@ import * as storage from '@data/storage';
  * so both save paths carry them over verbatim.
  */
 
+/** Kept [start, end] point-index window while trimming (inclusive both ends). */
+export interface TrimRange {
+  start: number;
+  end: number;
+}
+
 /** Read the source file's standalone waypoints; a trim never discards them. */
 async function readSourceWaypoints(fileUri: string) {
   try {
