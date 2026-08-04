@@ -25,6 +25,79 @@ const DEFAULT_ELEVATION_THRESHOLD_M = 3;
 const DEFAULT_MOVING_SPEED_THRESHOLD_MPS = 0.5;
 
 /**
+ * Running state for the elevation hysteresis filter (see
+ * {@link stepElevationGainLoss} / {@link elevationGainLoss}): the current
+ * "reference" elevation plus the ascent/descent committed so far. Threading
+ * this through callers (rather than recomputing from scratch) is what lets
+ * the LIVE recorder apply the exact same hysteresis as the final saved
+ * stats, incrementally, one fix at a time.
+ */
+export interface ElevationAccumulator {
+  reference: number | undefined;
+  ascentM: number;
+  descentM: number;
+}
+
+/** The accumulator's initial state, before any elevation sample has been seen. */
+export const EMPTY_ELEVATION_ACC: ElevationAccumulator = {
+  reference: undefined,
+  ascentM: 0,
+  descentM: 0,
+};
+
+/**
+ * Fold ONE new elevation sample into an {@link ElevationAccumulator}, applying
+ * the same hysteresis rule as {@link elevationGainLoss}: a delta from the
+ * current reference only commits to ascent/descent once it exceeds
+ * `threshold`, and the reference then advances to the new elevation. A
+ * `undefined`/`NaN` sample is a no-op (returns `acc` unchanged) — it neither
+ * resets nor advances the reference, exactly like the batch version skipping
+ * undefined samples.
+ *
+ * Unlike a naive "compare to the previous point" step, this keeps a real
+ * running reference across calls, so a slow sustained climb made of many
+ * sub-threshold single-fix deltas is still counted in full once the
+ * CUMULATIVE change from the reference clears the threshold — the live HUD
+ * no longer under-counts relative to the authoritative batch computation.
+ */
+export function stepElevationGainLoss(
+  acc: ElevationAccumulator,
+  elevation: number | undefined,
+  opts?: { threshold?: number },
+): ElevationAccumulator {
+  if (elevation === undefined || Number.isNaN(elevation)) return acc;
+  const threshold = opts?.threshold ?? DEFAULT_ELEVATION_THRESHOLD_M;
+  if (acc.reference === undefined) {
+    return { reference: elevation, ascentM: acc.ascentM, descentM: acc.descentM };
+  }
+  const delta = elevation - acc.reference;
+  if (delta >= threshold) {
+    return { reference: elevation, ascentM: acc.ascentM + delta, descentM: acc.descentM };
+  }
+  if (-delta >= threshold) {
+    return { reference: elevation, ascentM: acc.ascentM, descentM: acc.descentM - delta };
+  }
+  // Within the dead-band: leave the reference (and totals) untouched.
+  return acc;
+}
+
+/**
+ * Fold a whole elevation series into an {@link ElevationAccumulator} from
+ * scratch, one sample at a time via {@link stepElevationGainLoss}. Used both
+ * by {@link elevationGainLoss} (which discards the final reference) and by
+ * the recorder store to (re)synchronize its live accumulator after a batch
+ * operation (merge, crash recovery) replaces the point list wholesale.
+ */
+export function accumulateElevationGainLoss(
+  elevations: readonly (number | undefined)[],
+  opts?: { threshold?: number },
+): ElevationAccumulator {
+  let acc = EMPTY_ELEVATION_ACC;
+  for (const ele of elevations) acc = stepElevationGainLoss(acc, ele, opts);
+  return acc;
+}
+
+/**
  * Cumulative ascent (D+) and descent (D-) from an elevation series.
  *
  * Raw GPS altitude is noisy: summing every tiny up/down would inflate D+ on a
@@ -41,28 +114,7 @@ export function elevationGainLoss(
   elevations: readonly (number | undefined)[],
   opts?: { threshold?: number },
 ): { ascentM: number; descentM: number } {
-  const threshold = opts?.threshold ?? DEFAULT_ELEVATION_THRESHOLD_M;
-  let ascentM = 0;
-  let descentM = 0;
-  let reference: number | undefined;
-
-  for (const ele of elevations) {
-    if (ele === undefined || Number.isNaN(ele)) continue;
-    if (reference === undefined) {
-      reference = ele;
-      continue;
-    }
-    const delta = ele - reference;
-    if (delta >= threshold) {
-      ascentM += delta;
-      reference = ele;
-    } else if (-delta >= threshold) {
-      descentM += -delta;
-      reference = ele;
-    }
-    // else: within the dead-band, leave the reference untouched.
-  }
-
+  const { ascentM, descentM } = accumulateElevationGainLoss(elevations, opts);
   return { ascentM, descentM };
 }
 
@@ -177,17 +229,22 @@ interface ReduceOpts {
 /**
  * Fold a single new point into prior stats for the live recording HUD.
  *
- * APPROXIMATION — read carefully. True D+/D- hysteresis needs a running
- * "reference" elevation that this function cannot persist (we must not widen
- * the `TrackStats` type). So per step we apply the threshold between
- * `prevPoint` and `next` directly: a single inter-point jump is committed to
- * ascent/descent only if it already exceeds the threshold. This means a slow,
- * sustained climb made of many sub-threshold steps will be UNDER-counted live,
- * and the headline figure can drift from the hysteresis filter over the full
- * array. That is an accepted tradeoff: the live HUD is approximate, and the
- * authoritative saved stats are always recomputed with `computeTrackStats`
- * over the complete point list. For distance / duration / moving time / max
- * speed this folding is exact.
+ * APPROXIMATION for ascent/descent — read carefully. True D+/D- hysteresis
+ * needs a running "reference" elevation that this function cannot persist (we
+ * must not widen the `TrackStats` type). So per step we apply the threshold
+ * between `prevPoint` and `next` directly: a single inter-point jump is
+ * committed to ascent/descent only if it already exceeds the threshold. This
+ * means a slow, sustained climb made of many sub-threshold steps would be
+ * UNDER-counted if the caller relied on THIS function's own ascentM/descentM.
+ *
+ * The recorder store does not: it tracks elevation gain/loss separately via
+ * {@link ElevationAccumulator} / {@link stepElevationGainLoss} (a real
+ * persisted reference, exactly matching `computeTrackStats`'s hysteresis
+ * incrementally) and overwrites this function's ascentM/descentM with that
+ * accumulator's totals. Any other caller that folds points one at a time
+ * should do the same rather than trust the fields below.
+ *
+ * For distance / duration / moving time / max speed this folding is exact.
  */
 export function reduceStatsWith(
   prev: TrackStats,

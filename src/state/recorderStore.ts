@@ -1,6 +1,13 @@
 import type { Track, TrackPoint, TrackStats } from '@core/models';
 import { buildGpx } from '@core/geo/gpx';
-import { computeTrackStats, reduceStatsWith } from '@core/geo/track';
+import {
+  accumulateElevationGainLoss,
+  computeTrackStats,
+  EMPTY_ELEVATION_ACC,
+  reduceStatsWith,
+  stepElevationGainLoss,
+  type ElevationAccumulator,
+} from '@core/geo/track';
 import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import { findCategory } from '@core/library/categories';
@@ -49,6 +56,16 @@ interface RecorderState {
   pausedAt: number | null;
   points: TrackPoint[];
   stats: TrackStats;
+  /**
+   * Live D+/D- hysteresis state, threaded across `addPoint` calls so the
+   * running HUD accumulates elevation gain/loss with a real persisted
+   * "reference" elevation — exactly matching `computeTrackStats`'s batch
+   * hysteresis, incrementally, instead of the old per-step approximation
+   * (which compared only to the immediately preceding point and under-counted
+   * slow, sustained climbs to the point of looking broken). Internal
+   * bookkeeping only; `stats.ascentM`/`descentM` are what the UI reads.
+   */
+  elevationAcc: ElevationAccumulator;
   waypoints: PendingWaypoint[];
   /**
    * Epoch ms of the most recently ACCEPTED fix (null until the first one), and
@@ -170,6 +187,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   pausedAt: null,
   points: [],
   stats: EMPTY_STATS,
+  elevationAcc: EMPTY_ELEVATION_ACC,
   waypoints: [],
   lastFixAt: null,
   lastAccuracyM: null,
@@ -188,6 +206,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
+      elevationAcc: EMPTY_ELEVATION_ACC,
       waypoints: [],
       lastFixAt: null,
       lastAccuracyM: null,
@@ -195,18 +214,30 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   addPoint: (point) => {
-    const { status, points, stats } = get();
+    const { status, points, stats, elevationAcc } = get();
     if (status !== 'recording') return;
     const prev = points[points.length - 1];
     // Gate raw fixes: bad-accuracy and teleport outliers inflate distance/D±,
     // and near-duplicate timestamps guard against double-feeding when both the
     // background task and the foreground watch deliver the same fix.
     if (!shouldAcceptFix(prev, point)) return;
+    // True live D+/D- hysteresis: fold this fix into the persisted-reference
+    // accumulator (matches computeTrackStats's batch hysteresis exactly,
+    // incrementally) and overwrite reduceStatsWith's own per-step
+    // ascentM/descentM approximation with it — see reduceStatsWith's doc
+    // comment and ElevationAccumulator.
+    const nextElevationAcc = stepElevationGainLoss(elevationAcc, point.altitude);
+    const foldedStats = reduceStatsWith(stats, prev, point);
     set({
       points: [...points, point],
-      // Live HUD uses the cheap incremental fold; final stats are recomputed
-      // exactly on stop().
-      stats: reduceStatsWith(stats, prev, point),
+      // Live HUD uses the cheap incremental fold for everything else; final
+      // stats are recomputed exactly on stop().
+      stats: {
+        ...foldedStats,
+        ascentM: nextElevationAcc.ascentM,
+        descentM: nextElevationAcc.descentM,
+      },
+      elevationAcc: nextElevationAcc,
       // Freshness/quality signal for the HUD's GPS indicator (using the fix's
       // own timestamp so a late-delivered fix reflects its true age).
       lastFixAt: point.time,
@@ -222,10 +253,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     const merged = mergeTrackPoints(points, incoming, { accept: shouldAcceptFix });
     if (merged === points) return; // nothing new — keep identity, skip the I/O
     const newest = merged[merged.length - 1];
+    // Out-of-order inserts invalidate both the incremental stats fold AND the
+    // elevation accumulator's running reference — resynchronize both from the
+    // full merged point list, exactly like computeTrackStats does for stats.
+    const elevationAcc = accumulateElevationGainLoss(merged.map((p) => p.altitude));
     set({
       points: merged,
-      // Out-of-order inserts invalidate the incremental fold; recompute exactly.
-      stats: computeTrackStats(merged),
+      stats: {
+        ...computeTrackStats(merged),
+        ascentM: elevationAcc.ascentM,
+        descentM: elevationAcc.descentM,
+      },
+      elevationAcc,
       // Fold in the newest merged fix's freshness for the HUD's GPS indicator.
       ...(newest ? { lastFixAt: newest.time, lastAccuracyM: newest.accuracy ?? null } : {}),
     });
@@ -376,6 +415,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
+      elevationAcc: EMPTY_ELEVATION_ACC,
       waypoints: [],
       // Signal observers (Strava push prompt) that a trail was just saved.
       lastSavedTrackId: points.length > 0 ? track.id : null,
@@ -397,6 +437,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       pausedAt: null,
       points: [],
       stats: EMPTY_STATS,
+      elevationAcc: EMPTY_ELEVATION_ACC,
       waypoints: [],
       lastFixAt: null,
       lastAccuracyM: null,
@@ -451,6 +492,10 @@ export async function initRecorderRecovery(): Promise<boolean> {
       pausedAt: Date.now(),
       points,
       stats: computeTrackStats(points),
+      // Resynchronize the live hysteresis accumulator's running reference from
+      // the recovered points, so addPoint's live D+/D- keeps matching the
+      // batch computation after a resume — same reasoning as mergeBackgroundPoints.
+      elevationAcc: accumulateElevationGainLoss(points.map((p) => p.altitude)),
       waypoints: cp.waypoints ?? [],
       lastFixAt: points[points.length - 1]?.time ?? null,
       lastAccuracyM: points[points.length - 1]?.accuracy ?? null,

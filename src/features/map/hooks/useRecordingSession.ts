@@ -1,9 +1,10 @@
 import { gpsQualityLevel, type GpsQuality } from '@core/geo/track/gpsQuality';
+import { liveSpeed } from '@core/geo/track/liveSpeed';
 import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBackgroundRecording } from './useBackgroundRecording';
 
 /**
@@ -38,6 +39,14 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // Live GPS-quality level for the HUD. Recomputed each tick (staleness grows
   // even when no new fix arrives — that IS the signal-loss case).
   const [gpsQuality, setGpsQuality] = useState<GpsQuality>('acquiring');
+
+  // Instantaneous speed for the HUD's "Speed" tile — see @core/geo/track/liveSpeed.
+  // stats.avgSpeedMps is a WHOLE-SESSION moving average; on a long recording it
+  // drifts toward the trip's overall average and can look "stuck" even as the
+  // real speed changes a lot (the reported bug: cruising at 110 km/h read as
+  // ~100, the ride's average up to that point). Recomputed from `points`
+  // whenever a new fix is accepted.
+  const liveSpeedMps = useMemo(() => liveSpeed(points), [points]);
 
   // OS-level background location feed while recording (foreground service on
   // Android, background mode on iOS), including the "Allow all the time"
@@ -124,6 +133,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     waypoints,
     elapsedS,
     gpsQuality,
+    liveSpeedMps,
     pause,
     resume,
     startRecording,

@@ -1,6 +1,14 @@
 import type { TrackPoint } from '@core/models';
 
-import { computeTrackStats, elevationGainLoss, haversineMeters, reduceStatsWith } from './index';
+import {
+  accumulateElevationGainLoss,
+  computeTrackStats,
+  EMPTY_ELEVATION_ACC,
+  elevationGainLoss,
+  haversineMeters,
+  reduceStatsWith,
+  stepElevationGainLoss,
+} from './index';
 
 const pt = (
   latitude: number,
@@ -73,6 +81,70 @@ describe('elevationGainLoss', () => {
       ascentM: 0,
       descentM: 0,
     });
+  });
+});
+
+describe('stepElevationGainLoss / accumulateElevationGainLoss', () => {
+  it('accumulateElevationGainLoss matches elevationGainLoss on the same series', () => {
+    const profile = [100, 130, 160, 200, 180, 150];
+    const acc = accumulateElevationGainLoss(profile);
+    const batch = elevationGainLoss(profile);
+    expect(acc.ascentM).toBeCloseTo(batch.ascentM, 6);
+    expect(acc.descentM).toBeCloseTo(batch.descentM, 6);
+  });
+
+  it('a single step below threshold is a no-op (dead-band)', () => {
+    const acc1 = stepElevationGainLoss(EMPTY_ELEVATION_ACC, 100);
+    const acc2 = stepElevationGainLoss(acc1, 101); // +1 m, under the 3 m default
+    expect(acc2).toEqual({ reference: 100, ascentM: 0, descentM: 0 });
+  });
+
+  it('an undefined/NaN sample is a no-op and does not disturb the reference', () => {
+    const acc1 = stepElevationGainLoss(EMPTY_ELEVATION_ACC, 100);
+    const acc2 = stepElevationGainLoss(acc1, undefined);
+    const acc3 = stepElevationGainLoss(acc2, NaN);
+    expect(acc3).toEqual(acc1);
+  });
+
+  it('THE FIX: a slow sustained climb of many sub-threshold steps is (almost) fully counted, matching the batch computation exactly', () => {
+    // 20 steps of +0.5 m each = 10 m of real, sustained climb. Each individual
+    // step is well under the 3 m hysteresis threshold, so the OLD per-step
+    // approximation (comparing only to the immediately preceding point, as
+    // reduceStatsWith's ascentM/descentM still do) commits ZERO of it — that
+    // was the live "D+/D- did not work" bug. The persisted-reference
+    // accumulator instead commits each 3 m crossing of the CUMULATIVE change
+    // from its reference, so almost all of the real climb is captured live
+    // (only the final sub-threshold tail is deferred — the same behaviour the
+    // authoritative batch computation has always had over this exact series).
+    const series: number[] = [100];
+    let a = 100;
+    for (let i = 0; i < 20; i++) {
+      a += 0.5;
+      series.push(a);
+    }
+    let acc = EMPTY_ELEVATION_ACC;
+    for (const ele of series) acc = stepElevationGainLoss(acc, ele);
+
+    // The old naive "delta vs. the immediately preceding point" approach:
+    // every single step is 0.5 m, under the 3 m threshold, so it commits 0.
+    const naiveOldApproach = series.slice(1).every((ele, i) => Math.abs(ele - series[i]!) < 3); // 3 m = the default hysteresis threshold
+    expect(naiveOldApproach).toBe(true); // sanity: confirms the bug scenario is real
+
+    expect(acc.ascentM).toBeGreaterThan(8); // captures nearly all of the 10 m climb
+    expect(acc.descentM).toBe(0);
+
+    // Live (incremental) and saved (batch) must agree exactly.
+    const batch = elevationGainLoss(series);
+    expect(acc.ascentM).toBeCloseTo(batch.ascentM, 6);
+    expect(acc.descentM).toBeCloseTo(batch.descentM, 6);
+  });
+
+  it('is order-independent to call incrementally vs. all at once (streaming = batch)', () => {
+    const elevations = [100, 101, 102, 103.5, 104, 90, 85, 84, 95, 96, 97, 98.2];
+    let streamed = EMPTY_ELEVATION_ACC;
+    for (const e of elevations) streamed = stepElevationGainLoss(streamed, e);
+    const batch = accumulateElevationGainLoss(elevations);
+    expect(streamed).toEqual(batch);
   });
 });
 
