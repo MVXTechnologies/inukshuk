@@ -68,12 +68,14 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
 
-// Sane constant matching TrailInspectPanel's compact height (header row +
-// ElevationProfile + bottom safe-area padding) after item 6's paddings
-// audit — used to pad the camera fit-to-trail above the panel (item 4).
-// Generous on purpose: a slightly larger pad is a smaller trail on-screen,
-// never a trail hidden under the panel.
+// Fallback bottom padding for the select-trail camera fit, used only before
+// TrailInspectPanel has ever reported its real height via onLayout (see
+// inspectPanelHeight below) — e.g. the very first trail selected in a
+// session. Generous on purpose: a slightly larger pad is a smaller trail
+// on-screen, never a trail hidden under the panel.
 const INSPECT_PANEL_H_ESTIMATE = 300;
+// Breathing room between the panel's top edge and the fitted trail.
+const INSPECT_PANEL_PAD = 24;
 
 /**
  * Throttled `toLineFeature(points)`. Between rebuilds the previous feature
@@ -331,6 +333,12 @@ export function MapScreen() {
 
   const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
     useTrailInspection(tracks);
+  // TrailInspectPanel's real measured height (via its onLayout), so the
+  // select-trail camera fit below pads exactly above the panel instead of
+  // guessing. Stays set across panel remounts (same trail-inspect layout
+  // every time), so only the very first-ever selection in a session uses
+  // the INSPECT_PANEL_H_ESTIMATE fallback before the first layout lands.
+  const [inspectPanelHeight, setInspectPanelHeight] = useState<number | null>(null);
 
   // Trail inspect panel v4: fit the camera to the inspected trail's bbox in
   // the space ABOVE the (now-compact) panel, once its points load. Trimming
@@ -347,7 +355,7 @@ export function MapScreen() {
       top: insets.top + 80,
       left: 40,
       right: 40,
-      bottom: INSPECT_PANEL_H_ESTIMATE + 40,
+      bottom: (inspectPanelHeight ?? INSPECT_PANEL_H_ESTIMATE) + INSPECT_PANEL_PAD,
     };
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
     // Capture the camera as it stood BEFORE this selection-driven fit — but
@@ -371,9 +379,14 @@ export function MapScreen() {
       fit();
     }
     // `setFollowUser` is a stable setter wrapper; `insets.top` is effectively
-    // constant per device/orientation.
+    // constant per device/orientation. `inspectPanelHeight` IS a real dep:
+    // when the very first-ever panel layout lands after this effect already
+    // fit with the estimate, this reruns to re-fit with the real padding —
+    // safe because the restoreCameraRef guard below only captures once per
+    // selection "session", so the re-fit never re-captures the (now
+    // already-moved) view as the restore target.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspectId, inspectPoints, inspectTrack]);
+  }, [inspectId, inspectPoints, inspectTrack, inspectPanelHeight]);
 
   // Glide the camera back to its pre-selection view on a FULL deselect (the
   // effect above is the only thing that ever populates restoreCameraRef) —
@@ -774,10 +787,13 @@ export function MapScreen() {
           {/* Heatmap density: a native MapLibre `heatmap` layer under the
               trail lines, built from sampled points of performed trails only
               (useTrackHeat.heatPoints — bounded feature count regardless of
-              how many/long the shown trails are). Soft, blurry, semi-
-              transparent orange, diffuse enough at low zoom that trail
-              clusters within a few km read as one region. Drawn BEFORE the
-              lines below so it sits beneath them. */}
+              how many/long the shown trails are). Tight dots/streaks at
+              province/city zoom (small radius, low intensity — DENSITY
+              carries the "hot" signal, not blob size), growing into a
+              corridor wash as you zoom toward street level. Capped at a
+              warm orange (no dark/red-brown top) and faded slightly above
+              z15 once the trail lines themselves carry the detail. Drawn
+              BEFORE the lines below so it sits beneath them. */}
           {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
             <GeoJSONSource id="tracks-heat-points" data={trackHeat.heatPoints}>
               <Layer
@@ -785,36 +801,46 @@ export function MapScreen() {
                 type="heatmap"
                 paint={{
                   'heatmap-weight': 1,
-                  'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+                  'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 16, 1.0],
                   'heatmap-color': [
                     'interpolate',
                     ['linear'],
                     ['heatmap-density'],
                     0,
                     'rgba(255,140,0,0)',
-                    0.2,
-                    'rgba(255,140,0,0.12)',
-                    0.5,
-                    'rgba(255,120,0,0.22)',
-                    0.8,
-                    'rgba(255,100,0,0.3)',
+                    0.15,
+                    'rgba(255,140,0,0)',
+                    0.4,
+                    'rgba(255,140,0,0.18)',
+                    0.7,
+                    'rgba(255,130,0,0.35)',
                     1,
-                    'rgba(255,80,0,0.35)',
+                    'rgba(255,120,0,0.55)',
                   ],
                   'heatmap-radius': [
+                    'interpolate',
+                    ['exponential', 1.6],
+                    ['zoom'],
+                    6,
+                    3,
+                    10,
+                    8,
+                    13,
+                    16,
+                    16,
+                    28,
+                  ],
+                  'heatmap-opacity': [
                     'interpolate',
                     ['linear'],
                     ['zoom'],
                     0,
-                    70,
-                    9,
-                    45,
-                    13,
-                    22,
+                    0.5,
+                    15,
+                    0.5,
                     18,
-                    10,
+                    0.35,
                   ],
-                  'heatmap-opacity': 0.5,
                 }}
               />
             </GeoJSONSource>
@@ -990,8 +1016,12 @@ export function MapScreen() {
       {/* Right-side map controls. Unmounted while the map-maker editor is up:
           its desk/drawer covers the rail visually, but a covered rail would
           still sit in the accessibility tree — screen readers (and E2E) could
-          reach a hidden "Layers" behind the drawer's Layers tab. */}
-      {makeMapState === null && (
+          reach a hidden "Layers" behind the drawer's Layers tab. Also
+          unmounted while the heat carousel is open — the deck now renders
+          directly over the rail's footprint (top-right), so a covered rail
+          would again leave hidden nodes in the a11y tree; it comes back the
+          instant the carousel closes (heatSelection back to null). */}
+      {makeMapState === null && heatSelection === null && (
         <MapControlsRail
           top={insets.top + 8}
           onLocate={() => {
@@ -1081,6 +1111,7 @@ export function MapScreen() {
           }}
           onScrub={setMarkerAt}
           onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
+          onLayout={setInspectPanelHeight}
         />
       )}
 

@@ -20,8 +20,8 @@ interface Props {
 
 const CARD_H = 84;
 /** Vertical distance between card centres in the stack: a neighbour peeks
- * only ~25% of its height out from behind the focused card. */
-const PEEK = Math.round(CARD_H * 0.25);
+ * HALF its height out from behind the focused card, top and bottom. */
+const PEEK = Math.round(CARD_H * 0.5);
 /** Swipe distance that commits a one-card step on release. */
 const SWIPE_STEP = 24;
 

@@ -13,6 +13,9 @@ interface Props {
   onScrub: (at: TrackPointAt | null) => void;
   /** Opens this trail in the full viewer (2D/3D, notes, PDF export, trim). */
   onView: () => void;
+  /** Reports the panel's real laid-out height in dp, so the map's
+   * select-trail camera fit can pad exactly above it instead of guessing. */
+  onLayout?: (height: number) => void;
 }
 
 /**
@@ -21,11 +24,15 @@ interface Props {
  * Trimming lives there now (Trail3DGLScreen) — this panel is a quick,
  * map-side peek, not a place to edit the trail.
  */
-export function TrailInspectPanel({ track, points, onClose, onScrub, onView }: Props) {
+export function TrailInspectPanel({ track, points, onClose, onScrub, onView, onLayout }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
-    <Surface style={[styles.inspectPanel, { paddingBottom: insets.bottom + 4 }]} elevation={4}>
+    <Surface
+      style={[styles.inspectPanel, { paddingBottom: insets.bottom + 4 }]}
+      elevation={4}
+      onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.height) : undefined}
+    >
       <View style={styles.inspectHeader}>
         <Text variant="titleSmall" numberOfLines={1} style={styles.inspectTitle}>
           {track.name}
