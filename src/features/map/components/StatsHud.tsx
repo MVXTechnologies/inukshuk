@@ -2,7 +2,6 @@ import type { GpsQuality } from '@core/geo/track/gpsQuality';
 import type { TrackStats } from '@core/models';
 import { formatDistance, formatDuration, formatElevation, formatSpeed } from '@lib/format';
 import { StatTile } from '@ui/components/StatTile';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
@@ -11,6 +10,12 @@ interface StatsHudProps {
   stats: TrackStats;
   /** Live wall-clock duration in seconds (ticks independently of GPS fixes). */
   elapsedS: number;
+  /**
+   * Instantaneous speed in m/s (see `@core/geo/track/liveSpeed`) — NOT
+   * `stats.avgSpeedMps`, which is a whole-session moving average and reads as
+   * "stuck" on a long recording.
+   */
+  liveSpeedMps: number;
   paused: boolean;
   /**
    * Live GPS signal quality. A warning chip shows for 'weak'/'lost' so a
@@ -18,16 +23,31 @@ interface StatsHudProps {
    * healthy one. Ignored while paused. Defaults to 'good' (no warning).
    */
   gpsQuality?: GpsQuality;
+  /** Collapsed pill (false) vs. full card (true) — controlled so RecordControls
+   * can lay its buttons out relative to the same state (item 3: expanded docks
+   * the HUD bottom-left with the controls stacked vertically to its right). */
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }
 
 /**
- * Recording HUD. Defaults to a compact left-aligned pill (rec dot + time +
- * distance) so it doesn't cover the map; tap the chevron to expand to the full
- * card (time, distance, speed, D+, D-, max alt) and tap again to collapse.
+ * Recording HUD. Collapsed (default): a compact left-aligned pill (rec dot +
+ * time + distance) so it doesn't cover the map. Expanded: a smaller card
+ * (time, distance, speed, D+, D-, max alt) docked bottom-left — the sibling
+ * RecordControls stacks its buttons vertically to its right in both states
+ * (see MapScreen). The chevron on the pill/card toggles between the two.
  */
-export function StatsHud({ name, stats, elapsedS, paused, gpsQuality = 'good' }: StatsHudProps) {
+export function StatsHud({
+  name,
+  stats,
+  elapsedS,
+  liveSpeedMps,
+  paused,
+  gpsQuality = 'good',
+  expanded,
+  onToggleExpanded,
+}: StatsHudProps) {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState(false);
 
   const statusMark = paused ? (
     <Text variant="labelSmall" style={{ color: theme.colors.tertiary }}>
@@ -57,7 +77,7 @@ export function StatsHud({ name, stats, elapsedS, paused, gpsQuality = 'good' }:
     return (
       <Surface style={styles.pill} elevation={4}>
         <TouchableRipple
-          onPress={() => setExpanded(true)}
+          onPress={onToggleExpanded}
           borderless
           accessibilityRole="button"
           accessibilityLabel="Expand recording stats"
@@ -82,28 +102,39 @@ export function StatsHud({ name, stats, elapsedS, paused, gpsQuality = 'good' }:
   return (
     <Surface style={styles.card} elevation={4}>
       <View style={styles.header}>
-        <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
+        <Text variant="labelLarge" numberOfLines={1} style={styles.title}>
           {name}
         </Text>
         {gpsWarn}
         {statusMark}
         <IconButton
           icon="chevron-down"
-          size={20}
-          onPress={() => setExpanded(false)}
+          size={16}
+          onPress={onToggleExpanded}
           style={styles.collapseBtn}
           accessibilityLabel="Collapse recording stats"
         />
       </View>
       <View style={styles.row}>
-        <StatTile label="Time" value={formatDuration(elapsedS)} />
-        <StatTile label="Distance" value={formatDistance(stats.distanceM)} />
-        <StatTile label="Speed" value={formatSpeed(stats.avgSpeedMps)} />
+        <StatTile compact label="Time" value={formatDuration(elapsedS)} />
+        <StatTile compact label="Distance" value={formatDistance(stats.distanceM)} />
+        <StatTile compact label="Speed" value={formatSpeed(liveSpeedMps)} />
       </View>
       <View style={styles.row}>
-        <StatTile label="D+" value={formatElevation(stats.ascentM)} color={theme.colors.primary} />
-        <StatTile label="D-" value={formatElevation(stats.descentM)} color={theme.colors.error} />
         <StatTile
+          compact
+          label="D+"
+          value={formatElevation(stats.ascentM)}
+          color={theme.colors.primary}
+        />
+        <StatTile
+          compact
+          label="D-"
+          value={formatElevation(stats.descentM)}
+          color={theme.colors.error}
+        />
+        <StatTile
+          compact
           label="Max alt"
           value={stats.maxAltitudeM !== undefined ? formatElevation(stats.maxAltitudeM) : '--'}
         />
@@ -132,19 +163,21 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
-  // Expanded full card — left-aligned, sized to content (not full width).
+  // Expanded card — item 3: smaller than before and docked bottom-left, with
+  // RecordControls' buttons stacked vertically to its right (see MapScreen).
   card: {
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 8,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 4,
     alignSelf: 'flex-start',
+    maxWidth: 200,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 4,
+    gap: 6,
+    paddingLeft: 2,
   },
   title: {
     flexShrink: 1,
@@ -152,6 +185,8 @@ const styles = StyleSheet.create({
   },
   collapseBtn: {
     margin: 0,
+    width: 24,
+    height: 24,
   },
   dot: {
     width: 10,
@@ -165,6 +200,6 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 18,
+    gap: 10,
   },
 });
