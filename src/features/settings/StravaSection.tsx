@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, List, Text } from 'react-native-paper';
 
 /**
- * Settings § Connections — connect/disconnect Strava. The OAuth browser
+ * Third-party sync § Strava — connect/disconnect Strava. The OAuth browser
  * round-trip and token storage live in `@lib/strava` / `@state/stravaStore`;
  * this section is just the rows. In builds without Strava API credentials the
  * row stays visible but disabled ("not configured in this build").
@@ -47,7 +47,7 @@ export function StravaSection({ showSnack }: { showSnack: (message: string) => v
 
   return (
     <List.Section>
-      <List.Subheader>Connections</List.Subheader>
+      <List.Subheader>Strava</List.Subheader>
       {connection ? (
         <List.Item
           title="Strava"

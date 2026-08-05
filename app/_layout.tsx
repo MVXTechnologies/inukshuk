@@ -66,6 +66,7 @@ export default function RootLayout() {
               >
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="trail3d/[id]" />
+                <Stack.Screen name="third-party" />
               </Stack>
               <ImportFeedbackSnackbar />
               <StravaPushPrompt />

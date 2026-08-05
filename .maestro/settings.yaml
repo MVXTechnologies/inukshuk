@@ -1,13 +1,15 @@
 # Settings walk e2e: scrolls the whole Settings screen and asserts every
 # recently-added surface is present — the Your data export row, the
-# Connections section (Strava, #132), and the Privacy section's automatic
-# error reporting + report queue rows (#110).
+# Connections section (Third-party sync hub: Strava #132, Garmin placeholder),
+# and the Privacy section's automatic error reporting + report queue rows
+# (#110).
 #
 # Deliberately does NOT tap "Download your data": it opens the OS share
 # sheet, which on Android can trap Maestro outside the app. Presence-only.
-# Same for the Strava row: without client credentials in the build it is
-# disabled with subtitle "Strava is not configured in this build" — both the
-# configured and unconfigured subtitles are accepted.
+# Same for the Strava row (on the Third-party sync page): without client
+# credentials in the build it is disabled with subtitle "Strava is not
+# configured in this build" — both the configured and unconfigured subtitles
+# are accepted.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -52,13 +54,26 @@ appId: com.inukshuk.app
     element:
       text: 'Download your data.*'
     direction: DOWN
-# Connections: the Strava row exists; unconfigured builds show a disabled
-# "Connect Strava" with the not-configured subtitle.
+# Connections: the Third-party sync row opens the hub page holding the Strava
+# rows (unconfigured builds show a disabled "Connect Strava" with the
+# not-configured subtitle) and the Garmin Connect placeholder. Walk in, assert
+# both services, and come back.
 - scrollUntilVisible:
     element:
-      text: '(Connect )?Strava.*'
+      text: 'Third-party sync.*'
     direction: DOWN
+- tapOn:
+    text: 'Third-party sync.*'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: '(Connect )?Strava.*'
+    timeout: 10000
 - assertVisible: '.*(Strava is not configured in this build|Ask to push saved trails to Strava|Connected).*'
+- assertVisible: 'Garmin Connect.*'
+- tapOn: 'Back'
+- extendedWaitUntil:
+    visible: 'Third-party sync.*'
+    timeout: 10000
 # Privacy: error reporting toggle + queue row (subtitle is dynamic — count or
 # "No pending reports", suffixed with channel/last-attempt info). Scroll until
 # the QUEUE row itself is visible: scrolling to the section title stops the

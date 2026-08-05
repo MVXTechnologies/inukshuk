@@ -13,6 +13,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import type { UiStyle } from '@ui/theme';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
@@ -33,7 +34,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exportAllData } from './exportAllData';
 import { OfflineMapsSection } from './OfflineMapsSection';
-import { StravaSection } from './StravaSection';
 
 const DISPLACEMENT_OPTIONS = [
   { value: '2', label: '2 m' },
@@ -84,6 +84,7 @@ function isValidTileUrl(url: string): boolean {
 }
 
 export function SettingsScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
@@ -338,7 +339,16 @@ export function SettingsScreen() {
 
         <Divider />
 
-        <StravaSection showSnack={showSnack} />
+        <List.Section>
+          <List.Subheader>Connections</List.Subheader>
+          <List.Item
+            title="Third-party sync"
+            description="Strava, Garmin Connect and other services"
+            onPress={() => router.push('/third-party')}
+            left={(p) => <List.Icon {...p} icon="sync" />}
+            right={(p) => <List.Icon {...p} icon="chevron-right" />}
+          />
+        </List.Section>
 
         <Divider />
 
