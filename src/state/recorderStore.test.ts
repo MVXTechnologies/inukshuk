@@ -1,4 +1,5 @@
 import type { TrackPoint } from '@core/models';
+import { computeTrackStats } from '@core/geo/track';
 import * as checkpoint from '@data/recorderCheckpoint';
 import { useLibraryStore } from './libraryStore';
 import {
@@ -130,6 +131,79 @@ describe('GPS fix gating in addPoint', () => {
     s.start('Second');
     expect(useRecorderStore.getState().lastFixAt).toBeNull();
     expect(useRecorderStore.getState().lastAccuracyM).toBeNull();
+  });
+});
+
+describe('live D+/D- accumulation (item 2 fix)', () => {
+  it('accumulates ascent live from many sub-3m-per-fix steps (car-ride altitude noise/grade)', () => {
+    // Simulate a car climbing a gentle grade at ~25 m/s (90 km/h, well under
+    // the 40 m/s gpsFilter cap): 1 fix/s, each only ~1 m higher than the
+    // last — comfortably under the 3 m hysteresis threshold per single fix,
+    // which is exactly the case the old per-step-only approximation dropped
+    // to zero. 20 fixes climbing 1 m each = 20 m of real, sustained gain.
+    const s = useRecorderStore.getState();
+    s.start('Drive');
+    let lat = 46.8;
+    let time = 1_000_000;
+    let altitude = 100;
+    s.addPoint(pt({ time, latitude: lat, altitude }));
+    for (let i = 0; i < 20; i++) {
+      time += 1000;
+      lat += 0.00025; // ~27.8 m/step, under the 40 m/s * 1 s = 40 m cap
+      altitude += 1;
+      s.addPoint(pt({ time, latitude: lat, altitude }));
+    }
+    const { stats, points } = useRecorderStore.getState();
+    expect(points).toHaveLength(21); // every fix accepted (GPS filter is fine — see item 2 report)
+    // The old per-step approximation would have committed 0 here (every
+    // single-fix delta is 1 m < 3 m threshold). The fix must commit most of
+    // the real 20 m climb, live.
+    expect(stats.ascentM).toBeGreaterThan(15);
+    expect(stats.descentM).toBe(0);
+  });
+
+  it('live ascentM/descentM exactly match the authoritative batch computation at every step', () => {
+    const s = useRecorderStore.getState();
+    s.start('Rolling hills');
+    const deltas = [1, 1, 1, -1, -1, -1, -1, 2, 2, 2, -3, -3];
+    let lat = 46.8;
+    let time = 1_000_000;
+    let altitude = 100;
+    s.addPoint(pt({ time, latitude: lat, altitude }));
+    const fed: ReturnType<typeof pt>[] = [pt({ time, latitude: lat, altitude })];
+    for (const d of deltas) {
+      time += 1000;
+      lat += 0.0001;
+      altitude += d;
+      const p = pt({ time, latitude: lat, altitude });
+      fed.push(p);
+      s.addPoint(p);
+      // Live accumulation must equal the batch recompute over every fix fed
+      // so far — not just at the end.
+      const live = useRecorderStore.getState().stats;
+      const batch = computeTrackStats(fed);
+      expect(live.ascentM).toBeCloseTo(batch.ascentM, 6);
+      expect(live.descentM).toBeCloseTo(batch.descentM, 6);
+    }
+  });
+
+  it('mergeBackgroundPoints resynchronizes the elevation accumulator so live accumulation stays correct afterward', () => {
+    const s = useRecorderStore.getState();
+    s.start('Backgrounded');
+    s.addPoint(pt({ time: 1_000_000, latitude: 46.8, altitude: 100 }));
+    // A batch of background-journaled points lands, folded via merge (not addPoint).
+    s.mergeBackgroundPoints([
+      pt({ time: 1_001_000, latitude: 46.8003, altitude: 101 }),
+      pt({ time: 1_002_000, latitude: 46.8006, altitude: 102 }),
+    ]);
+    // Continue live: one more sub-threshold step, then a step that finally
+    // crosses the 3 m threshold from the resynchronized reference.
+    s.addPoint(pt({ time: 1_003_000, latitude: 46.8009, altitude: 102.5 }));
+    s.addPoint(pt({ time: 1_004_000, latitude: 46.8012, altitude: 105 }));
+    const { stats, points } = useRecorderStore.getState();
+    const batch = computeTrackStats(points);
+    expect(stats.ascentM).toBeCloseTo(batch.ascentM, 6);
+    expect(stats.descentM).toBeCloseTo(batch.descentM, 6);
   });
 });
 

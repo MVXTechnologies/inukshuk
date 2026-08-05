@@ -10,6 +10,7 @@ import {
   isInsideBBox,
   isValidLngLat,
   padBBox,
+  unionBoundingBoxes,
 } from './geomath';
 
 describe('fitAffine / applyAffine', () => {
@@ -149,6 +150,38 @@ describe('bbox helpers', () => {
   it('padBBox expands symmetrically by a fraction', () => {
     const padded = padBBox({ minLat: 0, minLng: 0, maxLat: 10, maxLng: 20 }, 0.1);
     expect(padded).toEqual({ minLat: -1, minLng: -2, maxLat: 11, maxLng: 22 });
+  });
+});
+
+describe('unionBoundingBoxes', () => {
+  it('returns undefined for an empty list', () => {
+    expect(unionBoundingBoxes([])).toBeUndefined();
+  });
+
+  it('returns the box itself for a single input', () => {
+    const b = { minLat: 1, minLng: 2, maxLat: 3, maxLng: 4 };
+    expect(unionBoundingBoxes([b])).toEqual(b);
+  });
+
+  it('computes the smallest box containing all inputs (disjoint boxes)', () => {
+    const a = { minLat: 0, minLng: 0, maxLat: 1, maxLng: 1 };
+    const b = { minLat: 5, minLng: 5, maxLat: 6, maxLng: 6 };
+    expect(unionBoundingBoxes([a, b])).toEqual({ minLat: 0, minLng: 0, maxLat: 6, maxLng: 6 });
+  });
+
+  it('computes the union of overlapping boxes', () => {
+    const a = { minLat: 0, minLng: 0, maxLat: 5, maxLng: 5 };
+    const b = { minLat: 3, minLng: -2, maxLat: 8, maxLng: 4 };
+    expect(unionBoundingBoxes([a, b])).toEqual({ minLat: 0, minLng: -2, maxLat: 8, maxLng: 5 });
+  });
+
+  it('handles three or more boxes', () => {
+    const boxes = [
+      { minLat: 0, minLng: 0, maxLat: 1, maxLng: 1 },
+      { minLat: -3, minLng: 2, maxLat: 0.5, maxLng: 6 },
+      { minLat: 2, minLng: -1, maxLat: 4, maxLng: 0.5 },
+    ];
+    expect(unionBoundingBoxes(boxes)).toEqual({ minLat: -3, minLng: -1, maxLat: 4, maxLng: 6 });
   });
 });
 

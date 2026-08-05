@@ -2,6 +2,7 @@ import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
+import { padBBox, unionBoundingBoxes } from '@core/geo/geomath';
 import type { BoundingBox, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -272,6 +273,7 @@ export function MapScreen() {
     waypoints,
     elapsedS,
     gpsQuality,
+    liveSpeedMps,
     pause,
     resume,
     startRecording,
@@ -282,6 +284,11 @@ export function MapScreen() {
     bgRationaleVisible,
     respondToBgRationale,
   } = useRecordingSession({ showSnack });
+
+  // Collapsed pill / expanded card — shared between StatsHud and
+  // RecordControls (item 3: the buttons' row/column layout follows the same
+  // state as the stats HUD's own expand toggle).
+  const [hudExpanded, setHudExpanded] = useState(false);
 
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
@@ -413,6 +420,43 @@ export function MapScreen() {
     void cameraRef.current?.setStop({ center: prev.center, zoom: prev.zoom, duration: 600 });
   }, []);
 
+  // Item 5: when the heat-spot carousel OPENS, zoom the camera OUT to fit the
+  // union of every trail it's showing (not just the focused one) — capturing
+  // the pre-open camera first via the SAME restoreCameraRef mechanism the
+  // inspect-panel fit above uses, so the carousel's own onClose (which
+  // already calls restoreCameraOnDeselect) glides back to it with no further
+  // wiring. Keyed on heatSelection?.trackIds's REFERENCE — that array is
+  // reused as-is by onFocus (`{...cur, focusedIdx}`), so this only fires once
+  // per carousel "open", not on every focused-card swipe.
+  useEffect(() => {
+    if (!heatSelection) return;
+    const boxes = heatSelection.trackIds
+      .map((id) => tracks.find((t) => t.id === id)?.stats.bbox)
+      .filter((b): b is BoundingBox => b !== undefined);
+    const union = unionBoundingBoxes(boxes);
+    if (!union) return;
+    setFollowUser(false);
+    const bounds = toLngLatBounds(padBBox(union, 0.25));
+    // Right padding clears the carousel deck (168 px wide, right: 8).
+    const padding = { top: insets.top + 90, left: 40, right: 190, bottom: 80 };
+    const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
+    if (restoreCameraRef.current === null && mapLoaded) {
+      void mapRef.current
+        ?.getViewState()
+        .then((vs) => {
+          restoreCameraRef.current = { center: vs.center, zoom: vs.zoom };
+        })
+        .catch(() => {
+          // map mid-teardown — skip capturing; the close glide-back just
+          // won't fire this one time.
+        })
+        .finally(fit);
+    } else {
+      fit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heatSelection?.trackIds]);
+
   // "Record track" intercepts here: the category sheet opens first, and only
   // its Start button actually begins the recording (owner ask: pick an
   // activity category BEFORE recording starts).
@@ -530,6 +574,10 @@ export function MapScreen() {
   // at its bottom tip, so its badge sits ~BADGE_OFFSET px above the coordinate.
   const WAYPOINT_BADGE_OFFSET = 45;
   const WAYPOINT_HIT_PX = 60;
+  // Item 4: tapping the user's own position dot re-enables follow mode —
+  // same screen-projection hit-test idiom as the waypoint pins below, just
+  // against the single live location instead of a list of pins.
+  const USER_LOCATION_HIT_PX = 40;
   // Tap-routing priority (this handler, in order): waypoint pin hit → the
   // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
@@ -546,6 +594,30 @@ export function MapScreen() {
       const map = mapRef.current;
       if (!point || !map) return;
       const [px, py] = point;
+
+      // Item 4: the user-location dot wins over every other tap route
+      // (waypoint pins, heat lookup, deselect) — checked first, same
+      // screen-projection hit-test as the waypoint pins below. Only while
+      // follow is OFF: that's the only state where re-engaging follow does
+      // anything (the reported ask — tap the dot to resume following after
+      // panning away). While already following, the dot sits pinned at the
+      // camera centre, so letting this route win there would permanently
+      // swallow every centre tap — including hot-spot taps on a trail the
+      // user is standing on (it broke exactly that in heatmap.yaml).
+      // Fresh-read via getState(): follow can flip between renders (Locate,
+      // pan-away) and a stale closure here would misroute the very next tap.
+      if (location && !useMapStore.getState().followUser) {
+        try {
+          const userPx = await map.project([location.longitude, location.latitude]);
+          if (userPx && Math.hypot(px - userPx[0], py - userPx[1]) < USER_LOCATION_HIT_PX) {
+            setFollowUser(true);
+            return;
+          }
+        } catch {
+          return; // projection unavailable mid-teardown — ignore the tap
+        }
+      }
+
       let best: (typeof visiblePins)[number] | null = null;
       if (visiblePins.length > 0) {
         let bestD = WAYPOINT_HIT_PX;
@@ -615,7 +687,15 @@ export function MapScreen() {
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
     },
-    [visiblePins, trackHeat, inspect, showTrackOverlays, restoreCameraOnDeselect],
+    [
+      visiblePins,
+      trackHeat,
+      inspect,
+      showTrackOverlays,
+      restoreCameraOnDeselect,
+      location,
+      setFollowUser,
+    ],
   );
 
   const trailFeature = useThrottledLineFeature(points);
@@ -1122,35 +1202,42 @@ export function MapScreen() {
         </Banner>
       )}
 
-      {/* Bottom HUD + controls */}
+      {/* Bottom HUD + controls. Item 3: a single row so the stats HUD and the
+          three record buttons share one layout — collapsed centers the
+          (small) pill against the (bigger) icon buttons so they pop slightly
+          out of the bar; expanded bottom-aligns the smaller card on the left
+          against the buttons stacked vertically to its right. */}
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
-        {!selecting && (
-          <>
-            {status !== 'idle' && (
-              <StatsHud
-                name={name}
-                stats={stats}
-                elapsedS={elapsedS}
-                paused={status === 'paused'}
-                gpsQuality={gpsQuality}
-              />
-            )}
-            <View style={styles.controlsRow} pointerEvents="box-none">
-              <RecordControls
-                status={status}
-                onPause={pause}
-                onResume={resume}
-                onStop={handleStop}
-                onWaypoint={() => {
-                  const n = addWaypoint();
-                  if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
-                  else showSnack('Waiting for a GPS fix before dropping a waypoint');
-                }}
-              />
-            </View>
-          </>
+        {!selecting && status !== 'idle' && (
+          <View
+            style={hudExpanded ? styles.recordingBarExpanded : styles.recordingBarCollapsed}
+            pointerEvents="box-none"
+          >
+            <StatsHud
+              name={name}
+              stats={stats}
+              elapsedS={elapsedS}
+              liveSpeedMps={liveSpeedMps}
+              paused={status === 'paused'}
+              gpsQuality={gpsQuality}
+              expanded={hudExpanded}
+              onToggleExpanded={() => setHudExpanded((e) => !e)}
+            />
+            <RecordControls
+              status={status}
+              expanded={hudExpanded}
+              onPause={pause}
+              onResume={resume}
+              onStop={handleStop}
+              onWaypoint={() => {
+                const n = addWaypoint();
+                if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
+                else showSnack('Waiting for a GPS fix before dropping a waypoint');
+              }}
+            />
+          </View>
         )}
       </View>
 
@@ -1320,5 +1407,10 @@ const styles = StyleSheet.create({
   topLeft: { position: 'absolute', left: 12 },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
   bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 14 },
-  controlsRow: { alignItems: 'center' },
+  // Collapsed: center-align the pill against the (bigger) icon buttons so
+  // they visibly pop out of the bar (item 3).
+  recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // Expanded: bottom-align the (smaller) card on the left against the
+  // buttons stacked vertically to its right (item 3).
+  recordingBarExpanded: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
 });

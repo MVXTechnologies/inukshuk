@@ -242,3 +242,23 @@ export function padBBox(b: BoundingBox, fraction: number): BoundingBox {
     maxLng: b.maxLng + dLng,
   };
 }
+
+/**
+ * The smallest bbox containing every input bbox — e.g. "fit the camera to
+ * every trail in the open carousel" needs one bounds spanning all of them,
+ * not just the focused one.
+ */
+export function unionBoundingBoxes(boxes: readonly BoundingBox[]): BoundingBox | undefined {
+  if (boxes.length === 0) return undefined;
+  let minLat = Infinity;
+  let minLng = Infinity;
+  let maxLat = -Infinity;
+  let maxLng = -Infinity;
+  for (const b of boxes) {
+    if (b.minLat < minLat) minLat = b.minLat;
+    if (b.minLng < minLng) minLng = b.minLng;
+    if (b.maxLat > maxLat) maxLat = b.maxLat;
+    if (b.maxLng > maxLng) maxLng = b.maxLng;
+  }
+  return { minLat, minLng, maxLat, maxLng };
+}
