@@ -597,8 +597,16 @@ export function MapScreen() {
 
       // Item 4: the user-location dot wins over every other tap route
       // (waypoint pins, heat lookup, deselect) — checked first, same
-      // screen-projection hit-test as the waypoint pins below.
-      if (location) {
+      // screen-projection hit-test as the waypoint pins below. Only while
+      // follow is OFF: that's the only state where re-engaging follow does
+      // anything (the reported ask — tap the dot to resume following after
+      // panning away). While already following, the dot sits pinned at the
+      // camera centre, so letting this route win there would permanently
+      // swallow every centre tap — including hot-spot taps on a trail the
+      // user is standing on (it broke exactly that in heatmap.yaml).
+      // Fresh-read via getState(): follow can flip between renders (Locate,
+      // pan-away) and a stale closure here would misroute the very next tap.
+      if (location && !useMapStore.getState().followUser) {
         try {
           const userPx = await map.project([location.longitude, location.latitude]);
           if (userPx && Math.hypot(px - userPx[0], py - userPx[1]) < USER_LOCATION_HIT_PX) {
