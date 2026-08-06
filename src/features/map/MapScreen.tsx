@@ -581,7 +581,8 @@ export function MapScreen() {
   // Tap-routing priority (this handler, in order): waypoint pin hit → the
   // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
-  // opens the inspect panel, and an empty spot deselects both.
+  // opens the inspect panel; else the user-location dot (re-engage follow,
+  // item 4 — deliberately LAST, see tapHitsUserDot below); else deselect.
   //
   // The event's real (runtime + typings) shape is `nativeEvent: { lngLat:
   // [lng, lat]; point: [x, y]; ... }` — flat tuples, NOT the GeoJSON
@@ -595,28 +596,29 @@ export function MapScreen() {
       if (!point || !map) return;
       const [px, py] = point;
 
-      // Item 4: the user-location dot wins over every other tap route
-      // (waypoint pins, heat lookup, deselect) — checked first, same
-      // screen-projection hit-test as the waypoint pins below. Only while
-      // follow is OFF: that's the only state where re-engaging follow does
-      // anything (the reported ask — tap the dot to resume following after
-      // panning away). While already following, the dot sits pinned at the
-      // camera centre, so letting this route win there would permanently
-      // swallow every centre tap — including hot-spot taps on a trail the
-      // user is standing on (it broke exactly that in heatmap.yaml).
-      // Fresh-read via getState(): follow can flip between renders (Locate,
-      // pan-away) and a stale closure here would misroute the very next tap.
-      if (location && !useMapStore.getState().followUser) {
+      // Item 4, demoted to the LOWEST tap priority (2026-08-06 field
+      // regression): the user-location dot re-engages follow ONLY when the
+      // tap hits nothing else — waypoint pins, hot spots and single-trail
+      // taps all win over it. On a real library every activity starts and
+      // ends at the user's usual spot, so the hottest heat cluster sits
+      // exactly under the dot; with the dot checked FIRST, tapping that
+      // cluster silently flipped follow on and the carousel never opened
+      // ("clickability of the heatmap/trace does not work anymore", 1.5.0).
+      // Only while follow is OFF — while following, the dot is pinned at
+      // the camera centre and the route is meaningless. Fresh-read via
+      // getState(): follow can flip between renders (Locate, pan-away) and
+      // a stale closure here would misroute the very next tap.
+      const tapHitsUserDot = async (): Promise<boolean> => {
+        if (!location || useMapStore.getState().followUser) return false;
         try {
           const userPx = await map.project([location.longitude, location.latitude]);
-          if (userPx && Math.hypot(px - userPx[0], py - userPx[1]) < USER_LOCATION_HIT_PX) {
-            setFollowUser(true);
-            return;
-          }
+          return (
+            userPx != null && Math.hypot(px - userPx[0], py - userPx[1]) < USER_LOCATION_HIT_PX
+          );
         } catch {
-          return; // projection unavailable mid-teardown — ignore the tap
+          return false; // projection unavailable mid-teardown — no dot hit
         }
-      }
+      };
 
       let best: (typeof visiblePins)[number] | null = null;
       if (visiblePins.length > 0) {
@@ -677,6 +679,14 @@ export function MapScreen() {
         setHeatSelection(null); // a single-trail tap hides the carousel
         inspect(at.trackIds[0] ?? null);
       } else {
+        // Nothing else claimed the tap — the dot route gets its turn now
+        // (item 4: tap your own position dot to resume following after
+        // panning away). Checked last so it can never steal a heat-spot,
+        // trail or waypoint tap that happens to sit under the dot.
+        if (await tapHitsUserDot()) {
+          setFollowUser(true);
+          return;
+        }
         // Empty/cold tap: deselect both the carousel and any open inspect
         // panel (item 7 — tapping empty map while a trail is selected
         // deselects it, same as tapping empty space anywhere else), and
