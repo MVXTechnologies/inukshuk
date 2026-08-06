@@ -40,9 +40,9 @@ Inukshuk only uses your location while the app is open and on screen — nothing
 HELP SHAPE IT
 
 Inukshuk gets better when its community speaks up. Propose a feature, pitch a plugin idea, report a bug, or contribute code on GitHub:
-https://github.com/marcandrevigneault/inukshuk
+https://github.com/MVXTechnologies/inukshuk
 
-Learn more: https://marcandrevigneault.github.io/inukshuk/
-Privacy policy: https://marcandrevigneault.github.io/inukshuk/privacy/
+Learn more: https://inukshuk.mvxtechnologies.com/
+Privacy policy: https://inukshuk.mvxtechnologies.com/privacy/
 
 Your maps. Your trails. Off the grid.

@@ -56,7 +56,7 @@ import {
  */
 
 /** Issues repo receiving the reports. */
-export const ERROR_REPORT_REPO = 'marcandrevigneault/inukshuk';
+export const ERROR_REPORT_REPO = 'MVXTechnologies/inukshuk';
 
 const MAX_BREADCRUMBS = 20;
 

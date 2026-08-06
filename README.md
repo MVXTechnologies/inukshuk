@@ -1,6 +1,6 @@
 # Inukshuk
 
-**Website: [marcandrevigneault.github.io/inukshuk](https://marcandrevigneault.github.io/inukshuk/)**
+**Website: [inukshuk.mvxtechnologies.com](https://inukshuk.mvxtechnologies.com/)**
 
 **Offline trail navigation with georeferenced PDF maps.** Load a georeferenced
 PDF (topo map, trail map, orienteering map), see your live GPS position on it,
