@@ -125,7 +125,7 @@ shown. Pick **one** of the two channels below.
 Create a **fine-grained personal access token** at _github.com → Settings →
 Developer settings → Personal access tokens → Fine-grained tokens_ with:
 
-- **Repository access**: only `marcandrevigneault/inukshuk`
+- **Repository access**: only `MVXTechnologies/inukshuk`
 - **Repository permissions**: `Issues` → **Read and write** (nothing else)
 
 Then register it as an EAS environment variable, so builds pick it up:

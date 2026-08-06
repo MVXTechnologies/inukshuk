@@ -16,7 +16,7 @@ const TIMEOUT_MS = 5_000;
 // Nominatim's usage policy requires an identifiable User-Agent with a way to
 // reach the operator (https://operations.osmfoundation.org/policies/nominatim/).
 const NOMINATIM_USER_AGENT =
-  'Inukshuk-TrailApp/1.0 (offline trail navigation app; https://github.com/marcandrevigneault/inukshuk)';
+  'Inukshuk-TrailApp/1.0 (offline trail navigation app; https://github.com/MVXTechnologies/inukshuk)';
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
