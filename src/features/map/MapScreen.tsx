@@ -2,7 +2,7 @@ import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
-import { padBBox, unionBoundingBoxes } from '@core/geo/geomath';
+import { unionBoundingBoxes } from '@core/geo/geomath';
 import type { BoundingBox, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -436,9 +436,13 @@ export function MapScreen() {
     const union = unionBoundingBoxes(boxes);
     if (!union) return;
     setFollowUser(false);
-    const bounds = toLngLatBounds(padBBox(union, 0.25));
-    // Right padding clears the carousel deck (168 px wide, right: 8).
-    const padding = { top: insets.top + 90, left: 40, right: 190, bottom: 80 };
+    // Border-to-border on purpose (owner feedback 2026-08-06: the 25% bbox
+    // inflation + deck-clearing margins landed way too zoomed out): fit the
+    // union bbox itself, with just enough pixel padding that the trail's
+    // line width and end markers aren't clipped by the very edge — the
+    // carousel deck overlapping a corner of the fit is accepted.
+    const bounds = toLngLatBounds(union);
+    const padding = { top: insets.top + 16, left: 16, right: 16, bottom: 16 };
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
     if (restoreCameraRef.current === null && mapLoaded) {
       void mapRef.current
