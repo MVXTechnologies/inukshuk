@@ -37,6 +37,21 @@ Ordered roughly by priority (top = next).
    is fine. A border-to-border fit shipped via OTA on 2026-08-07 — re-test
    after two app restarts before more tuning.
 
+## Larger initiatives (need a planning session each)
+
+- **Profiles + paid cloud sync ($2.99/mo)** — accounts with profile image,
+  email, etc.; traces + trail photos synced across devices; backend on the
+  owner's NAS. The app stays free; cloud sync is the paid tier. Note: Apple
+  and Google both require in-app purchase for digital subscriptions (their
+  15-30% cut applies) — pricing/billing architecture must account for that.
+- **Map & trail search / store (Avenza-style)** — a bottom "Search" tab: a
+  centralized catalog of free maps and charts by category (parks, forest,
+  hunting, topo, touristic, nautical charts, geological, aerial, river runs
+  with rapid classes R1-R3...), searchable; download straight into the
+  Library choosing the destination folder, rendered like any imported map.
+- **Nautical + meteo** — nautical charts and weather integration (owner:
+  "would make the app extremely complete"). Scope TBD.
+
 ## On ice
 
 - **Garmin Connect sync + third-party hub** — Garmin's developer program is
