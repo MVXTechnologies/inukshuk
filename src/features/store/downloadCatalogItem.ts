@@ -62,7 +62,10 @@ export async function downloadCatalogItemToLibrary(
       throw err;
     }
     if (doc.georeferences.length === 0) {
-      reportError(new Error('catalog map parsed with no georeference'), `catalog-georef ${item.id}`);
+      reportError(
+        new Error('catalog map parsed with no georeference'),
+        `catalog-georef ${item.id}`,
+      );
     }
 
     const provenance = {

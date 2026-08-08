@@ -33,10 +33,7 @@ function isNewerDate(a: string | undefined, b: string | undefined): boolean {
  * downloaded before revisions were tracked (no `sourceUpdatedAt`) stays plain
  * `installed` rather than nagging for a re-download.
  */
-export function installStatusFor(
-  item: CatalogItem,
-  maps: readonly MapDocument[],
-): InstallStatus {
+export function installStatusFor(item: CatalogItem, maps: readonly MapDocument[]): InstallStatus {
   const installed = findInstalledMap(maps, item.id);
   if (installed === undefined) return 'not-installed';
   return isNewerDate(installed.sourceUpdatedAt, item.updatedAt) ? 'update-available' : 'installed';

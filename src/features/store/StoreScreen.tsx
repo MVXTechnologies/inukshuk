@@ -1,7 +1,4 @@
-import {
-  categoriesPresent,
-  filterCatalogItems,
-} from '@core/catalog/filterCatalog';
+import { categoriesPresent, filterCatalogItems } from '@core/catalog/filterCatalog';
 import { installStatusFor, type InstallStatus } from '@core/catalog/installStatus';
 import {
   CATALOG_CATEGORIES,

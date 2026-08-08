@@ -11,7 +11,8 @@
  *
  * Used by the catalog generator to derive each CanTopo sheet's WGS84 bbox from
  * its id alone (the NRCan file tree carries no extents), and unit-tested here
- * so the manifest's bboxes are trustworthy.
+ * so the manifest's bboxes are trustworthy. Sheets north of 60°N (quad rows
+ * ≥ 5) are out of model — see the guard in {@link parseNtsSheetId}.
  */
 
 export interface NtsSheet {
@@ -41,9 +42,12 @@ export function parseNtsSheetId(id: string): NtsSheet | null {
   if (number < 1 || number > 16) return null;
   const col = Math.floor(quad / 10);
   const row = quad % 10;
-  // Row 0 does not exist; rows above 7 (≥68°N) use wider quads this math
-  // doesn't model; columns beyond 11 fall off the west coast.
-  if (row < 1 || row > 7 || col > 11) return null;
+  // Row 0 does not exist. Rows above 4 reach past 60°N, where the NTS grid
+  // stops being regular (1:50k sheets double in width above 62°N, primary
+  // quads above 68°N) — this math models only the regular southern zone, so
+  // anything else is null rather than a wrong bbox. Columns beyond 11 fall
+  // off the west coast.
+  if (row < 1 || row > 4 || col > 11) return null;
   return { quad, letter, number };
 }
 

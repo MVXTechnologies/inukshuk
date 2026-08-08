@@ -9,10 +9,7 @@ import type { CatalogCategory, CatalogItem } from './schema';
 /** Lowercase and strip combining diacritics ("Rivière" → "riviere"). */
 export function foldText(text: string): string {
   // NFD splits accented letters into base + combining marks (U+0300–U+036F).
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
 export interface CatalogFilter {

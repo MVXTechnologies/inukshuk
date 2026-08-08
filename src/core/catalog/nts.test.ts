@@ -13,6 +13,7 @@ describe('parseNtsSheetId', () => {
     expect(parseNtsSheetId('021L00')).toBeNull();
     expect(parseNtsSheetId('021Q14')).toBeNull(); // letters stop at P
     expect(parseNtsSheetId('020L14')).toBeNull(); // row 0 does not exist
+    expect(parseNtsSheetId('025A01')).toBeNull(); // ≥60°N: high-latitude belts unmodelled
     expect(parseNtsSheetId('028L14')).toBeNull(); // ≥68°N uses wider quads
     expect(parseNtsSheetId('not-a-sheet')).toBeNull();
   });

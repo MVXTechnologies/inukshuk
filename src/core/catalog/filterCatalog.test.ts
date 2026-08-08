@@ -6,7 +6,11 @@ import {
 } from './filterCatalog';
 import { CATALOG_CATEGORIES, type CatalogItem } from './schema';
 
-const mk = (id: string, title: string, category: CatalogItem['category'] = 'topo'): CatalogItem => ({
+const mk = (
+  id: string,
+  title: string,
+  category: CatalogItem['category'] = 'topo',
+): CatalogItem => ({
   id,
   sourceId: 'src',
   title,
