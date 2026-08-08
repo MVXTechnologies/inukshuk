@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-08T21:25:58.981Z",
+  "generatedAt": "2026-08-08T21:28:26.711Z",
   "sources": [
     {
       "id": "nrcan-cantopo",
@@ -16,7 +16,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bridgewater — CanTopo 021A07",
       "category": "topo",
-      "bbox": [-65, 44.25, -64.5, 44.5],
+      "bbox": [
+        -65,
+        44.25,
+        -64.5,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/a/cantopo_021a07_geopdf.zip",
@@ -29,7 +34,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Chester — CanTopo 021A09",
       "category": "topo",
-      "bbox": [-64.5, 44.5, -64, 44.75],
+      "bbox": [
+        -64.5,
+        44.5,
+        -64,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/a/cantopo_021a09_geopdf.zip",
@@ -42,7 +52,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Granville Ferry — CanTopo 021A13",
       "category": "topo",
-      "bbox": [-66, 44.75, -65.5, 45],
+      "bbox": [
+        -66,
+        44.75,
+        -65.5,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/a/cantopo_021a13_geopdf.zip",
@@ -55,7 +70,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Windsor — CanTopo 021A16",
       "category": "topo",
-      "bbox": [-64.5, 44.75, -64, 45],
+      "bbox": [
+        -64.5,
+        44.75,
+        -64,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/a/cantopo_021a16_geopdf.zip",
@@ -68,7 +88,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Musquash — CanTopo 021G01",
       "category": "topo",
-      "bbox": [-66.5, 45, -66, 45.25],
+      "bbox": [
+        -66.5,
+        45,
+        -66,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g01_geopdf.zip",
@@ -81,7 +106,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "St. George — CanTopo 021G02",
       "category": "topo",
-      "bbox": [-67, 45, -66.5, 45.25],
+      "bbox": [
+        -67,
+        45,
+        -66.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g02_geopdf.zip",
@@ -94,7 +124,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "St. Stephen — CanTopo 021G03",
       "category": "topo",
-      "bbox": [-67.5, 45, -67, 45.25],
+      "bbox": [
+        -67.5,
+        45,
+        -67,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g03_geopdf.zip",
@@ -107,7 +142,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Mcdougall Lake — CanTopo 021G07",
       "category": "topo",
-      "bbox": [-67, 45.25, -66.5, 45.5],
+      "bbox": [
+        -67,
+        45.25,
+        -66.5,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g07_geopdf.zip",
@@ -120,7 +160,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Hampstead — CanTopo 021G09",
       "category": "topo",
-      "bbox": [-66.5, 45.5, -66, 45.75],
+      "bbox": [
+        -66.5,
+        45.5,
+        -66,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g09_geopdf.zip",
@@ -133,7 +178,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Fredericton Junction — CanTopo 021G10",
       "category": "topo",
-      "bbox": [-67, 45.5, -66.5, 45.75],
+      "bbox": [
+        -67,
+        45.5,
+        -66.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g10_geopdf.zip",
@@ -146,7 +196,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Mcadam — CanTopo 021G11",
       "category": "topo",
-      "bbox": [-67.5, 45.5, -67, 45.75],
+      "bbox": [
+        -67.5,
+        45.5,
+        -67,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g11_geopdf.zip",
@@ -159,7 +214,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Canterbury — CanTopo 021G14",
       "category": "topo",
-      "bbox": [-67.5, 45.75, -67, 46],
+      "bbox": [
+        -67.5,
+        45.75,
+        -67,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g14_geopdf.zip",
@@ -172,7 +232,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Fredericton — CanTopo 021G15",
       "category": "topo",
-      "bbox": [-67, 45.75, -66.5, 46],
+      "bbox": [
+        -67,
+        45.75,
+        -66.5,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g15_geopdf.zip",
@@ -185,7 +250,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Grand Lake — CanTopo 021G16",
       "category": "topo",
-      "bbox": [-66.5, 45.75, -66, 46],
+      "bbox": [
+        -66.5,
+        45.75,
+        -66,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/g/cantopo_021g16_geopdf.zip",
@@ -198,7 +268,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Wolfville — CanTopo 021H01",
       "category": "topo",
-      "bbox": [-64.5, 45, -64, 45.25],
+      "bbox": [
+        -64.5,
+        45,
+        -64,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h01_geopdf.zip",
@@ -211,7 +286,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Berwick — CanTopo 021H02",
       "category": "topo",
-      "bbox": [-65, 45, -64.5, 45.25],
+      "bbox": [
+        -65,
+        45,
+        -64.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h02_geopdf.zip",
@@ -224,7 +304,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Salmon River — CanTopo 021H06",
       "category": "topo",
-      "bbox": [-65.5, 45.25, -65, 45.5],
+      "bbox": [
+        -65.5,
+        45.25,
+        -65,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h06_geopdf.zip",
@@ -237,7 +322,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Parrsboro — CanTopo 021H08",
       "category": "topo",
-      "bbox": [-64.5, 45.25, -64, 45.5],
+      "bbox": [
+        -64.5,
+        45.25,
+        -64,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h08_geopdf.zip",
@@ -250,7 +340,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Springhill — CanTopo 021H09",
       "category": "topo",
-      "bbox": [-64.5, 45.5, -64, 45.75],
+      "bbox": [
+        -64.5,
+        45.5,
+        -64,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h09_geopdf.zip",
@@ -263,7 +358,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Alma — CanTopo 021H10",
       "category": "topo",
-      "bbox": [-65, 45.5, -64.5, 45.75],
+      "bbox": [
+        -65,
+        45.5,
+        -64.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h10_geopdf.zip",
@@ -276,7 +376,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Waterford — CanTopo 021H11",
       "category": "topo",
-      "bbox": [-65.5, 45.5, -65, 45.75],
+      "bbox": [
+        -65.5,
+        45.5,
+        -65,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h11_geopdf.zip",
@@ -289,7 +394,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Sussex — CanTopo 021H12",
       "category": "topo",
-      "bbox": [-66, 45.5, -65.5, 45.75],
+      "bbox": [
+        -66,
+        45.5,
+        -65.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h12_geopdf.zip",
@@ -302,7 +412,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Codys — CanTopo 021H13",
       "category": "topo",
-      "bbox": [-66, 45.75, -65.5, 46],
+      "bbox": [
+        -66,
+        45.75,
+        -65.5,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h13_geopdf.zip",
@@ -315,7 +430,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Petitcodiac — CanTopo 021H14",
       "category": "topo",
-      "bbox": [-65.5, 45.75, -65, 46],
+      "bbox": [
+        -65.5,
+        45.75,
+        -65,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h14_geopdf.zip",
@@ -328,7 +448,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Hillsborough — CanTopo 021H15",
       "category": "topo",
-      "bbox": [-65, 45.75, -64.5, 46],
+      "bbox": [
+        -65,
+        45.75,
+        -64.5,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h15_geopdf.zip",
@@ -341,7 +466,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Amherst — CanTopo 021H16",
       "category": "topo",
-      "bbox": [-64.5, 45.75, -64, 46],
+      "bbox": [
+        -64.5,
+        45.75,
+        -64,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/h/cantopo_021h16_geopdf.zip",
@@ -354,7 +484,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Port Elgin — CanTopo 021I01",
       "category": "topo",
-      "bbox": [-64.5, 46, -64, 46.25],
+      "bbox": [
+        -64.5,
+        46,
+        -64,
+        46.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/i/cantopo_021i01_geopdf.zip",
@@ -367,7 +502,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Salisbury — CanTopo 021I03",
       "category": "topo",
-      "bbox": [-65.5, 46, -65, 46.25],
+      "bbox": [
+        -65.5,
+        46,
+        -65,
+        46.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/i/cantopo_021i03_geopdf.zip",
@@ -380,7 +520,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Richibucto — CanTopo 021I10",
       "category": "topo",
-      "bbox": [-65, 46.5, -64.5, 46.75],
+      "bbox": [
+        -65,
+        46.5,
+        -64.5,
+        46.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/i/cantopo_021i10_geopdf.zip",
@@ -393,7 +538,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Minto — CanTopo 021J01",
       "category": "topo",
-      "bbox": [-66.5, 46, -66, 46.25],
+      "bbox": [
+        -66.5,
+        46,
+        -66,
+        46.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/j/cantopo_021j01_geopdf.zip",
@@ -406,7 +556,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Chatham — CanTopo 021P03",
       "category": "topo",
-      "bbox": [-65.5, 47, -65, 47.25],
+      "bbox": [
+        -65.5,
+        47,
+        -65,
+        47.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/021/p/cantopo_021p03_geopdf.zip",
@@ -419,7 +574,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Sentinel Reef — CanTopo 024N07",
       "category": "topo",
-      "bbox": [-69, 59.25, -68.5, 59.5],
+      "bbox": [
+        -69,
+        59.25,
+        -68.5,
+        59.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/024/n/cantopo_024n07_geopdf.zip",
@@ -432,7 +592,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Ningiuluit Islands — CanTopo 024O01",
       "category": "topo",
-      "bbox": [-66.5, 59, -66, 59.25],
+      "bbox": [
+        -66.5,
+        59,
+        -66,
+        59.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/024/o/cantopo_024o01_geopdf.zip",
@@ -445,7 +610,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Mallorytown — CanTopo 031B05",
       "category": "topo",
-      "bbox": [-76, 44.25, -75.5, 44.5],
+      "bbox": [
+        -76,
+        44.25,
+        -75.5,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/b/cantopo_031b05_geopdf.zip",
@@ -458,7 +628,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Brockville — CanTopo 031B12",
       "category": "topo",
-      "bbox": [-76, 44.5, -75.5, 44.75],
+      "bbox": [
+        -76,
+        44.5,
+        -75.5,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/b/cantopo_031b12_geopdf.zip",
@@ -471,7 +646,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Merrickville — CanTopo 031B13",
       "category": "topo",
-      "bbox": [-76, 44.75, -75.5, 45],
+      "bbox": [
+        -76,
+        44.75,
+        -75.5,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/b/cantopo_031b13_geopdf.zip",
@@ -484,7 +664,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Wolfe Island — CanTopo 031C01",
       "category": "topo",
-      "bbox": [-76.5, 44, -76, 44.25],
+      "bbox": [
+        -76.5,
+        44,
+        -76,
+        44.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c01_geopdf.zip",
@@ -497,7 +682,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bath — CanTopo 031C02",
       "category": "topo",
-      "bbox": [-77, 44, -76.5, 44.25],
+      "bbox": [
+        -77,
+        44,
+        -76.5,
+        44.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c02_geopdf.zip",
@@ -510,7 +700,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Belleville — CanTopo 031C03",
       "category": "topo",
-      "bbox": [-77.5, 44, -77, 44.25],
+      "bbox": [
+        -77.5,
+        44,
+        -77,
+        44.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c03_geopdf.zip",
@@ -523,7 +718,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Tweed — CanTopo 031C06",
       "category": "topo",
-      "bbox": [-77.5, 44.25, -77, 44.5],
+      "bbox": [
+        -77.5,
+        44.25,
+        -77,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c06_geopdf.zip",
@@ -536,7 +736,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Sydenham — CanTopo 031C07",
       "category": "topo",
-      "bbox": [-77, 44.25, -76.5, 44.5],
+      "bbox": [
+        -77,
+        44.25,
+        -76.5,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c07_geopdf.zip",
@@ -549,7 +754,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Gananoque — CanTopo 031C08",
       "category": "topo",
-      "bbox": [-76.5, 44.25, -76, 44.5],
+      "bbox": [
+        -76.5,
+        44.25,
+        -76,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c08_geopdf.zip",
@@ -562,7 +772,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Westport — CanTopo 031C09",
       "category": "topo",
-      "bbox": [-76.5, 44.5, -76, 44.75],
+      "bbox": [
+        -76.5,
+        44.5,
+        -76,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c09_geopdf.zip",
@@ -575,7 +790,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Tichborne — CanTopo 031C10",
       "category": "topo",
-      "bbox": [-77, 44.5, -76.5, 44.75],
+      "bbox": [
+        -77,
+        44.5,
+        -76.5,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c10_geopdf.zip",
@@ -588,7 +808,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Kaladar — CanTopo 031C11",
       "category": "topo",
-      "bbox": [-77.5, 44.5, -77, 44.75],
+      "bbox": [
+        -77.5,
+        44.5,
+        -77,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c11_geopdf.zip",
@@ -601,7 +826,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bannockburn — CanTopo 031C12",
       "category": "topo",
-      "bbox": [-78, 44.5, -77.5, 44.75],
+      "bbox": [
+        -78,
+        44.5,
+        -77.5,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c12_geopdf.zip",
@@ -614,7 +844,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Coe Hill — CanTopo 031C13",
       "category": "topo",
-      "bbox": [-78, 44.75, -77.5, 45],
+      "bbox": [
+        -78,
+        44.75,
+        -77.5,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c13_geopdf.zip",
@@ -627,7 +862,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bon Echo — CanTopo 031C14",
       "category": "topo",
-      "bbox": [-77.5, 44.75, -77, 45],
+      "bbox": [
+        -77.5,
+        44.75,
+        -77,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c14_geopdf.zip",
@@ -640,7 +880,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Sharbot Lake — CanTopo 031C15",
       "category": "topo",
-      "bbox": [-77, 44.75, -76.5, 45],
+      "bbox": [
+        -77,
+        44.75,
+        -76.5,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c15_geopdf.zip",
@@ -653,7 +898,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Perth — CanTopo 031C16",
       "category": "topo",
-      "bbox": [-76.5, 44.75, -76, 45],
+      "bbox": [
+        -76.5,
+        44.75,
+        -76,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/c/cantopo_031c16_geopdf.zip",
@@ -666,7 +916,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Rice Lake — CanTopo 031D01",
       "category": "topo",
-      "bbox": [-78.5, 44, -78, 44.25],
+      "bbox": [
+        -78.5,
+        44,
+        -78,
+        44.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d01_geopdf.zip",
@@ -679,7 +934,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Barrie — CanTopo 031D05",
       "category": "topo",
-      "bbox": [-80, 44.25, -79.5, 44.5],
+      "bbox": [
+        -80,
+        44.25,
+        -79.5,
+        44.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d05_geopdf.zip",
@@ -692,7 +952,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Fenelon Falls — CanTopo 031D10",
       "category": "topo",
-      "bbox": [-79, 44.5, -78.5, 44.75],
+      "bbox": [
+        -79,
+        44.5,
+        -78.5,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d10_geopdf.zip",
@@ -705,7 +970,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Orillia — CanTopo 031D11",
       "category": "topo",
-      "bbox": [-79.5, 44.5, -79, 44.75],
+      "bbox": [
+        -79.5,
+        44.5,
+        -79,
+        44.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d11_geopdf.zip",
@@ -718,7 +988,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Gravenhurst — CanTopo 031D14",
       "category": "topo",
-      "bbox": [-79.5, 44.75, -79, 45],
+      "bbox": [
+        -79.5,
+        44.75,
+        -79,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d14_geopdf.zip",
@@ -731,7 +1006,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Minden — CanTopo 031D15",
       "category": "topo",
-      "bbox": [-79, 44.75, -78.5, 45],
+      "bbox": [
+        -79,
+        44.75,
+        -78.5,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d15_geopdf.zip",
@@ -744,7 +1024,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Gooderham — CanTopo 031D16",
       "category": "topo",
-      "bbox": [-78.5, 44.75, -78, 45],
+      "bbox": [
+        -78.5,
+        44.75,
+        -78,
+        45
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/d/cantopo_031d16_geopdf.zip",
@@ -757,7 +1042,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Wilberforce — CanTopo 031E01",
       "category": "topo",
-      "bbox": [-78.5, 45, -78, 45.25],
+      "bbox": [
+        -78.5,
+        45,
+        -78,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e01_geopdf.zip",
@@ -770,7 +1060,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Haliburton — CanTopo 031E02",
       "category": "topo",
-      "bbox": [-79, 45, -78.5, 45.25],
+      "bbox": [
+        -79,
+        45,
+        -78.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e02_geopdf.zip",
@@ -783,7 +1078,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bracebridge — CanTopo 031E03",
       "category": "topo",
-      "bbox": [-79.5, 45, -79, 45.25],
+      "bbox": [
+        -79.5,
+        45,
+        -79,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e03_geopdf.zip",
@@ -796,7 +1096,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Lake Joseph — CanTopo 031E04",
       "category": "topo",
-      "bbox": [-80, 45, -79.5, 45.25],
+      "bbox": [
+        -80,
+        45,
+        -79.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e04_geopdf.zip",
@@ -809,7 +1114,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Orrville — CanTopo 031E05",
       "category": "topo",
-      "bbox": [-80, 45.25, -79.5, 45.5],
+      "bbox": [
+        -80,
+        45.25,
+        -79.5,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e05_geopdf.zip",
@@ -822,7 +1132,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Huntsville — CanTopo 031E06",
       "category": "topo",
-      "bbox": [-79.5, 45.25, -79, 45.5],
+      "bbox": [
+        -79.5,
+        45.25,
+        -79,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e06_geopdf.zip",
@@ -835,7 +1150,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Kawagama Lake — CanTopo 031E07",
       "category": "topo",
-      "bbox": [-79, 45.25, -78.5, 45.5],
+      "bbox": [
+        -79,
+        45.25,
+        -78.5,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e07_geopdf.zip",
@@ -848,7 +1168,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Whitney — CanTopo 031E08",
       "category": "topo",
-      "bbox": [-78.5, 45.25, -78, 45.5],
+      "bbox": [
+        -78.5,
+        45.25,
+        -78,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e08_geopdf.zip",
@@ -861,7 +1186,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Opeongo Lake — CanTopo 031E09",
       "category": "topo",
-      "bbox": [-78.5, 45.5, -78, 45.75],
+      "bbox": [
+        -78.5,
+        45.5,
+        -78,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e09_geopdf.zip",
@@ -874,7 +1204,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Tom Thomson Lake — CanTopo 031E10",
       "category": "topo",
-      "bbox": [-79, 45.5, -78.5, 45.75],
+      "bbox": [
+        -79,
+        45.5,
+        -78.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e10_geopdf.zip",
@@ -887,7 +1222,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Burk'S Falls — CanTopo 031E11",
       "category": "topo",
-      "bbox": [-79.5, 45.5, -79, 45.75],
+      "bbox": [
+        -79.5,
+        45.5,
+        -79,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e11_geopdf.zip",
@@ -900,7 +1240,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Magnetawan — CanTopo 031E12",
       "category": "topo",
-      "bbox": [-80, 45.5, -79.5, 45.75],
+      "bbox": [
+        -80,
+        45.5,
+        -79.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e12_geopdf.zip",
@@ -913,7 +1258,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Lake Lavieille — CanTopo 031E16",
       "category": "topo",
-      "bbox": [-78.5, 45.75, -78, 46],
+      "bbox": [
+        -78.5,
+        45.75,
+        -78,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/e/cantopo_031e16_geopdf.zip",
@@ -926,7 +1276,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Carleton Place — CanTopo 031F01",
       "category": "topo",
-      "bbox": [-76.5, 45, -76, 45.25],
+      "bbox": [
+        -76.5,
+        45,
+        -76,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f01_geopdf.zip",
@@ -939,7 +1294,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Clyde Forks — CanTopo 031F02",
       "category": "topo",
-      "bbox": [-77, 45, -76.5, 45.25],
+      "bbox": [
+        -77,
+        45,
+        -76.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f02_geopdf.zip",
@@ -952,7 +1312,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Denbigh — CanTopo 031F03",
       "category": "topo",
-      "bbox": [-77.5, 45, -77, 45.25],
+      "bbox": [
+        -77.5,
+        45,
+        -77,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f03_geopdf.zip",
@@ -965,7 +1330,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bancroft — CanTopo 031F04",
       "category": "topo",
-      "bbox": [-78, 45, -77.5, 45.25],
+      "bbox": [
+        -78,
+        45,
+        -77.5,
+        45.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f04_geopdf.zip",
@@ -978,7 +1348,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Barry'S Bay — CanTopo 031F05",
       "category": "topo",
-      "bbox": [-78, 45.25, -77.5, 45.5],
+      "bbox": [
+        -78,
+        45.25,
+        -77.5,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f05_geopdf.zip",
@@ -991,7 +1366,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Brudenell — CanTopo 031F06",
       "category": "topo",
-      "bbox": [-77.5, 45.25, -77, 45.5],
+      "bbox": [
+        -77.5,
+        45.25,
+        -77,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f06_geopdf.zip",
@@ -1004,7 +1384,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Renfrew — CanTopo 031F07",
       "category": "topo",
-      "bbox": [-77, 45.25, -76.5, 45.5],
+      "bbox": [
+        -77,
+        45.25,
+        -76.5,
+        45.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f07_geopdf.zip",
@@ -1017,7 +1402,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Round Lake — CanTopo 031F12",
       "category": "topo",
-      "bbox": [-78, 45.5, -77.5, 45.75],
+      "bbox": [
+        -78,
+        45.5,
+        -77.5,
+        45.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f12_geopdf.zip",
@@ -1030,7 +1420,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Achray — CanTopo 031F13",
       "category": "topo",
-      "bbox": [-78, 45.75, -77.5, 46],
+      "bbox": [
+        -78,
+        45.75,
+        -77.5,
+        46
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/f/cantopo_031f13_geopdf.zip",
@@ -1043,7 +1438,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Brent — CanTopo 031L01",
       "category": "topo",
-      "bbox": [-78.5, 46, -78, 46.25],
+      "bbox": [
+        -78.5,
+        46,
+        -78,
+        46.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/l/cantopo_031l01_geopdf.zip",
@@ -1056,7 +1456,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Marten Lake — CanTopo 031L12",
       "category": "topo",
-      "bbox": [-80, 46.5, -79.5, 46.75],
+      "bbox": [
+        -80,
+        46.5,
+        -79.5,
+        46.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/l/cantopo_031l12_geopdf.zip",
@@ -1069,7 +1474,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Ingall Lake — CanTopo 031L13",
       "category": "topo",
-      "bbox": [-80, 46.75, -79.5, 47],
+      "bbox": [
+        -80,
+        46.75,
+        -79.5,
+        47
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/l/cantopo_031l13_geopdf.zip",
@@ -1082,7 +1492,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Temagami — CanTopo 031M04",
       "category": "topo",
-      "bbox": [-80, 47, -79.5, 47.25],
+      "bbox": [
+        -80,
+        47,
+        -79.5,
+        47.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/031/m/cantopo_031m04_geopdf.zip",
@@ -1095,7 +1510,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Charlton Island — CanTopo 032M13",
       "category": "topo",
-      "bbox": [-80, 51.75, -79.5, 52],
+      "bbox": [
+        -80,
+        51.75,
+        -79.5,
+        52
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/032/m/cantopo_032m13_geopdf.zip",
@@ -1108,7 +1528,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Wolf Islet — CanTopo 033D03",
       "category": "topo",
-      "bbox": [-79.5, 52, -79, 52.25],
+      "bbox": [
+        -79.5,
+        52,
+        -79,
+        52.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d03_geopdf.zip",
@@ -1121,7 +1546,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Trodely Island — CanTopo 033D04",
       "category": "topo",
-      "bbox": [-80, 52, -79.5, 52.25],
+      "bbox": [
+        -80,
+        52,
+        -79.5,
+        52.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d04_geopdf.zip",
@@ -1134,7 +1564,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033D05",
       "category": "topo",
-      "bbox": [-80, 52.25, -79.5, 52.5],
+      "bbox": [
+        -80,
+        52.25,
+        -79.5,
+        52.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d05_geopdf.zip",
@@ -1147,7 +1582,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Gull Island — CanTopo 033D06",
       "category": "topo",
-      "bbox": [-79.5, 52.25, -79, 52.5],
+      "bbox": [
+        -79.5,
+        52.25,
+        -79,
+        52.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d06_geopdf.zip",
@@ -1160,7 +1600,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033D11",
       "category": "topo",
-      "bbox": [-79.5, 52.5, -79, 52.75],
+      "bbox": [
+        -79.5,
+        52.5,
+        -79,
+        52.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d11_geopdf.zip",
@@ -1173,7 +1618,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Weston Island — CanTopo 033D12",
       "category": "topo",
-      "bbox": [-80, 52.5, -79.5, 52.75],
+      "bbox": [
+        -80,
+        52.5,
+        -79.5,
+        52.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d12_geopdf.zip",
@@ -1186,7 +1636,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033D13",
       "category": "topo",
-      "bbox": [-80, 52.75, -79.5, 53],
+      "bbox": [
+        -80,
+        52.75,
+        -79.5,
+        53
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d13_geopdf.zip",
@@ -1199,7 +1654,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Solomons Temple Islands — CanTopo 033D14",
       "category": "topo",
-      "bbox": [-79.5, 52.75, -79, 53],
+      "bbox": [
+        -79.5,
+        52.75,
+        -79,
+        53
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/d/cantopo_033d14_geopdf.zip",
@@ -1212,7 +1672,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "South Twin Island — CanTopo 033E04",
       "category": "topo",
-      "bbox": [-80, 53, -79.5, 53.25],
+      "bbox": [
+        -80,
+        53,
+        -79.5,
+        53.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/e/cantopo_033e04_geopdf.zip",
@@ -1225,7 +1690,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Walter Island — CanTopo 033E05",
       "category": "topo",
-      "bbox": [-80, 53.25, -79.5, 53.5],
+      "bbox": [
+        -80,
+        53.25,
+        -79.5,
+        53.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/e/cantopo_033e05_geopdf.zip",
@@ -1238,7 +1708,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Spencer Island — CanTopo 033E12",
       "category": "topo",
-      "bbox": [-80, 53.5, -79.5, 53.75],
+      "bbox": [
+        -80,
+        53.5,
+        -79.5,
+        53.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/e/cantopo_033e12_geopdf.zip",
@@ -1251,7 +1726,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Grey Goose Island — CanTopo 033E13",
       "category": "topo",
-      "bbox": [-80, 53.75, -79.5, 54],
+      "bbox": [
+        -80,
+        53.75,
+        -79.5,
+        54
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/e/cantopo_033e13_geopdf.zip",
@@ -1264,7 +1744,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033M02",
       "category": "topo",
-      "bbox": [-79, 55, -78.5, 55.25],
+      "bbox": [
+        -79,
+        55,
+        -78.5,
+        55.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/m/cantopo_033m02_geopdf.zip",
@@ -1277,7 +1762,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033M05",
       "category": "topo",
-      "bbox": [-80, 55.25, -79.5, 55.5],
+      "bbox": [
+        -80,
+        55.25,
+        -79.5,
+        55.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/m/cantopo_033m05_geopdf.zip",
@@ -1290,7 +1780,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033M12",
       "category": "topo",
-      "bbox": [-80, 55.5, -79.5, 55.75],
+      "bbox": [
+        -80,
+        55.5,
+        -79.5,
+        55.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/m/cantopo_033m12_geopdf.zip",
@@ -1303,7 +1798,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033M16",
       "category": "topo",
-      "bbox": [-78.5, 55.75, -78, 56],
+      "bbox": [
+        -78.5,
+        55.75,
+        -78,
+        56
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/m/cantopo_033m16_geopdf.zip",
@@ -1316,7 +1816,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 033N13",
       "category": "topo",
-      "bbox": [-78, 55.75, -77.5, 56],
+      "bbox": [
+        -78,
+        55.75,
+        -77.5,
+        56
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/033/n/cantopo_033n13_geopdf.zip",
@@ -1329,7 +1834,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Salikuit Islands — CanTopo 034C05",
       "category": "topo",
-      "bbox": [-78, 56.25, -77.5, 56.5],
+      "bbox": [
+        -78,
+        56.25,
+        -77.5,
+        56.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/c/cantopo_034c05_geopdf.zip",
@@ -1342,7 +1852,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034C06",
       "category": "topo",
-      "bbox": [-77.5, 56.25, -77, 56.5],
+      "bbox": [
+        -77.5,
+        56.25,
+        -77,
+        56.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/c/cantopo_034c06_geopdf.zip",
@@ -1355,7 +1870,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034C13",
       "category": "topo",
-      "bbox": [-78, 56.75, -77.5, 57],
+      "bbox": [
+        -78,
+        56.75,
+        -77.5,
+        57
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/c/cantopo_034c13_geopdf.zip",
@@ -1368,7 +1888,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034D01",
       "category": "topo",
-      "bbox": [-78.5, 56, -78, 56.25],
+      "bbox": [
+        -78.5,
+        56,
+        -78,
+        56.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d01_geopdf.zip",
@@ -1381,7 +1906,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034D08",
       "category": "topo",
-      "bbox": [-78.5, 56.25, -78, 56.5],
+      "bbox": [
+        -78.5,
+        56.25,
+        -78,
+        56.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d08_geopdf.zip",
@@ -1394,7 +1924,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034D09",
       "category": "topo",
-      "bbox": [-78.5, 56.5, -78, 56.75],
+      "bbox": [
+        -78.5,
+        56.5,
+        -78,
+        56.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d09_geopdf.zip",
@@ -1407,7 +1942,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Loaf Island — CanTopo 034D10",
       "category": "topo",
-      "bbox": [-79, 56.5, -78.5, 56.75],
+      "bbox": [
+        -79,
+        56.5,
+        -78.5,
+        56.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d10_geopdf.zip",
@@ -1420,7 +1960,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bakers Dozen Islands — CanTopo 034D15",
       "category": "topo",
-      "bbox": [-79, 56.75, -78.5, 57],
+      "bbox": [
+        -79,
+        56.75,
+        -78.5,
+        57
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d15_geopdf.zip",
@@ -1433,7 +1978,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034D16",
       "category": "topo",
-      "bbox": [-78.5, 56.75, -78, 57],
+      "bbox": [
+        -78.5,
+        56.75,
+        -78,
+        57
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/d/cantopo_034d16_geopdf.zip",
@@ -1446,7 +1996,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034E01",
       "category": "topo",
-      "bbox": [-78.5, 57, -78, 57.25],
+      "bbox": [
+        -78.5,
+        57,
+        -78,
+        57.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e01_geopdf.zip",
@@ -1459,7 +2014,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034E02",
       "category": "topo",
-      "bbox": [-79, 57, -78.5, 57.25],
+      "bbox": [
+        -79,
+        57,
+        -78.5,
+        57.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e02_geopdf.zip",
@@ -1472,7 +2032,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Sleeper Islands — CanTopo 034E05",
       "category": "topo",
-      "bbox": [-80, 57.25, -79.5, 57.5],
+      "bbox": [
+        -80,
+        57.25,
+        -79.5,
+        57.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e05_geopdf.zip",
@@ -1485,7 +2050,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034E06",
       "category": "topo",
-      "bbox": [-79.5, 57.25, -79, 57.5],
+      "bbox": [
+        -79.5,
+        57.25,
+        -79,
+        57.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e06_geopdf.zip",
@@ -1498,7 +2068,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Husky Island — CanTopo 034E07",
       "category": "topo",
-      "bbox": [-79, 57.25, -78.5, 57.5],
+      "bbox": [
+        -79,
+        57.25,
+        -78.5,
+        57.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e07_geopdf.zip",
@@ -1511,7 +2086,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Driftwood Island — CanTopo 034E08",
       "category": "topo",
-      "bbox": [-78.5, 57.25, -78, 57.5],
+      "bbox": [
+        -78.5,
+        57.25,
+        -78,
+        57.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e08_geopdf.zip",
@@ -1524,7 +2104,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034E10",
       "category": "topo",
-      "bbox": [-79, 57.5, -78.5, 57.75],
+      "bbox": [
+        -79,
+        57.5,
+        -78.5,
+        57.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e10_geopdf.zip",
@@ -1537,7 +2122,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Beach Island — CanTopo 034E11",
       "category": "topo",
-      "bbox": [-79.5, 57.5, -79, 57.75],
+      "bbox": [
+        -79.5,
+        57.5,
+        -79,
+        57.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e11_geopdf.zip",
@@ -1550,7 +2140,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Kidney Island — CanTopo 034E12",
       "category": "topo",
-      "bbox": [-80, 57.5, -79.5, 57.75],
+      "bbox": [
+        -80,
+        57.5,
+        -79.5,
+        57.75
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e12_geopdf.zip",
@@ -1563,7 +2158,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Marcopeet Islands — CanTopo 034E13",
       "category": "topo",
-      "bbox": [-80, 57.75, -79.5, 58],
+      "bbox": [
+        -80,
+        57.75,
+        -79.5,
+        58
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/e/cantopo_034e13_geopdf.zip",
@@ -1576,7 +2176,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Success Island — CanTopo 034L01",
       "category": "topo",
-      "bbox": [-78.5, 58, -78, 58.25],
+      "bbox": [
+        -78.5,
+        58,
+        -78,
+        58.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/l/cantopo_034l01_geopdf.zip",
@@ -1589,7 +2194,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034L04",
       "category": "topo",
-      "bbox": [-80, 58, -79.5, 58.25],
+      "bbox": [
+        -80,
+        58,
+        -79.5,
+        58.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/l/cantopo_034l04_geopdf.zip",
@@ -1602,7 +2212,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034L14",
       "category": "topo",
-      "bbox": [-79.5, 58.75, -79, 59],
+      "bbox": [
+        -79.5,
+        58.75,
+        -79,
+        59
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/l/cantopo_034l14_geopdf.zip",
@@ -1615,7 +2230,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034M02",
       "category": "topo",
-      "bbox": [-79, 59, -78.5, 59.25],
+      "bbox": [
+        -79,
+        59,
+        -78.5,
+        59.25
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/m/cantopo_034m02_geopdf.zip",
@@ -1628,7 +2248,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "CanTopo 034M07",
       "category": "topo",
-      "bbox": [-79, 59.25, -78.5, 59.5],
+      "bbox": [
+        -79,
+        59.25,
+        -78.5,
+        59.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/m/cantopo_034m07_geopdf.zip",
@@ -1641,7 +2266,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Checkered Islands — CanTopo 034M08",
       "category": "topo",
-      "bbox": [-78.5, 59.25, -78, 59.5],
+      "bbox": [
+        -78.5,
+        59.25,
+        -78,
+        59.5
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/m/cantopo_034m08_geopdf.zip",
@@ -1654,7 +2284,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Bronson Island — CanTopo 034M13",
       "category": "topo",
-      "bbox": [-80, 59.75, -79.5, 60],
+      "bbox": [
+        -80,
+        59.75,
+        -79.5,
+        60
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/m/cantopo_034m13_geopdf.zip",
@@ -1667,7 +2302,12 @@
       "sourceId": "nrcan-cantopo",
       "title": "Long Reach Island — CanTopo 034N13",
       "category": "topo",
-      "bbox": [-78, 59.75, -77.5, 60],
+      "bbox": [
+        -78,
+        59.75,
+        -77.5,
+        60
+      ],
       "format": "geopdf",
       "packaging": "zip",
       "url": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/034/n/cantopo_034n13_geopdf.zip",

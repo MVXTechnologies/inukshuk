@@ -17,9 +17,7 @@ const writeJson = storage.writeJson as jest.Mock;
 
 const validManifest = {
   schemaVersion: CATALOG_SCHEMA_VERSION,
-  sources: [
-    { id: 's1', name: 'Source', licence: 'OGL-Canada-2.0', attribution: 'NRCan' },
-  ],
+  sources: [{ id: 's1', name: 'Source', licence: 'OGL-Canada-2.0', attribution: 'NRCan' }],
   items: [
     {
       id: 'cantopo-021l14',

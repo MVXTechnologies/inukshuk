@@ -90,8 +90,10 @@ export function DestinationFolderDialog({
         </Dialog.Content>
         <Dialog.Actions>
           <Button onPress={onDismiss}>Cancel</Button>
+          {/* "Add", not "Download": distinct from the card's Download button so
+              e2e taps (and screen readers) can't hit the wrong one. */}
           <Button onPress={confirm} disabled={blocked}>
-            Download
+            Add
           </Button>
         </Dialog.Actions>
       </Dialog>

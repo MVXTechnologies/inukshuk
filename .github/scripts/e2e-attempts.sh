@@ -15,7 +15,17 @@ set -u
   done
 ) &
 GEO_PID=$!
-trap 'kill $GEO_PID 2>/dev/null' EXIT
+
+# Map-store fixture catalog (store.yaml): serve .maestro/fixtures/catalog on
+# the host and map the device's loopback :8787 onto it. The e2e APK is built
+# with CATALOG_MANIFEST_URL=http://127.0.0.1:8787/manifest.json (e2e.yml), so
+# the Search tab reads this fixture and CI never touches NRCan.
+python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catalog \
+  >/dev/null 2>&1 &
+CATALOG_PID=$!
+adb reverse tcp:8787 tcp:8787 || true
+
+trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null' EXIT
 
 RC=0
 # Order matters: category-record creates the saved (Run) trail that
@@ -27,7 +37,7 @@ RC=0
 # terrain-overlay settings.
 for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
   .maestro/heatmap.yaml .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/dashboard.yaml \
-  .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/folders.yaml \
+  .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/store.yaml .maestro/folders.yaml \
   .maestro/settings.yaml .maestro/record.yaml; do
   adb logcat -c || true
   if maestro test "$flow"; then
