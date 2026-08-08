@@ -131,6 +131,13 @@ export interface OsmStyleOptions {
   pastel?: boolean;
   /** Checked marked-trail databases, each draped as its own tile overlay. */
   markedTrailsNetworks?: readonly TrailNetworkId[];
+  /**
+   * Live weather overlay (ECCC GeoMet WMS via `weatherTileUrl`). Network-only
+   * by nature: callers must drop it entirely when `offlineOnly` is on, exactly
+   * like `markedTrailsNetworks`. An animation frame swap is just a different
+   * `urlTemplate` flowing through the caller's style-memo rebuild.
+   */
+  weather?: { urlTemplate: string; attribution: string; opacity?: number };
 }
 
 /**
@@ -243,6 +250,27 @@ export function buildOsmStyle(
       paint: { 'hillshade-exaggeration': 0.7 },
     });
     style.terrain = { source: 'dem', exaggeration: 2.2 };
+  }
+
+  // Weather drape (radar / model fields), above the basemap, trail overlays
+  // and hillshade — it's the topmost data layer, only under the offline mask
+  // (mutually exclusive with it anyway) and the runtime layers (trails,
+  // markers, the location dot) MapLibre appends after the style's own.
+  // raster-fade-duration 0: animation swaps the source URL per frame, and the
+  // default cross-fade would smear consecutive radar frames into each other.
+  if (options.weather) {
+    style.sources.weather = {
+      type: 'raster',
+      tiles: [options.weather.urlTemplate],
+      tileSize: 256,
+      attribution: options.weather.attribution,
+    };
+    style.layers.push({
+      id: 'weather',
+      type: 'raster',
+      source: 'weather',
+      paint: { 'raster-opacity': options.weather.opacity ?? 0.8, 'raster-fade-duration': 0 },
+    });
   }
 
   // "Locally downloaded only" mask, pushed LAST so it sits above every basemap
