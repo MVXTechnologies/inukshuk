@@ -82,6 +82,12 @@ function simulateCrash() {
 beforeEach(() => {
   useRecorderStore.getState().discard(); // resets state AND clears the mock journal
   resetRecorderRecoveryForTests();
+  // Tracks saved by earlier tests carry real Date.now() startedAt stamps; a
+  // recovery test whose session starts in the same millisecond then trips the
+  // ghost-session guard (startedAt match ⇒ checkpoint discarded). Impossible
+  // in production — one recording at a time — but the shared store must not
+  // leak that collision across tests.
+  useLibraryStore.setState({ tracks: [], hydrated: false });
 });
 
 describe('GPS fix gating in addPoint', () => {
