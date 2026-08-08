@@ -14,9 +14,11 @@ Ordered roughly by priority (top = next).
 3. ~~**BUG: waypoint button off-screen after expand→collapse**~~ — fixed in
    PR #185 (same OTA); verified with a dedicated expand→collapse Maestro
    flow on both platforms.
-4. **Settings grouped into expandable categories** — Settings is getting
-   scattered; group into collapsible sections, roughly: Third party / App /
-   System info / System settings / Data settings.
+4. ~~**Settings grouped into expandable categories**~~ — shipped in PR #187
+   (OTA'd to 1.5.0 + 1.4.0, 2026-08-08): App settings / Data settings /
+   Third party / System settings / System info, one open at a time. Bonus
+   from its E2E gate: a real field bug (ghost paused recording restored
+   after a saved hike) was caught and fixed in PR #188, same OTA wave.
 5. **Trail navigation mode** — tapping a navigation-category trail offers
    "Start navigating": guidance along the trail, and an off-trail alarm
    (beep/vibrate) that works with the screen off.
@@ -28,7 +30,15 @@ Ordered roughly by priority (top = next).
    is fine. A border-to-border fit shipped via OTA on 2026-08-07 — re-test
    after two app restarts before more tuning.
 
-## Larger initiatives (need a planning session each)
+## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
+
+Design packages live in `docs/plans/`. Implementation M1s are BUILT and
+check-green on feature branches, awaiting their turn through the device
+gates (serial, one rig): `feature/meteo-m1` (ECCC radar/wind overlay +
+forecast card, OTA-able), `feature/map-store-m1` (Search tab + CanTopo
+catalog; needs the fixture-server E2E wiring on CI), `feature/sync-m0`
+(pure LWW sync core, invisible). Still owed by the owner: NAS make/model
+(+ Docker?) for sync M1, and the SÉPAQ / Canot Kayak Québec outreach.
 
 - **Profiles + paid cloud sync ($2.99/mo)** — accounts with profile image,
   email, etc.; traces + trail photos synced across devices; backend on the
