@@ -1,0 +1,526 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.36,
+          46.69
+        ]
+      },
+      "properties": {
+        "lastUpdated": "2026-08-08T21:01:14Z",
+        "identifier": "qc-51",
+        "name": {
+          "en": "Bernières",
+          "fr": "Bernières"
+        },
+        "region": {
+          "en": "Lévis area",
+          "fr": "secteur de Lévis"
+        },
+        "currentConditions": {
+          "timestamp": {
+            "en": "2026-08-08T21:00:00Z",
+            "fr": "2026-08-08T21:00:00Z"
+          },
+          "relativeHumidity": {
+            "units": {
+              "en": "%",
+              "fr": "%"
+            },
+            "qaValue": {
+              "en": 100,
+              "fr": 100
+            },
+            "value": {
+              "en": 64,
+              "fr": 64
+            }
+          },
+          "wind": {
+            "speed": {
+              "unitType": {
+                "en": "metric",
+                "fr": "metric"
+              },
+              "units": {
+                "en": "km/h",
+                "fr": "km/h"
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": 4,
+                "fr": 4
+              }
+            },
+            "direction": {
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": "SW",
+                "fr": "SO"
+              }
+            },
+            "bearing": {
+              "units": {
+                "en": "degrees",
+                "fr": "degrees"
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": 219.7,
+                "fr": 219.7
+              }
+            },
+            "gust": {
+              "unitType": {
+                "en": "metric",
+                "fr": "metric"
+              },
+              "units": {
+                "en": "km/h",
+                "fr": "km/h"
+              },
+              "value": {
+                "en": 32,
+                "fr": 32
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              }
+            }
+          },
+          "temperature": {
+            "unitType": {
+              "en": "metric",
+              "fr": "metric"
+            },
+            "units": {
+              "en": "C",
+              "fr": "C"
+            },
+            "qaValue": {
+              "en": 100,
+              "fr": 100
+            },
+            "value": {
+              "en": 25.5,
+              "fr": 25.5
+            }
+          }
+        },
+        "forecastGroup": {
+          "forecasts": [
+            {
+              "period": {
+                "textForecastName": {
+                  "en": "Tonight",
+                  "fr": "Ce soir et cette nuit"
+                },
+                "value": {
+                  "en": "Saturday night",
+                  "fr": "ce soir et cette nuit"
+                }
+              },
+              "abbreviatedForecast": {
+                "icon": {
+                  "format": "gif",
+                  "value": 39,
+                  "url": "https://weather.gc.ca/weathericons/39.gif"
+                },
+                "textSummary": {
+                  "en": "Chance of showers",
+                  "fr": "Possibilité d'averses"
+                }
+              },
+              "temperatures": {
+                "temperature": [
+                  {
+                    "unitType": {
+                      "en": "metric",
+                      "fr": "metric"
+                    },
+                    "units": {
+                      "en": "C",
+                      "fr": "C"
+                    },
+                    "class": {
+                      "en": "low",
+                      "fr": "low"
+                    },
+                    "value": {
+                      "en": 19,
+                      "fr": 19
+                    }
+                  }
+                ],
+                "textSummary": {
+                  "en": "Low 19.",
+                  "fr": "Minimum 19."
+                }
+              },
+              "cloudPrecip": {
+                "en": "Mainly cloudy with 40 percent chance of showers. Risk of a thunderstorm this evening.",
+                "fr": "Généralement nuageux avec 40 pour cent de probabilité d'averses. Risque d'un orage ce soir."
+              }
+            },
+            {
+              "period": {
+                "textForecastName": {
+                  "en": "Sunday",
+                  "fr": "Dimanche"
+                },
+                "value": {
+                  "en": "Sunday",
+                  "fr": "dimanche"
+                }
+              },
+              "abbreviatedForecast": {
+                "icon": {
+                  "format": "gif",
+                  "value": 6,
+                  "url": "https://weather.gc.ca/weathericons/06.gif"
+                },
+                "textSummary": {
+                  "en": "Chance of showers",
+                  "fr": "Possibilité d'averses"
+                }
+              },
+              "temperatures": {
+                "temperature": [
+                  {
+                    "unitType": {
+                      "en": "metric",
+                      "fr": "metric"
+                    },
+                    "units": {
+                      "en": "C",
+                      "fr": "C"
+                    },
+                    "class": {
+                      "en": "high",
+                      "fr": "high"
+                    },
+                    "value": {
+                      "en": 27,
+                      "fr": 27
+                    }
+                  }
+                ],
+                "textSummary": {
+                  "en": "High 27.",
+                  "fr": "Maximum 27."
+                }
+              },
+              "cloudPrecip": {
+                "en": "Cloudy with 60 percent chance of showers in the morning then a mix of sun and cloud.",
+                "fr": "Nuageux avec 60 pour cent de probabilité d'averses le matin. Alternance de soleil et de nuages par la suite."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.27,
+          46.82
+        ]
+      },
+      "properties": {
+        "lastUpdated": "2026-08-08T21:02:19Z",
+        "identifier": "qc-41",
+        "name": {
+          "en": "Vanier",
+          "fr": "Vanier"
+        },
+        "region": {
+          "en": "Québec area",
+          "fr": "secteur de Québec"
+        },
+        "currentConditions": {
+          "condition": {
+            "en": "Light Rainshower",
+            "fr": "Faible averse de pluie"
+          },
+          "timestamp": {
+            "en": "2026-08-08T21:00:00Z",
+            "fr": "2026-08-08T21:00:00Z"
+          },
+          "relativeHumidity": {
+            "units": {
+              "en": "%",
+              "fr": "%"
+            },
+            "qaValue": {
+              "en": 100,
+              "fr": 100
+            },
+            "value": {
+              "en": 77,
+              "fr": 77
+            }
+          },
+          "wind": {
+            "speed": {
+              "unitType": {
+                "en": "metric",
+                "fr": "metric"
+              },
+              "units": {
+                "en": "km/h",
+                "fr": "km/h"
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": 8,
+                "fr": 8
+              }
+            },
+            "direction": {
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": "WNW",
+                "fr": "ONO"
+              }
+            },
+            "bearing": {
+              "units": {
+                "en": "degrees",
+                "fr": "degrees"
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              },
+              "value": {
+                "en": 282.0,
+                "fr": 282.0
+              }
+            },
+            "gust": {
+              "unitType": {
+                "en": "metric",
+                "fr": "metric"
+              },
+              "units": {
+                "en": "km/h",
+                "fr": "km/h"
+              },
+              "value": {
+                "en": 27,
+                "fr": 27
+              },
+              "qaValue": {
+                "en": 100,
+                "fr": 100
+              }
+            }
+          },
+          "temperature": {
+            "unitType": {
+              "en": "metric",
+              "fr": "metric"
+            },
+            "units": {
+              "en": "C",
+              "fr": "C"
+            },
+            "qaValue": {
+              "en": 100,
+              "fr": 100
+            },
+            "value": {
+              "en": 24.1,
+              "fr": 24.1
+            }
+          }
+        },
+        "forecastGroup": {
+          "forecasts": [
+            {
+              "period": {
+                "textForecastName": {
+                  "en": "Tonight",
+                  "fr": "Ce soir et cette nuit"
+                },
+                "value": {
+                  "en": "Saturday night",
+                  "fr": "ce soir et cette nuit"
+                }
+              },
+              "abbreviatedForecast": {
+                "icon": {
+                  "format": "gif",
+                  "value": 39,
+                  "url": "https://weather.gc.ca/weathericons/39.gif"
+                },
+                "textSummary": {
+                  "en": "Chance of showers",
+                  "fr": "Possibilité d'averses"
+                }
+              },
+              "temperatures": {
+                "temperature": [
+                  {
+                    "unitType": {
+                      "en": "metric",
+                      "fr": "metric"
+                    },
+                    "units": {
+                      "en": "C",
+                      "fr": "C"
+                    },
+                    "class": {
+                      "en": "low",
+                      "fr": "low"
+                    },
+                    "value": {
+                      "en": 19,
+                      "fr": 19
+                    }
+                  }
+                ],
+                "textSummary": {
+                  "en": "Low 19.",
+                  "fr": "Minimum 19."
+                }
+              },
+              "cloudPrecip": {
+                "en": "Mainly cloudy with 40 percent chance of showers. Risk of a thunderstorm this evening.",
+                "fr": "Généralement nuageux avec 40 pour cent de probabilité d'averses. Risque d'un orage ce soir."
+              }
+            },
+            {
+              "period": {
+                "textForecastName": {
+                  "en": "Sunday",
+                  "fr": "Dimanche"
+                },
+                "value": {
+                  "en": "Sunday",
+                  "fr": "dimanche"
+                }
+              },
+              "abbreviatedForecast": {
+                "icon": {
+                  "format": "gif",
+                  "value": 6,
+                  "url": "https://weather.gc.ca/weathericons/06.gif"
+                },
+                "textSummary": {
+                  "en": "Chance of showers",
+                  "fr": "Possibilité d'averses"
+                }
+              },
+              "temperatures": {
+                "temperature": [
+                  {
+                    "unitType": {
+                      "en": "metric",
+                      "fr": "metric"
+                    },
+                    "units": {
+                      "en": "C",
+                      "fr": "C"
+                    },
+                    "class": {
+                      "en": "high",
+                      "fr": "high"
+                    },
+                    "value": {
+                      "en": 27,
+                      "fr": 27
+                    }
+                  }
+                ],
+                "textSummary": {
+                  "en": "High 27.",
+                  "fr": "Maximum 27."
+                }
+              },
+              "cloudPrecip": {
+                "en": "Cloudy with 60 percent chance of showers in the morning then a mix of sun and cloud.",
+                "fr": "Nuageux avec 60 pour cent de probabilité d'averses le matin. Alternance de soleil et de nuages par la suite."
+              }
+            },
+            {
+              "period": {
+                "textForecastName": {
+                  "en": "Sunday night",
+                  "fr": "Dimanche soir et nuit"
+                },
+                "value": {
+                  "en": "Sunday night",
+                  "fr": "dimanche soir et nuit"
+                }
+              },
+              "abbreviatedForecast": {
+                "icon": {
+                  "format": "gif",
+                  "value": 32,
+                  "url": "https://weather.gc.ca/weathericons/32.gif"
+                },
+                "textSummary": {
+                  "en": "Partly cloudy",
+                  "fr": "Partiellement nuageux"
+                }
+              },
+              "temperatures": {
+                "temperature": [
+                  {
+                    "unitType": {
+                      "en": "metric",
+                      "fr": "metric"
+                    },
+                    "units": {
+                      "en": "C",
+                      "fr": "C"
+                    },
+                    "class": {
+                      "en": "low",
+                      "fr": "low"
+                    },
+                    "value": {
+                      "en": 15,
+                      "fr": 15
+                    }
+                  }
+                ],
+                "textSummary": {
+                  "en": "Low 15.",
+                  "fr": "Minimum 15."
+                }
+              },
+              "cloudPrecip": {
+                "en": "Partly cloudy.",
+                "fr": "Partiellement nuageux."
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
