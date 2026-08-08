@@ -393,7 +393,13 @@ export function SettingsScreen() {
             </Text>
           </View>
           <List.Item title="Version" description={`${Constants.expoConfig?.version ?? '1.0.0'}`} />
-          <List.Item title="Maps & data" description="© OpenStreetMap contributors" />
+          {/* The map screen no longer shows MapLibre's attribution button
+              (owner call — it crowded the map), so this row is the one place
+              the data credits live. Keep every provider listed. */}
+          <List.Item
+            title="Maps & data"
+            description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre"
+          />
           <View style={styles.note}>
             <Button mode="outlined" icon="restore" onPress={reset}>
               Reset settings

@@ -763,15 +763,12 @@ export function MapScreen() {
           ref={mapRef}
           style={styles.fill}
           mapStyle={style}
-          attribution
-          // MapLibre's wordmark logo also defaults to the bottom-left corner,
-          // exactly where the attribution "i" used to sit — the two ornaments
-          // rendered on top of each other. Stack the attribution button above
-          // the logo instead; both must stay visible (OSM/Esri attribution is
-          // a license requirement, and hiding the logo isn't wanted either).
-          attributionPosition={{ bottom: 48, left: 8 }}
-          logo
-          logoPosition={{ bottom: 8, left: 8 }}
+          // Owner call (backlog item 1): the bottom-left ornaments — MapLibre's
+          // wordmark logo and the attribution "i" — take too much map. Both are
+          // off; the OSM/Esri data credit lives in Settings → About instead
+          // ("Maps & data"), which is where the store listings also point.
+          attribution={false}
+          logo={false}
           // We draw our own compass badge (top-left), so hide MapLibre's native
           // compass — when the map is rotated it otherwise appears in the top-right,
           // peeking out behind our locate button as a stray dark circle.
@@ -1221,7 +1218,10 @@ export function MapScreen() {
           (small) pill against the (bigger) icon buttons so they pop slightly
           out of the bar; expanded bottom-aligns the smaller card on the left
           against the buttons stacked vertically to its right. */}
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+      {/* Item 2: with the map logo/attribution gone, the recording UI drops
+          into the freed bottom-left space — a much smaller pad clears more
+          map above it. */}
+      <View style={[styles.bottom, { paddingBottom: insets.bottom + 4 }]} pointerEvents="box-none">
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
         {!selecting && status !== 'idle' && (
@@ -1229,16 +1229,23 @@ export function MapScreen() {
             style={hudExpanded ? styles.recordingBarExpanded : styles.recordingBarCollapsed}
             pointerEvents="box-none"
           >
-            <StatsHud
-              name={name}
-              stats={stats}
-              elapsedS={elapsedS}
-              liveSpeedMps={liveSpeedMps}
-              paused={status === 'paused'}
-              gpsQuality={gpsQuality}
-              expanded={hudExpanded}
-              onToggleExpanded={() => setHudExpanded((e) => !e)}
-            />
+            {/* flexShrink guard (backlog item 3): the HUD must yield width to
+                the buttons, never push them off-screen — after an
+                expand→collapse cycle iOS re-lays the pill out wide (the Paper
+                Surface flex quirk) and without this the third button left the
+                screen. */}
+            <View style={styles.hudShrink} pointerEvents="box-none">
+              <StatsHud
+                name={name}
+                stats={stats}
+                elapsedS={elapsedS}
+                liveSpeedMps={liveSpeedMps}
+                paused={status === 'paused'}
+                gpsQuality={gpsQuality}
+                expanded={hudExpanded}
+                onToggleExpanded={() => setHudExpanded((e) => !e)}
+              />
+            </View>
             <RecordControls
               status={status}
               expanded={hudExpanded}
@@ -1424,6 +1431,9 @@ const styles = StyleSheet.create({
   // Collapsed: center-align the pill against the (bigger) icon buttons so
   // they visibly pop out of the bar (item 3).
   recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // The HUD yields width before the record buttons do (see the guard's
+  // comment at the call site).
+  hudShrink: { flexShrink: 1 },
   // Expanded: bottom-align the (smaller) card on the left against the
   // buttons stacked vertically to its right (item 3).
   recordingBarExpanded: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
