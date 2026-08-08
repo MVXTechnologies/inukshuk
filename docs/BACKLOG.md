@@ -40,8 +40,13 @@ Ordered roughly by priority (top = next).
   hunting, topo, touristic, nautical charts, geological, aerial, river runs
   with rapid classes R1-R3...), searchable; download straight into the
   Library choosing the destination folder, rendered like any imported map.
-- **Nautical + meteo** — nautical charts and weather integration (owner:
-  "would make the app extremely complete"). Scope TBD.
+- **Nautical + meteo** — marine charts and weather-map integration (owner:
+  "would make the app extremely complete"). Owner named Navionics marine
+  charts as the reference (2026-08-08). Note: Navionics is Garmin-owned and
+  its API/licensing is paid and restrictive — the planning session must weigh
+  it against open sources (OpenSeaMap, NOAA/CHS raster charts) for charts and
+  the usual free tile/API options for weather overlays. Scope TBD; not
+  started.
 
 ## On ice
 

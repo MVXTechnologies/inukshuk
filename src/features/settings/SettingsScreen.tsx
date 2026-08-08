@@ -215,197 +215,262 @@ export function SettingsScreen() {
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-        <List.Section>
-          <List.Subheader>Recording</List.Subheader>
-          <List.Item
-            title="Keep screen awake"
-            description="Prevents the device sleeping while recording"
-            right={() => (
-              <Switch value={keepAwake} onValueChange={(v) => set('keepAwakeWhileRecording', v)} />
-            )}
-          />
-          <List.Item
-            title="GPS point spacing"
-            description="Minimum distance between recorded fixes"
-          />
-          <View style={styles.segment}>
-            <SegmentedButtons
-              value={String(minDisplacement)}
-              onValueChange={(v) => set('minDisplacementM', Number(v))}
-              buttons={DISPLACEMENT_OPTIONS}
-            />
-          </View>
-        </List.Section>
+        {/* Five collapsible categories (owner's grouping, backlog item 4);
+            AccordionGroup keeps one open at a time. Each body is a single
+            View: Paper clones a paddingLeft onto direct accordion children
+            that lack left/right props, which would stagger mixed rows — one
+            wrapper neutralizes that and keeps rows full-width. */}
+        <List.AccordionGroup>
+          <List.Accordion
+            id="app"
+            title="App settings"
+            description="Recording, display and map"
+            left={(p) => <List.Icon {...p} icon="tune" />}
+          >
+            <View style={styles.accordionBody}>
+              <List.Section>
+                <List.Subheader>Recording</List.Subheader>
+                <List.Item
+                  title="Keep screen awake"
+                  description="Prevents the device sleeping while recording"
+                  right={() => (
+                    <Switch
+                      value={keepAwake}
+                      onValueChange={(v) => set('keepAwakeWhileRecording', v)}
+                    />
+                  )}
+                />
+                <List.Item
+                  title="GPS point spacing"
+                  description="Minimum distance between recorded fixes"
+                />
+                <View style={styles.segment}>
+                  <SegmentedButtons
+                    value={String(minDisplacement)}
+                    onValueChange={(v) => set('minDisplacementM', Number(v))}
+                    buttons={DISPLACEMENT_OPTIONS}
+                  />
+                </View>
+              </List.Section>
 
-        <Divider />
+              <Divider />
 
-        <List.Section>
-          <List.Subheader>Display</List.Subheader>
-          <List.Item title="Units" description="Distances, elevation, speed and pace" />
-          <View style={styles.segment}>
-            <SegmentedButtons
-              value={units}
-              onValueChange={(v) => set('units', v === 'imperial' ? 'imperial' : 'metric')}
-              buttons={UNITS_OPTIONS}
-            />
-          </View>
-          <List.Item title="Theme" description="Follow the system, or force light / dark" />
-          <View style={styles.segment}>
-            <SegmentedButtons
-              value={themeMode}
-              onValueChange={(v) => set('themeMode', v as 'system' | 'light' | 'dark')}
-              buttons={[
-                { value: 'system', label: 'System' },
-                { value: 'light', label: 'Light' },
-                { value: 'dark', label: 'Dark' },
-              ]}
-            />
-          </View>
-          <List.Item
-            title="App style"
-            description="Classic brand look, quiet Minimal, or the pastel Edge style"
-          />
-          <View style={styles.segment}>
-            <SegmentedButtons
-              value={uiStyle}
-              onValueChange={(v) => set('uiStyle', v as UiStyle)}
-              buttons={[
-                { value: 'classic', label: 'Classic' },
-                { value: 'minimal', label: 'Minimal' },
-                { value: 'edge', label: 'Edge' },
-              ]}
-            />
-          </View>
-        </List.Section>
+              <List.Section>
+                <List.Subheader>Display</List.Subheader>
+                <List.Item title="Units" description="Distances, elevation, speed and pace" />
+                <View style={styles.segment}>
+                  <SegmentedButtons
+                    value={units}
+                    onValueChange={(v) => set('units', v === 'imperial' ? 'imperial' : 'metric')}
+                    buttons={UNITS_OPTIONS}
+                  />
+                </View>
+                <List.Item title="Theme" description="Follow the system, or force light / dark" />
+                <View style={styles.segment}>
+                  <SegmentedButtons
+                    value={themeMode}
+                    onValueChange={(v) => set('themeMode', v as 'system' | 'light' | 'dark')}
+                    buttons={[
+                      { value: 'system', label: 'System' },
+                      { value: 'light', label: 'Light' },
+                      { value: 'dark', label: 'Dark' },
+                    ]}
+                  />
+                </View>
+                <List.Item
+                  title="App style"
+                  description="Classic brand look, quiet Minimal, or the pastel Edge style"
+                />
+                <View style={styles.segment}>
+                  <SegmentedButtons
+                    value={uiStyle}
+                    onValueChange={(v) => set('uiStyle', v as UiStyle)}
+                    buttons={[
+                      { value: 'classic', label: 'Classic' },
+                      { value: 'minimal', label: 'Minimal' },
+                      { value: 'edge', label: 'Edge' },
+                    ]}
+                  />
+                </View>
+              </List.Section>
 
-        <Divider />
+              <Divider />
 
-        <List.Section>
-          <List.Subheader>Map</List.Subheader>
-          <List.Item
-            title="Rotate map with compass"
-            description="Turn the map to match your heading"
-            right={() => (
-              <Switch value={rotateMap} onValueChange={(v) => set('rotateMapWithHeading', v)} />
-            )}
-          />
-          <List.Item
-            title="Base map tiles"
-            description={tileUrl === DEFAULT_TILE_URL ? 'OpenStreetMap (default)' : tileUrl}
-            onPress={openTileDialog}
-            right={(p) => <List.Icon {...p} icon="pencil-outline" />}
-          />
-          <View style={styles.note}>
-            <Text variant="bodySmall">
-              Inukshuk uses free OpenStreetMap raster tiles. For heavy public use, point this at
-              your own tile cache or a free provider to respect the OSM tile usage policy.
-            </Text>
-          </View>
-        </List.Section>
+              <List.Section>
+                <List.Subheader>Map</List.Subheader>
+                <List.Item
+                  title="Rotate map with compass"
+                  description="Turn the map to match your heading"
+                  right={() => (
+                    <Switch
+                      value={rotateMap}
+                      onValueChange={(v) => set('rotateMapWithHeading', v)}
+                    />
+                  )}
+                />
+                <List.Item
+                  title="Base map tiles"
+                  description={tileUrl === DEFAULT_TILE_URL ? 'OpenStreetMap (default)' : tileUrl}
+                  onPress={openTileDialog}
+                  right={(p) => <List.Icon {...p} icon="pencil-outline" />}
+                />
+                <View style={styles.note}>
+                  <Text variant="bodySmall">
+                    Inukshuk uses free OpenStreetMap raster tiles. For heavy public use, point this
+                    at your own tile cache or a free provider to respect the OSM tile usage policy.
+                  </Text>
+                </View>
+              </List.Section>
+            </View>
+          </List.Accordion>
 
-        <Divider />
+          <Divider />
 
-        <OfflineMapsSection />
+          <List.Accordion
+            id="data"
+            title="Data settings"
+            // Deliberately does NOT repeat body text ("Offline maps"): E2E
+            // guards detect the open state by body-only text, and iOS exposes
+            // this description as its own accessibility element.
+            description="Storage, downloads and export"
+            left={(p) => <List.Icon {...p} icon="database-outline" />}
+          >
+            <View style={styles.accordionBody}>
+              <OfflineMapsSection />
 
-        <Divider />
+              <Divider />
 
-        <List.Section>
-          <List.Subheader>Your data</List.Subheader>
-          <List.Item
-            title="Download your data"
-            description={
-              exporting
-                ? `Building archive… ${Math.min(exportProgress.done + 1, exportProgress.total)}/${exportProgress.total} files`
-                : exportSubtitle
-            }
-            onPress={onDownloadData}
-            disabled={exporting || exportPlan.entries.length === 0}
-            right={(p) =>
-              exporting ? (
-                <ActivityIndicator style={p.style} size={20} />
-              ) : (
-                <List.Icon {...p} icon="download" />
-              )
-            }
-          />
-          <View style={styles.note}>
-            <Text variant="bodySmall">
-              Bundles every map, trail and note photo into a zip that mirrors your Library folders,
-              then opens the share sheet.
-            </Text>
-          </View>
-        </List.Section>
+              <List.Section>
+                <List.Subheader>Your data</List.Subheader>
+                <List.Item
+                  title="Download your data"
+                  description={
+                    exporting
+                      ? `Building archive… ${Math.min(exportProgress.done + 1, exportProgress.total)}/${exportProgress.total} files`
+                      : exportSubtitle
+                  }
+                  onPress={onDownloadData}
+                  disabled={exporting || exportPlan.entries.length === 0}
+                  right={(p) =>
+                    exporting ? (
+                      <ActivityIndicator style={p.style} size={20} />
+                    ) : (
+                      <List.Icon {...p} icon="download" />
+                    )
+                  }
+                />
+                <View style={styles.note}>
+                  <Text variant="bodySmall">
+                    Bundles every map, trail and note photo into a zip that mirrors your Library
+                    folders, then opens the share sheet.
+                  </Text>
+                </View>
+              </List.Section>
+            </View>
+          </List.Accordion>
 
-        <Divider />
+          <Divider />
 
-        <StravaSection showSnack={showSnack} />
+          <List.Accordion
+            id="thirdparty"
+            title="Third party"
+            description="Strava and other connections"
+            left={(p) => <List.Icon {...p} icon="link-variant" />}
+          >
+            <View style={styles.accordionBody}>
+              <StravaSection showSnack={showSnack} />
+            </View>
+          </List.Accordion>
 
-        <Divider />
+          <Divider />
 
-        <List.Section>
-          <List.Subheader>Privacy</List.Subheader>
-          <List.Item
-            title="Automatic error reporting"
-            description="Send app errors to the developer automatically (queued while offline)"
-            right={() => (
-              <Switch value={errorReporting} onValueChange={(v) => set('errorReporting', v)} />
-            )}
-          />
-          {queueStatus !== null && (
-            <List.Item
-              title="Error report queue"
-              description={describeQueue(queueStatus)}
-              onPress={onSendReports}
-              disabled={!errorReporting || sendingReports || queueStatus.queued === 0}
-              right={(p) =>
-                sendingReports ? (
-                  <ActivityIndicator style={p.style} size={20} />
-                ) : (
-                  <List.Icon {...p} icon="send-outline" />
-                )
-              }
-            />
-          )}
-          <View style={styles.note}>
-            <Text variant="bodySmall">
-              Reports are filed in the background — you are never asked to do anything. They contain
-              only the error details, app version and device model — never your location, maps or
-              trails.
-            </Text>
-          </View>
-        </List.Section>
+          <List.Accordion
+            id="system"
+            title="System settings"
+            description="Error reporting and reset"
+            left={(p) => <List.Icon {...p} icon="cog-outline" />}
+          >
+            <View style={styles.accordionBody}>
+              <List.Section>
+                <List.Subheader>Privacy</List.Subheader>
+                <List.Item
+                  title="Automatic error reporting"
+                  description="Send app errors to the developer automatically (queued while offline)"
+                  right={() => (
+                    <Switch
+                      value={errorReporting}
+                      onValueChange={(v) => set('errorReporting', v)}
+                    />
+                  )}
+                />
+                {queueStatus !== null && (
+                  <List.Item
+                    title="Error report queue"
+                    description={describeQueue(queueStatus)}
+                    onPress={onSendReports}
+                    disabled={!errorReporting || sendingReports || queueStatus.queued === 0}
+                    right={(p) =>
+                      sendingReports ? (
+                        <ActivityIndicator style={p.style} size={20} />
+                      ) : (
+                        <List.Icon {...p} icon="send-outline" />
+                      )
+                    }
+                  />
+                )}
+                <View style={styles.note}>
+                  <Text variant="bodySmall">
+                    Reports are filed in the background — you are never asked to do anything. They
+                    contain only the error details, app version and device model — never your
+                    location, maps or trails.
+                  </Text>
+                </View>
+              </List.Section>
+              <View style={styles.note}>
+                <Button mode="outlined" icon="restore" onPress={reset}>
+                  Reset settings
+                </Button>
+              </View>
+            </View>
+          </List.Accordion>
 
-        <Divider />
+          <Divider />
 
-        <List.Section>
-          <List.Subheader>About</List.Subheader>
-          <View style={styles.logoWrap}>
-            <Image
-              source={require('../../../assets/icon.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text variant="titleMedium" style={styles.logoName}>
-              Inukshuk
-            </Text>
-            <Text variant="bodySmall" style={styles.logoTag}>
-              Offline trail navigation
-            </Text>
-          </View>
-          <List.Item title="Version" description={`${Constants.expoConfig?.version ?? '1.0.0'}`} />
-          {/* The map screen no longer shows MapLibre's attribution button
+          <List.Accordion
+            id="info"
+            title="System info"
+            // Same rule: don't echo body text ("Version", "Maps & data").
+            description="About Inukshuk"
+            left={(p) => <List.Icon {...p} icon="information-outline" />}
+          >
+            <View style={styles.accordionBody}>
+              <View style={styles.logoWrap}>
+                <Image
+                  source={require('../../../assets/icon.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <Text variant="titleMedium" style={styles.logoName}>
+                  Inukshuk
+                </Text>
+                <Text variant="bodySmall" style={styles.logoTag}>
+                  Offline trail navigation
+                </Text>
+              </View>
+              <List.Item
+                title="Version"
+                description={`${Constants.expoConfig?.version ?? '1.0.0'}`}
+              />
+              {/* The map screen no longer shows MapLibre's attribution button
               (owner call — it crowded the map), so this row is the one place
               the data credits live. Keep every provider listed. */}
-          <List.Item
-            title="Maps & data"
-            description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre"
-          />
-          <View style={styles.note}>
-            <Button mode="outlined" icon="restore" onPress={reset}>
-              Reset settings
-            </Button>
-          </View>
-        </List.Section>
+              <List.Item
+                title="Maps & data"
+                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre"
+              />
+            </View>
+          </List.Accordion>
+        </List.AccordionGroup>
       </ScrollView>
 
       <Portal>
@@ -450,6 +515,9 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // Zeroes the paddingLeft Paper clones onto a lone accordion child, so
+  // category bodies keep the same full-width row layout as before.
+  accordionBody: { paddingLeft: 0 },
   segment: { paddingHorizontal: 16, paddingBottom: 8 },
   note: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
   logoWrap: { alignItems: 'center', paddingVertical: 12, gap: 2 },
