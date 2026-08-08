@@ -329,7 +329,10 @@ export function SettingsScreen() {
           <List.Accordion
             id="data"
             title="Data settings"
-            description="Offline maps and your data"
+            // Deliberately does NOT repeat body text ("Offline maps"): E2E
+            // guards detect the open state by body-only text, and iOS exposes
+            // this description as its own accessibility element.
+            description="Storage, downloads and export"
             left={(p) => <List.Icon {...p} icon="database-outline" />}
           >
             <View style={styles.accordionBody}>
@@ -436,7 +439,8 @@ export function SettingsScreen() {
           <List.Accordion
             id="info"
             title="System info"
-            description="Version and data credits"
+            // Same rule: don't echo body text ("Version", "Maps & data").
+            description="About Inukshuk"
             left={(p) => <List.Icon {...p} icon="information-outline" />}
           >
             <View style={styles.accordionBody}>

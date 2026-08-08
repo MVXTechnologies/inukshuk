@@ -43,7 +43,17 @@ appId: com.inukshuk.app
 #
 # --- App settings: recording rows, then the theme switcher ---
 - assertVisible: 'App settings.*'
-- tapOn: 'App settings.*'
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Keep screen awake.*'
+          commands:
+            - tapOn: 'App settings.*'
+      - extendedWaitUntil:
+          visible: 'Keep screen awake.*'
+          timeout: 5000
 - assertVisible: 'Keep screen awake.*'
 - assertVisible: 'GPS point spacing.*'
 # Display: theme switcher — force Dark, prove the screen survives the theme
@@ -61,7 +71,18 @@ appId: com.inukshuk.app
     element:
       text: 'Data settings.*'
     direction: DOWN
-- tapOn: 'Data settings.*'
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Offline maps.*'
+          commands:
+            - tapOn: 'Data settings.*'
+      - extendedWaitUntil:
+          visible: 'Offline maps.*'
+          timeout: 5000
 - scrollUntilVisible:
     element:
       text: 'Download your data.*'
@@ -72,7 +93,18 @@ appId: com.inukshuk.app
     element:
       text: 'Third party.*'
     direction: DOWN
-- tapOn: 'Third party.*'
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Connections.*'
+          commands:
+            - tapOn: 'Third party.*'
+      - extendedWaitUntil:
+          visible: 'Connections.*'
+          timeout: 5000
 - scrollUntilVisible:
     element:
       text: '(Connect )?Strava.*'
@@ -87,7 +119,18 @@ appId: com.inukshuk.app
     element:
       text: 'System settings.*'
     direction: DOWN
-- tapOn: 'System settings.*'
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Privacy.*'
+          commands:
+            - tapOn: 'System settings.*'
+      - extendedWaitUntil:
+          visible: 'Privacy.*'
+          timeout: 5000
 - scrollUntilVisible:
     element:
       text: 'Automatic error reporting.*'
@@ -106,9 +149,26 @@ appId: com.inukshuk.app
     element:
       text: 'System info.*'
     direction: DOWN
-- tapOn: 'System info.*'
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Offline trail navigation.*'
+          commands:
+            - tapOn: 'System info.*'
+      - extendedWaitUntil:
+          visible: 'Offline trail navigation.*'
+          timeout: 5000
 - scrollUntilVisible:
     element:
       text: 'Version.*'
+    direction: DOWN
+# Scroll to the credits row itself — stopping at Version leaves the next row
+# under the tab bar on iOS (same lesson as the Error report queue row above).
+- scrollUntilVisible:
+    element:
+      text: 'Maps & data.*'
     direction: DOWN
 - assertVisible: 'Maps & data.*'
