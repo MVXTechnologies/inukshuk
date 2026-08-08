@@ -476,6 +476,26 @@ export async function initRecorderRecovery(): Promise<boolean> {
     const cp = await checkpoint.readCheckpoint();
     if (!cp || !Array.isArray(cp.points)) return false;
 
+    // Ghost-session guard: clearCheckpoint's delete is best-effort — when it
+    // silently fails right after a successful save, the stale checkpoint
+    // resurrects the already-saved hike as a paused "ghost" recording on the
+    // next launch, and the re-checkpoint below then makes the ghost permanent
+    // across every later launch. A saved trail with this exact startedAt is
+    // proof the session completed: discard the checkpoint instead of
+    // restoring it.
+    const lib = useLibraryStore.getState();
+    if (!lib.hydrated) {
+      try {
+        await lib.hydrate();
+      } catch {
+        /* hydration failure → judge with whatever tracks we have */
+      }
+    }
+    if (useLibraryStore.getState().tracks.some((t) => t.startedAt === cp.startedAt)) {
+      checkpoint.clearCheckpoint();
+      return false;
+    }
+
     const journaled = await checkpoint.readBackgroundPoints();
     const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
     if (points.length === 0) return false;
