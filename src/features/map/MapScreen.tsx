@@ -3,7 +3,8 @@ import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/vi
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import type { BoundingBox, LngLat, TrackPoint } from '@core/models';
+import { ECCC_ATTRIBUTION, weatherTileUrl } from '@core/geo/weatherLayers';
+import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
 import {
@@ -60,6 +61,8 @@ import { usePdfOverlays } from './usePdfOverlay';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
+import { ForecastCard } from './weather/ForecastCard';
+import { useWeatherFrames } from './weather/useWeatherFrames';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
@@ -220,12 +223,30 @@ export function MapScreen() {
   // dial hides with the rest of the controls until the rail is out.
   const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
+  // Weather overlay (meteo M1): the persisted GeoMet layer choice, the
+  // transient radar-animation flag, and the current animation frame (null =
+  // static latest). Network-only like the marked trails: while offline-only
+  // is on the layer is dropped from the style entirely and the frames hook is
+  // parked, so the map stays byte-identical to a weatherless one.
+  const weatherLayer = useSettingsStore((s) => s.weatherLayer);
+  const weatherAnimating = useMapStore((s) => s.weatherAnimating);
+  const weatherTime = useWeatherFrames(offlineOnly ? null : weatherLayer, weatherAnimating);
+  // Long-pressed point whose ECCC forecast card is open (weather-only UI).
+  const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
   const style = useMemo(() => {
     const options = {
       // The 'edge' UI style washes the raster into pastels to match its chrome.
       pastel: uiStyle === 'edge',
       // Marked-trail networks (network-only; hidden while offline-only).
       markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
+      ...(weatherLayer !== null && !offlineOnly
+        ? {
+            weather: {
+              urlTemplate: weatherTileUrl(weatherLayer, weatherTime ?? undefined),
+              attribution: ECCC_ATTRIBUTION,
+            },
+          }
+        : {}),
       ...(offlineOnly
         ? {
             rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
@@ -248,6 +269,8 @@ export function MapScreen() {
     theme.colors.background,
     uiStyle,
     markedTrailsNetworks,
+    weatherLayer,
+    weatherTime,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -700,6 +723,7 @@ export function MapScreen() {
         restoreCameraOnDeselect();
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
+      setForecastAt(null); // ... and the forecast card
     },
     [
       visiblePins,
@@ -775,6 +799,14 @@ export function MapScreen() {
           compass={false}
           touchPitch
           onPress={onMapPress}
+          // Weather-only gesture: long-press opens the ECCC forecast card for
+          // that point. Gated on an active weather layer (and online) so the
+          // map behaves exactly like today when weather is off.
+          onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
+            const lngLat = e.nativeEvent?.lngLat;
+            if (!lngLat || weatherLayer === null || offlineOnly) return;
+            setForecastAt({ longitude: lngLat[0], latitude: lngLat[1] });
+          }}
           onWillStartLoadingMap={() => setMapLoaded(false)}
           onDidFinishLoadingMap={() => setMapLoaded(true)}
           onRegionDidChange={() => {
@@ -1390,6 +1422,18 @@ export function MapScreen() {
           onClose={() => setViewWp(null)}
         />
       )}
+
+      {/* ECCC forecast card (weather long-press): nearest citypage forecast +
+          the gridded value under the finger. Same bottom-card slot rules as
+          the waypoint viewer — hidden while other bottom cards are up. */}
+      {forecastAt !== null &&
+        weatherLayer !== null &&
+        !offlineOnly &&
+        inspectTrack === null &&
+        editWaypoint === null &&
+        viewWaypoint === null && (
+          <ForecastCard at={forecastAt} layer={weatherLayer} onClose={() => setForecastAt(null)} />
+        )}
 
       <WaypointEditorDialog
         waypoint={editWaypoint}

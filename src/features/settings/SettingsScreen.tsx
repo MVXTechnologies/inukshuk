@@ -466,7 +466,7 @@ export function SettingsScreen() {
               the data credits live. Keep every provider listed. */}
               <List.Item
                 title="Maps & data"
-                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre"
+                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada"
               />
             </View>
           </List.Accordion>

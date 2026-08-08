@@ -9,6 +9,8 @@ import {
   TerrainOverlayMenuRows,
   useSlopeDisclaimer,
 } from '../terrain3d/overlayControls';
+import { weatherLayerById } from '@core/geo/weatherLayers';
+import { WeatherLayersDialog } from '../weather/WeatherLayersDialog';
 import { EdgePill } from './EdgePill';
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { TrailNetworksDialog } from './TrailNetworksDialog';
@@ -29,6 +31,7 @@ export function OverlaysRows({
   onSlopeEnabled,
   onOpenFolders,
   onOpenTrailNetworks,
+  onOpenWeather,
 }: {
   pdfOverlayCount: number;
   trackOverlayCount: number;
@@ -37,12 +40,14 @@ export function OverlaysRows({
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onOpenTrailNetworks: () => void;
+  onOpenWeather: () => void;
 }) {
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const typeMode = mapVisibilityMode === 'type';
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const networks = useSettingsStore((s) => s.markedTrailsNetworks);
+  const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const set = useSettingsStore((s) => s.set);
 
@@ -65,6 +70,21 @@ export function OverlaysRows({
         leadingIcon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
         onPress={onOpenTrailNetworks}
         title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
+      />
+      {/* Weather is network-only: while "Locally downloaded only" is on the
+          layer is dropped from the style, so the row is disabled with a hint
+          instead of pretending a toggle would show anything. */}
+      <Menu.Item
+        leadingIcon="weather-partly-cloudy"
+        disabled={offlineOnly}
+        onPress={onOpenWeather}
+        title={
+          offlineOnly
+            ? 'Weather (needs connection)'
+            : weatherLayer !== null
+              ? `Weather: ${weatherLayerById(weatherLayer).label}`
+              : 'Weather'
+        }
       />
       <Menu.Item
         leadingIcon={showHeatmap ? 'checkbox-marked' : 'checkbox-blank-outline'}
@@ -91,18 +111,23 @@ export function OverlaysDialogs({
   onFoldersDismiss,
   networksOpen,
   onNetworksDismiss,
+  weatherOpen,
+  onWeatherDismiss,
   snackbar,
 }: {
   foldersOpen: boolean;
   onFoldersDismiss: () => void;
   networksOpen: boolean;
   onNetworksDismiss: () => void;
+  weatherOpen: boolean;
+  onWeatherDismiss: () => void;
   snackbar: ReturnType<typeof useSlopeDisclaimer>['snackbar'];
 }) {
   return (
     <>
       <FolderPickerDialog visible={foldersOpen} onDismiss={onFoldersDismiss} />
       <TrailNetworksDialog visible={networksOpen} onDismiss={onNetworksDismiss} />
+      <WeatherLayersDialog visible={weatherOpen} onDismiss={onWeatherDismiss} />
       <DisclaimerSnackbar snackbar={snackbar} />
     </>
   );
@@ -123,6 +148,7 @@ export function MapOverlaysMenu({
   const [open, setOpen] = useState(false);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [networksOpen, setNetworksOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
@@ -163,6 +189,10 @@ export function MapOverlaysMenu({
             setOpen(false);
             setNetworksOpen(true);
           }}
+          onOpenWeather={() => {
+            setOpen(false);
+            setWeatherOpen(true);
+          }}
         />
       </Menu>
       <OverlaysDialogs
@@ -170,6 +200,8 @@ export function MapOverlaysMenu({
         onFoldersDismiss={() => setFoldersOpen(false)}
         networksOpen={networksOpen}
         onNetworksDismiss={() => setNetworksOpen(false)}
+        weatherOpen={weatherOpen}
+        onWeatherDismiss={() => setWeatherOpen(false)}
         snackbar={snackbar}
       />
     </>

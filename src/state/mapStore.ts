@@ -22,6 +22,12 @@ interface MapState {
   terrain3d: boolean;
   /** Base layer: OSM streets, satellite imagery, or a topographic relief map. */
   basemap: MapBasemap;
+  /**
+   * Whether the active radar overlay cycles its bounded frame animation
+   * (transient — animation always starts off on launch; which weather layer
+   * is active is persisted in the settings store).
+   */
+  weatherAnimating: boolean;
   /** One-shot request for the map to fit these bounds (e.g. "view trail"). */
   focusBounds: BoundingBox | null;
   /**
@@ -35,6 +41,7 @@ interface MapState {
   toggleTrackOverlays: () => void;
   toggleTerrain3d: () => void;
   setBasemap: (b: MapBasemap) => void;
+  toggleWeatherAnimation: () => void;
   setFocusBounds: (b: BoundingBox | null) => void;
   setFocusWaypoint: (target: { latitude: number; longitude: number } | null) => void;
 }
@@ -45,6 +52,7 @@ export const useMapStore = create<MapState>((set) => ({
   showTrackOverlays: true,
   terrain3d: false,
   basemap: 'map',
+  weatherAnimating: false,
   focusBounds: null,
   focusWaypoint: null,
   setFocusBounds: (b) => set({ focusBounds: b }),
@@ -54,4 +62,5 @@ export const useMapStore = create<MapState>((set) => ({
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
   setBasemap: (b) => set({ basemap: b }),
+  toggleWeatherAnimation: () => set((s) => ({ weatherAnimating: !s.weatherAnimating })),
 }));

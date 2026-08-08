@@ -21,3 +21,17 @@ describe('mapStore focusWaypoint intent', () => {
     expect(useMapStore.getState().focusWaypoint).toBeNull();
   });
 });
+
+describe('mapStore weather animation (transient)', () => {
+  afterEach(() => {
+    useMapStore.setState({ weatherAnimating: false });
+  });
+
+  it('starts off and toggles', () => {
+    expect(useMapStore.getState().weatherAnimating).toBe(false);
+    useMapStore.getState().toggleWeatherAnimation();
+    expect(useMapStore.getState().weatherAnimating).toBe(true);
+    useMapStore.getState().toggleWeatherAnimation();
+    expect(useMapStore.getState().weatherAnimating).toBe(false);
+  });
+});

@@ -78,6 +78,54 @@ describe('buildOsmStyle', () => {
     });
   });
 
+  describe('weather overlay', () => {
+    const weather = {
+      urlTemplate:
+        'https://geo.weather.gc.ca/geomet?service=WMS&request=GetMap&layers=RADAR_1KM_RRAI&bbox={bbox-epsg-3857}',
+      attribution: 'Data Source: Environment and Climate Change Canada',
+    };
+
+    it('is absent by default — the map is byte-identical to today with weather off', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true);
+      expect(s.sources.weather).toBeUndefined();
+      expect(layerIds(s)).not.toContain('weather');
+    });
+
+    it('adds a WMS raster source + layer with the ECCC attribution', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { weather });
+      expect(s.sources.weather).toEqual({
+        type: 'raster',
+        tiles: [weather.urlTemplate],
+        tileSize: 256,
+        attribution: weather.attribution,
+      });
+      const layer = s.layers.find((l) => l.id === 'weather');
+      expect(layer).toMatchObject({
+        type: 'raster',
+        source: 'weather',
+        // No cross-fade: animation swaps frame URLs and fading would smear them.
+        paint: { 'raster-opacity': 0.8, 'raster-fade-duration': 0 },
+      });
+    });
+
+    it('honours an explicit opacity', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { weather: { ...weather, opacity: 0.5 } });
+      const layer = s.layers.find((l) => l.id === 'weather');
+      expect(layer?.paint).toMatchObject({ 'raster-opacity': 0.5 });
+    });
+
+    it('draws above the basemap, marked trails and hillshade', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        weather,
+        markedTrailsNetworks: ['hiking'],
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('weather')).toBeGreaterThan(ids.indexOf('osm'));
+      expect(ids.indexOf('weather')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
+      expect(ids.indexOf('weather')).toBeGreaterThan(ids.indexOf('hillshade-2d'));
+    });
+  });
+
   describe('downloaded-regions mask', () => {
     const mask = {
       data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),
@@ -101,6 +149,15 @@ describe('buildOsmStyle', () => {
         source: 'downloaded-mask',
         paint: { 'fill-color': '#FFFFFF', 'fill-opacity': 1 },
       });
+    });
+
+    it('stays the TOP layer even when a weather overlay is present', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        downloadedMask: mask,
+        weather: { urlTemplate: 'https://x/{bbox-epsg-3857}', attribution: 'ECCC' },
+      });
+      const ids = layerIds(s);
+      expect(ids[ids.length - 1]).toBe('downloaded-mask');
     });
 
     it('sits above the base raster layer for every basemap', () => {

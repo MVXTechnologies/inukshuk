@@ -1,0 +1,78 @@
+# Weather overlay e2e (meteo M1): open the Overlays menu, pick a GeoMet radar
+# layer (+ the bounded animation toggle), long-press for the forecast card and
+# confirm the 2D map stays alive throughout. Crash-detection focus, like
+# map-overlays.yaml — NEVER asserts weather pixels or forecast content.
+#
+# Portability notes:
+# - Network-independent by design: in CI the GeoMet WMS host is unreachable,
+#   tile fetches fail and the map degrades to the background/basemap it
+#   already tolerates; the animation toggle's GetCapabilities fetch fails and
+#   the overlay falls back to the static latest frame; the forecast card
+#   renders its "needs a connection" state. Nothing below asserts any of
+#   those network-dependent pixels — only menu state + the crash gate.
+# - The weather picker is a paper Dialog of RadioButton rows; labels are
+#   plain visible-text matches with no regex metacharacters (Maestro treats
+#   matchers as regexes — see the catalog test in weatherLayers.test.ts).
+# - A far-left tap lands on the Menu's dismiss backdrop and only closes the
+#   menu (see trail-view.yaml).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- Enable the rain radar overlay ---
+- tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Weather'
+    timeout: 10000
+- tapOn: 'Weather'
+- extendedWaitUntil:
+    visible: 'Rain radar'
+    timeout: 10000
+- tapOn: 'Rain radar'
+# Radar layers grow the bounded animation toggle — flip it on too (its
+# capabilities fetch failing offline must degrade to static, not crash).
+- extendedWaitUntil:
+    visible: 'Animate radar'
+    timeout: 10000
+- tapOn: 'Animate radar'
+- tapOn: 'Done'
+# The map beneath must still be responsive while (unreachable) WMS tiles fail.
+- assertVisible: 'Map actions'
+# --- Forecast tap-card: long-press must never crash, with or without network;
+# a map tap dismisses whatever state the card is in. ---
+- longPressOn:
+    point: 50%,40%
+- assertVisible: 'Map actions'
+- tapOn:
+    point: 50%,30%
+- assertVisible: 'Map actions'
+# --- The menu row reflects the active layer; turn everything back off so
+# reruns and later flows start from the default map. ---
+- tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Weather: Rain radar'
+    timeout: 10000
+- tapOn: 'Weather: Rain radar'
+- extendedWaitUntil:
+    visible: 'Animate radar'
+    timeout: 10000
+- tapOn: 'Animate radar'
+- tapOn: 'None'
+- tapOn: 'Done'
+- assertVisible: 'Map actions'

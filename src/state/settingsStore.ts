@@ -6,6 +6,7 @@ import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
 import type { UiStyle } from '@ui/theme';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
+import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
@@ -47,6 +48,12 @@ export interface Settings {
   uiStyle: UiStyle;
   /** Checked marked-trail databases draped on the main map (empty = off). */
   markedTrailsNetworks: TrailNetworkId[];
+  /**
+   * Active ECCC GeoMet weather overlay (radar / wind / precip), or null = off.
+   * Network-only: the map drops it entirely while `offlineOnly` is on, the
+   * same way `markedTrailsNetworks` is dropped.
+   */
+  weatherLayer: WeatherLayerId | null;
   /** Native MapLibre heatmap density layer under the trail lines. */
   showHeatmap: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
@@ -92,6 +99,7 @@ const DEFAULTS: Settings = {
   themeMode: 'system',
   uiStyle: 'classic',
   markedTrailsNetworks: [],
+  weatherLayer: null,
   showHeatmap: true,
   errorReporting: true,
   terrainSlope: false,
@@ -130,6 +138,7 @@ function snapshot(s: SettingsState): Settings {
     themeMode,
     uiStyle,
     markedTrailsNetworks,
+    weatherLayer,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -154,6 +163,7 @@ function snapshot(s: SettingsState): Settings {
     themeMode,
     uiStyle,
     markedTrailsNetworks,
+    weatherLayer,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -181,6 +191,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // default any object-typed junk would slip through — deep-validate here.
     next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
     next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
+    // weatherLayer's default is null (typeof 'object'), so the migration
+    // ladder's typeof check DROPS a valid persisted string id (and would pass
+    // object junk through). Recover the raw value and deep-validate it.
+    next.weatherLayer = sanitizeWeatherLayer(
+      typeof saved === 'object' && saved !== null
+        ? (saved as { weatherLayer?: unknown }).weatherLayer
+        : null,
+    );
     setDisplayUnits(next.units);
     set({ ...next, hydrated: true });
   },
