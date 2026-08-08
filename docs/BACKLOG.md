@@ -6,10 +6,7 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
-- **iOS map performance** — on a fresh install on the latest iPhone the map is
-  laggy to the point of unusable; find the bottleneck (JS re-render churn vs
-  native render stack), fix, and improve map load time. Android is fine.
-  _Status: instrumented measurement running (2026-08-07)._
+- **Map-screen chrome batch (items 1-3 below)** — started 2026-08-08.
 
 ## Queued (owner requests, 2026-08-07)
 
@@ -54,6 +51,13 @@ Ordered roughly by priority (top = next).
 
 ## On ice
 
+- **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
+  the two diagnostic readings). Findings so far: simulator JS rates clean
+  (~1 render/s while panning); Samsung error queue was a red herring; the
+  iPhone TestFlight build has the dead ERROR_REPORT_TOKEN baked in, so iOS
+  errors queue invisibly — resume = ask the 4 diagnostic questions, then
+  TestFlight build 5 (rotated token + FPS overlay). Probe parked on branch
+  `ios-perf-probe`.
 - **Garmin Connect sync + third-party hub** — Garmin's developer program is
   being upgraded, no timeline. Full package parked on PR #171 (branch
   `third-party-sync`); ships as 1.6.0 when thawed.
