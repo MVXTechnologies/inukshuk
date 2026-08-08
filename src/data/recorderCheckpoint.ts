@@ -96,11 +96,21 @@ export function clearCheckpoint(): void {
 
 function deleteJournalFiles(baseName: string): void {
   for (const name of [baseName, `${baseName}.tmp`]) {
-    try {
-      const file = new File(Paths.document, name);
-      if (file.exists) file.delete();
-    } catch {
-      /* best effort */
+    // Verified delete with one retry: a silently-failed delete leaves a stale
+    // checkpoint that resurrects an already-saved recording as a ghost paused
+    // session on the next launch (recovery re-writes what it restores, so the
+    // ghost then survives every relaunch). The saved-trail guard in
+    // initRecorderRecovery is the semantic backstop; this keeps the common
+    // path clean.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const file = new File(Paths.document, name);
+        if (!file.exists) break;
+        file.delete();
+        if (!new File(Paths.document, name).exists) break;
+      } catch {
+        /* best effort — retry once, then give up */
+      }
     }
   }
 }

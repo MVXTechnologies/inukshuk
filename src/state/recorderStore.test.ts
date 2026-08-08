@@ -492,3 +492,51 @@ describe('activity category threading', () => {
     expect(useRecorderStore.getState().name).toBe('Legacy hike');
   });
 });
+
+describe('ghost-session guard (stale checkpoint for an already-saved trail)', () => {
+  // The field bug this pins down: clearCheckpoint's delete silently failed
+  // after a successful save, so the next launch restored the saved hike as a
+  // paused ghost recording — and re-checkpointing on restore made the ghost
+  // permanent across every later launch (2026-08-08 emulator suite run11).
+  const ghostCheckpoint = () =>
+    checkpoint.writeCheckpoint({
+      status: 'recording',
+      name: 'Ghost hike',
+      startedAt: 111_222,
+      pausedMs: 0,
+      points: [pt({ time: 111_222 }), pt({ time: 114_222, latitude: 46.800025 })],
+      waypoints: [],
+    });
+
+  afterEach(() => {
+    useLibraryStore.setState({ tracks: [], hydrated: false });
+  });
+
+  it('discards the checkpoint instead of restoring when a saved trail has its startedAt', async () => {
+    ghostCheckpoint();
+    useLibraryStore.setState({
+      hydrated: true,
+      tracks: [{ id: 'saved1', name: 'Ghost hike', startedAt: 111_222 }] as never,
+    });
+    resetRecorderRecoveryForTests();
+
+    expect(await initRecorderRecovery()).toBe(false);
+    expect(useRecorderStore.getState().status).toBe('idle');
+    // The stale journal is gone: a later launch cannot resurrect it either.
+    expect(checkpoint.clearCheckpoint).toHaveBeenCalled();
+    expect(await checkpoint.readCheckpoint()).toBeNull();
+  });
+
+  it('still restores normally when no saved trail matches the checkpoint', async () => {
+    ghostCheckpoint();
+    useLibraryStore.setState({
+      hydrated: true,
+      tracks: [{ id: 'other', name: 'Different hike', startedAt: 999_999 }] as never,
+    });
+    resetRecorderRecoveryForTests();
+
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().status).toBe('paused');
+    expect(useRecorderStore.getState().name).toBe('Ghost hike');
+  });
+});
