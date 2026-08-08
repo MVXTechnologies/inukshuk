@@ -4,22 +4,16 @@ Owner-maintained wishlist. Claude reads this at the start of a session to pick
 up where we left off; items move to ~~struck~~ with the shipping PR when done.
 Ordered roughly by priority (top = next).
 
-## In progress
-
-- **Map-screen chrome batch (items 1-3 below)** — started 2026-08-08.
-
 ## Queued (owner requests, 2026-08-07)
 
-1. **Bottom-left map chrome must go** — the MapLibre logo and the clickable
-   attribution (i) icon take too much space. Note: OSM/Esri attribution is a
-   license requirement, so it needs a new, smaller home (e.g. Settings → About
-   or a one-line combined mark), not plain deletion.
-2. **Recording card sits lower** — when a recording starts, the whole controls
-   card (buttons + stats) should sit further down, in the space the map logo
-   used to occupy, clearing more map.
-3. **BUG: waypoint button off-screen after expand→collapse** — expanding the
-   recording stats card and collapsing it again pushes the third (waypoint)
-   button off-screen. Only happens after an expand→collapse cycle.
+1. ~~**Bottom-left map chrome must go**~~ — shipped in PR #185 (OTA'd to
+   1.5.0 + 1.4.0, 2026-08-08). Logo + attribution (i) removed; the OSM/Esri/
+   MapLibre credit line lives in Settings → About → "Maps & data".
+2. ~~**Recording card sits lower**~~ — shipped in PR #185 (same OTA); the
+   recording UI now sits just above the tab bar in the freed space.
+3. ~~**BUG: waypoint button off-screen after expand→collapse**~~ — fixed in
+   PR #185 (same OTA); verified with a dedicated expand→collapse Maestro
+   flow on both platforms.
 4. **Settings grouped into expandable categories** — Settings is getting
    scattered; group into collapsible sections, roughly: Third party / App /
    System info / System settings / Data settings.
