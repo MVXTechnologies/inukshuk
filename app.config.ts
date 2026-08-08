@@ -208,6 +208,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // "not configured in this build". See docs/DEPLOYMENT.md § Strava.
     stravaClientId: process.env.STRAVA_CLIENT_ID,
     stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
+    // Map-store catalog manifest (src/data/catalogCache). Unset = the Pages
+    // site (/catalog/v1/manifest.json). E2E builds point it at a loopback
+    // fixture server (see .maestro/store.yaml) so CI never depends on NRCan.
+    catalogManifestUrl: process.env.CATALOG_MANIFEST_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes
