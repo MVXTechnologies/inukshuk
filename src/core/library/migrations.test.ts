@@ -88,9 +88,9 @@ describe('migrateLibraryIndex', () => {
     expect(index.tracks[1]?.category).toBe('hike');
   });
 
-  it('passes a current v4 index through unchanged', () => {
-    const v4: LibraryIndex = {
-      schemaVersion: 4,
+  it('passes a current v5 index through unchanged', () => {
+    const v5: LibraryIndex = {
+      schemaVersion: 5,
       maps: [
         {
           id: 'm1',
@@ -101,6 +101,8 @@ describe('migrateLibraryIndex', () => {
           georeferences: [geoRef(0), geoRef(1)],
           activePages: [1],
           folderId: 'f1',
+          sourceItemId: 'cantopo-021l14',
+          sourceUpdatedAt: '2019-07-24',
         },
       ],
       tracks: [{ ...track('t1'), folderId: 'f1', category: 'cat1' }],
@@ -114,7 +116,53 @@ describe('migrateLibraryIndex', () => {
         { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
       ],
     };
-    expect(migrateLibraryIndex(v4)).toEqual(v4);
+    expect(migrateLibraryIndex(v5)).toEqual(v5);
+  });
+
+  it('v4 → v5 stamps the version; maps stay untouched (no provenance yet)', () => {
+    const v4 = {
+      schemaVersion: 4,
+      maps: [
+        {
+          id: 'm1',
+          name: 'Map',
+          fileUri: 'file://m1.pdf',
+          importedAt: 5,
+          pageCount: 1,
+          georeferences: [geoRef(0)],
+          activePages: [0],
+        },
+      ],
+      tracks: [],
+      folders: [],
+      mapVisibilityMode: 'type',
+      visibleFolderIds: [],
+      activeMapId: 'm1',
+      activeTrackIds: [],
+      customCategories: [],
+      waypoints: [],
+    };
+    const index = migrateLibraryIndex(v4);
+    expect(index.schemaVersion).toBe(5);
+    expect(index.maps[0]).not.toHaveProperty('sourceItemId');
+    expect(index.maps[0]).not.toHaveProperty('sourceUpdatedAt');
+    expect(index.activeMapId).toBe('m1');
+  });
+
+  it('drops wrong-typed catalog-provenance fields instead of keeping junk', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: 5,
+      maps: [
+        {
+          id: 'm1',
+          georeferences: [geoRef(0)],
+          sourceItemId: 42,
+          sourceUpdatedAt: { when: 'yesterday' },
+        },
+      ],
+    });
+    expect(index.maps[0]).not.toHaveProperty('sourceItemId');
+    expect(index.maps[0]).not.toHaveProperty('sourceUpdatedAt');
   });
 
   it('upgrades a v2 index: waypoints start empty', () => {
@@ -128,7 +176,7 @@ describe('migrateLibraryIndex', () => {
       activeTrackIds: ['t1'],
     };
     const index = migrateLibraryIndex(v2);
-    expect(index.schemaVersion).toBe(4);
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(index.waypoints).toEqual([]);
     expect(index.activeTrackIds).toEqual(['t1']); // v2 content is retained
   });
