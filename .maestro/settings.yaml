@@ -1,7 +1,12 @@
-# Settings walk e2e: scrolls the whole Settings screen and asserts every
-# recently-added surface is present — the Your data export row, the
-# Connections section (Strava, #132), and the Privacy section's automatic
-# error reporting + report queue rows (#110).
+# Settings walk e2e: opens each of the five collapsible categories (backlog
+# item 4) and asserts its key rows — App settings (recording/display/map),
+# Data settings (export row), Third party (Strava, #132), System settings
+# (automatic error reporting + report queue, #110), System info (version).
+#
+# The AccordionGroup keeps ONE category open at a time: tapping the next
+# header closes the previous one, so each category's assertions must finish
+# before moving on, and scroll positions shift at every switch —
+# scrollUntilVisible absorbs that.
 #
 # Deliberately does NOT tap "Download your data": it opens the OS share
 # sheet, which on Android can trap Maestro outside the app. Presence-only.
@@ -32,6 +37,13 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Settings(, tab.*)?'
     retryTapIfNoChange: true
+# iOS merges a row's title + subtitle into ONE accessibility string (Android
+# keeps them separate elements), so every row match below is a wildcard
+# regex — it hits the title element on Android and the merged row on iOS.
+#
+# --- App settings: recording rows, then the theme switcher ---
+- assertVisible: 'App settings.*'
+- tapOn: 'App settings.*'
 - assertVisible: 'Keep screen awake.*'
 - assertVisible: 'GPS point spacing.*'
 # Display: theme switcher — force Dark, prove the screen survives the theme
@@ -44,26 +56,38 @@ appId: com.inukshuk.app
 - assertVisible: 'Theme.*'
 - tapOn: 'System'
 - assertVisible: 'Theme.*'
-# iOS merges a row's title + subtitle into ONE accessibility string (Android
-# keeps them separate elements), so every row match below is a wildcard
-# regex — it hits the title element on Android and the merged row on iOS.
-# Your data: export row present (do not tap — share sheet).
+# --- Data settings: export row present (do not tap — share sheet) ---
+- scrollUntilVisible:
+    element:
+      text: 'Data settings.*'
+    direction: DOWN
+- tapOn: 'Data settings.*'
 - scrollUntilVisible:
     element:
       text: 'Download your data.*'
     direction: DOWN
-# Connections: the Strava row exists; unconfigured builds show a disabled
-# "Connect Strava" with the not-configured subtitle.
+# --- Third party: the Strava row exists; unconfigured builds show a
+# disabled "Connect Strava" with the not-configured subtitle ---
+- scrollUntilVisible:
+    element:
+      text: 'Third party.*'
+    direction: DOWN
+- tapOn: 'Third party.*'
 - scrollUntilVisible:
     element:
       text: '(Connect )?Strava.*'
     direction: DOWN
 - assertVisible: '.*(Strava is not configured in this build|Ask to push saved trails to Strava|Connected).*'
-# Privacy: error reporting toggle + queue row (subtitle is dynamic — count or
-# "No pending reports", suffixed with channel/last-attempt info). Scroll until
-# the QUEUE row itself is visible: scrolling to the section title stops the
-# moment it peeks above the tab bar, leaving the queue row off-screen — the
-# 2026-08-03 nightly failed exactly there on both the run and its retry.
+# --- System settings: error reporting toggle + queue row (subtitle is
+# dynamic — count or "No pending reports", suffixed with channel/last-attempt
+# info). Scroll until the QUEUE row itself is visible: scrolling to a title
+# stops the moment it peeks above the tab bar, leaving the row off-screen —
+# the 2026-08-03 nightly failed exactly there on both the run and its retry.
+- scrollUntilVisible:
+    element:
+      text: 'System settings.*'
+    direction: DOWN
+- tapOn: 'System settings.*'
 - scrollUntilVisible:
     element:
       text: 'Automatic error reporting.*'
@@ -73,9 +97,18 @@ appId: com.inukshuk.app
       text: 'Error report queue.*'
     direction: DOWN
 - assertVisible: 'Error report queue.*'
-# About: bottom of the screen reachable, version row present.
 - scrollUntilVisible:
     element:
       text: 'Reset settings'
     direction: DOWN
-- assertVisible: 'Version.*'
+# --- System info: version + data credits ---
+- scrollUntilVisible:
+    element:
+      text: 'System info.*'
+    direction: DOWN
+- tapOn: 'System info.*'
+- scrollUntilVisible:
+    element:
+      text: 'Version.*'
+    direction: DOWN
+- assertVisible: 'Maps & data.*'

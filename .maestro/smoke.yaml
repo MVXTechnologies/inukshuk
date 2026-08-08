@@ -42,7 +42,9 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Settings(, tab.*)?'
     retryTapIfNoChange: true
-- assertVisible: 'Keep screen awake.*'
+# Settings is grouped into collapsed accordions (backlog item 4) — the
+# category header is the screen's mount proof, not any inner row.
+- assertVisible: 'App settings.*'
 # Settings has its own "Map" section header that Maestro would tap instead of
 # the tab bar; hop through Library (nothing there matches the Map regex — the
 # "Maps (n)" section header doesn't fit it) before returning.
