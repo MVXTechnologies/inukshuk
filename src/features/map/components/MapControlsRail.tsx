@@ -115,6 +115,7 @@ function EdgeRail({
   const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays'>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [networksOpen, setNetworksOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
@@ -153,6 +154,10 @@ function EdgeRail({
               setOpenMenu(null);
               setNetworksOpen(true);
             }}
+            onOpenWeather={() => {
+              setOpenMenu(null);
+              setWeatherOpen(true);
+            }}
           />
         </EdgeExpandingMenu>
       </View>
@@ -161,6 +166,8 @@ function EdgeRail({
         onFoldersDismiss={() => setFoldersOpen(false)}
         networksOpen={networksOpen}
         onNetworksDismiss={() => setNetworksOpen(false)}
+        weatherOpen={weatherOpen}
+        onWeatherDismiss={() => setWeatherOpen(false)}
         snackbar={snackbar}
       />
     </>

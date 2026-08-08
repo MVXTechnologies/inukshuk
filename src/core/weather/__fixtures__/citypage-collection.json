@@ -5,10 +5,7 @@
       "type": "Feature",
       "geometry": {
         "type": "Point",
-        "coordinates": [
-          -71.36,
-          46.69
-        ]
+        "coordinates": [-71.36, 46.69]
       },
       "properties": {
         "lastUpdated": "2026-08-08T21:01:14Z",
@@ -237,10 +234,7 @@
       "type": "Feature",
       "geometry": {
         "type": "Point",
-        "coordinates": [
-          -71.27,
-          46.82
-        ]
+        "coordinates": [-71.27, 46.82]
       },
       "properties": {
         "lastUpdated": "2026-08-08T21:02:19Z",

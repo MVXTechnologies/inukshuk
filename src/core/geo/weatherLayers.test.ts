@@ -140,10 +140,19 @@ describe('parseTimeDimension', () => {
 
   it.each([
     ['no dimension at all', '<WMS_Capabilities></WMS_Capabilities>'],
-    ['a single timestamp instead of an interval', '<Dimension name="time">2026-08-08T21:00:00Z</Dimension>'],
+    [
+      'a single timestamp instead of an interval',
+      '<Dimension name="time">2026-08-08T21:00:00Z</Dimension>',
+    ],
     ['an unparseable date', '<Dimension name="time">junk/2026-08-08T21:00:00Z/PT6M</Dimension>'],
-    ['a bad period', '<Dimension name="time">2026-08-08T18:00:00Z/2026-08-08T21:00:00Z/6min</Dimension>'],
-    ['end before start', '<Dimension name="time">2026-08-08T21:00:00Z/2026-08-08T18:00:00Z/PT6M</Dimension>'],
+    [
+      'a bad period',
+      '<Dimension name="time">2026-08-08T18:00:00Z/2026-08-08T21:00:00Z/6min</Dimension>',
+    ],
+    [
+      'end before start',
+      '<Dimension name="time">2026-08-08T21:00:00Z/2026-08-08T18:00:00Z/PT6M</Dimension>',
+    ],
   ])('returns null on %s (caller degrades to static)', (_name, xml) => {
     expect(parseTimeDimension(xml)).toBeNull();
   });

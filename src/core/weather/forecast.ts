@@ -122,7 +122,9 @@ function parsePeriods(group: unknown): ForecastPeriod[] {
     if (!isRecord(fc)) continue;
     const name = isRecord(fc.period) ? str(fc.period.textForecastName) : null;
     if (name === null) continue;
-    const summary = isRecord(fc.abbreviatedForecast) ? str(fc.abbreviatedForecast.textSummary) : null;
+    const summary = isRecord(fc.abbreviatedForecast)
+      ? str(fc.abbreviatedForecast.textSummary)
+      : null;
     const temperatureSummary = isRecord(fc.temperatures) ? str(fc.temperatures.textSummary) : null;
     out.push({ name, summary, temperatureSummary });
   }
