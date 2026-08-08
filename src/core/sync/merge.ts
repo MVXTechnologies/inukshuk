@@ -129,6 +129,9 @@ export function planMerge(local: ReplicaView, remote: ReplicaView): MergePlan {
     else if (l.stamp !== r.stamp) winner = l.stamp > r.stamp ? l : r;
     else if (l.state === r.state) winner = r;
     else winner = l.state === 'tombstone' ? l : r;
+    // Absent never wins (the both-absent case was skipped above); this guard
+    // only exists to narrow the type.
+    if (winner.state === 'absent') continue;
     const remoteWon = winner === r;
 
     if (winner.state === 'live') {
