@@ -34,11 +34,13 @@ Ordered roughly by priority (top = next).
 
 Design packages live in `docs/plans/`. Implementation M1s are BUILT and
 check-green on feature branches, awaiting their turn through the device
-gates (serial, one rig): `feature/meteo-m1` (ECCC radar/wind overlay +
-forecast card, OTA-able), `feature/map-store-m1` (Search tab + CanTopo
+gates (serial, one rig): ~~`feature/meteo-m1`~~ (SHIPPED — PR #189,
+OTA'd to 1.5.0 + 1.4.0 on 2026-08-08: ECCC radar/wind/precip overlays with
+bounded radar animation + long-press forecast card), `feature/map-store-m1` (Search tab + CanTopo
 catalog; needs the fixture-server E2E wiring on CI), `feature/sync-m0`
-(pure LWW sync core, invisible). Still owed by the owner: NAS make/model
-(+ Docker?) for sync M1, and the SÉPAQ / Canot Kayak Québec outreach.
+(pure LWW sync core, invisible). NAS confirmed 2026-08-08: UGREEN
+DXP4800 Plus, runs Docker — sync M1 unblocked. Still owed by the owner: the
+SÉPAQ / Canot Kayak Québec outreach (drafts on request).
 
 - **Profiles + paid cloud sync ($2.99/mo)** — accounts with profile image,
   email, etc.; traces + trail photos synced across devices; backend on the
