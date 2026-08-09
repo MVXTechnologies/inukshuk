@@ -10,6 +10,9 @@ import {
   weatherModelById,
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
+import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
+import type { WindBbox } from '@core/weather/windCoverage';
+import type { WindViewState } from '@core/weather/windProjection';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
 import {
@@ -22,6 +25,8 @@ import {
   type MapRef,
   Marker,
   UserLocation,
+  type ViewState,
+  type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -68,6 +73,7 @@ import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
+import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
 import { WeatherModelSheet } from './weather/WeatherModelSheet';
@@ -80,6 +86,11 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 // new fixes, whichever comes first.
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
+
+/** MapLibre ViewState bounds ([w,s,e,n]) → the wind layer's bbox shape. */
+function windBoundsOf(vs: ViewState): WindBbox {
+  return { west: vs.bounds[0], south: vs.bounds[1], east: vs.bounds[2], north: vs.bounds[3] };
+}
 
 // Fallback bottom padding for the select-trail camera fit, used only before
 // TrailInspectPanel has ever reported its real height via onLayout (see
@@ -279,6 +290,9 @@ export function MapScreen() {
             weather: {
               urlTemplate: modelWeatherTileUrl(weatherLayer, weatherModel, weatherTl.timeParam),
               attribution: ECCC_ATTRIBUTION,
+              // M3: the wind speed gradient reads a touch stronger under the
+              // particle streaks (design §3); other layers keep the default.
+              ...(weatherLayer === 'wind' ? { opacity: 0.75 } : {}),
             },
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
@@ -442,6 +456,88 @@ export function MapScreen() {
     // declaration comment (native crash if called before the map loads).
     active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
   });
+
+  // Wind particle overlay (weather M3): Windy-style streaks over the wind
+  // gradient. Everything hangs off one gate — the Wind layer active, 2D,
+  // online, the windParticles kill-switch, the screen focused and the map
+  // loaded (getViewState below NPEs pre-load). WindParticleLayer adds the
+  // AppState background gate itself; unmounting is what stops the GL loop.
+  const windParticles = useSettingsStore((s) => s.windParticles);
+  const windEnabled =
+    weatherLayer === 'wind' &&
+    !offlineOnly &&
+    windParticles &&
+    !terrain3d &&
+    screenFocused &&
+    mapLoaded;
+  // Camera state at gesture rate lives in a REF (the GL loop reads it per
+  // frame) — pushing 30–60 Hz onRegionIsChanging payloads through setState
+  // would re-render the whole screen per frame. React state only carries the
+  // low-rate bits: "a gesture is in progress" and the settled bounds.
+  const windViewRef = useRef<WindViewState | null>(null);
+  const windSizeRef = useRef({ width: 0, height: 0 });
+  const [windInteracting, setWindInteracting] = useState(false);
+  const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
+  const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => clearTimeout(windSettleTimer.current ?? undefined), []);
+  const writeWindView = useCallback((vs: ViewState) => {
+    windViewRef.current = {
+      centerLng: vs.center[0],
+      centerLat: vs.center[1],
+      zoom: vs.zoom,
+      bearing: vs.bearing,
+      pitch: vs.pitch,
+      width: windSizeRef.current.width,
+      height: windSizeRef.current.height,
+    };
+  }, []);
+  // Streamed during gestures/animations: track the camera in the ref; for
+  // USER gestures also fade the particles out and arm the ~400 ms settle
+  // (Windy's own mobile mitigation — re-seed once the camera rests).
+  const onWindRegionIsChanging = useCallback(
+    (e: { nativeEvent: ViewStateChangeEvent }) => {
+      const ev = e.nativeEvent;
+      writeWindView(ev);
+      if (!ev.userInteraction) return;
+      setWindInteracting(true);
+      clearTimeout(windSettleTimer.current ?? undefined);
+      windSettleTimer.current = setTimeout(() => {
+        setWindInteracting(false);
+        setWindSettledBounds(windBoundsOf(ev));
+      }, GESTURE_SETTLE_MS);
+    },
+    [writeWindView],
+  );
+  // Settled camera (also fires for programmatic moves): re-anchor input.
+  const onWindRegionDidChange = useCallback(
+    (e: { nativeEvent: ViewStateChangeEvent }) => {
+      const ev = e.nativeEvent;
+      writeWindView(ev);
+      clearTimeout(windSettleTimer.current ?? undefined);
+      setWindInteracting(false);
+      setWindSettledBounds(windBoundsOf(ev));
+    },
+    [writeWindView],
+  );
+  // Seed the camera ref/bounds when the overlay activates mid-session (the
+  // region callbacks only fire on movement).
+  useEffect(() => {
+    if (!windEnabled || windViewRef.current !== null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const vs = await mapRef.current?.getViewState();
+        if (vs === undefined || cancelled) return;
+        writeWindView(vs);
+        setWindSettledBounds(windBoundsOf(vs));
+      } catch {
+        // map mid-teardown — the first region event will seed instead.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [windEnabled, writeWindView]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -892,11 +988,22 @@ export function MapScreen() {
           }}
           onWillStartLoadingMap={() => setMapLoaded(false)}
           onDidFinishLoadingMap={() => setMapLoaded(true)}
-          onRegionDidChange={() => {
+          // Wind particles track the camera at gesture rate; the handler is
+          // only attached while the overlay is live (zero event traffic
+          // otherwise — the map stays byte-identical to a windless one).
+          onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
+          onRegionDidChange={(e) => {
             setRegionVersion((v) => v + 1);
             void refreshBounds();
+            if (windEnabled) onWindRegionDidChange(e);
           }}
-          onLayout={onMapLayout}
+          onLayout={(e) => {
+            windSizeRef.current = {
+              width: e.nativeEvent.layout.width,
+              height: e.nativeEvent.layout.height,
+            };
+            onMapLayout(e);
+          }}
         >
           <Camera
             ref={cameraRef}
@@ -1220,6 +1327,21 @@ export function MapScreen() {
           <HeadingCone location={location} />
           <UserLocation animated accuracy />
         </Map>
+      )}
+
+      {/* Wind particle overlay (weather M3): a transparent GLView riding
+          absolute-fill over the 2D map, under every piece of chrome below.
+          Touches pass straight through (pointerEvents none). One gate —
+          windEnabled — kills the whole thing; degradation without network
+          is the gradient drape alone. */}
+      {windEnabled && (
+        <WindParticleLayer
+          model={weatherModel}
+          timeIso={weatherTl.timeParam}
+          viewRef={windViewRef}
+          interacting={windInteracting}
+          settledBounds={windSettledBounds}
+        />
       )}
 
       {/* Region select overlay for offline download */}

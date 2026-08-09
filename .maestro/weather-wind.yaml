@@ -1,0 +1,110 @@
+# Weather UX v2 (M3) e2e: the wind particle overlay's crash gate. Turn the
+# Wind layer on (which mounts the transparent GLView over the map), pan and
+# zoom-ish gesture the map (region events + gesture fade + settle re-seed +
+# GLView survival), scrub the timeline (TIME re-fetch path), and turn it all
+# back off (GLView unmount — the other half of the crash surface). Crash
+# detection ONLY, like weather.yaml — NEVER asserts particles, streak pixels
+# or animation state (non-deterministic and network-dependent).
+#
+# Portability notes:
+# - Network-independent by design: in CI the GeoMet host is unreachable, so
+#   the WCS grid fetches fail silently, no wind field ever arrives, and the
+#   overlay idles as an empty transparent GLView — but the GLView still
+#   MOUNTS (by design: the GL surface lifecycle is exercised even offline)
+#   and unmounts on the way out, which is exactly the crash surface this
+#   flow gates. The drape/scrubber degrade as in weather.yaml.
+# - Matchers wrap in `.*` (iOS merges title+description into one accessible
+#   text). 'Wind' is a substring of nothing else in the layer dialog; the
+#   dialog is topmost while its open-sentinel ('Rain radar' — never visible
+#   outside the dialog while no radar layer is on) is showing, so the tap
+#   lands on the dialog row (the weather.yaml Temperature idiom).
+# - Guarded-tap idiom (retry + runFlow-when-notVisible) for the animated
+#   Overlays menu, exactly as weather.yaml.
+# - The pan swipes run through the 35–45% height band — above the weather
+#   dock and below the top chrome, so the gesture always hits bare map.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- Turn the Wind layer on from the Overlays menu picker ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather'
+          timeout: 10000
+- tapOn: 'Weather'
+# Dialog-open sentinel: a picker row never visible while the dialog is closed.
+- extendedWaitUntil:
+    visible: '.*Rain radar.*'
+    timeout: 10000
+- tapOn: '.*Wind.*'
+- tapOn: 'Done'
+# The scrubber must come up (wind is a forecast layer) with the map alive —
+# by now the GLView overlay is mounted over the map.
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 10000
+- assertVisible: 'Map actions'
+# --- Pan gestures over the live GLView: gesture fade → settle re-seed →
+# re-anchor path. The map (and the app) must survive every step. ---
+- swipe:
+    start: 70%,40%
+    end: 30%,40%
+    duration: 500
+- assertVisible: 'Map actions'
+- swipe:
+    start: 30%,35%
+    end: 70%,45%
+    duration: 500
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 10000
+- assertVisible: 'Map actions'
+# --- Scrub the timeline: the throttled TIME change re-fetches the wind grid
+# (or fails silently offline) without killing map or overlay. ---
+- tapOn: '.*Weather timeline.*'
+- assertVisible: 'Map actions'
+- assertVisible: '.*Weather timeline.*'
+# --- Everything back off: the GLView must unmount cleanly and later flows
+# start from the default map. ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather: Wind'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather: Wind'
+          timeout: 10000
+- tapOn: 'Weather: Wind'
+- extendedWaitUntil:
+    visible: '.*Rain radar.*'
+    timeout: 10000
+- tapOn: '.*None.*'
+- tapOn: 'Done'
+- assertVisible: 'Map actions'
+- assertNotVisible: '.*Weather timeline.*'

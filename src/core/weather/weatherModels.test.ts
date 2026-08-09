@@ -26,19 +26,21 @@ describe('weather model catalog', () => {
     }
   });
 
-  it('resolves HRDPS drapes to the M1 catalog ids verbatim (no visual change on default)', () => {
-    // The default model must be byte-identical to the shipped M1 behaviour.
+  it('resolves HRDPS drapes to the catalog ids verbatim (wind = the M3 speed gradient)', () => {
+    // Temp/precip stay byte-identical to shipped M1 behaviour; wind swapped
+    // to the scalar speed ramp for the particle underlay (M3, owner spec:
+    // smooth gradient, no arrows).
     expect(resolveModelWmsLayer('temp', 'hrdps')).toBe('HRDPS.CONTINENTAL_TT');
-    expect(resolveModelWmsLayer('wind', 'hrdps')).toBe('HRDPS.CONTINENTAL_UU');
+    expect(resolveModelWmsLayer('wind', 'hrdps')).toBe('HRDPS.CONTINENTAL_WSPD');
     expect(resolveModelWmsLayer('precip', 'hrdps')).toBe('HRDPS.CONTINENTAL_PR');
   });
 
   it('resolves RDPS/GDPS to the live new-scheme ids (verified 2026-08-09)', () => {
     expect(resolveModelWmsLayer('temp', 'rdps')).toBe('RDPS_10km_AirTemp_2m');
-    expect(resolveModelWmsLayer('wind', 'rdps')).toBe('RDPS_10km_Winds_10m');
+    expect(resolveModelWmsLayer('wind', 'rdps')).toBe('RDPS_10km_WindSpeed_10m');
     expect(resolveModelWmsLayer('precip', 'rdps')).toBe('RDPS_10km_Precip-Accum');
     expect(resolveModelWmsLayer('temp', 'gdps')).toBe('GDPS_15km_AirTemp_2m');
-    expect(resolveModelWmsLayer('wind', 'gdps')).toBe('GDPS_15km_Winds_10m');
+    expect(resolveModelWmsLayer('wind', 'gdps')).toBe('GDPS_15km_WindSpeed_10m');
     expect(resolveModelWmsLayer('precip', 'gdps')).toBe('GDPS_15km_Precip-Accum');
   });
 
