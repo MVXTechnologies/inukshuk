@@ -15,7 +15,7 @@ Ordered roughly by priority (top = next).
   GDPS model picker at the scrubber chevron + comparison table
   (GetFeatureInfo). M3 after: GL wind particles (webgl-wind port on
   expo-gl, WCS float grids). Multi-model beyond ECCC: NAS-hosted GFS/
-  ECMWF/ICON relay decided (owner, 2026-08-09) as M2.5.
+  ECMWF/ICON relay recommended as M2.5 — owner has NOT yet chosen relay vs Open-Meteo (~€29/mo).
 
 ## Queued (owner requests, 2026-08-07)
 
