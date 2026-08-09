@@ -3,7 +3,12 @@ import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/vi
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import { ECCC_ATTRIBUTION, weatherLayerById, weatherTileUrl } from '@core/geo/weatherLayers';
+import { ECCC_ATTRIBUTION, weatherLayerById } from '@core/geo/weatherLayers';
+import {
+  modelVariableForLayer,
+  modelWeatherTileUrl,
+  weatherModelById,
+} from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -65,6 +70,7 @@ import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
+import { WeatherModelSheet } from './weather/WeatherModelSheet';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -233,9 +239,25 @@ export function MapScreen() {
   // entirely and the timeline hook is parked, so the map stays byte-identical
   // to a weatherless one.
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
+  // M2: which ECCC model the forecast drapes resolve against (persisted;
+  // radar ignores it). The model sheet floats above the scrubber, toggled by
+  // its chevron — plain dock state, never a Portal.
+  const weatherModel = useSettingsStore((s) => s.weatherModel);
+  const setSettings = useSettingsStore((s) => s.set);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  // Changing the LAYER closes the sheet (a fresh layer starts from the
+  // scrubber, like Windy); switching models inside the sheet keeps it open.
+  useEffect(() => {
+    const t = setTimeout(() => setModelSheetOpen(false), 0);
+    return () => clearTimeout(t);
+  }, [weatherLayer]);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
   const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
-  const weatherTl = useWeatherTimeline(offlineOnly ? null : weatherLayer, weatherAnimating);
+  const weatherTl = useWeatherTimeline(
+    offlineOnly ? null : weatherLayer,
+    weatherModel,
+    weatherAnimating,
+  );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
@@ -255,7 +277,7 @@ export function MapScreen() {
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
-              urlTemplate: weatherTileUrl(weatherLayer, weatherTl.timeParam),
+              urlTemplate: modelWeatherTileUrl(weatherLayer, weatherModel, weatherTl.timeParam),
               attribution: ECCC_ATTRIBUTION,
             },
             // Windy-style muted background under weather: desaturated raster +
@@ -292,6 +314,7 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     weatherLayer,
+    weatherModel,
     weatherTl.timeParam,
   ]);
 
@@ -355,9 +378,32 @@ export function MapScreen() {
     resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
 
-  // One flag shared by the weather dock and the FAB lift (they must agree).
-  const weatherDockVisible =
-    weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null;
+  // M2: the model-comparison table route, for the long-pressed point when a
+  // forecast card is up, else the map centre (gated on mapLoaded — ungated
+  // getViewState NPEs on the native thread), else the last known position.
+  const openModelCompare = useCallback(() => {
+    setModelSheetOpen(false);
+    void (async () => {
+      let at = forecastAt;
+      if (at === null && mapLoaded) {
+        try {
+          const vs = await mapRef.current?.getViewState();
+          if (vs !== undefined) at = { latitude: vs.center[1], longitude: vs.center[0] };
+        } catch {
+          // map mid-teardown — fall through to the stored position.
+        }
+      }
+      at ??= lastKnownPosition ?? { latitude: 46.813, longitude: -71.208 };
+      router.push({
+        pathname: '/weather-compare',
+        params: {
+          lat: String(at.latitude),
+          lng: String(at.longitude),
+          layer: weatherLayer ?? '',
+        },
+      });
+    })();
+  }, [forecastAt, mapLoaded, lastKnownPosition, router, weatherLayer]);
 
   const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
@@ -522,6 +568,16 @@ export function MapScreen() {
     | { phase: 'options'; bbox: BoundingBox }
     | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress }
   >(null);
+
+  // One flag shared by the weather dock and the FAB lift (they must agree).
+  const weatherDockVisible =
+    weatherLayer !== null &&
+    !offlineOnly &&
+    !selecting &&
+    // The map-maker's options sheet owns the bottom edge too — the dock was
+    // covering its lower rows ("Contour lines") when weather stayed on.
+    makeMapState === null &&
+    weatherTl.timeline !== null;
   const makeMapHandleRef = useRef<ComposeHandle>({ aborted: false });
   const startMakeMap = useCallback(
     (bbox: BoundingBox, options: MakeMapOptions) => {
@@ -1337,6 +1393,16 @@ export function MapScreen() {
             edge, and offline-only parks weather entirely. */}
         {weatherDockVisible && weatherTl.timeline !== null && (
           <View style={styles.weatherDock} pointerEvents="box-none">
+            {/* M2: the model sheet floats above the legend+scrubber in the
+                same dock column (right-aligned over the chevron that opened
+                it). Forecast layers only — radar is model-less. */}
+            {modelSheetOpen && weatherTl.timeline.kind === 'forecast' && (
+              <WeatherModelSheet
+                selected={weatherModel}
+                onSelect={(id) => setSettings('weatherModel', id)}
+                onCompare={openModelCompare}
+              />
+            )}
             <WeatherLegend layer={weatherLayerById(weatherLayer)} />
             <WeatherTimeScrubber
               timeline={weatherTl.timeline}
@@ -1345,6 +1411,17 @@ export function MapScreen() {
               onScrub={weatherTl.scrubTo}
               playing={weatherAnimating}
               onTogglePlay={toggleWeatherAnimation}
+              onOpenModelPicker={
+                weatherTl.timeline.kind === 'forecast'
+                  ? () => setModelSheetOpen((o) => !o)
+                  : undefined
+              }
+              modelPickerOpen={modelSheetOpen}
+              modelCaption={
+                weatherTl.timeline.kind === 'forecast'
+                  ? `${weatherModelById(weatherModel).label} ${weatherModelById(weatherModel).horizonLabel.toUpperCase()}`
+                  : undefined
+              }
             />
           </View>
         )}
@@ -1400,6 +1477,9 @@ export function MapScreen() {
         !selecting &&
         makeMapState === null &&
         inspectId === null &&
+        // The model sheet opens exactly where the lifted FAB sits (above the
+        // weather dock's corner) — hide the FAB while the sheet is up.
+        !(weatherDockVisible && modelSheetOpen) &&
         // Minimal style folds the "+" dial away with the rest of the controls.
         (uiStyle !== 'minimal' || minimalControlsOpen) &&
         !pickingCategory && (
@@ -1496,6 +1576,13 @@ export function MapScreen() {
             layer={weatherLayer}
             marineActive={marineActive}
             onClose={() => setForecastAt(null)}
+            // M2: the comparison-table entry from the tap-card (forecast
+            // layers only — the table has nothing to say about radar).
+            onCompareModels={
+              weatherLayer !== null && modelVariableForLayer(weatherLayer) !== null
+                ? openModelCompare
+                : undefined
+            }
           />
         )}
 

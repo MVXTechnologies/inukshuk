@@ -1,0 +1,160 @@
+# Weather UX v2 (M2) e2e: forecast models. Open a forecast layer, open the
+# model sheet from the scrubber chevron, switch HRDPS → RDPS (the drape/
+# timeline rebuild in place must not kill the map), open the model-comparison
+# table, confirm its (skeleton/degraded) render, come back, and put
+# everything back. Crash-detection focus like weather.yaml — NEVER asserts
+# weather pixels, cell values or run ages.
+#
+# Portability notes:
+# - Network-independent by design: in CI the GeoMet host is unreachable — the
+#   per-model GetCapabilities fetch fails and the scrubber runs on its
+#   clock-guessed per-model timeline; every comparison cell request fails and
+#   settles to the silent "–" state (the first burst settles within seconds,
+#   which IS the degraded render this flow gates on). Nothing below asserts
+#   network-dependent content.
+# - Matchers wrap in leading/trailing `.*` (iOS merges title+description into
+#   one accessible text). Model rows are labelled "Model HRDPS" etc. — the
+#   'Model ' prefix is load-bearing because 'HRDPS' contains 'RDPS', so a
+#   bare '.*RDPS.*' would cross-match the HRDPS row and the scrubber caption.
+# - Open-state sentinels never echo text visible while the surface is closed:
+#   'Compare models' exists only inside the model sheet (the scrubber caption
+#   shows the model NAME, the compare screen titles itself 'Model
+#   comparison', the forecast card's affordance is 'Compare forecast
+#   models' — none contain the sentinel substring). 'Rain radar'/'Snow
+#   radar' gate the layer dialog exactly as in weather.yaml.
+# - Guarded-tap idiom (retry + runFlow-when-notVisible) for every animated
+#   opener: the overlays menu, the layer dialog, and the model sheet.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- Turn the Temperature forecast layer on (thumbnail picker, as in
+# weather.yaml). ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather(: .*)?'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather(: .*)?'
+          timeout: 10000
+- tapOn: 'Weather(: .*)?'
+- extendedWaitUntil:
+    visible: '.*Rain radar.*'
+    timeout: 10000
+- tapOn: '.*Temperature.*'
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 10000
+# --- Open the model sheet from the scrubber chevron (guarded: the chevron
+# rides the animated dock). Sentinel: 'Compare models' exists only in the
+# open sheet. ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Compare models.*'
+          commands:
+            - tapOn: 'Choose forecast model'
+      - extendedWaitUntil:
+          visible: '.*Compare models.*'
+          timeout: 10000
+# --- Switch HRDPS → RDPS: drape + timeline rebuild in place; the scrubber
+# must stay alive (offline this is the clock-guessed 84 h timeline). ---
+- tapOn: '.*Model RDPS.*'
+# Timeline alive proves the switch landed; the "+" FAB is deliberately
+# HIDDEN while the model sheet is open, so never assert it here.
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 10000
+# --- The comparison table: full-screen route; skeleton first, cells settle
+# to the degraded "–" state offline. GDPS's card header is a screen-only
+# sentinel once the route covers the map. ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Model comparison.*'
+          commands:
+            - tapOn: '.*Compare models.*'
+      - extendedWaitUntil:
+          visible: '.*Model comparison.*'
+          timeout: 10000
+- assertVisible: '.*GDPS.*'
+- assertVisible: '.*Temperature.*'
+# --- Back to the map; the model sheet is still up underneath. ---
+- tapOn: 'Close comparison'
+- extendedWaitUntil:
+    notVisible: '.*Model comparison.*'
+    timeout: 10000
+- assertVisible: 'Map actions'
+# --- Reset the model to the HRDPS default (reruns and later flows expect
+# it), then fold the sheet away with the chevron. ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Compare models.*'
+          commands:
+            - tapOn: 'Choose forecast model'
+      - extendedWaitUntil:
+          visible: '.*Compare models.*'
+          timeout: 10000
+- tapOn: '.*Model HRDPS.*'
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 10000
+# The chevron is a toggle — only tap it if the sheet is actually still open.
+- runFlow:
+    when:
+      visible: '.*Compare models.*'
+    commands:
+      - tapOn: 'Choose forecast model'
+- extendedWaitUntil:
+    notVisible: '.*Compare models.*'
+    timeout: 10000
+# --- Weather off so reruns and later flows start from the default map. ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather: Temperature'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather: Temperature'
+          timeout: 10000
+- tapOn: 'Weather: Temperature'
+- extendedWaitUntil:
+    visible: '.*Snow radar.*'
+    timeout: 10000
+- tapOn: '.*None.*'
+- tapOn: 'Done'
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
+- assertNotVisible: '.*Weather timeline.*'

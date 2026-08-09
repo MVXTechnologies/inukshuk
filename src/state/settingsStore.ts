@@ -8,6 +8,11 @@ import type { UiStyle } from '@ui/theme';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
+import {
+  DEFAULT_WEATHER_MODEL,
+  sanitizeWeatherModel,
+  type WeatherModelId,
+} from '@core/weather/weatherModels';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
@@ -55,6 +60,12 @@ export interface Settings {
    * same way `markedTrailsNetworks` is dropped.
    */
   weatherLayer: WeatherLayerId | null;
+  /**
+   * Forecast model the forecast drapes resolve against (weather UX M2):
+   * HRDPS 2.5 km / RDPS 10 km / GDPS 15 km. Radar layers ignore it. Never
+   * null — junk hydrates back to the HRDPS default.
+   */
+  weatherModel: WeatherModelId;
   /**
    * Checked marine reference layers (NONNA bathymetry / seamarks; empty =
    * off). Network-only like the trail networks — dropped from the style
@@ -108,6 +119,7 @@ const DEFAULTS: Settings = {
   uiStyle: 'classic',
   markedTrailsNetworks: [],
   weatherLayer: null,
+  weatherModel: DEFAULT_WEATHER_MODEL,
   marineLayers: [],
   showHeatmap: true,
   errorReporting: true,
@@ -148,6 +160,7 @@ function snapshot(s: SettingsState): Settings {
     uiStyle,
     markedTrailsNetworks,
     weatherLayer,
+    weatherModel,
     marineLayers,
     showHeatmap,
     errorReporting,
@@ -174,6 +187,7 @@ function snapshot(s: SettingsState): Settings {
     uiStyle,
     markedTrailsNetworks,
     weatherLayer,
+    weatherModel,
     marineLayers,
     showHeatmap,
     errorReporting,
@@ -211,6 +225,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         ? (saved as { weatherLayer?: unknown }).weatherLayer
         : null,
     );
+    // weatherModel's default is a string, so the ladder keeps any string —
+    // including junk ids from older builds. Deep-validate to the catalog.
+    next.weatherModel = sanitizeWeatherModel(next.weatherModel);
     setDisplayUnits(next.units);
     set({ ...next, hydrated: true });
   },
