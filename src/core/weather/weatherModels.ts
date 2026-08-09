@@ -15,9 +15,10 @@ import {
  * RDPS/GDPS moved to `RDPS_10km_*` / `GDPS_15km_*` (the old `RDPS.ETA_*`
  * family 404s with InvalidLayersParameter).
  *
- * `drape` names the GetMap layer per forecast variable (matches the M1
- * catalog's visual choices: TT temperature ramp, UU/Winds barb composites,
- * PR total accumulation). `info` names the GetFeatureInfo layer the
+ * `drape` names the GetMap layer per forecast variable (TT temperature
+ * ramp, PR total accumulation; wind uses the scalar SPEED layer since M3 —
+ * a smooth Windy-style gradient under the particle overlay, never the
+ * arrow/barb `_UU`/`Winds` composites). `info` names the GetFeatureInfo layer the
  * comparison table queries — wind uses the scalar speed layer [m/s] and
  * precip the 1-hour interval accumulation [mm], which are comparable across
  * models (total accumulation is not: horizons differ).
@@ -42,7 +43,7 @@ export const WEATHER_MODELS = [
     stepHoursAfterChange: null,
     drape: {
       temp: 'HRDPS.CONTINENTAL_TT',
-      wind: 'HRDPS.CONTINENTAL_UU',
+      wind: 'HRDPS.CONTINENTAL_WSPD',
       precip: 'HRDPS.CONTINENTAL_PR',
     },
     info: {
@@ -61,7 +62,7 @@ export const WEATHER_MODELS = [
     stepHoursAfterChange: null,
     drape: {
       temp: 'RDPS_10km_AirTemp_2m',
-      wind: 'RDPS_10km_Winds_10m',
+      wind: 'RDPS_10km_WindSpeed_10m',
       precip: 'RDPS_10km_Precip-Accum',
     },
     info: {
@@ -80,7 +81,7 @@ export const WEATHER_MODELS = [
     stepHoursAfterChange: 3,
     drape: {
       temp: 'GDPS_15km_AirTemp_2m',
-      wind: 'GDPS_15km_Winds_10m',
+      wind: 'GDPS_15km_WindSpeed_10m',
       precip: 'GDPS_15km_Precip-Accum',
     },
     info: {

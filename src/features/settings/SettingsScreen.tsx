@@ -95,6 +95,7 @@ export function SettingsScreen() {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
+  const windParticles = useSettingsStore((s) => s.windParticles);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
   const themeMode = useSettingsStore((s) => s.themeMode);
@@ -315,6 +316,13 @@ export function SettingsScreen() {
                       value={rotateMap}
                       onValueChange={(v) => set('rotateMapWithHeading', v)}
                     />
+                  )}
+                />
+                <List.Item
+                  title="Animated wind streaks"
+                  description="Windy-style flow animation on the Wind weather layer"
+                  right={() => (
+                    <Switch value={windParticles} onValueChange={(v) => set('windParticles', v)} />
                   )}
                 />
                 <List.Item

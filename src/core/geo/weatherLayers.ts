@@ -65,7 +65,10 @@ export const WEATHER_LAYERS = [
   {
     id: 'wind',
     label: 'Wind',
-    wmsLayer: 'HRDPS.CONTINENTAL_UU',
+    // M3: the scalar speed layer (smooth colour ramp) — NOT the `_UU` barb
+    // composite. The Windy look is a continuous gradient with animated
+    // streaks on top; arrows/barbs are explicitly out (owner spec).
+    wmsLayer: 'HRDPS.CONTINENTAL_WSPD',
     timeline: 'forecast',
     swatch: ['#E8F2F4', '#A9D3DD', '#6BA8C9', '#4A6FB5', '#8E5DB4', '#C9488F'],
     legend: { unit: 'km/h', labels: ['0', '20', '40', '60', '80'] },

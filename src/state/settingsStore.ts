@@ -67,6 +67,13 @@ export interface Settings {
    */
   weatherModel: WeatherModelId;
   /**
+   * Windy-style animated wind streaks over the Wind weather layer (M3).
+   * The whole GL particle overlay hangs off this one flag so QA (or a
+   * device that hates it) can kill it — off = the gradient drape alone,
+   * exactly the pre-M3 wind UX.
+   */
+  windParticles: boolean;
+  /**
    * Checked marine reference layers (NONNA bathymetry / seamarks; empty =
    * off). Network-only like the trail networks — dropped from the style
    * while `offlineOnly` is on. Any active layer also shows the mandatory
@@ -120,6 +127,7 @@ const DEFAULTS: Settings = {
   markedTrailsNetworks: [],
   weatherLayer: null,
   weatherModel: DEFAULT_WEATHER_MODEL,
+  windParticles: true,
   marineLayers: [],
   showHeatmap: true,
   errorReporting: true,
@@ -161,6 +169,7 @@ function snapshot(s: SettingsState): Settings {
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,
+    windParticles,
     marineLayers,
     showHeatmap,
     errorReporting,
@@ -188,6 +197,7 @@ function snapshot(s: SettingsState): Settings {
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,
+    windParticles,
     marineLayers,
     showHeatmap,
     errorReporting,

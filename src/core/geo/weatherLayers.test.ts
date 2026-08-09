@@ -113,7 +113,7 @@ describe('weatherTileUrl', () => {
   });
 
   it('encodes the HRDPS layer names (dots survive, safe chars only)', () => {
-    expect(weatherTileUrl('wind')).toContain('layers=HRDPS.CONTINENTAL_UU');
+    expect(weatherTileUrl('wind')).toContain('layers=HRDPS.CONTINENTAL_WSPD');
   });
 });
 
@@ -209,7 +209,7 @@ describe('GetFeatureInfo', () => {
   it('builds a centred JSON query window', () => {
     const url = getFeatureInfoUrl('wind', { latitude: 46.8139, longitude: -71.208 });
     expect(url).toContain('request=GetFeatureInfo');
-    expect(url).toContain('query_layers=HRDPS.CONTINENTAL_UU');
+    expect(url).toContain('query_layers=HRDPS.CONTINENTAL_WSPD');
     expect(url).toContain('i=50');
     expect(url).toContain('j=50');
     expect(url).toContain('width=101');
