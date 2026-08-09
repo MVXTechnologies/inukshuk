@@ -1,6 +1,7 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
 import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { Feature, Polygon } from 'geojson';
 
@@ -132,6 +133,14 @@ export interface OsmStyleOptions {
   /** Checked marked-trail databases, each draped as its own tile overlay. */
   markedTrailsNetworks?: readonly TrailNetworkId[];
   /**
+   * Checked marine reference layers (CHS NONNA bathymetry / OpenSeaMap
+   * seamarks — see `@core/geo/marineLayers`). Network-only like the trail
+   * networks: callers must pass [] while `offlineOnly` is on. Catalog order
+   * wins regardless of toggle order, so the depth tint always draws under
+   * the seamark symbols.
+   */
+  marineLayers?: readonly MarineLayerId[];
+  /**
    * Live weather overlay (ECCC GeoMet WMS via `weatherTileUrl`). Network-only
    * by nature: callers must drop it entirely when `offlineOnly` is on, exactly
    * like `markedTrailsNetworks`. An animation frame swap is just a different
@@ -158,6 +167,9 @@ export function buildOsmStyle(
   options: OsmStyleOptions = {},
 ): StyleSpecification {
   const base = baseSource(basemap, tileUrl);
+  // Requested marine layers in catalog order (bathymetry under seamarks),
+  // whatever order the user toggled them in.
+  const marine = MARINE_LAYERS.filter((l) => (options.marineLayers ?? []).includes(l.id));
   const style: StyleSpecification = {
     version: 8,
     sources: {
@@ -177,6 +189,21 @@ export function buildOsmStyle(
             tileSize: 256,
             maxzoom: 17,
             attribution: '© Waymarked Trails',
+          },
+        ]),
+      ),
+      // Marine reference drapes (marine M3): NONNA bathymetry rides the same
+      // WMS-through-a-raster-source mechanism as the weather layers; the
+      // seamarks are plain XYZ tiles like the trail networks.
+      ...Object.fromEntries(
+        marine.map((l) => [
+          `marine-${l.id}`,
+          {
+            type: 'raster' as const,
+            tiles: [marineTileUrl(l.id)],
+            tileSize: 256,
+            maxzoom: l.maxzoom,
+            attribution: l.attribution,
           },
         ]),
       ),
@@ -202,6 +229,14 @@ export function buildOsmStyle(
         type: 'raster' as const,
         source: `wmt-${n}`,
         paint: { 'raster-opacity': 0.85 },
+      })),
+      // Marine layers above the trail overlays; the depth tint is dimmed so
+      // the basemap's shoreline/labels stay readable through it.
+      ...marine.map((l) => ({
+        id: `marine-${l.id}`,
+        type: 'raster' as const,
+        source: `marine-${l.id}`,
+        paint: { 'raster-opacity': l.opacity },
       })),
     ],
   };
