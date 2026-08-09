@@ -4,6 +4,17 @@ Owner-maintained wishlist. Claude reads this at the start of a session to pick
 up where we left off; items move to ~~struck~~ with the shipping PR when done.
 Ordered roughly by priority (top = next).
 
+## In progress
+
+- **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** M1 (building):
+  layer picker with map-style thumbnails instead of radio buttons; muted
+  city-labels-only basemap under weather layers; bottom time scrubber to
+  move through predictions to the model horizon (rain, snow, temp, wind);
+  temperature layer added. M2 (designing): model picker at the scrubber's
+  right + Windy-style model-comparison table. M3 (designing): wind as
+  animated thin flow lines over color gradients — speed/length from wind
+  speed + gusts, direction from the field; no arrows.
+
 ## Queued (owner requests, 2026-08-07)
 
 1. ~~**Bottom-left map chrome must go**~~ — shipped in PR #185 (OTA'd to
