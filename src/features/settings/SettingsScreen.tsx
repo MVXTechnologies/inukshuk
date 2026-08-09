@@ -29,6 +29,7 @@ import {
   Switch,
   Text,
   TextInput,
+  useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exportAllData } from './exportAllData';
@@ -85,6 +86,12 @@ function isValidTileUrl(url: string): boolean {
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  // Owner feedback (2026-08-08): with a category open, the next collapsed
+  // header visually ran into the open category's rows. Headers get a tinted
+  // band + bold title so the boundary between categories is unmistakable.
+  const accordionHeaderStyle = { backgroundColor: theme.colors.surfaceVariant };
+  const accordionTitleStyle = { fontWeight: '700' } as const;
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
@@ -226,6 +233,8 @@ export function SettingsScreen() {
             title="App settings"
             description="Recording, display and map"
             left={(p) => <List.Icon {...p} icon="tune" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
               <List.Section>
@@ -334,6 +343,8 @@ export function SettingsScreen() {
             // this description as its own accessibility element.
             description="Storage, downloads and export"
             left={(p) => <List.Icon {...p} icon="database-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
               <OfflineMapsSection />
@@ -376,6 +387,8 @@ export function SettingsScreen() {
             title="Third party"
             description="Strava and other connections"
             left={(p) => <List.Icon {...p} icon="link-variant" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
               <StravaSection showSnack={showSnack} />
@@ -389,6 +402,8 @@ export function SettingsScreen() {
             title="System settings"
             description="Error reporting and reset"
             left={(p) => <List.Icon {...p} icon="cog-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
               <List.Section>
@@ -442,6 +457,8 @@ export function SettingsScreen() {
             // Same rule: don't echo body text ("Version", "Maps & data").
             description="About Inukshuk"
             left={(p) => <List.Icon {...p} icon="information-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
               <View style={styles.logoWrap}>
