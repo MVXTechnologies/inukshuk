@@ -83,10 +83,11 @@ appId: com.inukshuk.app
 # --- Switch HRDPS → RDPS: drape + timeline rebuild in place; the scrubber
 # must stay alive (offline this is the clock-guessed 84 h timeline). ---
 - tapOn: '.*Model RDPS.*'
+# Timeline alive proves the switch landed; the "+" FAB is deliberately
+# HIDDEN while the model sheet is open, so never assert it here.
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
-- assertVisible: 'Map actions'
 # --- The comparison table: full-screen route; skeleton first, cells settle
 # to the degraded "–" state offline. GDPS's card header is a screen-only
 # sentinel once the route covers the map. ---
