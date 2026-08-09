@@ -5,6 +5,7 @@ import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
 import type { UiStyle } from '@ui/theme';
+import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { create } from 'zustand';
@@ -54,6 +55,13 @@ export interface Settings {
    * same way `markedTrailsNetworks` is dropped.
    */
   weatherLayer: WeatherLayerId | null;
+  /**
+   * Checked marine reference layers (NONNA bathymetry / seamarks; empty =
+   * off). Network-only like the trail networks — dropped from the style
+   * while `offlineOnly` is on. Any active layer also shows the mandatory
+   * "Not for navigation" chip on the map.
+   */
+  marineLayers: MarineLayerId[];
   /** Native MapLibre heatmap density layer under the trail lines. */
   showHeatmap: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
@@ -100,6 +108,7 @@ const DEFAULTS: Settings = {
   uiStyle: 'classic',
   markedTrailsNetworks: [],
   weatherLayer: null,
+  marineLayers: [],
   showHeatmap: true,
   errorReporting: true,
   terrainSlope: false,
@@ -139,6 +148,7 @@ function snapshot(s: SettingsState): Settings {
     uiStyle,
     markedTrailsNetworks,
     weatherLayer,
+    marineLayers,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -164,6 +174,7 @@ function snapshot(s: SettingsState): Settings {
     uiStyle,
     markedTrailsNetworks,
     weatherLayer,
+    marineLayers,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -191,6 +202,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // default any object-typed junk would slip through — deep-validate here.
     next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
     next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
+    next.marineLayers = sanitizeMarineLayers(next.marineLayers);
     // weatherLayer's default is null (typeof 'object'), so the migration
     // ladder's typeof check DROPS a valid persisted string id (and would pass
     // object junk through). Recover the raw value and deep-validate it.

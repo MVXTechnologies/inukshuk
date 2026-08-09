@@ -36,10 +36,17 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 # --- Enable the rain radar overlay ---
-- tapOn: 'Map overlays'
-- extendedWaitUntil:
-    visible: 'Weather'
-    timeout: 10000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather'
+          timeout: 10000
 - tapOn: 'Weather'
 - extendedWaitUntil:
     visible: 'Rain radar'
@@ -64,10 +71,17 @@ appId: com.inukshuk.app
 - assertVisible: 'Map actions'
 # --- The menu row reflects the active layer; turn everything back off so
 # reruns and later flows start from the default map. ---
-- tapOn: 'Map overlays'
-- extendedWaitUntil:
-    visible: 'Weather: Rain radar'
-    timeout: 10000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather: Rain radar'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather: Rain radar'
+          timeout: 10000
 - tapOn: 'Weather: Rain radar'
 - extendedWaitUntil:
     visible: 'Animate radar'

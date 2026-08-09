@@ -483,7 +483,10 @@ export function SettingsScreen() {
               the data credits live. Keep every provider listed. */}
               <List.Item
                 title="Maps & data"
-                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada"
+                // paper truncates descriptions at 2 lines by default; the
+                // credit roll must stay fully readable.
+                descriptionNumberOfLines={8}
+                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada · Bathymetry: CHS NONNA, Open Government Licence – Canada (not for navigation) · Seamarks © OpenSeaMap contributors (ODbL) · Tides: Fisheries and Oceans Canada (CHS IWLS)"
               />
             </View>
           </List.Accordion>

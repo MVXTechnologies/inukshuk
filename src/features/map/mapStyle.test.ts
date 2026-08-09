@@ -126,6 +126,61 @@ describe('buildOsmStyle', () => {
     });
   });
 
+  describe('marine overlays', () => {
+    it('is absent by default — the map is byte-identical to today with marine off', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true);
+      expect(s.sources['marine-bathymetry']).toBeUndefined();
+      expect(s.sources['marine-seamarks']).toBeUndefined();
+      expect(layerIds(s)).not.toContain('marine-bathymetry');
+    });
+
+    it('adds a raster source + layer per checked marine layer, with attribution and zoom clamp', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry', 'seamarks'],
+      });
+      expect(s.sources['marine-bathymetry']).toMatchObject({
+        type: 'raster',
+        tileSize: 256,
+        maxzoom: 17,
+      });
+      const bathySource = s.sources['marine-bathymetry'] as {
+        tiles: string[];
+        attribution: string;
+      };
+      expect(bathySource.tiles[0]).toContain('nonna-geoserver.data.chs-shc.ca');
+      expect(bathySource.tiles[0]).toContain('bbox={bbox-epsg-3857}');
+      expect(bathySource.attribution).toContain('Not for navigation');
+      const seamarkSource = s.sources['marine-seamarks'] as { tiles: string[] };
+      expect(seamarkSource.tiles[0]).toContain('tiles.openseamap.org');
+      const bathyLayer = s.layers.find((l) => l.id === 'marine-bathymetry');
+      expect(bathyLayer).toMatchObject({
+        type: 'raster',
+        source: 'marine-bathymetry',
+        paint: { 'raster-opacity': 0.7 },
+      });
+    });
+
+    it('draws bathymetry under seamarks in catalog order, whatever the toggle order', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['seamarks', 'bathymetry'],
+        markedTrailsNetworks: ['hiking'],
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('osm'));
+      expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
+      expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
+    });
+
+    it('stays under a weather drape (the topmost data layer)', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        weather: { urlTemplate: 'https://example.test/{bbox-epsg-3857}', attribution: 'ECCC' },
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('weather')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
+    });
+  });
+
   describe('downloaded-regions mask', () => {
     const mask = {
       data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),

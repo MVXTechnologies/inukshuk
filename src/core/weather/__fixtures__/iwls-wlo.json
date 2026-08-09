@@ -1,0 +1,72 @@
+[
+  {
+    "eventDate": "2026-08-09T00:21:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.148
+  },
+  {
+    "eventDate": "2026-08-09T00:22:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.139
+  },
+  {
+    "eventDate": "2026-08-09T00:23:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.131
+  },
+  {
+    "eventDate": "2026-08-09T00:24:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.123
+  },
+  {
+    "eventDate": "2026-08-09T00:25:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.115
+  },
+  {
+    "eventDate": "2026-08-09T00:26:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.112
+  },
+  {
+    "eventDate": "2026-08-09T00:27:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.104
+  },
+  {
+    "eventDate": "2026-08-09T00:28:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.097
+  },
+  {
+    "eventDate": "2026-08-09T00:29:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.09
+  },
+  {
+    "eventDate": "2026-08-09T00:30:00Z",
+    "qcFlagCode": "1",
+    "reviewed": false,
+    "timeSeriesId": "5cebf1e23d0f4a073c4bc0e1",
+    "value": 1.083
+  }
+]
