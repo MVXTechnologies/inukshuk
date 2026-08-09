@@ -8,3 +8,7 @@ assets/pdfjs
 package-lock.json
 .superpowers
 .claude
+# Generated catalog artifacts (byte-stable generator output; do not reformat)
+docs/catalog/
+scripts/catalog/fragments/
+.maestro/fixtures/

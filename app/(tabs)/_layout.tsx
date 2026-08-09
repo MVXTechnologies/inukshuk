@@ -45,6 +45,7 @@ export default function TabsLayout() {
         name="library"
         options={{ title: 'Library', tabBarIcon: icon('folder-multiple-outline') }}
       />
+      <Tabs.Screen name="search" options={{ title: 'Search', tabBarIcon: icon('magnify') }} />
       <Tabs.Screen
         name="dashboard"
         options={{ title: 'Dashboard', tabBarIcon: icon('chart-timeline-variant') }}

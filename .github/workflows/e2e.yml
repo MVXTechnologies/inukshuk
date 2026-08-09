@@ -69,6 +69,9 @@ jobs:
           cd android && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
         env:
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
+          # Point the map store at the loopback fixture catalog served by
+          # e2e-attempts.sh (adb reverse tcp:8787) — CI must never hit NRCan.
+          CATALOG_MANIFEST_URL: http://127.0.0.1:8787/manifest.json
 
       - name: Install Maestro
         run: |

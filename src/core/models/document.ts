@@ -16,4 +16,15 @@ export interface MapDocument {
   georeferenceWarning?: string;
   /** Id of the {@link Folder} this map is organized under; undefined = Ungrouped. */
   folderId?: string;
+  /**
+   * Catalog item this map was downloaded from (Search tab); absent for local
+   * imports and made maps. Drives store dedup ("In Library" instead of a
+   * second Download) — see `@core/catalog/installStatus`.
+   */
+  sourceItemId?: string;
+  /**
+   * The catalog item's `updatedAt` at download time. A manifest revision newer
+   * than this shows an "Update" action in the store.
+   */
+  sourceUpdatedAt?: string;
 }

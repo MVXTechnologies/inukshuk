@@ -14,7 +14,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 4;
+export const LIBRARY_SCHEMA_VERSION = 5;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -106,6 +106,10 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
       ? { georeferenceWarning: legacy.georeferenceWarning }
       : {}),
     ...(typeof legacy.folderId === 'string' ? { folderId: legacy.folderId } : {}),
+    ...(typeof legacy.sourceItemId === 'string' ? { sourceItemId: legacy.sourceItemId } : {}),
+    ...(typeof legacy.sourceUpdatedAt === 'string'
+      ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
+      : {}),
   };
 }
 
@@ -132,6 +136,11 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
     const { bundles: _dropped, ...rest } = doc;
     return { ...rest, schemaVersion: 4, mapVisibilityMode: 'type', visibleFolderIds: [] };
   },
+  // v4 → v5: maps gained optional catalog-provenance fields (`sourceItemId`,
+  // `sourceUpdatedAt` — the map store's dedup/update keys). Absent on every
+  // pre-v5 map by definition (the store didn't exist), so this is a pure
+  // version-stamp bump; the fields ride through normalizeMapDoc when present.
+  4: (doc) => ({ ...doc, schemaVersion: 5 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
