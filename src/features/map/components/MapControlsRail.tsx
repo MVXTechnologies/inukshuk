@@ -6,6 +6,7 @@ import { useSlopeDisclaimer } from '../terrain3d/overlayControls';
 import { EdgeExpandingMenu } from './EdgeExpandingMenu';
 import { EdgePill } from './EdgePill';
 import { BasemapMenu, BasemapRows } from './LayersMenu';
+import { MapActionsMenu, type MapActions } from './MapActionsMenu';
 import { MapOverlaysMenu, OverlaysDialogs, OverlaysRows } from './MapOverlaysMenu';
 
 interface Props {
@@ -20,23 +21,42 @@ interface Props {
   pdfOverlayCount: number;
   trackOverlayCount: number;
   /**
+   * The "+" map actions (wave A item 6: moved here from the bottom-right
+   * FAB.Group), rendered as a rail button directly below Map overlays.
+   * undefined hides the button entirely (recording under way, region select,
+   * category sheet up) — 'Map actions' then leaves the a11y tree, exactly
+   * like the old FAB's own gating.
+   */
+  actions?: MapActions;
+  /**
    * 'minimal' style: whether the chevron rail is unfolded. Owned by MapScreen
-   * because the "+" dial is also gated on it — in minimal, the dial only shows
-   * while the controls are out.
+   * because it also gates other chrome; in minimal, the "+" actions button
+   * only shows while the controls are out (it lives in this rail).
    */
   minimalOpen: boolean;
   onMinimalOpenChange: (open: boolean) => void;
 }
 
-/** Right-side map controls: locate, fit, base map, overlays. */
+/** Right-side map controls: locate, fit, base map, overlays, map actions. */
 export function MapControlsRail(props: Props) {
   const uiStyle = useSettingsStore((s) => s.uiStyle);
   const { minimalOpen, onMinimalOpenChange } = props;
+  // "+" actions sheet, owned here so an outside tap on the backdrop below
+  // closes it (the sheet itself is a plain View — see MapActionsMenu).
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   if (uiStyle === 'edge') return <EdgeRail {...props} />;
 
-  const { top, onLocate, showFitControl, onFit, terrain3d, pdfOverlayCount, trackOverlayCount } =
-    props;
+  const {
+    top,
+    onLocate,
+    showFitControl,
+    onFit,
+    terrain3d,
+    pdfOverlayCount,
+    trackOverlayCount,
+    actions,
+  } = props;
 
   // 'minimal' style: everything folded behind one small chevron until asked.
   if (uiStyle === 'minimal' && !minimalOpen) {
@@ -55,45 +75,57 @@ export function MapControlsRail(props: Props) {
   }
 
   return (
-    <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
-      {uiStyle === 'minimal' && (
+    <>
+      {actionsOpen && actions !== undefined && (
+        <Pressable style={styles.backdrop} onPress={() => setActionsOpen(false)} />
+      )}
+      <View
+        style={[styles.rightControls, styles.railAboveBackdrop, { top }]}
+        pointerEvents="box-none"
+      >
+        {uiStyle === 'minimal' && (
+          <FAB
+            icon="chevron-right"
+            size="small"
+            variant="surface"
+            onPress={() => onMinimalOpenChange(false)}
+            style={styles.controlFab}
+            accessibilityLabel="Hide map controls"
+          />
+        )}
         <FAB
-          icon="chevron-right"
+          icon="crosshairs-gps"
           size="small"
           variant="surface"
-          onPress={() => onMinimalOpenChange(false)}
+          onPress={onLocate}
           style={styles.controlFab}
-          accessibilityLabel="Hide map controls"
+          accessibilityLabel="Locate"
         />
-      )}
-      <FAB
-        icon="crosshairs-gps"
-        size="small"
-        variant="surface"
-        onPress={onLocate}
-        style={styles.controlFab}
-        accessibilityLabel="Locate"
-      />
-      {showFitControl && (
-        <FAB
-          icon="fit-to-page-outline"
-          size="small"
-          variant="surface"
-          onPress={onFit}
-          style={styles.controlFab}
+        {showFitControl && (
+          <FAB
+            icon="fit-to-page-outline"
+            size="small"
+            variant="surface"
+            onPress={onFit}
+            style={styles.controlFab}
+          />
+        )}
+        {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
+            working so well ... until we figure it out"). The focused trail
+            viewer keeps its 3D. To restore, re-add the video-3d FAB here (and
+            its EdgePill in EdgeRail) — everything behind terrain3d still works. */}
+        <BasemapMenu />
+        <MapOverlaysMenu
+          pdfOverlayCount={pdfOverlayCount}
+          trackOverlayCount={trackOverlayCount}
+          showHypso={terrain3d}
         />
-      )}
-      {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
-          working so well ... until we figure it out"). The focused trail
-          viewer keeps its 3D. To restore, re-add the video-3d FAB here (and
-          its EdgePill in EdgeRail) — everything behind terrain3d still works. */}
-      <BasemapMenu />
-      <MapOverlaysMenu
-        pdfOverlayCount={pdfOverlayCount}
-        trackOverlayCount={trackOverlayCount}
-        showHypso={terrain3d}
-      />
-    </View>
+        {/* "+" map actions, directly below Map overlays (wave A item 6). */}
+        {actions !== undefined && (
+          <MapActionsMenu actions={actions} open={actionsOpen} onToggle={setActionsOpen} />
+        )}
+      </View>
+    </>
   );
 }
 
@@ -111,8 +143,9 @@ function EdgeRail({
   terrain3d,
   pdfOverlayCount,
   trackOverlayCount,
+  actions,
 }: Props) {
-  const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays'>(null);
+  const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [networksOpen, setNetworksOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
@@ -165,6 +198,15 @@ function EdgeRail({
             }}
           />
         </EdgeExpandingMenu>
+        {/* "+" map actions, below the overlays menu (wave A item 6). */}
+        {actions !== undefined && (
+          <MapActionsMenu
+            edge
+            actions={actions}
+            open={openMenu === 'actions'}
+            onToggle={(o) => setOpenMenu(o ? 'actions' : null)}
+          />
+        )}
       </View>
       <OverlaysDialogs
         foldersOpen={foldersOpen}
@@ -183,6 +225,8 @@ function EdgeRail({
 
 const styles = StyleSheet.create({
   rightControls: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
+  // While the actions sheet is up, the rail must stack above its backdrop.
+  railAboveBackdrop: { zIndex: 5 },
   controlFab: { borderRadius: 24 },
   edgeRail: { position: 'absolute', right: 0, gap: 4, alignItems: 'flex-end', zIndex: 5 },
   backdrop: { ...StyleSheet.absoluteFill, zIndex: 4 },

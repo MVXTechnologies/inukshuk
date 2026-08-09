@@ -83,8 +83,9 @@ appId: com.inukshuk.app
 # --- Switch HRDPS → RDPS: drape + timeline rebuild in place; the scrubber
 # must stay alive (offline this is the clock-guessed 84 h timeline). ---
 - tapOn: '.*Model RDPS.*'
-# Timeline alive proves the switch landed; the "+" FAB is deliberately
-# HIDDEN while the model sheet is open, so never assert it here.
+# Timeline alive proves the switch landed. (Since wave A the "+" actions
+# button lives on the top-right rail and stays visible while the model sheet
+# is open — but the timeline stays the switch signal here.)
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000

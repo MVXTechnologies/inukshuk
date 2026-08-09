@@ -1,8 +1,10 @@
-# Weather UX v2 (M1) e2e: open the Overlays menu, pick a weather layer from
-# the thumbnail picker, confirm the bottom time scrubber appears, scrub
-# forward, flip playback, long-press for the forecast card and confirm the 2D
-# map stays alive throughout. Crash-detection focus, like map-overlays.yaml —
-# NEVER asserts weather pixels, scrubber times or forecast content.
+# Weather UX v2 (M1, reworked in wave A) e2e: open the Overlays menu, pick a
+# weather layer from the icon picker, confirm the bottom time scrubber
+# appears, scrub forward, flip playback from the scrubber's play button (the
+# one and only animation control since wave A — the dialog's Animate checkbox
+# is gone), long-press for the forecast card and confirm the 2D map stays
+# alive throughout. Crash-detection focus, like map-overlays.yaml — NEVER
+# asserts weather pixels, scrubber times or forecast content.
 #
 # Portability notes:
 # - Network-independent by design: in CI the GeoMet WMS host is unreachable,
@@ -10,13 +12,14 @@
 #   tolerates; the timeline's GetCapabilities fetch fails and the scrubber
 #   runs on its clock-guessed timeline; playback steps that timeline with
 #   nothing to draw; the forecast card renders its "needs a connection"
-#   state. Nothing below asserts any network-dependent pixels — only menu
-#   state, the (purely local) scrubber chrome, and the crash gate.
-# - The weather picker is a paper Dialog of thumbnail rows (label + legend
-#   swatch); rows carry their label as accessibilityLabel. iOS merges an
-#   element's title+description into one accessible text, so matchers for
-#   dialog rows and the scrubber wrap in leading/trailing `.*`. Catalog
-#   labels are regex-metacharacter-free (see weatherLayers.test.ts).
+#   state; the tap-anywhere point chip settles to "No data". Nothing below
+#   asserts any network-dependent pixels — only menu state, the (purely
+#   local) scrubber chrome, and the crash gate.
+# - The weather picker is a paper Dialog of icon rows; rows carry their label
+#   as accessibilityLabel. iOS merges an element's title+description into one
+#   accessible text, so matchers for dialog rows and the scrubber wrap in
+#   leading/trailing `.*`. Catalog labels are regex-metacharacter-free (see
+#   weatherLayers.test.ts).
 # - Open-state sentinels must not echo text visible while the dialog is
 #   closed: 'Rain radar' only exists inside the dialog while no radar layer
 #   is selected, so it gates the temperature pick; 'Snow radar' gates the
@@ -72,7 +75,9 @@ appId: com.inukshuk.app
 - assertVisible: 'Map actions'
 - assertVisible: '.*Weather timeline.*'
 # --- Forecast tap-card: long-press must never crash, with or without
-# network; a map tap dismisses whatever state the card is in. ---
+# network. A later bare map tap dismisses the card AND (wave A item 7) drops
+# the point-value chip at the tapped spot — offline it settles to "No data";
+# this stays a crash gate, never a content assert. ---
 - longPressOn:
     point: 50%,40%
 - assertVisible: 'Map actions'
@@ -80,7 +85,8 @@ appId: com.inukshuk.app
     point: 50%,30%
 - assertVisible: 'Map actions'
 # --- Switch to a radar layer: the scrubber must survive the forecast→past
-# timeline seam, and playback (Animate) must degrade to a no-op offline. ---
+# timeline seam, and playback (the scrubber's play button) must degrade to a
+# no-op offline. ---
 - retry:
     maxRetries: 3
     commands:
@@ -99,17 +105,25 @@ appId: com.inukshuk.app
     visible: '.*Snow radar.*'
     timeout: 10000
 - tapOn: '.*Rain radar.*'
-- extendedWaitUntil:
-    visible: '.*Animate.*'
-    timeout: 10000
-- tapOn: '.*Animate.*'
 - tapOn: 'Done'
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
+# Playback on, from the scrubber's play disc (its label flips to the pause
+# label while playing — that flip is also the "it engaged" signal).
+- tapOn: '.*Play weather timeline.*'
+- extendedWaitUntil:
+    visible: '.*Pause weather timeline.*'
+    timeout: 10000
 - assertVisible: 'Map actions'
 # --- Everything back off so reruns and later flows start from the default
-# map (playback off too — it is transient but this run keeps going). ---
+# map: pause playback first (it is transient but this run keeps going),
+# then None. ---
+- runFlow:
+    when:
+      visible: '.*Pause weather timeline.*'
+    commands:
+      - tapOn: '.*Pause weather timeline.*'
 - retry:
     maxRetries: 3
     commands:
@@ -122,10 +136,11 @@ appId: com.inukshuk.app
           visible: 'Weather: Rain radar'
           timeout: 10000
 - tapOn: 'Weather: Rain radar'
+# Open sentinel while 'Weather: Rain radar' shows on the (closed) menu row:
+# 'Snow radar' never appears outside the dialog.
 - extendedWaitUntil:
-    visible: '.*Animate.*'
+    visible: '.*Snow radar.*'
     timeout: 10000
-- tapOn: '.*Animate.*'
 - tapOn: '.*None.*'
 - tapOn: 'Done'
 - assertVisible: 'Map actions'

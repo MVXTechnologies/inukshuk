@@ -143,10 +143,23 @@ export interface OsmStyleOptions {
   /**
    * Live weather overlay (ECCC GeoMet WMS via `weatherTileUrl`). Network-only
    * by nature: callers must drop it entirely when `offlineOnly` is on, exactly
-   * like `markedTrailsNetworks`. An animation frame swap is just a different
-   * `urlTemplate` flowing through the caller's style-memo rebuild.
+   * like `markedTrailsNetworks`.
+   *
+   * Frame-swap crossfade (wave A item 3): `slots` carries TWO frame URL
+   * slots (A/B, null = unused) with `activeSlot` naming the visible one. A
+   * frame change stages the incoming URL in the inactive slot at opacity 0 —
+   * MapLibre fetches tiles for an opacity-0 layer, so this IS the prefetch —
+   * and the caller flips `activeSlot` once the preload window elapses (see
+   * `@core/weather/weatherCrossfade`). The outgoing frame stays on screen
+   * until the incoming one is ready: no more blank between frames. Both
+   * updates flow through the caller's style-memo rebuild as before.
    */
-  weather?: { urlTemplate: string; attribution: string; opacity?: number };
+  weather?: {
+    slots: readonly [string | null, string | null];
+    activeSlot: 0 | 1;
+    attribution: string;
+    opacity?: number;
+  };
   /**
    * Weather-mode basemap muting (weather UX M1, the Windy look): while a
    * weather layer is draped, the basemap steps back — heavy desaturation on
@@ -333,21 +346,33 @@ export function buildOsmStyle(
   // and hillshade — it's the topmost data layer, only under the offline mask
   // (mutually exclusive with it anyway) and the runtime layers (trails,
   // markers, the location dot) MapLibre appends after the style's own.
-  // raster-fade-duration 0: animation swaps the source URL per frame, and the
-  // default cross-fade would smear consecutive radar frames into each other.
+  // Two crossfade slots (see the option's doc): the inactive slot prefetches
+  // the incoming frame at opacity 0 while the active one keeps the current
+  // frame on screen. raster-fade-duration 0: per-tile fades would smear
+  // consecutive radar frames into each other (and the swap itself is already
+  // covered by the preload).
   if (options.weather) {
-    style.sources.weather = {
-      type: 'raster',
-      tiles: [options.weather.urlTemplate],
-      tileSize: 256,
-      attribution: options.weather.attribution,
-    };
-    style.layers.push({
-      id: 'weather',
-      type: 'raster',
-      source: 'weather',
-      paint: { 'raster-opacity': options.weather.opacity ?? 0.62, 'raster-fade-duration': 0 },
-    });
+    for (const i of [0, 1] as const) {
+      const url = options.weather.slots[i];
+      if (url === null) continue;
+      const id = i === 0 ? 'weather-a' : 'weather-b';
+      style.sources[id] = {
+        type: 'raster',
+        tiles: [url],
+        tileSize: 256,
+        attribution: options.weather.attribution,
+      };
+      style.layers.push({
+        id,
+        type: 'raster',
+        source: id,
+        paint: {
+          'raster-opacity':
+            i === options.weather.activeSlot ? (options.weather.opacity ?? 0.62) : 0,
+          'raster-fade-duration': 0,
+        },
+      });
+    }
   }
 
   // "Locally downloaded only" mask, pushed LAST so it sits above every basemap
