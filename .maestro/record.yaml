@@ -39,6 +39,15 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 3
     commands:
+      # Self-heal: on iOS a state-shifted a11y frame sometimes lands this tap
+      # on the neighbouring Overlays button — if that menu opened, dismiss it
+      # via its backdrop before trying again.
+      - runFlow:
+          when:
+            visible: 'Content: everything'
+          commands:
+            - tapOn:
+                point: 8%,70%
       - runFlow:
           when:
             notVisible: 'Record track'

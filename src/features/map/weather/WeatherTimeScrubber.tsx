@@ -2,11 +2,18 @@ import {
   daySegments,
   formatTimelineLabel,
   isHourMark,
-  nearestFrameIndex,
   type WeatherTimeline,
 } from '@core/geo/weatherTimeline';
-import { frameX, msForTrackRatio, spacedIndices } from '@core/weather/modelTimeline';
-import { useMemo, useState } from 'react';
+import { frameX, spacedIndices } from '@core/weather/modelTimeline';
+import {
+  displayedScrubIndex,
+  dragIndexForPageX,
+  SCRUB_DRAG_IDLE,
+  scrubDragEnd,
+  scrubDragMove,
+  type ScrubDragState,
+} from '@core/weather/scrubDrag';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
 import { IconButton, Text } from 'react-native-paper';
 import { weatherChrome as wc } from './weatherChrome';
@@ -18,9 +25,10 @@ import { weatherChrome as wc } from './weatherChrome';
  * riding the selection, small-caps day labels at day boundaries, and the
  * model-picker chevron at the far right. Radar layers scrub their ~3 h past
  * window, model layers the model's forecast horizon; the micro caption by
- * the chevron names the active model ("HRDPS 48 H"). Scrubbing calls
- * `onScrub` per move; the caller throttles the actual WMS TIME swaps (see
- * useWeatherTimeline).
+ * the chevron names the active model ("HRDPS 48 H"). While a drag is in
+ * flight the thumb/chip follow LOCAL gesture state (see the drag block
+ * below); `onScrub` commits exactly once on release, and the caller
+ * throttles the actual WMS TIME swap (see useWeatherTimeline).
  *
  * M2: track geometry is linear in TIME, not frame index — GDPS's 1 h → 3 h
  * cadence change shows as wider tick spacing on the 3-hourly tail, and dense
@@ -63,6 +71,50 @@ export function WeatherTimeScrubber({
   const innerWidth = Math.max(trackWidth - 2 * TRACK_PAD, 1);
   const xFor = (idx: number): number => TRACK_PAD + frameX(frames, idx, innerWidth);
 
+  // --- Drag state (wave A item 4, the snap-back fix) ---------------------
+  // While a drag is in flight the thumb/chip follow LOCAL gesture state
+  // exclusively; the committed selection (which the playback tick and the
+  // throttled TIME refetch keep re-rendering) is ignored until release,
+  // which commits exactly once. The old per-move `onScrub(locationX)` had
+  // two failure modes seen in the field: RN reports `locationX` relative to
+  // whichever CHILD view the touch is over — the accent chip rides the
+  // selection, so the finger crossing it collapsed the x to a chip-local
+  // value and the thumb snapped to the start — and the committed-state
+  // display let every external update yank the thumb back to "now" mid-drag.
+  // Pure logic in @core/weather/scrubDrag; position comes from the touch's
+  // pageX against the track's measured window origin (child-independent).
+  const [drag, setDrag] = useState<ScrubDragState>(SCRUB_DRAG_IDLE);
+  const dragRef = useRef<ScrubDragState>(SCRUB_DRAG_IDLE);
+  const trackRef = useRef<View>(null);
+  const trackLeftRef = useRef(0);
+  // Live geometry/callback mirrors so the PanResponder (created once) never
+  // closes over stale values — recreating it mid-gesture drops the gesture.
+  // Written from an effect, never during render (the propsRef idiom).
+  const geomRef = useRef({ timeline, innerWidth });
+  const onScrubRef = useRef(onScrub);
+  useEffect(() => {
+    geomRef.current = { timeline, innerWidth };
+    onScrubRef.current = onScrub;
+  });
+  // A timeline re-key mid-drag (model swap tears the session down) must not
+  // leave a stale drag showing: reset local drag state when the timeline
+  // object is replaced. Timeout(0) keeps setState out of the effect body.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (dragRef.current.dragIdx !== null) {
+        dragRef.current = SCRUB_DRAG_IDLE;
+        setDrag(SCRUB_DRAG_IDLE);
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, [timeline]);
+
+  const measureTrack = () => {
+    trackRef.current?.measureInWindow((x) => {
+      trackLeftRef.current = x;
+    });
+  };
+
   // Hour-mark tick candidates, thinned to a minimum pixel gap so the GDPS
   // hourly head (85 frames) reads as a fine comb, not a smear. Day-boundary
   // ticks always survive the thinning (their labels need an anchor).
@@ -83,24 +135,51 @@ export function WeatherTimeScrubber({
     return [...kept].sort((a, b) => a - b);
   }, [frames, innerWidth, segments]);
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (e) => {
-          const ratio = (e.nativeEvent.locationX - TRACK_PAD) / innerWidth;
-          onScrub(nearestFrameIndex(timeline, msForTrackRatio(frames, ratio)));
-        },
-        onPanResponderMove: (e) => {
-          const ratio = (e.nativeEvent.locationX - TRACK_PAD) / innerWidth;
-          onScrub(nearestFrameIndex(timeline, msForTrackRatio(frames, ratio)));
-        },
-      }),
-    [innerWidth, frames, timeline, onScrub],
-  );
+  // Created ONCE: every per-event value is read through refs, so the
+  // responder is never recreated mid-gesture (which drops the gesture).
+  // pageX (window space) instead of locationX — see the drag-state comment.
+  // The initializer only CAPTURES the stable ref objects; every `.current`
+  // access happens inside responder callbacks (never during render). Same
+  // pattern as RangeSlider.
+  // eslint-disable-next-line react-hooks/refs
+  const [responder] = useState(() => {
+    const moveTo = (pageX: number) => {
+      const { timeline: tl, innerWidth: w } = geomRef.current;
+      const idx = dragIndexForPageX(tl, pageX, trackLeftRef.current, TRACK_PAD, w);
+      const next = scrubDragMove(dragRef.current, idx);
+      if (next !== dragRef.current) {
+        dragRef.current = next;
+        setDrag(next);
+      }
+    };
+    const end = () => {
+      const { state: next, commitIdx } = scrubDragEnd(dragRef.current);
+      dragRef.current = next;
+      setDrag(next);
+      if (commitIdx !== null) onScrubRef.current(commitIdx);
+    };
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      // Never hand the gesture to a parent mid-drag (map pan must not steal it).
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (e) => {
+        // Re-measure at grant: the dock can have moved (recording bar mounts,
+        // keyboard insets) since the last layout pass.
+        measureTrack();
+        moveTo(e.nativeEvent.pageX);
+      },
+      onPanResponderMove: (e) => moveTo(e.nativeEvent.pageX),
+      onPanResponderRelease: end,
+      onPanResponderTerminate: end,
+    });
+  });
 
-  const cursorX = xFor(selectedIdx);
+  // The rendered position: local drag while in flight, committed otherwise.
+  const shownIdx = displayedScrubIndex(drag, selectedIdx, frames.length);
+  const shownMs = drag.dragIdx !== null ? (frames[shownIdx] ?? selectedMs) : selectedMs;
+
+  const cursorX = xFor(shownIdx);
   const chipLeft = Math.max(0, Math.min(cursorX - CHIP_W / 2, Math.max(trackWidth - CHIP_W, 0)));
 
   return (
@@ -114,8 +193,12 @@ export function WeatherTimeScrubber({
         accessibilityLabel={playing ? 'Pause weather timeline' : 'Play weather timeline'}
       />
       <View
+        ref={trackRef}
         style={styles.track}
-        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => {
+          setTrackWidth(e.nativeEvent.layout.width);
+          measureTrack();
+        }}
         accessibilityLabel="Weather timeline"
         {...responder.panHandlers}
       >
@@ -145,7 +228,7 @@ export function WeatherTimeScrubber({
             <View style={[styles.chipTail, { left: cursorX - 4 }]} />
             <View style={[styles.chip, { left: chipLeft }]}>
               <Text style={styles.chipText} numberOfLines={1}>
-                {selectedMs !== null ? formatTimelineLabel(selectedMs) : ''}
+                {shownMs !== null ? formatTimelineLabel(shownMs) : ''}
               </Text>
             </View>
           </>

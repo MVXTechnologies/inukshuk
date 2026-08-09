@@ -445,16 +445,14 @@ appId: com.inukshuk.app
     visible: 'Notes.*'
     timeout: 30000
 - tapOn: 'Back'
-# 'Map actions' is NOT a reliable pop-complete signal here: the map's tab
-# screen is frozen, not unmounted, underneath the trail-viewer stack screen,
-# so its FAB is already in the accessibility tree — and reports "visible" —
-# while the trail viewer is still sliding out on top. Gate on the departing
-# screen's own (unique) content going away instead, THEN confirm we're back.
+# 'Map actions' is NOT a reliable pop-complete signal here — and since wave
+# A it cannot even appear yet: it lives on the top-right controls rail,
+# which MapScreen unmounts entirely while the heat carousel is open (no
+# hidden a11y nodes under the deck). Gate on the departing screen's own
+# (unique) content going away instead; 'Map actions' is asserted only AFTER
+# the carousel below is closed and the rail remounts.
 - extendedWaitUntil:
     notVisible: 'Export PDF'
-    timeout: 15000
-- extendedWaitUntil:
-    visible: 'Map actions'
     timeout: 15000
 # The departing 3D trail viewer's three.js/GL teardown starves the JS thread
 # for several seconds after the screen itself is gone from the hierarchy —
@@ -476,11 +474,11 @@ appId: com.inukshuk.app
 # single-trail/cold map tap, the Library-driven inspect-intent effect) — just
 # not by the trail-viewer round trip this flow just took, so it's still set
 # and the carousel is still fully showing its cards when Back lands us on the
-# map — and, since it mounts after (so paints over) the top-right FAB rail in
-# MapScreen's JSX, it physically intercepts taps meant for those buttons.
-# Verified on-device: without this dismiss, the cleanup's "Map overlays" tap
-# actually landed on the still-visible focused card underneath and bounced
-# straight back into the trail viewer. Close it via its own button first.
+# map — and the controls rail (Map overlays, Map actions) stays unmounted
+# beneath it. Verified on-device (pre-wave-A variant): without this dismiss,
+# the cleanup's "Map overlays" tap landed on the still-visible focused card
+# underneath and bounced straight back into the trail viewer. Close it via
+# its own button first.
 - runFlow:
     when:
       visible: 'Close activities'
@@ -489,6 +487,10 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           notVisible: 'Activities here'
           timeout: 5000
+# Rail remounted (carousel gone) — NOW 'Map actions' confirms we're back.
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
 # Restore 'type' visibility mode so later flows (library-filter, trail-view,
 # map-overlays, folders, …) see the app's default state, same as folders.yaml
 # does at the end of its own run. "Everything" is also a checkbox (its

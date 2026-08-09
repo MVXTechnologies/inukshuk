@@ -46,7 +46,6 @@ import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
 import { HeadingCone } from './components/HeadingCone';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
-import { MapActionsFab } from './components/MapActionsFab';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RecordControls } from './components/RecordControls';
 import { StatsHud } from './components/StatsHud';
@@ -74,9 +73,11 @@ import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
+import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
 import { WeatherModelSheet } from './weather/WeatherModelSheet';
+import { WeatherPointChip } from './weather/WeatherPointChip';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -170,7 +171,7 @@ export function MapScreen() {
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
-  // Standalone waypoints (dropped from the "+" speed-dial, no recording needed).
+  // Standalone waypoints (dropped from the "+" actions menu, no recording needed).
   const savedWaypoints = useLibraryStore((s) => s.waypoints);
   const addSavedWaypoint = useLibraryStore((s) => s.addWaypoint);
   const updateSavedWaypoint = useLibraryStore((s) => s.updateWaypoint);
@@ -239,8 +240,8 @@ export function MapScreen() {
   // light mode, the app background in dark mode) — downloaded areas show
   // through holes in the mask; trails/markers/location still draw on top.
   const uiStyle = useSettingsStore((s) => s.uiStyle);
-  // 'minimal' style: chevron-rail unfold state lives here because the "+"
-  // dial hides with the rest of the controls until the rail is out.
+  // 'minimal' style: chevron-rail unfold state (the "+" actions button now
+  // lives in the rail too, so it folds away with the rest of the controls).
   const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
@@ -277,6 +278,20 @@ export function MapScreen() {
   // Long-pressed point whose forecast/tides card is open (shown while a
   // weather or marine layer is active).
   const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
+  // Tap-anywhere point value (wave A item 7): a bare tap with a weather
+  // layer draped drops/moves the compact readout chip here; tapping the chip
+  // itself dismisses it (hit-tested in onMapPress below).
+  const [weatherPointAt, setWeatherPointAt] = useState<LatLng | null>(null);
+  // Frame-swap crossfade (wave A item 3): the throttled TIME's tile URL runs
+  // through a two-slot A/B stage-then-flip so the outgoing frame stays on
+  // screen while the incoming one prefetches at opacity 0 — the drape never
+  // blanks between frames during playback/scrub. Pure slot machine in
+  // @core/weather/weatherCrossfade; both phases rebuild the style memo below.
+  const weatherUrl =
+    weatherLayer !== null && !offlineOnly
+      ? modelWeatherTileUrl(weatherLayer, weatherModel, weatherTl.timeParam)
+      : null;
+  const weatherFade = useWeatherCrossfade(weatherUrl);
   const style = useMemo(() => {
     const options = {
       // The 'edge' UI style washes the raster into pastels to match its chrome.
@@ -288,7 +303,8 @@ export function MapScreen() {
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
-              urlTemplate: modelWeatherTileUrl(weatherLayer, weatherModel, weatherTl.timeParam),
+              slots: weatherFade.slots,
+              activeSlot: weatherFade.activeSlot,
               attribution: ECCC_ATTRIBUTION,
               // M3: the wind speed gradient reads a touch stronger under the
               // particle streaks (design §3); other layers keep the default.
@@ -328,8 +344,7 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     weatherLayer,
-    weatherModel,
-    weatherTl.timeParam,
+    weatherFade,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -665,7 +680,7 @@ export function MapScreen() {
     | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress }
   >(null);
 
-  // One flag shared by the weather dock and the FAB lift (they must agree).
+  // Whether the legend+scrubber dock owns the bottom edge right now.
   const weatherDockVisible =
     weatherLayer !== null &&
     !offlineOnly &&
@@ -746,7 +761,7 @@ export function MapScreen() {
     else updateSavedWaypoint(editWp.id, { photoUri: uri });
   };
 
-  // "+" speed-dial → Add waypoint: drop a standalone waypoint at the current
+  // "+" actions menu → Add waypoint: drop a standalone waypoint at the current
   // GPS position and open the editor on it right away.
   const onAddWaypoint = useCallback(() => {
     if (!location) {
@@ -783,11 +798,19 @@ export function MapScreen() {
   // same screen-projection hit-test idiom as the waypoint pins below, just
   // against the single live location instead of a list of pins.
   const USER_LOCATION_HIT_PX = 40;
+  // Weather point chip (wave A item 7): the chip floats above its anchor dot
+  // (bottom-anchored marker), so the dismiss hit-test centres a little above
+  // the coordinate — same idiom as the waypoint pins' badge offset.
+  const WEATHER_CHIP_OFFSET = 20;
+  const WEATHER_CHIP_HIT_PX = 44;
   // Tap-routing priority (this handler, in order): waypoint pin hit → the
   // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
   // opens the inspect panel; else the user-location dot (re-engage follow,
-  // item 4 — deliberately LAST, see tapHitsUserDot below); else deselect.
+  // item 4 — deliberately last among the selection routes, see
+  // tapHitsUserDot below); else, with a weather layer draped, the tap
+  // drops/moves/dismisses the point-value chip (wave A item 7); else
+  // deselect.
   //
   // The event's real (runtime + typings) shape is `nativeEvent: { lngLat:
   // [lng, lat]; point: [x, y]; ... }` — flat tuples, NOT the GeoJSON
@@ -886,8 +909,8 @@ export function MapScreen() {
       } else {
         // Nothing else claimed the tap — the dot route gets its turn now
         // (item 4: tap your own position dot to resume following after
-        // panning away). Checked last so it can never steal a heat-spot,
-        // trail or waypoint tap that happens to sit under the dot.
+        // panning away). Checked after heat/trail so it can never steal a
+        // heat-spot, trail or waypoint tap that happens to sit under the dot.
         if (await tapHitsUserDot()) {
           setFollowUser(true);
           return;
@@ -899,6 +922,30 @@ export function MapScreen() {
         setHeatSelection(null);
         inspect(null);
         restoreCameraOnDeselect();
+        // Weather point-tap (wave A item 7), slotted between the dot route
+        // and plain deselect: with a weather layer draped, a bare tap
+        // drops/moves the point-value chip at the tapped spot; a tap ON the
+        // chip (or its anchor dot) dismisses it — same screen-projection
+        // hit-test idiom as the waypoint pins.
+        if (lngLatArr && weatherLayer !== null && !offlineOnly) {
+          if (weatherPointAt !== null) {
+            try {
+              const p = await map.project([weatherPointAt.longitude, weatherPointAt.latitude]);
+              if (
+                p != null &&
+                Math.hypot(px - p[0], py - (p[1] - WEATHER_CHIP_OFFSET)) < WEATHER_CHIP_HIT_PX
+              ) {
+                setWeatherPointAt(null);
+                setViewWp(null);
+                setForecastAt(null);
+                return;
+              }
+            } catch {
+              // projection unavailable mid-teardown — treat as a fresh drop
+            }
+          }
+          setWeatherPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+        }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
       setForecastAt(null); // ... and the forecast card
@@ -911,6 +958,9 @@ export function MapScreen() {
       restoreCameraOnDeselect,
       location,
       setFollowUser,
+      weatherLayer,
+      offlineOnly,
+      weatherPointAt,
     ],
   );
 
@@ -1321,6 +1371,26 @@ export function MapScreen() {
             </Marker>
           ))}
 
+          {/* Tap-anywhere point value (wave A item 7): compact Windy-style
+              readout chip at the tapped spot, pinned to the scrubbed TIME.
+              Visual only — dismissal is hit-tested in onMapPress (Marker
+              onPress doesn't fire on Android, the waypoint-pin precedent). */}
+          {weatherPointAt !== null && weatherLayer !== null && !offlineOnly && (
+            <Marker
+              id="weather-point"
+              lngLat={[weatherPointAt.longitude, weatherPointAt.latitude]}
+              anchor="bottom"
+            >
+              <WeatherPointChip
+                at={weatherPointAt}
+                layer={weatherLayer}
+                model={weatherModel}
+                timeIso={weatherTl.timeParam}
+                selectedMs={weatherTl.selectedMs}
+              />
+            </Marker>
+          )}
+
           {/* Direction cone under the dot. The built-in `heading` arrow was
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
@@ -1434,6 +1504,39 @@ export function MapScreen() {
           terrain3d={terrain3d}
           pdfOverlayCount={overlays.length}
           trackOverlayCount={trackOverlays.length}
+          // "+" map actions (wave A item 6): moved out of the bottom-right
+          // FAB.Group into the rail, directly below Map overlays. Hidden
+          // (undefined) while a recording is under way (the active controls
+          // take over), while selecting a region, and while the category
+          // sheet is deciding — the same gates the old FAB carried. The
+          // bottom-corner-specific gates (#131 inspect overlap, the model
+          // sheet's perch, the weather-dock lift) are gone with the corner.
+          actions={
+            status === 'idle' && !selecting && !pickingCategory
+              ? {
+                  onRecord: () => setPickingCategory(true),
+                  onAddWaypoint,
+                  // A second download would stop the first's loopback server.
+                  onDownload:
+                    terrain3d || downloadProgress !== null
+                      ? undefined
+                      : () => {
+                          // Close any open trail inspector first: the download
+                          // sheet renders below the inspector panel (#131).
+                          inspect(null);
+                          beginRegionSelect();
+                        },
+                  // The region box needs the flat 2D map, like the selector.
+                  onMakeMap: terrain3d
+                    ? undefined
+                    : () => {
+                        inspect(null);
+                        setMakeMapState({ phase: 'select' });
+                        prepareRegionGeometry();
+                      },
+                }
+              : undefined
+          }
           minimalOpen={minimalControlsOpen}
           onMinimalOpenChange={setMinimalControlsOpen}
         />
@@ -1469,7 +1572,12 @@ export function MapScreen() {
       {/* Item 2: with the map logo/attribution gone, the recording UI drops
           into the freed bottom-left space — a much smaller pad clears more
           map above it. */}
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 4 }]} pointerEvents="box-none">
+      {/* Wave A item 1 (dock gap): NO insets.bottom here. This screen sits
+          ABOVE the tab bar, and the tab bar already absorbs the gesture-nav
+          inset itself — padding it again double-paid the inset and floated
+          the weather dock (and recording bar) ~1 cm off the bar. A few dp of
+          fixed breathing room is all the column needs. */}
+      <View style={styles.bottom} pointerEvents="box-none">
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
         {!selecting && status !== 'idle' && (
@@ -1590,51 +1698,6 @@ export function MapScreen() {
         />
       )}
 
-      {/* "+" speed-dial: the recording entry point (and home for future map
-          actions). Hidden while a recording is under way (the active controls
-          take over), while selecting an offline region, and while the trail
-          inspector is open — its trim actions sit exactly where the FAB
-          renders, which left the Overwrite button half-covered (#131). */}
-      {status === 'idle' &&
-        !selecting &&
-        makeMapState === null &&
-        inspectId === null &&
-        // The model sheet opens exactly where the lifted FAB sits (above the
-        // weather dock's corner) — hide the FAB while the sheet is up.
-        !(weatherDockVisible && modelSheetOpen) &&
-        // Minimal style folds the "+" dial away with the rest of the controls.
-        (uiStyle !== 'minimal' || minimalControlsOpen) &&
-        !pickingCategory && (
-          <MapActionsFab
-            // The weather dock (legend 22 + gap 6 + scrubber 54 + column gap)
-            // owns the FAB's corner while visible — hop above it.
-            liftBy={weatherDockVisible ? 96 : 0}
-            onRecord={() => setPickingCategory(true)}
-            onAddWaypoint={onAddWaypoint}
-            // Close any open trail inspector first: the download sheet renders
-            // below the inspector panel in this tree, so starting a download
-            // with the inspector open left its controls buried under it (#131).
-            onDownload={
-              terrain3d || downloadProgress !== null || status !== 'idle'
-                ? undefined
-                : () => {
-                    inspect(null);
-                    beginRegionSelect();
-                  }
-            }
-            // The region box needs the flat 2D map, like the download selector.
-            onMakeMap={
-              terrain3d
-                ? undefined
-                : () => {
-                    inspect(null);
-                    setMakeMapState({ phase: 'select' });
-                    prepareRegionGeometry();
-                  }
-            }
-          />
-        )}
-
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}
       <CategoryStartSheet
@@ -1746,7 +1809,7 @@ const styles = StyleSheet.create({
   // Centred between the compass (left) and the controls rail (right).
   marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
-  bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 14 },
+  bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 12, paddingBottom: 6 },
   // Collapsed: center-align the pill against the (bigger) icon buttons so
   // they visibly pop out of the bar (item 3).
   recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
