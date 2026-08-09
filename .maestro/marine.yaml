@@ -36,10 +36,17 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 # --- Enable both marine layers ---
-- tapOn: 'Map overlays'
-- extendedWaitUntil:
-    visible: 'Marine'
-    timeout: 10000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Marine'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Marine'
+          timeout: 10000
 - tapOn: 'Marine'
 - extendedWaitUntil:
     visible: 'Water depths'
@@ -62,10 +69,17 @@ appId: com.inukshuk.app
 - assertVisible: 'Map actions'
 # --- The menu row reflects the active layers; turn everything back off so
 # reruns and later flows start from the default map. ---
-- tapOn: 'Map overlays'
-- extendedWaitUntil:
-    visible: 'Marine (2)'
-    timeout: 10000
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Marine (2)'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Marine (2)'
+          timeout: 10000
 - tapOn: 'Marine (2)'
 - extendedWaitUntil:
     visible: 'Water depths'
