@@ -218,7 +218,11 @@ describe('buildOsmStyle', () => {
 
   describe('labels + coastline overlay (wave B)', () => {
     const weather = {
-      urlTemplate: 'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
+      slots: [
+        'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
+        null,
+      ] as const,
+      activeSlot: 0 as const,
       attribution: 'ECCC',
     };
     const OVERLAY_LAYER_IDS = ['overlay-water-line', 'overlay-town-labels', 'overlay-city-labels'];
