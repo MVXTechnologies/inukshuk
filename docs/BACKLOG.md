@@ -14,8 +14,12 @@ Ordered roughly by priority (top = next).
   ~~M2~~ SHIPPED (PR #196, OTA'd 1.5.0 + 1.4.0, 2026-08-09): HRDPS/RDPS/
   GDPS model picker on the scrubber chevron (drape + timeline re-key on
   switch, time-proportional ticks) + Windy-style model comparison table
-  with live spread and run age. M3 building: GL wind particles
-  (webgl-wind port on expo-gl, WCS float grids). Multi-model beyond ECCC: NAS-hosted GFS/
+  with live spread and run age. ~~M3~~ SHIPPED (PR #197, OTA'd
+  1.5.0 + 1.4.0, 2026-08-09): GPU wind particles — thin gust-scaled flow
+  streaks over the scalar speed gradient (no arrows), self-throttling
+  28 fps ladder, kill-switch in Settings → Map. Owner verdict pending on
+  real hardware (emulator = software GL). Weather v2 program COMPLETE
+  except owner-judged polish + the open multi-model source decision. Multi-model beyond ECCC: NAS-hosted GFS/
   ECMWF/ICON relay recommended as M2.5 — owner has NOT yet chosen relay vs Open-Meteo (~€29/mo).
 
 ## Queued (owner requests, 2026-08-07)
