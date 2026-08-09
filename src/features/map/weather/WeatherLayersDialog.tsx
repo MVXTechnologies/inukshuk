@@ -1,4 +1,6 @@
 import { WEATHER_LAYERS, type WeatherLayerId } from '@core/geo/weatherLayers';
+import { radarAvailableAt } from '@core/weather/modelCoverage';
+import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
 import { Button, Dialog, Icon, Portal, Text, TouchableRipple } from 'react-native-paper';
@@ -40,8 +42,13 @@ export function WeatherLayersDialog({
 }) {
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const set = useSettingsStore((s) => s.set);
+  // Wave B: radar is a North American composite — while the map centre sits
+  // outside it, the radar rows carry an honest "Canada only" hint (the rows
+  // stay tappable; the drape just shows nothing there). Boolean selector, so
+  // the dialog only re-renders when the answer flips at the coverage edge.
+  const radarOutside = useMapStore((s) => !radarAvailableAt(s.mapCenter));
 
-  const row = (id: WeatherLayerId | null, label: string) => {
+  const row = (id: WeatherLayerId | null, label: string, hint?: string) => {
     const selected = weatherLayer === id;
     return (
       <TouchableRipple
@@ -61,7 +68,10 @@ export function WeatherLayersDialog({
               />
             </View>
           </View>
-          <Text style={[styles.rowLabel, selected && styles.rowLabelSelected]}>{label}</Text>
+          <View style={styles.rowText}>
+            <Text style={[styles.rowLabel, selected && styles.rowLabelSelected]}>{label}</Text>
+            {hint !== undefined && <Text style={styles.rowHint}>{hint}</Text>}
+          </View>
           {selected && <Icon source="check" size={18} color={wc.accent} />}
         </View>
       </TouchableRipple>
@@ -78,7 +88,9 @@ export function WeatherLayersDialog({
             connection; hidden while &quot;Locally downloaded only&quot; is on.
           </Text>
           {row(null, 'None')}
-          {WEATHER_LAYERS.map((l) => row(l.id, l.label))}
+          {WEATHER_LAYERS.map((l) =>
+            row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
+          )}
         </Dialog.Content>
         <Dialog.Actions>
           <Button onPress={onDismiss} textColor={wc.accent}>
@@ -118,6 +130,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowLabel: { flex: 1, fontSize: 15, lineHeight: 20, color: wc.ink },
+  rowText: { flex: 1 },
+  rowLabel: { fontSize: 15, lineHeight: 20, color: wc.ink },
   rowLabelSelected: { fontWeight: '700' },
+  rowHint: { fontSize: 11, lineHeight: 14, color: wc.inkFaint },
 });

@@ -494,7 +494,7 @@ export function SettingsScreen() {
                 // paper truncates descriptions at 2 lines by default; the
                 // credit roll must stay fully readable.
                 descriptionNumberOfLines={8}
-                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada · Bathymetry: CHS NONNA, Open Government Licence – Canada (not for navigation) · Seamarks © OpenSeaMap contributors (ODbL) · Tides: Fisheries and Oceans Canada (CHS IWLS)"
+                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada · Weather-mode labels: OpenFreeMap (© OpenMapTiles) · Bathymetry: CHS NONNA, Open Government Licence – Canada (not for navigation) · Seamarks © OpenSeaMap contributors (ODbL) · Tides: Fisheries and Oceans Canada (CHS IWLS)"
               />
             </View>
           </List.Accordion>

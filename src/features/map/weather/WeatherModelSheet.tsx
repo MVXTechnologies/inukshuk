@@ -1,4 +1,9 @@
-import { modelCaption, WEATHER_MODELS, type WeatherModelId } from '@core/weather/weatherModels';
+import {
+  modelCaption,
+  WEATHER_MODELS,
+  weatherModelById,
+  type WeatherModelId,
+} from '@core/weather/weatherModels';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import { weatherChrome as wc } from './weatherChrome';
@@ -20,41 +25,60 @@ import { weatherChrome as wc } from './weatherChrome';
  * cross-match. "Compare models" only exists here while the sheet is open
  * (the scrubber caption echoes the model NAME, so names are not open-state
  * sentinels — this row is).
+ *
+ * Wave B (worldwide weather): `effective` is the model the drape actually
+ * resolved to at the viewport centre. Inside the selected model's domain it
+ * equals `selected` and nothing changes. Outside (HRDPS/RDPS are
+ * Canada-domain), the GDPS pill wears a soft "in use" ring beside the
+ * selection ring and a hint row says why — honest, no error, and the
+ * selection itself is untouched so panning home restores it.
  */
 export function WeatherModelSheet({
   selected,
+  effective,
   onSelect,
   onCompare,
 }: {
   selected: WeatherModelId;
+  /** The model the drape resolved to here (== selected inside coverage). */
+  effective?: WeatherModelId;
   onSelect: (id: WeatherModelId) => void;
   onCompare: () => void;
 }) {
+  const resolved = effective ?? selected;
+  const fallback = resolved !== selected;
   return (
     <View style={styles.sheet}>
       <Text style={styles.title}>FORECAST MODEL</Text>
       <View style={styles.pillRow}>
         {WEATHER_MODELS.map((m) => {
           const active = m.id === selected;
+          const auto = fallback && m.id === resolved;
           return (
             <TouchableRipple
               key={m.id}
               onPress={() => onSelect(m.id)}
               accessibilityLabel={`Model ${m.label}`}
               accessibilityState={{ selected: active }}
-              style={[styles.pill, active && styles.pillActive]}
+              style={[styles.pill, active && styles.pillActive, auto && styles.pillAuto]}
               borderless
             >
               <View style={styles.pillInner}>
                 <Text style={[styles.pillName, active && styles.pillNameActive]}>{m.label}</Text>
                 <Text style={[styles.pillSub, active && styles.pillSubActive]} numberOfLines={1}>
-                  {modelCaption(m)}
+                  {auto ? 'in use here' : modelCaption(m)}
                 </Text>
               </View>
             </TouchableRipple>
           );
         })}
       </View>
+      {fallback && (
+        <Text style={styles.autoHint}>
+          Outside {weatherModelById(selected).label} coverage here — showing{' '}
+          {weatherModelById(resolved).label} (global)
+        </Text>
+      )}
       <View style={styles.divider} />
       <TouchableRipple
         onPress={onCompare}
@@ -100,6 +124,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   pillActive: { borderColor: wc.accent, backgroundColor: 'rgba(182, 201, 138, 0.14)' },
+  // The auto-resolved model outside the selection's domain: a soft ring —
+  // present but visually subordinate to the selection's full accent ring.
+  pillAuto: { borderColor: 'rgba(182, 201, 138, 0.55)' },
+  autoHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: wc.inkMuted,
+    marginTop: 8,
+    marginHorizontal: 6,
+  },
   pillInner: { alignItems: 'center', gap: 1 },
   pillName: { fontSize: 13, lineHeight: 16, fontWeight: '700', color: wc.inkMuted },
   pillNameActive: { color: wc.accent },

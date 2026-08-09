@@ -12,6 +12,24 @@ import type { Feature, Polygon } from 'geojson';
 const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
 /**
+ * OpenFreeMap vector tiles + glyphs (openfreemap.org): key-free, no usage
+ * limits, commercial use explicitly allowed, self-hostable if it ever goes
+ * away. Data © OpenStreetMap contributors (schema © OpenMapTiles). Used ONLY
+ * for the weather/marine reference overlay below — the basemap stays raster.
+ *
+ * Chosen over the raster label candidates (verified live 2026-08-09):
+ * CARTO's `*_only_labels` tiles render beautifully but CARTO's basemap terms
+ * require an Enterprise licence for commercial use; Esri's World Boundaries
+ * and Places renders bilingual double labels in Canada and Esri's Web Site &
+ * Service ToU limits keyless arcgisonline use to noncommercial. OpenFreeMap
+ * is the one candidate that is legally clean with no key — and being vector
+ * it adds the water outlines no labels-only raster source carries.
+ */
+const OFM_TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
+const OFM_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
+const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
+
+/**
  * Free, key-free raster base layers. Satellite/relief come from Esri's public
  * ArcGIS Online tile services (note the `{z}/{y}/{x}` row/col order). `map` uses
  * the OSM URL injected from settings.
@@ -170,10 +188,25 @@ export interface OsmStyleOptions {
    * HONEST LIMIT: the base is raster tiles, so a true labels-only minimal
    * style (land/water + city labels) is impossible — labels are baked into
    * the tile pixels. The dim treatment keeps them readable while pushing
-   * everything else back. Future work: a vector basemap variant could style
-   * a real city-labels-only weather background.
+   * everything else back. Wave B: `overlayLabels` redraws place names and
+   * water outlines ABOVE the drape, which is the real fix; the dim stays as
+   * the zero-network degradation.
    */
   weatherMuted?: { dimColor: string; dimOpacity: number };
+  /**
+   * Labels + coastline reference overlay ABOVE the weather/marine drapes
+   * (weather wave B, owner: "names and coastlines readable above the
+   * colors, like Windy"): OpenFreeMap vector tiles drawn as a transparent
+   * reference pass — water outlines (coastlines, lakes, wide rivers) plus
+   * halo'd city/town labels — pushed above every drape so saturated colour
+   * fields never swallow geography. Adds a `glyphs` endpoint to the style
+   * (the raster basemap never needed one). Network-only like the drapes it
+   * rides on: callers only set it while a weather or marine layer is on, so
+   * the plain map stays byte-identical to today. If the tile/glyph host is
+   * unreachable the overlay simply doesn't draw — silent degradation to the
+   * dim-only look.
+   */
+  overlayLabels?: { dark: boolean };
 }
 
 /**
@@ -373,6 +406,78 @@ export function buildOsmStyle(
         },
       });
     }
+  }
+
+  // Labels + coastline reference overlay, ABOVE the dim and the weather/
+  // marine drapes (see the option's doc). Water outlines first, then towns,
+  // then cities — MapLibre renders symbol collisions top-layer-first, so
+  // cities win crowded spots. Text colours follow the app theme: the drape
+  // colours are the same in both, but the dim backdrop under them is
+  // theme-matched, so ink/halo polarity flips with it.
+  if (options.overlayLabels) {
+    const { dark } = options.overlayLabels;
+    style.glyphs = OFM_GLYPHS_URL;
+    style.sources['overlay-labels'] = {
+      type: 'vector',
+      url: OFM_TILEJSON_URL,
+      attribution: OFM_ATTRIBUTION,
+    };
+    const ink = dark ? '#FFFFFF' : '#20303C';
+    const halo = dark ? 'rgba(12, 16, 20, 0.92)' : 'rgba(255, 255, 255, 0.94)';
+    style.layers.push(
+      {
+        id: 'overlay-water-line',
+        type: 'line',
+        source: 'overlay-labels',
+        'source-layer': 'water',
+        paint: {
+          'line-color': dark ? 'rgba(160, 200, 228, 0.62)' : 'rgba(38, 76, 112, 0.60)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.6, 10, 1.1, 14, 1.7],
+        },
+      },
+      {
+        id: 'overlay-town-labels',
+        type: 'symbol',
+        source: 'overlay-labels',
+        'source-layer': 'place',
+        minzoom: 9,
+        filter: ['in', ['get', 'class'], ['literal', ['town', 'village']]],
+        layout: {
+          'text-field': ['coalesce', ['get', 'name:latin'], ['get', 'name']],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 9, 11, 14, 13.5],
+          'text-max-width': 8,
+          'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        },
+        paint: {
+          'text-color': ink,
+          'text-halo-color': halo,
+          'text-halo-width': 1.4,
+          'text-halo-blur': 0.4,
+        },
+      },
+      {
+        id: 'overlay-city-labels',
+        type: 'symbol',
+        source: 'overlay-labels',
+        'source-layer': 'place',
+        minzoom: 3,
+        filter: ['==', ['get', 'class'], 'city'],
+        layout: {
+          'text-field': ['coalesce', ['get', 'name:latin'], ['get', 'name']],
+          'text-font': ['Noto Sans Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11.5, 8, 13, 12, 16],
+          'text-max-width': 8,
+          'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        },
+        paint: {
+          'text-color': ink,
+          'text-halo-color': halo,
+          'text-halo-width': 1.6,
+          'text-halo-blur': 0.4,
+        },
+      },
+    );
   }
 
   // "Locally downloaded only" mask, pushed LAST so it sits above every basemap

@@ -216,6 +216,68 @@ describe('buildOsmStyle', () => {
     });
   });
 
+  describe('labels + coastline overlay (wave B)', () => {
+    const weather = {
+      urlTemplate: 'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
+      attribution: 'ECCC',
+    };
+    const OVERLAY_LAYER_IDS = ['overlay-water-line', 'overlay-town-labels', 'overlay-city-labels'];
+
+    it('is absent by default — no vector source, no glyphs endpoint', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true);
+      expect(s.sources['overlay-labels']).toBeUndefined();
+      expect(s.glyphs).toBeUndefined();
+      for (const id of OVERLAY_LAYER_IDS) expect(layerIds(s)).not.toContain(id);
+    });
+
+    it('adds the OpenFreeMap vector source, glyphs and the three reference layers', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: false } });
+      expect(s.sources['overlay-labels']).toMatchObject({
+        type: 'vector',
+        url: 'https://tiles.openfreemap.org/planet',
+      });
+      expect(s.glyphs).toBe('https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf');
+      for (const id of OVERLAY_LAYER_IDS) expect(layerIds(s)).toContain(id);
+      const water = s.layers.find((l) => l.id === 'overlay-water-line');
+      expect(water).toMatchObject({ type: 'line', 'source-layer': 'water' });
+      const cities = s.layers.find((l) => l.id === 'overlay-city-labels');
+      expect(cities).toMatchObject({ type: 'symbol', 'source-layer': 'place' });
+    });
+
+    it('draws ABOVE the dim and the weather/marine drapes (the whole point)', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        weather,
+        weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
+        marineLayers: ['bathymetry', 'seamarks'],
+        overlayLabels: { dark: true },
+      });
+      const ids = layerIds(s);
+      for (const id of OVERLAY_LAYER_IDS) {
+        expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('weather'));
+        expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('weather-dim'));
+        expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('marine-seamarks'));
+      }
+    });
+
+    it('sits above a marine-only drape too (no weather layer in the style)', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        overlayLabels: { dark: false },
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('overlay-water-line')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
+    });
+
+    it('flips ink/halo polarity with the theme', () => {
+      const light = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: false } });
+      const dark = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: true } });
+      const cityPaint = (s: ReturnType<typeof buildOsmStyle>) =>
+        s.layers.find((l) => l.id === 'overlay-city-labels')?.paint as Record<string, unknown>;
+      expect(cityPaint(light)['text-color']).toBe('#20303C');
+      expect(cityPaint(dark)['text-color']).toBe('#FFFFFF');
+    });
+  });
+
   describe('marine overlays', () => {
     it('is absent by default — the map is byte-identical to today with marine off', () => {
       const s = buildOsmStyle(TILE, false, 'map', true);

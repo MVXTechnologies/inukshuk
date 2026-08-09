@@ -10,6 +10,7 @@ import {
   weatherModelById,
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
+import { resolveEffectiveModel } from '@core/weather/modelCoverage';
 import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
@@ -257,6 +258,19 @@ export function MapScreen() {
   const weatherModel = useSettingsStore((s) => s.weatherModel);
   const setSettings = useSettingsStore((s) => s.set);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  // Wave B (worldwide weather): the camera's settled centre, and the model
+  // the drape actually resolves to there — the user's selection inside its
+  // domain, GDPS (global) outside it (HRDPS/RDPS are Canada-domain; see
+  // `@core/weather/modelCoverage`). The persisted selection is never
+  // touched: pan home and the chosen model comes back. Everything drape-
+  // shaped below (tile URL, timeline, wind particles, scrubber caption)
+  // rides the EFFECTIVE model so they can never disagree.
+  const mapCenter = useMapStore((s) => s.mapCenter);
+  const setMapCenter = useMapStore((s) => s.setMapCenter);
+  const { model: effectiveModel, fallback: modelFallback } = resolveEffectiveModel(
+    weatherModel,
+    mapCenter,
+  );
   // Changing the LAYER closes the sheet (a fresh layer starts from the
   // scrubber, like Windy); switching models inside the sheet keeps it open.
   useEffect(() => {
@@ -267,7 +281,7 @@ export function MapScreen() {
   const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
   const weatherTl = useWeatherTimeline(
     offlineOnly ? null : weatherLayer,
-    weatherModel,
+    effectiveModel,
     weatherAnimating,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
@@ -289,7 +303,7 @@ export function MapScreen() {
   // @core/weather/weatherCrossfade; both phases rebuild the style memo below.
   const weatherUrl =
     weatherLayer !== null && !offlineOnly
-      ? modelWeatherTileUrl(weatherLayer, weatherModel, weatherTl.timeParam)
+      ? modelWeatherTileUrl(weatherLayer, effectiveModel, weatherTl.timeParam)
       : null;
   const weatherFade = useWeatherCrossfade(weatherUrl);
   const style = useMemo(() => {
@@ -300,6 +314,11 @@ export function MapScreen() {
       markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
       // Marine drapes ride the same offline-only rule.
       marineLayers: offlineOnly ? [] : marineLayers,
+      // Labels + coastlines readable ABOVE the colour drapes (wave B): the
+      // reference overlay rides whenever a weather OR marine layer is on.
+      ...((weatherLayer !== null || marineLayers.length > 0) && !offlineOnly
+        ? { overlayLabels: { dark: theme.dark } }
+        : {}),
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
@@ -553,6 +572,25 @@ export function MapScreen() {
       cancelled = true;
     };
   }, [windEnabled, writeWindView]);
+  // Seed the settled centre once the map loads (wave B): the region callback
+  // only fires on movement, so without this a user who never pans keeps a
+  // null centre — and the model fallback/radar hint would never resolve.
+  useEffect(() => {
+    if (!mapLoaded || mapCenter !== null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const vs = await mapRef.current?.getViewState();
+        if (vs === undefined || cancelled) return;
+        setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
+      } catch {
+        // map mid-teardown — the first region settle seeds instead.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapLoaded, mapCenter, setMapCenter]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -1044,6 +1082,13 @@ export function MapScreen() {
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
             setRegionVersion((v) => v + 1);
+            // Settled centre → mapStore (wave B): resolves the effective
+            // forecast model and the radar rows' "Canada only" hint. Same
+            // render batch as the version bump above — no extra re-render.
+            setMapCenter({
+              latitude: e.nativeEvent.center[1],
+              longitude: e.nativeEvent.center[0],
+            });
             void refreshBounds();
             if (windEnabled) onWindRegionDidChange(e);
           }}
@@ -1406,7 +1451,7 @@ export function MapScreen() {
           is the gradient drape alone. */}
       {windEnabled && (
         <WindParticleLayer
-          model={weatherModel}
+          model={effectiveModel}
           timeIso={weatherTl.timeParam}
           viewRef={windViewRef}
           interacting={windInteracting}
@@ -1629,6 +1674,7 @@ export function MapScreen() {
             {modelSheetOpen && weatherTl.timeline.kind === 'forecast' && (
               <WeatherModelSheet
                 selected={weatherModel}
+                effective={effectiveModel}
                 onSelect={(id) => setSettings('weatherModel', id)}
                 onCompare={openModelCompare}
               />
@@ -1649,7 +1695,9 @@ export function MapScreen() {
               modelPickerOpen={modelSheetOpen}
               modelCaption={
                 weatherTl.timeline.kind === 'forecast'
-                  ? `${weatherModelById(weatherModel).label} ${weatherModelById(weatherModel).horizonLabel.toUpperCase()}`
+                  ? // The EFFECTIVE model, with an honest marker when it was
+                    // auto-resolved (outside the selected model's domain).
+                    `${weatherModelById(effectiveModel).label} ${weatherModelById(effectiveModel).horizonLabel.toUpperCase()}${modelFallback ? ' · AUTO' : ''}`
                   : undefined
               }
             />
