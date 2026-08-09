@@ -1,4 +1,5 @@
 import { WEATHER_LAYERS, type WeatherLayerId } from '@core/geo/weatherLayers';
+import { interpolateRamp } from '@core/weather/colorRamp';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
@@ -11,17 +12,17 @@ import {
   Portal,
   Text,
   TouchableRipple,
-  useTheme,
 } from 'react-native-paper';
+import { weatherChrome as wc } from './weatherChrome';
 
 /**
- * "Weather" picker (weather UX M1): one live ECCC GeoMet layer at a time,
- * chosen from thumbnail rows in the basemap-picker idiom (label left, a
- * banner strip right — see BasemapRows) rather than radio buttons. The
- * banner is the layer's legend colour ramp rendered as stepped gradient
- * segments: plain Views, no binary assets, OTA-clean. The Animate toggle is
- * "play" over the layer's scrubber timeline — radar loops its ~3 h past,
- * model layers their ~48 h forecast.
+ * "Weather" picker (weather UX M1, the Windy idiom): a dark translucent
+ * panel — same fixed chrome in both themes as the scrubber/legend, see
+ * weatherChrome.ts — listing one row per layer: a circular thumbnail of the
+ * layer's colour ramp (smoothly interpolated from its swatch stops — plain
+ * Views, no binary assets, OTA-clean) beside its label. The selected row
+ * wears an accent ring and a bolder label. The Animate toggle is "play"
+ * over the layer's scrubber timeline.
  *
  * User-invoked dialog, so Portal is safe here (the launch-path Portal ban in
  * [[paper-portal-touch-swallow]] doesn't apply). M2/M3 seam: rows render
@@ -34,7 +35,6 @@ export function WeatherLayersDialog({
   visible: boolean;
   onDismiss: () => void;
 }) {
-  const theme = useTheme();
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const set = useSettingsStore((s) => s.set);
   const animating = useMapStore((s) => s.weatherAnimating);
@@ -48,27 +48,28 @@ export function WeatherLayersDialog({
         onPress={() => set('weatherLayer', id)}
         accessibilityLabel={label}
         style={styles.row}
+        borderless
       >
         <View style={styles.rowInner}>
-          <View style={styles.labelBox}>
-            {selected && <Icon source="check" size={16} />}
-            <Text variant="bodyLarge">{label}</Text>
+          <View style={[styles.thumbRing, selected && styles.thumbRingSelected]}>
+            <View style={styles.thumb}>
+              {swatch !== null ? (
+                interpolateRamp(swatch, THUMB_STEPS).map((color, i) => (
+                  // Colours can repeat after interpolation; suffix the position.
+                  <View
+                    key={`${color}-${i}`}
+                    style={[styles.thumbStep, { backgroundColor: color }]}
+                  />
+                ))
+              ) : (
+                <View style={styles.thumbOff}>
+                  <Icon source="eye-off-outline" size={17} color={wc.inkMuted} />
+                </View>
+              )}
+            </View>
           </View>
-          <View
-            style={[
-              styles.banner,
-              selected && { borderWidth: 2, borderColor: theme.colors.primary },
-            ]}
-          >
-            {swatch !== null ? (
-              // Stepped legend ramp — the layer's "map look" thumbnail.
-              swatch.map((color) => (
-                <View key={color} style={[styles.swatchStep, { backgroundColor: color }]} />
-              ))
-            ) : (
-              <View style={[styles.swatchStep, { backgroundColor: theme.colors.surfaceVariant }]} />
-            )}
-          </View>
+          <Text style={[styles.rowLabel, selected && styles.rowLabelSelected]}>{label}</Text>
+          {selected && <Icon source="check" size={18} color={wc.accent} />}
         </View>
       </TouchableRipple>
     );
@@ -76,10 +77,10 @@ export function WeatherLayersDialog({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss}>
-        <Dialog.Title>Weather</Dialog.Title>
+      <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
+        <Dialog.Title style={styles.title}>Weather</Dialog.Title>
         <Dialog.Content>
-          <Text variant="bodySmall" style={styles.hint}>
+          <Text style={styles.hint}>
             Live layers from Environment and Climate Change Canada, draped over the map. Needs a
             connection; hidden while &quot;Locally downloaded only&quot; is on.
           </Text>
@@ -87,37 +88,61 @@ export function WeatherLayersDialog({
           {WEATHER_LAYERS.map((l) => row(l.id, l.label, l.swatch))}
           {weatherLayer !== null && (
             <>
-              <Divider />
+              <Divider style={styles.divider} />
               <Checkbox.Item
                 label="Animate"
                 status={animating ? 'checked' : 'unchecked'}
                 onPress={toggleAnimation}
                 position="leading"
-                labelStyle={styles.leftLabel}
+                labelStyle={styles.animateLabel}
+                color={wc.accent}
+                uncheckedColor={wc.inkMuted}
               />
             </>
           )}
         </Dialog.Content>
         <Dialog.Actions>
-          <Button onPress={onDismiss}>Done</Button>
+          <Button onPress={onDismiss} textColor={wc.accent}>
+            Done
+          </Button>
         </Dialog.Actions>
       </Dialog>
     </Portal>
   );
 }
 
+/** 40 px circle over 16 interpolated bands ≈ a smooth gradient disc. */
+const THUMB_STEPS = 16;
+const THUMB_D = 40;
+
 const styles = StyleSheet.create({
-  hint: { opacity: 0.7, marginBottom: 4 },
-  row: { paddingVertical: 7, paddingHorizontal: 4, borderRadius: 8 },
-  rowInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  labelBox: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 118 },
-  banner: {
-    flex: 1,
-    flexDirection: 'row',
-    borderRadius: 7,
-    overflow: 'hidden',
-    height: 24,
+  dialog: { backgroundColor: wc.panelSolid },
+  title: { color: wc.ink },
+  hint: { color: wc.inkMuted, fontSize: 12, lineHeight: 16, marginBottom: 10 },
+  row: { borderRadius: 12, paddingVertical: 7, paddingHorizontal: 6 },
+  rowInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  // Constant-size ring wrapper so selection never shifts the layout.
+  thumbRing: {
+    width: THUMB_D + 6,
+    height: THUMB_D + 6,
+    borderRadius: (THUMB_D + 6) / 2,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  swatchStep: { flex: 1 },
-  leftLabel: { textAlign: 'left' },
+  thumbRingSelected: { borderColor: wc.accent },
+  thumb: {
+    width: THUMB_D,
+    height: THUMB_D,
+    borderRadius: THUMB_D / 2,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  thumbStep: { flex: 1 },
+  thumbOff: { flex: 1, backgroundColor: '#353B43', alignItems: 'center', justifyContent: 'center' },
+  rowLabel: { flex: 1, fontSize: 15, lineHeight: 20, color: wc.ink },
+  rowLabelSelected: { fontWeight: '700' },
+  divider: { backgroundColor: wc.hairline, marginTop: 4 },
+  animateLabel: { textAlign: 'left', color: wc.ink },
 });

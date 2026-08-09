@@ -32,15 +32,19 @@ export type WeatherTimelineKind = 'past' | 'forecast';
 export const WEATHER_LAYERS = [
   // Labels double as Maestro/a11y match targets — keep them free of regex
   // metacharacters (Maestro treats text matchers as regexes).
-  // `swatch` is the picker thumbnail: a stepped legend-style colour ramp
-  // conveying how the layer paints the map (rendered as plain Views — no
-  // binary assets, OTA-clean).
+  // `swatch` is the layer's colour identity: interpolated into a smooth ramp
+  // (see `@core/weather/colorRamp`) for the picker's circular thumbnails and
+  // the legend pill — plain Views, no binary assets, OTA-clean.
+  // `legend` is the Windy-style value scale drawn along that ramp: `labels`
+  // sit evenly spaced across it. Values approximate GeoMet's default WMS
+  // styles (device QA calibrates them against the live drape colours).
   {
     id: 'radar-rain',
     label: 'Rain radar',
     wmsLayer: 'RADAR_1KM_RRAI',
     timeline: 'past',
     swatch: ['#A7E28F', '#4FBF4A', '#FFE45C', '#FFAB3D', '#F4552C', '#B3226B'],
+    legend: { unit: 'mm/h', labels: ['0.1', '1', '4', '12', '24', '50'] },
   },
   {
     id: 'radar-snow',
@@ -48,6 +52,7 @@ export const WEATHER_LAYERS = [
     wmsLayer: 'RADAR_1KM_RSNO',
     timeline: 'past',
     swatch: ['#EDF5FF', '#B8D8F5', '#7FB3E8', '#4A7FD4', '#6A5ACD'],
+    legend: { unit: 'cm/h', labels: ['0.1', '0.5', '1', '2', '4'] },
   },
   {
     id: 'temp',
@@ -55,6 +60,7 @@ export const WEATHER_LAYERS = [
     wmsLayer: 'HRDPS.CONTINENTAL_TT',
     timeline: 'forecast',
     swatch: ['#4A54C4', '#4A9FD8', '#59C48F', '#E8D24A', '#F2953D', '#E0442E'],
+    legend: { unit: '°C', labels: ['-30', '-15', '0', '15', '30'] },
   },
   {
     id: 'wind',
@@ -62,6 +68,7 @@ export const WEATHER_LAYERS = [
     wmsLayer: 'HRDPS.CONTINENTAL_UU',
     timeline: 'forecast',
     swatch: ['#E8F2F4', '#A9D3DD', '#6BA8C9', '#4A6FB5', '#8E5DB4', '#C9488F'],
+    legend: { unit: 'km/h', labels: ['0', '20', '40', '60', '80'] },
   },
   {
     id: 'precip',
@@ -69,6 +76,7 @@ export const WEATHER_LAYERS = [
     wmsLayer: 'HRDPS.CONTINENTAL_PR',
     timeline: 'forecast',
     swatch: ['#DCEEFB', '#9EC9EC', '#5D9CD9', '#3A6EC4', '#7A4FB0'],
+    legend: { unit: 'mm', labels: ['0', '1', '2', '5', '10'] },
   },
 ] as const;
 

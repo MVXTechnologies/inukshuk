@@ -3,7 +3,7 @@ import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/vi
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import { ECCC_ATTRIBUTION, weatherTileUrl } from '@core/geo/weatherLayers';
+import { ECCC_ATTRIBUTION, weatherLayerById, weatherTileUrl } from '@core/geo/weatherLayers';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -64,6 +64,7 @@ import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
+import { WeatherLegend } from './weather/WeatherLegend';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -259,10 +260,11 @@ export function MapScreen() {
             },
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
-            // through it. See the option's doc for the raster-tile honesty note.
+            // through it — strong enough that the weather gradient reads as THE
+            // content. See the option's doc for the raster-tile honesty note.
             weatherMuted: {
               dimColor: theme.dark ? '#101418' : '#F4F1EC',
-              dimOpacity: theme.dark ? 0.5 : 0.42,
+              dimOpacity: theme.dark ? 0.55 : 0.48,
             },
           }
         : {}),
@@ -1324,20 +1326,23 @@ export function MapScreen() {
             />
           </View>
         )}
-        {/* Weather time scrubber (weather UX M1): rides the same bottom flex
-            column as the recording bar — the column stacks them, so the two
-            never overlap. Hidden with the recording UI while the region-select
-            overlay owns the bottom edge, and offline-only parks weather
-            entirely. */}
+        {/* Weather dock (weather UX M1): the value-legend pill + time
+            scrubber, riding the same bottom flex column as the recording bar
+            — the column stacks them, so they never overlap it. Hidden with
+            the recording UI while the region-select overlay owns the bottom
+            edge, and offline-only parks weather entirely. */}
         {weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null && (
-          <WeatherTimeScrubber
-            timeline={weatherTl.timeline}
-            selectedIdx={weatherTl.selectedIdx}
-            selectedMs={weatherTl.selectedMs}
-            onScrub={weatherTl.scrubTo}
-            playing={weatherAnimating}
-            onTogglePlay={toggleWeatherAnimation}
-          />
+          <View style={styles.weatherDock} pointerEvents="box-none">
+            <WeatherLegend layer={weatherLayerById(weatherLayer)} />
+            <WeatherTimeScrubber
+              timeline={weatherTl.timeline}
+              selectedIdx={weatherTl.selectedIdx}
+              selectedMs={weatherTl.selectedMs}
+              onScrub={weatherTl.scrubTo}
+              playing={weatherAnimating}
+              onTogglePlay={toggleWeatherAnimation}
+            />
+          </View>
         )}
       </View>
 
@@ -1535,4 +1540,7 @@ const styles = StyleSheet.create({
   // Expanded: bottom-align the (smaller) card on the left against the
   // buttons stacked vertically to its right (item 3).
   recordingBarExpanded: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  // Legend pill + time scrubber, tight together (the bottom column's own gap
+  // is for separating whole blocks like the recording bar).
+  weatherDock: { gap: 6 },
 });

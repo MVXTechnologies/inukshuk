@@ -6,23 +6,26 @@ import {
 } from '@core/geo/weatherTimeline';
 import { useMemo, useState } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
-import { IconButton, Text, useTheme } from 'react-native-paper';
+import { IconButton, Text } from 'react-native-paper';
+import { weatherChrome as wc } from './weatherChrome';
 
 /**
- * Bottom time scrubber (weather UX M1, the Windy idiom): visible whenever a
- * weather layer is draped. One draggable track spanning the layer's whole
- * timeline — the ~3 h radar past for radar layers, the ~48 h HRDPS forecast
- * for model layers — with hour ticks, taller day-boundary ticks + weekday
- * labels, a live "Sat 14:00" readout, and a play/pause head for the existing
- * animate flag. Scrubbing calls `onScrub` per move; the caller throttles the
- * actual WMS TIME swaps (see useWeatherTimeline).
+ * Bottom time scrubber (weather UX M1, the Windy idiom): one floating dark
+ * translucent pill over the map — round white play disc at the left, a thin
+ * tick track with a floating accent time chip ("Sat 14:00", pointer tail)
+ * riding the selection, small-caps day labels at day boundaries, and the
+ * reserved model-picker chevron at the far right. Radar layers scrub their
+ * ~3 h past window, model layers the ~48 h forecast; the micro caption by
+ * the chevron says which. Scrubbing calls `onScrub` per move; the caller
+ * throttles the actual WMS TIME swaps (see useWeatherTimeline).
  *
- * A plain themed View, not a paper Surface — the absolutely-positioned
- * Surface flex collapse on iOS (see WaypointViewerCard's note).
+ * Fixed dark chrome in BOTH themes (see weatherChrome.ts — the edgePill
+ * precedent), and a plain View, not a paper Surface (the absolutely-
+ * positioned Surface flex collapse on iOS).
  *
- * M2 seam: the chevron at the far right is the reserved model-picker
- * affordance — a disabled placeholder until model-compare lands; pass
- * `onOpenModelPicker` then. The timeline prop itself is model-agnostic.
+ * M2 seam: the chevron is the model-picker affordance — a faint placeholder
+ * until model-compare lands; pass `onOpenModelPicker` then. The timeline
+ * prop itself is model-agnostic.
  */
 export function WeatherTimeScrubber({
   timeline,
@@ -41,7 +44,6 @@ export function WeatherTimeScrubber({
   onTogglePlay: () => void;
   onOpenModelPicker?: () => void;
 }) {
-  const theme = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
   const frames = timeline.framesMs;
   const n = frames.length;
@@ -68,39 +70,19 @@ export function WeatherTimeScrubber({
     [innerWidth, n, onScrub],
   );
 
-  const tickColor = theme.colors.onSurfaceVariant;
+  const cursorX = xFor(selectedIdx);
+  const chipLeft = Math.max(0, Math.min(cursorX - CHIP_W / 2, Math.max(trackWidth - CHIP_W, 0)));
 
   return (
-    <View
-      style={[styles.bar, { backgroundColor: theme.colors.elevation.level2 }]}
-      pointerEvents="auto"
-    >
-      <View style={styles.topRow}>
-        <IconButton
-          icon={playing ? 'pause' : 'play'}
-          size={18}
-          style={styles.headButton}
-          onPress={onTogglePlay}
-          accessibilityLabel={playing ? 'Pause weather timeline' : 'Play weather timeline'}
-        />
-        <Text variant="labelLarge">
-          {selectedMs !== null ? formatTimelineLabel(selectedMs) : ''}
-        </Text>
-        <Text variant="labelSmall" style={[styles.kindHint, { color: tickColor }]}>
-          {timeline.kind === 'past' ? 'Radar - past 3 h' : 'Forecast'}
-        </Text>
-        <View style={styles.spacer} />
-        {/* M2 placeholder: the forecast-model picker affordance. Disabled
-            until model-compare ships — visual seam only. */}
-        <IconButton
-          icon="chevron-up"
-          size={18}
-          style={styles.headButton}
-          disabled={onOpenModelPicker === undefined}
-          onPress={onOpenModelPicker}
-          accessibilityLabel="Choose forecast model"
-        />
-      </View>
+    <View style={styles.bar} pointerEvents="auto">
+      <IconButton
+        icon={playing ? 'pause' : 'play'}
+        size={20}
+        style={styles.playDisc}
+        iconColor={wc.onPlayDisc}
+        onPress={onTogglePlay}
+        accessibilityLabel={playing ? 'Pause weather timeline' : 'Play weather timeline'}
+      />
       <View
         style={styles.track}
         onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
@@ -109,78 +91,130 @@ export function WeatherTimeScrubber({
       >
         {trackWidth > 0 && (
           <>
-            {/* Baseline */}
-            <View style={[styles.baseline, { backgroundColor: tickColor }]} />
+            <View style={styles.baseline} />
+            {/* Hour ticks; day boundaries get a taller tick + small-caps label. */}
             {frames.map((ms, i) => {
+              if (!isHourMark(ms)) return null;
               const dayStart = segments.some((s) => s.startIdx === i && s.startIdx > 0);
-              const height = dayStart ? 16 : isHourMark(ms) ? 10 : 5;
               return (
                 <View
                   key={ms}
-                  style={[
-                    styles.tick,
-                    {
-                      left: xFor(i) - 0.5,
-                      height,
-                      backgroundColor: tickColor,
-                      opacity: dayStart ? 0.9 : 0.45,
-                    },
-                  ]}
+                  style={[dayStart ? styles.dayTick : styles.hourTick, { left: xFor(i) - 0.5 }]}
                 />
               );
             })}
-            {/* Weekday labels at each day boundary (the first segment's day is
-                already in the readout). */}
             {segments
               .filter((s) => s.startIdx > 0)
               .map((s) => (
-                <Text
-                  key={s.startIdx}
-                  variant="labelSmall"
-                  style={[styles.dayLabel, { left: xFor(s.startIdx) + 3, color: tickColor }]}
-                >
-                  {s.label}
+                <Text key={s.startIdx} style={[styles.dayLabel, { left: xFor(s.startIdx) + 4 }]}>
+                  {s.label.toUpperCase()}
                 </Text>
               ))}
-            {/* Selection head */}
-            <View
-              style={[
-                styles.cursor,
-                { left: xFor(selectedIdx) - 1, backgroundColor: theme.colors.primary },
-              ]}
-            />
-            <View
-              style={[
-                styles.knob,
-                { left: xFor(selectedIdx) - 5, backgroundColor: theme.colors.primary },
-              ]}
-            />
+            {/* Selection: accent cursor + the floating time chip with tail. */}
+            <View style={[styles.cursor, { left: cursorX - 1 }]} />
+            <View style={[styles.chipTail, { left: cursorX - 4 }]} />
+            <View style={[styles.chip, { left: chipLeft }]}>
+              <Text style={styles.chipText} numberOfLines={1}>
+                {selectedMs !== null ? formatTimelineLabel(selectedMs) : ''}
+              </Text>
+            </View>
           </>
         )}
+      </View>
+      <View style={styles.rightRail}>
+        <Text style={styles.kindHint}>{timeline.kind === 'past' ? 'PAST 3 H' : 'FORECAST'}</Text>
+        {/* M2 placeholder: the forecast-model picker affordance. Faint until
+            model-compare ships — visual seam only. */}
+        <IconButton
+          icon="chevron-up"
+          size={18}
+          style={styles.chevron}
+          iconColor={onOpenModelPicker === undefined ? wc.inkFaint : wc.ink}
+          onPress={onOpenModelPicker}
+          accessibilityState={{ disabled: onOpenModelPicker === undefined }}
+          accessibilityLabel="Choose forecast model"
+        />
       </View>
     </View>
   );
 }
 
-const TRACK_PAD = 10;
+const TRACK_PAD = 8;
+const CHIP_W = 84;
 
 const styles = StyleSheet.create({
-  bar: { borderRadius: 14, paddingHorizontal: 8, paddingTop: 2, paddingBottom: 8 },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headButton: { margin: 0 },
-  kindHint: { opacity: 0.8 },
-  spacer: { flex: 1 },
-  track: { height: 40, justifyContent: 'flex-end' },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: wc.panel,
+    borderRadius: 27,
+    paddingVertical: 6,
+    paddingLeft: 8,
+    paddingRight: 4,
+  },
+  playDisc: {
+    margin: 0,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: wc.playDisc,
+  },
+  track: { flex: 1, height: 54 },
   baseline: {
     position: 'absolute',
     left: TRACK_PAD,
     right: TRACK_PAD,
-    bottom: 6,
-    height: 1,
-    opacity: 0.35,
+    bottom: 8,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: wc.hairline,
   },
-  tick: { position: 'absolute', bottom: 6, width: 1 },
-  dayLabel: { position: 'absolute', top: 0, fontSize: 10, lineHeight: 12 },
-  cursor: { position: 'absolute', bottom: 2, top: 12, width: 2, borderRadius: 1 },
-  knob: { position: 'absolute', bottom: 20, width: 10, height: 10, borderRadius: 5 },
+  hourTick: { position: 'absolute', bottom: 8, width: 1, height: 6, backgroundColor: wc.inkFaint },
+  dayTick: { position: 'absolute', bottom: 8, width: 1, height: 13, backgroundColor: wc.inkMuted },
+  dayLabel: {
+    position: 'absolute',
+    bottom: 22,
+    fontSize: 9,
+    lineHeight: 11,
+    letterSpacing: 0.8,
+    color: wc.inkMuted,
+  },
+  cursor: {
+    position: 'absolute',
+    bottom: 4,
+    height: 22,
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: wc.accent,
+  },
+  chip: {
+    position: 'absolute',
+    top: 0,
+    width: CHIP_W,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: wc.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipTail: {
+    position: 'absolute',
+    top: 17,
+    width: 8,
+    height: 8,
+    borderRadius: 1.5,
+    backgroundColor: wc.accent,
+    transform: [{ rotate: '45deg' }],
+  },
+  chipText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+    color: wc.onAccent,
+    fontVariant: ['tabular-nums'],
+  },
+  rightRail: { alignItems: 'center' },
+  kindHint: { fontSize: 8, lineHeight: 10, letterSpacing: 0.6, color: wc.inkFaint },
+  chevron: { margin: 0, width: 28, height: 24 },
 });

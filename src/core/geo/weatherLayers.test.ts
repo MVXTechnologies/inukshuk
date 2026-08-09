@@ -63,6 +63,14 @@ describe('weather layer catalog', () => {
     }
   });
 
+  it('gives every layer a value legend (unit + evenly spaced labels)', () => {
+    for (const l of WEATHER_LAYERS) {
+      expect(l.legend.unit.length).toBeGreaterThan(0);
+      expect(l.legend.labels.length).toBeGreaterThanOrEqual(3);
+      for (const label of l.legend.labels) expect(label.length).toBeGreaterThan(0);
+    }
+  });
+
   it('type-guards ids and sanitizes persisted junk to null', () => {
     expect(isWeatherLayerId('radar-rain')).toBe(true);
     expect(isWeatherLayerId('RADAR_1KM_RRAI')).toBe(false);
