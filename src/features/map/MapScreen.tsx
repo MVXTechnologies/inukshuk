@@ -378,10 +378,6 @@ export function MapScreen() {
     resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
 
-  // One flag shared by the weather dock and the FAB lift (they must agree).
-  const weatherDockVisible =
-    weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null;
-
   // M2: the model-comparison table route, for the long-pressed point when a
   // forecast card is up, else the map centre (gated on mapLoaded — ungated
   // getViewState NPEs on the native thread), else the last known position.
@@ -572,6 +568,16 @@ export function MapScreen() {
     | { phase: 'options'; bbox: BoundingBox }
     | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress }
   >(null);
+
+  // One flag shared by the weather dock and the FAB lift (they must agree).
+  const weatherDockVisible =
+    weatherLayer !== null &&
+    !offlineOnly &&
+    !selecting &&
+    // The map-maker's options sheet owns the bottom edge too — the dock was
+    // covering its lower rows ("Contour lines") when weather stayed on.
+    makeMapState === null &&
+    weatherTl.timeline !== null;
   const makeMapHandleRef = useRef<ComposeHandle>({ aborted: false });
   const startMakeMap = useCallback(
     (bbox: BoundingBox, options: MakeMapOptions) => {

@@ -51,13 +51,13 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Weather'
+            notVisible: 'Weather(: .*)?'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Weather'
+          visible: 'Weather(: .*)?'
           timeout: 10000
-- tapOn: 'Weather'
+- tapOn: 'Weather(: .*)?'
 - extendedWaitUntil:
     visible: '.*Rain radar.*'
     timeout: 10000
@@ -153,5 +153,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*None.*'
 - tapOn: 'Done'
-- assertVisible: 'Map actions'
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
 - assertNotVisible: '.*Weather timeline.*'
