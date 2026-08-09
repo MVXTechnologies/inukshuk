@@ -6,14 +6,16 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
-- **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** M1 (building):
-  layer picker with map-style thumbnails instead of radio buttons; muted
-  city-labels-only basemap under weather layers; bottom time scrubber to
-  move through predictions to the model horizon (rain, snow, temp, wind);
-  temperature layer added. M2 (designing): model picker at the scrubber's
-  right + Windy-style model-comparison table. M3 (designing): wind as
-  animated thin flow lines over color gradients — speed/length from wind
-  speed + gusts, direction from the field; no arrows.
+- **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** ~~M1~~ SHIPPED
+  (PR #195, OTA'd 1.5.0 + 1.4.0, 2026-08-09): thumbnail layer picker, dark
+  translucent chrome, floating time scrubber (radar past / forecast to
+  horizon), gradient legend pill, temperature layer, muted basemap, two
+  Windy-reference polish rounds. Aesthetic bar = Windy (standing gate).
+  M2 next (design approved, `docs/plans/plan-weather-v2.md`): HRDPS/RDPS/
+  GDPS model picker at the scrubber chevron + comparison table
+  (GetFeatureInfo). M3 after: GL wind particles (webgl-wind port on
+  expo-gl, WCS float grids). Multi-model beyond ECCC: NAS-hosted GFS/
+  ECMWF/ICON relay decided (owner, 2026-08-09) as M2.5.
 
 ## Queued (owner requests, 2026-08-07)
 
