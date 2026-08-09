@@ -32,15 +32,19 @@ Ordered roughly by priority (top = next).
 
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
-Design packages live in `docs/plans/`. Implementation M1s are BUILT and
-check-green on feature branches, awaiting their turn through the device
-gates (serial, one rig): ~~`feature/meteo-m1`~~ (SHIPPED — PR #189,
-OTA'd to 1.5.0 + 1.4.0 on 2026-08-08: ECCC radar/wind/precip overlays with
-bounded radar animation + long-press forecast card), `feature/map-store-m1` (Search tab + CanTopo
-catalog; needs the fixture-server E2E wiring on CI), `feature/sync-m0`
-(pure LWW sync core, invisible). NAS confirmed 2026-08-08: UGREEN
-DXP4800 Plus, runs Docker — sync M1 unblocked. Still owed by the owner: the
-SÉPAQ / Canot Kayak Québec outreach (drafts on request).
+Design packages live in `docs/plans/`. Shipped 2026-08-08/09 (all OTA'd to
+1.5.0 + 1.4.0): meteo M1 (PR #189, ECCC radar/wind/precip + forecast card),
+map store M1 (PR #191, Search tab + 128-sheet CanTopo catalog live at
+/catalog/v1/), sync M0 (PR #190, pure LWW core), marine M2+M3 (PR #194,
+St. Lawrence tides in the forecast card + NONNA bathymetry/seamark layer
+with 'Not for navigation' chip). Same wave: FAB corner nudge (PR #192),
+tinted settings category headers (PR #193).
+
+Next milestones when prioritized: sync M1 (accounts; NAS = UGREEN DXP4800
+Plus, Docker — unblocked, needs owner-side Cloudflare Tunnel/SMTP/B2
+setup), map store M2 (regions/bbox search + USGS/NPS) and M3 (GeoTIFF →
+BDTQ Québec depth), marine M4 (offline chart regions). Still owed by the
+owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
 
 - **Profiles + paid cloud sync ($2.99/mo)** — accounts with profile image,
   email, etc.; traces + trail photos synced across devices; backend on the
