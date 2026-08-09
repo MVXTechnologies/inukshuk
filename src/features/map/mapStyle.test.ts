@@ -126,6 +126,58 @@ describe('buildOsmStyle', () => {
     });
   });
 
+  describe('weather-mode basemap muting', () => {
+    const weather = {
+      urlTemplate: 'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
+      attribution: 'ECCC',
+    };
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+
+    it('is absent by default — no dim layer, normal raster paint', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true);
+      expect(layerIds(s)).not.toContain('weather-dim');
+      const osm = s.layers.find((l) => l.id === 'osm');
+      expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.25 });
+    });
+
+    it('desaturates the raster and screens it with the dim backdrop', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { weather, weatherMuted });
+      const osm = s.layers.find((l) => l.id === 'osm');
+      expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.85 });
+      const dim = s.layers.find((l) => l.id === 'weather-dim');
+      expect(dim).toMatchObject({
+        type: 'background',
+        paint: { 'background-color': '#F4F1EC', 'background-opacity': 0.42 },
+      });
+    });
+
+    it('stacks dim between every basemap-side raster and the weather drape', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        weather,
+        weatherMuted,
+        markedTrailsNetworks: ['hiking'],
+        marineLayers: ['bathymetry'],
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('osm'));
+      expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
+      expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
+      expect(ids.indexOf('weather')).toBeGreaterThan(ids.indexOf('weather-dim'));
+    });
+
+    it('suppresses the shaded-relief hillshade (terrain shading under weather is noise)', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { weather, weatherMuted });
+      expect(layerIds(s)).not.toContain('hillshade-2d');
+      expect(s.sources.dem).toBeUndefined();
+    });
+
+    it('mutes satellite imagery too — under weather the drape is the content', () => {
+      const s = buildOsmStyle(TILE, false, 'satellite', true, { weather, weatherMuted });
+      const osm = s.layers.find((l) => l.id === 'osm');
+      expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.85 });
+    });
+  });
+
   describe('marine overlays', () => {
     it('is absent by default — the map is byte-identical to today with marine off', () => {
       const s = buildOsmStyle(TILE, false, 'map', true);

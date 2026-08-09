@@ -63,7 +63,8 @@ import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
-import { useWeatherFrames } from './weather/useWeatherFrames';
+import { useWeatherTimeline } from './weather/useWeatherTimeline';
+import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
@@ -224,14 +225,16 @@ export function MapScreen() {
   // dial hides with the rest of the controls until the rail is out.
   const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
-  // Weather overlay (meteo M1): the persisted GeoMet layer choice, the
-  // transient radar-animation flag, and the current animation frame (null =
-  // static latest). Network-only like the marked trails: while offline-only
-  // is on the layer is dropped from the style entirely and the frames hook is
-  // parked, so the map stays byte-identical to a weatherless one.
+  // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
+  // transient play flag, and the scrubbable timeline that owns the drape's
+  // valid time (throttled inside the hook). Network-only like the marked
+  // trails: while offline-only is on the layer is dropped from the style
+  // entirely and the timeline hook is parked, so the map stays byte-identical
+  // to a weatherless one.
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
-  const weatherTime = useWeatherFrames(offlineOnly ? null : weatherLayer, weatherAnimating);
+  const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
+  const weatherTl = useWeatherTimeline(offlineOnly ? null : weatherLayer, weatherAnimating);
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
@@ -251,8 +254,15 @@ export function MapScreen() {
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
-              urlTemplate: weatherTileUrl(weatherLayer, weatherTime ?? undefined),
+              urlTemplate: weatherTileUrl(weatherLayer, weatherTl.timeParam),
               attribution: ECCC_ATTRIBUTION,
+            },
+            // Windy-style muted background under weather: desaturated raster +
+            // a neutral dim screen (theme-matched), city labels staying legible
+            // through it. See the option's doc for the raster-tile honesty note.
+            weatherMuted: {
+              dimColor: theme.dark ? '#101418' : '#F4F1EC',
+              dimOpacity: theme.dark ? 0.5 : 0.42,
             },
           }
         : {}),
@@ -280,7 +290,7 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     weatherLayer,
-    weatherTime,
+    weatherTl.timeParam,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -1313,6 +1323,21 @@ export function MapScreen() {
               }}
             />
           </View>
+        )}
+        {/* Weather time scrubber (weather UX M1): rides the same bottom flex
+            column as the recording bar — the column stacks them, so the two
+            never overlap. Hidden with the recording UI while the region-select
+            overlay owns the bottom edge, and offline-only parks weather
+            entirely. */}
+        {weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null && (
+          <WeatherTimeScrubber
+            timeline={weatherTl.timeline}
+            selectedIdx={weatherTl.selectedIdx}
+            selectedMs={weatherTl.selectedMs}
+            onScrub={weatherTl.scrubTo}
+            playing={weatherAnimating}
+            onTogglePlay={toggleWeatherAnimation}
+          />
         )}
       </View>
 

@@ -1,5 +1,4 @@
 import {
-  animationFrames,
   ECCC_ATTRIBUTION,
   formatWmsTime,
   getFeatureInfoUrl,
@@ -29,17 +28,39 @@ const CAPS_XML = `<?xml version="1.0" encoding="UTF-8"?>
 </WMS_Capabilities>`;
 
 describe('weather layer catalog', () => {
-  it('exposes the four M1 GeoMet layers with regex-safe labels', () => {
-    expect(WEATHER_LAYERS.map((l) => l.id)).toEqual(['radar-rain', 'radar-snow', 'wind', 'precip']);
+  it('exposes the five GeoMet layers with regex-safe labels', () => {
+    expect(WEATHER_LAYERS.map((l) => l.id)).toEqual([
+      'radar-rain',
+      'radar-snow',
+      'temp',
+      'wind',
+      'precip',
+    ]);
     // Labels are Maestro/a11y match targets — no regex metacharacters allowed.
     for (const l of WEATHER_LAYERS) expect(l.label).not.toMatch(/[.*+?^${}()|[\]\\]/);
   });
 
-  it('marks only the radar layers animatable', () => {
-    expect(WEATHER_LAYERS.filter((l) => l.animatable).map((l) => l.id)).toEqual([
+  it('marks radar layers past-scrubbing and HRDPS model layers forecast-scrubbing', () => {
+    expect(WEATHER_LAYERS.filter((l) => l.timeline === 'past').map((l) => l.id)).toEqual([
       'radar-rain',
       'radar-snow',
     ]);
+    expect(WEATHER_LAYERS.filter((l) => l.timeline === 'forecast').map((l) => l.id)).toEqual([
+      'temp',
+      'wind',
+      'precip',
+    ]);
+  });
+
+  it('serves the HRDPS 2 m temperature layer (verified live 2026-08-09)', () => {
+    expect(weatherLayerById('temp').wmsLayer).toBe('HRDPS.CONTINENTAL_TT');
+  });
+
+  it('gives every layer a legend-style thumbnail swatch of valid hex colours', () => {
+    for (const l of WEATHER_LAYERS) {
+      expect(l.swatch.length).toBeGreaterThanOrEqual(3);
+      for (const c of l.swatch) expect(c).toMatch(/^#[0-9A-F]{6}$/);
+    }
   });
 
   it('type-guards ids and sanitizes persisted junk to null', () => {
@@ -158,35 +179,7 @@ describe('parseTimeDimension', () => {
   });
 });
 
-describe('animationFrames', () => {
-  const dim = {
-    startMs: Date.parse('2026-08-08T18:00:00Z'),
-    endMs: Date.parse('2026-08-08T21:00:00Z'),
-    stepMs: 360_000,
-    defaultTime: '2026-08-08T21:00:00Z',
-  };
-
-  it('returns the last N frames, oldest first, ending on the latest', () => {
-    const frames = animationFrames(dim, 10);
-    expect(frames).toHaveLength(10);
-    expect(frames[0]).toBe('2026-08-08T20:06:00Z');
-    expect(frames[9]).toBe('2026-08-08T21:00:00Z');
-    // 6-minute spacing throughout.
-    for (let i = 1; i < frames.length; i++) {
-      expect(Date.parse(frames[i] ?? '') - Date.parse(frames[i - 1] ?? '')).toBe(360_000);
-    }
-  });
-
-  it('never exceeds what the window actually offers', () => {
-    const short = { ...dim, startMs: dim.endMs - 2 * dim.stepMs };
-    expect(animationFrames(short, 10)).toHaveLength(3);
-  });
-
-  it('is empty for degenerate inputs', () => {
-    expect(animationFrames(dim, 0)).toEqual([]);
-    expect(animationFrames({ ...dim, stepMs: 0 }, 10)).toEqual([]);
-  });
-
+describe('formatWmsTime', () => {
   it('formats frames the way GeoMet TIME expects (no milliseconds)', () => {
     expect(formatWmsTime(Date.parse('2026-08-08T20:54:00Z'))).toBe('2026-08-08T20:54:00Z');
   });

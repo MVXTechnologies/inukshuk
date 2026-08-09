@@ -6,8 +6,8 @@ import type { LatLng } from '@core/models';
  * radar composites (1 km, 6-min updates, ~3 h window) and HRDPS model
  * fields (2.5 km, hourly) — free, commercial use allowed, attribution-only
  * (ECCC end-use licence v2.1). Usage policy: ~1 req/s sustained, meaningful
- * User-Agent, client-side caching — which is why radar animation is bounded
- * to a handful of pre-listed frames (see {@link animationFrames}).
+ * User-Agent, client-side caching — which is why the time scrubber's TIME
+ * updates are throttled and its frame lists bounded (see `weatherTimeline.ts`).
  *
  * Same catalog discipline as `trailNetworks.ts`: a small const list, an id
  * type derived from it, and a sanitize helper for settings hydration.
@@ -18,13 +18,58 @@ export const GEOMET_WMS_ENDPOINT = 'https://geo.weather.gc.ca/geomet';
 /** Required credit line for anything rendered from GeoMet (licence v2.1). */
 export const ECCC_ATTRIBUTION = 'Data Source: Environment and Climate Change Canada';
 
+/**
+ * Which side of "now" a layer's TIME dimension covers (weather UX M1):
+ * radar composites carry ~3 h of PAST frames (PT6M steps); HRDPS model
+ * fields carry a ~48 h FORECAST horizon (PT1H steps) from the latest run.
+ * The time scrubber builds its timeline from this kind — see
+ * `weatherTimeline.ts`. M2/M3 seam: a model-compare dimension would add
+ * per-model `wmsLayer` variants here; the catalog shape deliberately
+ * tolerates more entries (nothing indexes it positionally).
+ */
+export type WeatherTimelineKind = 'past' | 'forecast';
+
 export const WEATHER_LAYERS = [
   // Labels double as Maestro/a11y match targets — keep them free of regex
   // metacharacters (Maestro treats text matchers as regexes).
-  { id: 'radar-rain', label: 'Rain radar', wmsLayer: 'RADAR_1KM_RRAI', animatable: true },
-  { id: 'radar-snow', label: 'Snow radar', wmsLayer: 'RADAR_1KM_RSNO', animatable: true },
-  { id: 'wind', label: 'Wind', wmsLayer: 'HRDPS.CONTINENTAL_UU', animatable: false },
-  { id: 'precip', label: 'Precipitation', wmsLayer: 'HRDPS.CONTINENTAL_PR', animatable: false },
+  // `swatch` is the picker thumbnail: a stepped legend-style colour ramp
+  // conveying how the layer paints the map (rendered as plain Views — no
+  // binary assets, OTA-clean).
+  {
+    id: 'radar-rain',
+    label: 'Rain radar',
+    wmsLayer: 'RADAR_1KM_RRAI',
+    timeline: 'past',
+    swatch: ['#A7E28F', '#4FBF4A', '#FFE45C', '#FFAB3D', '#F4552C', '#B3226B'],
+  },
+  {
+    id: 'radar-snow',
+    label: 'Snow radar',
+    wmsLayer: 'RADAR_1KM_RSNO',
+    timeline: 'past',
+    swatch: ['#EDF5FF', '#B8D8F5', '#7FB3E8', '#4A7FD4', '#6A5ACD'],
+  },
+  {
+    id: 'temp',
+    label: 'Temperature',
+    wmsLayer: 'HRDPS.CONTINENTAL_TT',
+    timeline: 'forecast',
+    swatch: ['#4A54C4', '#4A9FD8', '#59C48F', '#E8D24A', '#F2953D', '#E0442E'],
+  },
+  {
+    id: 'wind',
+    label: 'Wind',
+    wmsLayer: 'HRDPS.CONTINENTAL_UU',
+    timeline: 'forecast',
+    swatch: ['#E8F2F4', '#A9D3DD', '#6BA8C9', '#4A6FB5', '#8E5DB4', '#C9488F'],
+  },
+  {
+    id: 'precip',
+    label: 'Precipitation',
+    wmsLayer: 'HRDPS.CONTINENTAL_PR',
+    timeline: 'forecast',
+    swatch: ['#DCEEFB', '#9EC9EC', '#5D9CD9', '#3A6EC4', '#7A4FB0'],
+  },
 ] as const;
 
 export type WeatherLayerId = (typeof WEATHER_LAYERS)[number]['id'];
@@ -146,20 +191,6 @@ export function parseTimeDimension(xml: string): WmsTimeDimension | null {
 /** Format an epoch-ms timestamp the way GeoMet's TIME parameter expects. */
 export function formatWmsTime(epochMs: number): string {
   return new Date(epochMs).toISOString().replace('.000Z', 'Z');
-}
-
-/**
- * The bounded animation frame list: the last `maxFrames` available frames,
- * oldest first, always ending on the latest frame. Bounded by design — the
- * GeoMet usage policy (~1 req/s) rules out open-ended scrubbing.
- */
-export function animationFrames(dim: WmsTimeDimension, maxFrames: number): string[] {
-  if (maxFrames <= 0 || dim.stepMs <= 0) return [];
-  const available = Math.floor((dim.endMs - dim.startMs) / dim.stepMs) + 1;
-  const count = Math.min(maxFrames, available);
-  const frames: string[] = [];
-  for (let i = count - 1; i >= 0; i--) frames.push(formatWmsTime(dim.endMs - i * dim.stepMs));
-  return frames;
 }
 
 /** Spherical-mercator (EPSG:3857) projection of a lat/lng, in metres. */

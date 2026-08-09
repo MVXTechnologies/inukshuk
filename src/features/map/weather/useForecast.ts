@@ -11,7 +11,7 @@ import {
 } from '@core/weather/forecast';
 import type { LatLng } from '@core/models';
 import { useEffect, useState } from 'react';
-import { WEATHER_USER_AGENT } from './useWeatherFrames';
+import { WEATHER_USER_AGENT } from './useWeatherTimeline';
 
 /**
  * The forecast tap-card's data: the nearest ECCC citypage forecast around a

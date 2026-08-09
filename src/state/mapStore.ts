@@ -23,8 +23,8 @@ interface MapState {
   /** Base layer: OSM streets, satellite imagery, or a topographic relief map. */
   basemap: MapBasemap;
   /**
-   * Whether the active radar overlay cycles its bounded frame animation
-   * (transient — animation always starts off on launch; which weather layer
+   * Whether the active weather overlay plays across its scrubber timeline
+   * (transient — playback always starts off on launch; which weather layer
    * is active is persisted in the settings store).
    */
   weatherAnimating: boolean;
