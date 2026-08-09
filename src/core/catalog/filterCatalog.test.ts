@@ -1,5 +1,6 @@
 import {
   categoriesPresent,
+  countByCategory,
   filterCatalogItems,
   foldText,
   matchesCatalogFilter,
@@ -75,5 +76,18 @@ describe('categoriesPresent', () => {
 
   it('is empty for an empty catalog', () => {
     expect(categoriesPresent([], CATALOG_CATEGORIES)).toEqual([]);
+  });
+});
+
+describe('countByCategory', () => {
+  it('counts items per category', () => {
+    const counts = countByCategory(items);
+    expect(counts.get('topo')).toBe(2);
+    expect(counts.get('geological')).toBe(1);
+    expect(counts.get('parks')).toBeUndefined();
+  });
+
+  it('is empty for an empty catalog', () => {
+    expect(countByCategory([]).size).toBe(0);
   });
 });

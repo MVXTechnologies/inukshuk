@@ -1,5 +1,10 @@
-import { categoriesPresent, filterCatalogItems } from '@core/catalog/filterCatalog';
+import {
+  categoriesPresent,
+  countByCategory,
+  filterCatalogItems,
+} from '@core/catalog/filterCatalog';
 import { installStatusFor, type InstallStatus } from '@core/catalog/installStatus';
+import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
   CATALOG_CATEGORIES,
   CATALOG_CATEGORY_LABELS,
@@ -10,6 +15,8 @@ import {
 import { formatByteSize } from '@core/storage/diskBudget';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
+import { useSettingsStore } from '@state/settingsStore';
+import { formatDistance } from '@lib/format';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Linking, ScrollView, StyleSheet, View } from 'react-native';
@@ -29,7 +36,9 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { CategoryGrid } from './CategoryGrid';
 import { DestinationFolderDialog } from './DestinationFolderDialog';
+import { LocatorThumb } from './LocatorThumb';
 import {
   CatalogDownloadCanceled,
   cancelCatalogDownload,
@@ -37,12 +46,23 @@ import {
 } from './downloadCatalogItem';
 
 /**
- * The Search tab — a free-map store (M1: NRCan CanTopo GeoPDFs). Browses the
- * static catalog manifest (cached on device, see `@data/catalogCache`),
- * filters by diacritic-folded text + category chips, and downloads items into
- * the Library as regular imported maps with live progress. Dedup against the
- * Library shows "Open"/"Update" instead of a second Download.
+ * The Search tab — a free-map store (M1: NRCan CanTopo GeoPDFs; Wave C UX).
+ * Lands on a category grid (search on top works globally); tapping a category
+ * (or typing) shows the item list, sorted nearest-first from the last known
+ * position, each row with an offline locator thumbnail showing where the map
+ * is. Downloads land in the Library as regular imported maps with live
+ * progress; dedup against the Library shows "Open"/"Update" instead of a
+ * second Download.
  */
+
+/** "≈ 12 km" caption: standard distance formatting minus noise decimals. */
+function approxDistanceLabel(meters: number): string {
+  const clean = formatDistance(meters)
+    .replace(/(\.\d*?)0+(?=\s)/, '$1')
+    .replace(/\.(?=\s)/, '');
+  return `≈ ${clean}`;
+}
+
 export function StoreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -60,10 +80,14 @@ export function StoreScreen() {
   const addFolder = useLibraryStore((s) => s.addFolder);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
 
+  const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
+
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<CatalogCategory | null>(null);
+  /** True once the user entered a category (or "All") from the landing grid. */
+  const [browsing, setBrowsing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Item awaiting a destination folder in the dialog. */
   const [pendingItem, setPendingItem] = useState<CatalogItem | null>(null);
@@ -77,11 +101,30 @@ export function StoreScreen() {
     () => filterCatalogItems(items, { text: query, category }),
     [items, query, category],
   );
+  const sorted = useMemo(
+    () => sortCatalogItems(filtered, lastKnownPosition),
+    [filtered, lastKnownPosition],
+  );
   const chipCategories = useMemo(() => categoriesPresent(items, CATALOG_CATEGORIES), [items]);
+  const categoryCounts = useMemo(() => countByCategory(items), [items]);
   const sourcesById = useMemo(
     () => new Map<string, CatalogSource>((manifest?.sources ?? []).map((s) => [s.id, s])),
     [manifest],
   );
+
+  // Landing (category grid) until the user types or enters a category.
+  const home = !browsing && query.trim() === '';
+
+  const enterCategory = (c: CatalogCategory) => {
+    setCategory(c);
+    setBrowsing(true);
+  };
+
+  const leaveList = () => {
+    setBrowsing(false);
+    setCategory(null);
+    setQuery('');
+  };
 
   const startDownload = async (item: CatalogItem, folderId: string | null) => {
     try {
@@ -119,7 +162,10 @@ export function StoreScreen() {
   };
 
   const metaLine = (item: CatalogItem): string => {
+    const distance =
+      lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null;
     const parts = [
+      distance !== null ? approxDistanceLabel(distance) : undefined,
       sourcesById.get(item.sourceId)?.name,
       item.sizeBytes !== undefined ? formatByteSize(item.sizeBytes) : undefined,
       item.updatedAt,
@@ -173,6 +219,7 @@ export function StoreScreen() {
       >
         <Card.Content>
           <View style={styles.cardRow}>
+            <LocatorThumb bbox={item.bbox} size={56} />
             <View style={styles.cardText}>
               <Text variant="titleSmall">{item.title}</Text>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -245,7 +292,7 @@ export function StoreScreen() {
     return (
       <View style={styles.emptyWrap}>
         <Text variant="bodyMedium" style={styles.emptyText}>
-          No maps match your search.
+          {home ? 'The catalog is empty right now.' : 'No maps match your search.'}
         </Text>
       </View>
     );
@@ -254,7 +301,16 @@ export function StoreScreen() {
   return (
     <View style={styles.fill}>
       <Appbar.Header>
-        <Appbar.Content title="Search" />
+        {browsing && <Appbar.BackAction onPress={leaveList} />}
+        <Appbar.Content
+          title={
+            browsing && category !== null
+              ? CATALOG_CATEGORY_LABELS[category]
+              : browsing
+                ? 'All maps'
+                : 'Search'
+          }
+        />
       </Appbar.Header>
 
       <Searchbar
@@ -263,35 +319,6 @@ export function StoreScreen() {
         onChangeText={setQuery}
         style={styles.searchbar}
       />
-
-      {chipCategories.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipRow}
-          contentContainerStyle={styles.chipRowContent}
-        >
-          <Chip
-            selected={category === null}
-            onPress={() => setCategory(null)}
-            style={styles.chip}
-            compact
-          >
-            All
-          </Chip>
-          {chipCategories.map((c) => (
-            <Chip
-              key={c}
-              selected={category === c}
-              onPress={() => setCategory(category === c ? null : c)}
-              style={styles.chip}
-              compact
-            >
-              {CATALOG_CATEGORY_LABELS[c]}
-            </Chip>
-          ))}
-        </ScrollView>
-      )}
 
       {fromCache && status === 'ready' && (
         <Text
@@ -302,14 +329,58 @@ export function StoreScreen() {
         </Text>
       )}
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ListEmptyComponent={emptyState()}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
-        keyboardShouldPersistTaps="handled"
-      />
+      {home ? (
+        status === 'ready' && chipCategories.length > 0 ? (
+          <CategoryGrid
+            categories={chipCategories}
+            counts={categoryCounts}
+            bottomInset={insets.bottom}
+            onSelect={enterCategory}
+          />
+        ) : (
+          emptyState()
+        )
+      ) : (
+        <>
+          {chipCategories.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipRow}
+              contentContainerStyle={styles.chipRowContent}
+            >
+              <Chip
+                selected={category === null}
+                onPress={() => setCategory(null)}
+                style={styles.chip}
+                compact
+              >
+                All
+              </Chip>
+              {chipCategories.map((c) => (
+                <Chip
+                  key={c}
+                  selected={category === c}
+                  onPress={() => setCategory(category === c ? null : c)}
+                  style={styles.chip}
+                  compact
+                >
+                  {CATALOG_CATEGORY_LABELS[c]}
+                </Chip>
+              ))}
+            </ScrollView>
+          )}
+
+          <FlatList
+            data={sorted}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListEmptyComponent={emptyState()}
+            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled"
+          />
+        </>
+      )}
 
       <Portal>
         <DestinationFolderDialog
@@ -345,7 +416,7 @@ const styles = StyleSheet.create({
   cacheNote: { paddingHorizontal: 16, paddingBottom: 6 },
   listContent: { paddingHorizontal: 12, gap: 8 },
   card: { marginBottom: 0 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardText: { flex: 1 },
   progress: { marginTop: 8, height: 5, borderRadius: 3 },
   details: { marginTop: 10, gap: 3 },

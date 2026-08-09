@@ -61,3 +61,10 @@ export function categoriesPresent(
   const present = new Set(items.map((i) => i.category));
   return order.filter((c) => present.has(c));
 }
+
+/** Item count per category (drives the category-grid card captions). */
+export function countByCategory(items: readonly CatalogItem[]): Map<CatalogCategory, number> {
+  const counts = new Map<CatalogCategory, number>();
+  for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+  return counts;
+}
