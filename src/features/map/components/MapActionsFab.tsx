@@ -98,8 +98,16 @@ export function MapActionsFab({ onRecord, onAddWaypoint, onDownload, onMakeMap }
       icon={open ? 'close' : 'plus'}
       color={theme.colors.onTertiary}
       // Circular like every rail FAB (paper's MD3 default is a squircle), and
-      // actions pulled tighter to the dial.
-      fabStyle={{ backgroundColor: theme.colors.tertiary, borderRadius: 28 }}
+      // actions pulled tighter to the dial. With the MapLibre logo gone from
+      // the bottom-left (backlog item 1), the dial's old perch read as
+      // floating too high/right — owner call (2026-08-08): nudge it down and
+      // left so it sits symmetric with the recording pill's corner.
+      fabStyle={{
+        backgroundColor: theme.colors.tertiary,
+        borderRadius: 28,
+        marginBottom: 4,
+        marginRight: 28,
+      }}
       backdropColor="#00000066"
       actions={actions}
       onStateChange={({ open: o }) => setOpen(o)}
