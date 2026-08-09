@@ -22,6 +22,29 @@ Ordered roughly by priority (top = next).
   except owner-judged polish + the open multi-model source decision. Multi-model beyond ECCC: NAS-hosted GFS/
   ECMWF/ICON relay recommended as M2.5 — owner has NOT yet chosen relay vs Open-Meteo (~€29/mo).
 
+## In progress — weather/marine/store field-feedback round (owner, 2026-08-09)
+
+Wave A (weather UX fixes, building): dock hugs the tab bar; Animate toggle
+removed (play button is the animation); crossfade frame swaps (no blank
+between frames); scrubber drag fixed (no snap-back to now, no lag on
+release); picker rows show layer icons; "+" actions button moves to the
+top-right rail below Overlays, rail-styled; tap-anywhere-on-map shows the
+point value/prediction (Windy picker behavior).
+Wave B (visibility + world, building): town names + coastlines readable
+ABOVE weather/marine drapes (labels-above-drape layer); worldwide coverage
+via GDPS auto-fallback outside HRDPS/RDPS domains + global radar
+alternative research (RainViewer). Weather is currently ECCC = Canada-
+centric; GDPS is already global.
+Wave C (store UX, building): Search tab gets categories-first browsing,
+per-map region thumbnails, nearest-first ordering.
+Wave D (marine deep, designing): higher-res chart sources, tap-for-depth,
+"download free local marine map" prompt on low-res regions (ties into
+marine M4 offline packs). Honesty note: navigation-grade CHS charts remain
+licensed — "data which would allow navigation" needs the GeoGarage-type
+paid route or stays not-for-navigation.
+Open: owner to confirm wind particles visible after M3 OTA; marine+weather
+simultaneous UX TBD; multi-model source decision still open.
+
 ## Queued (owner requests, 2026-08-07)
 
 1. ~~**Bottom-left map chrome must go**~~ — shipped in PR #185 (OTA'd to
