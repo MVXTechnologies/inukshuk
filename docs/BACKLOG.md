@@ -11,10 +11,11 @@ Ordered roughly by priority (top = next).
   translucent chrome, floating time scrubber (radar past / forecast to
   horizon), gradient legend pill, temperature layer, muted basemap, two
   Windy-reference polish rounds. Aesthetic bar = Windy (standing gate).
-  M2 next (design approved, `docs/plans/plan-weather-v2.md`): HRDPS/RDPS/
-  GDPS model picker at the scrubber chevron + comparison table
-  (GetFeatureInfo). M3 after: GL wind particles (webgl-wind port on
-  expo-gl, WCS float grids). Multi-model beyond ECCC: NAS-hosted GFS/
+  ~~M2~~ SHIPPED (PR #196, OTA'd 1.5.0 + 1.4.0, 2026-08-09): HRDPS/RDPS/
+  GDPS model picker on the scrubber chevron (drape + timeline re-key on
+  switch, time-proportional ticks) + Windy-style model comparison table
+  with live spread and run age. M3 building: GL wind particles
+  (webgl-wind port on expo-gl, WCS float grids). Multi-model beyond ECCC: NAS-hosted GFS/
   ECMWF/ICON relay recommended as M2.5 — owner has NOT yet chosen relay vs Open-Meteo (~€29/mo).
 
 ## Queued (owner requests, 2026-08-07)
