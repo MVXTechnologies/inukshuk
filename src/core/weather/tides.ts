@@ -103,7 +103,8 @@ export function parseStations(json: unknown): TideStation[] {
   for (const s of json) {
     if (!isRecord(s)) continue;
     const id = typeof s.id === 'string' && s.id !== '' ? s.id : null;
-    const name = typeof s.officialName === 'string' && s.officialName !== '' ? s.officialName : null;
+    const name =
+      typeof s.officialName === 'string' && s.officialName !== '' ? s.officialName : null;
     const latitude = finite(s.latitude);
     const longitude = finite(s.longitude);
     if (id === null || name === null || latitude === null || longitude === null) continue;

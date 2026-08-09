@@ -26,7 +26,9 @@ const NOW_MS = Date.parse('2026-08-09T00:31:00Z');
 
 describe('urls', () => {
   it('builds the region station-list url', () => {
-    expect(stationsUrl()).toBe('https://api-iwls.dfo-mpo.gc.ca/api/v1/stations?chs-region-code=QUE');
+    expect(stationsUrl()).toBe(
+      'https://api-iwls.dfo-mpo.gc.ca/api/v1/stations?chs-region-code=QUE',
+    );
     expect(stationsUrl('PAC')).toContain('chs-region-code=PAC');
   });
 
@@ -49,9 +51,7 @@ describe('parseStations', () => {
       operating: true,
       position: { latitude: 46.811111, longitude: -71.20175 },
     });
-    expect(vq?.timeSeries).toEqual(
-      expect.arrayContaining(['wlo', 'wlp', 'wlp-hilo', 'wlf-spine']),
-    );
+    expect(vq?.timeSeries).toEqual(expect.arrayContaining(['wlo', 'wlp', 'wlp-hilo', 'wlf-spine']));
   });
 
   it('keeps stations with no series (they are filtered at selection, not parse)', () => {
