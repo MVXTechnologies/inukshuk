@@ -14,13 +14,22 @@ interface Props {
   onDownload?: () => void;
   /** Open the map maker (region box → options → PDF). Omitted in 3D. */
   onMakeMap?: () => void;
+  /** Extra lift above the bottom edge when floating bars (the weather
+   * legend + scrubber dock) occupy the FAB's usual corner. */
+  liftBy?: number;
 }
 
 /**
  * The bottom-right "+" speed-dial (start recording, drop a waypoint; room for
  * more map actions later — plan a route, import…).
  */
-export function MapActionsFab({ onRecord, onAddWaypoint, onDownload, onMakeMap }: Props) {
+export function MapActionsFab({
+  onRecord,
+  onAddWaypoint,
+  onDownload,
+  onMakeMap,
+  liftBy = 0,
+}: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
 
@@ -105,7 +114,7 @@ export function MapActionsFab({ onRecord, onAddWaypoint, onDownload, onMakeMap }
       fabStyle={{
         backgroundColor: theme.colors.tertiary,
         borderRadius: 28,
-        marginBottom: 4,
+        marginBottom: 4 + liftBy,
         marginRight: 28,
       }}
       backdropColor="#00000066"

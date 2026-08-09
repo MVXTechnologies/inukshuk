@@ -13,7 +13,7 @@ import {
 } from '@core/weather/tides';
 import type { LatLng } from '@core/models';
 import { useEffect, useState } from 'react';
-import { WEATHER_USER_AGENT } from './useWeatherFrames';
+import { WEATHER_USER_AGENT } from './useWeatherTimeline';
 
 /**
  * The forecast card's Tides section data (marine M2): nearest CHS IWLS

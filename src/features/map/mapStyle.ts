@@ -147,7 +147,31 @@ export interface OsmStyleOptions {
    * `urlTemplate` flowing through the caller's style-memo rebuild.
    */
   weather?: { urlTemplate: string; attribution: string; opacity?: number };
+  /**
+   * Weather-mode basemap muting (weather UX M1, the Windy look): while a
+   * weather layer is draped, the basemap steps back — heavy desaturation on
+   * the raster plus a semi-opaque neutral "dim" backdrop layered between the
+   * basemap and the weather drape, and the shaded-relief hillshade is
+   * suppressed (terrain shading under a radar/temperature field is noise).
+   *
+   * HONEST LIMIT: the base is raster tiles, so a true labels-only minimal
+   * style (land/water + city labels) is impossible — labels are baked into
+   * the tile pixels. The dim treatment keeps them readable while pushing
+   * everything else back. Future work: a vector basemap variant could style
+   * a real city-labels-only weather background.
+   */
+  weatherMuted?: { dimColor: string; dimOpacity: number };
 }
+
+/**
+ * Weather-mode raster wash: near-grayscale so the weather drape owns the
+ * colour space. Applied to every basemap — the "don't mute satellite" rule
+ * yields here because under weather the drape IS the content.
+ */
+const WEATHER_MUTED_PAINT: Record<string, number> = {
+  'raster-saturation': -0.85,
+  'raster-contrast': -0.08,
+};
 
 /**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
@@ -219,7 +243,9 @@ export function buildOsmStyle(
         id: 'osm',
         type: 'raster',
         source: 'osm',
-        paint: (options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {},
+        paint: options.weatherMuted
+          ? WEATHER_MUTED_PAINT
+          : ((options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {}),
       },
       // Marked-trail networks, each its own layer over the basemap (only
       // requested networks get a source — keeps offline packs and 3D drapes
@@ -246,7 +272,7 @@ export function buildOsmStyle(
   // (shadedRelief=false) so the DEM source doesn't bloat downloaded tile pyramids
   // — relief just degrades to flat tiles offline. Skipped in 3D (the real terrain
   // surface adds its own DEM/hillshade below) and for satellite imagery.
-  if (shadedRelief && !terrain3d && SHADE_BASEMAPS.has(basemap)) {
+  if (shadedRelief && !terrain3d && SHADE_BASEMAPS.has(basemap) && !options.weatherMuted) {
     style.sources.dem = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
@@ -287,6 +313,22 @@ export function buildOsmStyle(
     style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
 
+  // Weather-mode dim: a semi-opaque neutral BACKGROUND layer above the
+  // basemap/overlay rasters and below the weather drape. `background` paints
+  // the whole viewport regardless of its position in the layer list, so it
+  // works as a "screen" over raster tiles — the only muting available when
+  // labels are baked into tile pixels (see the option's doc).
+  if (options.weatherMuted) {
+    style.layers.push({
+      id: 'weather-dim',
+      type: 'background',
+      paint: {
+        'background-color': options.weatherMuted.dimColor,
+        'background-opacity': options.weatherMuted.dimOpacity,
+      },
+    });
+  }
+
   // Weather drape (radar / model fields), above the basemap, trail overlays
   // and hillshade — it's the topmost data layer, only under the offline mask
   // (mutually exclusive with it anyway) and the runtime layers (trails,
@@ -304,7 +346,7 @@ export function buildOsmStyle(
       id: 'weather',
       type: 'raster',
       source: 'weather',
-      paint: { 'raster-opacity': options.weather.opacity ?? 0.8, 'raster-fade-duration': 0 },
+      paint: { 'raster-opacity': options.weather.opacity ?? 0.62, 'raster-fade-duration': 0 },
     });
   }
 

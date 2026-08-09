@@ -3,7 +3,7 @@ import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/vi
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import { ECCC_ATTRIBUTION, weatherTileUrl } from '@core/geo/weatherLayers';
+import { ECCC_ATTRIBUTION, weatherLayerById, weatherTileUrl } from '@core/geo/weatherLayers';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import type { Feature, LineString } from 'geojson';
 import { mapColors } from '@ui/theme';
@@ -63,7 +63,9 @@ import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
-import { useWeatherFrames } from './weather/useWeatherFrames';
+import { useWeatherTimeline } from './weather/useWeatherTimeline';
+import { WeatherLegend } from './weather/WeatherLegend';
+import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
@@ -224,14 +226,16 @@ export function MapScreen() {
   // dial hides with the rest of the controls until the rail is out.
   const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
-  // Weather overlay (meteo M1): the persisted GeoMet layer choice, the
-  // transient radar-animation flag, and the current animation frame (null =
-  // static latest). Network-only like the marked trails: while offline-only
-  // is on the layer is dropped from the style entirely and the frames hook is
-  // parked, so the map stays byte-identical to a weatherless one.
+  // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
+  // transient play flag, and the scrubbable timeline that owns the drape's
+  // valid time (throttled inside the hook). Network-only like the marked
+  // trails: while offline-only is on the layer is dropped from the style
+  // entirely and the timeline hook is parked, so the map stays byte-identical
+  // to a weatherless one.
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
-  const weatherTime = useWeatherFrames(offlineOnly ? null : weatherLayer, weatherAnimating);
+  const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
+  const weatherTl = useWeatherTimeline(offlineOnly ? null : weatherLayer, weatherAnimating);
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
@@ -251,8 +255,16 @@ export function MapScreen() {
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
-              urlTemplate: weatherTileUrl(weatherLayer, weatherTime ?? undefined),
+              urlTemplate: weatherTileUrl(weatherLayer, weatherTl.timeParam),
               attribution: ECCC_ATTRIBUTION,
+            },
+            // Windy-style muted background under weather: desaturated raster +
+            // a neutral dim screen (theme-matched), city labels staying legible
+            // through it — strong enough that the weather gradient reads as THE
+            // content. See the option's doc for the raster-tile honesty note.
+            weatherMuted: {
+              dimColor: theme.dark ? '#101418' : '#F4F1EC',
+              dimOpacity: theme.dark ? 0.45 : 0.38,
             },
           }
         : {}),
@@ -280,7 +292,7 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     weatherLayer,
-    weatherTime,
+    weatherTl.timeParam,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -342,6 +354,10 @@ export function MapScreen() {
     prepareRegionGeometry,
     resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
+
+  // One flag shared by the weather dock and the FAB lift (they must agree).
+  const weatherDockVisible =
+    weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null;
 
   const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
@@ -1314,6 +1330,24 @@ export function MapScreen() {
             />
           </View>
         )}
+        {/* Weather dock (weather UX M1): the value-legend pill + time
+            scrubber, riding the same bottom flex column as the recording bar
+            — the column stacks them, so they never overlap it. Hidden with
+            the recording UI while the region-select overlay owns the bottom
+            edge, and offline-only parks weather entirely. */}
+        {weatherDockVisible && weatherTl.timeline !== null && (
+          <View style={styles.weatherDock} pointerEvents="box-none">
+            <WeatherLegend layer={weatherLayerById(weatherLayer)} />
+            <WeatherTimeScrubber
+              timeline={weatherTl.timeline}
+              selectedIdx={weatherTl.selectedIdx}
+              selectedMs={weatherTl.selectedMs}
+              onScrub={weatherTl.scrubTo}
+              playing={weatherAnimating}
+              onTogglePlay={toggleWeatherAnimation}
+            />
+          </View>
+        )}
       </View>
 
       {inspectId && inspectPoints && inspectTrack && (
@@ -1370,6 +1404,9 @@ export function MapScreen() {
         (uiStyle !== 'minimal' || minimalControlsOpen) &&
         !pickingCategory && (
           <MapActionsFab
+            // The weather dock (legend 22 + gap 6 + scrubber 54 + column gap)
+            // owns the FAB's corner while visible — hop above it.
+            liftBy={weatherDockVisible ? 96 : 0}
             onRecord={() => setPickingCategory(true)}
             onAddWaypoint={onAddWaypoint}
             // Close any open trail inspector first: the download sheet renders
@@ -1510,4 +1547,7 @@ const styles = StyleSheet.create({
   // Expanded: bottom-align the (smaller) card on the left against the
   // buttons stacked vertically to its right (item 3).
   recordingBarExpanded: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  // Legend pill + time scrubber, tight together (the bottom column's own gap
+  // is for separating whole blocks like the recording bar).
+  weatherDock: { gap: 6 },
 });
