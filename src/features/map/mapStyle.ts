@@ -346,7 +346,7 @@ export function buildOsmStyle(
       id: 'weather',
       type: 'raster',
       source: 'weather',
-      paint: { 'raster-opacity': options.weather.opacity ?? 0.8, 'raster-fade-duration': 0 },
+      paint: { 'raster-opacity': options.weather.opacity ?? 0.62, 'raster-fade-duration': 0 },
     });
   }
 

@@ -112,7 +112,7 @@ export function WeatherLayersDialog({
 }
 
 /** 40 px circle over 16 interpolated bands ≈ a smooth gradient disc. */
-const THUMB_STEPS = 16;
+const THUMB_STEPS = 32;
 const THUMB_D = 40;
 
 const styles = StyleSheet.create({

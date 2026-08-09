@@ -104,7 +104,7 @@ describe('buildOsmStyle', () => {
         type: 'raster',
         source: 'weather',
         // No cross-fade: animation swaps frame URLs and fading would smear them.
-        paint: { 'raster-opacity': 0.8, 'raster-fade-duration': 0 },
+        paint: { 'raster-opacity': 0.62, 'raster-fade-duration': 0 },
       });
     });
 

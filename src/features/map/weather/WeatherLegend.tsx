@@ -49,6 +49,9 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     overflow: 'hidden',
     backgroundColor: wc.panel,
+    // Narrower than the scrubber pill so it reads as a floating element
+    // (edge-to-edge it looked like a glued-on strip — Windy's legend floats).
+    marginHorizontal: 10,
   },
   unitCell: { paddingHorizontal: 9, justifyContent: 'center' },
   unitText: { fontSize: 11, lineHeight: 14, color: wc.inkMuted },

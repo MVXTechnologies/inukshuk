@@ -264,7 +264,7 @@ export function MapScreen() {
             // content. See the option's doc for the raster-tile honesty note.
             weatherMuted: {
               dimColor: theme.dark ? '#101418' : '#F4F1EC',
-              dimOpacity: theme.dark ? 0.55 : 0.48,
+              dimOpacity: theme.dark ? 0.45 : 0.38,
             },
           }
         : {}),
@@ -354,6 +354,10 @@ export function MapScreen() {
     prepareRegionGeometry,
     resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
+
+  // One flag shared by the weather dock and the FAB lift (they must agree).
+  const weatherDockVisible =
+    weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null;
 
   const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
@@ -1331,7 +1335,7 @@ export function MapScreen() {
             — the column stacks them, so they never overlap it. Hidden with
             the recording UI while the region-select overlay owns the bottom
             edge, and offline-only parks weather entirely. */}
-        {weatherLayer !== null && !offlineOnly && !selecting && weatherTl.timeline !== null && (
+        {weatherDockVisible && weatherTl.timeline !== null && (
           <View style={styles.weatherDock} pointerEvents="box-none">
             <WeatherLegend layer={weatherLayerById(weatherLayer)} />
             <WeatherTimeScrubber
@@ -1400,6 +1404,9 @@ export function MapScreen() {
         (uiStyle !== 'minimal' || minimalControlsOpen) &&
         !pickingCategory && (
           <MapActionsFab
+            // The weather dock (legend 22 + gap 6 + scrubber 54 + column gap)
+            // owns the FAB's corner while visible — hop above it.
+            liftBy={weatherDockVisible ? 96 : 0}
             onRecord={() => setPickingCategory(true)}
             onAddWaypoint={onAddWaypoint}
             // Close any open trail inspector first: the download sheet renders
