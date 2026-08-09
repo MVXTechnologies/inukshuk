@@ -61,6 +61,7 @@ import { usePdfOverlays } from './usePdfOverlay';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
+import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { useWeatherFrames } from './weather/useWeatherFrames';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
@@ -231,7 +232,13 @@ export function MapScreen() {
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
   const weatherTime = useWeatherFrames(offlineOnly ? null : weatherLayer, weatherAnimating);
-  // Long-pressed point whose ECCC forecast card is open (weather-only UI).
+  // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
+  // network-only treatment as the marked trails. Any active layer also pins
+  // the mandatory "Not for navigation" chip below.
+  const marineLayers = useSettingsStore((s) => s.marineLayers);
+  const marineActive = marineLayers.length > 0 && !offlineOnly;
+  // Long-pressed point whose forecast/tides card is open (shown while a
+  // weather or marine layer is active).
   const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
   const style = useMemo(() => {
     const options = {
@@ -239,6 +246,8 @@ export function MapScreen() {
       pastel: uiStyle === 'edge',
       // Marked-trail networks (network-only; hidden while offline-only).
       markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
+      // Marine drapes ride the same offline-only rule.
+      marineLayers: offlineOnly ? [] : marineLayers,
       ...(weatherLayer !== null && !offlineOnly
         ? {
             weather: {
@@ -269,6 +278,7 @@ export function MapScreen() {
     theme.colors.background,
     uiStyle,
     markedTrailsNetworks,
+    marineLayers,
     weatherLayer,
     weatherTime,
   ]);
@@ -799,12 +809,13 @@ export function MapScreen() {
           compass={false}
           touchPitch
           onPress={onMapPress}
-          // Weather-only gesture: long-press opens the ECCC forecast card for
-          // that point. Gated on an active weather layer (and online) so the
-          // map behaves exactly like today when weather is off.
+          // Weather/marine gesture: long-press opens the forecast card (ECCC
+          // forecast + CHS tides) for that point. Gated on an active weather
+          // OR marine layer (and online) so the map behaves exactly like
+          // today when both are off.
           onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
             const lngLat = e.nativeEvent?.lngLat;
-            if (!lngLat || weatherLayer === null || offlineOnly) return;
+            if (!lngLat || (weatherLayer === null && !marineActive) || offlineOnly) return;
             setForecastAt({ longitude: lngLat[0], latitude: lngLat[1] });
           }}
           onWillStartLoadingMap={() => setMapLoaded(false)}
@@ -1189,6 +1200,17 @@ export function MapScreen() {
         <CompassBadge onPress={resetNorth} />
       </View>
 
+      {/* Mandatory marine notice (marine M3): whenever a marine layer is
+          draped, the "Not for navigation" chip pins top-centre — between the
+          compass (left) and the controls rail (right). A plain overlay chip
+          like the GPS warning, never a Portal/Dialog. 2D only: the 3D view
+          doesn't drape marine layers. */}
+      {marineActive && !terrain3d && (
+        <View style={[styles.marineChip, { top: insets.top + 12 }]} pointerEvents="none">
+          <MarineDisclaimerChip />
+        </View>
+      )}
+
       {/* Right-side map controls. Unmounted while the map-maker editor is up:
           its desk/drawer covers the rail visually, but a covered rail would
           still sit in the accessibility tree — screen readers (and E2E) could
@@ -1427,12 +1449,17 @@ export function MapScreen() {
           the gridded value under the finger. Same bottom-card slot rules as
           the waypoint viewer — hidden while other bottom cards are up. */}
       {forecastAt !== null &&
-        weatherLayer !== null &&
+        (weatherLayer !== null || marineActive) &&
         !offlineOnly &&
         inspectTrack === null &&
         editWaypoint === null &&
         viewWaypoint === null && (
-          <ForecastCard at={forecastAt} layer={weatherLayer} onClose={() => setForecastAt(null)} />
+          <ForecastCard
+            at={forecastAt}
+            layer={weatherLayer}
+            marineActive={marineActive}
+            onClose={() => setForecastAt(null)}
+          />
         )}
 
       <WaypointEditorDialog
@@ -1470,6 +1497,8 @@ export function MapScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   topLeft: { position: 'absolute', left: 12 },
+  // Centred between the compass (left) and the controls rail (right).
+  marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
   bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 14 },
   // Collapsed: center-align the pill against the (bigger) icon buttons so

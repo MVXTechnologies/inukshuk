@@ -143,7 +143,10 @@ describe('buildOsmStyle', () => {
         tileSize: 256,
         maxzoom: 17,
       });
-      const bathySource = s.sources['marine-bathymetry'] as { tiles: string[]; attribution: string };
+      const bathySource = s.sources['marine-bathymetry'] as {
+        tiles: string[];
+        attribution: string;
+      };
       expect(bathySource.tiles[0]).toContain('nonna-geoserver.data.chs-shc.ca');
       expect(bathySource.tiles[0]).toContain('bbox={bbox-epsg-3857}');
       expect(bathySource.attribution).toContain('Not for navigation');

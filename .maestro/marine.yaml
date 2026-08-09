@@ -1,0 +1,78 @@
+# Marine overlays e2e (marine M3): open the Overlays menu, check both marine
+# layers (NONNA bathymetry + OpenSeaMap seamarks), confirm the mandatory
+# "Not for navigation" chip shows, long-press for the forecast/tides card and
+# confirm the 2D map stays alive throughout. Crash-detection focus, like
+# weather.yaml — NEVER asserts chart pixels or tide content.
+#
+# Portability notes:
+# - Network-independent by design: in CI the NONNA WMS / OpenSeaMap hosts are
+#   unreachable, tile fetches fail and the map degrades to the basemap it
+#   already tolerates; the card's IWLS fetches fail and the Tides section
+#   renders its "unavailable" line. Nothing below asserts any network pixels
+#   — only menu state, the (purely local) disclaimer chip, and the crash gate.
+# - The marine picker is a paper Dialog of Checkbox rows; labels are plain
+#   visible-text matches with no regex metacharacters (Maestro treats
+#   matchers as regexes — see the catalog test in marineLayers.test.ts).
+# - A far-left tap lands on the Menu's dismiss backdrop and only closes the
+#   menu (see trail-view.yaml).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# --- Enable both marine layers ---
+- tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Marine'
+    timeout: 10000
+- tapOn: 'Marine'
+- extendedWaitUntil:
+    visible: 'Water depths'
+    timeout: 10000
+- tapOn: 'Water depths'
+- tapOn: 'Seamarks'
+- tapOn: 'Done'
+# The map beneath must still be responsive while (unreachable) tiles fail,
+# and the mandatory disclaimer chip must be up — it's pure local UI, so this
+# asserts fine with or without network.
+- assertVisible: 'Map actions'
+- assertVisible: 'Not for navigation'
+# --- Forecast/tides card: with only a marine layer on (no weather layer),
+# long-press must open/dismiss without ever crashing, network or not. ---
+- longPressOn:
+    point: 50%,40%
+- assertVisible: 'Map actions'
+- tapOn:
+    point: 50%,30%
+- assertVisible: 'Map actions'
+# --- The menu row reflects the active layers; turn everything back off so
+# reruns and later flows start from the default map. ---
+- tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Marine (2)'
+    timeout: 10000
+- tapOn: 'Marine (2)'
+- extendedWaitUntil:
+    visible: 'Water depths'
+    timeout: 10000
+- tapOn: 'Water depths'
+- tapOn: 'Seamarks'
+- tapOn: 'Done'
+- assertVisible: 'Map actions'
+# Chip gone with the layers off.
+- assertNotVisible: 'Not for navigation'
