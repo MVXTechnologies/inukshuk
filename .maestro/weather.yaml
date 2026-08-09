@@ -52,13 +52,13 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Weather'
+            notVisible: 'Weather(: .*)?'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Weather'
+          visible: 'Weather(: .*)?'
           timeout: 10000
-- tapOn: 'Weather'
+- tapOn: 'Weather(: .*)?'
 # Dialog-open sentinel: a picker row that is never visible while closed.
 - extendedWaitUntil:
     visible: '.*Rain radar.*'
@@ -110,8 +110,14 @@ appId: com.inukshuk.app
     visible: '.*Weather timeline.*'
     timeout: 10000
 # Playback on, from the scrubber's play disc (its label flips to the pause
-# label while playing — that flip is also the "it engaged" signal).
-- tapOn: '.*Play weather timeline.*'
+# label while playing — that flip is also the "it engaged" signal). Playback
+# state PERSISTS across a layer switch — if the earlier layer left it
+# playing, the disc already reads Pause; only tap Play when it shows Play.
+- runFlow:
+    when:
+      notVisible: '.*Pause weather timeline.*'
+    commands:
+      - tapOn: '.*Play weather timeline.*'
 - extendedWaitUntil:
     visible: '.*Pause weather timeline.*'
     timeout: 10000
