@@ -106,20 +106,21 @@ export function weatherLayerById(id: WeatherLayerId): WeatherLayer {
 }
 
 /**
- * GetMap tile-URL template for a weather layer, using MapLibre's
- * `{bbox-epsg-3857}` templating so a plain raster source fetches WMS tiles.
- * Without `time`, GeoMet serves the latest frame (static mode — zero extra
- * requests). With `time`, the URL pins one animation frame; changing frames
- * means swapping the source URL (WMS params aren't re-templated by `setUrl`),
- * which flows naturally through the MapScreen style-memo rebuild.
+ * GetMap tile-URL template for an arbitrary GeoMet WMS layer name, using
+ * MapLibre's `{bbox-epsg-3857}` templating so a plain raster source fetches
+ * WMS tiles. Without `time`, GeoMet serves the latest frame (static mode —
+ * zero extra requests). With `time`, the URL pins one animation frame;
+ * changing frames means swapping the source URL (WMS params aren't
+ * re-templated by `setUrl`), which flows naturally through the MapScreen
+ * style-memo rebuild. M2: the per-model catalog resolves which WMS layer name
+ * lands here (see `@core/weather/weatherModels`).
  */
-export function weatherTileUrl(id: WeatherLayerId, time?: string): string {
-  const layer = weatherLayerById(id);
+export function wmsTileUrlForLayer(wmsLayer: string, time?: string): string {
   const params = [
     'service=WMS',
     'version=1.3.0',
     'request=GetMap',
-    `layers=${encodeURIComponent(layer.wmsLayer)}`,
+    `layers=${encodeURIComponent(wmsLayer)}`,
     'crs=EPSG:3857',
     'bbox={bbox-epsg-3857}',
     'width=256',
@@ -131,10 +132,19 @@ export function weatherTileUrl(id: WeatherLayerId, time?: string): string {
   return `${GEOMET_WMS_ENDPOINT}?${params.join('&')}`;
 }
 
+/** GetMap tile URL for a catalog layer (the model-less M1 path). */
+export function weatherTileUrl(id: WeatherLayerId, time?: string): string {
+  return wmsTileUrlForLayer(weatherLayerById(id).wmsLayer, time);
+}
+
 /** Layer-scoped GetCapabilities URL (GeoMet supports `layer=` to keep it small). */
+export function capabilitiesUrlForLayer(wmsLayer: string): string {
+  return `${GEOMET_WMS_ENDPOINT}?service=WMS&version=1.3.0&request=GetCapabilities&layer=${encodeURIComponent(wmsLayer)}`;
+}
+
+/** Layer-scoped GetCapabilities URL for a catalog layer. */
 export function weatherCapabilitiesUrl(id: WeatherLayerId): string {
-  const layer = weatherLayerById(id);
-  return `${GEOMET_WMS_ENDPOINT}?service=WMS&version=1.3.0&request=GetCapabilities&layer=${encodeURIComponent(layer.wmsLayer)}`;
+  return capabilitiesUrlForLayer(weatherLayerById(id).wmsLayer);
 }
 
 /** A WMS time dimension: an ISO interval with a step and a server default. */
@@ -196,6 +206,93 @@ export function parseTimeDimension(xml: string): WmsTimeDimension | null {
   return null;
 }
 
+/**
+ * Explicit valid-times of a WMS time dimension — the list form the scrubber
+ * consumes directly (M2). Unlike {@link WmsTimeDimension} this survives
+ * GDPS's comma-separated list with its 1 h → 3 h cadence change at +84 h:
+ * uneven steps are real data, not a parse bug.
+ */
+export interface WmsTimeList {
+  /** Every available valid time, epoch ms, ascending, deduplicated. */
+  timesMs: number[];
+  /** The server's default TIME (usually the latest run's anchor), verbatim. */
+  defaultTime: string | null;
+}
+
+/** Guard against a junk dimension exploding a single interval expansion. */
+const MAX_INTERVAL_STEPS = 400;
+/** Guard on the merged list (GDPS's 10-day list is ~133 entries). */
+const MAX_TIME_LIST = 1000;
+
+/** Expand one `start/end/period` interval token into epoch-ms steps. */
+function expandIntervalToken(token: string): number[] | null {
+  const parts = token.split('/');
+  if (parts.length !== 3) return null;
+  const [startIso, endIso, period] = parts;
+  const startMs = Date.parse(startIso ?? '');
+  const endMs = Date.parse(endIso ?? '');
+  const stepMs = parseIsoDuration(period ?? '');
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || stepMs === null) return null;
+  if (endMs < startMs) return null;
+  const out: number[] = [];
+  const count = Math.min(Math.floor((endMs - startMs) / stepMs) + 1, MAX_INTERVAL_STEPS);
+  for (let i = 0; i < count; i++) out.push(startMs + i * stepMs);
+  return out;
+}
+
+/**
+ * Extract the `time` dimension from a WMS GetCapabilities document as an
+ * explicit time list. Handles all three GeoMet dimension forms (each verified
+ * live 2026-08-09):
+ * - a single interval `start/end/period` (HRDPS, RDPS, radar);
+ * - a comma-separated list of plain timestamps, uneven cadence included
+ *   (GDPS: hourly to +84 h, then 3-hourly);
+ * - a mixed comma list of intervals and/or timestamps.
+ * Returns null when nothing parses — callers degrade to the clock guess.
+ */
+export function parseTimeDimensionList(xml: string): WmsTimeList | null {
+  const tagRe = /<Dimension\b([^>]*)>([^<]*)<\/Dimension>/g;
+  for (let m = tagRe.exec(xml); m !== null; m = tagRe.exec(xml)) {
+    const [, attrs = '', content = ''] = m;
+    if (!/name\s*=\s*"time"/.test(attrs)) continue;
+    const defaultMatch = /default\s*=\s*"([^"]*)"/.exec(attrs);
+    const merged = new Set<number>();
+    for (const raw of content.trim().split(',')) {
+      const token = raw.trim();
+      if (token === '') continue;
+      const expanded = token.includes('/') ? expandIntervalToken(token) : null;
+      if (expanded !== null) {
+        for (const ms of expanded) merged.add(ms);
+      } else if (!token.includes('/')) {
+        const ms = Date.parse(token);
+        if (Number.isFinite(ms)) merged.add(ms);
+      }
+      if (merged.size > MAX_TIME_LIST) break;
+    }
+    if (merged.size === 0) return null;
+    const timesMs = [...merged].sort((a, b) => a - b).slice(0, MAX_TIME_LIST);
+    return { timesMs, defaultTime: defaultMatch?.[1] ?? null };
+  }
+  return null;
+}
+
+/**
+ * The model run behind a layer, from the `reference_time` dimension's default
+ * (GeoMet echoes the latest run there — verified live for HRDPS/RDPS/GDPS).
+ * Epoch ms, or null when absent/junk. Feeds the "run 6 h ago" chrome.
+ */
+export function parseReferenceTimeDefault(xml: string): number | null {
+  const tagRe = /<Dimension\b([^>]*)>[^<]*<\/Dimension>/g;
+  for (let m = tagRe.exec(xml); m !== null; m = tagRe.exec(xml)) {
+    const [, attrs = ''] = m;
+    if (!/name\s*=\s*"reference_time"/.test(attrs)) continue;
+    const def = /default\s*=\s*"([^"]*)"/.exec(attrs)?.[1];
+    const ms = Date.parse(def ?? '');
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
 /** Format an epoch-ms timestamp the way GeoMet's TIME parameter expects. */
 export function formatWmsTime(epochMs: number): string {
   return new Date(epochMs).toISOString().replace('.000Z', 'Z');
@@ -215,7 +312,17 @@ export function toWebMercator(p: LatLng): { x: number; y: number } {
  * on the point, JSON info format.
  */
 export function getFeatureInfoUrl(id: WeatherLayerId, at: LatLng): string {
-  const layer = weatherLayerById(id);
+  return getFeatureInfoUrlForLayer(weatherLayerById(id).wmsLayer, at);
+}
+
+/**
+ * GetFeatureInfo URL for an arbitrary GeoMet WMS layer name, optionally
+ * pinned to one valid time (the M2 comparison table: one request per
+ * model × time × variable — GeoMet rejects multi-layer queries, verified).
+ * Out-of-range times come back as XML ServiceException even with a JSON
+ * info_format; callers treat non-JSON as "no value".
+ */
+export function getFeatureInfoUrlForLayer(wmsLayer: string, at: LatLng, timeIso?: string): string {
   const { x, y } = toWebMercator(at);
   const half = 10_000; // metres — ~1 grid cell margin around the point
   const size = 101;
@@ -224,8 +331,8 @@ export function getFeatureInfoUrl(id: WeatherLayerId, at: LatLng): string {
     'service=WMS',
     'version=1.3.0',
     'request=GetFeatureInfo',
-    `layers=${encodeURIComponent(layer.wmsLayer)}`,
-    `query_layers=${encodeURIComponent(layer.wmsLayer)}`,
+    `layers=${encodeURIComponent(wmsLayer)}`,
+    `query_layers=${encodeURIComponent(wmsLayer)}`,
     'crs=EPSG:3857',
     `bbox=${bbox}`,
     `width=${size}`,
@@ -233,6 +340,7 @@ export function getFeatureInfoUrl(id: WeatherLayerId, at: LatLng): string {
     `i=${(size - 1) / 2}`,
     `j=${(size - 1) / 2}`,
     'info_format=application/json',
+    ...(timeIso !== undefined ? [`time=${encodeURIComponent(timeIso)}`] : []),
   ];
   return `${GEOMET_WMS_ENDPOINT}?${params.join('&')}`;
 }
@@ -245,6 +353,8 @@ export interface FeatureInfoValue {
   label: string | null;
   /** Valid time of the value, verbatim ISO string when present. */
   time: string | null;
+  /** The model run the value came from (`dim_reference_time`), verbatim. */
+  referenceTime: string | null;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -272,5 +382,6 @@ export function parseFeatureInfo(json: unknown): FeatureInfoValue | null {
     value: props.value,
     label,
     time: typeof props.time === 'string' ? props.time : null,
+    referenceTime: typeof props.dim_reference_time === 'string' ? props.dim_reference_time : null,
   };
 }

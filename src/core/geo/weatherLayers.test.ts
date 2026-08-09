@@ -2,10 +2,13 @@ import {
   ECCC_ATTRIBUTION,
   formatWmsTime,
   getFeatureInfoUrl,
+  getFeatureInfoUrlForLayer,
   isWeatherLayerId,
   parseFeatureInfo,
   parseIsoDuration,
+  parseReferenceTimeDefault,
   parseTimeDimension,
+  parseTimeDimensionList,
   sanitizeWeatherLayer,
   toWebMercator,
   WEATHER_LAYERS,
@@ -243,6 +246,7 @@ describe('GetFeatureInfo', () => {
       value: 25.327021,
       label: 'Air temperature at 2m above ground [°C]',
       time: '2026-08-08T21:00:00Z',
+      referenceTime: '2026-08-08T12:00:00Z',
     });
   });
 
@@ -251,6 +255,7 @@ describe('GetFeatureInfo', () => {
       value: 1.5,
       label: null,
       time: null,
+      referenceTime: null,
     });
   });
 
@@ -267,5 +272,93 @@ describe('GetFeatureInfo', () => {
   it('keeps the capabilities URL layer-scoped', () => {
     expect(weatherCapabilitiesUrl('radar-snow')).toContain('request=GetCapabilities');
     expect(weatherCapabilitiesUrl('radar-snow')).toContain('layer=RADAR_1KM_RSNO');
+  });
+
+  it('pins an arbitrary layer and time in the generalized URL (M2 table cells)', () => {
+    const url = getFeatureInfoUrlForLayer(
+      'RDPS_10km_AirTemp_2m',
+      { latitude: 46.813, longitude: -71.208 },
+      '2026-08-09T15:00:00Z',
+    );
+    expect(url).toContain('layers=RDPS_10km_AirTemp_2m');
+    expect(url).toContain('query_layers=RDPS_10km_AirTemp_2m');
+    expect(url).toContain('time=2026-08-09T15%3A00%3A00Z');
+  });
+
+  it('omits time when not pinned', () => {
+    const url = getFeatureInfoUrlForLayer('HRDPS.CONTINENTAL_TT', {
+      latitude: 46.813,
+      longitude: -71.208,
+    });
+    expect(url).not.toContain('time=');
+  });
+});
+
+describe('parseTimeDimensionList', () => {
+  it('expands a single interval (HRDPS/RDPS/radar form)', () => {
+    const list = parseTimeDimensionList(CAPS_XML);
+    expect(list).not.toBeNull();
+    expect(list?.timesMs).toHaveLength(31); // 3 h of PT6M steps inclusive
+    expect(list?.timesMs[0]).toBe(Date.parse('2026-08-08T18:00:00Z'));
+    expect(list?.timesMs[30]).toBe(Date.parse('2026-08-08T21:00:00Z'));
+    expect(list?.defaultTime).toBe('2026-08-08T21:00:00Z');
+  });
+
+  it('parses the GDPS comma-list with its 1 h to 3 h cadence change', () => {
+    // Trimmed live shape (GDPS_15km_AirTemp_2m, 2026-08-09): plain timestamps,
+    // hourly until the seam, then 3-hourly.
+    const xml = `<Layer><Name>GDPS_15km_AirTemp_2m</Name>
+      <Dimension name="time" units="ISO8601" default="2026-08-09T06:00:00Z" nearestValue="0">2026-08-12T10:00:00Z,2026-08-12T11:00:00Z,2026-08-12T12:00:00Z,2026-08-12T15:00:00Z,2026-08-12T18:00:00Z,2026-08-12T21:00:00Z</Dimension>
+      </Layer>`;
+    const list = parseTimeDimensionList(xml);
+    expect(list?.timesMs.map((t) => new Date(t).toISOString())).toEqual([
+      '2026-08-12T10:00:00.000Z',
+      '2026-08-12T11:00:00.000Z',
+      '2026-08-12T12:00:00.000Z',
+      '2026-08-12T15:00:00.000Z',
+      '2026-08-12T18:00:00.000Z',
+      '2026-08-12T21:00:00.000Z',
+    ]);
+    expect(list?.defaultTime).toBe('2026-08-09T06:00:00Z');
+  });
+
+  it('handles a mixed list of intervals and plain timestamps, sorted and deduped', () => {
+    const xml = `<Dimension name="time" default="x">2026-08-09T03:00:00Z,2026-08-09T00:00:00Z/2026-08-09T02:00:00Z/PT1H,2026-08-09T02:00:00Z</Dimension>`;
+    const list = parseTimeDimensionList(xml);
+    expect(list?.timesMs.map((t) => new Date(t).toISOString())).toEqual([
+      '2026-08-09T00:00:00.000Z',
+      '2026-08-09T01:00:00.000Z',
+      '2026-08-09T02:00:00.000Z',
+      '2026-08-09T03:00:00.000Z',
+    ]);
+  });
+
+  it.each([
+    ['no time dimension', '<Dimension name="elevation">0</Dimension>'],
+    ['empty content', '<Dimension name="time" default="x"></Dimension>'],
+    ['junk tokens', '<Dimension name="time" default="x">nope,also/not/valid</Dimension>'],
+    ['no XML at all', 'not xml'],
+  ])('returns null on %s', (_name, xml) => {
+    expect(parseTimeDimensionList(xml)).toBeNull();
+  });
+
+  it('ignores junk tokens mixed with valid ones', () => {
+    const xml = `<Dimension name="time" default="x">garbage,2026-08-09T00:00:00Z</Dimension>`;
+    expect(parseTimeDimensionList(xml)?.timesMs).toEqual([Date.parse('2026-08-09T00:00:00Z')]);
+  });
+});
+
+describe('parseReferenceTimeDefault', () => {
+  it('reads the latest run from the reference_time default', () => {
+    expect(parseReferenceTimeDefault(CAPS_XML)).toBe(Date.parse('2026-08-08T21:00:00Z'));
+  });
+
+  it('returns null when the dimension is absent or junk', () => {
+    expect(
+      parseReferenceTimeDefault('<Dimension name="time" default="x">a</Dimension>'),
+    ).toBeNull();
+    expect(
+      parseReferenceTimeDefault('<Dimension name="reference_time" default="junk">a</Dimension>'),
+    ).toBeNull();
   });
 });

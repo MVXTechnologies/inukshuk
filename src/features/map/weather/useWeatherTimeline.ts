@@ -1,6 +1,5 @@
 import {
-  parseTimeDimension,
-  weatherCapabilitiesUrl,
+  parseTimeDimensionList,
   weatherLayerById,
   type WeatherLayerId,
 } from '@core/geo/weatherLayers';
@@ -10,10 +9,15 @@ import {
   nearestFrameIndex,
   SCRUB_THROTTLE_MS,
   throttleGate,
-  timelineFromDimension,
   wmsTimeParam,
   type WeatherTimeline,
 } from '@core/geo/weatherTimeline';
+import { defaultModelTimeline, timelineFromTimeList } from '@core/weather/modelTimeline';
+import {
+  modelCapabilitiesUrl,
+  resolveModelWmsLayer,
+  type WeatherModelId,
+} from '@core/weather/weatherModels';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -21,13 +25,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * useWeatherFrames): while a weather layer is active this owns which valid
  * time the drape shows.
  *
- * - Starts instantly on a clock-guessed timeline (`defaultTimeline`) so the
- *   scrubber renders with zero network, then refines it from the layer's
- *   GetCapabilities TIME dimension (one small layer-scoped request per
- *   activation — GeoMet usage policy). Every failure mode — offline, junk
- *   XML, degenerate window — silently stays on the guess, and an unscrubbed
- *   radar guess resolves to "no TIME" = the server's latest frame, exactly
- *   the pre-scrubber behaviour.
+ * - Starts instantly on a clock-guessed timeline so the scrubber renders with
+ *   zero network — per-model for forecast layers (`defaultModelTimeline`
+ *   knows GDPS's 1 h → 3 h cadence change), the radar guess for past layers —
+ *   then refines it from the resolved layer's GetCapabilities TIME dimension
+ *   (one small layer-scoped request per activation — GeoMet usage policy).
+ *   The list-form parser survives GDPS's comma-list dimension. Every failure
+ *   mode — offline, junk XML, degenerate window — silently stays on the
+ *   guess, and an unscrubbed radar guess resolves to "no TIME" = the server's
+ *   latest frame, exactly the pre-scrubber behaviour.
+ * - M2: sessions are keyed by the RESOLVED WMS layer (layer × model), so
+ *   switching models rebuilds the timeline in place; the scrubbed position
+ *   carries across as the nearest frame of the new model's timeline (mid-
+ *   scrub model swaps land where the finger was). Radar layers resolve
+ *   identically under every model — no session churn.
  * - Scrubbing updates the selection (and the readout) live, but the WMS TIME
  *   fed to the drape is trailing-throttled ({@link SCRUB_THROTTLE_MS}) — each
  *   emit re-fetches the visible tile set, so the drag must not emit per-move.
@@ -42,8 +53,10 @@ export const WEATHER_USER_AGENT = 'Inukshuk trail app (github.com/MVXTechnologie
 export const WEATHER_FRAME_INTERVAL_MS = 700;
 
 interface TimelineSession {
-  /** The layer this session belongs to; stale sessions never leak across layers. */
-  key: WeatherLayerId;
+  /** Resolved WMS layer name (layer × model); stale sessions never leak. */
+  key: string;
+  /** The catalog layer, so a model swap can carry the scrubbed time over. */
+  layerId: WeatherLayerId;
   timeline: WeatherTimeline;
   selectedIdx: number;
 }
@@ -89,55 +102,70 @@ function useThrottledValue<T>(value: T, intervalMs: number): T {
 
 export function useWeatherTimeline(
   layer: WeatherLayerId | null,
+  model: WeatherModelId,
   playing: boolean,
 ): WeatherTimelineState {
   // Keyed session instead of resetting state in an effect (the
   // react-hooks/set-state-in-effect rule): a session tagged with another
-  // layer's key simply stops being used when the layer changes. The session
-  // is seeded from the activation effect below — never during render, which
-  // must stay pure (react-hooks/purity bans Date.now() there).
+  // resolved layer's key simply stops being used when the layer or model
+  // changes. The session is seeded from the activation effect below — never
+  // during render, which must stay pure (react-hooks/purity bans Date.now()
+  // there).
   const [session, setSession] = useState<TimelineSession | null>(null);
 
-  const live = session !== null && session.key === layer ? session : null;
+  const resolvedKey = layer !== null ? resolveModelWmsLayer(layer, model) : null;
+  const live = session !== null && session.key === resolvedKey ? session : null;
 
-  // Layer activation: (1) seed a clock-guessed session on the next tick so
-  // the scrubber works with zero network, then (2) refine it from the
-  // layer's GetCapabilities TIME window (one small layer-scoped request —
-  // GeoMet usage policy). All failures degrade silently to the guess.
+  // Activation (layer picked or model switched): (1) seed a clock-guessed
+  // session on the next tick so the scrubber works with zero network — a
+  // model swap carries the previous scrubbed time to the nearest new frame —
+  // then (2) refine it from the resolved layer's GetCapabilities TIME window
+  // (one small layer-scoped request — GeoMet usage policy). All failures
+  // degrade silently to the guess.
   useEffect(() => {
     if (layer === null) return;
+    const key = resolveModelWmsLayer(layer, model);
     const kind = weatherLayerById(layer).timeline;
     let cancelled = false;
+    const guess = (nowMs: number): WeatherTimeline =>
+      kind === 'past' ? defaultTimeline('past', nowMs) : defaultModelTimeline(model, nowMs);
     const seed = setTimeout(() => {
       setSession((prev) => {
-        if (prev !== null && prev.key === layer) return prev;
+        if (prev !== null && prev.key === key) return prev;
         const now = Date.now();
-        const timeline = defaultTimeline(kind, now);
-        return { key: layer, timeline, selectedIdx: initialIndex(timeline, now) };
+        const timeline = guess(now);
+        // Same catalog layer, different model: keep the scrubbed position.
+        const prevMs =
+          prev !== null && prev.layerId === layer
+            ? prev.timeline.framesMs[prev.selectedIdx]
+            : undefined;
+        const selectedIdx =
+          prevMs !== undefined ? nearestFrameIndex(timeline, prevMs) : initialIndex(timeline, now);
+        return { key, layerId: layer, timeline, selectedIdx };
       });
     }, 0);
     void (async () => {
       try {
-        const res = await fetch(weatherCapabilitiesUrl(layer), {
+        const res = await fetch(modelCapabilitiesUrl(layer, model), {
           headers: { 'User-Agent': WEATHER_USER_AGENT },
         });
         if (!res.ok || cancelled) return;
-        const dim = parseTimeDimension(await res.text());
-        if (dim === null || cancelled) return;
-        const timeline = timelineFromDimension(dim, kind, Date.now());
+        const list = parseTimeDimensionList(await res.text());
+        if (list === null || cancelled) return;
+        const timeline = timelineFromTimeList(list.timesMs, kind, Date.now());
         if (timeline === null) return;
         setSession((prev) => {
           // Keep an already-scrubbed position (nearest real frame); otherwise
           // open at the kind's natural end (latest observation / now).
           const prevMs =
-            prev !== null && prev.key === layer
+            prev !== null && prev.key === key
               ? prev.timeline.framesMs[prev.selectedIdx]
               : undefined;
           const selectedIdx =
             prevMs !== undefined
               ? nearestFrameIndex(timeline, prevMs)
               : initialIndex(timeline, Date.now());
-          return { key: layer, timeline, selectedIdx };
+          return { key, layerId: layer, timeline, selectedIdx };
         });
       } catch {
         // Unreachable host / offline: stay on the clock-guessed timeline.
@@ -147,7 +175,7 @@ export function useWeatherTimeline(
       cancelled = true;
       clearTimeout(seed);
     };
-  }, [layer]);
+  }, [layer, model]);
 
   const scrubTo = useCallback(
     (idx: number) => {
@@ -159,15 +187,15 @@ export function useWeatherTimeline(
 
   // Playback: advance one frame per tick over the same timeline, wrapping.
   useEffect(() => {
-    if (layer === null || !playing) return;
+    if (resolvedKey === null || !playing) return;
     const interval = setInterval(() => {
       setSession((prev) => {
-        if (prev === null || prev.key !== layer) return prev;
+        if (prev === null || prev.key !== resolvedKey) return prev;
         return { ...prev, selectedIdx: (prev.selectedIdx + 1) % prev.timeline.framesMs.length };
       });
     }, WEATHER_FRAME_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [layer, playing]);
+  }, [resolvedKey, playing]);
 
   const rawParam = live !== null ? wmsTimeParam(live.timeline, live.selectedIdx) : undefined;
   const timeParam = useThrottledValue(rawParam, SCRUB_THROTTLE_MS);

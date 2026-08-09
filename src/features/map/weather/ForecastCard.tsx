@@ -27,11 +27,14 @@ export function ForecastCard({
   layer,
   marineActive = false,
   onClose,
+  onCompareModels,
 }: {
   at: LatLng;
   layer: WeatherLayerId | null;
   marineActive?: boolean;
   onClose: () => void;
+  /** M2: opens the model-comparison table for this point (forecast layers). */
+  onCompareModels?: () => void;
 }) {
   const { status, forecast, layerValue } = useForecast(at, layer);
   const tides = useTides(at, marineActive ? TIDE_MARINE_MAX_M : TIDE_NEARBY_MAX_M);
@@ -53,6 +56,14 @@ export function ForecastCard({
               : forecast.site
             : 'Forecast'}
         </Text>
+        {onCompareModels !== undefined && (
+          <IconButton
+            icon="table-large"
+            size={20}
+            onPress={onCompareModels}
+            accessibilityLabel="Compare forecast models"
+          />
+        )}
         <IconButton icon="close" size={20} onPress={onClose} accessibilityLabel="Close forecast" />
       </View>
 
