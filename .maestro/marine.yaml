@@ -20,6 +20,9 @@
 #   state a previous run left behind (the heatmap.yaml checkbox idiom).
 # - A far-left tap lands on the sheet's dismiss backdrop and only closes the
 #   menu (see trail-view.yaml).
+# - Wave D adds a tap-for-depth crash gate: the readout chip's depth line is
+#   a live NONNA WCS query, so offline it simply never renders. Taps below
+#   assert only the map's own chrome, never the chip or a depth number.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -74,6 +77,26 @@ appId: com.inukshuk.app
 - tapOn:
     point: 50%,30%
 - assertVisible: 'Map actions'
+# --- Tap-for-depth (wave D D1): a bare map tap in marine mode drops the
+# readout chip and fires a NONNA WCS point query. Crash gate only — offline
+# the query fails silently and the depth line never appears (the chip may not
+# render at all), so nothing below asserts the chip or any depth text. The
+# second tap lands on/near the first, exercising the chip dismiss path. ---
+- tapOn:
+    point: 50%,55%
+- assertVisible: 'Map actions'
+- tapOn:
+    point: 50%,55%
+- assertVisible: 'Map actions'
+# The client-rendered chart drape mounts an image source + a soundings symbol
+# layer on camera settle; a pan must survive that style rebuild.
+- swipe:
+    start: 50%,60%
+    end: 50%,45%
+- assertVisible: 'Map actions'
+- assertVisible: 'Not for navigation'
+# --- The menu row reflects the active layers; turn everything back off so
+# reruns and later flows start from the default map. ---
 # --- Toggle marine back off so reruns and later flows start from the
 # default map (same self-correcting idiom, inverted chip wait). ---
 - retry:

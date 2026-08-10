@@ -135,6 +135,33 @@ export function writeOverlayPng(id: string, base64Png: string): string {
   return file.uri;
 }
 
+/**
+ * Write raw PNG bytes into the cache and return a cache-busting `file://`
+ * uri (marine wave D: the client-rendered depth-chart drape).
+ *
+ * Like {@link writeOverlayPng} this exists because MapLibre's Android
+ * `ImageSource` cannot consume a `data:` URI — but it takes BYTES, skipping
+ * the base64 round trip a multi-megabyte chart bitmap would otherwise pay on
+ * every camera settle (`File.write` accepts a Uint8Array directly in SDK 56).
+ *
+ * The file NAME carries a timestamp: MapLibre caches image sources by URL,
+ * so re-rendering a region must hand it a URL it has not seen or the stale
+ * bitmap stays on screen. Older renders of the same id are deleted first, so
+ * the cache holds at most one file per chart id.
+ */
+export function writeChartPng(id: string, bytes: Uint8Array): string {
+  const dir = overlaysDir();
+  if (!dir.exists) dir.create({ intermediates: true });
+  for (const existing of dir.list()) {
+    if (existing instanceof File && existing.name.startsWith(`${id}_`)) existing.delete();
+  }
+  const file = new File(dir, `${id}_${Date.now()}.png`);
+  if (file.exists) file.delete();
+  file.create();
+  guardWrite(() => file.write(bytes));
+  return file.uri;
+}
+
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
   return new File(uri).bytes();
 }
