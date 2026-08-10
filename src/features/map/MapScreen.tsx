@@ -397,7 +397,10 @@ export function MapScreen() {
               attribution: ECCC_ATTRIBUTION,
               // M3: the wind speed gradient reads a touch stronger under the
               // particle streaks (design §3); other layers keep the default.
-              ...(weatherLayer === 'wind' ? { opacity: 0.75 } : {}),
+              // Wind runs LIGHTER than other layers, not heavier: the streaks
+              // supply the reading, so the speed gradient only needs to tint.
+              // At 0.75 it buried the coastlines (owner, 2026-08-10).
+              ...(weatherLayer === 'wind' ? { opacity: 0.5 } : {}),
             },
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
