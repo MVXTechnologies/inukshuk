@@ -63,7 +63,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*Temperature.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
@@ -156,7 +156,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*None.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000

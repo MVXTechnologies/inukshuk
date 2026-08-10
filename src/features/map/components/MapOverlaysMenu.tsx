@@ -94,6 +94,11 @@ function GroupRow({
     <TouchableRipple
       onPress={onPress}
       disabled={disabled}
+      // `accessible` collapses the row into ONE element on iOS, so the label
+      // below is authoritative. Without it iOS also exposes the name/subtitle
+      // Texts and the row's accessible string carries the state ("off"),
+      // which broke every full-match flow matcher (2026-08-10).
+      accessible
       accessibilityLabel={accessibilityLabel}
       accessibilityState={checked === undefined ? undefined : { checked }}
       style={styles.groupRow}

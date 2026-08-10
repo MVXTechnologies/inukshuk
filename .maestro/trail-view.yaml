@@ -80,7 +80,7 @@ appId: com.inukshuk.app
     timeout: 60000
 - assertVisible: 'Satellite'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 # Overlay switches live in the overlays FAB's menu (#134 fallback keeps the
 # FAB off screen when the shaders can't compile): exercise them when present,
 # skip silently otherwise. The menu stays open across toggles.
@@ -110,7 +110,7 @@ appId: com.inukshuk.app
       - tapOn: 'Contours'
       - tapOn: 'Slope'
       - tapOn:
-          point: 10%,50%
+          point: 50%,8%
 # Still responsive after GL work: flip back to 2D, then leave.
 - tapOn: 'Switch to 2D view'
 - assertVisible: 'Notes.*'

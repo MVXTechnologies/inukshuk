@@ -275,7 +275,7 @@ appId: com.inukshuk.app
           visible: 'Content: 1 folder'
           timeout: 10000
       - tapOn:
-          point: 10%,50%
+          point: 50%,8%
 # The heat GPX-load effect is async (reads + parses both trails' files); give
 # it a beat before probing for the rendered heat layer. Widened from 3000 to
 # 5000 as a low-risk safety margin — the original report's own unresolved
@@ -560,5 +560,5 @@ appId: com.inukshuk.app
           visible: 'Content: everything'
           timeout: 30000
       - tapOn:
-          point: 10%,50%
+          point: 50%,8%
 - assertVisible: 'Map actions'

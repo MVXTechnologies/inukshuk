@@ -69,7 +69,7 @@ appId: com.inukshuk.app
 - tapOn: '.*Temperature.*'
 # No 'Done' since the drill-down — the backdrop tap closes the sheet.
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 # --- The bottom time scrubber must be up whenever a weather layer is on;
 # scrubbing must not kill the map. Tapping the track's centre IS a scrub —
 # the forecast timeline opens at "now" (far left), so centre = ~+24 h. ---
@@ -111,7 +111,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*Rain radar.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
@@ -124,10 +124,13 @@ appId: com.inukshuk.app
       notVisible: '.*Pause weather timeline.*'
     commands:
       - tapOn: '.*Play weather timeline.*'
-- extendedWaitUntil:
-    visible: '.*Pause weather timeline.*'
-    timeout: 10000
+# Do NOT assert the Pause label: playback is transient state. A radar
+# timeline opens on its newest frame, so a play from there can reach the
+# end and stop before the assert runs (seen on iOS, 2026-08-10). The
+# invariant worth gating is that the press neither crashes the map nor
+# kills the scrubber.
 - assertVisible: 'Map actions'
+- assertVisible: '.*Weather timeline.*'
 # --- Everything back off so reruns and later flows start from the default
 # map: pause playback first (it is transient but this run keeps going),
 # then None. ---
@@ -155,6 +158,6 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*None.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - assertVisible: 'Map actions'
 - assertNotVisible: '.*Weather timeline.*'

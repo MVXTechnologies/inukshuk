@@ -65,7 +65,7 @@ appId: com.inukshuk.app
 # also match the folder section header sitting earlier in the tree.
 - tapOn: 'Move to TripA'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 # The trail now lives in the folder group (header shows a count).
 - assertVisible: 'TripA \(1\)'
 # --- Folder-visibility mode on the map ---

@@ -74,7 +74,7 @@ appId: com.inukshuk.app
 # Close the menu via the backdrop; the map beneath must still be responsive
 # while the overlay computes (DEM fetch + raster/contour build are async).
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - assertVisible: 'Map actions'
 # Leave the overlays off so reruns and later flows start from the default map.
 - retry:
@@ -95,5 +95,5 @@ appId: com.inukshuk.app
 - tapOn: 'Slope'
 - tapOn: 'Contours'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - assertVisible: 'Map actions'

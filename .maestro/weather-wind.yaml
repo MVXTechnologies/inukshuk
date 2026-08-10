@@ -62,7 +62,7 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*Wind.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 # The scrubber must come up (wind is a forecast layer) with the map alive —
 # by now the GLView overlay is mounted over the map.
 - extendedWaitUntil:
@@ -88,7 +88,9 @@ appId: com.inukshuk.app
 # (or fails silently offline) without killing map or overlay. ---
 - tapOn: '.*Weather timeline.*'
 - assertVisible: 'Map actions'
-- assertVisible: '.*Weather timeline.*'
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 15000
 # --- Everything back off: the GLView must unmount cleanly and later flows
 # start from the default map. ---
 - retry:
@@ -108,6 +110,6 @@ appId: com.inukshuk.app
     timeout: 10000
 - tapOn: '.*None.*'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 - assertVisible: 'Map actions'
 - assertNotVisible: '.*Weather timeline.*'
