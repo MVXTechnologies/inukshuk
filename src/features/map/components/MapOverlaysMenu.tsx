@@ -241,62 +241,64 @@ function TopologySubmenu({
 
   return (
     <View>
+      {/* No scroll container here: these rows host sliders, and wrapping them
+          stole the gesture and hid rows from the a11y tree (two flows failed,
+          2026-08-10). Topology already fits — the Weather list was the one
+          that grew. */}
       <SubmenuHeader title="Topology" onBack={onBack} />
-      <ScrollView style={styles.submenuScroll} showsVerticalScrollIndicator={false}>
-        <ItemRow
-          icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
-          title={contentTitle}
-          onPress={onOpenFolders}
-          chevron
-        />
-        {checkRow(
-          'Slope',
-          slope,
-          () => {
-            const next = !slope;
-            set('terrainSlope', next);
-            if (next) onSlopeEnabled();
-          },
-          <RangeSlider
-            min={0}
-            max={90}
+      <ItemRow
+        icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
+        title={contentTitle}
+        onPress={onOpenFolders}
+        chevron
+      />
+      {checkRow(
+        'Slope',
+        slope,
+        () => {
+          const next = !slope;
+          set('terrainSlope', next);
+          if (next) onSlopeEnabled();
+        },
+        <RangeSlider
+          min={0}
+          max={90}
+          width={100}
+          lo={slopeMinDeg}
+          hi={slopeMaxDeg}
+          disabled={!slope}
+          accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
+          onChange={(newLo, newHi) => {
+            set('terrainSlopeMinDeg', newLo);
+            set('terrainSlopeMaxDeg', newHi);
+          }}
+          {...SLIDER_PALETTE}
+        />,
+      )}
+      {checkRow(
+        'Contours',
+        contours,
+        () => set('terrainContours', !contours),
+        <View style={!contours && styles.dimmed}>
+          <DetentSlider
+            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+            selected={intervalM}
+            onSelect={(m) => set('terrainContourIntervalM', m)}
+            disabled={!contours}
             width={100}
-            lo={slopeMinDeg}
-            hi={slopeMaxDeg}
-            disabled={!slope}
-            accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
-            onChange={(newLo, newHi) => {
-              set('terrainSlopeMinDeg', newLo);
-              set('terrainSlopeMaxDeg', newHi);
-            }}
             {...SLIDER_PALETTE}
-          />,
-        )}
-        {checkRow(
-          'Contours',
-          contours,
-          () => set('terrainContours', !contours),
-          <View style={!contours && styles.dimmed}>
-            <DetentSlider
-              detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-              selected={intervalM}
-              onSelect={(m) => set('terrainContourIntervalM', m)}
-              disabled={!contours}
-              width={100}
-              {...SLIDER_PALETTE}
-            />
-          </View>,
-        )}
-        {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
-        <ItemRow
-          icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
-          iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
-          title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
-          onPress={onOpenTrailNetworks}
-          chevron
-        />
-        {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
-      </ScrollView>
+          />
+        </View>,
+      )}
+      {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
+      <ItemRow
+        icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
+        iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
+        title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
+        onPress={onOpenTrailNetworks}
+        chevron
+      />
+      {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
     </View>
   );
 }
