@@ -362,6 +362,11 @@ export class WindGl {
   private numParticles = 0;
   private screenWidth = 0;
   private screenHeight = 0;
+  /** Full drawing-buffer size (the composite target). */
+  private viewWidth = 0;
+  private viewHeight = 0;
+  /** Current trail-buffer scale (see resize). */
+  private scale = 1;
   /** Physical-px multiplier for gl_PointSize (the GLView buffer is physical). */
   pointScale = 1;
 
@@ -384,19 +389,30 @@ export class WindGl {
     this.resize();
   }
 
-  /** (Re)allocate the screen/trail textures to the drawing buffer size. */
-  resize(): void {
+  /**
+   * (Re)allocate the screen/trail textures. They are sized to the drawing
+   * buffer times `resolutionScale`: the three fullscreen passes per frame are
+   * the real cost on fill-rate-bound devices, so rendering them at half size
+   * (and letting the composite upscale) is the throttle that actually works.
+   * The composite still covers the full drawing buffer.
+   */
+  resize(scale = 1): void {
     const gl = this.gl;
-    const w = gl.drawingBufferWidth;
-    const h = gl.drawingBufferHeight;
+    const w = Math.max(1, Math.round(gl.drawingBufferWidth * scale));
+    const h = Math.max(1, Math.round(gl.drawingBufferHeight * scale));
+    this.viewWidth = gl.drawingBufferWidth;
+    this.viewHeight = gl.drawingBufferHeight;
+    this.scale = scale;
     if (w === this.screenWidth && h === this.screenHeight && this.screenTexture !== null) return;
     this.screenWidth = w;
     this.screenHeight = h;
     const empty = new Uint8Array(w * h * 4);
     if (this.backgroundTexture) gl.deleteTexture(this.backgroundTexture);
     if (this.screenTexture) gl.deleteTexture(this.screenTexture);
-    this.backgroundTexture = createTexture(gl, gl.NEAREST, empty, w, h);
-    this.screenTexture = createTexture(gl, gl.NEAREST, empty, w, h);
+    // LINEAR so an upscaled trail buffer composites smoothly instead of
+    // showing the scaling as blocky streaks.
+    this.backgroundTexture = createTexture(gl, gl.LINEAR, empty, w, h);
+    this.screenTexture = createTexture(gl, gl.LINEAR, empty, w, h);
   }
 
   /** Clear the accumulated trails (gesture settle → fresh streaks). */
@@ -463,7 +479,7 @@ export class WindGl {
   ): void {
     const gl = this.gl;
     if (!this.hasWind) {
-      gl.viewport(0, 0, this.screenWidth, this.screenHeight);
+      gl.viewport(0, 0, this.viewWidth, this.viewHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       return;
@@ -492,7 +508,7 @@ export class WindGl {
     // PREMULTIPLIED (see DRAW_FRAG), so the blend must be ONE /
     // ONE_MINUS_SRC_ALPHA — a straight-alpha blend would multiply the colour
     // by alpha a second time and paint faded trails as dark smears.
-    gl.viewport(0, 0, this.screenWidth, this.screenHeight);
+    gl.viewport(0, 0, this.viewWidth, this.viewHeight);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
@@ -530,7 +546,7 @@ export class WindGl {
     gl.uniform1f(p.uniform.u_lat_north ?? null, data.latNorth);
     gl.uniform1f(p.uniform.u_lat_span ?? null, data.latSpanDeg);
     gl.uniform1f(p.uniform.u_lon_span ?? null, data.lonSpanDeg);
-    gl.uniform1f(p.uniform.u_point_size ?? null, POINT_SIZE * this.pointScale);
+    gl.uniform1f(p.uniform.u_point_size ?? null, POINT_SIZE * this.pointScale * this.scale);
     gl.drawArrays(gl.POINTS, 0, this.numParticles);
   }
 

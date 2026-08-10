@@ -1,12 +1,13 @@
 /**
- * Self-throttling for the wind particle overlay (weather M3 perf gates):
- * the render loop feeds executed-frame times into a pure ladder that first
- * sheds particles in 25% steps and, only at the floor, flips to a static
- * streak render. All decisions are pure so Jest can pin the ladder; the GL
- * component just applies the returned state.
+ * Self-throttling for the wind particle overlay (weather M3 perf gates): the
+ * render loop feeds executed-frame times into a pure ladder that sheds
+ * particles, then render resolution, then frame rate. All decisions are pure
+ * so Jest can pin the ladder; the GL component just applies the state.
  *
  * Gate numbers come from the design doc (§2.5): sustain ≥ 28 fps at 2,000
- * particles on the Android target; recovery after a gesture ≤ 400 ms.
+ * particles on the Android target; recovery after a gesture ≤ 400 ms. The
+ * thresholds below are stated against FRAME_CAP_FPS rather than as absolute
+ * fps, because the loop throttles itself and can never measure faster.
  */
 
 /** Design-doc target particle count (Android gate). */
@@ -52,11 +53,28 @@ export function emaUpdate(prev: number | null, sampleMs: number, alpha = 0.15): 
   return prev + alpha * (sampleMs - prev);
 }
 
+/**
+ * Render scales for the trail buffers, worst last. Shedding particles barely
+ * moves the needle when the cost is the three FULLSCREEN passes per frame
+ * (fade, composite, advect) — measured on the iOS simulator, the frame time
+ * held at ~90 ms while the ladder cut 2000 particles to 500. Halving the
+ * buffer is a 4x cut in that fill cost, so it is the lever that pays.
+ */
+export const RESOLUTION_STEPS = [1, 0.7, 0.5] as const;
+/**
+ * Frame intervals, worst last (30 / 20 / 15 fps). The slowest step still
+ * ANIMATES: a frozen overlay is indistinguishable from a broken feature, so
+ * the ladder slows down instead of ever giving up.
+ */
+export const FRAME_INTERVAL_STEPS = [FRAME_INTERVAL_MS, 50, 66] as const;
+
 export interface WindPerfState {
   /** Particles the renderer should currently run. */
   particleCount: number;
-  /** True once even MIN_PARTICLES can't hold the fps gate: render static streaks. */
-  staticMode: boolean;
+  /** Trail-buffer scale relative to the drawing buffer (1 = full res). */
+  resolutionScale: number;
+  /** Frame interval the loop should target, ms. */
+  frameIntervalMs: number;
   /** Frame-time EMA, ms (null until the first frame). */
   emaFrameMs: number | null;
   /** Frames since the last ladder change (hysteresis window). */
@@ -64,21 +82,41 @@ export interface WindPerfState {
 }
 
 export function initialPerfState(target = TARGET_PARTICLES): WindPerfState {
-  return { particleCount: target, staticMode: false, emaFrameMs: null, framesSinceChange: 0 };
+  return {
+    particleCount: target,
+    resolutionScale: 1,
+    frameIntervalMs: FRAME_INTERVAL_MS,
+    emaFrameMs: null,
+    framesSinceChange: 0,
+  };
+}
+
+/** How degraded the state is, 0 (pristine) upward — used to order the ladder. */
+function stepIndex(steps: readonly number[], value: number): number {
+  const i = steps.indexOf(value);
+  return i === -1 ? 0 : i;
 }
 
 /**
- * Advance the ladder by one executed frame. Degrades 25% per window while
- * the EMA fps sits under DEGRADE_FPS, flips to staticMode at the floor, and
- * climbs back (never past TARGET) when fps recovers. staticMode is sticky —
- * only a reset (new field / layer toggle) re-arms animation.
+ * Advance the ladder by one executed frame.
+ *
+ * Degrading order (each step waits out PERF_WINDOW_FRAMES): particles first
+ * (cheap and invisible at the top end), then RESOLUTION, then CADENCE. It
+ * never stops animating — the M3 design's "static streak" endgame froze the
+ * overlay permanently and read to users as a dead feature, which is the
+ * behaviour this ladder exists to avoid, not to cause. Recovery walks the
+ * same rungs back up in reverse, so a transient stall costs a few seconds of
+ * softer rendering rather than the rest of the session.
  */
 export function perfStep(state: WindPerfState, frameMs: number): WindPerfState {
   const emaFrameMs = emaUpdate(state.emaFrameMs, frameMs);
   const framesSinceChange = state.framesSinceChange + 1;
   const next: WindPerfState = { ...state, emaFrameMs, framesSinceChange };
-  if (state.staticMode || framesSinceChange < PERF_WINDOW_FRAMES) return next;
+  if (framesSinceChange < PERF_WINDOW_FRAMES) return next;
   const fps = 1000 / emaFrameMs;
+  const resIdx = stepIndex(RESOLUTION_STEPS, state.resolutionScale);
+  const capIdx = stepIndex(FRAME_INTERVAL_STEPS, state.frameIntervalMs);
+
   if (fps < DEGRADE_FPS) {
     if (state.particleCount > MIN_PARTICLES) {
       return {
@@ -87,14 +125,46 @@ export function perfStep(state: WindPerfState, frameMs: number): WindPerfState {
         framesSinceChange: 0,
       };
     }
-    return { ...next, staticMode: true, framesSinceChange: 0 };
+    if (resIdx < RESOLUTION_STEPS.length - 1) {
+      return {
+        ...next,
+        resolutionScale: RESOLUTION_STEPS[resIdx + 1] ?? state.resolutionScale,
+        framesSinceChange: 0,
+      };
+    }
+    if (capIdx < FRAME_INTERVAL_STEPS.length - 1) {
+      return {
+        ...next,
+        frameIntervalMs: FRAME_INTERVAL_STEPS[capIdx + 1] ?? state.frameIntervalMs,
+        framesSinceChange: 0,
+      };
+    }
+    return next; // bottom rung: slow, low-res, but still moving
   }
-  if (fps > RESTORE_FPS && state.particleCount < TARGET_PARTICLES) {
-    return {
-      ...next,
-      particleCount: Math.min(TARGET_PARTICLES, Math.round(state.particleCount / 0.75)),
-      framesSinceChange: 0,
-    };
+
+  // Recovery, most-degraded rung first.
+  if (fps > RESTORE_FPS) {
+    if (capIdx > 0) {
+      return {
+        ...next,
+        frameIntervalMs: FRAME_INTERVAL_STEPS[capIdx - 1] ?? state.frameIntervalMs,
+        framesSinceChange: 0,
+      };
+    }
+    if (resIdx > 0) {
+      return {
+        ...next,
+        resolutionScale: RESOLUTION_STEPS[resIdx - 1] ?? state.resolutionScale,
+        framesSinceChange: 0,
+      };
+    }
+    if (state.particleCount < TARGET_PARTICLES) {
+      return {
+        ...next,
+        particleCount: Math.min(TARGET_PARTICLES, Math.round(state.particleCount / 0.75)),
+        framesSinceChange: 0,
+      };
+    }
   }
   return next;
 }

@@ -39,6 +39,19 @@ module.exports = [
     },
   },
   {
+    // Repo tooling runs in Node, not React Native: give it Node's globals so
+    // Buffer/process/console are not flagged as undefined.
+    files: ['scripts/**/*.{js,mjs,cjs}'],
+    languageOptions: {
+      globals: {
+        Buffer: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+  },
+  {
     ignores: [
       'dist/*',
       'node_modules/*',

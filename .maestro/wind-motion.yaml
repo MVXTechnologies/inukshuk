@@ -1,0 +1,61 @@
+# Drives the app to a live Wind layer and stops — the setup half of the
+# wind-particle MOTION gate (scripts/wind-motion-check.mjs takes it from here
+# with two screen captures and a pixel diff).
+#
+# Why a separate flow from weather-wind.yaml: that one is a crash gate and
+# deliberately asserts nothing about pixels. This one exists so the checker
+# can leave the camera perfectly still on a wind field and measure whether
+# the GL overlay actually animates — the thing `assertVisible` cannot see.
+#
+# The location is set to Québec City so the HRDPS domain has a real field;
+# a viewport over open ocean or outside Canada would legitimately show fewer
+# streaks and make the gate flaky.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- setLocation:
+    latitude: 46.8131
+    longitude: -71.2082
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn: 'Locate'
+# --- Turn the Wind layer on from the Overlays menu picker ---
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Weather(: .*)?'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Weather(: .*)?'
+          timeout: 10000
+- tapOn: 'Weather(: .*)?'
+# Dialog-open sentinel: a picker row never visible while the dialog is closed.
+- extendedWaitUntil:
+    visible: '.*Rain radar.*'
+    timeout: 10000
+- tapOn: '.*Wind.*'
+- tapOn: 'Done'
+# The scrubber coming up means the forecast layer is live; by now the GLView
+# is mounted over the map and the field fetch is in flight.
+- extendedWaitUntil:
+    visible: '.*Weather timeline.*'
+    timeout: 15000
+- assertVisible: 'Map actions'
