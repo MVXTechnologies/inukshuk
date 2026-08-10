@@ -5,7 +5,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { FAB, Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
   CONTOUR_INTERVALS,
@@ -242,59 +242,61 @@ function TopologySubmenu({
   return (
     <View>
       <SubmenuHeader title="Topology" onBack={onBack} />
-      <ItemRow
-        icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
-        title={contentTitle}
-        onPress={onOpenFolders}
-        chevron
-      />
-      {checkRow(
-        'Slope',
-        slope,
-        () => {
-          const next = !slope;
-          set('terrainSlope', next);
-          if (next) onSlopeEnabled();
-        },
-        <RangeSlider
-          min={0}
-          max={90}
-          width={100}
-          lo={slopeMinDeg}
-          hi={slopeMaxDeg}
-          disabled={!slope}
-          accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
-          onChange={(newLo, newHi) => {
-            set('terrainSlopeMinDeg', newLo);
-            set('terrainSlopeMaxDeg', newHi);
-          }}
-          {...SLIDER_PALETTE}
-        />,
-      )}
-      {checkRow(
-        'Contours',
-        contours,
-        () => set('terrainContours', !contours),
-        <View style={!contours && styles.dimmed}>
-          <DetentSlider
-            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-            selected={intervalM}
-            onSelect={(m) => set('terrainContourIntervalM', m)}
-            disabled={!contours}
+      <ScrollView style={styles.submenuScroll} showsVerticalScrollIndicator={false}>
+        <ItemRow
+          icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
+          title={contentTitle}
+          onPress={onOpenFolders}
+          chevron
+        />
+        {checkRow(
+          'Slope',
+          slope,
+          () => {
+            const next = !slope;
+            set('terrainSlope', next);
+            if (next) onSlopeEnabled();
+          },
+          <RangeSlider
+            min={0}
+            max={90}
             width={100}
+            lo={slopeMinDeg}
+            hi={slopeMaxDeg}
+            disabled={!slope}
+            accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
+            onChange={(newLo, newHi) => {
+              set('terrainSlopeMinDeg', newLo);
+              set('terrainSlopeMaxDeg', newHi);
+            }}
             {...SLIDER_PALETTE}
-          />
-        </View>,
-      )}
-      {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
-      <ItemRow
-        icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
-        iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
-        title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
-        onPress={onOpenTrailNetworks}
-        chevron
-      />
-      {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
+          />,
+        )}
+        {checkRow(
+          'Contours',
+          contours,
+          () => set('terrainContours', !contours),
+          <View style={!contours && styles.dimmed}>
+            <DetentSlider
+              detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+              selected={intervalM}
+              onSelect={(m) => set('terrainContourIntervalM', m)}
+              disabled={!contours}
+              width={100}
+              {...SLIDER_PALETTE}
+            />
+          </View>,
+        )}
+        {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
+        <ItemRow
+          icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
+          iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
+          title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
+          onPress={onOpenTrailNetworks}
+          chevron
+        />
+        {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
+      </ScrollView>
     </View>
   );
 }
@@ -328,7 +330,7 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
             <View style={styles.disc}>
               <Icon
                 source={id === null ? 'eye-off-outline' : WEATHER_LAYER_ICONS[id]}
-                size={22}
+                size={17}
                 color={id === null ? wc.inkMuted : wc.ink}
               />
             </View>
@@ -348,14 +350,16 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
   return (
     <View>
       <SubmenuHeader title="Weather" onBack={onBack} />
-      <Text style={styles.hint}>
-        Live layers from Environment and Climate Change Canada, draped over the map. Needs a
-        connection; hidden while &quot;Locally downloaded only&quot; is on.
-      </Text>
-      {row(null, 'None')}
-      {WEATHER_LAYERS.map((l) =>
-        row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
-      )}
+      {/* Owner call (2026-08-10): a sub-menu must occupy the SAME footprint as
+          the menu it replaces — no growing panel that swallows the map. The
+          ECCC explainer moved to Settings → System info → Maps & data; the
+          list scrolls inside a capped height instead of stretching. */}
+      <ScrollView style={styles.submenuScroll} showsVerticalScrollIndicator={false}>
+        {row(null, 'None')}
+        {WEATHER_LAYERS.map((l) =>
+          row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -540,6 +544,9 @@ export function MapOverlaysMenu({
 
 /** 40 px icon disc — same slot the old gradient thumbnail occupied. */
 const DISC_D = 40;
+/** Weather rows use a smaller disc so the sub-menu keeps the top level's
+ * footprint (owner call 2026-08-10). */
+const WEATHER_DISC = 30;
 
 const styles = StyleSheet.create({
   controlFab: { borderRadius: 24 },
@@ -584,6 +591,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   backTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: wc.ink },
+  submenuScroll: { maxHeight: 268 },
   hint: {
     color: wc.inkMuted,
     fontSize: 12,
@@ -620,13 +628,13 @@ const styles = StyleSheet.create({
   layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rightCol: { width: 170, alignItems: 'flex-end' },
   // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
-  weatherRow: { borderRadius: 12, paddingVertical: 7, paddingHorizontal: 6 },
+  weatherRow: { borderRadius: 12, paddingVertical: 3, paddingHorizontal: 6 },
   weatherRowInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   // Constant-size ring wrapper so selection never shifts the layout.
   discRing: {
-    width: DISC_D + 6,
-    height: DISC_D + 6,
-    borderRadius: (DISC_D + 6) / 2,
+    width: WEATHER_DISC + 6,
+    height: WEATHER_DISC + 6,
+    borderRadius: (WEATHER_DISC + 6) / 2,
     borderWidth: 2,
     borderColor: 'transparent',
     alignItems: 'center',
@@ -634,8 +642,8 @@ const styles = StyleSheet.create({
   },
   discRingSelected: { borderColor: wc.accent },
   disc: {
-    width: DISC_D,
-    height: DISC_D,
+    width: WEATHER_DISC,
+    height: WEATHER_DISC,
     borderRadius: DISC_D / 2,
     backgroundColor: '#353B43',
     alignItems: 'center',
