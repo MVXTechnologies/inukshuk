@@ -39,20 +39,34 @@ paid route or stays not-for-navigation.
 Open: owner to confirm wind particles visible after M3 OTA; marine+weather
 simultaneous UX TBD; multi-model source decision still open.
 
-## Overnight autonomous run (owner away 2026-08-09/10)
+## Shipped overnight 2026-08-09/10 (owner away, autonomous)
 
-In flight: overlays drill-down (PR #201, CI green + Android 17/17 — iOS
-device leg pending), marine ENC chart mode (`feature/marine-depth`,
-built + check-green, gates pending), wind-particle hotfix
-(`fix/wind-particles`: six root causes found incl. a shader that never
-compiled; delivery-chain bug still open, agent iterating with a permanent
-pixel-motion gate as the deliverable). Rig lessons this session: never run
-two Maestro sessions against one device (killed a suite), and a persistent
-disk guard now auto-purges build intermediates under 3 GB free.
+All OTA'd to 1.5.0 + 1.4.0:
 
-Parked on owner decisions: SpotWx-style point-forecast page (needs the
-S-1 data-path call: NAS relay vs Open-Meteo), GeoGarage quote email,
-worldwide chart ladder + offline marine packs.
+- **Wind particles FIXED** (PR #202) — 8 root causes; the killer was a
+  shader that never compiled, the second an `endFrameEXP` that queues an
+  async present our RAF loop never delivered (the debug probe's blocking
+  `readPixels` was masking it — the overlay only worked while watched).
+  Verified by pixel diff (196k px, 8/8 bands). New permanent gate:
+  `npm run wind:motion`.
+- **Overlays drill-down** (PR #201) — Topology/Weather/Marine groups with
+  in-place sub-menus, Marine a single toggle, "Locally downloaded only"
+  moved to Settings → Data settings. Review pass caught invisible labels
+  (flex:1 in a non-flex touchable) + an a11y-container defect that also
+  affected VoiceOver.
+- **Marine ENC chart mode** (PR #203) — client-rendered depth bands,
+  contours, spot soundings, chart-tan land (the CHS server's rendering was
+  the "awful resolution", not the data); tap-for-depth; unified tap chip
+  (coords / weather / depth). Render budget raised 1.5× after visual
+  review vs the iBoating reference.
+
+Rig lessons: never share one device between two Maestro sessions; the
+drill-down panel is near full-width so flow dismiss taps must go ABOVE it;
+a persistent disk guard now purges intermediates under 3 GB free.
+
+Next build wave (no owner input needed): marine worldwide chart ladder
+(NOAA/EMODnet/GEBCO), offline marine packs + low-res download prompt,
+store M2 (regions/USGS/NPS), trim-button move.
 
 ## Awaiting owner design review (Checkpoint 1 — mockups published 2026-08-09)
 
