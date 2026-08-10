@@ -64,9 +64,14 @@ Rig lessons: never share one device between two Maestro sessions; the
 drill-down panel is near full-width so flow dismiss taps must go ABOVE it;
 a persistent disk guard now purges intermediates under 3 GB free.
 
-Next build wave (no owner input needed): marine worldwide chart ladder
-(NOAA/EMODnet/GEBCO), offline marine packs + low-res download prompt,
-store M2 (regions/USGS/NPS), trim-button move.
+- **Marine worldwide + offline packs** (PR #204) — jurisdiction ladder
+  CHS→NOAA→EMODnet→GEBCO with the active source named in the legend and
+  tap chip; free local packs (~2 MB/cell after fixing a 4× tile-padding
+  waste) with the owner's low-res download banner; pack management in
+  Settings → Data settings.
+
+Next build wave (no owner input needed): store M2 (regions, USGS/NPS
+sources), trim-button move, trail navigation mode (needs a design pass).
 
 ## Awaiting owner design review (Checkpoint 1 — mockups published 2026-08-09)
 
