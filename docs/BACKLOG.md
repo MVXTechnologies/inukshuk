@@ -45,6 +45,18 @@ paid route or stays not-for-navigation.
 Open: owner to confirm wind particles visible after M3 OTA; marine+weather
 simultaneous UX TBD; multi-model source decision still open.
 
+## Awaiting owner design review (Checkpoint 1 — mockups published 2026-08-09)
+
+Review page (private artifact) covers, with decisions D-1..D-7: marine
+depth client-rendering (palette A/B, contours), the 13 m data ceiling +
+GeoGarage quote email, worldwide chart ladder timing, the unified
+mode-aware tap inspector (base = coordinates [new], weather = value
+[shipped], marine = depth), and the overlays drill-down menu redesign
+(Topology/Weather/Marine groups, in-place sub-menus, "Locally downloaded
+only" likely moving to Settings). Build agents launch only on the owner's
+calls. New process: [[pre-ship-review-checkpoints]] — mockup approval
+before build, device screenshots/recordings before merge.
+
 ## Queued (owner requests, 2026-08-07)
 
 1. ~~**Bottom-left map chrome must go**~~ — shipped in PR #185 (OTA'd to
