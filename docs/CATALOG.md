@@ -30,25 +30,30 @@ Pages root, so `docs/catalog/v2/index.json` serves at
       "homepage": "https://…",
     },
   ],
-  "categoryCounts": { "topo": 31240, "nautical": 1180, "parks": 410 },
+  "categoryCounts": { "topo": 65877 },
   "shards": [
     {
-      "id": "topo-n40w080",
+      "id": "topo-n40w080-3",
       "category": "topo",
-      "path": "shards/topo-n40w080.json",
-      "itemCount": 312,
-      "bbox": [-79.98, 40.01, -70.02, 49.97],
-      "byteSize": 118432,
+      "path": "shards/topo-n40w080-3.json",
+      "itemCount": 96,
+      "bbox": [-75.0, 45.0, -70.0, 50.0],
+      "byteSize": 37000,
     },
   ],
 }
 ```
 
-`categoryCounts` exists so the landing grid can say "Nautical · 1,180 charts"
+`categoryCounts` exists so the landing grid can say "Topo · 65,877 maps"
 **before a single shard is fetched**. `bbox` is the union of the shard's item
 bboxes — deliberately not the cell, so a sheet whose coverage spills into the
 next cell is still found by nearest-shard ranking. `byteSize` lets the client
 budget a prefetch instead of guessing.
+
+**As published today:** 65,877 items in **255 shards**, index **61.5 KB**,
+shard bodies 23 MB in total, largest shard 147 KB / 400 items. Measured
+worst-case first paint from three places on Earth — Québec City 300 KB, Denver
+434 KB, Alice Springs 51 KB (index + three nearest shards).
 
 ### `v2/shards/<id>.json` — fetched on demand
 
@@ -171,6 +176,14 @@ index, rank shards, fetch the nearest, merge, show "Around you" — runs on a
 device. It stays ~10 KB, so the e2e run is no slower than before.
 `src/core/catalog/fixture.test.ts` guards every claim `.maestro/store.yaml`
 makes about it.
+
+The fixture's **nautical** shard is intentional even though the published
+catalog has no nautical items yet (see `docs/CATALOG-SOURCES.md` §2 — no
+hydrographic office publishes chart documents in a format we can render). Two
+categories are what make the e2e run prove the parts that only matter at world
+scale: round-robin shard selection, the per-category cap in "Around you", and a
+category grid with more than one card. When a marine source becomes shippable
+it lands in exactly this category, against plumbing already covered on device.
 
 ## 5. Sources
 
