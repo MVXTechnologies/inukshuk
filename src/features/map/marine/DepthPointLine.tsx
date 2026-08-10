@@ -1,14 +1,17 @@
 import { formatDepthReadout } from '@core/geo/marineDepth';
 import type { LatLng } from '@core/models';
+import { useMarinePackStore } from '@state/marinePackStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { MapPointLine } from '../components/MapPointChip';
 import { useDepthPointValue } from './useDepthPointValue';
 
 /**
  * The depth line of the tap-anywhere chip (marine wave D §D1): with marine
- * mode on, a tap shows the surveyed NONNA depth under the finger —
+ * mode on, a tap shows the surveyed depth under the finger —
  * "Depth 26.5 m · chart datum" (drying heights read "Drying 3.8 m"). Feet
- * under imperial units.
+ * under imperial units. A second muted line names WHO answered (§D3's
+ * honesty rule): a 10 m CHS survey and a 450 m global compilation must never
+ * look like the same number, and an offline pack says so out loud.
  *
  * While the query is in flight the line shows an ellipsis, exactly like the
  * weather line. On any failure — offline, land, no survey coverage — the
@@ -18,13 +21,16 @@ import { useDepthPointValue } from './useDepthPointValue';
  * renders one), which is the honest answer over unsurveyed water.
  */
 export function DepthPointLine({ at }: { at: LatLng }) {
-  const { status, valueM } = useDepthPointValue(at);
+  const installedPacks = useMarinePackStore((s) => s.installed);
+  const { status, valueM, sourceLabel } = useDepthPointValue(at, installedPacks);
   const imperial = useSettingsStore((s) => s.units === 'imperial');
 
   if (status === 'error') return null;
+  if (status !== 'ready' || valueM === null) return <MapPointLine text="…" />;
   return (
-    <MapPointLine
-      text={status === 'ready' && valueM !== null ? formatDepthReadout(valueM, imperial) : '…'}
-    />
+    <>
+      <MapPointLine text={formatDepthReadout(valueM, imperial)} />
+      {sourceLabel !== null && <MapPointLine text={sourceLabel} muted />}
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import type { FloatGrid } from './floatTiff';
-import { isDepthNoData, mercXToLon, mercYToLat } from './marineDepth';
+import { isDepthNoData } from './marineDepth';
+import { gridXToLon, gridYToLat, type MarineGridCrs } from './marineSources';
 
 /**
  * Classic ENC chart rendering of the raw NONNA depth grid (marine wave D §D2,
@@ -195,6 +196,33 @@ function compositeValueAtMerc(
   return sampleDepthValue(grid100, fx, fy);
 }
 
+/**
+ * Mask the dry land out of an ELEVATION grid (marine wave D §D3): NONNA and
+ * EMODnet publish depth with a nodata value over land, but the NOAA NCEI
+ * mosaic is a continuous terrain model — without this every hill above the
+ * shore would render as a vast drying flat. Values at or above `cutoffM`
+ * metres above chart datum become NaN, which the sampler already reads as
+ * "no data" (small positive values survive: those are real drying heights).
+ * Returns a new grid unless nothing needed masking.
+ */
+export function maskLandAbove(grid: FloatGrid, cutoffM: number): FloatGrid {
+  let hit = false;
+  for (let i = 0; i < grid.data.length; i++) {
+    const v = grid.data[i];
+    if (v !== undefined && Number.isFinite(v) && v >= cutoffM) {
+      hit = true;
+      break;
+    }
+  }
+  if (!hit) return grid;
+  const data = Float32Array.from(grid.data);
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (v !== undefined && Number.isFinite(v) && v >= cutoffM) data[i] = NaN;
+  }
+  return { ...grid, data };
+}
+
 export interface DepthChartImage {
   width: number;
   height: number;
@@ -276,11 +304,12 @@ export function renderDepthChart(
  */
 export function depthChartCorners(
   grid10: FloatGrid,
+  crs: MarineGridCrs = 'EPSG:3857',
 ): [[number, number], [number, number], [number, number], [number, number]] {
-  const west = mercXToLon(grid10.x0);
-  const east = mercXToLon(grid10.x0 + grid10.dx * grid10.width);
-  const north = mercYToLat(grid10.y0);
-  const south = mercYToLat(grid10.y0 - grid10.dy * grid10.height);
+  const west = gridXToLon(crs, grid10.x0);
+  const east = gridXToLon(crs, grid10.x0 + grid10.dx * grid10.width);
+  const north = gridYToLat(crs, grid10.y0);
+  const south = gridYToLat(crs, grid10.y0 - grid10.dy * grid10.height);
   return [
     [west, north],
     [east, north],
@@ -307,7 +336,11 @@ const MAX_SOUNDINGS = 400;
  * block minimum is simply the local depth, so numbers appear everywhere the
  * reference shows them. Positions are cell centres.
  */
-export function selectSoundings(grid10: FloatGrid, grid100: FloatGrid | null): Sounding[] {
+export function selectSoundings(
+  grid10: FloatGrid,
+  grid100: FloatGrid | null,
+  crs: MarineGridCrs = 'EPSG:3857',
+): Sounding[] {
   const out: Sounding[] = [];
   const block = SOUNDING_BLOCK_CELLS;
   const g10 = infillSeams(grid10, 1);
@@ -330,14 +363,14 @@ export function selectSoundings(grid10: FloatGrid, grid100: FloatGrid | null): S
         const yMerc = grid10.y0 - (by + (rEnd - by) / 2) * grid10.dy;
         const v = compositeValueAtMerc(grid10, grid100, xMerc, yMerc);
         if (v !== null) {
-          out.push({ lon: mercXToLon(xMerc), lat: mercYToLat(yMerc), depthM: -v });
+          out.push({ lon: gridXToLon(crs, xMerc), lat: gridYToLat(crs, yMerc), depthM: -v });
         }
         continue;
       }
       if (best !== null) {
         const xMerc = grid10.x0 + (best.c + 0.5) * grid10.dx;
         const yMerc = grid10.y0 - (best.r + 0.5) * grid10.dy;
-        out.push({ lon: mercXToLon(xMerc), lat: mercYToLat(yMerc), depthM: -best.v });
+        out.push({ lon: gridXToLon(crs, xMerc), lat: gridYToLat(crs, yMerc), depthM: -best.v });
       }
     }
   }

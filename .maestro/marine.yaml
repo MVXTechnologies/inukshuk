@@ -23,6 +23,16 @@
 # - Wave D adds a tap-for-depth crash gate: the readout chip's depth line is
 #   a live NONNA WCS query, so offline it simply never renders. Taps below
 #   assert only the map's own chrome, never the chip or a depth number.
+# - Wave D3/D4 add two more gates, both network-independent:
+#   * the offline-pack BANNER. Whether it appears depends on the emulator's
+#     location, zoom and the coverage ladder's verdict, so it is NEVER
+#     asserted visible — it is only tapped WHEN visible, to prove that the
+#     Surface (deliberately not a Portal/Dialog) and its snooze path don't
+#     crash or soft-lock the map underneath.
+#   * the Settings -> Data settings pack list, which is pure local UI: its
+#     empty state and the auto-update switch must always render.
+#   Both use wildcard matchers with a LEADING and TRAILING '.*' — iOS merges
+#   a row's title and subtitle into one accessibility string.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -95,6 +105,25 @@ appId: com.inukshuk.app
     end: 50%,45%
 - assertVisible: 'Map actions'
 - assertVisible: 'Not for navigation'
+# --- Offline marine pack banner (wave D §D4): a plain Surface row in the
+# bottom stack, never a Portal (One UI touch-swallow). It only offers where
+# the coverage ladder says a pack would beat what is on screen, so its
+# presence is environment-dependent and must not be asserted. When it IS up,
+# "Not now" snoozes the region for 30 days — tap it and prove the map is
+# still alive and the chip is untouched. ---
+- runFlow:
+    when:
+      visible: '.*Marine chart pack.*'
+    commands:
+      - assertVisible: 'Map actions'
+      - tapOn: '.*Not now.*'
+      - assertVisible: 'Map actions'
+      - assertVisible: 'Not for navigation'
+      # Snoozed: the banner must not immediately nag again after a pan.
+      - swipe:
+          start: 50%,55%
+          end: 50%,45%
+      - assertVisible: 'Map actions'
 # --- The menu row reflects the active layers; turn everything back off so
 # reruns and later flows start from the default map. ---
 # --- Toggle marine back off so reruns and later flows start from the
@@ -119,3 +148,47 @@ appId: com.inukshuk.app
           timeout: 5000
 # Chip gone with the chart mode off.
 - assertNotVisible: 'Not for navigation'
+
+# --- Offline marine packs in Settings -> Data settings (wave D §D4): pure
+# local UI, so this asserts for real. With no packs downloaded the section
+# shows its empty state; the auto-update switch is always present. The row
+# is NOT tapped — flipping it would change persisted behaviour for later
+# flows, and deleting a pack needs one to exist. ---
+- tapOn:
+    text: 'Settings(, tab.*)?'
+    retryTapIfNoChange: true
+- assertVisible: '.*Data settings.*'
+- scrollUntilVisible:
+    element:
+      text: '.*Data settings.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*Offline maps.*'
+          commands:
+            - tapOn: '.*Data settings.*'
+      - extendedWaitUntil:
+          visible: '.*Offline maps.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: '.*Offline marine packs.*'
+    direction: DOWN
+    centerElement: true
+- assertVisible: '.*Offline marine packs.*'
+- scrollUntilVisible:
+    element:
+      text: '.*Auto-update marine packs.*'
+    direction: DOWN
+- assertVisible: '.*Auto-update marine packs.*'
+# Back to the map so reruns and later flows start where they expect to.
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000

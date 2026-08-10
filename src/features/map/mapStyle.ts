@@ -235,6 +235,13 @@ export interface OsmStyleOptions {
     drape: { uri: string; coordinates: [LngLat, LngLat, LngLat, LngLat] } | null;
     soundings: FeatureCollection<Point, SoundingProperties> | null;
     wmsFallback: boolean;
+    /**
+     * Tile template for the fallback bathymetry drape when the ladder
+     * (`@core/geo/marineSources`, wave D §D3) landed on a source that only
+     * publishes imagery — GEBCO worldwide, NOAA ENC Online in US waters.
+     * Null keeps the legacy CHS WMS pair, which is right in Canada.
+     */
+    rasterUrl?: string | null;
   };
 }
 
@@ -247,6 +254,17 @@ const WEATHER_MUTED_PAINT: Record<string, number> = {
   'raster-saturation': -0.85,
   'raster-contrast': -0.08,
 };
+
+/**
+ * Tile template for a marine reference drape. The seamark layer is always
+ * OpenSeaMap; the bathymetry drape follows the coverage ladder's fallback
+ * choice when there is one (wave D §D3) and otherwise stays on the legacy
+ * CHS WMS pair.
+ */
+function marineDrapeUrl(id: MarineLayerId, options: OsmStyleOptions): string {
+  if (id !== 'bathymetry') return marineTileUrl(id);
+  return options.marineChart?.rasterUrl ?? marineTileUrl(id);
+}
 
 /**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
@@ -304,9 +322,15 @@ export function buildOsmStyle(
           `marine-${l.id}`,
           {
             type: 'raster' as const,
-            tiles: [marineTileUrl(l.id)],
+            tiles: [marineDrapeUrl(l.id, options)],
             tileSize: 256,
-            maxzoom: l.maxzoom,
+            // A worldwide fallback source is coarse; overscaling it past its
+            // own detail is the blockiness wave D removed. The catalog's
+            // maxzoom still governs the Canadian WMS pair.
+            maxzoom:
+              l.id === 'bathymetry' && (options.marineChart?.rasterUrl ?? null) !== null
+                ? 12
+                : l.maxzoom,
             attribution: l.attribution,
           },
         ]),

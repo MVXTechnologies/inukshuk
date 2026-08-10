@@ -4,6 +4,7 @@ import {
   depthBandIndex,
   depthChartCorners,
   infillSeams,
+  maskLandAbove,
   renderDepthChart,
   selectSoundings,
   soundingLabel,
@@ -193,5 +194,90 @@ describe('soundingsFeatureCollection', () => {
     expect(fc.features[1]?.properties.shallow).toBe(0);
     expect(fc.features[0]?.properties.sort).toBeLessThan(fc.features[1]?.properties.sort ?? -1);
     expect(fc.features[0]?.geometry.coordinates).toEqual([-71.2, 46.8]);
+  });
+});
+
+describe('maskLandAbove', () => {
+  /** A degrees-anchored grid, the shape the EPSG:4326 sources answer with. */
+  function degGrid(values: number[]): FloatGrid {
+    return {
+      width: 2,
+      height: 2,
+      data: Float32Array.from(values),
+      x0: -70.98,
+      y0: 42.36,
+      dx: 0.0006,
+      dy: 0.0005,
+    };
+  }
+
+  it('masks terrain elevations but keeps real drying heights', () => {
+    const masked = maskLandAbove(degGrid([-12, 0.2, 41.5, -3]), 0.5);
+    expect(masked.data[0]).toBe(-12);
+    expect(masked.data[1]).toBeCloseTo(0.2, 5);
+    expect(Number.isNaN(masked.data[2] ?? 0)).toBe(true);
+    expect(masked.data[3]).toBe(-3);
+  });
+
+  it('returns the input untouched when nothing is dry (no needless copy)', () => {
+    const g = degGrid([-12, -3, -4, -5]);
+    expect(maskLandAbove(g, 0.5)).toBe(g);
+  });
+
+  it('leaves the original grid alone when it does mask', () => {
+    const g = degGrid([-12, 99, -4, -5]);
+    const masked = maskLandAbove(g, 0.5);
+    expect(masked).not.toBe(g);
+    expect(g.data[1]).toBe(99);
+  });
+
+  it('makes a masked land cell render transparent', () => {
+    const values = Array.from({ length: 64 }, (_, i) => (i < 32 ? -8 : 120));
+    const img = renderDepthChart(maskLandAbove(grid(8, 8, values), 0.5), null);
+    expect(img).not.toBeNull();
+    if (img === null) return;
+    const alphaTop = img.rgba[3];
+    const alphaBottom = img.rgba[(img.width * (img.height - 1) + 1) * 4 + 3];
+    expect(alphaTop).toBe(255);
+    expect(alphaBottom).toBe(0);
+  });
+});
+
+describe('CRS-aware geometry (the worldwide ladder, §D3)', () => {
+  /** A degrees-anchored grid over the North Sea (the EMODnet shape). */
+  const degrees: FloatGrid = {
+    width: 4,
+    height: 4,
+    data: Float32Array.from(Array<number>(16).fill(-30)),
+    x0: 1.9,
+    y0: 54.1,
+    dx: 0.01,
+    dy: 0.01,
+  };
+
+  it('reads a 4326 grid s corners straight off its georeference', () => {
+    expect(depthChartCorners(degrees, 'EPSG:4326')).toEqual([
+      [1.9, 54.1],
+      [1.94, 54.1],
+      [1.94, 54.06],
+      [1.9, 54.06],
+    ]);
+  });
+
+  it('still treats an unqualified grid as mercator (the NONNA default)', () => {
+    const g = grid(4, 4, Array<number>(16).fill(-5));
+    expect(depthChartCorners(g)).toEqual(depthChartCorners(g, 'EPSG:3857'));
+  });
+
+  it('places 4326 soundings in degrees, not mercator metres', () => {
+    const soundings = selectSoundings(degrees, null, 'EPSG:4326');
+    expect(soundings.length).toBeGreaterThan(0);
+    for (const s of soundings) {
+      expect(s.lon).toBeGreaterThan(1.89);
+      expect(s.lon).toBeLessThan(1.95);
+      expect(s.lat).toBeGreaterThan(54.05);
+      expect(s.lat).toBeLessThan(54.11);
+      expect(s.depthM).toBeCloseTo(30, 5);
+    }
   });
 });
