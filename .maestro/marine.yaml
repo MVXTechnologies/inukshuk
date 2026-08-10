@@ -1,8 +1,11 @@
-# Marine overlays e2e (marine M3): open the Overlays menu, check both marine
-# layers (NONNA bathymetry + OpenSeaMap seamarks), confirm the mandatory
+# Marine overlays e2e (marine M3, reworked for the D-6 drill-down): since the
+# drill-down amendment, Marine is a single all-or-nothing chart-mode toggle
+# at the TOP LEVEL of the Overlays menu (no sub-menu, no per-layer rows —
+# depth bands + seamarks drape together). Toggle it on, confirm the mandatory
 # "Not for navigation" chip shows, long-press for the forecast/tides card and
-# confirm the 2D map stays alive throughout. Crash-detection focus, like
-# weather.yaml — NEVER asserts chart pixels or tide content.
+# confirm the 2D map stays alive throughout, then toggle it back off.
+# Crash-detection focus, like weather.yaml — NEVER asserts chart pixels or
+# tide content.
 #
 # Portability notes:
 # - Network-independent by design: in CI the NONNA WMS / OpenSeaMap hosts are
@@ -10,10 +13,12 @@
 #   already tolerates; the card's IWLS fetches fail and the Tides section
 #   renders its "unavailable" line. Nothing below asserts any network pixels
 #   — only menu state, the (purely local) disclaimer chip, and the crash gate.
-# - The marine picker is a paper Dialog of Checkbox rows; labels are plain
-#   visible-text matches with no regex metacharacters (Maestro treats
-#   matchers as regexes — see the catalog test in marineLayers.test.ts).
-# - A far-left tap lands on the Menu's dismiss backdrop and only closes the
+# - 'Marine' is the toggle row's constant a11y label; it exists only while
+#   the menu sheet is open, so it doubles as the open sentinel. The row is a
+#   TOGGLE, so each retry pass flips it exactly once and the chip
+#   wait afterwards verifies the resulting state — self-correcting whatever
+#   state a previous run left behind (the heatmap.yaml checkbox idiom).
+# - A far-left tap lands on the sheet's dismiss backdrop and only closes the
 #   menu (see trail-view.yaml).
 appId: com.inukshuk.app
 ---
@@ -35,7 +40,7 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# --- Enable both marine layers ---
+# --- Marine chart mode ON (guarded toggle; chip = the state signal) ---
 - retry:
     maxRetries: 3
     commands:
@@ -47,19 +52,21 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Marine'
           timeout: 10000
-- tapOn: 'Marine'
-- extendedWaitUntil:
-    visible: 'Water depths'
-    timeout: 10000
-- tapOn: 'Water depths'
-- tapOn: 'Seamarks'
-- tapOn: 'Done'
+      - tapOn: 'Marine'
+      - tapOn:
+          point: 50%,8%
+      - assertVisible: 'Map actions'
+      # If a previous run left marine ON, that tap just turned it OFF — this
+      # wait fails and the next pass flips it back on.
+      - extendedWaitUntil:
+          visible: 'Not for navigation'
+          timeout: 5000
 # The map beneath must still be responsive while (unreachable) tiles fail,
 # and the mandatory disclaimer chip must be up — it's pure local UI, so this
 # asserts fine with or without network.
 - assertVisible: 'Map actions'
 - assertVisible: 'Not for navigation'
-# --- Forecast/tides card: with only a marine layer on (no weather layer),
+# --- Forecast/tides card: with only the marine mode on (no weather layer),
 # long-press must open/dismiss without ever crashing, network or not. ---
 - longPressOn:
     point: 50%,40%
@@ -67,26 +74,25 @@ appId: com.inukshuk.app
 - tapOn:
     point: 50%,30%
 - assertVisible: 'Map actions'
-# --- The menu row reflects the active layers; turn everything back off so
-# reruns and later flows start from the default map. ---
+# --- Toggle marine back off so reruns and later flows start from the
+# default map (same self-correcting idiom, inverted chip wait). ---
 - retry:
     maxRetries: 3
     commands:
       - runFlow:
           when:
-            notVisible: 'Marine (2)'
+            notVisible: 'Marine'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Marine (2)'
+          visible: 'Marine'
           timeout: 10000
-- tapOn: 'Marine (2)'
-- extendedWaitUntil:
-    visible: 'Water depths'
-    timeout: 10000
-- tapOn: 'Water depths'
-- tapOn: 'Seamarks'
-- tapOn: 'Done'
-- assertVisible: 'Map actions'
-# Chip gone with the layers off.
+      - tapOn: 'Marine'
+      - tapOn:
+          point: 50%,8%
+      - assertVisible: 'Map actions'
+      - extendedWaitUntil:
+          notVisible: 'Not for navigation'
+          timeout: 5000
+# Chip gone with the chart mode off.
 - assertNotVisible: 'Not for navigation'

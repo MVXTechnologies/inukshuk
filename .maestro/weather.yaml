@@ -1,10 +1,10 @@
-# Weather UX v2 (M1, reworked in wave A) e2e: open the Overlays menu, pick a
-# weather layer from the icon picker, confirm the bottom time scrubber
-# appears, scrub forward, flip playback from the scrubber's play button (the
-# one and only animation control since wave A — the dialog's Animate checkbox
-# is gone), long-press for the forecast card and confirm the 2D map stays
-# alive throughout. Crash-detection focus, like map-overlays.yaml — NEVER
-# asserts weather pixels, scrubber times or forecast content.
+# Weather UX v2 (M1, reworked in wave A + the D-6 drill-down) e2e: open the
+# Overlays menu, drill into the Weather group's in-place icon picker, confirm
+# the bottom time scrubber appears, scrub forward, flip playback from the
+# scrubber's play button (the one and only animation control since wave A),
+# long-press for the forecast card and confirm the 2D map stays alive
+# throughout. Crash-detection focus, like map-overlays.yaml — NEVER asserts
+# weather pixels, scrubber times or forecast content.
 #
 # Portability notes:
 # - Network-independent by design: in CI the GeoMet WMS host is unreachable,
@@ -15,16 +15,19 @@
 #   state; the tap-anywhere point chip settles to "No data". Nothing below
 #   asserts any network-dependent pixels — only menu state, the (purely
 #   local) scrubber chrome, and the crash gate.
-# - The weather picker is a paper Dialog of icon rows; rows carry their label
-#   as accessibilityLabel. iOS merges an element's title+description into one
-#   accessible text, so matchers for dialog rows and the scrubber wrap in
-#   leading/trailing `.*`. Catalog labels are regex-metacharacter-free (see
-#   weatherLayers.test.ts).
-# - Open-state sentinels must not echo text visible while the dialog is
-#   closed: 'Rain radar' only exists inside the dialog while no radar layer
+# - The weather picker is an in-place sub-menu of the dark drill-down sheet
+#   (no dialog, no 'Done' — closing is the backdrop tap); rows carry their
+#   label as accessibilityLabel. iOS merges an element's title+description
+#   into one accessible text, so matchers for picker rows and the scrubber
+#   wrap in leading/trailing `.*`. Catalog labels are
+#   regex-metacharacter-free (see weatherLayers.test.ts).
+# - Open-state sentinels must not echo text visible while the picker is
+#   closed: 'Rain radar' only exists inside the sub-menu while no radar layer
 #   is selected, so it gates the temperature pick; 'Snow radar' gates the
-#   pick while 'Weather: Rain radar' is on the menu row behind.
-# - A far-left tap lands on the Menu's dismiss backdrop and only closes the
+#   pick while 'Weather: Rain radar' is on the group row behind. The sub-menu
+#   title renders inside the back button's a11y label, so it never
+#   cross-matches the 'Weather(: .*)?' group-row matchers.
+# - A far-left tap lands on the sheet's dismiss backdrop and only closes the
 #   menu (see trail-view.yaml).
 appId: com.inukshuk.app
 ---
@@ -46,7 +49,7 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# --- Open the picker and select the Temperature layer from its thumbnail row ---
+# --- Open the menu, drill into Weather, select the Temperature layer ---
 - retry:
     maxRetries: 3
     commands:
@@ -59,12 +62,14 @@ appId: com.inukshuk.app
           visible: 'Weather(: .*)?'
           timeout: 10000
 - tapOn: 'Weather(: .*)?'
-# Dialog-open sentinel: a picker row that is never visible while closed.
+# Picker-open sentinel: a layer row that is never visible while closed.
 - extendedWaitUntil:
     visible: '.*Rain radar.*'
     timeout: 10000
 - tapOn: '.*Temperature.*'
-- tapOn: 'Done'
+# No 'Done' since the drill-down — the backdrop tap closes the sheet.
+- tapOn:
+    point: 50%,8%
 # --- The bottom time scrubber must be up whenever a weather layer is on;
 # scrubbing must not kill the map. Tapping the track's centre IS a scrub —
 # the forecast timeline opens at "now" (far left), so centre = ~+24 h. ---
@@ -99,13 +104,14 @@ appId: com.inukshuk.app
           visible: 'Weather: Temperature'
           timeout: 10000
 - tapOn: 'Weather: Temperature'
-# Open sentinel while 'Weather: Temperature' shows on the (closed) menu row:
-# 'Snow radar' never appears outside the dialog.
+# Open sentinel while 'Weather: Temperature' shows on the (closed) group row:
+# 'Snow radar' never appears outside the sub-menu.
 - extendedWaitUntil:
     visible: '.*Snow radar.*'
     timeout: 10000
 - tapOn: '.*Rain radar.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 50%,8%
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
@@ -118,10 +124,13 @@ appId: com.inukshuk.app
       notVisible: '.*Pause weather timeline.*'
     commands:
       - tapOn: '.*Play weather timeline.*'
-- extendedWaitUntil:
-    visible: '.*Pause weather timeline.*'
-    timeout: 10000
+# Do NOT assert the Pause label: playback is transient state. A radar
+# timeline opens on its newest frame, so a play from there can reach the
+# end and stop before the assert runs (seen on iOS, 2026-08-10). The
+# invariant worth gating is that the press neither crashes the map nor
+# kills the scrubber.
 - assertVisible: 'Map actions'
+- assertVisible: '.*Weather timeline.*'
 # --- Everything back off so reruns and later flows start from the default
 # map: pause playback first (it is transient but this run keeps going),
 # then None. ---
@@ -142,12 +151,13 @@ appId: com.inukshuk.app
           visible: 'Weather: Rain radar'
           timeout: 10000
 - tapOn: 'Weather: Rain radar'
-# Open sentinel while 'Weather: Rain radar' shows on the (closed) menu row:
-# 'Snow radar' never appears outside the dialog.
+# Open sentinel while 'Weather: Rain radar' shows on the (closed) group row:
+# 'Snow radar' never appears outside the sub-menu.
 - extendedWaitUntil:
     visible: '.*Snow radar.*'
     timeout: 10000
 - tapOn: '.*None.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 50%,8%
 - assertVisible: 'Map actions'
 - assertNotVisible: '.*Weather timeline.*'

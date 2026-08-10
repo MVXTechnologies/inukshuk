@@ -15,6 +15,11 @@ interface Props {
   unit?: string;
   disabled?: boolean;
   accessibilityLabel?: string;
+  /** Fill/thumb/value colour override (defaults to the theme primary) — for
+   * hosts with fixed dark chrome, e.g. the overlays drill-down panel. */
+  accentColor?: string;
+  /** Track colour override (defaults to the theme surfaceVariant). */
+  trackColor?: string;
 }
 
 /**
@@ -33,8 +38,12 @@ export function RangeSlider({
   unit = '°',
   disabled,
   accessibilityLabel,
+  accentColor,
+  trackColor,
 }: Props) {
   const theme = useTheme();
+  const accent = accentColor ?? theme.colors.primary;
+  const track = trackColor ?? theme.colors.surfaceVariant;
   // Live values during a drag; null = idle (render the committed props).
   const [live, setLive] = useState<{ lo: number; hi: number } | null>(null);
   const liveRef = useRef<{ lo: number; hi: number } | null>(null);
@@ -105,31 +114,31 @@ export function RangeSlider({
       accessibilityLabel={accessibilityLabel ?? `Range ${shownLo} to ${shownHi}${unit}`}
     >
       <View style={[styles.trackBox, { width }]}>
-        <View style={[styles.track, { backgroundColor: theme.colors.surfaceVariant }]} />
+        <View style={[styles.track, { backgroundColor: track }]} />
         <View
           style={[
             styles.fill,
             {
               left: xOf(shownLo),
               width: xOf(shownHi) - xOf(shownLo),
-              backgroundColor: theme.colors.primary,
+              backgroundColor: accent,
             },
           ]}
         />
         <View
           {...thumbs.lo}
           hitSlop={{ top: 18, bottom: 18, left: 14, right: 8 }}
-          style={[styles.thumb, { left: xOf(shownLo) - 10, backgroundColor: theme.colors.primary }]}
+          style={[styles.thumb, { left: xOf(shownLo) - 10, backgroundColor: accent }]}
           accessibilityLabel="Minimum"
         />
         <View
           {...thumbs.hi}
           hitSlop={{ top: 18, bottom: 18, left: 8, right: 14 }}
-          style={[styles.thumb, { left: xOf(shownHi) - 10, backgroundColor: theme.colors.primary }]}
+          style={[styles.thumb, { left: xOf(shownHi) - 10, backgroundColor: accent }]}
           accessibilityLabel="Maximum"
         />
       </View>
-      <Text variant="labelMedium" style={[styles.value, { color: theme.colors.primary }]}>
+      <Text variant="labelMedium" style={[styles.value, { color: accent }]}>
         {shownLo}–{shownHi}
         {unit}
       </Text>

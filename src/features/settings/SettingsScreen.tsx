@@ -1,5 +1,6 @@
 import { planDataArchive } from '@core/export/archivePlan';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
+import { setOfflineOnly } from '@data/offline';
 import * as storage from '@data/storage';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import {
@@ -101,6 +102,7 @@ export function SettingsScreen() {
   const themeMode = useSettingsStore((s) => s.themeMode);
   const uiStyle = useSettingsStore((s) => s.uiStyle);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
+  const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const set = useSettingsStore((s) => s.set);
   const reset = useSettingsStore((s) => s.reset);
 
@@ -355,6 +357,27 @@ export function SettingsScreen() {
             titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
+              {/* Moved here from the map's Overlays menu (D-7): a data-usage
+                  policy, not a map layer. Same switch semantics — the store
+                  flag plus the native tile/download gate flip together. */}
+              <List.Item
+                title="Locally downloaded only"
+                description="Use only content stored on this device — online base map, weather and marine layers wait until this is off"
+                descriptionNumberOfLines={3}
+                right={() => (
+                  <Switch
+                    value={offlineOnly}
+                    onValueChange={(v) => {
+                      set('offlineOnly', v);
+                      setOfflineOnly(v);
+                    }}
+                    accessibilityLabel="Locally downloaded only"
+                  />
+                )}
+              />
+
+              <Divider />
+
               <OfflineMapsSection />
 
               <Divider />

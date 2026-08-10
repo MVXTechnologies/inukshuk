@@ -65,7 +65,7 @@ appId: com.inukshuk.app
 # also match the folder section header sitting earlier in the tree.
 - tapOn: 'Move to TripA'
 - tapOn:
-    point: 10%,50%
+    point: 50%,8%
 # The trail now lives in the folder group (header shows a count).
 - assertVisible: 'TripA \(1\)'
 # --- Folder-visibility mode on the map ---
@@ -75,9 +75,14 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# Content visibility lives in the Overlays menu's picker (the PDF/Trails
-# type toggles are retired; "Everything" in the picker is the way back).
+# Content visibility lives in the Overlays menu's Topology sub-menu (D-6
+# drill-down): open the menu, drill into Topology, then the picker (the
+# PDF/Trails type toggles are retired; "Everything" is the way back).
 - tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Topology.*'
+    timeout: 10000
+- tapOn: 'Topology.*'
 - extendedWaitUntil:
     visible: 'Content.*'
     timeout: 10000
@@ -90,6 +95,10 @@ appId: com.inukshuk.app
 - assertVisible: 'Map actions'
 # Back to show-everything via the picker's Everything row.
 - tapOn: 'Map overlays'
+- extendedWaitUntil:
+    visible: 'Topology.*'
+    timeout: 10000
+- tapOn: 'Topology.*'
 - extendedWaitUntil:
     visible: 'Content: 1 folder'
     timeout: 10000

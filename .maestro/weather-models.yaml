@@ -44,8 +44,8 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# --- Turn the Temperature forecast layer on (thumbnail picker, as in
-# weather.yaml). ---
+# --- Turn the Temperature forecast layer on (the drill-down's in-place
+# Weather picker, as in weather.yaml; backdrop tap closes — no 'Done'). ---
 - retry:
     maxRetries: 3
     commands:
@@ -62,7 +62,8 @@ appId: com.inukshuk.app
     visible: '.*Rain radar.*'
     timeout: 10000
 - tapOn: '.*Temperature.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 50%,8%
 - extendedWaitUntil:
     visible: '.*Weather timeline.*'
     timeout: 10000
@@ -154,7 +155,8 @@ appId: com.inukshuk.app
     visible: '.*Snow radar.*'
     timeout: 10000
 - tapOn: '.*None.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 50%,8%
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000

@@ -14,6 +14,13 @@ interface Props<V> {
   /** Track width in dp (the row's remaining space, minus the value label). */
   width?: number;
   disabled?: boolean;
+  /** Selection/value colour override (defaults to the theme primary) — for
+   * hosts with fixed dark chrome, e.g. the overlays drill-down panel. */
+  accentColor?: string;
+  /** Track colour override (defaults to the theme surfaceVariant). */
+  trackColor?: string;
+  /** Unselected tick colour override (defaults to the theme outlineVariant). */
+  tickColor?: string;
 }
 
 /**
@@ -24,8 +31,20 @@ interface Props<V> {
  * because tap-per-detent stays deterministic for Maestro and screen readers
  * (each detent keeps the label the old rows had).
  */
-export function DetentSlider<V>({ detents, selected, onSelect, width = 116, disabled }: Props<V>) {
+export function DetentSlider<V>({
+  detents,
+  selected,
+  onSelect,
+  width = 116,
+  disabled,
+  accentColor,
+  trackColor,
+  tickColor,
+}: Props<V>) {
   const theme = useTheme();
+  const accent = accentColor ?? theme.colors.primary;
+  const track = trackColor ?? theme.colors.surfaceVariant;
+  const tick = tickColor ?? theme.colors.outlineVariant;
   const i = Math.max(
     0,
     detents.findIndex((d) => d.value === selected),
@@ -36,12 +55,9 @@ export function DetentSlider<V>({ detents, selected, onSelect, width = 116, disa
   return (
     <View style={styles.row} pointerEvents={disabled ? 'none' : 'auto'}>
       <View style={[styles.trackBox, { width }]}>
-        <View style={[styles.track, { backgroundColor: theme.colors.surfaceVariant }]} />
+        <View style={[styles.track, { backgroundColor: track }]} />
         <View
-          style={[
-            styles.trackFill,
-            { width: i * step, backgroundColor: theme.colors.primary, opacity: 0.4 },
-          ]}
+          style={[styles.trackFill, { width: i * step, backgroundColor: accent, opacity: 0.4 }]}
         />
         {detents.map((d, j) => (
           <Pressable
@@ -58,7 +74,7 @@ export function DetentSlider<V>({ detents, selected, onSelect, width = 116, disa
               style={[
                 styles.tickDot,
                 {
-                  backgroundColor: j === i ? theme.colors.primary : theme.colors.outlineVariant,
+                  backgroundColor: j === i ? accent : tick,
                 },
                 j === i && styles.thumb,
               ]}
@@ -66,7 +82,7 @@ export function DetentSlider<V>({ detents, selected, onSelect, width = 116, disa
           </Pressable>
         ))}
       </View>
-      <Text variant="labelMedium" style={[styles.valueLabel, { color: theme.colors.primary }]}>
+      <Text variant="labelMedium" style={[styles.valueLabel, { color: accent }]}>
         {current.label}
       </Text>
     </View>
