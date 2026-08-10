@@ -146,19 +146,35 @@ export function writeOverlayPng(id: string, base64Png: string): string {
  *
  * The file NAME carries a timestamp: MapLibre caches image sources by URL,
  * so re-rendering a region must hand it a URL it has not seen or the stale
- * bitmap stays on screen. Older renders of the same id are deleted first, so
- * the cache holds at most one file per chart id.
+ * bitmap stays on screen.
+ *
+ * The new file is written BEFORE the old ones are pruned, and the previous
+ * render is kept: MapLibre keeps drawing the URI it already has until the new
+ * bitmap is decoded, and the marine chart's progressive first paint deletes
+ * the coarse preview roughly a second after handing it over. Deleting first
+ * meant pulling a file out from under an in-flight decode — a blank drape, or
+ * worse. Two files per chart id is the price; the id count is bounded.
  */
 export function writeChartPng(id: string, bytes: Uint8Array): string {
   const dir = overlaysDir();
   if (!dir.exists) dir.create({ intermediates: true });
-  for (const existing of dir.list()) {
-    if (existing instanceof File && existing.name.startsWith(`${id}_`)) existing.delete();
-  }
   const file = new File(dir, `${id}_${Date.now()}.png`);
   if (file.exists) file.delete();
   file.create();
   guardWrite(() => file.write(bytes));
+  // Prune everything older than the previous render (never this one, never
+  // the one that may still be on screen).
+  const mine = dir
+    .list()
+    .filter((e): e is File => e instanceof File && e.name.startsWith(`${id}_`))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  for (const stale of mine.slice(0, Math.max(0, mine.length - 2))) {
+    try {
+      stale.delete();
+    } catch {
+      // Already gone, or the OS reclaimed the cache dir — nothing to do.
+    }
+  }
   return file.uri;
 }
 

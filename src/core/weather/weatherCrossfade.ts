@@ -13,10 +13,22 @@
  * the caller (`useWeatherCrossfade`).
  */
 
-/** Preload window between staging a frame's URL and showing it. Comfortably
+/** Minimum window between staging a frame's URL and showing it. Comfortably
  * inside the scrub throttle (SCRUB_THROTTLE_MS = 300) and the playback tick
  * (700 ms), so back-to-back frames still land one per swap. */
 export const WEATHER_PRELOAD_MS = 240;
+
+/**
+ * Hard cap on that window. Past {@link WEATHER_PRELOAD_MS} the caller keeps
+ * waiting for MapLibre to report a fully-rendered frame (i.e. the staged
+ * slot's tiles are actually in); this cap means a frame whose tiles never
+ * arrive — dead host, region with no data — still swaps instead of freezing
+ * playback on the outgoing frame.
+ */
+export const WEATHER_PRELOAD_MAX_MS = 4000;
+
+/** How often the caller re-checks for that fully-rendered frame. */
+export const WEATHER_PRELOAD_POLL_MS = 60;
 
 export interface WeatherCrossfadeState {
   /** The two slot URLs; null = slot unused (renders nothing). */

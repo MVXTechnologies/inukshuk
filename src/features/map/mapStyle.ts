@@ -1,17 +1,16 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import { CHART_LAND_COLOR, CHART_WATER_COLOR } from '@core/geo/depthChart';
 import {
-  CHART_LAND_COLOR,
-  CHART_WATER_COLOR,
-  SOUNDING_INK,
-  SOUNDING_SHALLOW_INK,
-  type SoundingProperties,
-} from '@core/geo/depthChart';
+  drapeAnchorLayer,
+  MARINE_DRAPE_ANCHOR,
+  MARINE_SOUNDINGS_ANCHOR,
+  WEATHER_DRAPE_ANCHOR,
+} from '@core/geo/mapLayerStack';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
 import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
-import type { LngLat } from '@core/models';
-import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
+import type { Feature, Polygon } from 'geojson';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -166,26 +165,6 @@ export interface OsmStyleOptions {
    */
   marineLayers?: readonly MarineLayerId[];
   /**
-   * Live weather overlay (ECCC GeoMet WMS via `weatherTileUrl`). Network-only
-   * by nature: callers must drop it entirely when `offlineOnly` is on, exactly
-   * like `markedTrailsNetworks`.
-   *
-   * Frame-swap crossfade (wave A item 3): `slots` carries TWO frame URL
-   * slots (A/B, null = unused) with `activeSlot` naming the visible one. A
-   * frame change stages the incoming URL in the inactive slot at opacity 0 —
-   * MapLibre fetches tiles for an opacity-0 layer, so this IS the prefetch —
-   * and the caller flips `activeSlot` once the preload window elapses (see
-   * `@core/weather/weatherCrossfade`). The outgoing frame stays on screen
-   * until the incoming one is ready: no more blank between frames. Both
-   * updates flow through the caller's style-memo rebuild as before.
-   */
-  weather?: {
-    slots: readonly [string | null, string | null];
-    activeSlot: 0 | 1;
-    attribution: string;
-    opacity?: number;
-  };
-  /**
    * Weather-mode basemap muting (weather UX M1, the Windy look): while a
    * weather layer is draped, the basemap steps back — heavy desaturation on
    * the raster plus a semi-opaque neutral "dim" backdrop layered between the
@@ -232,8 +211,6 @@ export interface OsmStyleOptions {
    * overlay resolved.
    */
   marineChart?: {
-    drape: { uri: string; coordinates: [LngLat, LngLat, LngLat, LngLat] } | null;
-    soundings: FeatureCollection<Point, SoundingProperties> | null;
     wmsFallback: boolean;
     /**
      * Tile template for the fallback bathymetry drape when the ladder
@@ -391,6 +368,12 @@ export function buildOsmStyle(
             },
           ]
         : []),
+      // Anchor for the client-rendered depth-band drape (a MapView child —
+      // see `@core/geo/mapLayerStack`). It sits under the marine WMS layers:
+      // the seamark symbols must stay above the bands, and the legacy WMS
+      // bathymetry drape is only ever present as the fallback for a FAILED
+      // client pipeline, i.e. never at the same time as the drape itself.
+      ...(options.marineChart ? [drapeAnchorLayer(MARINE_DRAPE_ANCHOR)] : []),
       // Marine layers above the trail overlays; the depth tint is dimmed so
       // the basemap's shoreline/labels stay readable through it.
       ...marine.map((l) => ({
@@ -402,29 +385,11 @@ export function buildOsmStyle(
     ],
   };
 
-  // Client-rendered depth-band drape (marine chart mode): the bands+contours
-  // PNG as a georeferenced image source — the PDF-overlay mechanic, placed
-  // in the style's own layer list so it stays BELOW the labels overlay and
-  // the seamark symbols ride above it. Inserted before `marine-seamarks`
-  // when that layer exists.
-  if (options.marineChart?.drape) {
-    style.sources['marine-depth-chart'] = {
-      type: 'image',
-      url: options.marineChart.drape.uri,
-      coordinates: options.marineChart.drape.coordinates,
-    };
-    const drapeLayer = {
-      id: 'marine-depth-chart',
-      type: 'raster' as const,
-      source: 'marine-depth-chart',
-      // Near-opaque: the bands ARE the chart; a hint of basemap texture
-      // ghosts through. fade 0 — re-anchored drapes must swap crisply.
-      paint: { 'raster-opacity': 0.92, 'raster-fade-duration': 0 },
-    };
-    const seamarksIdx = style.layers.findIndex((l) => l.id === 'marine-seamarks');
-    if (seamarksIdx >= 0) style.layers.splice(seamarksIdx, 0, drapeLayer);
-    else style.layers.push(drapeLayer);
-  }
+  // The client-rendered depth-band drape and the spot soundings are NOT
+  // declared here either: they are MapView children (`MarineChartLayers`),
+  // so a re-anchored chart updates the image source in place instead of
+  // reloading the entire style (which used to feed a reload storm — see
+  // `@core/geo/mapLayerStack`).
 
   // A shaded-relief hillshade derived from the free Terrarium DEM, blended under
   // the live 2D map for the warm topographic look. Kept OFF for offline packs
@@ -493,39 +458,18 @@ export function buildOsmStyle(
         'background-opacity': options.weatherMuted.dimOpacity,
       },
     });
+    // The weather drape itself is NOT declared here: its two crossfade slots
+    // are mounted as MapView children (`WeatherDrapeLayers`) — a frame URL
+    // inside this style would make every playback tick reload the whole
+    // native style. They anchor HERE, directly above the dim, whatever order
+    // the modes were toggled in (see `@core/geo/mapLayerStack`).
+    style.layers.push(drapeAnchorLayer(WEATHER_DRAPE_ANCHOR));
   }
 
-  // Weather drape (radar / model fields), above the basemap, trail overlays
-  // and hillshade — it's the topmost data layer, only under the offline mask
-  // (mutually exclusive with it anyway) and the runtime layers (trails,
-  // markers, the location dot) MapLibre appends after the style's own.
-  // Two crossfade slots (see the option's doc): the inactive slot prefetches
-  // the incoming frame at opacity 0 while the active one keeps the current
-  // frame on screen. raster-fade-duration 0: per-tile fades would smear
-  // consecutive radar frames into each other (and the swap itself is already
-  // covered by the preload).
-  if (options.weather) {
-    for (const i of [0, 1] as const) {
-      const url = options.weather.slots[i];
-      if (url === null) continue;
-      const id = i === 0 ? 'weather-a' : 'weather-b';
-      style.sources[id] = {
-        type: 'raster',
-        tiles: [url],
-        tileSize: 256,
-        attribution: options.weather.attribution,
-      };
-      style.layers.push({
-        id,
-        type: 'raster',
-        source: id,
-        paint: {
-          'raster-opacity':
-            i === options.weather.activeSlot ? (options.weather.opacity ?? 0.62) : 0,
-          'raster-fade-duration': 0,
-        },
-      });
-    }
+  // Anchor for the spot soundings, above the weather anchor: ink beats
+  // colour, so the depth numbers stay readable through a weather field.
+  if (options.marineChart) {
+    style.layers.push(drapeAnchorLayer(MARINE_SOUNDINGS_ANCHOR));
   }
 
   // Labels + coastline reference overlay, ABOVE the dim and the weather/
@@ -550,37 +494,6 @@ export function buildOsmStyle(
     };
     const ink = dark ? '#FFFFFF' : '#20303C';
     const halo = dark ? 'rgba(12, 16, 20, 0.92)' : 'rgba(255, 255, 255, 0.94)';
-    // Spot soundings (marine chart mode): sparse depth numbers over the
-    // band drape, chart-style — small dark digits, shallow (hazard) values
-    // in chart blue and sorted first so they win collisions. Pushed BEFORE
-    // the place labels so towns/cities take crowded spots (MapLibre resolves
-    // symbol collisions top-layer-first). Needs the glyphs endpoint this
-    // block just set, which is why soundings only draw when the labels
-    // overlay resolved.
-    if (options.marineChart?.soundings) {
-      style.sources['marine-soundings'] = {
-        type: 'geojson',
-        data: options.marineChart.soundings,
-      };
-      style.layers.push({
-        id: 'marine-soundings',
-        type: 'symbol',
-        source: 'marine-soundings',
-        minzoom: 9,
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-font': ['Noto Sans Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9.5, 13, 11, 16, 12.5],
-          'text-allow-overlap': false,
-          'symbol-sort-key': ['get', 'sort'],
-        },
-        paint: {
-          'text-color': ['case', ['==', ['get', 'shallow'], 1], SOUNDING_SHALLOW_INK, SOUNDING_INK],
-          'text-halo-color': 'rgba(255, 255, 255, 0.85)',
-          'text-halo-width': 1,
-        },
-      });
-    }
     style.layers.push(
       {
         id: 'overlay-water-line',

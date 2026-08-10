@@ -87,6 +87,8 @@ import { MapPointChip, MapPointLine } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
+import { WeatherDrapeLayers } from './weather/WeatherDrapeLayers';
+import { MarineDrapeLayer, MarineSoundingsLayer } from './marine/MarineChartLayers';
 import { useOverlayLabelTiles } from './useOverlayLabelTiles';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
@@ -292,10 +294,18 @@ export function MapScreen() {
   }, [weatherLayer]);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
   const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
+  // Playback pacing + the crossfade's "is the staged frame drawn yet" gate.
+  // Refs, not state: `onDidFinishRenderingFrameFully` fires tens of times a
+  // second and the timeline hook sits UPSTREAM of the crossfade, so state
+  // here would mean a render storm and a dependency cycle (perf fix
+  // 2026-08-10).
+  const weatherStagingRef = useRef(false);
+  const renderedFramesRef = useRef(0);
   const weatherTl = useWeatherTimeline(
     offlineOnly ? null : weatherLayer,
     effectiveModel,
     weatherAnimating,
+    weatherStagingRef,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
@@ -328,7 +338,10 @@ export function MapScreen() {
     weatherLayer !== null && !offlineOnly
       ? modelWeatherTileUrl(weatherLayer, effectiveModel, weatherTl.timeParam)
       : null;
-  const weatherFade = useWeatherCrossfade(weatherUrl);
+  const weatherFade = useWeatherCrossfade(weatherUrl, renderedFramesRef);
+  useEffect(() => {
+    weatherStagingRef.current = weatherFade.pendingSlot !== null;
+  }, [weatherFade.pendingSlot]);
   const overlayTiles = useOverlayLabelTiles(
     (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
   );
@@ -336,6 +349,16 @@ export function MapScreen() {
   // marine chart fetch) needs a focus gate — declared here because the style
   // memo below already depends on it through the marine chart.
   const [screenFocused, setScreenFocused] = useState(true);
+  // Re-arm the getViewState gate whenever <Map> itself is NOT mounted (3D,
+  // or before the persisted camera seed). This replaces the old
+  // onWillStartLoadingMap reset, which also fired on every style reload —
+  // see the handler's note on the reload storm that caused.
+  const mapMounted = !terrain3d && settingsHydrated;
+  useEffect(() => {
+    if (mapMounted) return;
+    const t = setTimeout(() => setMapLoaded(false), 0);
+    return () => clearTimeout(t);
+  }, [mapMounted]);
   useFocusEffect(
     useCallback(() => {
       setScreenFocused(true);
@@ -378,9 +401,10 @@ export function MapScreen() {
       // as the silent fallback while the client pipeline has nothing.
       ...(marineActive
         ? {
+            // The client drape + soundings are NOT in here: they mount as
+            // MapView children so a re-anchored chart never reloads the
+            // whole native style (see MarineChartLayers).
             marineChart: {
-              drape: marineChart.chart?.drape ?? null,
-              soundings: marineChart.chart?.soundings ?? null,
               wmsFallback: marineChart.fallback && !offlineOnly,
               // Which imagery the coverage ladder fell back to, if any
               // (GEBCO worldwide / NOAA ENC in US waters); null keeps the
@@ -391,14 +415,10 @@ export function MapScreen() {
         : {}),
       ...(weatherLayer !== null && !offlineOnly
         ? {
-            weather: {
-              slots: weatherFade.slots,
-              activeSlot: weatherFade.activeSlot,
-              attribution: ECCC_ATTRIBUTION,
-              // M3: the wind speed gradient reads a touch stronger under the
-              // particle streaks (design §3); other layers keep the default.
-              ...(weatherLayer === 'wind' ? { opacity: 0.75 } : {}),
-            },
+            // The frames themselves mount as MapView children
+            // (WeatherDrapeLayers) — a frame URL in this object would reload
+            // the entire native style twice per playback tick.
+            //
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
             // through it — strong enough that the weather gradient reads as THE
@@ -433,9 +453,12 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     marineActive,
-    marineChart,
+    // Only the FALLBACK shape of the chart state restyles the map; the drape
+    // and the soundings are live children, so a new render must not rebuild
+    // (and therefore reload) the style.
+    marineChart.fallback,
+    marineChart.rasterUrl,
     weatherLayer,
-    weatherFade,
     overlayTiles,
   ]);
 
@@ -1253,8 +1276,21 @@ export function MapScreen() {
             if (!lngLat || (weatherLayer === null && !marineActive) || offlineOnly) return;
             setForecastAt({ longitude: lngLat[0], latitude: lngLat[1] });
           }}
-          onWillStartLoadingMap={() => setMapLoaded(false)}
+          // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
+          // every STYLE reload as well as a real (re)mount, and the false
+          // switched the marine chart off, which changed the style, which
+          // reloaded it again — a self-sustaining storm measured at ~15
+          // style reloads per second (perf fix 2026-08-10). The gate exists
+          // to keep getViewState() off an uninitialised native view, and
+          // only an unmounted <Map> can put us back in that state — which
+          // the effect above re-arms.
           onDidFinishLoadingMap={() => setMapLoaded(true)}
+          // Feeds the crossfade's "is the staged frame actually drawn yet"
+          // gate (see useWeatherCrossfade). A ref, so this fires at render
+          // rate without costing a React update.
+          onDidFinishRenderingFrameFully={() => {
+            renderedFramesRef.current += 1;
+          }}
           // Wind particles track the camera at gesture rate; the handler is
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
@@ -1332,6 +1368,36 @@ export function MapScreen() {
             // blank offline tiles.
             maxZoom={18}
           />
+
+          {/* Live drapes, mounted as MapView children rather than style-JSON
+              layers (perf fix 2026-08-10). A changed `mapStyle` object makes
+              maplibre-react-native reload the ENTIRE native style — every
+              source rebuilt, every tile refetched, the vector coastlines and
+              labels dropped — which is what made playback blink and marine
+              mode thrash. As children they update incrementally.
+
+              Their z-order does NOT come from this mount order — a child is
+              inserted immediately below the layer it names, and every style
+              reload re-inserts them all — so each names its OWN invisible
+              anchor layer, which `buildOsmStyle` places at exactly the
+              height that drape must occupy (see `@core/geo/mapLayerStack`).
+              The PDF overlays and trails below carry no anchor at all, which
+              is what keeps them on top of everything. */}
+          {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
+          {weatherLayer !== null && !offlineOnly && (
+            <WeatherDrapeLayers
+              fade={weatherFade}
+              // M3: the wind speed gradient reads a touch stronger under the
+              // particle streaks (design §3); other layers keep the default.
+              opacity={weatherLayer === 'wind' ? 0.75 : 0.62}
+              attribution={ECCC_ATTRIBUTION}
+            />
+          )}
+          {marineActive && (
+            <MarineSoundingsLayer
+              soundings={overlayTiles !== null ? (marineChart.chart?.soundings ?? null) : null}
+            />
+          )}
 
           {showPdfOverlay &&
             overlays.map((o) => (
