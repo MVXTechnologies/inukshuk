@@ -75,17 +75,18 @@ appId: com.inukshuk.app
       text: 'Data settings.*'
     direction: DOWN
     centerElement: true
-- retry:
-    maxRetries: 3
-    commands:
-      - runFlow:
-          when:
-            notVisible: 'Offline maps.*'
-          commands:
-            - tapOn: 'Data settings.*'
-      - extendedWaitUntil:
-          visible: 'Offline maps.*'
-          timeout: 5000
+# No open-guard here: the AccordionGroup keeps exactly one category open, and
+# the flow just left 'App settings' open — so Data settings is closed and a
+# single tap opens it. A guard is actively harmful now that the body is long
+# (marine packs + the relocated switch): once the body scrolls, its sentinel
+# leaves the viewport and the retry re-taps the header, closing the category.
+- tapOn: 'Data settings.*'
+# Opening this (now long) category leaves the viewport below its first rows,
+# so the relocated switch sits ABOVE the fold — scroll UP to reach it.
+- scrollUntilVisible:
+    element:
+      text: 'Locally downloaded only.*'
+    direction: UP
 # The relocated switch row sits at the very top of the category body.
 - assertVisible: 'Locally downloaded only.*'
 - scrollUntilVisible:
