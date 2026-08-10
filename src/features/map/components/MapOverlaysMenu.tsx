@@ -220,11 +220,13 @@ function TopologySubmenu({
         borderless
       >
         <View style={styles.layerLabelBox}>
-          <Icon
-            source={on ? 'checkbox-marked' : 'checkbox-blank-outline'}
-            size={20}
-            color={on ? wc.accent : wc.inkMuted}
-          />
+          <View style={styles.iconSlot}>
+            <Icon
+              source={on ? 'checkbox-marked' : 'checkbox-blank-outline'}
+              size={22}
+              color={on ? wc.accent : wc.inkMuted}
+            />
+          </View>
           <Text style={styles.itemLabel}>{label}</Text>
         </View>
       </TouchableRipple>
@@ -600,7 +602,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingRight: 10,
   },
-  layerToggle: { borderRadius: 12, paddingVertical: 10, paddingLeft: 8, paddingRight: 6 },
+  // flex:1 is load-bearing — itemLabel inside is flex:1, so without it the
+  // touchable shrinks to its icon and the label renders at zero width
+  // (Slope/Contours/Heatmap looked label-less on device).
+  layerToggle: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingLeft: 8,
+    paddingRight: 6,
+  },
   layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rightCol: { width: 170, alignItems: 'flex-end' },
   // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
