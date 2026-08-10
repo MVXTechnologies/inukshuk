@@ -39,6 +39,21 @@ paid route or stays not-for-navigation.
 Open: owner to confirm wind particles visible after M3 OTA; marine+weather
 simultaneous UX TBD; multi-model source decision still open.
 
+## Overnight autonomous run (owner away 2026-08-09/10)
+
+In flight: overlays drill-down (PR #201, CI green + Android 17/17 — iOS
+device leg pending), marine ENC chart mode (`feature/marine-depth`,
+built + check-green, gates pending), wind-particle hotfix
+(`fix/wind-particles`: six root causes found incl. a shader that never
+compiled; delivery-chain bug still open, agent iterating with a permanent
+pixel-motion gate as the deliverable). Rig lessons this session: never run
+two Maestro sessions against one device (killed a suite), and a persistent
+disk guard now auto-purges build intermediates under 3 GB free.
+
+Parked on owner decisions: SpotWx-style point-forecast page (needs the
+S-1 data-path call: NAS relay vs Open-Meteo), GeoGarage quote email,
+worldwide chart ladder + offline marine packs.
+
 ## Awaiting owner design review (Checkpoint 1 — mockups published 2026-08-09)
 
 Review page (private artifact) covers, with decisions D-1..D-7: marine
