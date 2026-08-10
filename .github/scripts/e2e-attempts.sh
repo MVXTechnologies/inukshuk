@@ -18,7 +18,7 @@ GEO_PID=$!
 
 # Map-store fixture catalog (store.yaml): serve .maestro/fixtures/catalog on
 # the host and map the device's loopback :8787 onto it. The e2e APK is built
-# with CATALOG_MANIFEST_URL=http://127.0.0.1:8787/manifest.json (e2e.yml), so
+# with CATALOG_MANIFEST_URL=http://127.0.0.1:8787/index.json (e2e.yml), so
 # the Search tab reads this fixture and CI never touches NRCan.
 python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catalog \
   >/dev/null 2>&1 &

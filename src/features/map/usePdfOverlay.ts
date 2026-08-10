@@ -5,6 +5,7 @@ import {
   extrapolatePageCorners,
   isDegenerateBBox,
 } from '@core/geo/geomath';
+import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { File } from 'expo-file-system';
@@ -60,7 +61,10 @@ function activeTargets(maps: MapDocument[]): Target[] {
   for (const m of maps) {
     if (!m.fileUri) continue;
     for (const pageIndex of m.activePages) {
-      const geo = m.georeferences.find((g) => g.pageIndex === pageIndex);
+      // The PRIMARY viewport, not the first one listed: AUSTopo sheets put a
+      // whole-of-Australia locator inset ahead of the map, and taking the
+      // first georeference draws the sheet stretched across the continent.
+      const geo = primaryGeoreferenceForPage(m.georeferences, pageIndex);
       if (geo) targets.push({ docId: m.id, fileUri: m.fileUri, geo });
     }
   }

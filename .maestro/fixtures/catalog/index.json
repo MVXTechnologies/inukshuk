@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-01-01T00:00:00Z",
+  "sources": [
+    {
+      "id": "nrcan-cantopo",
+      "name": "NRCan CanTopo",
+      "licence": "OGL-Canada-2.0",
+      "attribution": "Natural Resources Canada",
+      "homepage": "https://natural-resources.canada.ca"
+    },
+    {
+      "id": "noaa-bookletchart",
+      "name": "NOAA BookletChart",
+      "licence": "Public domain (17 U.S.C. §105)",
+      "attribution": "NOAA Office of Coast Survey",
+      "homepage": "https://nauticalcharts.noaa.gov"
+    }
+  ],
+  "shards": [
+    {
+      "id": "nautical-n40w080",
+      "category": "nautical",
+      "path": "shards/nautical-n40w080.json",
+      "itemCount": 2,
+      "bbox": [
+        -71.6,
+        46.6,
+        -71.1,
+        46.9
+      ],
+      "byteSize": 944
+    },
+    {
+      "id": "topo-n40w080",
+      "category": "topo",
+      "path": "shards/topo-n40w080.json",
+      "itemCount": 2,
+      "bbox": [
+        -72,
+        46.75,
+        -71,
+        47
+      ],
+      "byteSize": 906
+    }
+  ],
+  "categoryCounts": {
+    "topo": 2,
+    "nautical": 2
+  }
+}

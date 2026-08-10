@@ -1,9 +1,6 @@
-import {
-  categoriesPresent,
-  countByCategory,
-  filterCatalogItems,
-} from '@core/catalog/filterCatalog';
-import { installStatusFor, type InstallStatus } from '@core/catalog/installStatus';
+import { filterCatalogItems } from '@core/catalog/filterCatalog';
+import { installStatusFor } from '@core/catalog/installStatus';
+import { nearbyCatalogItems } from '@core/catalog/nearby';
 import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
   CATALOG_CATEGORIES,
@@ -12,23 +9,18 @@ import {
   type CatalogItem,
   type CatalogSource,
 } from '@core/catalog/schema';
-import { formatByteSize } from '@core/storage/diskBudget';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { formatDistance } from '@lib/format';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
   Button,
-  Card,
   Chip,
-  IconButton,
   Portal,
-  ProgressBar,
   Searchbar,
   Snackbar,
   Text,
@@ -36,9 +28,9 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { CatalogItemCard } from './CatalogItemCard';
 import { CategoryGrid } from './CategoryGrid';
 import { DestinationFolderDialog } from './DestinationFolderDialog';
-import { LocatorThumb } from './LocatorThumb';
 import {
   CatalogDownloadCanceled,
   cancelCatalogDownload,
@@ -46,22 +38,27 @@ import {
 } from './downloadCatalogItem';
 
 /**
- * The Search tab — a free-map store (M1: NRCan CanTopo GeoPDFs; Wave C UX).
- * Lands on a category grid (search on top works globally); tapping a category
- * (or typing) shows the item list, sorted nearest-first from the last known
- * position, each row with an offline locator thumbnail showing where the map
- * is. Downloads land in the Library as regular imported maps with live
- * progress; dedup against the Library shows "Open"/"Update" instead of a
- * second Download.
+ * The Search tab — a free-map store over the world catalog.
+ *
+ * Lands on **"Around you"** (the nearest few items across every category, from
+ * the last known position) above the category grid, so a user standing on a
+ * shoreline sees the chart of that shoreline before anything else. With no
+ * known position the section simply isn't there and the grid takes the whole
+ * screen — browsing the world still works.
+ *
+ * The catalog is sharded (`/catalog/v2/`): the screen only ever has the index
+ * plus the shards nearest to wherever the user is looking, so opening the tab
+ * costs a few kilobytes, not the whole world. `ensureShardsNear` is re-run when
+ * the category changes, which is what fills the list on the way into it.
+ *
+ * Tapping a category (or typing) shows the item list, sorted nearest-first,
+ * each row with an offline locator thumbnail. Downloads land in the Library as
+ * regular imported maps with live progress; dedup against the Library shows
+ * "Open"/"Update" instead of a second Download.
  */
 
-/** "≈ 12 km" caption: standard distance formatting minus noise decimals. */
-function approxDistanceLabel(meters: number): string {
-  const clean = formatDistance(meters)
-    .replace(/(\.\d*?)0+(?=\s)/, '$1')
-    .replace(/\.(?=\s)/, '');
-  return `≈ ${clean}`;
-}
+/** How many rows the landing's "Around you" section shows. */
+const NEARBY_ROWS = 5;
 
 export function StoreScreen() {
   const theme = useTheme();
@@ -69,11 +66,14 @@ export function StoreScreen() {
   const router = useRouter();
 
   const status = useCatalogStore((s) => s.status);
-  const manifest = useCatalogStore((s) => s.manifest);
+  const index = useCatalogStore((s) => s.index);
+  const items = useCatalogStore((s) => s.items);
+  const loadingShards = useCatalogStore((s) => s.loadingShards);
   const fromCache = useCatalogStore((s) => s.fromCache);
   const downloads = useCatalogStore((s) => s.downloads);
   const lastFolderId = useCatalogStore((s) => s.lastFolderId);
   const load = useCatalogStore((s) => s.load);
+  const ensureShardsNear = useCatalogStore((s) => s.ensureShardsNear);
 
   const maps = useLibraryStore((s) => s.maps);
   const folders = useLibraryStore((s) => s.folders);
@@ -96,7 +96,13 @@ export function StoreScreen() {
     if (status === 'idle') void load();
   }, [status, load]);
 
-  const items = useMemo(() => manifest?.items ?? [], [manifest]);
+  // Pull the shards this view needs: nearest across all categories for the
+  // landing, nearest within the category once the user is inside one.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    void ensureShardsNear(lastKnownPosition, category);
+  }, [status, lastKnownPosition, category, ensureShardsNear]);
+
   const filtered = useMemo(
     () => filterCatalogItems(items, { text: query, category }),
     [items, query, category],
@@ -105,17 +111,24 @@ export function StoreScreen() {
     () => sortCatalogItems(filtered, lastKnownPosition),
     [filtered, lastKnownPosition],
   );
-  const chipCategories = useMemo(() => categoriesPresent(items, CATALOG_CATEGORIES), [items]);
-  const categoryCounts = useMemo(() => countByCategory(items), [items]);
+  const nearby = useMemo(
+    () => nearbyCatalogItems(items, lastKnownPosition, { limit: NEARBY_ROWS }),
+    [items, lastKnownPosition],
+  );
+  const categoryCounts = useMemo(() => index?.categoryCounts ?? {}, [index]);
+  const chipCategories = useMemo(
+    () => CATALOG_CATEGORIES.filter((c) => (categoryCounts[c] ?? 0) > 0),
+    [categoryCounts],
+  );
   const sourcesById = useMemo(
-    () => new Map<string, CatalogSource>((manifest?.sources ?? []).map((s) => [s.id, s])),
-    [manifest],
+    () => new Map<string, CatalogSource>((index?.sources ?? []).map((s) => [s.id, s])),
+    [index],
   );
 
-  // Landing (category grid) until the user types or enters a category.
+  // Landing (Around you + category grid) until the user types or picks one.
   const home = !browsing && query.trim() === '';
 
-  const enterCategory = (c: CatalogCategory) => {
+  const enterCategory = (c: CatalogCategory | null) => {
     setCategory(c);
     setBrowsing(true);
   };
@@ -161,110 +174,33 @@ export function StoreScreen() {
     router.navigate('/');
   };
 
-  const metaLine = (item: CatalogItem): string => {
-    const distance =
-      lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null;
-    const parts = [
-      distance !== null ? approxDistanceLabel(distance) : undefined,
-      sourcesById.get(item.sourceId)?.name,
-      item.sizeBytes !== undefined ? formatByteSize(item.sizeBytes) : undefined,
-      item.updatedAt,
-      item.lang?.toUpperCase(),
-    ];
-    return parts.filter((p): p is string => p !== undefined).join(' · ');
-  };
+  const renderCard = useCallback(
+    (item: CatalogItem, distanceMeters: number | null) => (
+      <CatalogItemCard
+        key={item.id}
+        item={item}
+        source={sourcesById.get(item.sourceId)}
+        installStatus={installStatusFor(item, maps)}
+        downloading={item.id in downloads}
+        progress={downloads[item.id]}
+        expanded={expandedId === item.id}
+        distanceMeters={distanceMeters}
+        onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+        onDownload={() => setPendingItem(item)}
+        onUpdate={() => void startUpdate(item)}
+        onOpen={() => openInstalled(item)}
+        onCancel={() => cancelCatalogDownload(item.id)}
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers close over stable store actions
+    [sourcesById, maps, downloads, expandedId],
+  );
 
-  const renderActions = (item: CatalogItem, installStatus: InstallStatus, downloading: boolean) => {
-    if (downloading) {
-      return (
-        <IconButton
-          icon="close-circle-outline"
-          accessibilityLabel={`Cancel download of ${item.title}`}
-          onPress={() => cancelCatalogDownload(item.id)}
-        />
-      );
-    }
-    if (installStatus === 'installed') {
-      return (
-        <Button compact onPress={() => openInstalled(item)}>
-          Open
-        </Button>
-      );
-    }
-    if (installStatus === 'update-available') {
-      return (
-        <Button compact mode="contained-tonal" onPress={() => void startUpdate(item)}>
-          Update
-        </Button>
-      );
-    }
-    return (
-      <Button compact mode="contained-tonal" onPress={() => setPendingItem(item)}>
-        Download
-      </Button>
+  const renderItem = ({ item }: { item: CatalogItem }) =>
+    renderCard(
+      item,
+      lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null,
     );
-  };
-
-  const renderItem = ({ item }: { item: CatalogItem }) => {
-    const source = sourcesById.get(item.sourceId);
-    const installStatus = installStatusFor(item, maps);
-    const fraction = downloads[item.id];
-    const downloading = item.id in downloads;
-    const expanded = expandedId === item.id;
-    return (
-      <Card
-        mode="outlined"
-        style={styles.card}
-        onPress={() => setExpandedId(expanded ? null : item.id)}
-      >
-        <Card.Content>
-          <View style={styles.cardRow}>
-            <LocatorThumb bbox={item.bbox} size={56} />
-            <View style={styles.cardText}>
-              <Text variant="titleSmall">{item.title}</Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {metaLine(item)}
-              </Text>
-            </View>
-            {renderActions(item, installStatus, downloading)}
-          </View>
-          {downloading && (
-            <ProgressBar
-              style={styles.progress}
-              progress={fraction ?? 0}
-              indeterminate={fraction === null || fraction === undefined}
-            />
-          )}
-          {expanded && (
-            <View style={styles.details}>
-              {source !== undefined && (
-                <Text variant="bodySmall">
-                  {source.attribution} — {source.licence}
-                </Text>
-              )}
-              {item.region !== undefined && <Text variant="bodySmall">Region: {item.region}</Text>}
-              {item.bbox !== undefined && (
-                <Text variant="bodySmall">
-                  Coverage: {item.bbox[1].toFixed(2)}°–{item.bbox[3].toFixed(2)}°N,{' '}
-                  {Math.abs(item.bbox[2]).toFixed(2)}°–{Math.abs(item.bbox[0]).toFixed(2)}°W
-                </Text>
-              )}
-              {source?.homepage !== undefined && (
-                <Button
-                  compact
-                  icon="open-in-new"
-                  style={styles.sourceLink}
-                  onPress={() => void Linking.openURL(source.homepage ?? '')}
-                >
-                  About this source
-                </Button>
-              )}
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    );
-  };
 
   const emptyState = () => {
     if (status === 'loading' || status === 'idle') {
@@ -289,12 +225,56 @@ export function StoreScreen() {
         </View>
       );
     }
+    if (loadingShards) {
+      return (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator />
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            Loading maps for this area…
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyWrap}>
         <Text variant="bodyMedium" style={styles.emptyText}>
           {home ? 'The catalog is empty right now.' : 'No maps match your search.'}
         </Text>
       </View>
+    );
+  };
+
+  const landing = () => {
+    if (status !== 'ready' || chipCategories.length === 0) return emptyState();
+    return (
+      <ScrollView
+        contentContainerStyle={[styles.landing, { paddingBottom: insets.bottom + 24 }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {nearby.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text variant="titleMedium">Around you</Text>
+              <Button compact onPress={() => enterCategory(null)}>
+                See all
+              </Button>
+            </View>
+            <View style={styles.sectionRows}>
+              {nearby.map((entry) => renderCard(entry.item, entry.distanceMeters))}
+            </View>
+          </View>
+        )}
+        {nearby.length === 0 && lastKnownPosition === null && (
+          <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
+            Open the Map tab once to let “Around you” show what’s near.
+          </Text>
+        )}
+        <CategoryGrid
+          categories={chipCategories}
+          counts={categoryCounts}
+          onSelect={enterCategory}
+        />
+      </ScrollView>
     );
   };
 
@@ -330,16 +310,7 @@ export function StoreScreen() {
       )}
 
       {home ? (
-        status === 'ready' && chipCategories.length > 0 ? (
-          <CategoryGrid
-            categories={chipCategories}
-            counts={categoryCounts}
-            bottomInset={insets.bottom}
-            onSelect={enterCategory}
-          />
-        ) : (
-          emptyState()
-        )
+        landing()
       ) : (
         <>
           {chipCategories.length > 0 && (
@@ -376,6 +347,13 @@ export function StoreScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
+            ListFooterComponent={
+              sorted.length > 0 && loadingShards ? (
+                <View style={styles.footer}>
+                  <ActivityIndicator size="small" />
+                </View>
+              ) : null
+            }
             contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled"
           />
@@ -414,13 +392,20 @@ const styles = StyleSheet.create({
   chipRowContent: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
   chip: { marginRight: 0 },
   cacheNote: { paddingHorizontal: 16, paddingBottom: 6 },
+  landing: { paddingTop: 2 },
+  section: { paddingBottom: 12 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingBottom: 4,
+  },
+  sectionRows: { paddingHorizontal: 12, gap: 8 },
+  hint: { paddingHorizontal: 16, paddingBottom: 10 },
   listContent: { paddingHorizontal: 12, gap: 8 },
-  card: { marginBottom: 0 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardText: { flex: 1 },
-  progress: { marginTop: 8, height: 5, borderRadius: 3 },
-  details: { marginTop: 10, gap: 3 },
-  sourceLink: { alignSelf: 'flex-start', marginTop: 4 },
+  footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
 });

@@ -1,5 +1,9 @@
-import { CATALOG_SCHEMA_VERSION } from '@core/catalog/schema';
-import { catalogManifestUrl, loadCatalogManifest } from './catalogCache';
+import {
+  CATALOG_INDEX_SCHEMA_VERSION,
+  CATALOG_SCHEMA_VERSION,
+  type CatalogShardRef,
+} from '@core/catalog/schema';
+import { catalogManifestUrl, loadCatalogManifest, loadCatalogShard } from './catalogCache';
 import * as storage from './storage';
 
 jest.mock('./storage', () => ({
@@ -53,7 +57,7 @@ describe('loadCatalogManifest', () => {
     fetchMock.mockResolvedValue(okResponse(validManifest));
     const result = await loadCatalogManifest();
     expect(result?.fromCache).toBe(false);
-    expect(result?.manifest.items).toHaveLength(1);
+    expect(result?.index.items).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://test.example/manifest.json',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
@@ -72,7 +76,7 @@ describe('loadCatalogManifest', () => {
     });
     const result = await loadCatalogManifest();
     expect(result?.fromCache).toBe(true);
-    expect(result?.manifest.items).toHaveLength(1);
+    expect(result?.index.items).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -86,7 +90,7 @@ describe('loadCatalogManifest', () => {
     const result = await loadCatalogManifest();
     expect(fetchMock).toHaveBeenCalled();
     expect(result?.fromCache).toBe(true);
-    expect(result?.manifest.items).toHaveLength(1);
+    expect(result?.index.items).toHaveLength(1);
   });
 
   it('force bypasses a fresh cache (pull-to-refresh)', async () => {
@@ -140,5 +144,96 @@ describe('loadCatalogManifest', () => {
     fetchMock.mockResolvedValue(okResponse(validManifest));
     const result = await loadCatalogManifest();
     expect(result?.fromCache).toBe(false);
+  });
+
+  it('accepts a v2 index and exposes its shard directory', async () => {
+    fetchMock.mockResolvedValue(
+      okResponse({
+        schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
+        sources: validManifest.sources,
+        shards: [
+          {
+            id: 'topo-n40w080',
+            category: 'topo',
+            path: 'shards/topo-n40w080.json',
+            itemCount: 128,
+            bbox: [-80, 40, -70, 50],
+          },
+        ],
+        categoryCounts: { topo: 128 },
+      }),
+    );
+    const result = await loadCatalogManifest();
+    expect(result?.index.shards).toHaveLength(1);
+    expect(result?.index.items).toEqual([]);
+    expect(result?.index.categoryCounts.topo).toBe(128);
+  });
+});
+
+describe('loadCatalogShard', () => {
+  const shard: CatalogShardRef = {
+    id: 'topo-n40w080',
+    category: 'topo',
+    path: 'shards/topo-n40w080.json',
+    itemCount: 1,
+  };
+  const sourceIds = new Set(['s1']);
+  const body = { id: 'topo-n40w080', items: validManifest.items };
+
+  it('resolves the shard URL relative to the index and caches under its id', async () => {
+    fetchMock.mockResolvedValue(okResponse(body));
+    const result = await loadCatalogShard(shard, sourceIds);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://test.example/shards/topo-n40w080.json',
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    );
+    expect(result?.items).toHaveLength(1);
+    expect(result?.fromCache).toBe(false);
+    expect(writeJson).toHaveBeenCalledWith(
+      'catalog-shard-topo-n40w080.json',
+      expect.objectContaining({ url: 'https://test.example/shards/topo-n40w080.json' }),
+    );
+  });
+
+  it('serves a cached shard without touching the network (offline browsing)', async () => {
+    readJson.mockResolvedValue({
+      fetchedAt: Date.now() - 1000,
+      url: 'https://test.example/shards/topo-n40w080.json',
+      raw: body,
+    });
+    const result = await loadCatalogShard(shard, sourceIds);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result?.fromCache).toBe(true);
+  });
+
+  it('falls back to a stale cached shard when the network fails', async () => {
+    readJson.mockResolvedValue({
+      fetchedAt: Date.now() - 8 * 24 * 60 * 60 * 1000, // past the 7-day shard TTL
+      url: 'https://test.example/shards/topo-n40w080.json',
+      raw: body,
+    });
+    fetchMock.mockRejectedValue(new Error('offline'));
+    const result = await loadCatalogShard(shard, sourceIds);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result?.fromCache).toBe(true);
+    expect(result?.items).toHaveLength(1);
+  });
+
+  it('drops rows whose source the index never declared', async () => {
+    fetchMock.mockResolvedValue(okResponse(body));
+    const result = await loadCatalogShard(shard, new Set(['someone-else']));
+    // Every row was rejected ⇒ nothing usable, and nothing cached.
+    expect(result).toBeNull();
+    expect(writeJson).not.toHaveBeenCalled();
+  });
+
+  it('returns null (not an error) when the shard is unreachable and uncached', async () => {
+    fetchMock.mockRejectedValue(new Error('offline'));
+    expect(await loadCatalogShard(shard, sourceIds)).toBeNull();
+  });
+
+  it('refuses a shard path that would leave the catalog directory', async () => {
+    expect(await loadCatalogShard({ ...shard, path: '../../secrets.json' }, sourceIds)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
