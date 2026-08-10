@@ -24,19 +24,13 @@ Ordered roughly by priority (top = next).
 
 ## In progress — weather/marine/store field-feedback round (owner, 2026-08-09)
 
-Wave A (weather UX fixes, building): dock hugs the tab bar; Animate toggle
-removed (play button is the animation); crossfade frame swaps (no blank
-between frames); scrubber drag fixed (no snap-back to now, no lag on
-release); picker rows show layer icons; "+" actions button moves to the
-top-right rail below Overlays, rail-styled; tap-anywhere-on-map shows the
-point value/prediction (Windy picker behavior).
-Wave B (visibility + world, building): town names + coastlines readable
-ABOVE weather/marine drapes (labels-above-drape layer); worldwide coverage
-via GDPS auto-fallback outside HRDPS/RDPS domains + global radar
-alternative research (RainViewer). Weather is currently ECCC = Canada-
-centric; GDPS is already global.
-Wave C (store UX, building): Search tab gets categories-first browsing,
-per-map region thumbnails, nearest-first ordering.
+~~Wave A~~ SHIPPED (PR #199, OTA'd 2026-08-09). ~~Wave C~~ SHIPPED
+(PR #198, OTA'd 2026-08-09).
+~~Wave B~~ SHIPPED (PR #200, OTA'd both runtimes 2026-08-10): OpenFreeMap
+labels + coastlines above weather/marine drapes (incl. a maplibre-native
+TileJSON-url bug found and fixed — tiles resolved in JS at runtime);
+worldwide GDPS auto-fallback with honest AUTO caption; radar "Canada
+only" hints. Global radar = paid RainViewer, future line item.
 Wave D (marine deep, designing): higher-res chart sources, tap-for-depth,
 "download free local marine map" prompt on low-res regions (ties into
 marine M4 offline packs). Honesty note: navigation-grade CHS charts remain
