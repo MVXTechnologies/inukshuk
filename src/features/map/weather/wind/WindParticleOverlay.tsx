@@ -6,7 +6,13 @@ import {
   perfStep,
   type WindPerfState,
 } from '@core/weather/windPerf';
-import { fieldClipMatrix, type WindViewState } from '@core/weather/windProjection';
+import {
+  advectionUvPerMps,
+  fieldClipMatrix,
+  isRenderableView,
+  viewportGridRect,
+  type WindViewState,
+} from '@core/weather/windProjection';
 import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
 import { useEffect, useRef } from 'react';
 import { PixelRatio, StyleSheet } from 'react-native';
@@ -14,6 +20,9 @@ import { WindGl, type WindGlData } from './windGl';
 
 /** Frames of the one-shot static render when animation is degraded away. */
 const STATIC_BURST_FRAMES = 70;
+/** Spawn rect / advection for the fade-out clear pass, which draws nothing. */
+const FULL_GRID = { minU: 0, minV: 0, maxU: 1, maxV: 1 };
+const NO_ADVECTION = { x: 0, y: 0 };
 
 export interface WindOverlayProps {
   /** Encoded wind texture + geo, or null while loading / failed. */
@@ -89,6 +98,8 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
       wind = new WindGl(gl as unknown as WebGLRenderingContext);
     } catch {
       // Shader compile/link failure on an exotic GPU: gradient-only, silently.
+      // (The shader stage-linkage lint in windGl.test.ts is what keeps a
+      // BUILD-time shader bug from reaching this silent runtime path.)
       return;
     }
     wind.pointScale = PixelRatio.get();
@@ -111,7 +122,10 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
       const dt = lastFrameAt === 0 ? FRAME_INTERVAL_MS : now - lastFrameAt;
       lastFrameAt = now;
 
-      const view = viewRef.current;
+      // A camera whose layout size has not landed yet would project every
+      // particle off screen; idle until it is real (see isRenderableView).
+      const seeded = viewRef.current;
+      const view = seeded !== null && isRenderableView(seeded) ? seeded : null;
       const d = dataRef.current;
       if (dataDirty.current) {
         dataDirty.current = false;
@@ -139,7 +153,7 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
         // the GPU entirely this frame. One clear pass when we just faded out.
         if (prevOpacity > 0 && opacity === 0 && !staticDone) {
           wind.resize();
-          wind.draw(new Float32Array(16), 0);
+          wind.draw(new Float32Array(16), 0, FULL_GRID, NO_ADVECTION);
           gl.endFrameEXP();
         }
         return;
@@ -158,11 +172,23 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
 
       wind.resize();
       const matrix = fieldClipMatrix(view, d.lon0, d.latNorth);
+      // Particles spawn in the padded VIEWPORT, not across the whole fetched
+      // grid — the grid is deliberately much larger (fetch padding + the
+      // 0.5° WCS floor), so grid-wide seeding leaves the screen empty.
+      const geo = {
+        lon0: d.lon0,
+        lat0: d.latNorth,
+        lonSpan: d.lonSpanDeg,
+        latSpan: d.latSpanDeg,
+      };
+      const spawn = viewportGridRect(view, geo);
+      // Advection is screen-relative for the same reason (see the helper).
+      const uvPerMps = advectionUvPerMps(view, geo, spawn);
 
       if (perfRef.current.staticMode) {
         // Static streaks: burst-advect trails once, leave the frame up.
         if (staticFramesLeft.current === null) staticFramesLeft.current = STATIC_BURST_FRAMES;
-        wind.draw(matrix, opacity);
+        wind.draw(matrix, opacity, spawn, uvPerMps);
         staticFramesLeft.current -= 1;
         gl.endFrameEXP();
         return;
@@ -178,7 +204,7 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
         }
       }
       lastDrawAt = now;
-      wind.draw(matrix, opacity);
+      wind.draw(matrix, opacity, spawn, uvPerMps);
       gl.endFrameEXP();
     };
     frame();

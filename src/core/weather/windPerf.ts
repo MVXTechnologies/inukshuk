@@ -13,14 +13,34 @@
 export const TARGET_PARTICLES = 2000;
 /** Floor before giving up on animation entirely. */
 export const MIN_PARTICLES = 500;
-/** Below this sustained fps the ladder degrades. */
-export const DEGRADE_FPS = 28;
-/** Above this sustained fps a previously-degraded ladder climbs back. */
-export const RESTORE_FPS = 45;
-/** Frames a change must "settle" before the ladder re-evaluates. */
-export const PERF_WINDOW_FRAMES = 45;
 /** Render-loop frame cap (~30 fps — the Windy mobile cadence). */
 export const FRAME_INTERVAL_MS = 33;
+/**
+ * The fps the loop can reach AT BEST: it sleeps to FRAME_INTERVAL_MS, so no
+ * measurement can ever exceed this. Every ladder threshold must be read
+ * against this ceiling, not against an imagined 60 fps.
+ */
+export const FRAME_CAP_FPS = 1000 / FRAME_INTERVAL_MS;
+/**
+ * Below this sustained fps the ladder degrades. It must sit well UNDER the
+ * cap: the loop's own throttle already pins the measured rate at ~30 fps, so
+ * a threshold just below the cap (the shipped 28) fires on ordinary jitter —
+ * one slipped vsync is a 50 ms sample (20 fps) and drags the EMA under. The
+ * M3 overlay ratcheted itself down to the particle floor and then into the
+ * sticky static mode within seconds on a busy device, which reads to the
+ * user as "the wind never animates". 22 fps ≈ 45 ms means three vsyncs per
+ * frame — a real stall, not noise.
+ */
+export const DEGRADE_FPS = 22;
+/**
+ * Above this sustained fps a previously-degraded ladder climbs back. MUST be
+ * below FRAME_CAP_FPS or recovery is unreachable and the ladder becomes a
+ * one-way ratchet to static mode (the shipped value was 45 — impossible
+ * under a 33 ms cap, so nothing ever climbed back).
+ */
+export const RESTORE_FPS = 27;
+/** Frames a change must "settle" before the ladder re-evaluates. */
+export const PERF_WINDOW_FRAMES = 45;
 /** Gesture settle: re-seed + fade back in this long after the last move. */
 export const GESTURE_SETTLE_MS = 400;
 /** Overlay fade duration for gesture/pitch transitions. */

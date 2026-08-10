@@ -1,7 +1,12 @@
 import {
+  advectionUvPerMps,
   fieldClipMatrix,
+  isRenderableView,
+  latFromMercatorY,
   mercatorX,
   mercatorY,
+  PX_PER_FRAME_PER_MPS,
+  viewportGridRect,
   worldSizePx,
   type WindViewState,
 } from './windProjection';
@@ -40,9 +45,36 @@ describe('mercator helpers', () => {
     expect(Number.isFinite(mercatorY(-90))).toBe(true);
   });
 
+  it('latFromMercatorY inverts mercatorY', () => {
+    for (const lat of [-80, -46.8, 0, 12.5, 46.8131, 80]) {
+      expect(latFromMercatorY(mercatorY(lat))).toBeCloseTo(lat, 6);
+    }
+  });
+
   it('worldSizePx doubles per zoom level', () => {
     expect(worldSizePx(0)).toBe(512);
     expect(worldSizePx(1)).toBe(1024);
+  });
+});
+
+describe('isRenderableView', () => {
+  it('accepts a laid-out camera', () => {
+    expect(isRenderableView(view())).toBe(true);
+  });
+
+  it('rejects a camera whose layout size has not landed', () => {
+    // The M3 "nothing until you pan" bug: getViewState resolving before the
+    // map's onLayout seeded width/height 0, and fieldClipMatrix then scales
+    // by 2·worldSize — every particle lands far outside clip space.
+    expect(isRenderableView(view({ width: 0, height: 0 }))).toBe(false);
+    expect(isRenderableView(view({ width: 390, height: 0 }))).toBe(false);
+    const m = fieldClipMatrix(view({ width: 0, height: 0 }), -71, 47.5);
+    expect(Math.abs(m[0] ?? 0)).toBeGreaterThan(1e6);
+  });
+
+  it('rejects a non-finite camera', () => {
+    expect(isRenderableView(view({ zoom: Number.NaN }))).toBe(false);
+    expect(isRenderableView(view({ centerLat: Number.POSITIVE_INFINITY }))).toBe(false);
   });
 });
 
@@ -87,6 +119,100 @@ describe('fieldClipMatrix', () => {
     // 100 px on a 400-wide view = half of the half-width → clip 0.5.
     expect(c.x).toBeCloseTo(0.5, 5);
     expect(c.y).toBeCloseTo(0, 5);
+  });
+
+  it('keeps the spawn rect around the camera, not the whole grid', () => {
+    // The shipped M3 regression: at trail zoom the 0.5° fetch grid is ~600×
+    // the viewport's area, so grid-wide spawning left ~3 of 2000 particles
+    // on screen. The rect must be a small patch centred on the camera.
+    const v = view({ centerLng: -71.2082, centerLat: 46.8131, zoom: 14, width: 390, height: 761 });
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const r = viewportGridRect(v, field);
+    // Camera centre sits inside the rect.
+    const cu = (v.centerLng - field.lon0) / field.lonSpan;
+    const cv = (field.lat0 - v.centerLat) / field.latSpan;
+    expect(r.minU).toBeLessThan(cu);
+    expect(r.maxU).toBeGreaterThan(cu);
+    expect(r.minV).toBeLessThan(cv);
+    expect(r.maxV).toBeGreaterThan(cv);
+    // And it is a small patch, not the whole grid.
+    expect(r.maxU - r.minU).toBeLessThan(0.2);
+    expect(r.maxV - r.minV).toBeLessThan(0.2);
+    // Sanity: the viewport is ~0.0167° wide; padded by 2·SPAWN_PAD → ~1.4×.
+    expect((r.maxU - r.minU) * field.lonSpan).toBeCloseTo(0.0167 * 1.4, 2);
+  });
+
+  it('grows the spawn rect as the camera zooms out', () => {
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const at14 = viewportGridRect(view({ centerLng: -71.25, centerLat: 46.75, zoom: 14 }), field);
+    const at11 = viewportGridRect(view({ centerLng: -71.25, centerLat: 46.75, zoom: 11 }), field);
+    expect(at11.maxU - at11.minU).toBeGreaterThan((at14.maxU - at14.minU) * 7);
+  });
+
+  it('clamps the spawn rect to the grid and never inverts it', () => {
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    // Zoomed way out: the viewport dwarfs the grid.
+    const wide = viewportGridRect(view({ centerLng: -71.25, centerLat: 46.75, zoom: 4 }), field);
+    expect(wide).toEqual({ minU: 0, minV: 0, maxU: 1, maxV: 1 });
+    // Camera far outside the grid: degenerate but still ordered.
+    const away = viewportGridRect(view({ centerLng: 10, centerLat: 5, zoom: 14 }), field);
+    expect(away.maxU).toBeGreaterThan(away.minU);
+    expect(away.maxV).toBeGreaterThan(away.minV);
+    for (const v of [away.minU, away.maxU, away.minV, away.maxV]) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('covers the corners of a rotated camera', () => {
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const v = view({ centerLng: -71.25, centerLat: 46.75, zoom: 13, width: 390, height: 761 });
+    const flat = viewportGridRect(v, field);
+    const turned = viewportGridRect({ ...v, bearing: 90 }, field);
+    // A portrait viewport rotated 90° is wider than it is tall.
+    expect(turned.maxU - turned.minU).toBeGreaterThan(flat.maxU - flat.minU);
+    expect(turned.maxV - turned.minV).toBeLessThan(flat.maxV - flat.minV);
+  });
+
+  it('advects a wind speed by the intended number of screen pixels', () => {
+    // The shipped M3 regression's other half: the step was a fraction of the
+    // fetched GRID, so at trail zoom particles crossed the screen in one or
+    // two frames and rendered as noise. The step must be screen-relative.
+    const v = view({ centerLng: -71.2082, centerLat: 46.8131, zoom: 14, width: 390, height: 761 });
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const rect = viewportGridRect(v, field);
+    const p = advectionUvPerMps(v, field, rect);
+    const cosLat = Math.cos((v.centerLat * Math.PI) / 180);
+    const mps = 10;
+    // Mirror the shader: offset.x = velocity.x / cos(lat) * p.x (grid UV).
+    const duGrid = ((mps / cosLat) * p.x) as number;
+    const pxPerFrame = (duGrid / (rect.maxU - rect.minU)) * v.width;
+    expect(pxPerFrame).toBeCloseTo(PX_PER_FRAME_PER_MPS * mps, 6);
+    // ...which is a readable streak, not a teleport across the viewport.
+    expect(pxPerFrame).toBeLessThan(v.width / 20);
+  });
+
+  it('keeps the on-screen advection speed constant across zooms', () => {
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const pxAt = (zoom: number): number => {
+      const v = view({ centerLng: -71.25, centerLat: 46.75, zoom, width: 390, height: 761 });
+      const rect = viewportGridRect(v, field);
+      const p = advectionUvPerMps(v, field, rect);
+      return (p.x / (rect.maxU - rect.minU)) * v.width;
+    };
+    expect(pxAt(11)).toBeCloseTo(pxAt(14), 9);
+  });
+
+  it('advects x and y isotropically in screen pixels', () => {
+    const v = view({ centerLng: -71.25, centerLat: 46.75, zoom: 13, width: 390, height: 761 });
+    const field = { lon0: -71.5, lat0: 47, lonSpan: 0.5, latSpan: 0.5 };
+    const rect = viewportGridRect(v, field);
+    const p = advectionUvPerMps(v, field, rect);
+    const cosLat = Math.cos((v.centerLat * Math.PI) / 180);
+    // Equal ground speeds east and north must move equal pixel counts.
+    const pxX = ((1 / cosLat) * p.x * v.width) / (rect.maxU - rect.minU);
+    const pxY = (p.y * v.height) / (rect.maxV - rect.minV);
+    expect(pxY).toBeCloseTo(pxX, 2);
   });
 
   it('projects a south offset downward through the y-flip', () => {
