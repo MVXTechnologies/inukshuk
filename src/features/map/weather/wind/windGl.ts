@@ -21,8 +21,17 @@
  * and particles render as GL_POINTS decoded from the state texture.
  *
  * Inukshuk adaptations (all deliberate, none change the technique):
- * - particles live in the WIND GRID's UV space (a viewport-sized WCS subset,
- *   not the whole world); out-of-grid particles respawn instead of wrapping;
+ * - particles live in the WIND GRID's UV space (a WCS subset of the region,
+ *   not the whole world) but SPAWN inside the visible viewport's sub-rect of
+ *   that grid (see `viewportGridRect`); leaving the rect respawns them
+ *   instead of wrapping. The grid is deliberately much larger than the
+ *   viewport (fetch padding + a 0.5° floor), so grid-wide spawning would put
+ *   all but ~3 of 2000 particles off-screen at trail zooms;
+ * - advection is likewise screen-relative (`advectionUvPerMps`) so streak
+ *   speed reads the same at every zoom instead of scaling with grid size;
+ * - the trail buffer and the composite are PREMULTIPLIED alpha end to end;
+ *   the fade pass scales rgb and alpha together, so a straight-alpha
+ *   composite would darken the drape wherever a trail decays;
  * - the draw pass projects grid UV → mercator offsets → clip through a
  *   matrix built from the MapLibre ViewState (see @core/weather/windProjection;
  *   mercator y is computed relative to the grid's north edge as log(tanN/tanP)
@@ -36,6 +45,8 @@
  *   drape — the underlay already encodes speed, Windy-style;
  * - a global opacity uniform lets the overlay fade during gestures.
  */
+
+import type { GridRect } from '@core/weather/windProjection';
 
 // expo-gl implements the WebGL 1 interface; the standard lib type is enough.
 type GL = WebGLRenderingContext;
@@ -76,6 +87,17 @@ uniform float u_drop_rate_bump;
 uniform float u_lat_north;
 uniform float u_lat_span;
 uniform float u_gust_scale;
+// The visible viewport as a grid-UV rect: particles spawn (and respawn) here,
+// not across the whole fetched grid — the grid is up to ~600× the viewport's
+// area at trail zooms, which would put all but a handful of particles
+// off-screen.
+uniform vec2 u_spawn_min;
+uniform vec2 u_spawn_max;
+
+// The quad vertex shader's texture coordinate. Declaring it here is NOT
+// optional: GLSL ES 1.00 requires the varying in BOTH stages, and without it
+// this program fails to compile — which took the whole renderer down.
+varying vec2 v_tex_pos;
 
 // pseudo-random generator
 const vec3 rand_constants = vec3(12.9898, 78.233, 4375.85453);
@@ -123,13 +145,16 @@ void main() {
   vec2 seed = (pos + v_tex_pos) * u_rand_seed;
 
   // drop rate is a chance a particle will restart at random position, to
-  // avoid degeneration; leaving the grid forces the respawn
+  // avoid degeneration; leaving the SPAWN RECT (the padded viewport, already
+  // clamped to the grid) forces the respawn
   float drop_rate = u_drop_rate + speed_t * u_drop_rate_bump;
   float drop = step(1.0 - drop_rate, rand(seed));
-  float out_of_grid = step(0.5, step(1.0, pos.x) + step(pos.x, 0.0) + step(1.0, pos.y) + step(pos.y, 0.0));
-  drop = max(drop, out_of_grid);
+  float out_of_view = step(0.5,
+    step(u_spawn_max.x, pos.x) + step(pos.x, u_spawn_min.x) +
+    step(u_spawn_max.y, pos.y) + step(pos.y, u_spawn_min.y));
+  drop = max(drop, out_of_view);
 
-  vec2 random_pos = vec2(rand(seed + 1.3), rand(seed + 2.1));
+  vec2 random_pos = mix(u_spawn_min, u_spawn_max, vec2(rand(seed + 1.3), rand(seed + 2.1)));
   pos = mix(pos, random_pos, drop);
 
   // encode the new particle position back into RGBA
@@ -188,9 +213,25 @@ void main() {
   float speed_t = length(velocity) / length(u_wind_max);
   // near-white translucent streak, brighter where the wind is stronger —
   // the colour information lives in the gradient drape underneath.
-  gl_FragColor = vec4(1.0, 1.0, 1.0, 0.35 + 0.5 * speed_t);
+  // PREMULTIPLIED: the trail pass fades rgb and alpha together, so the whole
+  // pipeline has to read as premultiplied or decayed trails composite as
+  // BLACK over the drape instead of fading out.
+  float a = 0.35 + 0.5 * speed_t;
+  gl_FragColor = vec4(vec3(a), a);
 }
 `;
+
+/**
+ * Every shader program the renderer links, exported so the co-located test
+ * can lint stage linkage without a GL context. A varying missing from one
+ * stage is a compile error on real drivers but invisible in review — that
+ * exact bug (UPDATE_FRAG lacking `varying vec2 v_tex_pos`) shipped M3 dead.
+ */
+export const WIND_SHADER_PROGRAMS: Record<string, { vert: string; frag: string }> = {
+  draw: { vert: DRAW_VERT, frag: DRAW_FRAG },
+  screen: { vert: QUAD_VERT, frag: SCREEN_FRAG },
+  update: { vert: QUAD_VERT, frag: UPDATE_FRAG },
+};
 
 interface ProgramInfo {
   program: WebGLProgram;
@@ -300,8 +341,6 @@ const FADE_OPACITY = 0.965; // trail persistence per frame (thin comet tails)
 const DROP_RATE = 0.003;
 const DROP_RATE_BUMP = 0.01;
 const GUST_SCALE = 3; // matches GUST_RATIO_MAX in the encoder
-/** Grid-UV advected per frame per m/s per degree-of-span (visual constant). */
-const SPEED_FACTOR = 0.0022;
 const POINT_SIZE = 1.8;
 
 export class WindGl {
@@ -323,6 +362,11 @@ export class WindGl {
   private numParticles = 0;
   private screenWidth = 0;
   private screenHeight = 0;
+  /** Full drawing-buffer size (the composite target). */
+  private viewWidth = 0;
+  private viewHeight = 0;
+  /** Current trail-buffer scale (see resize). */
+  private scale = 1;
   /** Physical-px multiplier for gl_PointSize (the GLView buffer is physical). */
   pointScale = 1;
 
@@ -345,19 +389,30 @@ export class WindGl {
     this.resize();
   }
 
-  /** (Re)allocate the screen/trail textures to the drawing buffer size. */
-  resize(): void {
+  /**
+   * (Re)allocate the screen/trail textures. They are sized to the drawing
+   * buffer times `resolutionScale`: the three fullscreen passes per frame are
+   * the real cost on fill-rate-bound devices, so rendering them at half size
+   * (and letting the composite upscale) is the throttle that actually works.
+   * The composite still covers the full drawing buffer.
+   */
+  resize(scale = 1): void {
     const gl = this.gl;
-    const w = gl.drawingBufferWidth;
-    const h = gl.drawingBufferHeight;
+    const w = Math.max(1, Math.round(gl.drawingBufferWidth * scale));
+    const h = Math.max(1, Math.round(gl.drawingBufferHeight * scale));
+    this.viewWidth = gl.drawingBufferWidth;
+    this.viewHeight = gl.drawingBufferHeight;
+    this.scale = scale;
     if (w === this.screenWidth && h === this.screenHeight && this.screenTexture !== null) return;
     this.screenWidth = w;
     this.screenHeight = h;
     const empty = new Uint8Array(w * h * 4);
     if (this.backgroundTexture) gl.deleteTexture(this.backgroundTexture);
     if (this.screenTexture) gl.deleteTexture(this.screenTexture);
-    this.backgroundTexture = createTexture(gl, gl.NEAREST, empty, w, h);
-    this.screenTexture = createTexture(gl, gl.NEAREST, empty, w, h);
+    // LINEAR so an upscaled trail buffer composites smoothly instead of
+    // showing the scaling as blocky streaks.
+    this.backgroundTexture = createTexture(gl, gl.LINEAR, empty, w, h);
+    this.screenTexture = createTexture(gl, gl.LINEAR, empty, w, h);
   }
 
   /** Clear the accumulated trails (gesture settle → fresh streaks). */
@@ -416,10 +471,15 @@ export class WindGl {
    * composite onto the (transparent) drawing buffer at `globalOpacity`, then
    * one advection step. `matrix` maps field-relative mercator → clip.
    */
-  draw(matrix: Float32Array, globalOpacity: number): void {
+  draw(
+    matrix: Float32Array,
+    globalOpacity: number,
+    spawn: GridRect,
+    uvPerMps: { x: number; y: number },
+  ): void {
     const gl = this.gl;
     if (!this.hasWind) {
-      gl.viewport(0, 0, this.screenWidth, this.screenHeight);
+      gl.viewport(0, 0, this.viewWidth, this.viewHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       return;
@@ -429,7 +489,7 @@ export class WindGl {
     bindTexture(gl, this.windTexture as WebGLTexture, 0);
     bindTexture(gl, this.particleStateTexture0 as WebGLTexture, 1);
     this.drawScreen(matrix, globalOpacity);
-    this.updateParticles();
+    this.updateParticles(spawn, uvPerMps);
   }
 
   private drawScreen(matrix: Float32Array, globalOpacity: number): void {
@@ -437,15 +497,22 @@ export class WindGl {
     bindFramebuffer(gl, this.framebuffer, this.screenTexture as WebGLTexture);
     gl.viewport(0, 0, this.screenWidth, this.screenHeight);
     this.drawTexture(this.backgroundTexture as WebGLTexture, FADE_OPACITY);
+    // Heads composite OVER the faded trail (premultiplied) rather than
+    // punching a hole in it.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.drawParticles(matrix);
+    gl.disable(gl.BLEND);
     bindFramebuffer(gl, null);
-    // composite over the transparent GLView; separate alpha blend keeps the
-    // destination alpha accumulating instead of squaring the source alpha.
-    gl.viewport(0, 0, this.screenWidth, this.screenHeight);
+    // Composite over the transparent GLView. The trail buffer is
+    // PREMULTIPLIED (see DRAW_FRAG), so the blend must be ONE /
+    // ONE_MINUS_SRC_ALPHA — a straight-alpha blend would multiply the colour
+    // by alpha a second time and paint faded trails as dark smears.
+    gl.viewport(0, 0, this.viewWidth, this.viewHeight);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.drawTexture(this.screenTexture as WebGLTexture, globalOpacity);
     gl.disable(gl.BLEND);
     const temp = this.backgroundTexture;
@@ -479,11 +546,11 @@ export class WindGl {
     gl.uniform1f(p.uniform.u_lat_north ?? null, data.latNorth);
     gl.uniform1f(p.uniform.u_lat_span ?? null, data.latSpanDeg);
     gl.uniform1f(p.uniform.u_lon_span ?? null, data.lonSpanDeg);
-    gl.uniform1f(p.uniform.u_point_size ?? null, POINT_SIZE * this.pointScale);
+    gl.uniform1f(p.uniform.u_point_size ?? null, POINT_SIZE * this.pointScale * this.scale);
     gl.drawArrays(gl.POINTS, 0, this.numParticles);
   }
 
-  private updateParticles(): void {
+  private updateParticles(spawn: GridRect, uvPerMps: { x: number; y: number }): void {
     const gl = this.gl;
     const data = this.windData as WindGlData;
     bindFramebuffer(gl, this.framebuffer, this.particleStateTexture1 as WebGLTexture);
@@ -497,17 +564,16 @@ export class WindGl {
     gl.uniform2f(p.uniform.u_wind_res ?? null, data.width, data.height);
     gl.uniform2f(p.uniform.u_wind_min ?? null, data.uMin, data.vMin);
     gl.uniform2f(p.uniform.u_wind_max ?? null, data.uMax, data.vMax);
-    // m/s → grid-UV per frame; ÷span converts a degree offset into UV.
-    gl.uniform2f(
-      p.uniform.u_uv_per_mps ?? null,
-      SPEED_FACTOR / data.lonSpanDeg,
-      SPEED_FACTOR / data.latSpanDeg,
-    );
+    // m/s → grid-UV per frame, computed against the VIEWPORT (see
+    // advectionUvPerMps) so streak speed reads the same at every zoom.
+    gl.uniform2f(p.uniform.u_uv_per_mps ?? null, uvPerMps.x, uvPerMps.y);
     gl.uniform1f(p.uniform.u_drop_rate ?? null, DROP_RATE);
     gl.uniform1f(p.uniform.u_drop_rate_bump ?? null, DROP_RATE_BUMP);
     gl.uniform1f(p.uniform.u_lat_north ?? null, data.latNorth);
     gl.uniform1f(p.uniform.u_lat_span ?? null, data.latSpanDeg);
     gl.uniform1f(p.uniform.u_gust_scale ?? null, GUST_SCALE);
+    gl.uniform2f(p.uniform.u_spawn_min ?? null, spawn.minU, spawn.minV);
+    gl.uniform2f(p.uniform.u_spawn_max ?? null, spawn.maxU, spawn.maxV);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     bindFramebuffer(gl, null);
     const temp = this.particleStateTexture0;

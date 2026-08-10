@@ -1,19 +1,20 @@
 import { PARTICLES_MAX_PITCH_DEG } from '@core/weather/windCoverage';
+import { fadeStep, initialPerfState, perfStep, type WindPerfState } from '@core/weather/windPerf';
 import {
-  fadeStep,
-  FRAME_INTERVAL_MS,
-  initialPerfState,
-  perfStep,
-  type WindPerfState,
-} from '@core/weather/windPerf';
-import { fieldClipMatrix, type WindViewState } from '@core/weather/windProjection';
+  advectionUvPerMps,
+  fieldClipMatrix,
+  isRenderableView,
+  viewportGridRect,
+  type WindViewState,
+} from '@core/weather/windProjection';
 import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
 import { useEffect, useRef } from 'react';
 import { PixelRatio, StyleSheet } from 'react-native';
 import { WindGl, type WindGlData } from './windGl';
 
-/** Frames of the one-shot static render when animation is degraded away. */
-const STATIC_BURST_FRAMES = 70;
+/** Spawn rect / advection for the fade-out clear pass, which draws nothing. */
+const FULL_GRID = { minU: 0, minV: 0, maxU: 1, maxV: 1 };
+const NO_ADVECTION = { x: 0, y: 0 };
 
 export interface WindOverlayProps {
   /** Encoded wind texture + geo, or null while loading / failed. */
@@ -49,16 +50,11 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
   const interactingRef = useRef(interacting);
   const reseedRequested = useRef(false);
   const perfRef = useRef<WindPerfState>(initialPerfState());
-  const staticFramesLeft = useRef<number | null>(null);
 
   // Prop → ref mirrors (the loop reads refs only).
   useEffect(() => {
     dataRef.current = data;
     dataDirty.current = true;
-    // A fresh field re-arms animation if the perf ladder had gone static.
-    if (perfRef.current.staticMode)
-      perfRef.current = initialPerfState(perfRef.current.particleCount);
-    staticFramesLeft.current = null;
   }, [data]);
   useEffect(() => {
     // Falling edge of a gesture = settle: re-seed so streaks re-form cleanly
@@ -89,6 +85,8 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
       wind = new WindGl(gl as unknown as WebGLRenderingContext);
     } catch {
       // Shader compile/link failure on an exotic GPU: gradient-only, silently.
+      // (The shader stage-linkage lint in windGl.test.ts is what keeps a
+      // BUILD-time shader bug from reaching this silent runtime path.)
       return;
     }
     wind.pointScale = PixelRatio.get();
@@ -107,11 +105,16 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
       }
       requestAnimationFrame(frame);
       const now = performance.now();
-      if (now - lastFrameAt < FRAME_INTERVAL_MS - 2) return; // ~30 fps cap
-      const dt = lastFrameAt === 0 ? FRAME_INTERVAL_MS : now - lastFrameAt;
+      // Cadence is a ladder rung: the slowest step still animates.
+      const interval = perfRef.current.frameIntervalMs;
+      if (now - lastFrameAt < interval - 2) return;
+      const dt = lastFrameAt === 0 ? interval : now - lastFrameAt;
       lastFrameAt = now;
 
-      const view = viewRef.current;
+      // A camera whose layout size has not landed yet would project every
+      // particle off screen; idle until it is real (see isRenderableView).
+      const seeded = viewRef.current;
+      const view = seeded !== null && isRenderableView(seeded) ? seeded : null;
       const d = dataRef.current;
       if (dataDirty.current) {
         dataDirty.current = false;
@@ -123,24 +126,19 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
         uploadedData = d;
       }
       const idle = d === null || view === null || !wind.hasWind;
-      const staticDone = staticFramesLeft.current !== null && staticFramesLeft.current <= 0;
       const hidden =
         idle || interactingRef.current || (view !== null && view.pitch > PARTICLES_MAX_PITCH_DEG);
       const target = hidden ? 0 : 1;
       const prevOpacity = opacity;
       opacity = fadeStep(opacity, target, dt);
-      if (
-        d === null ||
-        view === null ||
-        (opacity === 0 && target === 0 && prevOpacity === 0) ||
-        staticDone
-      ) {
-        // Nothing to draw (or the static frame is already on screen): free
-        // the GPU entirely this frame. One clear pass when we just faded out.
-        if (prevOpacity > 0 && opacity === 0 && !staticDone) {
-          wind.resize();
-          wind.draw(new Float32Array(16), 0);
+      if (d === null || view === null || (opacity === 0 && target === 0 && prevOpacity === 0)) {
+        // Nothing to draw: free the GPU entirely this frame. One clear pass
+        // when we just faded out.
+        if (prevOpacity > 0 && opacity === 0) {
+          wind.resize(perfRef.current.resolutionScale);
+          wind.draw(new Float32Array(16), 0, FULL_GRID, NO_ADVECTION);
           gl.endFrameEXP();
+          gl.flushEXP(); // the clear has to reach the screen too — see below
         }
         return;
       }
@@ -149,37 +147,56 @@ export function WindParticleOverlay({ data, viewRef, interacting, anchorKey }: W
         reseedRequested.current = false;
         wind.reseed();
         wind.clearTrails();
-        if (perfRef.current.staticMode) {
-          // Re-run the one-shot static render on the fresh view.
-          staticFramesLeft.current = null;
-        }
         lastDrawAt = null;
       }
 
-      wind.resize();
+      wind.resize(perfRef.current.resolutionScale);
       const matrix = fieldClipMatrix(view, d.lon0, d.latNorth);
-
-      if (perfRef.current.staticMode) {
-        // Static streaks: burst-advect trails once, leave the frame up.
-        if (staticFramesLeft.current === null) staticFramesLeft.current = STATIC_BURST_FRAMES;
-        wind.draw(matrix, opacity);
-        staticFramesLeft.current -= 1;
-        gl.endFrameEXP();
-        return;
-      }
+      // Particles spawn in the padded VIEWPORT, not across the whole fetched
+      // grid — the grid is deliberately much larger (fetch padding + the
+      // 0.5° WCS floor), so grid-wide seeding leaves the screen empty.
+      const geo = {
+        lon0: d.lon0,
+        lat0: d.latNorth,
+        lonSpan: d.lonSpanDeg,
+        latSpan: d.latSpanDeg,
+      };
+      const spawn = viewportGridRect(view, geo);
+      // Advection is screen-relative for the same reason (see the helper).
+      const uvPerMps = advectionUvPerMps(view, geo, spawn);
 
       // Perf ladder feeds on executed animated frames only.
       if (lastDrawAt !== null && opacity > 0.5) {
-        const prevCount = perfRef.current.particleCount;
-        perfRef.current = perfStep(perfRef.current, now - lastDrawAt);
-        if (perfRef.current.particleCount !== prevCount && !perfRef.current.staticMode) {
+        const prev = perfRef.current;
+        perfRef.current = perfStep(prev, now - lastDrawAt);
+        if (perfRef.current.particleCount !== prev.particleCount) {
           wind.setNumParticles(perfRef.current.particleCount);
           wind.clearTrails();
         }
+        // A resolution change reallocates the trail buffers; start them clean.
+        if (perfRef.current.resolutionScale !== prev.resolutionScale) wind.clearTrails();
       }
       lastDrawAt = now;
-      wind.draw(matrix, opacity);
+      wind.draw(matrix, opacity, spawn, uvPerMps);
       gl.endFrameEXP();
+      // ...and then FORCE the queued batch through. This line is the
+      // difference between a visible overlay and a blank one.
+      //
+      // endFrameEXP only marks the context as needing a redraw and asks for a
+      // flush via dispatch_async on expo-gl's GL queue; the MSAA resolve
+      // (blitFramebuffers) and the display-link present happen off the back of
+      // that. When the loop drives frames itself — as this one does, rather
+      // than rendering from expo-gl's own callback — that asynchronous request
+      // never lands and NOTHING is ever presented, while every JS-side
+      // signal (frame timing, particle state, GL error state) looks perfectly
+      // healthy. It cost days to find because the renderer is not at fault.
+      //
+      // flushEXP enqueues an empty BLOCKING op, so the batch executes on the
+      // GL queue before this returns and the frame reaches the screen. It is
+      // the cheapest such op expo-gl offers (gl.getError() also works, at the
+      // cost of a real round trip). Verified by scripts/wind-motion-check.mjs:
+      // without this line the two-capture diff is 0 pixels, with it ~220k.
+      gl.flushEXP();
     };
     frame();
   };

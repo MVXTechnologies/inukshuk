@@ -516,6 +516,10 @@ export function MapScreen() {
   // low-rate bits: "a gesture is in progress" and the settled bounds.
   const windViewRef = useRef<WindViewState | null>(null);
   const windSizeRef = useRef({ width: 0, height: 0 });
+  // The same size as low-rate STATE: the camera seed below must not run
+  // before the map has laid out (see its comment), and onLayout fires only
+  // on mount/rotation, so a re-render here costs nothing.
+  const [windLayout, setWindLayout] = useState({ width: 0, height: 0 });
   const [windInteracting, setWindInteracting] = useState(false);
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -561,8 +565,15 @@ export function MapScreen() {
   );
   // Seed the camera ref/bounds when the overlay activates mid-session (the
   // region callbacks only fire on movement).
+  //
+  // Gated on a KNOWN layout size: getViewState can resolve before the map's
+  // first onLayout, and a camera state carrying width/height 0 makes the
+  // particle projection scale 2·worldSize (see fieldClipMatrix), which maps
+  // every particle far outside clip space. The overlay then renders NOTHING
+  // until the user happens to pan — the M3 "no particles on a fresh launch"
+  // report. Waiting for the layout makes the seed deterministic.
   useEffect(() => {
-    if (!windEnabled || windViewRef.current !== null) return;
+    if (!windEnabled || windLayout.width === 0 || windViewRef.current !== null) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -577,7 +588,7 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [windEnabled, writeWindView]);
+  }, [windEnabled, windLayout, writeWindView]);
   // Seed the settled centre once the map loads (wave B): the region callback
   // only fires on movement, so without this a user who never pans keeps a
   // null centre — and the model fallback/radar hint would never resolve.
@@ -1099,10 +1110,17 @@ export function MapScreen() {
             if (windEnabled) onWindRegionDidChange(e);
           }}
           onLayout={(e) => {
-            windSizeRef.current = {
-              width: e.nativeEvent.layout.width,
-              height: e.nativeEvent.layout.height,
-            };
+            const { width, height } = e.nativeEvent.layout;
+            windSizeRef.current = { width, height };
+            // A camera state seeded (or streamed) before this layout carries
+            // a stale size; re-stamp it so the particle projection can never
+            // be left scaled to a zero-width viewport.
+            if (windViewRef.current !== null) {
+              windViewRef.current = { ...windViewRef.current, width, height };
+            }
+            setWindLayout((prev) =>
+              prev.width === width && prev.height === height ? prev : { width, height },
+            );
             onMapLayout(e);
           }}
         >
