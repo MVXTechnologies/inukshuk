@@ -24,8 +24,6 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const points = useRecorderStore((s) => s.points);
   const startedAt = useRecorderStore((s) => s.startedAt);
   const pausedMs = useRecorderStore((s) => s.pausedMs);
-  const lastFixAt = useRecorderStore((s) => s.lastFixAt);
-  const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const start = useRecorderStore((s) => s.start);
   const pause = useRecorderStore((s) => s.pause);
   const resume = useRecorderStore((s) => s.resume);
@@ -79,12 +77,19 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
       setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
       // Re-evaluate signal quality every second: staleness must climb toward
       // 'weak'/'lost' while fixes stop arriving, so this can't be event-driven.
-      setGpsQuality(gpsQualityLevel(lastFixAt, now, lastAccuracyM));
+      // Read fresh from the store rather than closing over the last render's
+      // values: as effect deps, `lastFixAt`/`lastAccuracyM` tore this interval
+      // down and rebuilt it on EVERY accepted GPS fix — and when fixes arrive
+      // faster than 1 s (cycling, driving) the interval was destroyed before it
+      // ever fired, so the "independent of GPS fix cadence" clock was in fact
+      // driven by it.
+      const s = useRecorderStore.getState();
+      setGpsQuality(gpsQualityLevel(s.lastFixAt, now, s.lastAccuracyM));
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status, startedAt, pausedMs, lastFixAt, lastAccuracyM]);
+  }, [status, startedAt, pausedMs]);
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {

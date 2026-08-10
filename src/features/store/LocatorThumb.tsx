@@ -1,4 +1,4 @@
-import { buildLocatorScene } from '@core/catalog/locator';
+import { buildLocatorScene, type LocatorScene } from '@core/catalog/locator';
 import { LOCATOR_BASEMAP } from '@core/catalog/locatorBasemap';
 import type { CatalogBbox } from '@core/catalog/schema';
 import { memo, useMemo } from 'react';
@@ -15,7 +15,27 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
  *
  * Memoized: the scene is a pure function of the bbox, and rows re-render on
  * download progress ticks — the SVG must not be rebuilt then.
+ *
+ * Perf: `useMemo` alone only survives as long as the row is mounted, and a
+ * FlatList recycles cells constantly while scrolling — every recycle re-ran the
+ * full projection + Sutherland–Hodgman clip of the basemap (measured: ~5.5k of
+ * the basemap's 14.3k points touched per thumbnail, ~0.26 ms on desktop V8 and
+ * several times that on Hermes). The scene is a deterministic pure function of
+ * (bbox, size), so cache it module-side: the catalog is ~130 items and each
+ * scene is a handful of short path strings, so the whole cache is a few hundred
+ * KB at most and every re-visit to a row is then free.
  */
+const sceneCache = new Map<string, LocatorScene>();
+
+function locatorScene(bbox: CatalogBbox): LocatorScene {
+  const key = bbox.join(',');
+  const hit = sceneCache.get(key);
+  if (hit !== undefined) return hit;
+  const scene = buildLocatorScene(bbox, LOCATOR_BASEMAP, 100);
+  sceneCache.set(key, scene);
+  return scene;
+}
+
 export const LocatorThumb = memo(function LocatorThumb({
   bbox,
   size,
@@ -24,10 +44,7 @@ export const LocatorThumb = memo(function LocatorThumb({
   size: number;
 }) {
   const theme = useTheme();
-  const scene = useMemo(
-    () => (bbox === undefined ? null : buildLocatorScene(bbox, LOCATOR_BASEMAP, 100)),
-    [bbox],
-  );
+  const scene = useMemo(() => (bbox === undefined ? null : locatorScene(bbox)), [bbox]);
 
   // Fixed miniature-map palette per theme (not theme.colors — water must read
   // as water in both themes, like the weather HUD's fixed gradient ramps).

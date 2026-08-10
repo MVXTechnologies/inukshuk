@@ -2,7 +2,7 @@ import type { TrackSummary } from '@core/models';
 import { parseGpx } from '@core/geo/gpx';
 import * as storage from '@data/storage';
 import type { Feature, LineString } from 'geojson';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toLineFeature } from './geojson';
 
 export interface TrackOverlay {
@@ -55,15 +55,23 @@ export function useTrackOverlays(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tracks]);
 
-  const overlays: TrackOverlay[] = [];
-  for (const id of activeTrackIds) {
-    // Membership check: removeTrack prunes activeTrackIds, but the parsed cache
-    // (and any stale persisted id) must never render a deleted trail — without
-    // this it kept rendering until app restart.
-    const t = tracks.find((x) => x.id === id);
-    if (!t) continue;
-    const feature = cache[cacheKey(t)];
-    if (feature) overlays.push({ id, feature });
-  }
-  return overlays;
+  // Memoized on the resolved inputs: an unmemoized array here got a new
+  // identity on every host render, which defeated the caller's own memos (the
+  // 3D drape's polyline list) even when nothing had changed.
+  return useMemo(() => {
+    const overlays: TrackOverlay[] = [];
+    for (const id of activeTrackIds) {
+      // Membership check: removeTrack prunes activeTrackIds, but the parsed
+      // cache (and any stale persisted id) must never render a deleted trail —
+      // without this it kept rendering until app restart.
+      const t = tracks.find((x) => x.id === id);
+      if (!t) continue;
+      const feature = cache[cacheKey(t)];
+      if (feature) overlays.push({ id, feature });
+    }
+    return overlays;
+    // `key` is the joined activeTrackIds — the array itself is rebuilt by the
+    // caller on every render, so keying on its content is what makes this hold.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, tracks, cache]);
 }

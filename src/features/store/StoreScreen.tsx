@@ -12,13 +12,14 @@ import {
   type CatalogItem,
   type CatalogSource,
 } from '@core/catalog/schema';
+import type { MapDocument } from '@core/models';
 import { formatByteSize } from '@core/storage/diskBudget';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { formatDistance } from '@lib/format';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { FlatList, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -97,9 +98,15 @@ export function StoreScreen() {
   }, [status, load]);
 
   const items = useMemo(() => manifest?.items ?? [], [manifest]);
+  // Typing must never wait on the list. Filtering + the nearest-first sort walk
+  // the whole catalog (and every new row rebuilds a locator thumbnail), so the
+  // Searchbar keeps the live `query` while the list re-derives from a deferred
+  // copy — React renders the keystroke first and the heavier list pass after,
+  // dropping intermediate passes when the user keeps typing.
+  const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(
-    () => filterCatalogItems(items, { text: query, category }),
-    [items, query, category],
+    () => filterCatalogItems(items, { text: deferredQuery, category }),
+    [items, deferredQuery, category],
   );
   const sorted = useMemo(
     () => sortCatalogItems(filtered, lastKnownPosition),
@@ -111,6 +118,22 @@ export function StoreScreen() {
     () => new Map<string, CatalogSource>((manifest?.sources ?? []).map((s) => [s.id, s])),
     [manifest],
   );
+  // Install state for the whole catalog, indexed once per (items, maps) change.
+  // Doing it per row meant `installStatusFor` scanned the entire library for
+  // every visible cell on every render — O(rows × library) on a screen that
+  // re-renders on each download-progress tick.
+  const installStatusById = useMemo(() => {
+    const bySourceItem = new Map<string, MapDocument>();
+    for (const m of maps) {
+      if (m.sourceItemId !== undefined) bySourceItem.set(m.sourceItemId, m);
+    }
+    const out = new Map<string, InstallStatus>();
+    for (const item of items) {
+      const doc = bySourceItem.get(item.id);
+      out.set(item.id, doc === undefined ? 'not-installed' : installStatusFor(item, [doc]));
+    }
+    return out;
+  }, [items, maps]);
 
   // Landing (category grid) until the user types or enters a category.
   const home = !browsing && query.trim() === '';
@@ -207,7 +230,7 @@ export function StoreScreen() {
 
   const renderItem = ({ item }: { item: CatalogItem }) => {
     const source = sourcesById.get(item.sourceId);
-    const installStatus = installStatusFor(item, maps);
+    const installStatus = installStatusById.get(item.id) ?? 'not-installed';
     const fraction = downloads[item.id];
     const downloading = item.id in downloads;
     const expanded = expandedId === item.id;
@@ -265,6 +288,14 @@ export function StoreScreen() {
       </Card>
     );
   };
+
+  const keyExtractor = (item: CatalogItem) => item.id;
+  // Stable across renders: a fresh array literal here invalidates the list's
+  // content container on every download-progress tick.
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
+    [insets.bottom],
+  );
 
   const emptyState = () => {
     if (status === 'loading' || status === 'idle') {
@@ -373,11 +404,18 @@ export function StoreScreen() {
 
           <FlatList
             data={sorted}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
-            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={listContentStyle}
             keyboardShouldPersistTaps="handled"
+            // Each row builds an SVG locator thumbnail, so the defaults
+            // (initialNumToRender 10, windowSize 21) do far more work up front
+            // and retain far more mounted rows than this list needs.
+            initialNumToRender={6}
+            maxToRenderPerBatch={5}
+            windowSize={7}
+            removeClippedSubviews
           />
         </>
       )}
