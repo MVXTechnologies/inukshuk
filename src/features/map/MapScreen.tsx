@@ -1,6 +1,12 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
+import {
+  MARINE_PACK_SNOOZE_MS,
+  encodePackSnooze,
+  marinePackOffer,
+  snoozedPackRegions,
+} from '@core/geo/marinePacks';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
 import { ECCC_ATTRIBUTION, weatherLayerById } from '@core/geo/weatherLayers';
@@ -31,11 +37,12 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
@@ -72,9 +79,10 @@ import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
+import { MarinePackBanner } from './marine/MarinePackBanner';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
-import { useMarineChart } from './marine/useMarineChart';
+import { marineChartSource, useMarineChart } from './marine/useMarineChart';
 import { MapPointChip, MapPointLine } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
@@ -293,7 +301,14 @@ export function MapScreen() {
   // network-only treatment as the marked trails. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
   const marineLayers = useSettingsStore((s) => s.marineLayers);
-  const marineActive = marineLayers.length > 0 && !offlineOnly;
+  // Offline marine packs (wave D §D4): a downloaded reach renders and answers
+  // tap-for-depth with the radio off, so chart mode survives offline-only
+  // mode as soon as ANY pack exists — the one place `offlineOnly` doesn't
+  // simply switch a network layer off.
+  const installedPacks = useMarinePackStore((s) => s.installed);
+  const packTotalBytes = useMarinePackStore((s) => s.totalBytes);
+  const packProgress = useMarinePackStore((s) => s.progress);
+  const marineActive = marineLayers.length > 0 && (!offlineOnly || installedPacks.size > 0);
   // Long-pressed point whose forecast/tides card is open (shown while a
   // weather or marine layer is active).
   const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
@@ -340,6 +355,8 @@ export function MapScreen() {
     marineActive && !terrain3d && screenFocused && mapLoaded,
     settledBounds,
     units === 'imperial',
+    installedPacks,
+    installedPacks.size + packTotalBytes,
   );
   const style = useMemo(() => {
     const options = {
@@ -364,7 +381,11 @@ export function MapScreen() {
             marineChart: {
               drape: marineChart.chart?.drape ?? null,
               soundings: marineChart.chart?.soundings ?? null,
-              wmsFallback: marineChart.fallback,
+              wmsFallback: marineChart.fallback && !offlineOnly,
+              // Which imagery the coverage ladder fell back to, if any
+              // (GEBCO worldwide / NOAA ENC in US waters); null keeps the
+              // legacy CHS WMS pair, which is the right answer in Canada.
+              rasterUrl: offlineOnly ? null : marineChart.rasterUrl,
             },
           }
         : {}),
@@ -1109,6 +1130,92 @@ export function MapScreen() {
     [focusedTrackId, trackHeat],
   );
 
+  // --- Offline marine packs (marine wave D §D4) ---------------------------
+  // Hydrate the inventory once, then sweep for packs older than 30 days each
+  // time the app comes forward online. The sweep is silent by design: it
+  // refreshes in place and leaves yesterday's grid alone when it fails.
+  const marinePackSnoozes = useSettingsStore((s) => s.marinePackSnoozes);
+  const marinePackAutoUpdate = useSettingsStore((s) => s.marinePackAutoUpdate);
+  const setSetting = useSettingsStore((s) => s.set);
+  useEffect(() => {
+    void useMarinePackStore.getState().hydrate();
+  }, []);
+  useEffect(() => {
+    if (!marinePackAutoUpdate || offlineOnly) return;
+    const sweep = (): void => {
+      // hydrate() may still be in flight on a cold start; chaining off it
+      // means the first sweep sees the real inventory instead of an empty one.
+      const store = useMarinePackStore.getState();
+      void (store.hydrated
+        ? store.refreshStale()
+        : store.hydrate().then(() => store.refreshStale()));
+    };
+    sweep();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') sweep();
+    });
+    return () => sub.remove();
+  }, [marinePackAutoUpdate, offlineOnly]);
+
+  // The low-resolution prompt. Entirely decided by a pure function so the
+  // "never nag" rule is unit-tested rather than hoped for. Snooze EXPIRY is
+  // applied at settings hydration, which keeps the trigger clock-free and
+  // therefore legal to evaluate during render.
+  const snoozedRegionKeys = useMemo(
+    () => snoozedPackRegions(marinePackSnoozes),
+    [marinePackSnoozes],
+  );
+  const marinePackOfferState = useMemo(
+    () =>
+      marinePackOffer({
+        active: marineActive && !terrain3d && !selecting && makeMapState === null,
+        view: settledBounds,
+        activeSourceId: marineChart.sourceId,
+        installed: installedPacks,
+        snoozedRegions: snoozedRegionKeys,
+      }),
+    [
+      marineActive,
+      terrain3d,
+      selecting,
+      makeMapState,
+      settledBounds,
+      marineChart.sourceId,
+      installedPacks,
+      snoozedRegionKeys,
+    ],
+  );
+  const onDownloadMarinePack = useCallback(() => {
+    if (marinePackOfferState === null) return;
+    const { source, cells } = marinePackOfferState;
+    void useMarinePackStore
+      .getState()
+      .download(source, cells)
+      .then((stored) => {
+        if (stored > 0) {
+          showSnack('Marine chart pack downloaded');
+          return;
+        }
+        // Nothing surveyed here after all: snooze the region so the banner
+        // doesn't immediately offer the same empty download again.
+        showSnack('No marine data available for this area');
+        setSetting('marinePackSnoozes', [
+          ...marinePackSnoozes,
+          encodePackSnooze(marinePackOfferState.regionKey, Date.now() + MARINE_PACK_SNOOZE_MS),
+        ]);
+      })
+      .catch((err: unknown) => {
+        showSnack(err instanceof Error ? err.message : 'Marine pack download failed');
+      });
+  }, [marinePackOfferState, marinePackSnoozes, setSetting, showSnack]);
+  const onSnoozeMarinePack = useCallback(() => {
+    if (marinePackOfferState === null) return;
+    setSetting('marinePackSnoozes', [
+      ...marinePackSnoozes,
+      encodePackSnooze(marinePackOfferState.regionKey, Date.now() + MARINE_PACK_SNOOZE_MS),
+    ]);
+  }, [marinePackOfferState, marinePackSnoozes, setSetting]);
+
   return (
     <View style={styles.fill}>
       {terrain3d ? (
@@ -1761,7 +1868,23 @@ export function MapScreen() {
             chart drape can actually be on screen — and never while the
             region selector or the map maker owns the bottom edge, the same
             gates the weather dock carries. */}
-        {marineActive && !terrain3d && !selecting && makeMapState === null && <MarineLegend />}
+        {marineActive && !terrain3d && !selecting && makeMapState === null && (
+          <MarineLegend
+            source={marineChartSource(marineChart.sourceId)}
+            offline={marineChart.chart?.offline ?? false}
+          />
+        )}
+        {/* Offline marine pack offer (wave D §D4): a quiet Surface row in
+            the bottom stack — never a Dialog, never a Portal (One UI
+            touch-swallow), and snoozed for 30 days by "Not now". */}
+        {marinePackOfferState !== null && (
+          <MarinePackBanner
+            offer={marinePackOfferState}
+            progress={packProgress}
+            onDownload={onDownloadMarinePack}
+            onDismiss={onSnoozeMarinePack}
+          />
+        )}
         {/* Weather dock (weather UX M1): the value-legend pill + time
             scrubber, riding the same bottom flex column as the recording bar
             — the column stacks them, so they never overlap it. Hidden with

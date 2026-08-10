@@ -34,6 +34,8 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exportAllData } from './exportAllData';
+import { MAP_DATA_CREDITS } from './mapDataCredits';
+import { MarinePacksSection } from './MarinePacksSection';
 import { OfflineMapsSection } from './OfflineMapsSection';
 import { StravaSection } from './StravaSection';
 
@@ -382,6 +384,10 @@ export function SettingsScreen() {
 
               <Divider />
 
+              <MarinePacksSection />
+
+              <Divider />
+
               <List.Section>
                 <List.Subheader>Your data</List.Subheader>
                 <List.Item
@@ -516,8 +522,8 @@ export function SettingsScreen() {
                 title="Maps & data"
                 // paper truncates descriptions at 2 lines by default; the
                 // credit roll must stay fully readable.
-                descriptionNumberOfLines={8}
-                description="© OpenStreetMap contributors · Esri/ArcGIS basemaps · AWS Terrain Tiles · MapLibre · Weather: Environment and Climate Change Canada · Weather-mode labels: OpenFreeMap (© OpenMapTiles) · Bathymetry: CHS NONNA, Open Government Licence – Canada (not for navigation) · Seamarks © OpenSeaMap contributors (ODbL) · Tides: Fisheries and Oceans Canada (CHS IWLS)"
+                descriptionNumberOfLines={14}
+                description={MAP_DATA_CREDITS}
               />
             </View>
           </List.Accordion>

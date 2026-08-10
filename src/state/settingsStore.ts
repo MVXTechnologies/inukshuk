@@ -6,6 +6,7 @@ import * as storage from '@data/storage';
 import { setDisplayUnits, type Units } from '@lib/format';
 import type { UiStyle } from '@ui/theme';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
+import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import {
@@ -80,6 +81,19 @@ export interface Settings {
    * "Not for navigation" chip on the map.
    */
   marineLayers: MarineLayerId[];
+  /**
+   * Refresh offline marine packs older than 30 days when the app comes to
+   * the foreground online (marine wave D §D4). NOTE: the app carries no
+   * network-type native module by design (it must stay OTA-able), so this
+   * cannot be Wi-Fi-only — packs are a few megabytes each and the sweep only
+   * runs monthly, which is why the honest label says "when online".
+   */
+  marinePackAutoUpdate: boolean;
+  /**
+   * Regions where the pack offer was waved off, as `"<cellKey>@<expiryMs>"`
+   * strings (see `@core/geo/marinePacks`). The banner must never nag.
+   */
+  marinePackSnoozes: string[];
   /** Native MapLibre heatmap density layer under the trail lines. */
   showHeatmap: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
@@ -129,6 +143,8 @@ const DEFAULTS: Settings = {
   weatherModel: DEFAULT_WEATHER_MODEL,
   windParticles: true,
   marineLayers: [],
+  marinePackAutoUpdate: true,
+  marinePackSnoozes: [],
   showHeatmap: true,
   errorReporting: true,
   terrainSlope: false,
@@ -171,6 +187,8 @@ function snapshot(s: SettingsState): Settings {
     weatherModel,
     windParticles,
     marineLayers,
+    marinePackAutoUpdate,
+    marinePackSnoozes,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -199,6 +217,8 @@ function snapshot(s: SettingsState): Settings {
     weatherModel,
     windParticles,
     marineLayers,
+    marinePackAutoUpdate,
+    marinePackSnoozes,
     showHeatmap,
     errorReporting,
     terrainSlope,
@@ -227,6 +247,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
     next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
     next.marineLayers = sanitizeMarineLayers(next.marineLayers);
+    next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
     // weatherLayer's default is null (typeof 'object'), so the migration
     // ladder's typeof check DROPS a valid persisted string id (and would pass
     // object junk through). Recover the raw value and deep-validate it.
