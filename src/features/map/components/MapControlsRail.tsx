@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { FAB } from 'react-native-paper';
 import { useSlopeDisclaimer } from '../terrain3d/overlayControls';
+import { weatherChrome as wc } from '../weather/weatherChrome';
 import { EdgeExpandingMenu } from './EdgeExpandingMenu';
 import { EdgePill } from './EdgePill';
 import { BasemapMenu, BasemapRows } from './LayersMenu';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
-import { MapOverlaysMenu, OverlaysDialogs, OverlaysRows } from './MapOverlaysMenu';
+import { MapOverlaysMenu, OverlaysDialogs, OverlaysDrilldown } from './MapOverlaysMenu';
 
 interface Props {
   /** Distance from the top of the screen (safe-area inset + margin). */
@@ -41,22 +42,14 @@ interface Props {
 export function MapControlsRail(props: Props) {
   const uiStyle = useSettingsStore((s) => s.uiStyle);
   const { minimalOpen, onMinimalOpenChange } = props;
-  // "+" actions sheet, owned here so an outside tap on the backdrop below
-  // closes it (the sheet itself is a plain View — see MapActionsMenu).
-  const [actionsOpen, setActionsOpen] = useState(false);
+  // The overlays drill-down and the "+" actions sheet are both plain-View
+  // sheets in the rail's own column; ONE open at a time, owned here so an
+  // outside tap on the backdrop below closes whichever is up.
+  const [openMenu, setOpenMenu] = useState<null | 'overlays' | 'actions'>(null);
 
   if (uiStyle === 'edge') return <EdgeRail {...props} />;
 
-  const {
-    top,
-    onLocate,
-    showFitControl,
-    onFit,
-    terrain3d,
-    pdfOverlayCount,
-    trackOverlayCount,
-    actions,
-  } = props;
+  const { top, onLocate, showFitControl, onFit, terrain3d, actions } = props;
 
   // 'minimal' style: everything folded behind one small chevron until asked.
   if (uiStyle === 'minimal' && !minimalOpen) {
@@ -76,9 +69,7 @@ export function MapControlsRail(props: Props) {
 
   return (
     <>
-      {actionsOpen && actions !== undefined && (
-        <Pressable style={styles.backdrop} onPress={() => setActionsOpen(false)} />
-      )}
+      {openMenu !== null && <Pressable style={styles.backdrop} onPress={() => setOpenMenu(null)} />}
       <View
         style={[styles.rightControls, styles.railAboveBackdrop, { top }]}
         pointerEvents="box-none"
@@ -116,13 +107,17 @@ export function MapControlsRail(props: Props) {
             its EdgePill in EdgeRail) — everything behind terrain3d still works. */}
         <BasemapMenu />
         <MapOverlaysMenu
-          pdfOverlayCount={pdfOverlayCount}
-          trackOverlayCount={trackOverlayCount}
           showHypso={terrain3d}
+          open={openMenu === 'overlays'}
+          onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
         />
         {/* "+" map actions, directly below Map overlays (wave A item 6). */}
         {actions !== undefined && (
-          <MapActionsMenu actions={actions} open={actionsOpen} onToggle={setActionsOpen} />
+          <MapActionsMenu
+            actions={actions}
+            open={openMenu === 'actions'}
+            onToggle={(o) => setOpenMenu(o ? 'actions' : null)}
+          />
         )}
       </View>
     </>
@@ -133,23 +128,13 @@ export function MapControlsRail(props: Props) {
  * 'edge' style: static half-pill actions (nothing to choose from — no
  * expansion), and two expanding menus that unfold horizontally then
  * vertically, all flush with the screen edge. One menu open at a time; a
- * transparent backdrop closes it.
+ * transparent backdrop closes it. The overlays menu's panel hosts the same
+ * drill-down as the classic sheet, on the fixed dark weather chrome.
  */
-function EdgeRail({
-  top,
-  onLocate,
-  showFitControl,
-  onFit,
-  terrain3d,
-  pdfOverlayCount,
-  trackOverlayCount,
-  actions,
-}: Props) {
+function EdgeRail({ top, onLocate, showFitControl, onFit, terrain3d, actions }: Props) {
   const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [networksOpen, setNetworksOpen] = useState(false);
-  const [weatherOpen, setWeatherOpen] = useState(false);
-  const [marineOpen, setMarineOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
@@ -174,10 +159,9 @@ function EdgeRail({
           accessibilityLabel="Map overlays"
           open={openMenu === 'overlays'}
           onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
+          panelColor={wc.panelSolid}
         >
-          <OverlaysRows
-            pdfOverlayCount={pdfOverlayCount}
-            trackOverlayCount={trackOverlayCount}
+          <OverlaysDrilldown
             showHypso={terrain3d}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={() => {
@@ -187,14 +171,6 @@ function EdgeRail({
             onOpenTrailNetworks={() => {
               setOpenMenu(null);
               setNetworksOpen(true);
-            }}
-            onOpenWeather={() => {
-              setOpenMenu(null);
-              setWeatherOpen(true);
-            }}
-            onOpenMarine={() => {
-              setOpenMenu(null);
-              setMarineOpen(true);
             }}
           />
         </EdgeExpandingMenu>
@@ -213,10 +189,6 @@ function EdgeRail({
         onFoldersDismiss={() => setFoldersOpen(false)}
         networksOpen={networksOpen}
         onNetworksDismiss={() => setNetworksOpen(false)}
-        weatherOpen={weatherOpen}
-        onWeatherDismiss={() => setWeatherOpen(false)}
-        marineOpen={marineOpen}
-        onMarineDismiss={() => setMarineOpen(false)}
         snackbar={snackbar}
       />
     </>
@@ -225,7 +197,7 @@ function EdgeRail({
 
 const styles = StyleSheet.create({
   rightControls: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
-  // While the actions sheet is up, the rail must stack above its backdrop.
+  // While a sheet is up, the rail must stack above its backdrop.
   railAboveBackdrop: { zIndex: 5 },
   controlFab: { borderRadius: 24 },
   edgeRail: { position: 'absolute', right: 0, gap: 4, alignItems: 'flex-end', zIndex: 5 },

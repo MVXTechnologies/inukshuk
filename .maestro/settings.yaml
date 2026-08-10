@@ -66,7 +66,10 @@ appId: com.inukshuk.app
 - assertVisible: 'Theme.*'
 - tapOn: 'System'
 - assertVisible: 'Theme.*'
-# --- Data settings: export row present (do not tap — share sheet) ---
+# --- Data settings: the relocated "Locally downloaded only" switch (moved
+# here from the map's Overlays menu, D-7) + export row present (do not tap
+# either — the switch flips real network gating; the export opens the share
+# sheet) ---
 - scrollUntilVisible:
     element:
       text: 'Data settings.*'
@@ -83,6 +86,8 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Offline maps.*'
           timeout: 5000
+# The relocated switch row sits at the very top of the category body.
+- assertVisible: 'Locally downloaded only.*'
 - scrollUntilVisible:
     element:
       text: 'Download your data.*'

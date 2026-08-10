@@ -14,10 +14,11 @@
 #   and unmounts on the way out, which is exactly the crash surface this
 #   flow gates. The drape/scrubber degrade as in weather.yaml.
 # - Matchers wrap in `.*` (iOS merges title+description into one accessible
-#   text). 'Wind' is a substring of nothing else in the layer dialog; the
-#   dialog is topmost while its open-sentinel ('Rain radar' — never visible
-#   outside the dialog while no radar layer is on) is showing, so the tap
-#   lands on the dialog row (the weather.yaml Temperature idiom).
+#   text). 'Wind' is a substring of nothing else in the in-place Weather
+#   picker (the D-6 drill-down sub-menu — no dialog, no 'Done'; the backdrop
+#   tap closes); the picker is up while its open-sentinel ('Rain radar' —
+#   never visible outside it while no radar layer is on) is showing, so the
+#   tap lands on the picker row (the weather.yaml Temperature idiom).
 # - Guarded-tap idiom (retry + runFlow-when-notVisible) for the animated
 #   Overlays menu, exactly as weather.yaml.
 # - The pan swipes run through the 35–45% height band — above the weather
@@ -55,12 +56,13 @@ appId: com.inukshuk.app
           visible: 'Weather'
           timeout: 10000
 - tapOn: 'Weather'
-# Dialog-open sentinel: a picker row never visible while the dialog is closed.
+# Picker-open sentinel: a layer row never visible while the picker is closed.
 - extendedWaitUntil:
     visible: '.*Rain radar.*'
     timeout: 10000
 - tapOn: '.*Wind.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 10%,50%
 # The scrubber must come up (wind is a forecast layer) with the map alive —
 # by now the GLView overlay is mounted over the map.
 - extendedWaitUntil:
@@ -105,6 +107,7 @@ appId: com.inukshuk.app
     visible: '.*Rain radar.*'
     timeout: 10000
 - tapOn: '.*None.*'
-- tapOn: 'Done'
+- tapOn:
+    point: 10%,50%
 - assertVisible: 'Map actions'
 - assertNotVisible: '.*Weather timeline.*'

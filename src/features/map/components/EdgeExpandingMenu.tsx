@@ -21,6 +21,7 @@ export function EdgeExpandingMenu({
   children,
   open,
   onToggle,
+  panelColor,
 }: {
   icon: string;
   label: string;
@@ -28,6 +29,9 @@ export function EdgeExpandingMenu({
   children: ReactNode;
   open: boolean;
   onToggle: (open: boolean) => void;
+  /** Panel slab override (defaults to the themed elevation surface) — the
+   * overlays drill-down passes the fixed dark weather chrome. */
+  panelColor?: string;
 }) {
   const theme = useTheme();
   const [width] = useState(() => new Animated.Value(0));
@@ -59,7 +63,7 @@ export function EdgeExpandingMenu({
   const pillWidth = width.interpolate({ inputRange: [0, 1], outputRange: [COLLAPSED, EXPANDED] });
   const labelOpacity = width.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 0, 1] });
 
-  const surface = theme.colors.elevation?.level2 ?? theme.colors.surface;
+  const surface = panelColor ?? theme.colors.elevation?.level2 ?? theme.colors.surface;
   // The pill matches the action pills' fixed dark slab; open state shows in
   // the pastel-river ink (the "+" dial blue), not a fill change.
   const ink = open ? edgePill.active : edgePill.ink;

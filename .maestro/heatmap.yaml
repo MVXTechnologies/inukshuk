@@ -238,7 +238,17 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 2
     commands:
-      - tapOn: 'Map overlays'
+      # D-6 drill-down: the Content row lives in the Topology sub-menu now —
+      # guarded open ('Topology' is the top-level open sentinel), then drill.
+      - runFlow:
+          when:
+            notVisible: 'Topology.*'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Topology.*'
+          timeout: 10000
+      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 10000
@@ -255,7 +265,12 @@ appId: com.inukshuk.app
       - tapOn: 'Ungrouped'
       - tapOn: 'Done'
       - assertVisible: 'Map actions'
+      # Verify through the drill-down: reopen, enter Topology, check the row.
       - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Topology.*'
+          timeout: 10000
+      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content: 1 folder'
           timeout: 10000
@@ -512,7 +527,17 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 3
     commands:
-      - tapOn: 'Map overlays'
+      # D-6 drill-down: guarded open, then through Topology to the Content
+      # picker (30 s waits absorb the post-viewer JS-thread stall).
+      - runFlow:
+          when:
+            notVisible: 'Topology.*'
+          commands:
+            - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Topology.*'
+          timeout: 30000
+      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 30000
@@ -527,6 +552,10 @@ appId: com.inukshuk.app
       - tapOn: 'Done'
       - assertVisible: 'Map actions'
       - tapOn: 'Map overlays'
+      - extendedWaitUntil:
+          visible: 'Topology.*'
+          timeout: 30000
+      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content: everything'
           timeout: 30000
