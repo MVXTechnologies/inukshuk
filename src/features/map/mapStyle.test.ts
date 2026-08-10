@@ -235,10 +235,14 @@ describe('buildOsmStyle', () => {
     });
 
     it('adds the OpenFreeMap vector source, glyphs and the three reference layers', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: false } });
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
       expect(s.sources['overlay-labels']).toMatchObject({
         type: 'vector',
-        url: 'https://tiles.openfreemap.org/planet',
+        // Inline templates, resolved from the TileJSON in JS — native drops
+        // a TileJSON `url` vector source silently.
+        tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'],
       });
       expect(s.glyphs).toBe('https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf');
       for (const id of OVERLAY_LAYER_IDS) expect(layerIds(s)).toContain(id);
@@ -253,7 +257,7 @@ describe('buildOsmStyle', () => {
         weather,
         weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
         marineLayers: ['bathymetry', 'seamarks'],
-        overlayLabels: { dark: true },
+        overlayLabels: { dark: true, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
       });
       const ids = layerIds(s);
       for (const id of OVERLAY_LAYER_IDS) {
@@ -266,15 +270,19 @@ describe('buildOsmStyle', () => {
     it('sits above a marine-only drape too (no weather layer in the style)', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['bathymetry'],
-        overlayLabels: { dark: false },
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
       });
       const ids = layerIds(s);
       expect(ids.indexOf('overlay-water-line')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
 
     it('flips ink/halo polarity with the theme', () => {
-      const light = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: false } });
-      const dark = buildOsmStyle(TILE, false, 'map', true, { overlayLabels: { dark: true } });
+      const light = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
+      const dark = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: true, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
       const cityPaint = (s: ReturnType<typeof buildOsmStyle>) =>
         s.layers.find((l) => l.id === 'overlay-city-labels')?.paint as Record<string, unknown>;
       expect(cityPaint(light)['text-color']).toBe('#20303C');

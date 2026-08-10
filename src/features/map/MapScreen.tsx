@@ -75,6 +75,7 @@ import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
+import { useOverlayLabelTiles } from './useOverlayLabelTiles';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
 import { WeatherModelSheet } from './weather/WeatherModelSheet';
@@ -306,6 +307,9 @@ export function MapScreen() {
       ? modelWeatherTileUrl(weatherLayer, effectiveModel, weatherTl.timeParam)
       : null;
   const weatherFade = useWeatherCrossfade(weatherUrl);
+  const overlayTiles = useOverlayLabelTiles(
+    (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
+  );
   const style = useMemo(() => {
     const options = {
       // The 'edge' UI style washes the raster into pastels to match its chrome.
@@ -315,9 +319,10 @@ export function MapScreen() {
       // Marine drapes ride the same offline-only rule.
       marineLayers: offlineOnly ? [] : marineLayers,
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
-      // reference overlay rides whenever a weather OR marine layer is on.
-      ...((weatherLayer !== null || marineLayers.length > 0) && !offlineOnly
-        ? { overlayLabels: { dark: theme.dark } }
+      // reference overlay rides whenever a weather OR marine layer is on and
+      // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
+      ...(overlayTiles !== null
+        ? { overlayLabels: { dark: theme.dark, tiles: overlayTiles } }
         : {}),
       ...(weatherLayer !== null && !offlineOnly
         ? {
@@ -364,6 +369,7 @@ export function MapScreen() {
     marineLayers,
     weatherLayer,
     weatherFade,
+    overlayTiles,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);

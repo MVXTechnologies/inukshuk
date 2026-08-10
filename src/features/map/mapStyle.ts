@@ -25,7 +25,6 @@ const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium
  * is the one candidate that is legally clean with no key — and being vector
  * it adds the water outlines no labels-only raster source carries.
  */
-const OFM_TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 const OFM_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
 
@@ -206,7 +205,7 @@ export interface OsmStyleOptions {
    * unreachable the overlay simply doesn't draw — silent degradation to the
    * dim-only look.
    */
-  overlayLabels?: { dark: boolean };
+  overlayLabels?: { dark: boolean; tiles: readonly string[] };
 }
 
 /**
@@ -417,9 +416,15 @@ export function buildOsmStyle(
   if (options.overlayLabels) {
     const { dark } = options.overlayLabels;
     style.glyphs = OFM_GLYPHS_URL;
+    // maplibre-native silently drops a vector source declared via TileJSON
+    // `url` (gl-js loads the identical style fine), so the caller resolves
+    // the TileJSON in JS and hands concrete templates in — see
+    // useOverlayLabelTiles.
     style.sources['overlay-labels'] = {
       type: 'vector',
-      url: OFM_TILEJSON_URL,
+      tiles: [...options.overlayLabels.tiles],
+      minzoom: 0,
+      maxzoom: 14,
       attribution: OFM_ATTRIBUTION,
     };
     const ink = dark ? '#FFFFFF' : '#20303C';
