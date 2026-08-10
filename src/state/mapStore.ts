@@ -28,6 +28,15 @@ interface MapState {
    * is active is persisted in the settings store).
    */
   weatherAnimating: boolean;
+  /**
+   * The map camera's last settled centre (weather wave B). Written by the
+   * map screen on every region settle; read to resolve which forecast model
+   * actually covers the place being looked at (HRDPS/RDPS are
+   * Canada-domain, GDPS is global — see `@core/weather/modelCoverage`) and
+   * whether the Canada-only radar rows should carry their hint. Null until
+   * the first settle; consumers treat null as "don't second-guess".
+   */
+  mapCenter: { latitude: number; longitude: number } | null;
   /** One-shot request for the map to fit these bounds (e.g. "view trail"). */
   focusBounds: BoundingBox | null;
   /**
@@ -42,6 +51,7 @@ interface MapState {
   toggleTerrain3d: () => void;
   setBasemap: (b: MapBasemap) => void;
   toggleWeatherAnimation: () => void;
+  setMapCenter: (c: { latitude: number; longitude: number } | null) => void;
   setFocusBounds: (b: BoundingBox | null) => void;
   setFocusWaypoint: (target: { latitude: number; longitude: number } | null) => void;
 }
@@ -53,6 +63,7 @@ export const useMapStore = create<MapState>((set) => ({
   terrain3d: false,
   basemap: 'map',
   weatherAnimating: false,
+  mapCenter: null,
   focusBounds: null,
   focusWaypoint: null,
   setFocusBounds: (b) => set({ focusBounds: b }),
@@ -63,4 +74,5 @@ export const useMapStore = create<MapState>((set) => ({
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
   setBasemap: (b) => set({ basemap: b }),
   toggleWeatherAnimation: () => set((s) => ({ weatherAnimating: !s.weatherAnimating })),
+  setMapCenter: (c) => set({ mapCenter: c }),
 }));
