@@ -349,6 +349,117 @@ describe('buildOsmStyle', () => {
     });
   });
 
+  describe('marine chart mode (wave D — the ENC chart look)', () => {
+    const overlayLabels = { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] };
+    const drape = {
+      uri: 'file:///cache/overlays/depth-chart.png',
+      coordinates: [
+        [-71.35, 46.9],
+        [-71.05, 46.9],
+        [-71.05, 46.7],
+        [-71.35, 46.7],
+      ] as [[number, number], [number, number], [number, number], [number, number]],
+    };
+    const soundings = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [-71.2, 46.8] },
+          properties: { label: '26.5', shallow: 0 as const, sort: 26.5 },
+        },
+      ],
+    };
+    const chart = { drape, soundings, wmsFallback: false };
+
+    it('is absent by default — the map is byte-identical with marine off', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true);
+      for (const id of [
+        'marine-land-dim',
+        'marine-water-fill',
+        'marine-depth-chart',
+        'marine-soundings',
+      ])
+        expect(layerIds(s)).not.toContain(id);
+    });
+
+    it('restyles land tan, fills water chart-blue and mutes the raster', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry', 'seamarks'],
+        overlayLabels,
+        marineChart: chart,
+      });
+      const osm = s.layers.find((l) => l.id === 'osm');
+      expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.85 });
+      const dim = s.layers.find((l) => l.id === 'marine-land-dim');
+      expect(dim).toMatchObject({ type: 'background' });
+      const water = s.layers.find((l) => l.id === 'marine-water-fill');
+      expect(water).toMatchObject({
+        type: 'fill',
+        source: 'overlay-labels',
+        'source-layer': 'water',
+      });
+      // Chart flatness: no terrain shading under a nautical chart.
+      expect(layerIds(s)).not.toContain('hillshade-2d');
+    });
+
+    it('replaces the WMS bathymetry drape with the band-chart image, under the seamarks', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry', 'seamarks'],
+        overlayLabels,
+        marineChart: chart,
+      });
+      expect(layerIds(s)).not.toContain('marine-bathymetry');
+      expect(s.sources['marine-bathymetry']).toBeUndefined();
+      expect(s.sources['marine-depth-chart']).toEqual({
+        type: 'image',
+        url: drape.uri,
+        coordinates: drape.coordinates,
+      });
+      const ids = layerIds(s);
+      expect(ids.indexOf('marine-depth-chart')).toBeGreaterThan(ids.indexOf('marine-water-fill'));
+      expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
+      // Below the wave B labels overlay — the whole point of the image route.
+      expect(ids.indexOf('overlay-city-labels')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
+    });
+
+    it('keeps the WMS drape as the silent fallback when the client pipeline failed', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        overlayLabels,
+        marineChart: { drape: null, soundings: null, wmsFallback: true },
+      });
+      expect(layerIds(s)).toContain('marine-bathymetry');
+      expect(layerIds(s)).not.toContain('marine-depth-chart');
+    });
+
+    it('renders spot soundings as a symbol layer below the place labels', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        overlayLabels,
+        marineChart: chart,
+      });
+      expect(s.sources['marine-soundings']).toEqual({ type: 'geojson', data: soundings });
+      const layer = s.layers.find((l) => l.id === 'marine-soundings');
+      expect(layer).toMatchObject({ type: 'symbol', source: 'marine-soundings' });
+      const ids = layerIds(s);
+      expect(ids.indexOf('marine-soundings')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
+      expect(ids.indexOf('overlay-town-labels')).toBeGreaterThan(ids.indexOf('marine-soundings'));
+    });
+
+    it('skips the water fill and soundings when the vector overlay did not resolve', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        marineChart: chart,
+      });
+      expect(layerIds(s)).not.toContain('marine-water-fill');
+      expect(layerIds(s)).not.toContain('marine-soundings');
+      // The drape itself still draws — it needs no glyphs.
+      expect(layerIds(s)).toContain('marine-depth-chart');
+      expect(layerIds(s)).toContain('marine-land-dim');
+    });
+  });
+
   describe('downloaded-regions mask', () => {
     const mask = {
       data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),

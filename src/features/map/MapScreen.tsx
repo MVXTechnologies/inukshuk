@@ -72,6 +72,10 @@ import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
+import { DepthPointLine } from './marine/DepthPointLine';
+import { MarineLegend } from './marine/MarineLegend';
+import { useMarineChart } from './marine/useMarineChart';
+import { MapPointChip, MapPointLine } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
@@ -79,7 +83,7 @@ import { useOverlayLabelTiles } from './useOverlayLabelTiles';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
 import { WeatherModelSheet } from './weather/WeatherModelSheet';
-import { WeatherPointChip } from './weather/WeatherPointChip';
+import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 
@@ -293,10 +297,13 @@ export function MapScreen() {
   // Long-pressed point whose forecast/tides card is open (shown while a
   // weather or marine layer is active).
   const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
-  // Tap-anywhere point value (wave A item 7): a bare tap with a weather
-  // layer draped drops/moves the compact readout chip here; tapping the chip
-  // itself dismisses it (hit-tested in onMapPress below).
-  const [weatherPointAt, setWeatherPointAt] = useState<LatLng | null>(null);
+  // Tap-anywhere point readout (wave A item 7, generalized by marine wave D
+  // §D1/D-5): a bare tap drops/moves ONE chip here whatever the active
+  // layers — coordinates on the plain map, the weather value with a weather
+  // layer, the surveyed depth in marine mode, both lines stacked when both
+  // are on. Tapping the chip itself dismisses it (and copies the coordinates
+  // in the bare-map case) — hit-tested in onMapPress below.
+  const [pointAt, setPointAt] = useState<LatLng | null>(null);
   // Frame-swap crossfade (wave A item 3): the throttled TIME's tile URL runs
   // through a two-slot A/B stage-then-flip so the outgoing frame stays on
   // screen while the incoming one prefetches at opacity 0 — the drape never
@@ -309,6 +316,30 @@ export function MapScreen() {
   const weatherFade = useWeatherCrossfade(weatherUrl);
   const overlayTiles = useOverlayLabelTiles(
     (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
+  );
+  // Tab screens stay mounted, so background work (the terrain pipeline, the
+  // marine chart fetch) needs a focus gate — declared here because the style
+  // memo below already depends on it through the marine chart.
+  const [screenFocused, setScreenFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
+  // Settled viewport bounds, written on every camera settle (and seeded once
+  // the map loads). The marine chart re-anchors off this — unlike the wind
+  // field's own settled bounds it is NOT gated on the wind overlay.
+  const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  // Marine chart drape (wave D §D2): the client-rendered ENC depth bands +
+  // contours + spot soundings for the settled region, replacing the CHS
+  // server's blocky pre-coloured mosaic. Silent on every failure — `fallback`
+  // simply re-enables the legacy WMS drape below.
+  const units = useSettingsStore((s) => s.units);
+  const marineChart = useMarineChart(
+    marineActive && !terrain3d && screenFocused && mapLoaded,
+    settledBounds,
+    units === 'imperial',
   );
   const style = useMemo(() => {
     const options = {
@@ -323,6 +354,19 @@ export function MapScreen() {
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
       ...(overlayTiles !== null
         ? { overlayLabels: { dark: theme.dark, tiles: overlayTiles } }
+        : {}),
+      // Marine chart mode (wave D): the whole map restyles as a nautical
+      // chart — tan land, flat chart-blue water, the client-rendered depth
+      // bands + contours + spot soundings — with the legacy WMS drape kept
+      // as the silent fallback while the client pipeline has nothing.
+      ...(marineActive
+        ? {
+            marineChart: {
+              drape: marineChart.chart?.drape ?? null,
+              soundings: marineChart.chart?.soundings ?? null,
+              wmsFallback: marineChart.fallback,
+            },
+          }
         : {}),
       ...(weatherLayer !== null && !offlineOnly
         ? {
@@ -367,6 +411,8 @@ export function MapScreen() {
     uiStyle,
     markedTrailsNetworks,
     marineLayers,
+    marineActive,
+    marineChart,
     weatherLayer,
     weatherFade,
     overlayTiles,
@@ -477,16 +523,9 @@ export function MapScreen() {
   // want, nothing recomputed until the layer was toggled off and on.
   // In 3D the terrain shader draws the same analysis from the same settings.
   const [regionVersion, setRegionVersion] = useState(0);
-  // Tab screens stay mounted, so without a focus gate the overlay pipeline
-  // kept fetching DEM tiles and contouring in the background after switching
-  // to Library/Settings.
-  const [screenFocused, setScreenFocused] = useState(true);
-  useFocusEffect(
-    useCallback(() => {
-      setScreenFocused(true);
-      return () => setScreenFocused(false);
-    }, []),
-  );
+  // `screenFocused` (declared above with the marine chart) is the focus gate:
+  // without it the overlay pipeline kept fetching DEM tiles and contouring in
+  // the background after switching to Library/Settings.
   const terrainOverlays2d = useTerrainOverlays2D({
     mapRef,
     boundsVersion: regionVersion,
@@ -588,18 +627,22 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
+    // windLayout is load-bearing: the wind fix re-stamps the camera on first
+    // layout, so a 0x0 viewport can't be seeded (see fix/wind-particles).
   }, [windEnabled, windLayout, writeWindView]);
-  // Seed the settled centre once the map loads (wave B): the region callback
-  // only fires on movement, so without this a user who never pans keeps a
-  // null centre — and the model fallback/radar hint would never resolve.
+  // Seed the settled centre + bounds once the map loads (wave B / wave D):
+  // the region callback only fires on movement, so without this a user who
+  // never pans keeps a null centre — and the model fallback/radar hint (and
+  // the marine chart's first render) would never resolve.
   useEffect(() => {
-    if (!mapLoaded || mapCenter !== null) return;
+    if (!mapLoaded || (mapCenter !== null && settledBounds !== null)) return;
     let cancelled = false;
     void (async () => {
       try {
         const vs = await mapRef.current?.getViewState();
         if (vs === undefined || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
+        setSettledBounds(windBoundsOf(vs));
       } catch {
         // map mid-teardown — the first region settle seeds instead.
       }
@@ -607,7 +650,7 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mapLoaded, mapCenter, setMapCenter]);
+  }, [mapLoaded, mapCenter, settledBounds, setMapCenter]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -853,19 +896,23 @@ export function MapScreen() {
   // same screen-projection hit-test idiom as the waypoint pins below, just
   // against the single live location instead of a list of pins.
   const USER_LOCATION_HIT_PX = 40;
-  // Weather point chip (wave A item 7): the chip floats above its anchor dot
-  // (bottom-anchored marker), so the dismiss hit-test centres a little above
-  // the coordinate — same idiom as the waypoint pins' badge offset.
-  const WEATHER_CHIP_OFFSET = 20;
-  const WEATHER_CHIP_HIT_PX = 44;
+  // Point chip (wave A item 7, unified by wave D): the chip floats above its
+  // anchor dot (bottom-anchored marker), so the dismiss hit-test centres a
+  // little above the coordinate — same idiom as the waypoint pins' badge
+  // offset.
+  const POINT_CHIP_OFFSET = 20;
+  const POINT_CHIP_HIT_PX = 44;
   // Tap-routing priority (this handler, in order): waypoint pin hit → the
   // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
   // opens the inspect panel; else the user-location dot (re-engage follow,
   // item 4 — deliberately last among the selection routes, see
-  // tapHitsUserDot below); else, with a weather layer draped, the tap
-  // drops/moves/dismisses the point-value chip (wave A item 7); else
-  // deselect.
+  // tapHitsUserDot below); else the tap drops/moves/dismisses the ONE point
+  // chip (wave A item 7 + wave D §D1/D-5: coordinates on the plain map, the
+  // weather value under a weather layer, the depth in marine mode, both
+  // lines when both are on); then deselect. Every pre-existing priority is
+  // untouched — the chip route only widened from "weather draped" to "any
+  // bare tap".
   //
   // The event's real (runtime + typings) shape is `nativeEvent: { lngLat:
   // [lng, lat]; point: [x, y]; ... }` — flat tuples, NOT the GeoJSON
@@ -977,20 +1024,27 @@ export function MapScreen() {
         setHeatSelection(null);
         inspect(null);
         restoreCameraOnDeselect();
-        // Weather point-tap (wave A item 7), slotted between the dot route
-        // and plain deselect: with a weather layer draped, a bare tap
-        // drops/moves the point-value chip at the tapped spot; a tap ON the
-        // chip (or its anchor dot) dismisses it — same screen-projection
-        // hit-test idiom as the waypoint pins.
-        if (lngLatArr && weatherLayer !== null && !offlineOnly) {
-          if (weatherPointAt !== null) {
+        // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
+        // slotted between the dot route and plain deselect: a bare tap
+        // drops/moves the readout chip at the tapped spot; a tap ON the chip
+        // (or its anchor dot) dismisses it — same screen-projection hit-test
+        // idiom as the waypoint pins. On the plain map (no weather, no
+        // marine) the chip shows the coordinates and dismissing it copies
+        // them, which is the only affordance a pointerEvents-none chip can
+        // offer.
+        if (lngLatArr) {
+          if (pointAt !== null) {
             try {
-              const p = await map.project([weatherPointAt.longitude, weatherPointAt.latitude]);
+              const p = await map.project([pointAt.longitude, pointAt.latitude]);
               if (
                 p != null &&
-                Math.hypot(px - p[0], py - (p[1] - WEATHER_CHIP_OFFSET)) < WEATHER_CHIP_HIT_PX
+                Math.hypot(px - p[0], py - (p[1] - POINT_CHIP_OFFSET)) < POINT_CHIP_HIT_PX
               ) {
-                setWeatherPointAt(null);
+                if (weatherLayer === null && !marineActive) {
+                  void Clipboard.setStringAsync(formatLatLng(pointAt.latitude, pointAt.longitude));
+                  showSnack('Coordinates copied');
+                }
+                setPointAt(null);
                 setViewWp(null);
                 setForecastAt(null);
                 return;
@@ -999,7 +1053,7 @@ export function MapScreen() {
               // projection unavailable mid-teardown — treat as a fresh drop
             }
           }
-          setWeatherPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+          setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
         }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
@@ -1014,8 +1068,9 @@ export function MapScreen() {
       location,
       setFollowUser,
       weatherLayer,
-      offlineOnly,
-      weatherPointAt,
+      marineActive,
+      pointAt,
+      showSnack,
     ],
   );
 
@@ -1099,6 +1154,9 @@ export function MapScreen() {
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
             setRegionVersion((v) => v + 1);
+            // Settled bounds for the marine chart's re-anchor check (the
+            // wind layer keeps its own copy behind the windEnabled gate).
+            setSettledBounds(windBoundsOf(e.nativeEvent));
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1440,23 +1498,35 @@ export function MapScreen() {
             </Marker>
           ))}
 
-          {/* Tap-anywhere point value (wave A item 7): compact Windy-style
-              readout chip at the tapped spot, pinned to the scrubbed TIME.
-              Visual only — dismissal is hit-tested in onMapPress (Marker
-              onPress doesn't fire on Android, the waypoint-pin precedent). */}
-          {weatherPointAt !== null && weatherLayer !== null && !offlineOnly && (
-            <Marker
-              id="weather-point"
-              lngLat={[weatherPointAt.longitude, weatherPointAt.latitude]}
-              anchor="bottom"
-            >
-              <WeatherPointChip
-                at={weatherPointAt}
-                layer={weatherLayer}
-                model={weatherModel}
-                timeIso={weatherTl.timeParam}
-                selectedMs={weatherTl.selectedMs}
-              />
+          {/* Tap-anywhere readout chip (wave A item 7, unified by wave D
+              §D1/D-5): ONE compact Windy-style chip at the tapped spot —
+              the weather value pinned to the scrubbed TIME, the surveyed
+              NONNA depth in marine mode, both stacked when both are on, and
+              plain coordinates on the bare map. Each line owns its own fetch
+              hook, so a silent failure only drops its own line. Visual only
+              — dismissal (and the coordinates copy) is hit-tested in
+              onMapPress (Marker onPress doesn't fire on Android, the
+              waypoint-pin precedent). */}
+          {pointAt !== null && (
+            <Marker id="map-point" lngLat={[pointAt.longitude, pointAt.latitude]} anchor="bottom">
+              <MapPointChip accessibilityLabel="Map point readout">
+                {weatherLayer !== null && !offlineOnly && (
+                  <WeatherPointLine
+                    at={pointAt}
+                    layer={weatherLayer}
+                    model={weatherModel}
+                    timeIso={weatherTl.timeParam}
+                    selectedMs={weatherTl.selectedMs}
+                  />
+                )}
+                {marineActive && <DepthPointLine at={pointAt} />}
+                {weatherLayer === null && !marineActive && (
+                  <>
+                    <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                    <MapPointLine text="Tap to copy" muted />
+                  </>
+                )}
+              </MapPointChip>
             </Marker>
           )}
 
@@ -1685,6 +1755,13 @@ export function MapScreen() {
             />
           </View>
         )}
+        {/* Depth legend (marine wave D §D2): the chart's quantized band
+            scale, in the same bottom column as the weather dock and above it
+            (the weather scrubber must keep the bottom edge). Only while the
+            chart drape can actually be on screen — and never while the
+            region selector or the map maker owns the bottom edge, the same
+            gates the weather dock carries. */}
+        {marineActive && !terrain3d && !selecting && makeMapState === null && <MarineLegend />}
         {/* Weather dock (weather UX M1): the value-legend pill + time
             scrubber, riding the same bottom flex column as the recording bar
             — the column stacks them, so they never overlap it. Hidden with

@@ -57,3 +57,23 @@ appId: com.inukshuk.app
 # The speed-dial's accessibility label — proves the Map screen itself mounted
 # (asserting 'Map' would match the tab label even if the screen failed).
 - assertVisible: 'Map actions'
+# --- Base-mode coordinates chip (marine wave D, item D-5): with NO weather
+# or marine layer on, a bare map tap drops the readout chip showing the
+# tapped coordinates, and a second tap on it copies them and dismisses. The
+# chip is purely local (no network), but it renders INSIDE a MapLibre marker
+# — whether its accessibility label surfaces in the hierarchy is a native
+# detail — so the assert is guarded: when the chip is visible we exercise
+# the dismiss path, and either way the map must stay alive. The tap point
+# avoids the screen centre, where the user-location dot would claim the tap
+# first (see MapScreen's tap-priority comment). ---
+- tapOn:
+    point: 30%,35%
+- assertVisible: 'Map actions'
+- runFlow:
+    when:
+      visible: 'Map point readout'
+    commands:
+      - tapOn:
+          point: 30%,35%
+      - assertNotVisible: 'Map point readout'
+- assertVisible: 'Map actions'

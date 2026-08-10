@@ -1,9 +1,17 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
+import {
+  CHART_LAND_COLOR,
+  CHART_WATER_COLOR,
+  SOUNDING_INK,
+  SOUNDING_SHALLOW_INK,
+  type SoundingProperties,
+} from '@core/geo/depthChart';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
 import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
-import type { Feature, Polygon } from 'geojson';
+import type { LngLat } from '@core/models';
+import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -206,6 +214,28 @@ export interface OsmStyleOptions {
    * dim-only look.
    */
   overlayLabels?: { dark: boolean; tiles: readonly string[] };
+  /**
+   * Marine chart mode (marine wave D, owner spec 2026-08-09: the iBoating/
+   * ENC paper-chart look). While any marine layer is active the whole map
+   * restyles as a nautical chart: the basemap raster is muted (streets stay
+   * faintly readable), land takes a chart-tan dim, water polygons (from the
+   * wave B OpenFreeMap vector source, when resolved) fill flat chart-blue,
+   * and the client-rendered NONNA depth-band drape + spot-sounding numbers
+   * draw over it — all BELOW the wave B labels overlay, through the style's
+   * own layer list (never a GLView, which would re-cover the labels).
+   *
+   * `drape` is the bands+contours PNG rendered per viewport region
+   * (`@core/geo/depthChart` via a file:// ImageSource, the PDF-overlay
+   * mechanic); null while unavailable. `wmsFallback` re-enables the legacy
+   * pre-coloured CHS WMS drape when the client pipeline failed (silent
+   * degrade). `soundings` needs glyphs, so it only draws when the labels
+   * overlay resolved.
+   */
+  marineChart?: {
+    drape: { uri: string; coordinates: [LngLat, LngLat, LngLat, LngLat] } | null;
+    soundings: FeatureCollection<Point, SoundingProperties> | null;
+    wmsFallback: boolean;
+  };
 }
 
 /**
@@ -237,8 +267,13 @@ export function buildOsmStyle(
 ): StyleSpecification {
   const base = baseSource(basemap, tileUrl);
   // Requested marine layers in catalog order (bathymetry under seamarks),
-  // whatever order the user toggled them in.
-  const marine = MARINE_LAYERS.filter((l) => (options.marineLayers ?? []).includes(l.id));
+  // whatever order the user toggled them in. In chart mode the legacy WMS
+  // bathymetry drape only rides as the silent fallback for a failed client
+  // pipeline — the band drape replaces it (see the marineChart option).
+  const marine = MARINE_LAYERS.filter((l) => (options.marineLayers ?? []).includes(l.id)).filter(
+    (l) =>
+      l.id !== 'bathymetry' || options.marineChart === undefined || options.marineChart.wmsFallback,
+  );
   const style: StyleSpecification = {
     version: 8,
     sources: {
@@ -288,9 +323,12 @@ export function buildOsmStyle(
         id: 'osm',
         type: 'raster',
         source: 'osm',
-        paint: options.weatherMuted
-          ? WEATHER_MUTED_PAINT
-          : ((options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {}),
+        // Chart mode mutes the raster exactly like weather mode: the chart
+        // colours own the palette; streets/labels ghost through the tan dim.
+        paint:
+          options.weatherMuted || options.marineChart
+            ? WEATHER_MUTED_PAINT
+            : ((options.pastel ? PASTEL_PAINT[basemap] : RASTER_PAINT[basemap]) ?? {}),
       },
       // Marked-trail networks, each its own layer over the basemap (only
       // requested networks get a source — keeps offline packs and 3D drapes
@@ -301,6 +339,34 @@ export function buildOsmStyle(
         source: `wmt-${n}`,
         paint: { 'raster-opacity': 0.85 },
       })),
+      // Chart-tan land dim (marine chart mode): a semi-opaque warm screen
+      // over the muted basemap — the paper-chart ground. `background` paints
+      // the whole viewport; the water fill + drape re-cover the wet parts.
+      ...(options.marineChart
+        ? [
+            {
+              id: 'marine-land-dim',
+              type: 'background' as const,
+              paint: { 'background-color': CHART_LAND_COLOR, 'background-opacity': 0.62 },
+            },
+          ]
+        : []),
+      // Flat chart-blue water fill from the OpenFreeMap vector water
+      // polygons (the wave B overlay source — declared below whenever
+      // overlayLabels is set): uncharted water reads chart-blue instead of
+      // tan, the iBoating overview idiom. Skipped silently when the vector
+      // host didn't resolve.
+      ...(options.marineChart && options.overlayLabels
+        ? [
+            {
+              id: 'marine-water-fill',
+              type: 'fill' as const,
+              source: 'overlay-labels',
+              'source-layer': 'water',
+              paint: { 'fill-color': CHART_WATER_COLOR, 'fill-opacity': 0.88 },
+            },
+          ]
+        : []),
       // Marine layers above the trail overlays; the depth tint is dimmed so
       // the basemap's shoreline/labels stay readable through it.
       ...marine.map((l) => ({
@@ -312,12 +378,43 @@ export function buildOsmStyle(
     ],
   };
 
+  // Client-rendered depth-band drape (marine chart mode): the bands+contours
+  // PNG as a georeferenced image source — the PDF-overlay mechanic, placed
+  // in the style's own layer list so it stays BELOW the labels overlay and
+  // the seamark symbols ride above it. Inserted before `marine-seamarks`
+  // when that layer exists.
+  if (options.marineChart?.drape) {
+    style.sources['marine-depth-chart'] = {
+      type: 'image',
+      url: options.marineChart.drape.uri,
+      coordinates: options.marineChart.drape.coordinates,
+    };
+    const drapeLayer = {
+      id: 'marine-depth-chart',
+      type: 'raster' as const,
+      source: 'marine-depth-chart',
+      // Near-opaque: the bands ARE the chart; a hint of basemap texture
+      // ghosts through. fade 0 — re-anchored drapes must swap crisply.
+      paint: { 'raster-opacity': 0.92, 'raster-fade-duration': 0 },
+    };
+    const seamarksIdx = style.layers.findIndex((l) => l.id === 'marine-seamarks');
+    if (seamarksIdx >= 0) style.layers.splice(seamarksIdx, 0, drapeLayer);
+    else style.layers.push(drapeLayer);
+  }
+
   // A shaded-relief hillshade derived from the free Terrarium DEM, blended under
   // the live 2D map for the warm topographic look. Kept OFF for offline packs
   // (shadedRelief=false) so the DEM source doesn't bloat downloaded tile pyramids
   // — relief just degrades to flat tiles offline. Skipped in 3D (the real terrain
   // surface adds its own DEM/hillshade below) and for satellite imagery.
-  if (shadedRelief && !terrain3d && SHADE_BASEMAPS.has(basemap) && !options.weatherMuted) {
+  if (
+    shadedRelief &&
+    !terrain3d &&
+    SHADE_BASEMAPS.has(basemap) &&
+    !options.weatherMuted &&
+    // Chart mode: terrain shading under a nautical chart is noise.
+    !options.marineChart
+  ) {
     style.sources.dem = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
@@ -429,6 +526,37 @@ export function buildOsmStyle(
     };
     const ink = dark ? '#FFFFFF' : '#20303C';
     const halo = dark ? 'rgba(12, 16, 20, 0.92)' : 'rgba(255, 255, 255, 0.94)';
+    // Spot soundings (marine chart mode): sparse depth numbers over the
+    // band drape, chart-style — small dark digits, shallow (hazard) values
+    // in chart blue and sorted first so they win collisions. Pushed BEFORE
+    // the place labels so towns/cities take crowded spots (MapLibre resolves
+    // symbol collisions top-layer-first). Needs the glyphs endpoint this
+    // block just set, which is why soundings only draw when the labels
+    // overlay resolved.
+    if (options.marineChart?.soundings) {
+      style.sources['marine-soundings'] = {
+        type: 'geojson',
+        data: options.marineChart.soundings,
+      };
+      style.layers.push({
+        id: 'marine-soundings',
+        type: 'symbol',
+        source: 'marine-soundings',
+        minzoom: 9,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9.5, 13, 11, 16, 12.5],
+          'text-allow-overlap': false,
+          'symbol-sort-key': ['get', 'sort'],
+        },
+        paint: {
+          'text-color': ['case', ['==', ['get', 'shallow'], 1], SOUNDING_SHALLOW_INK, SOUNDING_INK],
+          'text-halo-color': 'rgba(255, 255, 255, 0.85)',
+          'text-halo-width': 1,
+        },
+      });
+    }
     style.layers.push(
       {
         id: 'overlay-water-line',
