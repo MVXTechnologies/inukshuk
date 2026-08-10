@@ -211,7 +211,7 @@ const RENDER_SCALE = 2;
  * viewport renders ~0.4 Mpx, the same order as the 2D terrain pipeline's
  * per-settle analysis.
  */
-const MAX_RENDER_DIM = 768;
+const MAX_RENDER_DIM = 1152;
 
 /**
  * Render the chart bands + contour lines for the (seam-healed, composited)

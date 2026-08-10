@@ -102,7 +102,7 @@ const LAT_LIMIT = 84;
  * 384² float32 ≈ 0.6 MB on the wire (an unreduced viewport subset measured
  * 5.3 MB) and ~0.4 Mpx of output at the renderer's 2× upsample.
  */
-export const DEPTH_MAX_GRID_DIM = 384;
+export const DEPTH_MAX_GRID_DIM = 576;
 
 const quantNear = (v: number): number => Math.round(v / BBOX_QUANT_DEG) * BBOX_QUANT_DEG;
 const quantUp = (v: number): number => Math.ceil(v / BBOX_QUANT_DEG) * BBOX_QUANT_DEG;
