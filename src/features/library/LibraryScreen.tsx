@@ -694,7 +694,11 @@ export function LibraryScreen() {
           icon="dots-vertical"
           size={22}
           onPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
-          accessibilityLabel="More options"
+          // Distinct from the trail card's "More options": two buttons sharing
+          // one label is ambiguous for screen readers AND for Maestro, which
+          // could not resolve the trail menu once a saved waypoint was on
+          // screen (folders.yaml failed on main, 2026-08-10).
+          accessibilityLabel="Waypoint options"
         />
       }
     >
