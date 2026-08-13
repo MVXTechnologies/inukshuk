@@ -7,6 +7,7 @@ import type { BoundingBox } from '@core/models';
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
 import { setNetworkAllowed } from './storage';
+import { clearWeatherFrames } from './weatherFrames';
 
 // MapLibre's offline `createPack` expects `mapStyle` to be an **http(s) style URL**
 // it can fetch through its native HTTP source — inline style JSON AND `file://`
@@ -343,12 +344,19 @@ export async function deleteRegionPack(id: string): Promise<void> {
 
 /**
  * Force offline-only tile serving (true) or normal fetching (false). One switch
- * governs both tile paths: MapLibre's native fetches (NetworkManager) and the raw
- * 3D DEM/basemap downloads (storage.downloadBytes) — cached tiles still serve.
+ * governs every tile path: MapLibre's native fetches (NetworkManager), the raw
+ * 3D DEM/basemap downloads (storage.downloadBytes) and the weather drape's
+ * frame downloads (weatherFrames) — cached tiles still serve.
+ *
+ * Turning it ON also drops the weather frame cache. Those PNGs are pure
+ * network convenience: the drape does not draw at all in offline-only mode,
+ * and a frame URL never recurs once TIME has moved on, so the cache is worth
+ * nothing here while the disk it holds is worth something.
  */
 export function setOfflineOnly(on: boolean): void {
   NetworkManager.setConnected(!on);
   setNetworkAllowed(!on);
+  if (on) clearWeatherFrames();
 }
 
 export function setTileLimit(n: number): void {

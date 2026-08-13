@@ -89,19 +89,3 @@ export interface DrapeAnchorLayer {
 export function drapeAnchorLayer(id: DrapeAnchorId): DrapeAnchorLayer {
   return { id, type: 'background', layout: { visibility: 'none' } };
 }
-
-/**
- * A stable, collision-free id suffix for a drape source whose URL changed.
- *
- * MapLibre tile sources cannot be re-pointed in place, so a new weather frame
- * has to unmount its slot and mount a fresh one. `MLRNSource.addToMap` REUSES
- * any source already carrying the same identifier, so reusing `weather-a`
- * would risk silently keeping the outgoing frame's tiles; hashing the URL
- * into the id makes that impossible. djb2 — short, deterministic, and only
- * ever compared for equality.
- */
-export function drapeSourceId(prefix: string, url: string): string {
-  let h = 5381;
-  for (let i = 0; i < url.length; i++) h = (Math.imul(h, 33) ^ url.charCodeAt(i)) >>> 0;
-  return `${prefix}-${h.toString(36)}`;
-}

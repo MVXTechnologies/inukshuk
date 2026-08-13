@@ -18,7 +18,7 @@ import {
   resolveModelWmsLayer,
   type WeatherModelId,
 } from '@core/weather/weatherModels';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * The scrubbable weather timeline (weather UX M1, replaces the bounded-frame
@@ -65,6 +65,12 @@ export interface WeatherTimelineState {
   /** Null only while no layer is active. */
   timeline: WeatherTimeline | null;
   selectedIdx: number;
+  /**
+   * The trailing-throttled frame index the DRAPE renders. Scrubbing moves
+   * `selectedIdx` (and the readout) with the finger; this lags it by at most
+   * {@link SCRUB_THROTTLE_MS} so a drag costs a bounded number of fetches.
+   */
+  drapeIdx: number;
   /** Epoch ms of the selected frame (drives the readout), or null when off. */
   selectedMs: number | null;
   /** Scrub to a frame index (clamped). Instant — the readout follows the finger. */
@@ -209,12 +215,29 @@ export function useWeatherTimeline(
     return () => clearInterval(interval);
   }, [resolvedKey, playing, stagingRef]);
 
-  const rawParam = live !== null ? wmsTimeParam(live.timeline, live.selectedIdx) : undefined;
-  const timeParam = useThrottledValue(rawParam, SCRUB_THROTTLE_MS);
+  // The FRAME index is what gets throttled, not just its TIME string: the
+  // drape now fetches one image per frame and warms the next ones from the
+  // same index, so both need the same trailing-throttled value or a fast
+  // drag would queue a download per finger position.
+  //
+  // The throttled value carries its SESSION KEY, and an index tagged with a
+  // previous session is discarded rather than waited out. An index means
+  // nothing across timelines: switching from radar (36 frames, idx 35 = now)
+  // to HRDPS temperature would hold idx 35 against the new timeline for up to
+  // SCRUB_THROTTLE_MS and fetch a ~35 h-out forecast — the drape briefly
+  // showing tomorrow's weather when the user asked for now.
+  const selectedIdx = live?.selectedIdx ?? 0;
+  const throttled = useThrottledValue(
+    useMemo(() => ({ key: resolvedKey, idx: selectedIdx }), [resolvedKey, selectedIdx]),
+    SCRUB_THROTTLE_MS,
+  );
+  const drapeIdx = throttled.key === resolvedKey ? throttled.idx : selectedIdx;
+  const timeParam = live !== null ? wmsTimeParam(live.timeline, drapeIdx) : undefined;
 
   return {
     timeline: live?.timeline ?? null,
     selectedIdx: live?.selectedIdx ?? 0,
+    drapeIdx,
     selectedMs: live !== null ? (live.timeline.framesMs[live.selectedIdx] ?? null) : null,
     scrubTo,
     timeParam: layer === null ? undefined : timeParam,

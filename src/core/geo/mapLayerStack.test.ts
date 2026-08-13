@@ -1,7 +1,6 @@
 import {
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   drapeAnchorLayer,
-  drapeSourceId,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
@@ -35,29 +34,5 @@ describe('drape anchors', () => {
       expect('source' in layer).toBe(false);
       expect('paint' in layer).toBe(false);
     }
-  });
-});
-
-describe('drapeSourceId', () => {
-  it('is stable for the same url', () => {
-    expect(drapeSourceId('weather-a', 'https://x/?TIME=1')).toBe(
-      drapeSourceId('weather-a', 'https://x/?TIME=1'),
-    );
-  });
-
-  it('differs when the frame url changes — a reused id would keep stale tiles', () => {
-    expect(drapeSourceId('weather-a', 'https://x/?TIME=1')).not.toBe(
-      drapeSourceId('weather-a', 'https://x/?TIME=2'),
-    );
-  });
-
-  it('keeps the two slots apart for the same url', () => {
-    expect(drapeSourceId('weather-a', 'u')).not.toBe(drapeSourceId('weather-b', 'u'));
-  });
-
-  it('is a plain identifier (no url punctuation leaks into the style)', () => {
-    expect(drapeSourceId('weather-a', 'https://a.b/c?d=1&e={bbox}')).toMatch(
-      /^weather-a-[0-9a-z]+$/,
-    );
   });
 });

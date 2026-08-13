@@ -40,9 +40,10 @@ import { useEffect, useRef, useState } from 'react';
  * map completely idle, and a gate that demanded a LATER event would stall
  * that frame for the full {@link WEATHER_PRELOAD_MAX_MS}.
  *
- * So this gate makes a washed-out swap RARE, not impossible; closing the gap
- * for good has to happen upstream, by staging only frames whose bitmap is
- * already local.
+ * So this gate makes a washed-out swap RARE, not impossible. What closes the
+ * gap is upstream: `useWeatherDrape` publishes a frame only once its PNG is
+ * on disk, so "staged" means "decodable right now" and the gate's residual
+ * imprecision has nothing left to catch it out.
  */
 export function useWeatherCrossfade(
   url: string | null,

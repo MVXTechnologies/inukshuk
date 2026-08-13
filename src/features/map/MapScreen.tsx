@@ -9,10 +9,10 @@ import {
 } from '@core/geo/marinePacks';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import { ECCC_ATTRIBUTION, weatherLayerById } from '@core/geo/weatherLayers';
+import { weatherLayerById } from '@core/geo/weatherLayers';
 import {
   modelVariableForLayer,
-  modelWeatherTileUrl,
+  resolveModelWmsLayer,
   weatherModelById,
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
@@ -94,6 +94,7 @@ import { MapPointChip, MapPointLine } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
+import { useWeatherDrape } from './weather/useWeatherDrape';
 import { WeatherDrapeLayers } from './weather/WeatherDrapeLayers';
 import { MarineDrapeLayer, MarineSoundingsLayer } from './marine/MarineChartLayers';
 import { useOverlayLabelTiles } from './useOverlayLabelTiles';
@@ -311,6 +312,20 @@ export function MapScreen() {
   // 2026-08-10).
   const weatherStagingRef = useRef(false);
   const renderedFramesRef = useRef(0);
+  // The crossfade's mounted slot keys, read back by the frame source (which
+  // sits UPSTREAM of the crossfade) so its bounded map never drops a frame a
+  // slot is still drawing. Same ref-breaks-the-cycle trick as the pacing.
+  const weatherSlotsRef = useRef<readonly (string | null)[]>([null, null]);
+  // Settled viewport bounds, written on every camera settle (and seeded once
+  // the map loads). The marine chart re-anchors off this — unlike the wind
+  // field's own settled bounds it is NOT gated on the wind overlay — and so
+  // does the weather drape, which is why both live this high up.
+  const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  // The MapView's laid-out size as low-rate STATE: the wind camera seed must
+  // not run before the map has laid out (see its comment), and the weather
+  // drape sizes its GetMap from it. onLayout fires only on mount/rotation,
+  // so a re-render here costs nothing.
+  const [windLayout, setWindLayout] = useState({ width: 0, height: 0 });
   const weatherTl = useWeatherTimeline(
     offlineOnly ? null : weatherLayer,
     effectiveModel,
@@ -344,14 +359,33 @@ export function MapScreen() {
   // screen while the incoming one prefetches at opacity 0 — the drape never
   // blanks between frames during playback/scrub. Pure slot machine in
   // @core/weather/weatherCrossfade; both phases rebuild the style memo below.
-  const weatherUrl =
+  // The drape's frames (perf work 2026-08-11): ONE viewport GetMap per frame,
+  // downloaded to disk and warmed a few frames ahead, instead of the ~15 WMS
+  // tile requests the `{bbox-epsg-3857}` template used to make per frame.
+  // `frameKey` only advances to a frame whose PNG is already local, so the
+  // crossfade below stages something that can be drawn immediately.
+  const weatherDrape = useWeatherDrape(
     weatherLayer !== null && !offlineOnly
-      ? modelWeatherTileUrl(weatherLayer, effectiveModel, weatherTl.timeParam)
-      : null;
-  const weatherFade = useWeatherCrossfade(weatherUrl, renderedFramesRef);
+      ? resolveModelWmsLayer(weatherLayer, effectiveModel)
+      : null,
+    weatherTl.timeline,
+    weatherTl.drapeIdx,
+    settledBounds,
+    windLayout,
+    weatherAnimating,
+    weatherSlotsRef,
+  );
+  const weatherFade = useWeatherCrossfade(weatherDrape.frameKey, renderedFramesRef);
   useEffect(() => {
-    weatherStagingRef.current = weatherFade.pendingSlot !== null;
-  }, [weatherFade.pendingSlot]);
+    // Playback holds its beat while a frame is staging OR still downloading,
+    // so it can never run ahead of what the drape can show.
+    weatherStagingRef.current = weatherFade.pendingSlot !== null || weatherDrape.fetching;
+  }, [weatherFade.pendingSlot, weatherDrape.fetching]);
+  useEffect(() => {
+    // Which frames are actually mounted, fed back UPSTREAM so the drape's
+    // bounded frame map can never evict one out from under a live slot.
+    weatherSlotsRef.current = weatherFade.slots;
+  }, [weatherFade.slots]);
   const overlayTiles = useOverlayLabelTiles(
     (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
   );
@@ -375,10 +409,6 @@ export function MapScreen() {
       return () => setScreenFocused(false);
     }, []),
   );
-  // Settled viewport bounds, written on every camera settle (and seeded once
-  // the map loads). The marine chart re-anchors off this — unlike the wind
-  // field's own settled bounds it is NOT gated on the wind overlay.
-  const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
   // Marine chart drape (wave D §D2): the client-rendered ENC depth bands +
   // contours + spot soundings for the settled region, replacing the CHS
   // server's blocky pre-coloured mosaic. Silent on every failure — `fallback`
@@ -609,10 +639,6 @@ export function MapScreen() {
   // low-rate bits: "a gesture is in progress" and the settled bounds.
   const windViewRef = useRef<WindViewState | null>(null);
   const windSizeRef = useRef({ width: 0, height: 0 });
-  // The same size as low-rate STATE: the camera seed below must not run
-  // before the map has laid out (see its comment), and onLayout fires only
-  // on mount/rotation, so a re-render here costs nothing.
-  const [windLayout, setWindLayout] = useState({ width: 0, height: 0 });
   const [windInteracting, setWindInteracting] = useState(false);
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1397,10 +1423,10 @@ export function MapScreen() {
           {weatherLayer !== null && !offlineOnly && (
             <WeatherDrapeLayers
               fade={weatherFade}
+              frames={weatherDrape.frames}
               // M3: the wind speed gradient reads a touch stronger under the
               // particle streaks (design §3); other layers keep the default.
               opacity={weatherLayer === 'wind' ? 0.75 : 0.62}
-              attribution={ECCC_ATTRIBUTION}
             />
           )}
           {marineActive && (

@@ -1,7 +1,6 @@
 import {
   capabilitiesUrlForLayer,
   weatherLayerById,
-  wmsTileUrlForLayer,
   type WeatherLayerId,
 } from '@core/geo/weatherLayers';
 
@@ -142,15 +141,6 @@ export function resolveModelWmsLayer(layerId: WeatherLayerId, modelId: WeatherMo
   const variable = modelVariableForLayer(layerId);
   if (variable === null) return weatherLayerById(layerId).wmsLayer;
   return weatherModelById(modelId).drape[variable];
-}
-
-/** Per-model GetMap tile-URL template (the M2 drape swap). */
-export function modelWeatherTileUrl(
-  layerId: WeatherLayerId,
-  modelId: WeatherModelId,
-  time?: string,
-): string {
-  return wmsTileUrlForLayer(resolveModelWmsLayer(layerId, modelId), time);
 }
 
 /** Per-model layer-scoped GetCapabilities URL (the scrubber's TIME window). */
