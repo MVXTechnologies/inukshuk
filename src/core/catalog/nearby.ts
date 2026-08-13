@@ -21,7 +21,11 @@ export const DEFAULT_NEARBY_RADIUS_METERS = 800_000;
 /** How many rows the landing section shows. */
 export const DEFAULT_NEARBY_LIMIT = 6;
 
-/** How many rows one category may take, so the section stays a mix. */
+/**
+ * Floor for the per-category cap: however many categories are around, one of
+ * them may always take at least this many rows (otherwise a nine-category
+ * catalog would allow a single row each and the section would read as a menu).
+ */
 export const DEFAULT_NEARBY_PER_CATEGORY = 2;
 
 export interface NearbyOptions {
@@ -47,6 +51,14 @@ export interface NearbyCatalogItem {
  * The cap is applied to a globally distance-sorted list, so the result is
  * always "the nearest thing of its kind" per category, never a category's
  * far-away sheet jumping ahead of a nearer one.
+ *
+ * With no explicit `perCategory` the cap **adapts to what is actually around**:
+ * it is the share of `limit` each present category may take, never below
+ * {@link DEFAULT_NEARBY_PER_CATEGORY}. That matters because the cap exists to
+ * stop one dense category crowding the others out — when there is only one
+ * category around (the published catalog is 65 877 topo sheets and nothing
+ * else) there is nothing to crowd out, and a fixed cap would silently shrink
+ * the section to two rows however many the caller asked for.
  */
 export function nearbyCatalogItems(
   items: readonly CatalogItem[],
@@ -55,7 +67,6 @@ export function nearbyCatalogItems(
 ): NearbyCatalogItem[] {
   if (origin === null) return [];
   const limit = Math.max(0, options?.limit ?? DEFAULT_NEARBY_LIMIT);
-  const perCategory = Math.max(1, options?.perCategory ?? DEFAULT_NEARBY_PER_CATEGORY);
   const radius = Math.max(0, options?.radiusMeters ?? DEFAULT_NEARBY_RADIUS_METERS);
   if (limit === 0) return [];
 
@@ -65,6 +76,16 @@ export function nearbyCatalogItems(
     if (distanceMeters === null || distanceMeters > radius) continue;
     candidates.push({ item, distanceMeters });
   }
+
+  // Adapt the cap to the categories genuinely in range, not to the vocabulary:
+  // a category with nothing nearby must not reserve rows it will never use.
+  const categoriesPresent = new Set(candidates.map((c) => c.item.category)).size;
+  const perCategory = Math.max(
+    1,
+    options?.perCategory ??
+      Math.max(DEFAULT_NEARBY_PER_CATEGORY, Math.ceil(limit / Math.max(1, categoriesPresent))),
+  );
+
   candidates.sort((a, b) =>
     a.distanceMeters !== b.distanceMeters
       ? a.distanceMeters - b.distanceMeters
