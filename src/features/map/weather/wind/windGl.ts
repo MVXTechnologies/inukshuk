@@ -216,7 +216,12 @@ void main() {
   // PREMULTIPLIED: the trail pass fades rgb and alpha together, so the whole
   // pipeline has to read as premultiplied or decayed trails composite as
   // BLACK over the drape instead of fading out.
-  float a = 0.20 + 0.34 * speed_t;
+  // Alpha is INTENSITY, not coverage: dropping it makes each streak fainter
+  // without freeing up any map underneath, and in light theme (pale cream
+  // basemap, white streaks) a low floor just erases calm-wind areas. So the
+  // floor stays high enough to read at rest; trail LENGTH below is the lever
+  // that actually opens the map up.
+  float a = 0.30 + 0.45 * speed_t;
   gl_FragColor = vec4(vec3(a), a);
 }
 `;
@@ -337,10 +342,22 @@ export interface WindGlData {
 }
 
 /** Tunables (webgl-wind heritage, values tuned for the trail-zoom look). */
-// Owner call (2026-08-10): the 0.965 tails were dense enough to bury the
-// coastlines and place names underneath. Shorter trails + a dimmer streak
-// alpha below keep the flow readable while the geography stays legible.
-const FADE_OPACITY = 0.93; // trail persistence per frame (short comet tails)
+/**
+ * Trail persistence per frame — THE density lever (owner, 2026-08-10: the
+ * 0.965 tails buried the coastlines and place names).
+ *
+ * A trail is visible for roughly 1/(1 - FADE_OPACITY) frames, so this is what
+ * decides how much of the screen streak ink covers:
+ *   0.965 → ~29 frames (shipped, too dense)
+ *   0.95  → ~20 frames (here)
+ *   0.93  → ~14 frames (first attempt on this branch — combined with a
+ *           halved alpha and fewer particles it read as "where did the wind
+ *           go", especially in light theme at low wind)
+ * Shortening trails removes coverage while leaving every streak crisp, which
+ * is why it is pulled harder than the other knobs instead of all four moving
+ * together.
+ */
+const FADE_OPACITY = 0.95;
 const DROP_RATE = 0.003;
 const DROP_RATE_BUMP = 0.01;
 const GUST_SCALE = 3; // matches GUST_RATIO_MAX in the encoder

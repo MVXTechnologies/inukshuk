@@ -457,7 +457,8 @@ export function MapScreen() {
         ? {
             // The frames themselves mount as MapView children
             // (WeatherDrapeLayers) — a frame URL in this object would reload
-            // the entire native style twice per playback tick.
+            // the entire native style twice per playback tick. The drape's
+            // opacity travels with them, at that call site.
             //
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
@@ -1424,9 +1425,17 @@ export function MapScreen() {
             <WeatherDrapeLayers
               fade={weatherFade}
               frames={weatherDrape.frames}
-              // M3: the wind speed gradient reads a touch stronger under the
-              // particle streaks (design §3); other layers keep the default.
-              opacity={weatherLayer === 'wind' ? 0.75 : 0.62}
+              // Wind takes the SAME drape as every other weather layer — no
+              // special case. M3 pushed it to 0.75 so the speed gradient would
+              // read under the streaks, but at that strength it buried the
+              // coastlines (owner, 2026-08-10). The answer was to thin the
+              // STREAKS (windGl.ts), not to keep trading the basemap against
+              // the drape: once the trails are short enough to see through, the
+              // ordinary drape carries the speed reading on its own. Going
+              // BELOW the default is worse than useless here — the streaks are
+              // white, so in light theme the drape is the only thing giving
+              // them contrast.
+              opacity={0.62}
             />
           )}
           {marineActive && (
