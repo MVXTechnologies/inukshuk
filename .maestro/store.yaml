@@ -109,25 +109,32 @@ appId: com.inukshuk.app
     timeout: 20000
     centerElement: true
 - assertVisible: 'Nautical.*'
-# Entering the Topo category shows both fixture sheets (nearest-first list).
-# The tap is GUARDED on still being on the landing ("Around you" is only
-# rendered there), so a retry can never re-tap once we are already inside.
+# Entering the Topo category shows all three fixture sheets (nearest-first).
+# The tap is GUARDED on still being on the landing, so a retry can never re-tap
+# once we are already inside. The guard is the appbar BACK ACTION — which only
+# exists once browsing a category — and NOT "Around you": that header scrolls
+# out of view on the way down to the category grid now the section is five rows
+# tall, which silently turned the guard false and skipped this whole step.
+# A scroll-position-independent guard cannot fail that way.
 - retry:
     maxRetries: 3
     commands:
       - runFlow:
           when:
-            visible: 'Around you.*'
+            notVisible: 'Back'
           commands:
             - tapOn:
                 text: 'Topo.*'
                 retryTapIfNoChange: true
       - extendedWaitUntil:
-          notVisible: 'Around you.*'
+          visible: 'Back'
           timeout: 20000
       - extendedWaitUntil:
           visible: '.*CanTopo 021L14.*'
           timeout: 20000
+# All three topo sheets, and no nautical chart: we really are inside Topo.
+- assertVisible: '.*CanTopo 021L11.*'
+- assertNotVisible: '.*Chart 14771.*'
 - assertVisible: '.*CanTopo 021L13.*'
 # Diacritic-folded text search: "raymond" keeps Saint-Raymond, drops Québec.
 - tapOn: 'Search maps'
