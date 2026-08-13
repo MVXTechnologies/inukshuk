@@ -1,5 +1,5 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
-import type { StyleSpecification } from '@maplibre/maplibre-react-native';
+import type { LineLayerSpecification, StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
 import { CHART_LAND_COLOR, CHART_WATER_COLOR } from '@core/geo/depthChart';
 import {
@@ -231,6 +231,62 @@ const WEATHER_MUTED_PAINT: Record<string, number> = {
   'raster-saturation': -0.85,
   'raster-contrast': -0.08,
 };
+
+/**
+ * Ink for the reference overlay that redraws geography ABOVE the colour
+ * drapes (`overlayLabels`).
+ *
+ * Owner review, 2026-08-13: with a weather layer running you could not tell
+ * where the coast was — "it should be much easier to differentiate coasts and
+ * features, have lines thicker". The previous treatment was a single hairline
+ * at ~0.6 alpha, which loses twice over: once against the drape (a
+ * full-spectrum colour ramp — no single ink reads over all of it) and again
+ * against the wind particle field drawn on top of the whole map.
+ *
+ * So each reference line is a CASING + CORE pair in opposite polarity. The
+ * pair brings its own contrast, so it reads identically over blue, green or
+ * magenta drape, and the casing doubles as separation from the white streaks.
+ * Alphas are high on purpose: this overlay only exists while a drape is up,
+ * and under a drape "subtle" means "invisible".
+ *
+ * Polarity follows the theme, matching the label ink/halo a few lines down:
+ * dark ink on a light casing in light theme, and the reverse in dark.
+ */
+const WEATHER_REFERENCE_INK = {
+  light: {
+    coast: 'rgba(11, 45, 74, 0.95)',
+    road: 'rgba(60, 48, 38, 0.80)',
+    casing: 'rgba(255, 255, 255, 0.85)',
+    casingAdd: 2.6,
+  },
+  dark: {
+    coast: 'rgba(190, 224, 248, 0.95)',
+    road: 'rgba(236, 222, 200, 0.78)',
+    casing: 'rgba(6, 11, 16, 0.85)',
+    casingAdd: 2.6,
+  },
+} as const;
+
+/**
+ * Core stroke widths by zoom for the reference lines, roughly double the
+ * hairlines they replace (water was 0.6/1.1/1.7). Water carries the shape of
+ * the land so it leads; roads stay a step behind it so the coast still wins
+ * the eye when the two run together along a waterfront.
+ */
+const WATER_LINE_W = { z5: 1.4, z10: 2.4, z14: 3.4 } as const;
+const ROAD_LINE_W = { z5: 0.8, z10: 1.4, z14: 2.2 } as const;
+
+/**
+ * A zoom-interpolated `line-width`, optionally widened by a fixed casing
+ * allowance. The casing is a constant amount wider at every zoom rather than
+ * a multiple: a proportional casing vanishes at low zoom, which is exactly
+ * where the coastline most needs help.
+ */
+type LineWidth = NonNullable<NonNullable<LineLayerSpecification['paint']>['line-width']>;
+
+function widthAtZoom(w: { z5: number; z10: number; z14: number }, add: number): LineWidth {
+  return ['interpolate', ['linear'], ['zoom'], 5, w.z5 + add, 10, w.z10 + add, 14, w.z14 + add];
+}
 
 /**
  * Tile template for a marine reference drape. The seamark layer is always
@@ -494,15 +550,65 @@ export function buildOsmStyle(
     };
     const ink = dark ? '#FFFFFF' : '#20303C';
     const halo = dark ? 'rgba(12, 16, 20, 0.92)' : 'rgba(255, 255, 255, 0.94)';
+    const ref = dark ? WEATHER_REFERENCE_INK.dark : WEATHER_REFERENCE_INK.light;
     style.layers.push(
+      // Coast/water edges, drawn as a CASING + CORE pair. One flat line is
+      // what the owner rejected on 2026-08-13 ("it should be much easier to
+      // differentiate coasts and features"): a single stroke has to compete
+      // with whatever colour the drape happens to be under it — and the drape
+      // is a full-spectrum ramp, so no single ink wins everywhere. The casing
+      // is the opposite polarity to the core, so the pair carries its own
+      // contrast with it and reads the same over blue, green or magenta.
+      {
+        id: 'overlay-water-casing',
+        type: 'line',
+        source: 'overlay-labels',
+        'source-layer': 'water',
+        paint: {
+          'line-color': ref.casing,
+          'line-width': widthAtZoom(WATER_LINE_W, ref.casingAdd),
+          'line-blur': 0.4,
+        },
+      },
       {
         id: 'overlay-water-line',
         type: 'line',
         source: 'overlay-labels',
         'source-layer': 'water',
         paint: {
-          'line-color': dark ? 'rgba(160, 200, 228, 0.62)' : 'rgba(38, 76, 112, 0.60)',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.6, 10, 1.1, 14, 1.7],
+          'line-color': ref.coast,
+          'line-width': widthAtZoom(WATER_LINE_W, 0),
+        },
+      },
+      // Major roads — the skeleton that says "this is a city and here is its
+      // shape". Deliberately restrained next to the water: thinner, and only
+      // the top three road classes from zoom 9. The basemap raster already
+      // draws every street; redrawing all of them above the drape would trade
+      // one unreadable image for a busier one. This pass exists to restore
+      // ORIENTATION, not detail.
+      {
+        id: 'overlay-road-casing',
+        type: 'line',
+        source: 'overlay-labels',
+        'source-layer': 'transportation',
+        minzoom: 9,
+        filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+        paint: {
+          'line-color': ref.casing,
+          'line-width': widthAtZoom(ROAD_LINE_W, ref.casingAdd),
+          'line-blur': 0.4,
+        },
+      },
+      {
+        id: 'overlay-road-line',
+        type: 'line',
+        source: 'overlay-labels',
+        'source-layer': 'transportation',
+        minzoom: 9,
+        filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+        paint: {
+          'line-color': ref.road,
+          'line-width': widthAtZoom(ROAD_LINE_W, 0),
         },
       },
       {

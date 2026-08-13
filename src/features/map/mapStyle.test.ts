@@ -251,7 +251,14 @@ describe('buildOsmStyle', () => {
   });
 
   describe('labels + coastline overlay (wave B)', () => {
-    const OVERLAY_LAYER_IDS = ['overlay-water-line', 'overlay-town-labels', 'overlay-city-labels'];
+    const OVERLAY_LAYER_IDS = [
+      'overlay-water-casing',
+      'overlay-water-line',
+      'overlay-road-casing',
+      'overlay-road-line',
+      'overlay-town-labels',
+      'overlay-city-labels',
+    ];
 
     it('is absent by default — no vector source, no glyphs endpoint', () => {
       const s = buildOsmStyle(TILE, false, 'map', true);
@@ -298,6 +305,70 @@ describe('buildOsmStyle', () => {
       });
       const ids = layerIds(s);
       expect(ids.indexOf('overlay-water-line')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
+    });
+
+    it('draws each reference line as a casing UNDER its core, and wider', () => {
+      // Owner, 2026-08-13: a single hairline could not be told apart from the
+      // drape. The pair is what carries contrast over an arbitrary colour.
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
+      const ids = layerIds(s);
+      const widthAt14 = (id: string): number => {
+        const w = s.layers.find((l) => l.id === id)?.paint as Record<string, unknown>;
+        const expr = w['line-width'] as unknown[];
+        return expr[expr.length - 1] as number;
+      };
+      for (const [casing, core] of [
+        ['overlay-water-casing', 'overlay-water-line'],
+        ['overlay-road-casing', 'overlay-road-line'],
+      ]) {
+        expect(ids.indexOf(casing!)).toBeLessThan(ids.indexOf(core!));
+        expect(widthAt14(casing!)).toBeGreaterThan(widthAt14(core!));
+      }
+    });
+
+    it('draws water thicker than roads, and both thicker than the old hairline', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
+      const widthAt14 = (id: string): number => {
+        const p = s.layers.find((l) => l.id === id)?.paint as Record<string, unknown>;
+        const expr = p['line-width'] as unknown[];
+        return expr[expr.length - 1] as number;
+      };
+      // Water leads: it carries the shape of the land.
+      expect(widthAt14('overlay-water-line')).toBeGreaterThan(widthAt14('overlay-road-line'));
+      // The treatment this replaced topped out at 1.7 px at z14.
+      expect(widthAt14('overlay-water-line')).toBeGreaterThan(1.7);
+    });
+
+    it('keeps the road pass restrained — top three classes, not before z9', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
+      for (const id of ['overlay-road-casing', 'overlay-road-line']) {
+        const l = s.layers.find((x) => x.id === id) as { filter?: unknown } | undefined;
+        expect(l).toMatchObject({ 'source-layer': 'transportation', minzoom: 9 });
+        expect(JSON.stringify(l?.filter)).toContain('motorway');
+        // Redrawing every street above the drape would trade an unreadable
+        // map for a busy one — secondary and below stay in the raster.
+        expect(JSON.stringify(l?.filter)).not.toContain('secondary');
+      }
+    });
+
+    it('flips reference-line polarity with the theme, casing against core', () => {
+      const paintOf = (dark: boolean, id: string): Record<string, unknown> => {
+        const s = buildOsmStyle(TILE, false, 'map', true, {
+          overlayLabels: { dark, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+        });
+        return s.layers.find((l) => l.id === id)?.paint as Record<string, unknown>;
+      };
+      // Light theme: dark coast on a light casing. Dark theme: the reverse.
+      expect(paintOf(false, 'overlay-water-casing')['line-color']).toContain('255, 255, 255');
+      expect(paintOf(true, 'overlay-water-casing')['line-color']).toContain('6, 11, 16');
+      expect(paintOf(false, 'overlay-water-line')['line-color']).toContain('11, 45, 74');
+      expect(paintOf(true, 'overlay-water-line')['line-color']).toContain('190, 224, 248');
     });
 
     it('flips ink/halo polarity with the theme', () => {
