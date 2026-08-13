@@ -164,6 +164,11 @@ mode" — the drape alone is already today's wind UX, so degradation never looks
 Measured via GLView frame timestamps logged behind a dev flag; failing a gate drops particle
 count by 25% steps to 1,000 before questioning the approach.
 
+The 2,000 above is the GATE — what the device must sustain — not the count we draw. The overlay
+seeds `DEFAULT_PARTICLES` (`windPerf.ts`), deliberately below the gate, because density is a
+visual decision and the gate is an acceptance criterion. Retuning the look moves
+`DEFAULT_PARTICLES`; this table only moves if the perf contract itself changes.
+
 ## 3. Color gradient underlay (M3) — decision: GeoMet WMS drape (existing mechanism)
 
 Reuse the shipped raster-drape path (`mapStyle.ts options.weather`) with the wind **speed**
@@ -171,8 +176,13 @@ layer (`HRDPS.CONTINENTAL_WSPD` etc.) instead of the barb composite `_UU` curren
 catalog. The WMS default style for WSPD is a continuous speed ramp; MapLibre's raster
 bilinear magnification smooths the 2.5 km cells into a Windy-like gradient at trail zooms.
 Client-rendering the gradient from the U/V grid would give pixel-identical-to-Windy colours but
-duplicates what the drape already does for zero code — not worth it at M3 scope. Keep
-`raster-opacity` ≈ 0.75 under the particles. If the default WMS style looks too classed/stepped
+duplicates what the drape already does for zero code — not worth it at M3 scope. The drape runs
+at the ordinary weather `raster-opacity` (the 0.62 default in `mapStyle.ts`) — wind gets no
+special case. M3 originally specified ≈ 0.75 here so the gradient would read under the streaks,
+but at that strength it buried the coastlines (owner, 2026-08-10); the fix was to shorten the
+streaks, not to push the drape. Do not take it BELOW the default either: the streaks are white,
+so in light theme the drape is what gives them contrast. If the default WMS style looks too
+classed/stepped
 on device, the WMS `styles=` parameter can select an alternative ramp before we ever consider
 client rendering (owner question Q3).
 
