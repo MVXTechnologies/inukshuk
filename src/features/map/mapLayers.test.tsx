@@ -1,16 +1,3 @@
-// The MapLibre native modules are looked up with TurboModuleRegistry.getEnforcing
-// at import time, which throws under Jest. Stub only the MLRN* ones — a blanket
-// stub breaks React Native's own Platform/Animated bootstrap.
-jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => {
-  const actual = jest.requireActual('react-native/Libraries/TurboModule/TurboModuleRegistry');
-  const isMapLibre = (name: string) => name.startsWith('MLRN');
-  return {
-    ...actual,
-    get: (name: string) => (isMapLibre(name) ? {} : actual.get(name)),
-    getEnforcing: (name: string) => (isMapLibre(name) ? {} : actual.getEnforcing(name)),
-  };
-});
-
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -22,6 +9,20 @@ import {
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYER,
 } from './mapLayers';
+
+// Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
+// modules are looked up with TurboModuleRegistry.getEnforcing at import time,
+// which throws under Jest. Stub only the MLRN* ones — a blanket stub breaks
+// React Native's own Platform/Animated bootstrap.
+jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => {
+  const actual = jest.requireActual('react-native/Libraries/TurboModule/TurboModuleRegistry');
+  const isMapLibre = (name: string) => name.startsWith('MLRN');
+  return {
+    ...actual,
+    get: (name: string) => (isMapLibre(name) ? {} : actual.get(name)),
+    getEnforcing: (name: string) => (isMapLibre(name) ? {} : actual.getEnforcing(name)),
+  };
+});
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 

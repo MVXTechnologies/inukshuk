@@ -3,7 +3,7 @@ import {
   countByCategory,
   filterCatalogItems,
 } from '@core/catalog/filterCatalog';
-import { installStatusFor, type InstallStatus } from '@core/catalog/installStatus';
+import { indexInstallStatus, type InstallStatus } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
   CATALOG_CATEGORIES,
@@ -12,7 +12,6 @@ import {
   type CatalogItem,
   type CatalogSource,
 } from '@core/catalog/schema';
-import type { MapDocument } from '@core/models';
 import { formatByteSize } from '@core/storage/diskBudget';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
@@ -55,6 +54,8 @@ import {
  * progress; dedup against the Library shows "Open"/"Update" instead of a
  * second Download.
  */
+
+const keyExtractor = (item: CatalogItem) => item.id;
 
 /** "≈ 12 km" caption: standard distance formatting minus noise decimals. */
 function approxDistanceLabel(meters: number): string {
@@ -122,21 +123,17 @@ export function StoreScreen() {
   // Doing it per row meant `installStatusFor` scanned the entire library for
   // every visible cell on every render — O(rows × library) on a screen that
   // re-renders on each download-progress tick.
-  const installStatusById = useMemo(() => {
-    const bySourceItem = new Map<string, MapDocument>();
-    for (const m of maps) {
-      if (m.sourceItemId !== undefined) bySourceItem.set(m.sourceItemId, m);
-    }
-    const out = new Map<string, InstallStatus>();
-    for (const item of items) {
-      const doc = bySourceItem.get(item.id);
-      out.set(item.id, doc === undefined ? 'not-installed' : installStatusFor(item, [doc]));
-    }
-    return out;
-  }, [items, maps]);
+  const installStatusById = useMemo(() => indexInstallStatus(items, maps), [items, maps]);
 
   // Landing (category grid) until the user types or enters a category.
-  const home = !browsing && query.trim() === '';
+  //
+  // Deliberately keyed on `deferredQuery`, not `query`: the list below derives
+  // from the deferred copy, so switching on the LIVE query flips to the list
+  // branch one pass before the list has the new query — rendering the entire
+  // unfiltered catalog for that pass. It converges, but it is a visible flash
+  // on the first keystroke, and a very expensive one now the world catalog is
+  // tens of thousands of items. Both sides move together this way.
+  const home = !browsing && deferredQuery.trim() === '';
 
   const enterCategory = (c: CatalogCategory) => {
     setCategory(c);
@@ -289,9 +286,16 @@ export function StoreScreen() {
     );
   };
 
-  const keyExtractor = (item: CatalogItem) => item.id;
   // Stable across renders: a fresh array literal here invalidates the list's
-  // content container on every download-progress tick.
+  // content container on every download-progress tick. `keyExtractor` is
+  // module-scope for the same reason.
+  //
+  // `renderItem` is deliberately NOT memoized: it closes over `downloads` and
+  // `expandedId`, which are exactly what changes on a progress tick, so a
+  // useCallback would only move the new identity around. Cells therefore still
+  // re-render on every tick. Fixing that for real needs a memoized row
+  // component with the progress subscribed per row — a UI refactor, not a
+  // mechanical one, so it is not done here.
   const listContentStyle = useMemo(
     () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
     [insets.bottom],
@@ -412,10 +416,13 @@ export function StoreScreen() {
             // Each row builds an SVG locator thumbnail, so the defaults
             // (initialNumToRender 10, windowSize 21) do far more work up front
             // and retain far more mounted rows than this list needs.
+            // No removeClippedSubviews: on Android it is a known cause of
+            // blank cells and dropped touches, these rows render react-native-
+            // svg trees, and nothing else in this app uses it. The window
+            // tuning above stands on its own.
             initialNumToRender={6}
             maxToRenderPerBatch={5}
             windowSize={7}
-            removeClippedSubviews
           />
         </>
       )}

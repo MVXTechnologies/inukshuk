@@ -1,4 +1,4 @@
-import { gpsQualityLevel, type GpsQuality } from '@core/geo/track/gpsQuality';
+import { gpsQualityLevel } from '@core/geo/track/gpsQuality';
 import { liveSpeed } from '@core/geo/track/liveSpeed';
 import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
@@ -36,9 +36,9 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const removeWaypoint = useRecorderStore((s) => s.removeWaypoint);
 
   const [elapsedS, setElapsedS] = useState(0);
-  // Live GPS-quality level for the HUD. Recomputed each tick (staleness grows
-  // even when no new fix arrives — that IS the signal-loss case).
-  const [gpsQuality, setGpsQuality] = useState<GpsQuality>('acquiring');
+  // Wall-clock sample taken by the ticker below, so GPS staleness can be
+  // DERIVED rather than stored — see gpsQuality.
+  const [tickAt, setTickAt] = useState(() => Date.now());
 
   // Instantaneous speed for the HUD's "Speed" tile — see @core/geo/track/liveSpeed.
   // stats.avgSpeedMps is a WHOLE-SESSION moving average; on a long recording it
@@ -73,36 +73,37 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // time (pausedMs) so resuming continues from where the display froze instead
   // of jumping forward by the whole pause.
   //
-  // The staleness half of gpsQuality has to be time-driven (it must climb to
-  // 'weak'/'lost' precisely when fixes STOP arriving), so it ticks here too —
-  // reading the store fresh rather than closing over the last render's values.
-  // As effect deps, `lastFixAt`/`lastAccuracyM` tore this interval down and
-  // rebuilt it on EVERY accepted GPS fix; the tick still ran synchronously on
-  // each rebuild, so the displayed clock was never wrong, but at fix rates
-  // above 1 Hz (cycling, driving) the interval itself never survived to fire —
-  // and with NO fixes at all it was the only thing keeping the display alive.
+  // It also samples the wall clock for gpsQuality below. `lastFixAt` and
+  // `lastAccuracyM` used to be deps of this effect, which tore the interval
+  // down and rebuilt it on EVERY accepted GPS fix. The tick still ran
+  // synchronously on each rebuild, so the displayed clock was never wrong —
+  // but above 1 Hz (cycling, driving) the interval itself never survived long
+  // enough to fire, and with NO fixes arriving it is the only thing keeping
+  // the display alive.
   useEffect(() => {
     if (status !== 'recording' || startedAt === null) return;
     const tick = () => {
       const now = Date.now();
       setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
-      const s = useRecorderStore.getState();
-      setGpsQuality(gpsQualityLevel(s.lastFixAt, now, s.lastAccuracyM));
+      setTickAt(now);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [status, startedAt, pausedMs]);
 
-  // The other half: a fix arriving is itself news (lost/weak → good), and the
-  // user should see that immediately rather than up to a second later. Kept as
-  // its own effect so subscribing to the fix fields costs a cheap setState and
-  // never restarts the interval above. No extra render: this hook already
-  // re-renders on every accepted fix via `points`/`stats`.
-  useEffect(() => {
-    if (status !== 'recording') return;
-    setGpsQuality(gpsQualityLevel(lastFixAt, Date.now(), lastAccuracyM));
-  }, [status, lastFixAt, lastAccuracyM]);
+  // Live GPS-quality level for the HUD, derived rather than stored.
+  //
+  // Staleness has to climb on the clock — growing to 'weak'/'lost' while fixes
+  // STOP arriving is the whole signal — which is what `tickAt` supplies. But a
+  // fix ARRIVING is news too, and a recovery indicator that lags up to a second
+  // behind the fix that caused it is a worse HUD. A fix's own timestamp is
+  // newer than the last tick, so taking the later of the two reports zero
+  // staleness immediately, without a second state update or an extra effect.
+  const gpsQuality = useMemo(
+    () => gpsQualityLevel(lastFixAt, Math.max(tickAt, lastFixAt ?? 0), lastAccuracyM),
+    [tickAt, lastFixAt, lastAccuracyM],
+  );
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {
