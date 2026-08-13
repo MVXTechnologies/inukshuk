@@ -315,7 +315,10 @@ export function StoreScreen() {
     if (!searching || searchScope === 'complete') return null;
     return (
       <View style={styles.footer}>
-        <Text variant="bodySmall" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+        <Text
+          variant="bodySmall"
+          style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
+        >
           {searchScope === 'partial'
             ? 'More of the catalog is still to search.'
             : 'Showing matches from this area only.'}

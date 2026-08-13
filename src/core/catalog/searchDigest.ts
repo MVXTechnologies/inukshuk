@@ -145,9 +145,11 @@ export function parseCatalogSearchDigest(raw: unknown): CatalogSearchParseResult
     }
     // An out-of-range index would silently select nothing; drop it loudly.
     const indices = list.filter(
-      (i): i is number => typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < shardIds.length,
+      (i): i is number =>
+        typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < shardIds.length,
     );
-    if (indices.length !== list.length) warnings.push(`dropped out-of-range postings for "${term}"`);
+    if (indices.length !== list.length)
+      warnings.push(`dropped out-of-range postings for "${term}"`);
     if (indices.length > 0) tokens[term] = indices;
   }
   return { digest: { schemaVersion: CATALOG_SEARCH_SCHEMA_VERSION, shardIds, tokens }, warnings };

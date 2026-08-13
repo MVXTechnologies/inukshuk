@@ -224,9 +224,9 @@ describe('sameCatalogOrigin', () => {
 
   it('separates different hosts, ports and schemes', () => {
     expect(sameCatalogOrigin(v2, 'https://evil.test/catalog/v2/index.json')).toBe(false);
-    expect(sameCatalogOrigin('http://127.0.0.1:8787/index.json', 'http://127.0.0.1:9999/i.json')).toBe(
-      false,
-    );
+    expect(
+      sameCatalogOrigin('http://127.0.0.1:8787/index.json', 'http://127.0.0.1:9999/i.json'),
+    ).toBe(false);
     expect(sameCatalogOrigin('http://inukshuk.mvxtechnologies.com/a.json', v2)).toBe(false);
   });
 

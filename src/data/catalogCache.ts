@@ -8,10 +8,7 @@ import {
   type CatalogSearchRef,
   type CatalogShardRef,
 } from '@core/catalog/schema';
-import {
-  parseCatalogSearchDigest,
-  type CatalogSearchDigest,
-} from '@core/catalog/searchDigest';
+import { parseCatalogSearchDigest, type CatalogSearchDigest } from '@core/catalog/searchDigest';
 import { resolveCatalogUrl, sameCatalogOrigin } from '@core/catalog/shard';
 import * as storage from './storage';
 

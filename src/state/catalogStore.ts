@@ -7,11 +7,7 @@ import type {
 } from '@core/catalog/schema';
 import { selectShards } from '@core/catalog/shard';
 import type { LatLng } from '@core/models';
-import {
-  loadCatalogManifest,
-  loadCatalogSearchDigest,
-  loadCatalogShard,
-} from '@data/catalogCache';
+import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '@data/catalogCache';
 import { create } from 'zustand';
 
 /**
@@ -137,7 +133,9 @@ function isCoolingDown(failedAt: number | undefined): boolean {
   return failedAt !== undefined && Date.now() - failedAt < SHARD_FAILURE_COOLDOWN_MS;
 }
 
-type SetState = (partial: Partial<CatalogState> | ((s: CatalogState) => Partial<CatalogState>)) => void;
+type SetState = (
+  partial: Partial<CatalogState> | ((s: CatalogState) => Partial<CatalogState>),
+) => void;
 type GetState = () => CatalogState;
 
 /**
@@ -318,9 +316,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     // A shard that failed is not "still coming": leaving it pending would keep
     // the screen saying "searching" forever. It is excluded from the remaining
     // work, and the scope stays partial only while real shards are left.
-    const remaining = candidateIds.filter(
-      (id) => !nowLoaded.has(id) && !isCoolingDown(failed[id]),
-    );
+    const remaining = candidateIds.filter((id) => !nowLoaded.has(id) && !isCoolingDown(failed[id]));
     set({
       pendingQueryShardIds: remaining,
       searchScope: remaining.length === 0 ? 'complete' : 'partial',

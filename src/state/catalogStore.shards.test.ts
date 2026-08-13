@@ -1,10 +1,6 @@
 import type { CatalogIndex, CatalogItem, CatalogShardRef } from '@core/catalog/schema';
 import { buildCatalogSearchDigest } from '@core/catalog/searchDigest';
-import {
-  loadCatalogManifest,
-  loadCatalogSearchDigest,
-  loadCatalogShard,
-} from '@data/catalogCache';
+import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '@data/catalogCache';
 import { useCatalogStore } from './catalogStore';
 
 /**
