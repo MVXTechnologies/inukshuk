@@ -158,9 +158,7 @@ describe('useRecordingSession — the elapsed/GPS-quality ticker', () => {
     await act(async () => {
       await view.unmount();
     });
-    expect(clearIntervalSpy.mock.calls.map((c) => c[0])).toEqual(
-      expect.arrayContaining(timerIds),
-    );
+    expect(clearIntervalSpy.mock.calls.map((c) => c[0])).toEqual(expect.arrayContaining(timerIds));
 
     // Nothing left running: advancing time must not throw an update-after-
     // unmount warning or resurrect the ticker.
