@@ -254,11 +254,11 @@ describe('buildOsmStyle', () => {
     const OVERLAY_LAYER_IDS = [
       'overlay-water-casing',
       'overlay-water-line',
-      'overlay-road-casing',
-      'overlay-road-line',
       'overlay-town-labels',
       'overlay-city-labels',
     ];
+    /** The road pass is weather-only — see the `roads` option. */
+    const ROAD_LAYER_IDS = ['overlay-road-casing', 'overlay-road-line'];
 
     it('is absent by default — no vector source, no glyphs endpoint', () => {
       const s = buildOsmStyle(TILE, false, 'map', true);
@@ -311,7 +311,11 @@ describe('buildOsmStyle', () => {
       // Owner, 2026-08-13: a single hairline could not be told apart from the
       // drape. The pair is what carries contrast over an arbitrary colour.
       const s = buildOsmStyle(TILE, false, 'map', true, {
-        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+        overlayLabels: {
+          dark: false,
+          tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'],
+          roads: true,
+        },
       });
       const ids = layerIds(s);
       const widthAt14 = (id: string): number => {
@@ -330,7 +334,11 @@ describe('buildOsmStyle', () => {
 
     it('draws water thicker than roads, and both thicker than the old hairline', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
-        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+        overlayLabels: {
+          dark: false,
+          tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'],
+          roads: true,
+        },
       });
       const widthAt14 = (id: string): number => {
         const p = s.layers.find((l) => l.id === id)?.paint as Record<string, unknown>;
@@ -345,9 +353,13 @@ describe('buildOsmStyle', () => {
 
     it('keeps the road pass restrained — top three classes, not before z9', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
-        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+        overlayLabels: {
+          dark: false,
+          tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'],
+          roads: true,
+        },
       });
-      for (const id of ['overlay-road-casing', 'overlay-road-line']) {
+      for (const id of ROAD_LAYER_IDS) {
         const l = s.layers.find((x) => x.id === id) as { filter?: unknown } | undefined;
         expect(l).toMatchObject({ 'source-layer': 'transportation', minzoom: 9 });
         expect(JSON.stringify(l?.filter)).toContain('motorway');
@@ -355,6 +367,25 @@ describe('buildOsmStyle', () => {
         // map for a busy one — secondary and below stay in the raster.
         expect(JSON.stringify(l?.filter)).not.toContain('secondary');
       }
+    });
+
+    it('keeps the road pass out of marine chart mode (land is dimmed there on purpose)', () => {
+      const withRoads = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: {
+          dark: false,
+          tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'],
+          roads: true,
+        },
+      });
+      const without = buildOsmStyle(TILE, false, 'map', true, {
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
+      for (const id of ROAD_LAYER_IDS) {
+        expect(layerIds(withRoads)).toContain(id);
+        expect(layerIds(without)).not.toContain(id);
+      }
+      // The coast pass is NOT opt-in — marine mode needs it just as much.
+      expect(layerIds(without)).toContain('overlay-water-line');
     });
 
     it('flips reference-line polarity with the theme, casing against core', () => {

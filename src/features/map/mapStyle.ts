@@ -1,5 +1,10 @@
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
-import type { LineLayerSpecification, StyleSpecification } from '@maplibre/maplibre-react-native';
+import type {
+  FilterSpecification,
+  LayerSpecification,
+  LineLayerSpecification,
+  StyleSpecification,
+} from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
 import { CHART_LAND_COLOR, CHART_WATER_COLOR } from '@core/geo/depthChart';
 import {
@@ -192,7 +197,18 @@ export interface OsmStyleOptions {
    * unreachable the overlay simply doesn't draw — silent degradation to the
    * dim-only look.
    */
-  overlayLabels?: { dark: boolean; tiles: readonly string[] };
+  overlayLabels?: {
+    dark: boolean;
+    tiles: readonly string[];
+    /**
+     * Add the major-road reference pass (motorway/trunk/primary from z9).
+     * Weather only. Marine chart mode deliberately dims land to tan so the
+     * water reads as the content, and bright cased road lines over it fight
+     * that intent — so the roads are opt-in per caller rather than riding
+     * along with every use of this overlay.
+     */
+    roads?: boolean;
+  };
   /**
    * Marine chart mode (marine wave D, owner spec 2026-08-09: the iBoating/
    * ENC paper-chart look). While any marine layer is active the whole map
@@ -551,6 +567,46 @@ export function buildOsmStyle(
     const ink = dark ? '#FFFFFF' : '#20303C';
     const halo = dark ? 'rgba(12, 16, 20, 0.92)' : 'rgba(255, 255, 255, 0.94)';
     const ref = dark ? WEATHER_REFERENCE_INK.dark : WEATHER_REFERENCE_INK.light;
+    // Major roads — the skeleton that says "this is a city and here is its
+    // shape". Deliberately restrained next to the water: thinner, and only
+    // the top three road classes from zoom 9. The basemap raster already
+    // draws every street; redrawing all of them above the drape would trade
+    // one unreadable image for a busier one. This pass restores ORIENTATION,
+    // not detail — and it is weather-only (see the `roads` option).
+    const roadFilter: FilterSpecification = [
+      'in',
+      ['get', 'class'],
+      ['literal', ['motorway', 'trunk', 'primary']],
+    ];
+    const roadLayers: LayerSpecification[] = options.overlayLabels.roads
+      ? [
+          {
+            id: 'overlay-road-casing',
+            type: 'line',
+            source: 'overlay-labels',
+            'source-layer': 'transportation',
+            minzoom: 9,
+            filter: roadFilter,
+            paint: {
+              'line-color': ref.casing,
+              'line-width': widthAtZoom(ROAD_LINE_W, ref.casingAdd),
+              'line-blur': 0.4,
+            },
+          },
+          {
+            id: 'overlay-road-line',
+            type: 'line',
+            source: 'overlay-labels',
+            'source-layer': 'transportation',
+            minzoom: 9,
+            filter: roadFilter,
+            paint: {
+              'line-color': ref.road,
+              'line-width': widthAtZoom(ROAD_LINE_W, 0),
+            },
+          },
+        ]
+      : [];
     style.layers.push(
       // Coast/water edges, drawn as a CASING + CORE pair. One flat line is
       // what the owner rejected on 2026-08-13 ("it should be much easier to
@@ -580,37 +636,7 @@ export function buildOsmStyle(
           'line-width': widthAtZoom(WATER_LINE_W, 0),
         },
       },
-      // Major roads — the skeleton that says "this is a city and here is its
-      // shape". Deliberately restrained next to the water: thinner, and only
-      // the top three road classes from zoom 9. The basemap raster already
-      // draws every street; redrawing all of them above the drape would trade
-      // one unreadable image for a busier one. This pass exists to restore
-      // ORIENTATION, not detail.
-      {
-        id: 'overlay-road-casing',
-        type: 'line',
-        source: 'overlay-labels',
-        'source-layer': 'transportation',
-        minzoom: 9,
-        filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
-        paint: {
-          'line-color': ref.casing,
-          'line-width': widthAtZoom(ROAD_LINE_W, ref.casingAdd),
-          'line-blur': 0.4,
-        },
-      },
-      {
-        id: 'overlay-road-line',
-        type: 'line',
-        source: 'overlay-labels',
-        'source-layer': 'transportation',
-        minzoom: 9,
-        filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
-        paint: {
-          'line-color': ref.road,
-          'line-width': widthAtZoom(ROAD_LINE_W, 0),
-        },
-      },
+      ...roadLayers,
       {
         id: 'overlay-town-labels',
         type: 'symbol',

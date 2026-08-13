@@ -434,7 +434,15 @@ export function MapScreen() {
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
       ...(overlayTiles !== null
-        ? { overlayLabels: { dark: theme.dark, tiles: overlayTiles } }
+        ? {
+            overlayLabels: {
+              dark: theme.dark,
+              tiles: overlayTiles,
+              // Major-road reference pass: weather only. Marine chart mode
+              // dims land on purpose so the water reads as the content.
+              roads: weatherLayer !== null,
+            },
+          }
         : {}),
       // Marine chart mode (wave D): the whole map restyles as a nautical
       // chart — tan land, flat chart-blue water, the client-rendered depth
