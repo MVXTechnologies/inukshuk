@@ -8,12 +8,33 @@
  * particles on the Android target; recovery after a gesture ≤ 400 ms. The
  * thresholds below are stated against FRAME_CAP_FPS rather than as absolute
  * fps, because the loop throttles itself and can never measure faster.
+ *
+ * Note the split between TARGET_PARTICLES (the gate — what the device must
+ * sustain) and DEFAULT_PARTICLES (what we choose to draw). Visual-density
+ * complaints move the latter; the gate only moves when the perf contract
+ * itself changes.
  */
 
-/** Design-doc target particle count (Android gate). */
-export const TARGET_PARTICLES = 1400;
+/**
+ * Design-doc target particle count — a PERFORMANCE GATE, not a visual knob.
+ * It states what the Android target must be able to sustain (§2.5: ≥ 28 fps
+ * at 2,000 particles), so it must never be lowered to make the overlay look
+ * lighter: that would silently relax the acceptance criterion instead of
+ * changing the design. Draw fewer by moving DEFAULT_PARTICLES.
+ */
+export const TARGET_PARTICLES = 2000;
+/**
+ * Particles the overlay actually SEEDS with — the visual density knob. The
+ * gate above proves the device could sustain more; we deliberately draw
+ * fewer so the map reads through the flow (owner, 2026-08-10). Keep it at or
+ * below TARGET_PARTICLES: the ladder treats the seed as its ceiling, so a
+ * value above the gate would let the overlay climb past what was measured.
+ */
+export const DEFAULT_PARTICLES = 1700;
 /** Floor before giving up on animation entirely. */
 export const MIN_PARTICLES = 500;
+/** Fraction of the particle count each degrade rung keeps (25% shed). */
+export const PARTICLE_SHED_FACTOR = 0.75;
 /** Render-loop frame cap (~30 fps — the Windy mobile cadence). */
 export const FRAME_INTERVAL_MS = 33;
 /**
@@ -71,6 +92,13 @@ export const FRAME_INTERVAL_STEPS = [FRAME_INTERVAL_MS, 50, 66] as const;
 export interface WindPerfState {
   /** Particles the renderer should currently run. */
   particleCount: number;
+  /**
+   * Ceiling for recovery — the count this state was seeded with. Recovery
+   * climbs back to here, NOT to TARGET_PARTICLES: seeding below the gate is
+   * a deliberate visual choice, and without this the ladder would read the
+   * gap as "degraded" and re-densify the overlay within a window or two.
+   */
+  maxParticles: number;
   /** Trail-buffer scale relative to the drawing buffer (1 = full res). */
   resolutionScale: number;
   /** Frame interval the loop should target, ms. */
@@ -81,9 +109,10 @@ export interface WindPerfState {
   framesSinceChange: number;
 }
 
-export function initialPerfState(target = TARGET_PARTICLES): WindPerfState {
+export function initialPerfState(target = DEFAULT_PARTICLES): WindPerfState {
   return {
     particleCount: target,
+    maxParticles: target,
     resolutionScale: 1,
     frameIntervalMs: FRAME_INTERVAL_MS,
     emaFrameMs: null,
@@ -121,7 +150,10 @@ export function perfStep(state: WindPerfState, frameMs: number): WindPerfState {
     if (state.particleCount > MIN_PARTICLES) {
       return {
         ...next,
-        particleCount: Math.max(MIN_PARTICLES, Math.round(state.particleCount * 0.75)),
+        particleCount: Math.max(
+          MIN_PARTICLES,
+          Math.round(state.particleCount * PARTICLE_SHED_FACTOR),
+        ),
         framesSinceChange: 0,
       };
     }
@@ -158,10 +190,13 @@ export function perfStep(state: WindPerfState, frameMs: number): WindPerfState {
         framesSinceChange: 0,
       };
     }
-    if (state.particleCount < TARGET_PARTICLES) {
+    if (state.particleCount < state.maxParticles) {
       return {
         ...next,
-        particleCount: Math.min(TARGET_PARTICLES, Math.round(state.particleCount / 0.75)),
+        particleCount: Math.min(
+          state.maxParticles,
+          Math.round(state.particleCount / PARTICLE_SHED_FACTOR),
+        ),
         framesSinceChange: 0,
       };
     }
