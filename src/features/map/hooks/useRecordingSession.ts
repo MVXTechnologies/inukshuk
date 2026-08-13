@@ -1,4 +1,4 @@
-import { gpsQualityLevel, type GpsQuality } from '@core/geo/track/gpsQuality';
+import { gpsQualityLevel } from '@core/geo/track/gpsQuality';
 import { liveSpeed } from '@core/geo/track/liveSpeed';
 import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
@@ -36,9 +36,9 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const removeWaypoint = useRecorderStore((s) => s.removeWaypoint);
 
   const [elapsedS, setElapsedS] = useState(0);
-  // Live GPS-quality level for the HUD. Recomputed each tick (staleness grows
-  // even when no new fix arrives — that IS the signal-loss case).
-  const [gpsQuality, setGpsQuality] = useState<GpsQuality>('acquiring');
+  // Wall-clock sample taken by the ticker below, so GPS staleness can be
+  // DERIVED rather than stored — see gpsQuality.
+  const [tickAt, setTickAt] = useState(() => Date.now());
 
   // Instantaneous speed for the HUD's "Speed" tile — see @core/geo/track/liveSpeed.
   // stats.avgSpeedMps is a WHOLE-SESSION moving average; on a long recording it
@@ -72,19 +72,38 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // Live elapsed timer, independent of GPS fix cadence. Excludes paused wall
   // time (pausedMs) so resuming continues from where the display froze instead
   // of jumping forward by the whole pause.
+  //
+  // It also samples the wall clock for gpsQuality below. `lastFixAt` and
+  // `lastAccuracyM` used to be deps of this effect, which tore the interval
+  // down and rebuilt it on EVERY accepted GPS fix. The tick still ran
+  // synchronously on each rebuild, so the displayed clock was never wrong —
+  // but above 1 Hz (cycling, driving) the interval itself never survived long
+  // enough to fire, and with NO fixes arriving it is the only thing keeping
+  // the display alive.
   useEffect(() => {
     if (status !== 'recording' || startedAt === null) return;
     const tick = () => {
       const now = Date.now();
       setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
-      // Re-evaluate signal quality every second: staleness must climb toward
-      // 'weak'/'lost' while fixes stop arriving, so this can't be event-driven.
-      setGpsQuality(gpsQualityLevel(lastFixAt, now, lastAccuracyM));
+      setTickAt(now);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status, startedAt, pausedMs, lastFixAt, lastAccuracyM]);
+  }, [status, startedAt, pausedMs]);
+
+  // Live GPS-quality level for the HUD, derived rather than stored.
+  //
+  // Staleness has to climb on the clock — growing to 'weak'/'lost' while fixes
+  // STOP arriving is the whole signal — which is what `tickAt` supplies. But a
+  // fix ARRIVING is news too, and a recovery indicator that lags up to a second
+  // behind the fix that caused it is a worse HUD. A fix's own timestamp is
+  // newer than the last tick, so taking the later of the two reports zero
+  // staleness immediately, without a second state update or an extra effect.
+  const gpsQuality = useMemo(
+    () => gpsQualityLevel(lastFixAt, Math.max(tickAt, lastFixAt ?? 0), lastAccuracyM),
+    [tickAt, lastFixAt, lastAccuracyM],
+  );
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {

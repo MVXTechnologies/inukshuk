@@ -74,5 +74,19 @@ export const useMapStore = create<MapState>((set) => ({
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
   setBasemap: (b) => set({ basemap: b }),
   toggleWeatherAnimation: () => set((s) => ({ weatherAnimating: !s.weatherAnimating })),
-  setMapCenter: (c) => set({ mapCenter: c }),
+  // Written on EVERY camera settle — including rotate/pitch-only gestures and
+  // the follow-mode camera moving with each GPS fix, where the centre is
+  // unchanged. A fresh object literal there would replace `mapCenter`'s
+  // identity every time and re-render every subscriber (the map screen among
+  // them) for nothing, so compare the coordinates before storing.
+  setMapCenter: (c) =>
+    set((s) =>
+      s.mapCenter === c ||
+      (s.mapCenter !== null &&
+        c !== null &&
+        s.mapCenter.latitude === c.latitude &&
+        s.mapCenter.longitude === c.longitude)
+        ? s
+        : { mapCenter: c },
+    ),
 }));

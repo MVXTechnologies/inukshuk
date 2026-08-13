@@ -16,7 +16,7 @@ import { useMapStore } from '@state/mapStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -140,9 +140,31 @@ export function LibraryScreen() {
   const [filter, setFilter] = useState<TrackFilter>({});
   const [filterOpen, setFilterOpen] = useState(false);
   const activeFilterCount = countActiveFilters(filter);
-  const visibleTracks = filterTracks(tracks, filter);
+  // Derived once per data change, not per render: this screen re-renders on
+  // every card-menu open, every section collapse, every selection tap and every
+  // drag-hover, and both of these walk (and re-allocate) the whole library.
+  const visibleTracks = useMemo(() => filterTracks(tracks, filter), [tracks, filter]);
 
-  const grouped = groupByFolder(folders, maps, visibleTracks, waypoints);
+  const grouped = useMemo(
+    () => groupByFolder(folders, maps, visibleTracks, waypoints),
+    [folders, maps, visibleTracks, waypoints],
+  );
+  // Same for the newest-first waypoint lists rendered below — each call copies
+  // and sorts. There are three of them: the flat "Waypoints" section, the
+  // Ungrouped section, and one PER FOLDER GROUP (sorted here as a map keyed by
+  // folder id, since the folder sections are built inside a render callback).
+  const sortedWaypoints = useMemo(() => sortWaypointsNewestFirst(waypoints), [waypoints]);
+  const sortedUngroupedWaypoints = useMemo(
+    () => sortWaypointsNewestFirst(grouped.ungroupedWaypoints),
+    [grouped],
+  );
+  const sortedFolderWaypoints = useMemo(
+    () =>
+      new Map(
+        grouped.groups.map((g) => [g.folder.id, sortWaypointsNewestFirst(g.waypoints)] as const),
+      ),
+    [grouped],
+  );
 
   // Drag-and-drop moves: each card's grip handle drags a ghost chip onto a
   // folder (or Ungrouped) header. The ⋮ move-to-folder menu remains for
@@ -823,7 +845,7 @@ export function LibraryScreen() {
               // while any filter is active.
               ...(activeFilterCount > 0 ? [] : g.maps.map(renderMapCard)),
               ...g.tracks.map(renderTrackCard),
-              ...sortWaypointsNewestFirst(g.waypoints).map(renderWaypointCard),
+              ...(sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointCard),
             ]
           )}
         </List.Section>
@@ -908,9 +930,7 @@ export function LibraryScreen() {
                   : [
                       ...(activeFilterCount > 0 ? [] : grouped.ungroupedMaps.map(renderMapCard)),
                       ...grouped.ungroupedTracks.map(renderTrackCard),
-                      ...sortWaypointsNewestFirst(grouped.ungroupedWaypoints).map(
-                        renderWaypointCard,
-                      ),
+                      ...sortedUngroupedWaypoints.map(renderWaypointCard),
                     ]}
               </List.Section>
             )
@@ -970,9 +990,7 @@ export function LibraryScreen() {
             <Divider />
             <List.Section>
               {sectionHeader('waypoints', `Waypoints (${waypoints.length})`)}
-              {collapsed.waypoints
-                ? null
-                : sortWaypointsNewestFirst(waypoints).map(renderWaypointCard)}
+              {collapsed.waypoints ? null : sortedWaypoints.map(renderWaypointCard)}
             </List.Section>
           </>
         )}

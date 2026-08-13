@@ -1,5 +1,4 @@
-import { buildLocatorScene } from '@core/catalog/locator';
-import { LOCATOR_BASEMAP } from '@core/catalog/locatorBasemap';
+import { locatorScene } from '@core/catalog/locatorSceneCache';
 import type { CatalogBbox } from '@core/catalog/schema';
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -14,8 +13,19 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
  * so it renders instantly in the FlatList and works in offline-only mode.
  *
  * Memoized: the scene is a pure function of the bbox, and rows re-render on
- * download progress ticks — the SVG must not be rebuilt then.
+ * download progress ticks — the SVG must not be rebuilt then. `useMemo` alone
+ * only survives while the row is mounted and a FlatList recycles cells
+ * constantly, so the scene itself is cached process-wide and bounded in
+ * `@core/catalog/locatorSceneCache`.
  */
+
+/**
+ * Internal canvas resolution the paths are projected into, independent of the
+ * displayed `size` — the <Svg> scales one to the other via viewBox, so every
+ * thumbnail shares a cache entry regardless of how large it is drawn.
+ */
+const CANVAS_PX = 100;
+
 export const LocatorThumb = memo(function LocatorThumb({
   bbox,
   size,
@@ -24,10 +34,7 @@ export const LocatorThumb = memo(function LocatorThumb({
   size: number;
 }) {
   const theme = useTheme();
-  const scene = useMemo(
-    () => (bbox === undefined ? null : buildLocatorScene(bbox, LOCATOR_BASEMAP, 100)),
-    [bbox],
-  );
+  const scene = useMemo(() => (bbox === undefined ? null : locatorScene(bbox, CANVAS_PX)), [bbox]);
 
   // Fixed miniature-map palette per theme (not theme.colors — water must read
   // as water in both themes, like the weather HUD's fixed gradient ramps).

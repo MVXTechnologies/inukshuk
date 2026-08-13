@@ -3,7 +3,7 @@ import {
   countByCategory,
   filterCatalogItems,
 } from '@core/catalog/filterCatalog';
-import { installStatusFor, type InstallStatus } from '@core/catalog/installStatus';
+import { indexInstallStatus, type InstallStatus } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
   CATALOG_CATEGORIES,
@@ -18,7 +18,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { formatDistance } from '@lib/format';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { FlatList, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -54,6 +54,8 @@ import {
  * progress; dedup against the Library shows "Open"/"Update" instead of a
  * second Download.
  */
+
+const keyExtractor = (item: CatalogItem) => item.id;
 
 /** "≈ 12 km" caption: standard distance formatting minus noise decimals. */
 function approxDistanceLabel(meters: number): string {
@@ -97,9 +99,15 @@ export function StoreScreen() {
   }, [status, load]);
 
   const items = useMemo(() => manifest?.items ?? [], [manifest]);
+  // Typing must never wait on the list. Filtering + the nearest-first sort walk
+  // the whole catalog (and every new row rebuilds a locator thumbnail), so the
+  // Searchbar keeps the live `query` while the list re-derives from a deferred
+  // copy — React renders the keystroke first and the heavier list pass after,
+  // dropping intermediate passes when the user keeps typing.
+  const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(
-    () => filterCatalogItems(items, { text: query, category }),
-    [items, query, category],
+    () => filterCatalogItems(items, { text: deferredQuery, category }),
+    [items, deferredQuery, category],
   );
   const sorted = useMemo(
     () => sortCatalogItems(filtered, lastKnownPosition),
@@ -111,9 +119,21 @@ export function StoreScreen() {
     () => new Map<string, CatalogSource>((manifest?.sources ?? []).map((s) => [s.id, s])),
     [manifest],
   );
+  // Install state for the whole catalog, indexed once per (items, maps) change.
+  // Doing it per row meant `installStatusFor` scanned the entire library for
+  // every visible cell on every render — O(rows × library) on a screen that
+  // re-renders on each download-progress tick.
+  const installStatusById = useMemo(() => indexInstallStatus(items, maps), [items, maps]);
 
   // Landing (category grid) until the user types or enters a category.
-  const home = !browsing && query.trim() === '';
+  //
+  // Deliberately keyed on `deferredQuery`, not `query`: the list below derives
+  // from the deferred copy, so switching on the LIVE query flips to the list
+  // branch one pass before the list has the new query — rendering the entire
+  // unfiltered catalog for that pass. It converges, but it is a visible flash
+  // on the first keystroke, and a very expensive one now the world catalog is
+  // tens of thousands of items. Both sides move together this way.
+  const home = !browsing && deferredQuery.trim() === '';
 
   const enterCategory = (c: CatalogCategory) => {
     setCategory(c);
@@ -207,7 +227,7 @@ export function StoreScreen() {
 
   const renderItem = ({ item }: { item: CatalogItem }) => {
     const source = sourcesById.get(item.sourceId);
-    const installStatus = installStatusFor(item, maps);
+    const installStatus = installStatusById.get(item.id) ?? 'not-installed';
     const fraction = downloads[item.id];
     const downloading = item.id in downloads;
     const expanded = expandedId === item.id;
@@ -265,6 +285,21 @@ export function StoreScreen() {
       </Card>
     );
   };
+
+  // Stable across renders: a fresh array literal here invalidates the list's
+  // content container on every download-progress tick. `keyExtractor` is
+  // module-scope for the same reason.
+  //
+  // `renderItem` is deliberately NOT memoized: it closes over `downloads` and
+  // `expandedId`, which are exactly what changes on a progress tick, so a
+  // useCallback would only move the new identity around. Cells therefore still
+  // re-render on every tick. Fixing that for real needs a memoized row
+  // component with the progress subscribed per row — a UI refactor, not a
+  // mechanical one, so it is not done here.
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
+    [insets.bottom],
+  );
 
   const emptyState = () => {
     if (status === 'loading' || status === 'idle') {
@@ -373,11 +408,21 @@ export function StoreScreen() {
 
           <FlatList
             data={sorted}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
-            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={listContentStyle}
             keyboardShouldPersistTaps="handled"
+            // Each row builds an SVG locator thumbnail, so the defaults
+            // (initialNumToRender 10, windowSize 21) do far more work up front
+            // and retain far more mounted rows than this list needs.
+            // No removeClippedSubviews: on Android it is a known cause of
+            // blank cells and dropped touches, these rows render react-native-
+            // svg trees, and nothing else in this app uses it. The window
+            // tuning above stands on its own.
+            initialNumToRender={6}
+            maxToRenderPerBatch={5}
+            windowSize={7}
           />
         </>
       )}
