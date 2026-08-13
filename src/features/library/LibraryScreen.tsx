@@ -148,11 +148,20 @@ export function LibraryScreen() {
     () => groupByFolder(folders, maps, visibleTracks, waypoints),
     [folders, maps, visibleTracks, waypoints],
   );
-  // Same for the three newest-first waypoint lists rendered below — each call
-  // copies and sorts.
+  // Same for the newest-first waypoint lists rendered below — each call copies
+  // and sorts. There are three of them: the flat "Waypoints" section, the
+  // Ungrouped section, and one PER FOLDER GROUP (sorted here as a map keyed by
+  // folder id, since the folder sections are built inside a render callback).
   const sortedWaypoints = useMemo(() => sortWaypointsNewestFirst(waypoints), [waypoints]);
   const sortedUngroupedWaypoints = useMemo(
     () => sortWaypointsNewestFirst(grouped.ungroupedWaypoints),
+    [grouped],
+  );
+  const sortedFolderWaypoints = useMemo(
+    () =>
+      new Map(
+        grouped.groups.map((g) => [g.folder.id, sortWaypointsNewestFirst(g.waypoints)] as const),
+      ),
     [grouped],
   );
 
@@ -832,7 +841,7 @@ export function LibraryScreen() {
               // while any filter is active.
               ...(activeFilterCount > 0 ? [] : g.maps.map(renderMapCard)),
               ...g.tracks.map(renderTrackCard),
-              ...sortWaypointsNewestFirst(g.waypoints).map(renderWaypointCard),
+              ...(sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointCard),
             ]
           )}
         </List.Section>
