@@ -21,7 +21,6 @@ import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
 import type { Feature, LineString } from 'geojson';
-import { mapColors } from '@ui/theme';
 import {
   Camera,
   type CameraRef,
@@ -72,6 +71,14 @@ import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
+import {
+  CONTOUR_LAYERS,
+  FOCUSED_TRAIL_LAYER,
+  HEATMAP_LAYERS,
+  INSPECT_MARKER_LAYER,
+  LIVE_TRAIL_LAYERS,
+  TRACKS_LINES_LAYER,
+} from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -115,176 +122,6 @@ function windBoundsOf(vs: ViewState): WindBbox {
 const INSPECT_PANEL_H_ESTIMATE = 300;
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
-
-// ---------------------------------------------------------------------------
-// Static <Layer> children, hoisted out of the render body.
-//
-// maplibre-react-native's <GeoJSONSource> is React.memo'd, and its render body
-// does `JSON.stringify(data)` (see the package's GeoJSONSource.tsx). memo does
-// a SHALLOW prop compare and `children` is a prop — so inline JSX children,
-// which are a fresh element object on every parent render, defeat the memo and
-// re-serialize the whole geometry every time MapScreen renders. With the
-// combined trails source that is megabytes of JSON per render, several times a
-// second while recording.
-//
-// Hoisting these element trees to module scope makes `children` reference-
-// stable, so each source re-renders (and re-serializes) only when its `data`
-// actually changes. They close over nothing, so hoisting is a pure identity
-// change: the rendered output is byte-for-byte the same.
-// ---------------------------------------------------------------------------
-
-const HEATMAP_LAYERS = (
-  <Layer
-    id="tracks-heatmap"
-    type="heatmap"
-    paint={{
-      'heatmap-weight': 1,
-      'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 16, 1.0],
-      'heatmap-color': [
-        'interpolate',
-        ['linear'],
-        ['heatmap-density'],
-        0,
-        'rgba(255,140,0,0)',
-        0.15,
-        'rgba(255,140,0,0)',
-        0.4,
-        'rgba(255,140,0,0.18)',
-        0.7,
-        'rgba(255,130,0,0.35)',
-        1,
-        'rgba(255,120,0,0.55)',
-      ],
-      'heatmap-radius': [
-        'interpolate',
-        ['exponential', 1.6],
-        ['zoom'],
-        6,
-        3,
-        10,
-        8,
-        13,
-        16,
-        16,
-        28,
-      ],
-      'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.5, 15, 0.5, 18, 0.35],
-    }}
-  />
-);
-
-/** Trail-lines layer, one element per `filter` value (see the selection rule). */
-const TRACKS_LINES_LAYER = {
-  shown: (
-    <Layer
-      id="tracks-lines-layer"
-      type="line"
-      filter={true}
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': ['get', 'color'], 'line-width': 3 }}
-    />
-  ),
-  hidden: (
-    <Layer
-      id="tracks-lines-layer"
-      type="line"
-      filter={false}
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': ['get', 'color'], 'line-width': 3 }}
-    />
-  ),
-} as const;
-
-const FOCUSED_TRAIL_LAYER = (
-  <Layer
-    id="focused-trail-line-layer"
-    type="line"
-    layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-    paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
-  />
-);
-
-const INSPECT_MARKER_LAYER = (
-  <Layer
-    id="inspect-marker-dot"
-    type="circle"
-    paint={{
-      'circle-radius': 7,
-      'circle-color': mapColors.userLocation,
-      'circle-stroke-width': 2,
-      'circle-stroke-color': '#ffffff',
-    }}
-  />
-);
-
-const LIVE_TRAIL_LAYERS = (
-  <>
-    <Layer
-      id="trail-casing"
-      type="line"
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
-    />
-    <Layer
-      id="trail-line"
-      type="line"
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': mapColors.trail, 'line-width': 5 }}
-    />
-  </>
-);
-
-/** Contour layers per basemap — only the two colour schemes exist. */
-function contourLayers(satellite: boolean) {
-  return {
-    minor: (
-      <>
-        <Layer
-          id="contours2d-minor-halo"
-          type="line"
-          paint={{
-            'line-color': satellite ? '#000000' : '#FFFFFF',
-            'line-opacity': 0.35,
-            'line-width': 2.2,
-          }}
-        />
-        <Layer
-          id="contours2d-minor-line"
-          type="line"
-          paint={{
-            'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
-            'line-opacity': satellite ? 0.8 : 0.5,
-            'line-width': 1,
-          }}
-        />
-      </>
-    ),
-    major: (
-      <>
-        <Layer
-          id="contours2d-major-halo"
-          type="line"
-          paint={{
-            'line-color': satellite ? '#000000' : '#FFFFFF',
-            'line-opacity': 0.45,
-            'line-width': 3.2,
-          }}
-        />
-        <Layer
-          id="contours2d-major-line"
-          type="line"
-          paint={{
-            'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
-            'line-opacity': satellite ? 0.95 : 0.75,
-            'line-width': 1.8,
-          }}
-        />
-      </>
-    ),
-  } as const;
-}
-
-const CONTOUR_LAYERS = { satellite: contourLayers(true), plain: contourLayers(false) } as const;
 
 /**
  * Throttled `toLineFeature(points)`. Between rebuilds the previous feature
