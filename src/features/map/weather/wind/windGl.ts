@@ -37,19 +37,43 @@
  *   mercator y is computed relative to the grid's north edge as log(tanN/tanP)
  *   — float32-safe at deep zooms);
  * - advection converts m/s to grid UV per frame with the cos(lat) mercator
- *   distortion, so streak speed and length are proportional to wind speed;
+ *   distortion, so streak speed and length track wind speed — but only up to
+ *   a knee, see the compression in @core/weather/windLook;
  * - the gust mapping (owner-approved): a deterministic ~20% particle subset
  *   advects at the gust/speed ratio decoded from the texture's B channel —
- *   gusty areas read as sparse, faster, longer streaks;
- * - streaks are near-white translucent (alpha ∝ speed) over the colour
- *   drape — the underlay already encodes speed, Windy-style;
+ *   gusty areas read as sparse, faster streaks;
+ * - streaks are near-white translucent (alpha rises with speed to a flat top)
+ *   over the colour drape — the underlay already encodes speed, Windy-style;
  * - a global opacity uniform lets the overlay fade during gestures.
+ *
+ * Every visual constant below is imported from @core/weather/windLook and
+ * INTERPOLATED into the GLSL rather than typed twice, so the shader and the
+ * unit-tested pure mirror can never disagree on a number.
  */
 
+import {
+  STREAK_ALPHA_CEIL,
+  STREAK_ALPHA_FLOOR,
+  STREAK_ALPHA_GAIN,
+  STREAK_EXCESS_GAIN,
+  STREAK_KNEE_MPS,
+  STREAK_MAX_MPS,
+  TRAIL_FADE_OPACITY,
+} from '@core/weather/windLook';
 import type { GridRect } from '@core/weather/windProjection';
 
 // expo-gl implements the WebGL 1 interface; the standard lib type is enough.
 type GL = WebGLRenderingContext;
+
+/**
+ * Render a number as a GLSL ES 1.00 float literal. `1` is an int there and
+ * `float x = 1;` is a COMPILE ERROR, which would take the whole renderer down
+ * the same way the missing varying did — so every interpolated constant goes
+ * through here and always carries a decimal point.
+ */
+export function glslFloat(n: number): string {
+  return Number.isInteger(n) ? `${n}.0` : String(n);
+}
 
 const QUAD_VERT = `
 precision mediump float;
@@ -139,6 +163,19 @@ void main() {
   vec2 offset = vec2(velocity.x / max(distortion, 0.05) * u_uv_per_mps.x,
                      -velocity.y * u_uv_per_mps.y) * boost;
 
+  // Streak-length compression — see @core/weather/windLook for the numbers.
+  // Trail length is (step per frame) × (a FIXED frame budget), so an uncapped
+  // step is exactly what smeared fast particles across the frame. Gusts make
+  // it worst: they multiply the step by up to u_gust_scale on top of the wind
+  // speed, so the longest streaks were ~3× the base flow. Advection is
+  // screen-relative (PX_PER_FRAME_PER_MPS), so clamping the m/s magnitude
+  // clamps the on-screen length directly. Scaling the whole vector keeps the
+  // direction exact; only the magnitude moves.
+  float adv_mps = length(velocity) * boost;
+  float kneed = min(adv_mps, ${glslFloat(STREAK_KNEE_MPS)})
+              + max(adv_mps - ${glslFloat(STREAK_KNEE_MPS)}, 0.0) * ${glslFloat(STREAK_EXCESS_GAIN)};
+  offset *= min(kneed, ${glslFloat(STREAK_MAX_MPS)}) / max(adv_mps, 1e-4);
+
   pos = pos + offset;
 
   // a random seed to use for the particle drop
@@ -219,9 +256,12 @@ void main() {
   // Alpha is INTENSITY, not coverage: dropping it makes each streak fainter
   // without freeing up any map underneath, and in light theme (pale cream
   // basemap, white streaks) a low floor just erases calm-wind areas. So the
-  // floor stays high enough to read at rest; trail LENGTH below is the lever
-  // that actually opens the map up.
-  float a = 0.28 + 0.38 * speed_t;
+  // floor stays high enough to read at rest.
+  // The ramp FLATTENS at the top (see @core/weather/windLook): length and
+  // brightness both used to scale with speed, so fast particles were longer
+  // AND brighter and the two compounded into smears.
+  float a = min(${glslFloat(STREAK_ALPHA_FLOOR)} + ${glslFloat(STREAK_ALPHA_GAIN)} * speed_t,
+                ${glslFloat(STREAK_ALPHA_CEIL)});
   gl_FragColor = vec4(vec3(a), a);
 }
 `;
@@ -343,25 +383,11 @@ export interface WindGlData {
 
 /** Tunables (webgl-wind heritage, values tuned for the trail-zoom look). */
 /**
- * Trail persistence per frame — THE density lever (owner, 2026-08-10: the
- * 0.965 tails buried the coastlines and place names).
- *
- * A trail is visible for roughly 1/(1 - FADE_OPACITY) frames, so this is what
- * decides how much of the screen streak ink covers:
- *   0.965 → ~29 frames (shipped, too dense — the original complaint)
- *   0.95  → ~20 frames (tried: fixed low wind, but at 24 km/h the streaks
- *           washed the basemap out again — see the device captures)
- *   0.94  → ~17 frames (here)
- *   0.93  → ~14 frames (first attempt on this branch — at 9 km/h the trails
- *           degenerated into scattered specks that no longer read as flow)
- * Pixel trail length scales with wind speed while the frame count is fixed,
- * so one value has to serve both ends; 0.94 is the point where 9 km/h still
- * reads as directional flow and 24 km/h still lets the street grid through.
- * Shortening trails removes coverage while leaving every streak crisp, which
- * is why it is pulled harder than the other knobs instead of all four moving
- * together.
+ * Trail persistence per frame. The rationale and the ladder of values tried
+ * live with the constant in @core/weather/windLook, next to the length
+ * compression it now shares the job with.
  */
-const FADE_OPACITY = 0.94;
+const FADE_OPACITY = TRAIL_FADE_OPACITY;
 const DROP_RATE = 0.003;
 const DROP_RATE_BUMP = 0.01;
 const GUST_SCALE = 3; // matches GUST_RATIO_MAX in the encoder

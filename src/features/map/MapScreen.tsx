@@ -17,6 +17,7 @@ import {
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import { resolveEffectiveModel } from '@core/weather/modelCoverage';
+import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
 import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
@@ -1427,14 +1428,9 @@ export function MapScreen() {
               frames={weatherDrape.frames}
               // Wind runs LIGHTER than every other weather layer, and
               // deliberately so: it is the only layer that also draws its own
-              // ink on top, so drape + streaks at the normal strength read
-              // heavier than any other layer at the normal strength. M3's 0.75
-              // buried the coastlines (owner, 2026-08-10); 0.62 was measured on
-              // device and still washed the street grid out at 24 km/h. 0.50 is
-              // where the basemap stays legible under the streaks, and the
-              // streaks keep their contrast against it in BOTH themes (verified
-              // light + dark, 9 and 24 km/h).
-              opacity={weatherLayer === 'wind' ? 0.5 : 0.62}
+              // ink on top. The value and the ladder of everything tried before
+              // it live with the constant in @core/weather/windLook.
+              opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : 0.62}
             />
           )}
           {marineActive && (

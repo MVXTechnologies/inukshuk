@@ -177,15 +177,23 @@ catalog. The WMS default style for WSPD is a continuous speed ramp; MapLibre's r
 bilinear magnification smooths the 2.5 km cells into a Windy-like gradient at trail zooms.
 Client-rendering the gradient from the U/V grid would give pixel-identical-to-Windy colours but
 duplicates what the drape already does for zero code — not worth it at M3 scope. The drape runs
-at `raster-opacity` **0.50**, deliberately BELOW the 0.62 default every other weather layer
+at `raster-opacity` **0.30**, deliberately BELOW the 0.62 default every other weather layer
 uses: wind is the only layer that also draws its own ink on top, so drape + streaks at the
-normal strength read heavier than any other layer at the normal strength. M3 originally
-specified ≈ 0.75 here; that buried the coastlines (owner, 2026-08-10), and 0.62 was measured on
-device and still washed the street grid out at 24 km/h. At 0.50 the basemap stays legible under
-the streaks and the streaks keep their contrast in both themes. If the default WMS style looks
-too classed/stepped
+normal strength read heavier than any other layer at the normal strength. The measured ladder,
+Québec City, both themes: 0.75 (M3's original) buried the coastlines (owner, 2026-08-10); 0.62
+still washed the street grid out at 24 km/h; 0.50 was legible in isolation but the owner's
+verdict across all four capture cases was still "the map is always under a wash". The value
+itself lives in `@core/weather/windLook` (`WIND_DRAPE_OPACITY`) with the full rationale — this
+doc must not restate it as a literal, which is how it drifted to claiming 0.75 while the code
+shipped something else. If the default WMS style looks too classed/stepped
 on device, the WMS `styles=` parameter can select an alternative ramp before we ever consider
 client rendering (owner question Q3).
+
+The drape is only half the legibility story, and on the owner's 2026-08-13 review it turned out
+to be the half that does NOT move the needle: successive rounds of streak alpha/count/trail
+tuning were reported as indistinguishable ("in the screenshots, I see no differences"). The
+live direction is the opposite one — strengthen the BASEMAP under the weather (thicker,
+higher-contrast coast and feature linework) rather than keep weakening the weather. See §3a.
 
 ## 4. M2 — models + comparison table
 
