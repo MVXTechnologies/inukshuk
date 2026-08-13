@@ -8,19 +8,35 @@ import {
   type LibraryIndex,
 } from '@core/library/migrations';
 import { removeNoteById } from '@core/library/notes';
+import { nextFolderVisibility } from '@core/library/visibility';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
+
+/** A trail as it comes out of an import: the parsed track, its GPX file and any notes. */
+export interface ImportedTrack {
+  track: Track;
+  fileUri: string;
+  notes?: readonly ImportedNote[];
+}
 
 interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   addMap: (doc: MapDocument) => void;
+  /**
+   * Add several maps at once, keeping `docs` order at the top of the library
+   * and making the first one active — a multi-file import in ONE index write
+   * instead of one full serialization per picked file.
+   */
+  addMaps: (docs: readonly MapDocument[]) => void;
   updateMap: (id: string, patch: Partial<MapDocument>) => void;
   removeMap: (id: string) => void;
   setActiveMap: (id: string | null) => void;
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
   toggleMapPage: (id: string, pageIndex: number) => void;
   addTrack: (track: Track, fileUri: string, notes?: readonly ImportedNote[]) => void;
+  /** Add several imported trails in `items` order, in ONE index write. */
+  addTracks: (items: readonly ImportedTrack[]) => void;
   /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
   updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id' | 'fileUri'>>) => void;
   removeTrack: (id: string) => void;
@@ -45,6 +61,14 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   setMapVisibilityMode: (mode: 'type' | 'folders') => void;
   /** Toggle a folder id (or the 'ungrouped' pseudo-id) in the visible set. */
   toggleVisibleFolder: (id: string) => void;
+  /**
+   * One tap on a folder row in the map's content picker: enter 'folders' mode
+   * AND move the folder in the visible set, in a single `set()` / single index
+   * write. Doing it as `setMapVisibilityMode` + `toggleVisibleFolder` cost two
+   * synchronous serializations of the whole index per tap and passed through a
+   * mode='folders' / selection=[] state that shows an empty map.
+   */
+  showFolder: (id: string) => void;
   // Folders — flat, cross-type containers that organize maps + trails by area.
   addFolder: (name: string) => string;
   renameFolder: (id: string, name: string) => void;
@@ -94,6 +118,29 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
   } satisfies LibraryIndex);
 }
 
+/** The persisted summary for a freshly imported/recorded trail. */
+function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
+  const seeded =
+    notes && notes.length > 0
+      ? notes.map((n) => ({
+          id: storage.newId(),
+          distanceM: Math.max(0, n.distanceM),
+          text: n.text.trim(),
+          createdAt: Date.now(),
+        }))
+      : undefined;
+  return {
+    id: track.id,
+    name: track.name,
+    startedAt: track.startedAt,
+    endedAt: track.endedAt,
+    stats: track.stats,
+    fileUri,
+    ...(seeded ? { notes: seeded } : {}),
+    ...(track.category ? { category: track.category } : {}),
+  };
+}
+
 // Single-flight hydration: concurrent callers (RootLayout's effect and a
 // cold-start "Open with" intent) await the same read instead of racing it.
 let hydration: Promise<void> | null = null;
@@ -130,6 +177,15 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   addMap: (doc) =>
     set((s) => {
       const next = { ...s, maps: [doc, ...s.maps], activeMapId: doc.id };
+      persist(next);
+      return next;
+    }),
+
+  addMaps: (docs) =>
+    set((s) => {
+      const first = docs[0];
+      if (first === undefined) return s;
+      const next = { ...s, maps: [...docs, ...s.maps], activeMapId: first.id };
       persist(next);
       return next;
     }),
@@ -182,26 +238,15 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   addTrack: (track, fileUri, notes) =>
     set((s) => {
-      const seeded =
-        notes && notes.length > 0
-          ? notes.map((n) => ({
-              id: storage.newId(),
-              distanceM: Math.max(0, n.distanceM),
-              text: n.text.trim(),
-              createdAt: Date.now(),
-            }))
-          : undefined;
-      const summary: TrackSummary = {
-        id: track.id,
-        name: track.name,
-        startedAt: track.startedAt,
-        endedAt: track.endedAt,
-        stats: track.stats,
-        fileUri,
-        ...(seeded ? { notes: seeded } : {}),
-        ...(track.category ? { category: track.category } : {}),
-      };
-      const next = { ...s, tracks: [summary, ...s.tracks] };
+      const next = { ...s, tracks: [toSummary({ track, fileUri, notes }), ...s.tracks] };
+      persist(next);
+      return next;
+    }),
+
+  addTracks: (items) =>
+    set((s) => {
+      if (items.length === 0) return s;
+      const next = { ...s, tracks: [...items.map(toSummary), ...s.tracks] };
       persist(next);
       return next;
     }),
@@ -320,6 +365,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   toggleVisibleFolder: (id) =>
     set((s) => {
       const next = { ...s, visibleFolderIds: toggleId(s.visibleFolderIds, id) };
+      persist(next);
+      return next;
+    }),
+
+  showFolder: (id) =>
+    set((s) => {
+      const v = nextFolderVisibility(
+        { mode: s.mapVisibilityMode, visibleFolderIds: s.visibleFolderIds },
+        id,
+      );
+      const next = { ...s, mapVisibilityMode: v.mode, visibleFolderIds: [...v.visibleFolderIds] };
       persist(next);
       return next;
     }),

@@ -1,4 +1,5 @@
 import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
+import { toggleId } from './toggleId';
 import type { MapVisibilityMode } from './migrations';
 
 /**
@@ -40,6 +41,32 @@ export function visibleTrackIds(
   if (mode === 'type') return [...activeTrackIds];
   const selected = new Set(visibleFolderIds);
   return tracks.filter((t) => inSelection(t.folderId, selected)).map((t) => t.id);
+}
+
+/** The map's folder-visibility state: the mode plus the checked folder ids. */
+export interface FolderVisibility {
+  mode: MapVisibilityMode;
+  visibleFolderIds: readonly string[];
+}
+
+/**
+ * The visibility state after one tap on a folder row in the map's content
+ * picker. Both fields move together — the picker must never leave the map in
+ * 'folders' mode with an empty selection (which shows nothing at all).
+ *
+ * Coming from 'type' mode the selection *restarts* at the tapped folder: in
+ * type mode every folder row reads unchecked (the "Everything" row is what's
+ * on), so the tap turns exactly that folder on. Toggling a stale leftover
+ * selection instead is what produced the "blank map after picking a folder"
+ * bug — check TripA, tap Everything (mode flips to 'type', TripA stays in the
+ * persisted set), then tap TripA again and the toggle *removed* it.
+ *
+ * Already in 'folders' mode it is a plain toggle, so a second tap on the same
+ * row hides that folder again.
+ */
+export function nextFolderVisibility(current: FolderVisibility, id: string): FolderVisibility {
+  if (current.mode !== 'folders') return { mode: 'folders', visibleFolderIds: [id] };
+  return { mode: 'folders', visibleFolderIds: toggleId(current.visibleFolderIds, id) };
 }
 
 /** The saved waypoints pinned on the map ('type' mode shows them all). */
