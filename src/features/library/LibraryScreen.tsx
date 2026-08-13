@@ -92,11 +92,12 @@ export function LibraryScreen() {
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
-  const addMap = useLibraryStore((s) => s.addMap);
+  const addMaps = useLibraryStore((s) => s.addMaps);
   const removeMap = useLibraryStore((s) => s.removeMap);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
   const addTrack = useLibraryStore((s) => s.addTrack);
+  const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
   const folders = useLibraryStore((s) => s.folders);
   const addFolder = useLibraryStore((s) => s.addFolder);
@@ -178,8 +179,9 @@ export function LibraryScreen() {
     const result = await pickAndImportMaps();
     setBusy(false);
     if (result.kind === 'imported') {
-      // Add in picked order (addMap prepends, so add last-first to preserve it).
-      [...result.docs].reverse().forEach(addMap);
+      // One write for the whole pick — adding them one by one re-serialized
+      // the entire index per file.
+      addMaps(result.docs);
       const n = result.docs.length;
       showSnack(
         `Imported ${n} map${n === 1 ? '' : 's'}${result.failed ? `, ${result.failed} failed` : ''}`,
@@ -194,9 +196,7 @@ export function LibraryScreen() {
     const result = await pickAndImportGpxFiles();
     setBusy(false);
     if (result.kind === 'imported') {
-      [...result.items]
-        .reverse()
-        .forEach(({ track, fileUri, notes }) => addTrack(track, fileUri, notes));
+      addTracks(result.items);
       const n = result.items.length;
       showSnack(
         `Imported ${n} trail${n === 1 ? '' : 's'}${result.failed ? `, ${result.failed} failed` : ''}`,
@@ -694,7 +694,11 @@ export function LibraryScreen() {
           icon="dots-vertical"
           size={22}
           onPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
-          accessibilityLabel="More options"
+          // Distinct from the trail card's "More options": two buttons sharing
+          // one label is ambiguous for screen readers AND for Maestro, which
+          // could not resolve the trail menu once a saved waypoint was on
+          // screen (folders.yaml failed on main, 2026-08-10).
+          accessibilityLabel="Waypoint options"
         />
       }
     >

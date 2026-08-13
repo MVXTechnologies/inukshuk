@@ -59,10 +59,9 @@ it('toggleTrackOverlay toggles and persists the id with the schema version', () 
 it('folder visibility mode + selection toggle and persist', () => {
   const s0 = useLibraryStore.getState();
   expect(s0.mapVisibilityMode).toBe('type');
-  s0.setMapVisibilityMode('folders');
+  s0.showFolder('f1');
   expect(useLibraryStore.getState().mapVisibilityMode).toBe('folders');
-  useLibraryStore.getState().toggleVisibleFolder('f1');
-  useLibraryStore.getState().toggleVisibleFolder('ungrouped');
+  useLibraryStore.getState().showFolder('ungrouped');
   expect(useLibraryStore.getState().visibleFolderIds).toEqual(['f1', 'ungrouped']);
   expect(storage.writeIndex).toHaveBeenLastCalledWith(
     expect.objectContaining({
@@ -70,13 +69,13 @@ it('folder visibility mode + selection toggle and persist', () => {
       visibleFolderIds: ['f1', 'ungrouped'],
     }),
   );
-  useLibraryStore.getState().toggleVisibleFolder('f1');
+  useLibraryStore.getState().showFolder('f1');
   expect(useLibraryStore.getState().visibleFolderIds).toEqual(['ungrouped']);
   useLibraryStore.getState().setMapVisibilityMode('type');
 });
 
 it('removeFolder clears item folderIds and the visible selection', () => {
-  useLibraryStore.getState().toggleVisibleFolder('f1');
+  useLibraryStore.getState().showFolder('f1');
   const wpId = useLibraryStore.getState().addWaypoint(46.8, -71.2);
   useLibraryStore.getState().setItemFolder('waypoint', wpId, 'f1');
   expect(useLibraryStore.getState().waypoints.find((w) => w.id === wpId)?.folderId).toBe('f1');
