@@ -12,6 +12,8 @@
  * - **`docs/catalog/v2/`** — the world catalog: a small `index.json` (sources,
  *   per-category totals, shard directory) plus `shards/<id>.json`, planned by
  *   the shared `planCatalogShards` so shard ids are identical on both sides.
+ *   Alongside them, `search.json` — the token -> shard digest that lets a query
+ *   reach a sheet on the other side of the world without pulling the catalog.
  *   This is what current clients read.
  * - **`docs/catalog/v1/manifest.json`** — the legacy flat manifest, still
  *   published so builds shipped before the world catalog keep working. It
@@ -41,6 +43,10 @@ import {
   type CatalogShardRef,
   type CatalogSource,
 } from '../../src/core/catalog/schema';
+import {
+  buildCatalogSearchDigest,
+  parseCatalogSearchDigest,
+} from '../../src/core/catalog/searchDigest';
 import { planCatalogShards } from '../../src/core/catalog/shard';
 
 /** Fragments that also feed the frozen v1 manifest for pre-world-catalog apps. */
@@ -160,11 +166,32 @@ function main(): void {
     });
   }
 
+  // The search digest: which shards could match a query, anywhere in the world.
+  // Published as its OWN document, not folded into the index — the index is
+  // fetched on every cold start and first paint depends on it staying small,
+  // while the digest is only ever paid for by someone who actually types.
+  const digest = buildCatalogSearchDigest(planned);
+  const digestBody = `${JSON.stringify(digest)}\n`;
+  const { digest: reparsedDigest, warnings: digestWarnings } = parseCatalogSearchDigest(
+    JSON.parse(digestBody),
+  );
+  if (reparsedDigest === null || digestWarnings.length > 0) {
+    throw new Error(`search digest failed validation:\n  ${digestWarnings.join('\n  ')}`);
+  }
+  const digestPath = join(v2Dir, 'search.json');
+  writeFileSync(digestPath, digestBody);
+  const tokenCount = Object.keys(digest.tokens).length;
+  console.log(
+    `wrote ${digestPath} (${tokenCount} tokens over ${digest.shardIds.length} shards, ` +
+      `${(digestBody.length / 1024).toFixed(1)} KB)`,
+  );
+
   const index = {
     schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
     sources,
     shards: refs,
+    search: { path: 'search.json', byteSize: Buffer.byteLength(digestBody), tokenCount },
     categoryCounts,
   };
   const { index: parsedIndex, warnings } = parseCatalogIndex(index);

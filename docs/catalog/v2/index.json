@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-10T13:31:27.734Z",
+  "generatedAt": "2026-08-13T15:16:22.621Z",
   "sources": [
     {
       "id": "ga-austopo",
@@ -3341,6 +3341,11 @@
       "byteSize": 2418
     }
   ],
+  "search": {
+    "path": "search.json",
+    "byteSize": 440195,
+    "tokenCount": 20596
+  },
   "categoryCounts": {
     "topo": 65877
   }
