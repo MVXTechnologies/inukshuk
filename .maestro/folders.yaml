@@ -91,9 +91,11 @@ appId: com.inukshuk.app
     visible: 'Show on the map'
     timeout: 10000
 - tapOn: 'TripA'
-# One tap = one store write now (showFolder), so the picker no longer stalls
-# the JS thread long enough to swallow the next tap. retryTapIfNoChange covers
-# a genuinely dropped tap without paying fixed latency on every run.
+# A folder pick is one store write now (showFolder) instead of two full index
+# serializations. The 1-in-5 failure the earlier `waitForAnimationToEnd` was
+# added for never reproduced in 6 clean runs without it, so don't read this as
+# a proven flake cure: retryTapIfNoChange is simply the right idiom — it
+# retries a genuinely dropped tap instead of charging every run fixed latency.
 - tapOn:
     text: 'Done'
     retryTapIfNoChange: true
