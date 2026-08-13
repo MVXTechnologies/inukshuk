@@ -123,21 +123,61 @@ latency; the "not flowy" complaint in its purest form.
 
 ### Fix (applied)
 
-Hoisted the static `<Layer>` element trees to module scope in `MapScreen.tsx`
-(`HEATMAP_LAYERS`, `TRACKS_LINES_LAYER.{shown,hidden}`, `FOCUSED_TRAIL_LAYER`,
+Hoisted the static `<Layer>` element trees to module scope, in a new
+`src/features/map/mapLayers.tsx` (`HEATMAP_LAYERS`,
+`TRACKS_LINES_LAYER.{shown,hidden}`, `FOCUSED_TRAIL_LAYER`,
 `INSPECT_MARKER_LAYER`, `LIVE_TRAIL_LAYERS`, `CONTOUR_LAYERS` per basemap). They
-close over nothing, so this is a pure identity change — the rendered tree is
-byte-for-byte the same, but `children` is now reference-stable and each source
-re-serializes only when its own `data` changes.
+close over nothing, so `children` is now reference-stable and those sources
+re-serialize only when their own `data` changes.
+
+### Correction: the first attempt DID change behaviour
+
+The single-element hoists are identity-only. The three multi-layer sets
+(`LIVE_TRAIL_LAYERS`, and contour minor/major) were first written as
+Fragment-wrapped pairs, and that is **not** byte-for-byte the same tree.
+
+`<GeoJSONSource>` does not render its children verbatim: it injects its own id
+into each child with `cloneReactChildrenWithProps`
+(`GeoJSONSource.tsx:239` → `utils/index.ts:82-95`), which is
+`React.Children.map` + `cloneElement`. **`Children.map` does not descend into a
+Fragment** — it treats the Fragment as the single child. So the Fragment
+received `source` and the `<Layer>`s inside it received nothing: six layers,
+including the live recording trail and both contour overlays.
+
+MEASURED, rendering through the real `<GeoJSONSource>` (React 19.2.3):
+
+```
+Fragment-wrapped pair → [["frag-a", undefined], ["frag-b", undefined]]
+array pair            → [["arr-a", "arr-src"],  ["arr-b", "arr-src"]]
+```
+
+It still drew correctly only because both native sides backfill a missing source
+id (`MLRNSource.kt:161-171`, `MLRNSource.m:20-24,85-88`). A MapLibre bump, or a
+Fabric mounting path that stops routing through `insertReactSubview`/`addView`,
+would have made the live trail and the contours vanish — with nothing in lint,
+types or the test suite to catch it. Fixed by using arrays, which is the branch
+`cloneReactChildrenWithProps` handles correctly, and pinned by
+`mapLayers.test.tsx`, which renders every hoisted set through the real
+`<GeoJSONSource>` and asserts each layer receives its source id.
 
 ### Risk
 
-Low. No behavioural change; layer mount order preserved. `npm run check` passes.
+Low **now**. Layer mount order preserved; `npm run check` passes. But the
+Fragment version above is the reason "pure identity change" is not a claim to
+make without rendering the result and looking at it.
 
 ### Still to do
 
 `HeadingCone.tsx` and the two single-point marker sources still pass inline
 children, but their payloads are one feature each — negligible.
+
+Note also that `inspect-marker` (`MapScreen.tsx`) and `heat-tap-marker` build
+their `data` as a **fresh inline object literal every render**, so the memo on
+those two sources cannot bail out regardless of the hoisted children: the
+`INSPECT_MARKER_LAYER` hoist is inert until that `data` is memoized. Both are
+one-feature payloads, so the cost is negligible — but the TL;DR's blanket "each
+source now re-serializes only when its `data` changes" is true of the geometry
+sources, not of these two.
 
 ---
 
@@ -399,9 +439,20 @@ sheet, so bounds rejection never helps for this catalog. The existing `memo`
 correctly prevents rebuilds on progress ticks, but **memo does not survive
 unmount**, and a FlatList recycles cells constantly.
 
-**Fix (applied):** module-level `Map<string, LocatorScene>` keyed on the bbox.
-Deterministic pure function, ~130 entries of ~900 chars. Every re-visit is now
-free. **Risk:** low (already covered by `locator.test.ts`).
+**Fix (applied):** a memoized `locatorScene(bbox, size)` in
+`@core/catalog/locatorSceneCache` — pure logic, so it lives in `core` with a
+co-located test rather than inline in the screen. Deterministic pure function,
+so there is no staleness to manage; every re-visit to a row is now free.
+
+The cache is **bounded** (LRU, 256 entries) and keyed on `(size, bbox)`. The
+first version keyed on the bbox alone while hardcoding size 100 — harmless
+today, since the canvas resolution is fixed and independent of the displayed
+size, but the key has to say so. It was also unbounded, which was fine for a
+~130-item catalog and is not fine for the ~66k-item world catalog now in
+flight: it would have retained a scene per bbox ever scrolled past.
+
+**Risk:** low (`locator.test.ts` covers the builder; `locatorSceneCache.test.ts`
+covers identity, the size key, the bound, and LRU order).
 
 **Still to do:** split the 5 289-point mainland ring into a spatial grid in
 `scripts/catalog/build-locator-basemap.ts` so bounds rejection actually rejects
@@ -526,10 +577,21 @@ stationary phone, and a native-driver needle animation._
 
 - **14** — the 1 s recording interval listed `lastFixAt`/`lastAccuracyM` as effect
   deps (`useRecordingSession.ts:87`), so it was torn down and rebuilt on every
-  accepted fix; when fixes arrive faster than 1 s the interval never fired and the
-  "independent of GPS cadence" clock was in fact driven by GPS. Now reads them
-  fresh from the store inside the tick, which also drops two per-fix
-  subscriptions.
+  accepted fix, and above 1 Hz (cycling, driving) it never survived long enough
+  to fire. **Correction:** the displayed clock was never wrong — the effect also
+  called `tick()` synchronously before `setInterval`, so every accepted fix
+  ticked immediately. What the interval actually protected was the no-fix case
+  (out of signal, phone in pocket), where it is the only thing keeping the
+  display alive, and the >1 Hz case, where the elapsed time was being driven by
+  GPS rather than by the clock. Now the tick reads the fix fields fresh instead
+  of listing them as deps, and `gpsQuality` is DERIVED from the tick's
+  wall-clock sample and the fix's own timestamp — so staleness still climbs to
+  `weak`/`lost` on the clock, and a lost → good recovery still shows on the fix
+  that caused it rather than up to a second later. First tests for this hook
+  (`useRecordingSession.test.ts`): 1 Hz with no fixes, 5 fixes/second, one
+  interval across pause → resume, teardown on unmount, both `gpsQuality`
+  directions. Verified to fail on the code they describe — 11 intervals instead
+  of 1 against `main`, `lost` instead of `good` against the first fix.
 - **15** — Store search had no debounce (`StoreScreen.tsx:319`): each keystroke
   re-folded 128 items (`normalize('NFD')` + regex + `toLowerCase`, uncached),
   re-sorted them (with `lastKnownPosition === null` the alphabetical comparator
@@ -537,16 +599,37 @@ stationary phone, and a native-driver needle animation._
   keystroke**), and rebuilt every visible thumbnail. Now filters off a
   `useDeferredValue` copy. _Still to do: precompute a folded haystack per item._
 - **16** — `filterTracks`, `groupByFolder` and three `sortWaypointsNewestFirst`
-  calls ran on every LibraryScreen render. Memoized.
+  calls ran on every LibraryScreen render. Memoized. (The first pass memoized
+  only two of the three; the per-folder-group sort at `LibraryScreen.tsx:835`
+  was still running per render and is now sorted once per grouping change into
+  a map keyed by folder id.)
 - **19** — `mapStore.setMapCenter` (`mapStore.ts:77`) had no equality guard and is
   fed a fresh object literal on **every** camera settle, including rotate/pitch-only
   gestures and follow mode moving with each fix; `settingsStore.set`
   (`settingsStore.ts:266`) had no no-op guard and every call snapshots 28 fields
   and synchronously rewrites `settings.json`. Both now bail on an unchanged value.
+  **Correction:** this does not save a MapScreen render. The same
+  `onRegionDidChange` handler calls `setRegionVersion((v) => v + 1)` two lines
+  above (`MapScreen.tsx:1436`), so MapScreen re-renders on every camera settle
+  regardless — the win is real for the _other_ `mapCenter` subscribers, and for
+  the file write in `settingsStore`.
   Also fixed: `installStatusFor` scanned the whole library per visible Store row
-  (now indexed once), the Store FlatList had no tuning props and a fresh
-  `contentContainerStyle` array per render, and `useTrackOverlays` returned an
-  unmemoized array that defeated the 3D drape's memo downstream.
+  (now indexed once, in `@core/catalog/installStatus`), the Store FlatList had no
+  tuning props and a fresh `contentContainerStyle` array per render, and
+  `useTrackOverlays` returned an unmemoized array that defeated the 3D drape's
+  memo downstream.
+- **Review follow-ups on the above** (all applied): the install index kept the
+  LAST map per `sourceItemId` where `findInstalledMap`'s `find` keeps the first,
+  which could flip a row between `installed` and `update-available` on library
+  order alone; the Store's landing/list switch read the LIVE query while the
+  list derives from the DEFERRED one, flashing the whole unfiltered catalog for
+  one pass on the first keystroke; and `removeClippedSubviews` was dropped from
+  the Store list — on Android it is a known cause of blank cells and dropped
+  touches, these rows render `react-native-svg` trees, and there is no precedent
+  for it in this repo. `keyExtractor` is module-scope now, but `renderItem`
+  closes over `downloads`/`expandedId` and so cannot be usefully memoized
+  without a per-row memo component: Store cells still re-render on every
+  download-progress tick.
 
 ---
 
