@@ -7,7 +7,6 @@ import {
   modelCapabilitiesUrl,
   modelCaption,
   modelVariableForLayer,
-  modelWeatherTileUrl,
   resolveModelWmsLayer,
   sanitizeWeatherModel,
   WEATHER_MODELS,
@@ -94,13 +93,6 @@ describe('sanitizeWeatherModel', () => {
 });
 
 describe('model URL builders', () => {
-  it('builds the per-model tile URL with a pinned time', () => {
-    const url = modelWeatherTileUrl('temp', 'rdps', '2026-08-09T15:00:00Z');
-    expect(url).toContain('layers=RDPS_10km_AirTemp_2m');
-    expect(url).toContain('time=2026-08-09T15%3A00%3A00Z');
-    expect(url).toContain('bbox={bbox-epsg-3857}');
-  });
-
   it('scopes capabilities to the resolved model layer', () => {
     expect(modelCapabilitiesUrl('temp', 'gdps')).toContain('layer=GDPS_15km_AirTemp_2m');
     expect(modelCapabilitiesUrl('radar-rain', 'gdps')).toContain('layer=RADAR_1KM_RRAI');

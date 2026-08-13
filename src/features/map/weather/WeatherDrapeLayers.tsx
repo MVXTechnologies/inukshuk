@@ -1,6 +1,8 @@
-import { drapeSourceId, WEATHER_DRAPE_ANCHOR } from '@core/geo/mapLayerStack';
+import { WEATHER_DRAPE_ANCHOR } from '@core/geo/mapLayerStack';
 import type { WeatherCrossfadeState } from '@core/weather/weatherCrossfade';
-import { Layer, RasterSource } from '@maplibre/maplibre-react-native';
+import { ImageSource, Layer } from '@maplibre/maplibre-react-native';
+
+import type { WeatherDrapeFrame } from './useWeatherDrape';
 
 /**
  * The weather drape's two crossfade slots, mounted as MapView CHILDREN
@@ -13,42 +15,57 @@ import { Layer, RasterSource } from '@maplibre/maplibre-react-native';
  * it to the native `styleURL`, which RELOADS THE ENTIRE STYLE — every source
  * torn down and refetched, the vector coastlines and labels dropped and
  * rebuilt. With the frames in the style that happened TWICE per 700 ms
- * playback tick (measured), which is exactly the blink the owner sees. As
+ * playback tick (measured), which is exactly the blink the owner saw. As
  * children only the slot that actually changed is touched.
  *
- * The A/B contract is unchanged (`@core/weather/weatherCrossfade`): the
- * incoming frame mounts in the idle slot at opacity 0 — MapLibre fetches
- * tiles for an invisible layer, so that IS the prefetch — and the commit is
- * a pure paint update on both layers, which maplibre applies in place. The
- * visible slot is never unmounted while a frame is staged, so a swap itself
- * never blanks the drape.
+ * Why IMAGE sources (perf work 2026-08-11, owner: "can you find a method to
+ * reduce the tile fetch time?"): the slots used to be WMS raster sources with
+ * a `{bbox-epsg-3857}` tile template, i.e. ~15 GetMap round trips per frame
+ * on a phone — measured at 1.5–2.1 s cold against 0.48–0.8 s for a single
+ * viewport GetMap of the same area, for the same bytes. Each slot now draws
+ * ONE pre-downloaded PNG (`useWeatherDrape` + `@data/weatherFrames`), which
+ * both removes fourteen round trips and lets the next frames be warmed while
+ * this one is on screen.
  *
- * Source ids are hashed from the frame URL: MapLibre cannot re-point a tile
- * source, so a new frame remounts its slot, and `MLRNSource.addToMap` reuses
- * any source that still carries the same identifier (which would silently
- * pin the outgoing frame's tiles). That remount is also why both slots
+ * The A/B contract is unchanged (`@core/weather/weatherCrossfade`): the
+ * incoming frame mounts in the idle slot at opacity 0 and the commit is a
+ * pure paint update on both layers, which maplibre applies in place. Source
+ * ids are FIXED per slot: an ImageSource's `url` and `coordinates` update in
+ * place (`MLRNImageSource.setUrl`), so unlike a tile source there is nothing
+ * to remount and no stale-tile risk to hash around.
+ *
+ * A slot renders nothing while its frame is not in `frames` — the drape's
+ * resolved-bitmap map is bounded, so eviction there has to protect exactly
+ * the keys the slots hold, which is what `useWeatherDrape` does. Both slots
  * anchor on their OWN marker layer ({@link WEATHER_DRAPE_ANCHOR}) rather
- * than on a layer they share with the soundings: a re-insert below a shared
- * anchor takes the top slot, so from frame 2 the colour field would have
- * buried the depth numbers (see `@core/geo/mapLayerStack`).
+ * than on one shared with the soundings: a child is inserted immediately
+ * below the layer it names, so of two children sharing an anchor the one
+ * re-inserted last takes the top slot and the colour field would bury the
+ * depth numbers (see `@core/geo/mapLayerStack`).
+ *
+ * The ECCC credit rides in the app's data credits (`mapDataCredits`), not on
+ * the source — an ImageSource carries no attribution field.
  */
 export function WeatherDrapeLayers({
   fade,
+  frames,
   opacity,
-  attribution,
 }: {
   fade: WeatherCrossfadeState;
+  /** Resolved local bitmaps, keyed by the frame identity the slots carry. */
+  frames: ReadonlyMap<string, WeatherDrapeFrame>;
   opacity: number;
-  attribution: string;
 }) {
   return (
     <>
       {([0, 1] as const).map((slot) => {
-        const url = fade.slots[slot];
-        if (url === null) return null;
-        const id = drapeSourceId(slot === 0 ? 'weather-a' : 'weather-b', url);
+        const key = fade.slots[slot];
+        if (key === null) return null;
+        const frame = frames.get(key);
+        if (frame === undefined) return null;
+        const id = slot === 0 ? 'weather-a' : 'weather-b';
         return (
-          <RasterSource key={id} id={id} tiles={[url]} tileSize={256} attribution={attribution}>
+          <ImageSource key={id} id={id} url={frame.uri} coordinates={frame.coordinates}>
             <Layer
               id={`${id}-layer`}
               type="raster"
@@ -68,7 +85,7 @@ export function WeatherDrapeLayers({
                 'raster-fade-duration': 0,
               }}
             />
-          </RasterSource>
+          </ImageSource>
         );
       })}
     </>

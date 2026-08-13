@@ -200,6 +200,15 @@ export function setNetworkAllowed(allowed: boolean): void {
   networkAllowed = allowed;
 }
 
+/**
+ * Is app-owned network traffic allowed right now? Anything that downloads
+ * outside {@link downloadBytes} — the weather drape's frame cache, say — must
+ * consult this, or "Locally downloaded only" stops being ONE switch.
+ */
+export function isNetworkAllowed(): boolean {
+  return networkAllowed;
+}
+
 // ---- DEM/basemap tile cache eviction --------------------------------------
 // Paths.cache/dem would otherwise grow without bound (every 3D pan streams new
 // tiles). After every EVICTION_CHECK_EVERY successful downloads we scan the dir
