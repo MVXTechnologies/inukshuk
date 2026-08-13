@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "shardIds": [
+    "nautical-n40w080",
+    "topo-n40w080"
+  ],
+  "tokens": {
+    "14771": [
+      0
+    ],
+    "14772": [
+      0
+    ],
+    "021l11": [
+      1
+    ],
+    "021l13": [
+      1
+    ],
+    "021l14": [
+      1
+    ],
+    "approaches": [
+      0
+    ],
+    "cantopo": [
+      1
+    ],
+    "chart": [
+      0
+    ],
+    "fixture": [
+      0
+    ],
+    "harbour": [
+      0
+    ],
+    "joseph": [
+      1
+    ],
+    "lac": [
+      1
+    ],
+    "quebec": [
+      1
+    ],
+    "raymond": [
+      1
+    ],
+    "saint": [
+      1
+    ]
+  }
+}
