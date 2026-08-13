@@ -88,6 +88,21 @@ describe('cell geometry', () => {
       expect(cellId(rootCellFor(point))).toMatch(/^[a-z0-9][a-z0-9._-]{0,63}$/);
     }
   });
+
+  // floorTo(90, 10) is 90, which would name a 90°-100° latitude band: a stable
+  // id for a cell that does not exist, and nonsense distances ever after.
+  it('keeps the poles and the antimeridian inside WGS84', () => {
+    const pole = rootCellFor({ latitude: 90, longitude: 0 });
+    expect(cellBbox(pole)[3]).toBeLessThanOrEqual(90);
+    expect(cellId(pole)).toBe('n80e000');
+
+    const seam = rootCellFor({ latitude: 0, longitude: 180 });
+    expect(cellBbox(seam)[2]).toBeLessThanOrEqual(180);
+    expect(cellId(seam)).toBe('n00e170');
+
+    // The other corners are untouched.
+    expect(cellId(rootCellFor({ latitude: -90, longitude: -180 }))).toBe('s90w180');
+  });
 });
 
 describe('planCatalogShards', () => {

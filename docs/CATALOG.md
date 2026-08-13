@@ -50,7 +50,8 @@ bboxes — deliberately not the cell, so a sheet whose coverage spills into the
 next cell is still found by nearest-shard ranking. `byteSize` lets the client
 budget a prefetch instead of guessing.
 
-**As published today:** 65,877 items in **255 shards**, index **61.5 KB**,
+**As published today:** 65,877 items in **255 shards**, index **61.6 KB**,
+search digest **429.9 KB** (142.6 KB gzipped, lazy),
 shard bodies 23 MB in total, largest shard 147 KB / 400 items. Measured
 worst-case first paint from three places on Earth — Québec City 300 KB, Denver
 434 KB, Alice Springs 51 KB (index + three nearest shards).
@@ -142,17 +143,53 @@ off-host.
 
 ### Search across a sharded catalog
 
-Text search matches the items **currently loaded**, which is the shards near the
-user or near the category they opened. That is the honest trade: a global text
-index would be a second data structure to publish, version and cache. If
-worldwide title search becomes a requirement, the shape to add is a separate
-`v2/search-<prefix>.json` trigram index — not a bigger `index.json`.
+Sharding made the tab honest about bytes and dishonest about search: filtering
+only the loaded items meant a user in Montréal typing "Grand Canyon" was told
+**"No maps match your search."** about a catalog holding dozens of them. So the
+generator publishes a search digest and the client consults it.
+
+`v2/search.json` is an inverted index — folded token → the shards containing it:
+
+```json
+{
+  "schemaVersion": 1,
+  "shardIds": ["topo-n10w070", "topo-n20w090-30", "…"],
+  "tokens": { "canyon": [17, 42], "quebec": [3], "…": [] }
+}
+```
+
+- It is a **separate document**, not part of `index.json`. The index is fetched
+  on every cold start and first paint depends on it; the digest is fetched
+  lazily on the first keystroke and then cached for a week like a shard. Sizes:
+
+  | Document      | Raw       | Gzipped  | Fetched                |
+  | ------------- | --------- | -------- | ---------------------- |
+  | `index.json`  | 61.6 KB   | 5.5 KB   | every cold start       |
+  | `search.json` | 429.9 KB  | 142.6 KB | first search, then 7 d |
+  | one shard     | 37–146 KB | 4–13 KB  | 6 per fetch round      |
+
+  So the digest costs roughly what a dozen shards cost, once, only for someone
+  who actually searches — against a 24 MB catalog and 20 MB map downloads.
+
+- `shardIdsForQuery()` matches a query term as a **substring** of the digest's
+  tokens and splits it on non-alphanumerics first, so it is never narrower than
+  the item filter that runs on the fetched rows. False positives (a shard where
+  two different items supplied the two terms) cost one wasted fetch; false
+  negatives are impossible by construction.
+- That is what lets the empty state stop lying. `catalogStore.searchScope`
+  reports `complete` (every matching shard is in — "No maps match your search."
+  is now a true statement), `partial` (more shards to pull), or `area-only` (no
+  digest, e.g. offline). The last two show what was searched and offer an
+  explicit **Search the whole catalog**.
+- Build and query share one pure module (`src/core/catalog/searchDigest.ts`), so
+  generator and client cannot drift on tokenization — the same rule as
+  `planCatalogShards`.
 
 ## 4. Generating it
 
 ```
 npx tsx scripts/catalog/fetch-<source>.ts   # → scripts/catalog/fragments/<source>.json
-npx tsx scripts/catalog/build-manifest.ts   # → docs/catalog/v2/{index.json,shards/*.json}
+npx tsx scripts/catalog/build-manifest.ts   # → docs/catalog/v2/{index.json,search.json,shards/*.json}
 npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2e)
 ```
 
@@ -169,11 +206,12 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
 
 ### The e2e fixture is sharded too
 
-`.maestro/fixtures/catalog/` is an index + two shards (topo and nautical) + four
-~1 KB zipped GeoPDFs, all around Québec City where CI geo-fixes the emulator.
+`.maestro/fixtures/catalog/` is an index + a search digest + two shards (topo
+and nautical) + five ~1 KB zipped GeoPDFs, all around Québec City where CI
+geo-fixes the emulator.
 That is deliberate: the fixture is the only place the production path — fetch
-index, rank shards, fetch the nearest, merge, show "Around you" — runs on a
-device. It stays ~10 KB, so the e2e run is no slower than before.
+index, rank shards, fetch the nearest, merge, consult the digest when the user
+types, show "Around you" — runs on a device. It stays ~10 KB, so the e2e run is no slower than before.
 `src/core/catalog/fixture.test.ts` guards every claim `.maestro/store.yaml`
 makes about it.
 
@@ -182,7 +220,11 @@ catalog has no nautical items yet (see `docs/CATALOG-SOURCES.md` §2 — no
 hydrographic office publishes chart documents in a format we can render). Two
 categories are what make the e2e run prove the parts that only matter at world
 scale: round-robin shard selection, the per-category cap in "Around you", and a
-category grid with more than one card. When a marine source becomes shippable
+category grid with more than one card. The fixture holds **five** items —
+exactly `NEARBY_ROWS` — so "Around you" is full only when that cap adapts to the
+categories present; with two items per category the section filled either way,
+which is how it shipped capped at two rows in the single-category production
+catalog while this flow stayed green. When a marine source becomes shippable
 it lands in exactly this category, against plumbing already covered on device.
 
 ## 5. Sources

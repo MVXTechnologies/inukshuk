@@ -14,10 +14,10 @@ import type { CatalogBbox, CatalogCategory, CatalogItem, CatalogShardRef } from 
  * The cell grid is a quadtree over WGS84 rooted at 10° cells:
  *
  * - level 0 is a 10°×10° cell whose origin is the item's bbox-center floored to
- *   a multiple of 10 — id `n45w075` (south/west corner, hemisphere-prefixed);
+ *   a multiple of 10 — id `n40w080` (south/west corner, hemisphere-prefixed);
  * - a cell holding more than {@link DEFAULT_MAX_SHARD_ITEMS} items subdivides
  *   into four quadrants (`0` SW, `1` SE, `2` NW, `3` NE), appended to the id
- *   after a dash: `n45w075-1`, `n45w075-13`, … Each level halves the side, so
+ *   after a dash: `n40w080-1`, `n40w080-13`, … Each level halves the side, so
  *   level L cells are 10 / 2^L degrees;
  * - subdivision stops at {@link DEFAULT_MIN_CELL_DEG} — a dense city harbour
  *   must not spawn a thousand shards, an over-full leaf is simply accepted;
@@ -60,11 +60,21 @@ function floorTo(value: number, step: number): number {
   return Math.floor(value / step) * step;
 }
 
-/** The level-0 cell containing a point. */
+/**
+ * The level-0 cell containing a point.
+ *
+ * The origin is clamped so a point exactly on the north pole or the
+ * antimeridian cannot name a cell that runs off the end of WGS84:
+ * `floorTo(90, 10)` is 90, which would describe a 90°–100° latitude band. Such
+ * a cell would still get a stable id, but its bbox is nonsense and every
+ * distance computed against it after that is nonsense too.
+ */
 export function rootCellFor(point: LatLng): ShardCell {
+  const maxSouth = 90 - SHARD_ROOT_CELL_DEG;
+  const maxWest = 180 - SHARD_ROOT_CELL_DEG;
   return {
-    rootWest: floorTo(point.longitude, SHARD_ROOT_CELL_DEG),
-    rootSouth: floorTo(point.latitude, SHARD_ROOT_CELL_DEG),
+    rootWest: Math.min(floorTo(point.longitude, SHARD_ROOT_CELL_DEG), maxWest),
+    rootSouth: Math.min(floorTo(point.latitude, SHARD_ROOT_CELL_DEG), maxSouth),
     path: [],
   };
 }
@@ -103,7 +113,7 @@ function pad(value: number, width: number): string {
 
 /**
  * Stable, filename-safe cell id: hemisphere-prefixed level-0 origin plus the
- * quadrant path — `n45w075`, `s34e018-20`. Matches the shard-id charset the
+ * quadrant path — `n40w080`, `s30e010-20`. Matches the shard-id charset the
  * manifest parser enforces.
  */
 export function cellId(cell: ShardCell): string {
@@ -129,7 +139,7 @@ function unionBbox(a: CatalogBbox | null, b: CatalogBbox): CatalogBbox {
 
 /** One planned shard: its identity, its published metadata, and its payload. */
 export interface PlannedShard {
-  /** `${category}-${cellId}`, e.g. "topo-n45w075" or "nautical-nogeo". */
+  /** `${category}-${cellId}`, e.g. "topo-n40w080" or "nautical-nogeo". */
   id: string;
   category: CatalogCategory;
   /** Union of the items' bboxes; absent for a `nogeo` shard. */
