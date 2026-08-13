@@ -91,6 +91,10 @@ appId: com.inukshuk.app
     visible: 'Show on the map'
     timeout: 10000
 - tapOn: 'TripA'
+# Selecting a folder re-renders the map's content; tapping Done in the same
+# breath raced that render and failed ~1 run in 5 (2026-08-12).
+- waitForAnimationToEnd:
+    timeout: 3000
 - tapOn: 'Done'
 - assertVisible: 'Map actions'
 # Back to show-everything via the picker's Everything row.
@@ -107,6 +111,8 @@ appId: com.inukshuk.app
     visible: 'Everything'
     timeout: 10000
 - tapOn: 'Everything'
+- waitForAnimationToEnd:
+    timeout: 3000
 - tapOn: 'Done'
 - assertVisible: 'Map actions'
 # --- Clean up: delete the folder so reruns see the no-folders layout ---
