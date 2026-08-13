@@ -78,6 +78,20 @@ function runLadder(doc: RawDoc, upgraders: Record<number, (d: RawDoc) => RawDoc>
 // --- library.json -----------------------------------------------------------
 
 /**
+ * Active page indices as a sorted, duplicate-free list of non-negative
+ * integers. Junk entries (strings, NaN, negatives) are dropped rather than
+ * carried into the overlay pipeline, which indexes PDF pages with them.
+ */
+function dedupePageIndices(value: readonly unknown[]): number[] {
+  const pages = new Set<number>();
+  for (const entry of value) {
+    if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 0) continue;
+    pages.add(entry);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
+/**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
  * `georeferences[]` + `activePages[]` (defaulting to every georeferenced page
@@ -91,9 +105,16 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     : legacy.georeference
       ? [legacy.georeference]
       : [];
-  const activePages = Array.isArray(legacy.activePages)
-    ? legacy.activePages
-    : georeferences.map((g) => g.pageIndex);
+  // Page indices are a SET: one entry per page, never one per viewport.
+  // Builds before the primary-viewport fix wrote `georeferences.map(pageIndex)`
+  // straight through, so a three-viewport sheet (US Topo, AUSTopo) persisted
+  // [0, 0, 0] — which the overlay pipeline drew as three stacked copies of the
+  // same raster and the Library counted as "3/1 shown". Normalizing here heals
+  // those documents on the next hydration instead of waiting for the user to
+  // toggle the page off and on again.
+  const activePages = dedupePageIndices(
+    Array.isArray(legacy.activePages) ? legacy.activePages : georeferences.map((g) => g.pageIndex),
+  );
   return {
     id: String(legacy.id ?? ''),
     name: String(legacy.name ?? ''),
