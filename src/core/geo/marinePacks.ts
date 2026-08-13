@@ -42,11 +42,18 @@ export const MARINE_PACK_CELL_DEG = 0.1;
 export const MARINE_PACK_MAX_CELLS = 12;
 
 /**
- * The banner only offers packs for a boating-scale viewport. Wider than this
- * and the region is a passage plan, not a harbour — and 0.1° cells would
- * multiply past the cap anyway.
+ * Sanity ceiling on the viewport the banner will offer for (degrees, either
+ * axis). Owner report 2026-08-10 ("I was in the Québec region and it didn't
+ * ask me for marine charts"): the old 0.6° cap made the offer unreachable at
+ * ordinary boating zooms — a 390×844 pt phone at z10 already spans ~0.40° of
+ * latitude and z9 spans ~0.79°, so the trigger silently returned null exactly
+ * where a boater looks at a reach. The DOWNLOAD size is capped by
+ * {@link MARINE_PACK_MAX_CELLS} instead (a wider view gets the centred block
+ * that fits), which is the thing that actually needs bounding; this ceiling
+ * only keeps the offer off a continent-wide view — it matches
+ * `DEPTH_MAX_VIEW_SPAN_DEG`, past which no chart renders at all.
  */
-export const MARINE_PACK_MAX_VIEW_SPAN_DEG = 0.6;
+export const MARINE_PACK_MAX_VIEW_SPAN_DEG = 6;
 
 /** Packs older than this are refreshed by the auto-update sweep. */
 export const MARINE_PACK_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -111,10 +118,38 @@ export function packCellBbox(latIdx: number, lonIdx: number): GeoBbox {
 }
 
 /**
+ * The largest `columns × rows` block that fits in `maxCells` while staying
+ * inside `nx × ny` and tracking the viewport's aspect ratio as closely as it
+ * can. Pure integer search over the (few) candidate row counts.
+ */
+function fitBlock(nx: number, ny: number, maxCells: number): { kx: number; ky: number } {
+  if (nx * ny <= maxCells) return { kx: nx, ky: ny };
+  const aspect = nx / ny;
+  let best = { kx: 1, ky: 1 };
+  let bestScore = -Infinity;
+  for (let ky = 1; ky <= ny; ky++) {
+    const kx = Math.min(nx, Math.floor(maxCells / ky));
+    if (kx < 1) break;
+    // Prefer the biggest download that still fits, then the closest aspect.
+    const score = kx * ky * 1000 - Math.abs(kx / ky - aspect);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { kx, ky };
+    }
+  }
+  return best;
+}
+
+/**
  * The pack cells a viewport needs, row-major from the south-west corner.
- * Returns an empty list when the viewport is degenerate, crosses the
- * antimeridian, or would need more than `maxCells` (the offer is capped, not
- * silently truncated — a partial pack would lie about coverage).
+ *
+ * When the viewport spans more cells than `maxCells` the list is CENTRED and
+ * clamped to the biggest block that fits rather than emptied (owner report
+ * 2026-08-10: an ordinary boating zoom over Québec offered nothing at all).
+ * The caller is told the offer is partial so the prompt can say so — the old
+ * behaviour silently refused, which read as "no packs here".
+ *
+ * Still empty for a degenerate or antimeridian-crossing viewport.
  */
 export function marinePackCellsForView(
   sourceId: MarineSourceId,
@@ -123,15 +158,23 @@ export function marinePackCellsForView(
 ): MarinePackCell[] {
   if (!(view.east > view.west) || !(view.north > view.south)) return [];
   if (view.west < -180 || view.east > 180) return [];
+  if (maxCells < 1) return [];
   const lon0 = packCellIndex(view.west);
   const lon1 = packCellIndex(view.east - EPS);
   const lat0 = packCellIndex(view.south);
   const lat1 = packCellIndex(view.north - EPS);
-  const count = (lon1 - lon0 + 1) * (lat1 - lat0 + 1);
-  if (count < 1 || count > maxCells) return [];
+  const nx = lon1 - lon0 + 1;
+  const ny = lat1 - lat0 + 1;
+  if (nx < 1 || ny < 1) return [];
+  const { kx, ky } = fitBlock(nx, ny, maxCells);
+  // Centre the (possibly clamped) block on the viewport centre.
+  const cx = packCellIndex((view.west + view.east) / 2);
+  const cy = packCellIndex((view.south + view.north) / 2);
+  const startX = Math.max(lon0, Math.min(lon1 - kx + 1, cx - Math.floor((kx - 1) / 2)));
+  const startY = Math.max(lat0, Math.min(lat1 - ky + 1, cy - Math.floor((ky - 1) / 2)));
   const cells: MarinePackCell[] = [];
-  for (let latIdx = lat0; latIdx <= lat1; latIdx++) {
-    for (let lonIdx = lon0; lonIdx <= lon1; lonIdx++) {
+  for (let latIdx = startY; latIdx < startY + ky; latIdx++) {
+    for (let lonIdx = startX; lonIdx < startX + kx; lonIdx++) {
       cells.push({
         key: packCellKey(sourceId, latIdx, lonIdx),
         sourceId,
@@ -142,6 +185,17 @@ export function marinePackCellsForView(
     }
   }
   return cells;
+}
+
+/** Does a viewport need more cells than `maxCells` (so the offer is partial)? */
+export function marinePackViewIsPartial(
+  view: GeoBbox,
+  maxCells: number = MARINE_PACK_MAX_CELLS,
+): boolean {
+  if (!(view.east > view.west) || !(view.north > view.south)) return false;
+  const nx = packCellIndex(view.east - EPS) - packCellIndex(view.west) + 1;
+  const ny = packCellIndex(view.north - EPS) - packCellIndex(view.south) + 1;
+  return nx * ny > maxCells;
 }
 
 /**
@@ -313,6 +367,12 @@ export interface MarinePackOffer {
   reason: MarinePackOfferReason;
   /** Snooze key for "Not now". */
   regionKey: string;
+  /**
+   * True when the viewport needs more cells than the download cap allows, so
+   * the offer covers the CENTRE of the view rather than all of it. The banner
+   * says so — a pack that quietly stopped halfway would read as "no data".
+   */
+  partial: boolean;
 }
 
 export interface MarinePackOfferInput {
@@ -361,7 +421,14 @@ export function marinePackOffer(input: MarinePackOfferInput): MarinePackOffer | 
         ? 'coarse'
         : 'offline';
 
-  return { source, cells, bytes: estimatePackBytes(source, cells), reason, regionKey };
+  return {
+    source,
+    cells,
+    bytes: estimatePackBytes(source, cells),
+    reason,
+    regionKey,
+    partial: marinePackViewIsPartial(view),
+  };
 }
 
 /** The banner's headline for an offer — plain, quiet, never alarmist. */

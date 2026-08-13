@@ -30,14 +30,29 @@ function crc32(bytes: Uint8Array, start: number, end: number): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** Adler-32 over the raw (pre-deflate) data; the zlib trailer. */
+/**
+ * Adler-32 over the raw (pre-deflate) data; the zlib trailer.
+ *
+ * The modulo is DEFERRED: 5552 is the largest run of byte additions that
+ * cannot overflow a 32-bit accumulator, so the reduction runs once per block
+ * instead of twice per byte. Same result, and it matters — the depth chart
+ * pushes ~5 MB of scanlines through here on every camera settle.
+ */
 function adler32(bytes: Uint8Array): number {
   const MOD = 65521;
+  const NMAX = 5552;
   let a = 1;
   let b = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    a = (a + (bytes[i] ?? 0)) % MOD;
-    b = (b + a) % MOD;
+  let i = 0;
+  const n = bytes.length;
+  while (i < n) {
+    const end = Math.min(i + NMAX, n);
+    for (; i < end; i++) {
+      a += bytes[i] ?? 0;
+      b += a;
+    }
+    a %= MOD;
+    b %= MOD;
   }
   return ((b << 16) | a) >>> 0;
 }

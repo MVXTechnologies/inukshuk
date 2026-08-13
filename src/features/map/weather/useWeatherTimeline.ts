@@ -104,6 +104,15 @@ export function useWeatherTimeline(
   layer: WeatherLayerId | null,
   model: WeatherModelId,
   playing: boolean,
+  /**
+   * "The drape is still staging a frame" (the crossfade's pending slot).
+   * A ref, not a prop, because the crossfade is downstream of this hook —
+   * the ref breaks the cycle without a render loop. Playback SKIPS a tick
+   * while it is true, which paces the animation to the tile-fetch rate
+   * instead of queueing frames the map has not drawn yet (perf fix
+   * 2026-08-10: the owner saw playback run ahead of what was on screen).
+   */
+  stagingRef?: { current: boolean },
 ): WeatherTimelineState {
   // Keyed session instead of resetting state in an effect (the
   // react-hooks/set-state-in-effect rule): a session tagged with another
@@ -189,13 +198,16 @@ export function useWeatherTimeline(
   useEffect(() => {
     if (resolvedKey === null || !playing) return;
     const interval = setInterval(() => {
+      // Still waiting on the staged frame's tiles: hold this beat rather
+      // than stacking another frame the drape cannot show yet.
+      if (stagingRef?.current === true) return;
       setSession((prev) => {
         if (prev === null || prev.key !== resolvedKey) return prev;
         return { ...prev, selectedIdx: (prev.selectedIdx + 1) % prev.timeline.framesMs.length };
       });
     }, WEATHER_FRAME_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [resolvedKey, playing]);
+  }, [resolvedKey, playing, stagingRef]);
 
   const rawParam = live !== null ? wmsTimeParam(live.timeline, live.selectedIdx) : undefined;
   const timeParam = useThrottledValue(rawParam, SCRUB_THROTTLE_MS);

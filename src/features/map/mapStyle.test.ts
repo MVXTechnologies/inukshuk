@@ -1,4 +1,10 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
+import {
+  DRAPE_ANCHORS_BOTTOM_TO_TOP,
+  MARINE_DRAPE_ANCHOR,
+  MARINE_SOUNDINGS_ANCHOR,
+  WEATHER_DRAPE_ANCHOR,
+} from '@core/geo/mapLayerStack';
 import type { RasterSourceSpecification } from '@maplibre/maplibre-react-native';
 import { buildOsmStyle } from './mapStyle';
 
@@ -78,97 +84,127 @@ describe('buildOsmStyle', () => {
     });
   });
 
-  describe('weather overlay', () => {
-    const URL_A =
-      'https://geo.weather.gc.ca/geomet?service=WMS&request=GetMap&layers=RADAR_1KM_RRAI&bbox={bbox-epsg-3857}&time=A';
-    const URL_B =
-      'https://geo.weather.gc.ca/geomet?service=WMS&request=GetMap&layers=RADAR_1KM_RRAI&bbox={bbox-epsg-3857}&time=B';
-    const weather = {
-      slots: [URL_A, null] as const,
-      activeSlot: 0 as const,
-      attribution: 'Data Source: Environment and Climate Change Canada',
-    };
-
-    it('is absent by default — the map is byte-identical to today with weather off', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true);
+  describe('weather drape', () => {
+    // The frames themselves are NOT style layers any more (perf fix
+    // 2026-08-10): they mount as MapView children (`WeatherDrapeLayers`)
+    // because a changed style object reloads the ENTIRE native style, which
+    // blanked the drape twice per playback tick. Stacking is covered by
+    // `@core/geo/mapLayerStack`; the style only owns the muting below.
+    it('never declares a frame source or layer, playback or not', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        weatherMuted: { dimColor: '#F4F1EC', dimOpacity: 0.42 },
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+      });
       expect(s.sources['weather-a']).toBeUndefined();
       expect(s.sources['weather-b']).toBeUndefined();
       expect(layerIds(s)).not.toContain('weather-a');
       expect(layerIds(s)).not.toContain('weather-b');
     });
 
-    it('adds a WMS raster source + layer per used slot with the ECCC attribution', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, { weather });
-      expect(s.sources['weather-a']).toEqual({
-        type: 'raster',
-        tiles: [URL_A],
-        tileSize: 256,
-        attribution: weather.attribution,
+    it('carries the weather anchor whenever the drape can mount', () => {
+      // The drape children mount on exactly `weatherLayer !== null &&
+      // !offlineOnly`, which is the same condition that sets `weatherMuted`.
+      // If the anchor were ever missing, `waitForLayer` would park the layer
+      // forever (a style layer never fires `layerAdded`), so this pairing is
+      // load-bearing.
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        weatherMuted: { dimColor: '#F4F1EC', dimOpacity: 0.42 },
+        overlayLabels: { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
       });
-      expect(s.sources['weather-b']).toBeUndefined(); // null slot renders nothing
-      const layer = s.layers.find((l) => l.id === 'weather-a');
-      expect(layer).toMatchObject({
-        type: 'raster',
-        source: 'weather-a',
-        // No per-tile cross-fade: it would smear consecutive radar frames.
-        paint: { 'raster-opacity': 0.62, 'raster-fade-duration': 0 },
+      expect(layerIds(s)).toContain(WEATHER_DRAPE_ANCHOR);
+    });
+  });
+
+  describe('live drape anchors (`@core/geo/mapLayerStack`)', () => {
+    const overlayLabels = { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] };
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+    const chart = { wmsFallback: false };
+    const mask = {
+      data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),
+      color: '#FFFFFF',
+    };
+
+    it('adds none of them on a plain map — an idle style stays byte-identical', () => {
+      const ids = layerIds(buildOsmStyle(TILE, false, 'map', true));
+      for (const a of DRAPE_ANCHORS_BOTTOM_TO_TOP) expect(ids).not.toContain(a);
+    });
+
+    it('is invisible and sourceless — a marker must never paint or fetch', () => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { weatherMuted });
+      const anchor = s.layers.find((l) => l.id === WEATHER_DRAPE_ANCHOR);
+      expect(anchor).toEqual({
+        id: WEATHER_DRAPE_ANCHOR,
+        type: 'background',
+        layout: { visibility: 'none' },
       });
     });
 
-    it('keeps the inactive slot prefetching at opacity 0 (the anti-flicker swap)', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather: { ...weather, slots: [URL_A, URL_B] as const, activeSlot: 0 },
-      });
-      // Both sources exist — the pending frame's tiles fetch while invisible.
-      expect(s.sources['weather-a']).toMatchObject({ tiles: [URL_A] });
-      expect(s.sources['weather-b']).toMatchObject({ tiles: [URL_B] });
-      const a = s.layers.find((l) => l.id === 'weather-a');
-      const b = s.layers.find((l) => l.id === 'weather-b');
-      expect(a?.paint).toMatchObject({ 'raster-opacity': 0.62 });
-      expect(b?.paint).toMatchObject({ 'raster-opacity': 0 });
+    it('keeps the soundings ABOVE the weather field in EITHER toggle order', () => {
+      // The whole point of separate anchors: with one shared anchor the last
+      // child re-inserted took the top slot, so the 62%-opaque colour field
+      // buried the depth numbers.
+      for (const opts of [
+        { weatherMuted, marineChart: chart, overlayLabels },
+        { marineChart: chart, weatherMuted, overlayLabels },
+      ]) {
+        const ids = layerIds(buildOsmStyle(TILE, false, 'map', true, opts));
+        expect(ids.indexOf(MARINE_SOUNDINGS_ANCHOR)).toBeGreaterThan(
+          ids.indexOf(WEATHER_DRAPE_ANCHOR),
+        );
+        expect(ids.indexOf(WEATHER_DRAPE_ANCHOR)).toBeGreaterThan(ids.indexOf(MARINE_DRAPE_ANCHOR));
+      }
     });
 
-    it('flipping activeSlot swaps which frame is visible', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather: { ...weather, slots: [URL_A, URL_B] as const, activeSlot: 1 },
-      });
-      const a = s.layers.find((l) => l.id === 'weather-a');
-      const b = s.layers.find((l) => l.id === 'weather-b');
-      expect(a?.paint).toMatchObject({ 'raster-opacity': 0 });
-      expect(b?.paint).toMatchObject({ 'raster-opacity': 0.62 });
+    it('puts the weather anchor directly above the dim, and the chart anchor below it', () => {
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, 'map', true, { weatherMuted, marineChart: chart }),
+      );
+      expect(ids.indexOf(WEATHER_DRAPE_ANCHOR)).toBe(ids.indexOf('weather-dim') + 1);
+      // A chart under a weather field must be dimmed with everything else.
+      expect(ids.indexOf(MARINE_DRAPE_ANCHOR)).toBeLessThan(ids.indexOf('weather-dim'));
     });
 
-    it('honours an explicit opacity on the active slot only', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather: { ...weather, slots: [URL_A, URL_B] as const, opacity: 0.5 },
-      });
-      const a = s.layers.find((l) => l.id === 'weather-a');
-      const b = s.layers.find((l) => l.id === 'weather-b');
-      expect(a?.paint).toMatchObject({ 'raster-opacity': 0.5 });
-      expect(b?.paint).toMatchObject({ 'raster-opacity': 0 });
+    it('keeps the depth bands under the seamark symbols', () => {
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, 'map', true, {
+          marineLayers: ['bathymetry', 'seamarks'],
+          marineChart: chart,
+          overlayLabels,
+        }),
+      );
+      expect(ids.indexOf(MARINE_DRAPE_ANCHOR)).toBeLessThan(ids.indexOf('marine-seamarks'));
     });
 
-    it('draws above the basemap, marked trails and hillshade', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather,
-        markedTrailsNetworks: ['hiking'],
-      });
-      const ids = layerIds(s);
-      expect(ids.indexOf('weather-a')).toBeGreaterThan(ids.indexOf('osm'));
-      expect(ids.indexOf('weather-a')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
-      expect(ids.indexOf('weather-a')).toBeGreaterThan(ids.indexOf('hillshade-2d'));
+    it('keeps every anchor under wave B labels — colour never swallows geography', () => {
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, 'map', true, {
+          weatherMuted,
+          marineChart: chart,
+          overlayLabels,
+        }),
+      );
+      for (const a of DRAPE_ANCHORS_BOTTOM_TO_TOP) {
+        expect(ids.indexOf(a)).toBeLessThan(ids.indexOf('overlay-water-line'));
+      }
+    });
+
+    it('keeps every anchor UNDER the downloaded-only mask', () => {
+      // The regression this guards: with no anchor a child layer goes through
+      // `style.addLayer()` = top of the whole stack, so in offline-only mode
+      // the marine drape drew OVER the mask that hides undownloaded ground.
+      // Marine chart mode survives offline-only when a pack is installed.
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, 'map', true, { marineChart: chart, downloadedMask: mask }),
+      );
+      expect(ids[ids.length - 1]).toBe('downloaded-mask');
+      for (const a of [MARINE_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
+        expect(ids.indexOf(a)).toBeGreaterThan(-1);
+        expect(ids.indexOf(a)).toBeLessThan(ids.indexOf('downloaded-mask'));
+      }
     });
   });
 
   describe('weather-mode basemap muting', () => {
-    const weather = {
-      slots: [
-        'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
-        null,
-      ] as const,
-      activeSlot: 0 as const,
-      attribution: 'ECCC',
-    };
     const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
 
     it('is absent by default — no dim layer, normal raster paint', () => {
@@ -179,7 +215,7 @@ describe('buildOsmStyle', () => {
     });
 
     it('desaturates the raster and screens it with the dim backdrop', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, { weather, weatherMuted });
+      const s = buildOsmStyle(TILE, false, 'map', true, { weatherMuted });
       const osm = s.layers.find((l) => l.id === 'osm');
       expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.85 });
       const dim = s.layers.find((l) => l.id === 'weather-dim');
@@ -189,9 +225,8 @@ describe('buildOsmStyle', () => {
       });
     });
 
-    it('stacks dim between every basemap-side raster and the weather drape', () => {
+    it('stacks dim above every basemap-side raster (the drape rides above it)', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather,
         weatherMuted,
         markedTrailsNetworks: ['hiking'],
         marineLayers: ['bathymetry'],
@@ -200,31 +235,22 @@ describe('buildOsmStyle', () => {
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('osm'));
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
-      expect(ids.indexOf('weather-a')).toBeGreaterThan(ids.indexOf('weather-dim'));
     });
 
     it('suppresses the shaded-relief hillshade (terrain shading under weather is noise)', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, { weather, weatherMuted });
+      const s = buildOsmStyle(TILE, false, 'map', true, { weatherMuted });
       expect(layerIds(s)).not.toContain('hillshade-2d');
       expect(s.sources.dem).toBeUndefined();
     });
 
     it('mutes satellite imagery too — under weather the drape is the content', () => {
-      const s = buildOsmStyle(TILE, false, 'satellite', true, { weather, weatherMuted });
+      const s = buildOsmStyle(TILE, false, 'satellite', true, { weatherMuted });
       const osm = s.layers.find((l) => l.id === 'osm');
       expect(osm?.paint).toMatchObject({ 'raster-saturation': -0.85 });
     });
   });
 
   describe('labels + coastline overlay (wave B)', () => {
-    const weather = {
-      slots: [
-        'https://geo.weather.gc.ca/geomet?request=GetMap&bbox={bbox-epsg-3857}',
-        null,
-      ] as const,
-      activeSlot: 0 as const,
-      attribution: 'ECCC',
-    };
     const OVERLAY_LAYER_IDS = ['overlay-water-line', 'overlay-town-labels', 'overlay-city-labels'];
 
     it('is absent by default — no vector source, no glyphs endpoint', () => {
@@ -252,16 +278,14 @@ describe('buildOsmStyle', () => {
       expect(cities).toMatchObject({ type: 'symbol', 'source-layer': 'place' });
     });
 
-    it('draws ABOVE the dim and the weather/marine drapes (the whole point)', () => {
+    it('draws ABOVE the dim and the marine drapes (the whole point)', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
-        weather,
         weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
         marineLayers: ['bathymetry', 'seamarks'],
         overlayLabels: { dark: true, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
       });
       const ids = layerIds(s);
       for (const id of OVERLAY_LAYER_IDS) {
-        expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('weather'));
         expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('weather-dim'));
         expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf('marine-seamarks'));
       }
@@ -334,53 +358,17 @@ describe('buildOsmStyle', () => {
       expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
-
-    it('stays under a weather drape (the topmost data layer)', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        marineLayers: ['bathymetry'],
-        weather: {
-          slots: ['https://example.test/{bbox-epsg-3857}', null] as const,
-          activeSlot: 0,
-          attribution: 'ECCC',
-        },
-      });
-      const ids = layerIds(s);
-      expect(ids.indexOf('weather-a')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
-    });
   });
 
   describe('marine chart mode (wave D — the ENC chart look)', () => {
     const overlayLabels = { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] };
-    const drape = {
-      uri: 'file:///cache/overlays/depth-chart.png',
-      coordinates: [
-        [-71.35, 46.9],
-        [-71.05, 46.9],
-        [-71.05, 46.7],
-        [-71.35, 46.7],
-      ] as [[number, number], [number, number], [number, number], [number, number]],
-    };
-    const soundings = {
-      type: 'FeatureCollection' as const,
-      features: [
-        {
-          type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [-71.2, 46.8] },
-          properties: { label: '26.5', shallow: 0 as const, sort: 26.5 },
-        },
-      ],
-    };
-    const chart = { drape, soundings, wmsFallback: false };
+    const chart = { wmsFallback: false };
 
     it('is absent by default — the map is byte-identical with marine off', () => {
       const s = buildOsmStyle(TILE, false, 'map', true);
-      for (const id of [
-        'marine-land-dim',
-        'marine-water-fill',
-        'marine-depth-chart',
-        'marine-soundings',
-      ])
+      for (const id of ['marine-land-dim', 'marine-water-fill']) {
         expect(layerIds(s)).not.toContain(id);
+      }
     });
 
     it('restyles land tan, fills water chart-blue and mutes the raster', () => {
@@ -403,7 +391,7 @@ describe('buildOsmStyle', () => {
       expect(layerIds(s)).not.toContain('hillshade-2d');
     });
 
-    it('replaces the WMS bathymetry drape with the band-chart image, under the seamarks', () => {
+    it('drops the WMS bathymetry drape — the client chart replaces it', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['bathymetry', 'seamarks'],
         overlayLabels,
@@ -411,51 +399,42 @@ describe('buildOsmStyle', () => {
       });
       expect(layerIds(s)).not.toContain('marine-bathymetry');
       expect(s.sources['marine-bathymetry']).toBeUndefined();
-      expect(s.sources['marine-depth-chart']).toEqual({
-        type: 'image',
-        url: drape.uri,
-        coordinates: drape.coordinates,
+      // The anchors the live chart mounts against must exist (see the
+      // "live drape anchors" block for the ordering they encode).
+      expect(layerIds(s)).toContain(MARINE_DRAPE_ANCHOR);
+      expect(layerIds(s)).toContain(MARINE_SOUNDINGS_ANCHOR);
+    });
+
+    it('never declares the client drape or the soundings itself', () => {
+      // They are MapView children (`MarineChartLayers`) so a re-anchored
+      // chart updates the image source in place instead of reloading the
+      // whole native style — the reload storm behind "charts load very slow".
+      const s = buildOsmStyle(TILE, false, 'map', true, {
+        marineLayers: ['bathymetry'],
+        overlayLabels,
+        marineChart: chart,
       });
-      const ids = layerIds(s);
-      expect(ids.indexOf('marine-depth-chart')).toBeGreaterThan(ids.indexOf('marine-water-fill'));
-      expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
-      // Below the wave B labels overlay — the whole point of the image route.
-      expect(ids.indexOf('overlay-city-labels')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
+      expect(s.sources['marine-depth-chart']).toBeUndefined();
+      expect(s.sources['marine-soundings']).toBeUndefined();
+      expect(layerIds(s)).not.toContain('marine-depth-chart');
+      expect(layerIds(s)).not.toContain('marine-soundings');
     });
 
     it('keeps the WMS drape as the silent fallback when the client pipeline failed', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['bathymetry'],
         overlayLabels,
-        marineChart: { drape: null, soundings: null, wmsFallback: true },
+        marineChart: { wmsFallback: true },
       });
       expect(layerIds(s)).toContain('marine-bathymetry');
-      expect(layerIds(s)).not.toContain('marine-depth-chart');
     });
 
-    it('renders spot soundings as a symbol layer below the place labels', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        marineLayers: ['bathymetry'],
-        overlayLabels,
-        marineChart: chart,
-      });
-      expect(s.sources['marine-soundings']).toEqual({ type: 'geojson', data: soundings });
-      const layer = s.layers.find((l) => l.id === 'marine-soundings');
-      expect(layer).toMatchObject({ type: 'symbol', source: 'marine-soundings' });
-      const ids = layerIds(s);
-      expect(ids.indexOf('marine-soundings')).toBeGreaterThan(ids.indexOf('marine-depth-chart'));
-      expect(ids.indexOf('overlay-town-labels')).toBeGreaterThan(ids.indexOf('marine-soundings'));
-    });
-
-    it('skips the water fill and soundings when the vector overlay did not resolve', () => {
+    it('skips the water fill when the vector overlay did not resolve', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['bathymetry'],
         marineChart: chart,
       });
       expect(layerIds(s)).not.toContain('marine-water-fill');
-      expect(layerIds(s)).not.toContain('marine-soundings');
-      // The drape itself still draws — it needs no glyphs.
-      expect(layerIds(s)).toContain('marine-depth-chart');
       expect(layerIds(s)).toContain('marine-land-dim');
     });
   });
@@ -485,14 +464,10 @@ describe('buildOsmStyle', () => {
       });
     });
 
-    it('stays the TOP layer even when a weather overlay is present', () => {
+    it('stays the TOP layer even in weather mode', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         downloadedMask: mask,
-        weather: {
-          slots: ['https://x/{bbox-epsg-3857}', null] as const,
-          activeSlot: 0,
-          attribution: 'ECCC',
-        },
+        weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
       });
       const ids = layerIds(s);
       expect(ids[ids.length - 1]).toBe('downloaded-mask');

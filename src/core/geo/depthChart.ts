@@ -152,25 +152,44 @@ export function infillSeams(grid: FloatGrid, passes = 2): FloatGrid {
  */
 function sampleDepthValue(grid: FloatGrid, fx: number, fy: number): number | null {
   if (fx < -0.5 || fy < -0.5 || fx > grid.width - 0.5 || fy > grid.height - 0.5) return null;
-  const x0 = Math.max(0, Math.min(grid.width - 1, Math.floor(fx)));
+  const w = grid.width;
+  const data = grid.data;
+  const x0 = Math.max(0, Math.min(w - 1, Math.floor(fx)));
   const y0 = Math.max(0, Math.min(grid.height - 1, Math.floor(fy)));
-  const x1 = Math.min(grid.width - 1, x0 + 1);
+  const x1 = Math.min(w - 1, x0 + 1);
   const y1 = Math.min(grid.height - 1, y0 + 1);
   const tx = Math.max(0, Math.min(1, fx - x0));
   const ty = Math.max(0, Math.min(1, fy - y0));
   let sum = 0;
   let weight = 0;
-  const acc = (xi: number, yi: number, w: number): void => {
-    if (w <= 0) return;
-    const v = grid.data[yi * grid.width + xi];
-    if (v === undefined || isDepthNoData(v)) return;
-    sum += v * w;
-    weight += w;
-  };
-  acc(x0, y0, (1 - tx) * (1 - ty));
-  acc(x1, y0, tx * (1 - ty));
-  acc(x0, y1, (1 - tx) * ty);
-  acc(x1, y1, tx * ty);
+  // Unrolled (no per-sample closure): this runs once per OUTPUT PIXEL of the
+  // drape — ~1 Mpx per camera settle — so an allocation here is a frame.
+  const r0 = y0 * w;
+  const r1 = y1 * w;
+  const w00 = (1 - tx) * (1 - ty);
+  const w10 = tx * (1 - ty);
+  const w01 = (1 - tx) * ty;
+  const w11 = tx * ty;
+  let v = data[r0 + x0];
+  if (w00 > 0 && v !== undefined && !isDepthNoData(v)) {
+    sum += v * w00;
+    weight += w00;
+  }
+  v = data[r0 + x1];
+  if (w10 > 0 && v !== undefined && !isDepthNoData(v)) {
+    sum += v * w10;
+    weight += w10;
+  }
+  v = data[r1 + x0];
+  if (w01 > 0 && v !== undefined && !isDepthNoData(v)) {
+    sum += v * w01;
+    weight += w01;
+  }
+  v = data[r1 + x1];
+  if (w11 > 0 && v !== undefined && !isDepthNoData(v)) {
+    sum += v * w11;
+    weight += w11;
+  }
   // Under a quarter of the full weight = an isolated corner touching the
   // sample — treat as no data so coasts keep a crisp edge.
   return weight >= 0.25 ? sum / weight : null;
@@ -258,31 +277,40 @@ export function renderDepthChart(
   const g10 = infillSeams(grid10);
   const g100 = grid100 !== null ? infillSeams(grid100, 1) : null;
   const rgba = new Uint8Array(outW * outH * 4);
-  // Depth per output pixel for the current and previous row — contour lines
-  // compare each pixel's contour index against its left/top neighbours.
-  const rowDepth = new Float64Array(outW).fill(NaN);
-  const prevDepth = new Float64Array(outW).fill(NaN);
+  // Contour index per output pixel for the current and previous row — contour
+  // lines compare each pixel's index against its left/top neighbours. Stored
+  // as the INDEX (not the depth) so `contourIndex` runs once per pixel
+  // instead of three times; -1 marks "no data here".
+  const rowCi = new Int16Array(outW).fill(-1);
+  const prevCi = new Int16Array(outW).fill(-1);
+  // Column mercator coordinates are row-invariant — hoist them out of the
+  // inner loop (one multiply per pixel saved over ~1 Mpx).
+  const xs = new Float64Array(outW);
+  for (let px = 0; px < outW; px++) xs[px] = g10.x0 + ((px + 0.5) / scale) * g10.dx;
   for (let py = 0; py < outH; py++) {
-    prevDepth.set(rowDepth);
-    rowDepth.fill(NaN);
+    prevCi.set(rowCi);
+    rowCi.fill(-1);
     const yMerc = g10.y0 - ((py + 0.5) / scale) * g10.dy;
-    for (let px = 0; px < outW; px++) {
-      const xMerc = g10.x0 + ((px + 0.5) / scale) * g10.dx;
+    let o = py * outW * 4;
+    for (let px = 0; px < outW; px++, o += 4) {
+      // `?? 0` would silently sample column zero for the whole row; px is
+      // always in range, so an out-of-range read is a bug, not a pixel.
+      const xMerc = xs[px];
+      if (xMerc === undefined) continue;
       const value = compositeValueAtMerc(g10, g100, xMerc, yMerc);
-      const o = (py * outW + px) * 4;
       if (value === null) continue; // transparent — uncharted
       const d = -value; // metres below datum; drying lands negative
-      rowDepth[px] = d;
       const band = BAND_RGB[depthBandIndex(d)] ?? [255, 255, 255];
       let [r, g, b] = band;
       // Contour: this pixel crossed a chart level vs its left or top
       // neighbour → draw the thin near-black line instead of the band fill.
       const ci = contourIndex(d);
-      const leftD = px > 0 ? rowDepth[px - 1] : undefined;
-      const topD = prevDepth[px];
+      rowCi[px] = ci;
+      const leftCi = px > 0 ? rowCi[px - 1] : -1;
+      const topCi = prevCi[px];
       if (
-        (leftD !== undefined && Number.isFinite(leftD) && contourIndex(leftD) !== ci) ||
-        (topD !== undefined && Number.isFinite(topD) && contourIndex(topD) !== ci)
+        (leftCi !== undefined && leftCi >= 0 && leftCi !== ci) ||
+        (topCi !== undefined && topCi >= 0 && topCi !== ci)
       ) {
         r = CONTOUR_R;
         g = CONTOUR_G;
