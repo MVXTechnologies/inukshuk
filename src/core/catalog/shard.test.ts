@@ -7,6 +7,7 @@ import {
   planCatalogShards,
   rankShardsByDistance,
   resolveCatalogUrl,
+  sameCatalogOrigin,
   rootCellFor,
   selectShards,
   subdivideCell,
@@ -190,6 +191,33 @@ describe('resolveCatalogUrl', () => {
 
   it('refuses a base URL with no path to hang the shard off', () => {
     expect(resolveCatalogUrl('https://example.test', 'shards/a.json')).toBeNull();
+  });
+});
+
+describe('sameCatalogOrigin', () => {
+  const v1 = 'https://inukshuk.mvxtechnologies.com/catalog/v1/manifest.json';
+  const v2 = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
+
+  it('treats a moved path on one host as the same catalog (the v1 → v2 upgrade)', () => {
+    expect(sameCatalogOrigin(v1, v2)).toBe(true);
+  });
+
+  it('ignores case in scheme and host, and query strings', () => {
+    expect(sameCatalogOrigin('HTTPS://Inukshuk.MVXTechnologies.com/a.json', v2)).toBe(true);
+    expect(sameCatalogOrigin(`${v1}?v=3`, v2)).toBe(true);
+  });
+
+  it('separates different hosts, ports and schemes', () => {
+    expect(sameCatalogOrigin(v2, 'https://evil.test/catalog/v2/index.json')).toBe(false);
+    expect(sameCatalogOrigin('http://127.0.0.1:8787/index.json', 'http://127.0.0.1:9999/i.json')).toBe(
+      false,
+    );
+    expect(sameCatalogOrigin('http://inukshuk.mvxtechnologies.com/a.json', v2)).toBe(false);
+  });
+
+  it('refuses anything that is not an absolute http(s) URL', () => {
+    expect(sameCatalogOrigin('file:///tmp/a.json', 'file:///tmp/b.json')).toBe(false);
+    expect(sameCatalogOrigin('shards/a.json', v2)).toBe(false);
   });
 });
 

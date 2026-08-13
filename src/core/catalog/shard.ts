@@ -246,6 +246,29 @@ export function resolveCatalogUrl(indexUrl: string, path: string): string | null
   return `${withoutQuery.slice(0, lastSlash + 1)}${path}`;
 }
 
+/** `scheme://host[:port]` of an absolute http(s) URL, lowercased; null if not one. */
+function originOf(url: string): string | null {
+  const match = /^(https?):\/\/([^/?#]+)/i.exec(url);
+  return match === null ? null : `${match[1]?.toLowerCase()}://${match[2]?.toLowerCase()}`;
+}
+
+/**
+ * Do two catalog URLs come from the same publisher?
+ *
+ * The on-device cache is keyed by the exact URL it was fetched from, so a build
+ * pointed at a different catalog (a dev override, an e2e loopback fixture) can
+ * never reuse production's copy. But moving the *path* — `/catalog/v1/manifest.json`
+ * to `/catalog/v2/index.json` — is an upgrade of the same catalog, and treating
+ * it as a foreign document is what turned "open the store offline right after
+ * updating" into an error screen. Same origin ⇒ the stale copy is still a
+ * last-resort fallback; different origin ⇒ it never is.
+ */
+export function sameCatalogOrigin(a: string, b: string): boolean {
+  const left = originOf(a);
+  const right = originOf(b);
+  return left !== null && right !== null && left === right;
+}
+
 /* --------------------------------------------------- client-side ranking --- */
 
 /**

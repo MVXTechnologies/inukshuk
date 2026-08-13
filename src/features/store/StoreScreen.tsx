@@ -60,6 +60,9 @@ import {
 /** How many rows the landing's "Around you" section shows. */
 const NEARBY_ROWS = 5;
 
+/** Settle time before a query costs a digest lookup and a shard fetch. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function StoreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -69,11 +72,16 @@ export function StoreScreen() {
   const index = useCatalogStore((s) => s.index);
   const items = useCatalogStore((s) => s.items);
   const loadingShards = useCatalogStore((s) => s.loadingShards);
+  const loadingSearch = useCatalogStore((s) => s.loadingSearch);
+  const searchScope = useCatalogStore((s) => s.searchScope);
+  const pendingQueryShardIds = useCatalogStore((s) => s.pendingQueryShardIds);
   const fromCache = useCatalogStore((s) => s.fromCache);
   const downloads = useCatalogStore((s) => s.downloads);
   const lastFolderId = useCatalogStore((s) => s.lastFolderId);
   const load = useCatalogStore((s) => s.load);
   const ensureShardsNear = useCatalogStore((s) => s.ensureShardsNear);
+  const ensureShardsForQuery = useCatalogStore((s) => s.ensureShardsForQuery);
+  const searchWholeCatalog = useCatalogStore((s) => s.searchWholeCatalog);
 
   const maps = useLibraryStore((s) => s.maps);
   const folders = useLibraryStore((s) => s.folders);
@@ -103,6 +111,19 @@ export function StoreScreen() {
     void ensureShardsNear(lastKnownPosition, category);
   }, [status, lastKnownPosition, category, ensureShardsNear]);
 
+  // …and the shards a *query* needs, which geography alone would never reach:
+  // the tab is called Search, and before this the query only ever filtered the
+  // handful of shards pulled for wherever the user happened to be standing.
+  // Debounced so a word costs one digest lookup, not one per keystroke.
+  const trimmedQuery = query.trim();
+  useEffect(() => {
+    if (status !== 'ready' || trimmedQuery === '') return;
+    const timer = setTimeout(() => {
+      void ensureShardsForQuery(trimmedQuery, lastKnownPosition);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [status, trimmedQuery, lastKnownPosition, ensureShardsForQuery]);
+
   const filtered = useMemo(
     () => filterCatalogItems(items, { text: query, category }),
     [items, query, category],
@@ -126,7 +147,11 @@ export function StoreScreen() {
   );
 
   // Landing (Around you + category grid) until the user types or picks one.
-  const home = !browsing && query.trim() === '';
+  const home = !browsing && trimmedQuery === '';
+  /** True while a text query is active — the only time search scope matters. */
+  const searching = trimmedQuery !== '';
+
+  const searchWholeCatalogNow = () => void searchWholeCatalog(trimmedQuery, lastKnownPosition);
 
   const enterCategory = (c: CatalogCategory | null) => {
     setCategory(c);
@@ -225,12 +250,33 @@ export function StoreScreen() {
         </View>
       );
     }
-    if (loadingShards) {
+    if (loadingShards || loadingSearch) {
       return (
         <View style={styles.emptyWrap}>
           <ActivityIndicator />
           <Text variant="bodyMedium" style={styles.emptyText}>
-            Loading maps for this area…
+            {searching ? 'Searching the catalog…' : 'Loading maps for this area…'}
+          </Text>
+        </View>
+      );
+    }
+    if (!searching) {
+      return (
+        <View style={styles.emptyWrap}>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            {home ? 'The catalog is empty right now.' : 'No maps in this area yet.'}
+          </Text>
+        </View>
+      );
+    }
+    // A query with nothing to show. What we are allowed to say depends on how
+    // much of the catalog was actually searched: the store only reports
+    // 'complete' once every shard that could match is in.
+    if (searchScope === 'complete') {
+      return (
+        <View style={styles.emptyWrap}>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            No maps match your search.
           </Text>
         </View>
       );
@@ -238,8 +284,45 @@ export function StoreScreen() {
     return (
       <View style={styles.emptyWrap}>
         <Text variant="bodyMedium" style={styles.emptyText}>
-          {home ? 'The catalog is empty right now.' : 'No maps match your search.'}
+          {searchScope === 'partial'
+            ? `No matches yet — still ${pendingQueryShardIds.length} area${
+                pendingQueryShardIds.length === 1 ? '' : 's'
+              } of the catalog to search.`
+            : 'Searched the maps loaded for this area only — the rest of the catalog needs a connection.'}
         </Text>
+        <Button mode="contained-tonal" onPress={searchWholeCatalogNow}>
+          Search the whole catalog
+        </Button>
+      </View>
+    );
+  };
+
+  /**
+   * Below a non-empty list: the spinner while shards land, and — when a query
+   * has matches but has not covered the catalog yet — the same explicit
+   * "there is more" affordance the empty state offers. Silence here would let
+   * a partial result read as the complete one.
+   */
+  const listFooter = () => {
+    if (sorted.length === 0) return null;
+    if (loadingShards || loadingSearch) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+    if (!searching || searchScope === 'complete') return null;
+    return (
+      <View style={styles.footer}>
+        <Text variant="bodySmall" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+          {searchScope === 'partial'
+            ? 'More of the catalog is still to search.'
+            : 'Showing matches from this area only.'}
+        </Text>
+        <Button compact mode="contained-tonal" onPress={searchWholeCatalogNow}>
+          Search the whole catalog
+        </Button>
       </View>
     );
   };
@@ -347,13 +430,16 @@ export function StoreScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
-            ListFooterComponent={
-              sorted.length > 0 && loadingShards ? (
-                <View style={styles.footer}>
-                  <ActivityIndicator size="small" />
-                </View>
-              ) : null
-            }
+            ListFooterComponent={listFooter()}
+            // Reaching the end of what is loaded pulls the next-nearest shards,
+            // so the grid's "65 877 maps" is something the user can actually
+            // scroll into rather than a number with 400 rows behind it.
+            onEndReached={() => {
+              if (loadingShards) return;
+              if (searching) return;
+              void ensureShardsNear(lastKnownPosition, category);
+            }}
+            onEndReachedThreshold={0.6}
             contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled"
           />

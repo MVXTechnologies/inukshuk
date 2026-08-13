@@ -294,6 +294,18 @@ export interface CatalogShardRef {
   byteSize?: number;
 }
 
+/**
+ * Where the index says the search digest lives, and what it costs to fetch.
+ * The document itself is parsed by `@core/catalog/searchDigest`; the index only
+ * points at it, so a client that predates search simply ignores the field.
+ */
+export interface CatalogSearchRef {
+  /** Relative to the index document, e.g. "search.json". */
+  path: string;
+  byteSize?: number;
+  tokenCount?: number;
+}
+
 /** The small document the client fetches first (and caches for offline). */
 export interface CatalogIndex {
   schemaVersion: typeof CATALOG_INDEX_SCHEMA_VERSION;
@@ -301,6 +313,12 @@ export interface CatalogIndex {
   sources: CatalogSource[];
   /** Shard directory; empty for a small/inline catalog. */
   shards: CatalogShardRef[];
+  /**
+   * Where the search digest lives, when one is published. Absent means the
+   * client can only search what it has fetched — and must say so rather than
+   * claim "no results" (see `@core/catalog/searchDigest`).
+   */
+  search?: CatalogSearchRef;
   /** Items carried inline (v1 manifests, tiny catalogs, fixtures). */
   items: CatalogItem[];
   /**
@@ -361,6 +379,28 @@ function parseShardRef(raw: unknown): CatalogShardRef | string {
     itemCount,
     ...(bbox !== undefined ? { bbox } : {}),
     ...(byteSize !== undefined ? { byteSize } : {}),
+  };
+}
+
+/**
+ * The optional search-digest pointer. Held to the same path rules as a shard
+ * (relative, no climbing out of the catalog directory); anything else is simply
+ * absent, which downgrades search to "this area only" rather than breaking it.
+ */
+function parseSearchRef(raw: unknown): CatalogSearchRef | undefined {
+  if (!isRecord(raw) || !isShardPath(raw.path)) return undefined;
+  const byteSize =
+    typeof raw.byteSize === 'number' && Number.isFinite(raw.byteSize) && raw.byteSize > 0
+      ? Math.round(raw.byteSize)
+      : undefined;
+  const tokenCount =
+    typeof raw.tokenCount === 'number' && Number.isFinite(raw.tokenCount) && raw.tokenCount > 0
+      ? Math.round(raw.tokenCount)
+      : undefined;
+  return {
+    path: raw.path,
+    ...(byteSize !== undefined ? { byteSize } : {}),
+    ...(tokenCount !== undefined ? { tokenCount } : {}),
   };
 }
 
@@ -460,6 +500,7 @@ export function parseCatalogIndex(raw: unknown): CatalogIndexParseResult {
     return { index: null, warnings: [...warnings, 'catalog index has neither shards nor items'] };
   }
 
+  const search = parseSearchRef(raw.search);
   const declared = parseCategoryCounts(raw.categoryCounts);
   // A shardless index states its own totals badly at most once; fall back to
   // what the inline items actually contain so the grid never shows "0 maps".
@@ -471,6 +512,7 @@ export function parseCatalogIndex(raw: unknown): CatalogIndexParseResult {
       ...(nonEmptyString(raw.generatedAt) ? { generatedAt: raw.generatedAt } : {}),
       sources,
       shards,
+      ...(search !== undefined ? { search } : {}),
       items,
       categoryCounts,
     },

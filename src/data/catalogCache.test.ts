@@ -3,6 +3,7 @@ import {
   CATALOG_SCHEMA_VERSION,
   type CatalogShardRef,
 } from '@core/catalog/schema';
+import Constants from 'expo-constants';
 import { catalogManifestUrl, loadCatalogManifest, loadCatalogShard } from './catalogCache';
 import * as storage from './storage';
 
@@ -18,6 +19,12 @@ jest.mock('expo-constants', () => ({
 
 const readJson = storage.readJson as jest.Mock;
 const writeJson = storage.writeJson as jest.Mock;
+
+/** Repoint the build-time catalog URL override the way an e2e/dev build does. */
+function setManifestUrl(url: string): void {
+  const extra = Constants.expoConfig?.extra;
+  if (extra !== undefined) extra.catalogManifestUrl = url;
+}
 
 const validManifest = {
   schemaVersion: CATALOG_SCHEMA_VERSION,
@@ -115,6 +122,80 @@ describe('loadCatalogManifest', () => {
     const result = await loadCatalogManifest();
     expect(fetchMock).toHaveBeenCalled();
     expect(result?.fromCache).toBe(false);
+  });
+
+  // The offline-upgrade path. The previous build cached the v1 flat manifest
+  // under .../catalog/v1/manifest.json in this same cache file; this build asks
+  // for .../catalog/v2/index.json. Update on wifi, drive to a trailhead, open
+  // Search: the fetch fails and the v1 copy must still browse (it did before
+  // this branch), not produce "Couldn't load the map catalog."
+  describe('offline upgrade from a v1 cache', () => {
+    const V2_URL = 'https://test.example/catalog/v2/index.json';
+    beforeEach(() => setManifestUrl(V2_URL));
+    afterEach(() => setManifestUrl('https://test.example/manifest.json'));
+
+    const v1Cached = {
+      fetchedAt: Date.now() - 60 * 1000, // fresh, but written for the OLD url
+      url: 'https://test.example/catalog/v1/manifest.json',
+      raw: validManifest,
+    };
+
+    it('falls back to the superseded v1 copy when the network fails', async () => {
+      readJson.mockResolvedValue(v1Cached);
+      fetchMock.mockRejectedValue(new Error('offline'));
+      const result = await loadCatalogManifest();
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://test.example/catalog/v2/index.json',
+        expect.anything(),
+      );
+      expect(result).not.toBeNull();
+      expect(result?.fromCache).toBe(true);
+      // Adapted by the v1 branch of parseCatalogIndex: items inline, no shards.
+      expect(result?.index.items).toHaveLength(1);
+      expect(result?.index.shards).toEqual([]);
+    });
+
+    it('prefers the network and migrates the cache entry to the v2 URL', async () => {
+      readJson.mockResolvedValue(v1Cached);
+      const v2Index = {
+        schemaVersion: CATALOG_INDEX_SCHEMA_VERSION,
+        sources: validManifest.sources,
+        shards: [
+          {
+            id: 'topo-n40w080',
+            category: 'topo',
+            path: 'shards/topo-n40w080.json',
+            itemCount: 5,
+            bbox: [-80, 40, -70, 50],
+          },
+        ],
+        categoryCounts: { topo: 5 },
+      };
+      fetchMock.mockResolvedValue(okResponse(v2Index));
+      const result = await loadCatalogManifest();
+      expect(result?.fromCache).toBe(false);
+      expect(result?.index.shards).toHaveLength(1);
+      // Same cache file, now stamped with the v2 URL — the v1 copy is gone, so
+      // the fallback above happens at most once per upgrade.
+      expect(writeJson).toHaveBeenCalledWith(
+        'catalog.json',
+        expect.objectContaining({ url: 'https://test.example/catalog/v2/index.json' }),
+      );
+    });
+
+    it('never falls back to a copy from another origin (dev / e2e override)', async () => {
+      readJson.mockResolvedValue({ ...v1Cached, url: 'http://127.0.0.1:8787/index.json' });
+      fetchMock.mockRejectedValue(new Error('offline'));
+      expect(await loadCatalogManifest()).toBeNull();
+    });
+
+    it('does not serve a superseded copy while the network is fine', async () => {
+      readJson.mockResolvedValue(v1Cached);
+      fetchMock.mockResolvedValue(okResponse(validManifest));
+      const result = await loadCatalogManifest();
+      expect(fetchMock).toHaveBeenCalled();
+      expect(result?.fromCache).toBe(false);
+    });
   });
 
   it('treats an unusable remote manifest as a failure (cache fallback)', async () => {
