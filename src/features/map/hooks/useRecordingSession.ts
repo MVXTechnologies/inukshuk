@@ -24,6 +24,8 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const points = useRecorderStore((s) => s.points);
   const startedAt = useRecorderStore((s) => s.startedAt);
   const pausedMs = useRecorderStore((s) => s.pausedMs);
+  const lastFixAt = useRecorderStore((s) => s.lastFixAt);
+  const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
   const start = useRecorderStore((s) => s.start);
   const pause = useRecorderStore((s) => s.pause);
   const resume = useRecorderStore((s) => s.resume);
@@ -70,19 +72,20 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   // Live elapsed timer, independent of GPS fix cadence. Excludes paused wall
   // time (pausedMs) so resuming continues from where the display froze instead
   // of jumping forward by the whole pause.
+  //
+  // The staleness half of gpsQuality has to be time-driven (it must climb to
+  // 'weak'/'lost' precisely when fixes STOP arriving), so it ticks here too —
+  // reading the store fresh rather than closing over the last render's values.
+  // As effect deps, `lastFixAt`/`lastAccuracyM` tore this interval down and
+  // rebuilt it on EVERY accepted GPS fix; the tick still ran synchronously on
+  // each rebuild, so the displayed clock was never wrong, but at fix rates
+  // above 1 Hz (cycling, driving) the interval itself never survived to fire —
+  // and with NO fixes at all it was the only thing keeping the display alive.
   useEffect(() => {
     if (status !== 'recording' || startedAt === null) return;
     const tick = () => {
       const now = Date.now();
       setElapsedS(Math.floor((now - startedAt - pausedMs) / 1000));
-      // Re-evaluate signal quality every second: staleness must climb toward
-      // 'weak'/'lost' while fixes stop arriving, so this can't be event-driven.
-      // Read fresh from the store rather than closing over the last render's
-      // values: as effect deps, `lastFixAt`/`lastAccuracyM` tore this interval
-      // down and rebuilt it on EVERY accepted GPS fix — and when fixes arrive
-      // faster than 1 s (cycling, driving) the interval was destroyed before it
-      // ever fired, so the "independent of GPS fix cadence" clock was in fact
-      // driven by it.
       const s = useRecorderStore.getState();
       setGpsQuality(gpsQualityLevel(s.lastFixAt, now, s.lastAccuracyM));
     };
@@ -90,6 +93,16 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [status, startedAt, pausedMs]);
+
+  // The other half: a fix arriving is itself news (lost/weak → good), and the
+  // user should see that immediately rather than up to a second later. Kept as
+  // its own effect so subscribing to the fix fields costs a cheap setState and
+  // never restarts the interval above. No extra render: this hook already
+  // re-renders on every accepted fix via `points`/`stats`.
+  useEffect(() => {
+    if (status !== 'recording') return;
+    setGpsQuality(gpsQualityLevel(lastFixAt, Date.now(), lastAccuracyM));
+  }, [status, lastFixAt, lastAccuracyM]);
 
   // Keep the screen on while actively recording (if enabled).
   useEffect(() => {
