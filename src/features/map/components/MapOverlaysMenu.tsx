@@ -336,10 +336,13 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
   const rowH =
     2 * WEATHER_ROW_PAD_V +
     Math.max(WEATHER_RING_D, WEATHER_LABEL_LINE * PixelRatio.getFontScale());
-  // The half row is deliberate: a partially-clipped row is the affordance
-  // that says "there is more below" (with the scroll indicator as backup).
   // Clamped against the window so landscape and small phones can't hand the
-  // sheet a cap taller than the screen it has to sit in.
+  // sheet a cap taller than the screen it has to sit in — there the list DOES
+  // scroll, which is the correct degradation when the rows genuinely cannot
+  // fit. On a phone in portrait the budget wins and today's catalog shows in
+  // full. Note the cap is a function of rowH, so growing the row (touch
+  // targets, font scale) grows the cap in lockstep and can never push a row
+  // past the fold on its own.
   const listMaxHeight = Math.min(rowH * WEATHER_VISIBLE_ROWS, windowH * 0.45);
 
   const row = (id: WeatherLayerId | null, label: string, hint?: string) => {
@@ -601,13 +604,26 @@ const WEATHER_ROW_PAD_V = 6;
 /** Label line box at fontScale 1 — the row grows past the ring beyond that. */
 const WEATHER_LABEL_LINE = 20;
 /**
- * Rows visible before the list scrolls. The catalog is 6 rows today (None +
- * WEATHER_LAYERS) and `weatherLayers.ts` says it deliberately tolerates more,
- * so this has to keep working as entries are appended: at 5.5 every row the
- * e2e flows reach — None, Rain/Snow radar, Temperature, Wind — stays fully on
- * screen, and growth spills into the scroll region below them.
+ * Rows the list shows before it starts scrolling.
+ *
+ * Sized so TODAY's catalog fits with NO scrolling: None + the five entries in
+ * WEATHER_LAYERS is 6 rows. At the previous 5.5 the sixth row (Precipitation)
+ * sat permanently half below the fold — a layer that is only discoverable by
+ * scrolling is a discoverability regression, not an affordance, and it was
+ * the one row no e2e flow happened to reach so nothing caught it.
+ *
+ * The extra half row IS the "there is more below" affordance, but it now only
+ * appears once the catalog GROWS past today's six rows. `weatherLayers.ts`
+ * says the catalog shape deliberately tolerates more entries, so the excess
+ * has to degrade to scrolling.
+ *
+ * Deliberately a fixed budget rather than `WEATHER_LAYERS.length + 1.5`:
+ * deriving it from the catalog would let the sheet grow without bound as
+ * entries are appended, and the owner's call (2026-08-10) is that a sub-menu
+ * keeps the footprint of the menu it replaces. The window clamp at the use
+ * site is the other bound, for landscape and small phones.
  */
-const WEATHER_VISIBLE_ROWS = 5.5;
+const WEATHER_VISIBLE_ROWS = 6.5;
 
 const styles = StyleSheet.create({
   controlFab: { borderRadius: 24 },
