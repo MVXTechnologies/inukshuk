@@ -59,12 +59,11 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   // Map-visibility mode: 'type' shows the classic PDF/Trails toggles' picks;
   // 'folders' shows exactly the checked folders' items (see visibleFolderIds).
   setMapVisibilityMode: (mode: 'type' | 'folders') => void;
-  /** Toggle a folder id (or the 'ungrouped' pseudo-id) in the visible set. */
-  toggleVisibleFolder: (id: string) => void;
   /**
    * One tap on a folder row in the map's content picker: enter 'folders' mode
-   * AND move the folder in the visible set, in a single `set()` / single index
-   * write. Doing it as `setMapVisibilityMode` + `toggleVisibleFolder` cost two
+   * AND move the folder (or the 'ungrouped' pseudo-id) in the visible set, in
+   * a single `set()` / single index write. This deliberately replaces the old
+   * `setMapVisibilityMode` + `toggleVisibleFolder` pair, which cost two
    * synchronous serializations of the whole index per tap and passed through a
    * mode='folders' / selection=[] state that shows an empty map.
    */
@@ -358,13 +357,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setMapVisibilityMode: (mode) =>
     set((s) => {
       const next = { ...s, mapVisibilityMode: mode };
-      persist(next);
-      return next;
-    }),
-
-  toggleVisibleFolder: (id) =>
-    set((s) => {
-      const next = { ...s, visibleFolderIds: toggleId(s.visibleFolderIds, id) };
       persist(next);
       return next;
     }),
