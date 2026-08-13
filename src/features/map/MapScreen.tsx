@@ -1425,17 +1425,16 @@ export function MapScreen() {
             <WeatherDrapeLayers
               fade={weatherFade}
               frames={weatherDrape.frames}
-              // Wind takes the SAME drape as every other weather layer — no
-              // special case. M3 pushed it to 0.75 so the speed gradient would
-              // read under the streaks, but at that strength it buried the
-              // coastlines (owner, 2026-08-10). The answer was to thin the
-              // STREAKS (windGl.ts), not to keep trading the basemap against
-              // the drape: once the trails are short enough to see through, the
-              // ordinary drape carries the speed reading on its own. Going
-              // BELOW the default is worse than useless here — the streaks are
-              // white, so in light theme the drape is the only thing giving
-              // them contrast.
-              opacity={0.62}
+              // Wind runs LIGHTER than every other weather layer, and
+              // deliberately so: it is the only layer that also draws its own
+              // ink on top, so drape + streaks at the normal strength read
+              // heavier than any other layer at the normal strength. M3's 0.75
+              // buried the coastlines (owner, 2026-08-10); 0.62 was measured on
+              // device and still washed the street grid out at 24 km/h. 0.50 is
+              // where the basemap stays legible under the streaks, and the
+              // streaks keep their contrast against it in BOTH themes (verified
+              // light + dark, 9 and 24 km/h).
+              opacity={weatherLayer === 'wind' ? 0.5 : 0.62}
             />
           )}
           {marineActive && (

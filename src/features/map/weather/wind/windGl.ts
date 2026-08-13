@@ -221,7 +221,7 @@ void main() {
   // basemap, white streaks) a low floor just erases calm-wind areas. So the
   // floor stays high enough to read at rest; trail LENGTH below is the lever
   // that actually opens the map up.
-  float a = 0.30 + 0.45 * speed_t;
+  float a = 0.28 + 0.38 * speed_t;
   gl_FragColor = vec4(vec3(a), a);
 }
 `;
@@ -348,16 +348,20 @@ export interface WindGlData {
  *
  * A trail is visible for roughly 1/(1 - FADE_OPACITY) frames, so this is what
  * decides how much of the screen streak ink covers:
- *   0.965 → ~29 frames (shipped, too dense)
- *   0.95  → ~20 frames (here)
- *   0.93  → ~14 frames (first attempt on this branch — combined with a
- *           halved alpha and fewer particles it read as "where did the wind
- *           go", especially in light theme at low wind)
+ *   0.965 → ~29 frames (shipped, too dense — the original complaint)
+ *   0.95  → ~20 frames (tried: fixed low wind, but at 24 km/h the streaks
+ *           washed the basemap out again — see the device captures)
+ *   0.94  → ~17 frames (here)
+ *   0.93  → ~14 frames (first attempt on this branch — at 9 km/h the trails
+ *           degenerated into scattered specks that no longer read as flow)
+ * Pixel trail length scales with wind speed while the frame count is fixed,
+ * so one value has to serve both ends; 0.94 is the point where 9 km/h still
+ * reads as directional flow and 24 km/h still lets the street grid through.
  * Shortening trails removes coverage while leaving every streak crisp, which
  * is why it is pulled harder than the other knobs instead of all four moving
  * together.
  */
-const FADE_OPACITY = 0.95;
+const FADE_OPACITY = 0.94;
 const DROP_RATE = 0.003;
 const DROP_RATE_BUMP = 0.01;
 const GUST_SCALE = 3; // matches GUST_RATIO_MAX in the encoder

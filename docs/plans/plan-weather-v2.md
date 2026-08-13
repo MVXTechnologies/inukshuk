@@ -177,12 +177,13 @@ catalog. The WMS default style for WSPD is a continuous speed ramp; MapLibre's r
 bilinear magnification smooths the 2.5 km cells into a Windy-like gradient at trail zooms.
 Client-rendering the gradient from the U/V grid would give pixel-identical-to-Windy colours but
 duplicates what the drape already does for zero code — not worth it at M3 scope. The drape runs
-at the ordinary weather `raster-opacity` (the 0.62 default in `mapStyle.ts`) — wind gets no
-special case. M3 originally specified ≈ 0.75 here so the gradient would read under the streaks,
-but at that strength it buried the coastlines (owner, 2026-08-10); the fix was to shorten the
-streaks, not to push the drape. Do not take it BELOW the default either: the streaks are white,
-so in light theme the drape is what gives them contrast. If the default WMS style looks too
-classed/stepped
+at `raster-opacity` **0.50**, deliberately BELOW the 0.62 default every other weather layer
+uses: wind is the only layer that also draws its own ink on top, so drape + streaks at the
+normal strength read heavier than any other layer at the normal strength. M3 originally
+specified ≈ 0.75 here; that buried the coastlines (owner, 2026-08-10), and 0.62 was measured on
+device and still washed the street grid out at 24 km/h. At 0.50 the basemap stays legible under
+the streaks and the streaks keep their contrast in both themes. If the default WMS style looks
+too classed/stepped
 on device, the WMS `styles=` parameter can select an alternative ramp before we ever consider
 client rendering (owner question Q3).
 

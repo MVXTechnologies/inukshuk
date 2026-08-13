@@ -30,7 +30,7 @@ export const TARGET_PARTICLES = 2000;
  * below TARGET_PARTICLES: the ladder treats the seed as its ceiling, so a
  * value above the gate would let the overlay climb past what was measured.
  */
-export const DEFAULT_PARTICLES = 1700;
+export const DEFAULT_PARTICLES = 1400;
 /** Floor before giving up on animation entirely. */
 export const MIN_PARTICLES = 500;
 /** Fraction of the particle count each degrade rung keeps (25% shed). */
