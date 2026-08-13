@@ -195,6 +195,61 @@ tuning were reported as indistinguishable ("in the screenshots, I see no differe
 live direction is the opposite one — strengthen the BASEMAP under the weather (thicker,
 higher-contrast coast and feature linework) rather than keep weakening the weather. See §3a.
 
+## 3a. Map legibility under weather — decision: strengthen the basemap, not weaken the drape
+
+Owner, 2026-08-13, after eight matched device captures: _"honestly in the screenshots, I see no
+differences. One thing I notice, it is that it should be much easier to differentiate coasts and
+features, have lines thicker and maybe even over the wind."_
+
+That retires a whole line of work. Four rounds of streak alpha / particle count / trail-length
+tuning were, to the person the feature is for, indistinguishable from each other. The knob that
+matters is not how much ink the weather puts down; it is how strongly the map asserts itself
+underneath.
+
+**Shipped:** the wave B `overlayLabels` reference overlay already redrew water outlines and
+place labels above every drape, but at hairline weight (0.6/1.1/1.7 px, ~0.60 alpha) with
+nothing for roads. It is now a CASING + CORE pair per line in opposite polarity, water roughly
+doubled to 1.4/2.4/3.4 px at 0.95 alpha, plus a restrained major-road pass (motorway/trunk/
+primary, from z9). The pair matters more than the width: the drape is a full-spectrum colour
+ramp, so no single ink reads over all of it, and a line that carries its own contrast is the
+only kind that survives an arbitrary background. Constants: `WEATHER_REFERENCE_INK`,
+`WATER_LINE_W`, `ROAD_LINE_W` in `mapStyle.ts`.
+
+### Can coasts draw ABOVE the wind particles? No — and the fix is not worth its price
+
+The particle canvas is **not** a MapLibre layer. `WindParticleOverlay` renders an `expo-gl`
+`GLView` at `StyleSheet.absoluteFill`, mounted in `MapScreen` as a SIBLING after `</Map>`
+(`MapScreen.tsx`, the `windEnabled &&` block). It is composited over the entire MapView by the
+React Native view hierarchy, so **no `beforeId`, and no position in the style's layer list, can
+put anything above it** — including the `mapLayerStack.ts` drape anchors, which order layers
+_within_ the style and therefore all sit below the GLView by construction.
+
+Options, with honest prices:
+
+| #   | Option                                                                   | Effort                                                                                                                                                                             | Verdict                                           |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| a   | Move particles into the MapLibre stack as a native custom layer          | Weeks. `@maplibre/maplibre-react-native` exposes no custom-GL-layer API to JS, so this is a new native module on both platforms, sharing a GL context with MapLibre's own renderer | No. Large, risky, and it buys only layer ordering |
+| b   | A second transparent MapView above the GLView drawing only coasts/labels | Days. Two map instances: double tile/memory/battery, camera sync every frame, touch pass-through                                                                                   | No. Trades the complaint for a perf complaint     |
+| c   | Let the lines read THROUGH the particles instead of above them           | Done — this section                                                                                                                                                                | Yes                                               |
+
+Option (c) is the recommendation and what is implemented. It works because the particle field is
+not an opaque sheet: streaks are thin, sparse, semi-transparent and now length-capped, so a
+2.4-3.4 px cased line beneath them stays continuous to the eye where a hairline did not. The
+owner's test — _can you tell where the coast is at a glance, with weather running_ — does not
+actually require the lines to be on top; it requires them to be legible. If (c) proves
+insufficient on device, the next cheap lever is the particle overlay's existing global opacity
+uniform, not a re-architecture.
+
+### Composing with the `mapLayerStack` anchors (merged separately)
+
+The anchor system (`@core/geo/mapLayerStack`: `drape-marine-chart`, `drape-weather`,
+`drape-soundings`) orders LIVE drapes that mount as MapView children. The reference linework is
+static style JSON emitted by `buildOsmStyle` above every anchor, so the two do not interact and
+the documented bottom→top stack is unchanged apart from the new lines sitting beside
+`overlay-water-line`. One real rebase conflict to expect: this branch still sets the wind
+drape's opacity through the style's `weather` option, whereas main mounts that drape as a child
+— `WIND_DRAPE_OPACITY` has to move to the child's paint at integration time.
+
 ## 4. M2 — models + comparison table
 
 ### 4.1 Models to expose (all verified live, layer-scoped GetCapabilities)
