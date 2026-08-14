@@ -1,5 +1,5 @@
 import { filterCatalogItems } from '@core/catalog/filterCatalog';
-import { installStatusFor } from '@core/catalog/installStatus';
+import { indexInstallStatus } from '@core/catalog/installStatus';
 import { nearbyCatalogItems } from '@core/catalog/nearby';
 import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
@@ -13,7 +13,7 @@ import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -62,6 +62,9 @@ const NEARBY_ROWS = 5;
 
 /** Settle time before a query costs a digest lookup and a shard fetch. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Module-scope so the list's props don't churn on every render. */
+const keyExtractor = (item: CatalogItem) => item.id;
 
 export function StoreScreen() {
   const theme = useTheme();
@@ -115,6 +118,11 @@ export function StoreScreen() {
   // the tab is called Search, and before this the query only ever filtered the
   // handful of shards pulled for wherever the user happened to be standing.
   // Debounced so a word costs one digest lookup, not one per keystroke.
+  //
+  // Deliberately keyed on the LIVE query, not the deferred one below: the
+  // 300 ms debounce is already the settle window, and the network round-trip
+  // is the long pole — starting it from the deferred copy would only push the
+  // fetch a render behind the user for no saved work.
   const trimmedQuery = query.trim();
   useEffect(() => {
     if (status !== 'ready' || trimmedQuery === '') return;
@@ -124,9 +132,16 @@ export function StoreScreen() {
     return () => clearTimeout(timer);
   }, [status, trimmedQuery, lastKnownPosition, ensureShardsForQuery]);
 
+  // Typing must never wait on the list. Filtering + the nearest-first sort walk
+  // every loaded item (and every new row rebuilds a locator thumbnail), so the
+  // Searchbar keeps the live `query` while the list re-derives from a deferred
+  // copy — React renders the keystroke first and the heavier list pass after,
+  // dropping intermediate passes when the user keeps typing.
+  const deferredQuery = useDeferredValue(query);
+  const deferredTrimmedQuery = deferredQuery.trim();
   const filtered = useMemo(
-    () => filterCatalogItems(items, { text: query, category }),
-    [items, query, category],
+    () => filterCatalogItems(items, { text: deferredQuery, category }),
+    [items, deferredQuery, category],
   );
   const sorted = useMemo(
     () => sortCatalogItems(filtered, lastKnownPosition),
@@ -145,11 +160,25 @@ export function StoreScreen() {
     () => new Map<string, CatalogSource>((index?.sources ?? []).map((s) => [s.id, s])),
     [index],
   );
+  // Install state for the whole catalog, indexed once per (items, maps) change.
+  // Doing it per row meant `installStatusFor` scanned the entire library for
+  // every visible cell on every render — O(rows × library) on a screen that
+  // re-renders on each download-progress tick.
+  const installStatusById = useMemo(() => indexInstallStatus(items, maps), [items, maps]);
 
   // Landing (Around you + category grid) until the user types or picks one.
-  const home = !browsing && trimmedQuery === '';
+  //
+  // Deliberately keyed on `deferredQuery`, not `query`: the list below derives
+  // from the deferred copy, so switching on the LIVE query flips to the list
+  // branch one pass before the list has the new query — rendering everything
+  // loaded, unfiltered, for that pass. It converges, but it is a visible flash
+  // on the first keystroke, and a very expensive one now the catalog is the
+  // whole world. `searching` moves with it for the same reason: the empty
+  // state and footer describe the list, so they must describe the query the
+  // list is actually showing.
+  const home = !browsing && deferredTrimmedQuery === '';
   /** True while a text query is active — the only time search scope matters. */
-  const searching = trimmedQuery !== '';
+  const searching = deferredTrimmedQuery !== '';
 
   const searchWholeCatalogNow = () => void searchWholeCatalog(trimmedQuery, lastKnownPosition);
 
@@ -205,7 +234,11 @@ export function StoreScreen() {
         key={item.id}
         item={item}
         source={sourcesById.get(item.sourceId)}
-        installStatus={installStatusFor(item, maps)}
+        // Read out of the prebuilt index, never re-scanned per row: see
+        // `installStatusById` above. An item the index has not seen (it is
+        // built from the same `items` these rows come from, so only reachable
+        // transiently) reads as not installed, exactly as a fresh scan would.
+        installStatus={installStatusById.get(item.id) ?? 'not-installed'}
         downloading={item.id in downloads}
         progress={downloads[item.id]}
         expanded={expandedId === item.id}
@@ -218,7 +251,7 @@ export function StoreScreen() {
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers close over stable store actions
-    [sourcesById, maps, downloads, expandedId],
+    [sourcesById, installStatusById, maps, downloads, expandedId],
   );
 
   const renderItem = ({ item }: { item: CatalogItem }) =>
@@ -226,6 +259,21 @@ export function StoreScreen() {
       item,
       lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null,
     );
+
+  // Stable across renders: a fresh array literal here invalidates the list's
+  // content container on every download-progress tick. `keyExtractor` is
+  // module-scope for the same reason.
+  //
+  // `renderCard`'s useCallback above buys nothing on a progress tick — it
+  // closes over `downloads` and `expandedId`, which are exactly what changes
+  // then — it is there so the landing's "Around you" rows and the list rows
+  // stay one code path. Cells therefore still re-render on every tick. Fixing
+  // that for real needs the progress subscribed per row inside
+  // `CatalogItemCard` — a UI refactor, not a mechanical one, so not done here.
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
+    [insets.bottom],
+  );
 
   const emptyState = () => {
     if (status === 'loading' || status === 'idle') {
@@ -430,7 +478,7 @@ export function StoreScreen() {
 
           <FlatList
             data={sorted}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
             ListFooterComponent={listFooter()}
@@ -443,8 +491,25 @@ export function StoreScreen() {
               void ensureShardsNear(lastKnownPosition, category);
             }}
             onEndReachedThreshold={0.6}
-            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={listContentStyle}
             keyboardShouldPersistTaps="handled"
+            // Each row builds an SVG locator thumbnail, so the defaults
+            // (initialNumToRender 10, windowSize 21) do far more work up front
+            // and retain far more mounted rows than this list needs.
+            // No removeClippedSubviews: on Android it is a known cause of
+            // blank cells and dropped touches, these rows render react-native-
+            // svg trees, and nothing else in this app uses it. The window
+            // tuning above stands on its own.
+            //
+            // It does interact with `onEndReached`: a short initial window can
+            // put the end of the rendered content inside the threshold on
+            // mount, so the next ring of shards may be pulled straight away.
+            // That is the same work the first scroll would have done, and
+            // `ensureShardsNear` is bounded per call and skips what is loaded
+            // or in flight, so it costs one earlier batch, never a loop.
+            initialNumToRender={6}
+            maxToRenderPerBatch={5}
+            windowSize={7}
           />
         </>
       )}

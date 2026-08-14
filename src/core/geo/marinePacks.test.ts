@@ -12,6 +12,7 @@ import {
   isPackOfferSnoozed,
   marinePackCellsForView,
   marinePackOffer,
+  marinePackViewIsPartial,
   marinePackOfferMessage,
   packCellAt,
   packCellBbox,
@@ -94,11 +95,19 @@ describe('cells for a viewport', () => {
     expect(cells.map((c) => c.key)).toEqual(['nonna:468:-713']);
   });
 
-  it('refuses rather than truncating when a viewport needs too many cells', () => {
-    expect(marinePackCellsForView('nonna', around(46.8, -71.2, 1))).toEqual([]);
-    expect(marinePackCellsForView('nonna', around(46.8, -71.2, 0.15)).length).toBeLessThanOrEqual(
-      MARINE_PACK_MAX_CELLS,
-    );
+  it('clamps to a centred block when a viewport needs too many cells', () => {
+    // Owner report 2026-08-10: returning [] here made the banner unreachable
+    // at ordinary boating zooms. The download stays capped; the offer does
+    // not vanish, and it is centred on what the user is looking at.
+    const wide = marinePackCellsForView('nonna', around(46.8, -71.2, 1));
+    expect(wide.length).toBeGreaterThan(0);
+    expect(wide.length).toBeLessThanOrEqual(MARINE_PACK_MAX_CELLS);
+    expect(marinePackViewIsPartial(around(46.8, -71.2, 1))).toBe(true);
+    const centre = wide.find((c) => c.latIdx === 468 && c.lonIdx === -713);
+    expect(centre).toBeDefined();
+    const tight = marinePackCellsForView('nonna', around(46.8, -71.2, 0.1));
+    expect(tight.length).toBeLessThanOrEqual(MARINE_PACK_MAX_CELLS);
+    expect(marinePackViewIsPartial(around(46.8, -71.2, 0.1))).toBe(false);
   });
 
   it('refuses degenerate and antimeridian-crossing viewports', () => {
@@ -247,7 +256,17 @@ describe('the low-resolution banner trigger', () => {
     expect(marinePackOffer({ ...base, view: null })).toBeNull();
   });
 
-  it('stays silent above the boating-scale span', () => {
+  it('still offers at an ordinary boating zoom (the 2026-08-10 field report)', () => {
+    // ~0.40 deg of latitude is a phone at z10 over Quebec City: the old
+    // 0.6 deg cap plus the 12-cell refusal made this return null, so the
+    // banner never appeared where a boater actually looks.
+    const offer = marinePackOffer({ ...base, view: around(46.8, -71.2, 0.2) });
+    expect(offer).not.toBeNull();
+    expect(offer!.cells.length).toBeLessThanOrEqual(MARINE_PACK_MAX_CELLS);
+    expect(offer!.partial).toBe(true);
+  });
+
+  it('stays silent above the sanity ceiling (a passage plan, not a harbour)', () => {
     const wide = around(46.8, -71.2, MARINE_PACK_MAX_VIEW_SPAN_DEG);
     expect(marinePackOffer({ ...base, view: wide })).toBeNull();
   });

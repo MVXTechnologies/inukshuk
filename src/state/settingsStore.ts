@@ -264,6 +264,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   set: (key, value) => {
+    // A no-op write still notifies every subscriber AND rewrites settings.json
+    // synchronously (persist → storage.writeJson stages, writes, deletes and
+    // moves a file on the JS thread). Re-setting the value a toggle already
+    // holds is common — bail before paying for it.
+    if (Object.is(get()[key], value)) return;
     set({ [key]: value } as Pick<Settings, typeof key>);
     const next = snapshot(get());
     setDisplayUnits(next.units);

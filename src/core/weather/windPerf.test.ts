@@ -51,8 +51,10 @@ describe('perfStep ladder', () => {
 
   it('degrades particles, then resolution, then cadence — in that order', () => {
     let s = initialPerfState();
-    // 2000 → 1500 → 1125 → 844 → 633 → 500 is five rungs, one per window.
-    s = run(s, 60, PERF_WINDOW_FRAMES * 5 + 2);
+    // One 25%-shed rung per window until the floor; derive the count from the
+    // constants so retuning TARGET_PARTICLES can't silently break this.
+    const rungs = Math.ceil(Math.log(MIN_PARTICLES / TARGET_PARTICLES) / Math.log(0.75));
+    s = run(s, 60, PERF_WINDOW_FRAMES * rungs + 2);
     expect(s.particleCount).toBe(MIN_PARTICLES);
     expect(s.resolutionScale).toBe(1);
     expect(s.frameIntervalMs).toBe(FRAME_INTERVAL_MS);

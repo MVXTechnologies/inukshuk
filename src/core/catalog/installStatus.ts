@@ -38,3 +38,35 @@ export function installStatusFor(item: CatalogItem, maps: readonly MapDocument[]
   if (installed === undefined) return 'not-installed';
   return isNewerDate(installed.sourceUpdatedAt, item.updatedAt) ? 'update-available' : 'installed';
 }
+
+/**
+ * `installStatusFor` for a whole catalog in one pass, keyed by item id.
+ *
+ * Per-item it is a `maps.find(...)` over the entire Library, which the store
+ * screen was paying for every visible row on every render — O(rows × library)
+ * on a screen that re-renders on each download-progress tick. Indexing the
+ * Library once makes it O(items + library).
+ *
+ * The index keeps the FIRST map for a given sourceItemId, because that is what
+ * `findInstalledMap`'s `find` returns. Duplicates are reachable in practice (a
+ * repeat download, or an "Update" that adds rather than replaces), and their
+ * `sourceUpdatedAt` values can differ — last-wins would flip a row between
+ * `installed` and `update-available` on Library order alone.
+ */
+export function indexInstallStatus(
+  items: readonly CatalogItem[],
+  maps: readonly MapDocument[],
+): Map<string, InstallStatus> {
+  const bySourceItem = new Map<string, MapDocument>();
+  for (const m of maps) {
+    if (m.sourceItemId !== undefined && !bySourceItem.has(m.sourceItemId)) {
+      bySourceItem.set(m.sourceItemId, m);
+    }
+  }
+  const out = new Map<string, InstallStatus>();
+  for (const item of items) {
+    const doc = bySourceItem.get(item.id);
+    out.set(item.id, doc === undefined ? 'not-installed' : installStatusFor(item, [doc]));
+  }
+  return out;
+}

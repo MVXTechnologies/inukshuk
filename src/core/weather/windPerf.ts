@@ -11,7 +11,7 @@
  */
 
 /** Design-doc target particle count (Android gate). */
-export const TARGET_PARTICLES = 2000;
+export const TARGET_PARTICLES = 1400;
 /** Floor before giving up on animation entirely. */
 export const MIN_PARTICLES = 500;
 /** Render-loop frame cap (~30 fps — the Windy mobile cadence). */

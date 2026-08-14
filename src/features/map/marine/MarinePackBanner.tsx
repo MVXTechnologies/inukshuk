@@ -38,7 +38,7 @@ export function MarinePackBanner({
   const size = formatBytes(offer.bytes);
   const detail = busy
     ? `Downloading ${progress.done} of ${progress.total}`
-    : `${size} · ${offer.source.label} · works offline`;
+    : `${size} · ${offer.source.label} · ${offer.partial ? 'centre of view' : 'works offline'}`;
 
   return (
     <Surface style={styles.card} elevation={3} accessibilityLabel="Marine chart pack">

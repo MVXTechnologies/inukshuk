@@ -216,7 +216,7 @@ void main() {
   // PREMULTIPLIED: the trail pass fades rgb and alpha together, so the whole
   // pipeline has to read as premultiplied or decayed trails composite as
   // BLACK over the drape instead of fading out.
-  float a = 0.35 + 0.5 * speed_t;
+  float a = 0.20 + 0.34 * speed_t;
   gl_FragColor = vec4(vec3(a), a);
 }
 `;
@@ -337,7 +337,10 @@ export interface WindGlData {
 }
 
 /** Tunables (webgl-wind heritage, values tuned for the trail-zoom look). */
-const FADE_OPACITY = 0.965; // trail persistence per frame (thin comet tails)
+// Owner call (2026-08-10): the 0.965 tails were dense enough to bury the
+// coastlines and place names underneath. Shorter trails + a dimmer streak
+// alpha below keep the flow readable while the geography stays legible.
+const FADE_OPACITY = 0.93; // trail persistence per frame (short comet tails)
 const DROP_RATE = 0.003;
 const DROP_RATE_BUMP = 0.01;
 const GUST_SCALE = 3; // matches GUST_RATIO_MAX in the encoder

@@ -9,10 +9,10 @@ import {
 } from '@core/geo/marinePacks';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
-import { ECCC_ATTRIBUTION, weatherLayerById } from '@core/geo/weatherLayers';
+import { weatherLayerById } from '@core/geo/weatherLayers';
 import {
   modelVariableForLayer,
-  modelWeatherTileUrl,
+  resolveModelWmsLayer,
   weatherModelById,
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
@@ -21,7 +21,6 @@ import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
 import type { Feature, LineString } from 'geojson';
-import { mapColors } from '@ui/theme';
 import {
   Camera,
   type CameraRef,
@@ -72,6 +71,14 @@ import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
+import {
+  CONTOUR_LAYERS,
+  FOCUSED_TRAIL_LAYER,
+  HEATMAP_LAYERS,
+  INSPECT_MARKER_LAYER,
+  LIVE_TRAIL_LAYERS,
+  TRACKS_LINES_LAYER,
+} from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -87,6 +94,9 @@ import { MapPointChip, MapPointLine } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
+import { useWeatherDrape } from './weather/useWeatherDrape';
+import { WeatherDrapeLayers } from './weather/WeatherDrapeLayers';
+import { MarineDrapeLayer, MarineSoundingsLayer } from './marine/MarineChartLayers';
 import { useOverlayLabelTiles } from './useOverlayLabelTiles';
 import { useWeatherTimeline } from './weather/useWeatherTimeline';
 import { WeatherLegend } from './weather/WeatherLegend';
@@ -241,6 +251,9 @@ export function MapScreen() {
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
+  // Stable per basemap so the contour sources' memo can hold (see the hoisted
+  // layer constants above).
+  const contourLayerSet = basemap === 'satellite' ? CONTOUR_LAYERS.satellite : CONTOUR_LAYERS.plain;
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const offlineRegions = useOfflineStore((s) => s.regions);
@@ -292,10 +305,32 @@ export function MapScreen() {
   }, [weatherLayer]);
   const weatherAnimating = useMapStore((s) => s.weatherAnimating);
   const toggleWeatherAnimation = useMapStore((s) => s.toggleWeatherAnimation);
+  // Playback pacing + the crossfade's "is the staged frame drawn yet" gate.
+  // Refs, not state: `onDidFinishRenderingFrameFully` fires tens of times a
+  // second and the timeline hook sits UPSTREAM of the crossfade, so state
+  // here would mean a render storm and a dependency cycle (perf fix
+  // 2026-08-10).
+  const weatherStagingRef = useRef(false);
+  const renderedFramesRef = useRef(0);
+  // The crossfade's mounted slot keys, read back by the frame source (which
+  // sits UPSTREAM of the crossfade) so its bounded map never drops a frame a
+  // slot is still drawing. Same ref-breaks-the-cycle trick as the pacing.
+  const weatherSlotsRef = useRef<readonly (string | null)[]>([null, null]);
+  // Settled viewport bounds, written on every camera settle (and seeded once
+  // the map loads). The marine chart re-anchors off this — unlike the wind
+  // field's own settled bounds it is NOT gated on the wind overlay — and so
+  // does the weather drape, which is why both live this high up.
+  const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  // The MapView's laid-out size as low-rate STATE: the wind camera seed must
+  // not run before the map has laid out (see its comment), and the weather
+  // drape sizes its GetMap from it. onLayout fires only on mount/rotation,
+  // so a re-render here costs nothing.
+  const [windLayout, setWindLayout] = useState({ width: 0, height: 0 });
   const weatherTl = useWeatherTimeline(
     offlineOnly ? null : weatherLayer,
     effectiveModel,
     weatherAnimating,
+    weatherStagingRef,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
@@ -324,11 +359,33 @@ export function MapScreen() {
   // screen while the incoming one prefetches at opacity 0 — the drape never
   // blanks between frames during playback/scrub. Pure slot machine in
   // @core/weather/weatherCrossfade; both phases rebuild the style memo below.
-  const weatherUrl =
+  // The drape's frames (perf work 2026-08-11): ONE viewport GetMap per frame,
+  // downloaded to disk and warmed a few frames ahead, instead of the ~15 WMS
+  // tile requests the `{bbox-epsg-3857}` template used to make per frame.
+  // `frameKey` only advances to a frame whose PNG is already local, so the
+  // crossfade below stages something that can be drawn immediately.
+  const weatherDrape = useWeatherDrape(
     weatherLayer !== null && !offlineOnly
-      ? modelWeatherTileUrl(weatherLayer, effectiveModel, weatherTl.timeParam)
-      : null;
-  const weatherFade = useWeatherCrossfade(weatherUrl);
+      ? resolveModelWmsLayer(weatherLayer, effectiveModel)
+      : null,
+    weatherTl.timeline,
+    weatherTl.drapeIdx,
+    settledBounds,
+    windLayout,
+    weatherAnimating,
+    weatherSlotsRef,
+  );
+  const weatherFade = useWeatherCrossfade(weatherDrape.frameKey, renderedFramesRef);
+  useEffect(() => {
+    // Playback holds its beat while a frame is staging OR still downloading,
+    // so it can never run ahead of what the drape can show.
+    weatherStagingRef.current = weatherFade.pendingSlot !== null || weatherDrape.fetching;
+  }, [weatherFade.pendingSlot, weatherDrape.fetching]);
+  useEffect(() => {
+    // Which frames are actually mounted, fed back UPSTREAM so the drape's
+    // bounded frame map can never evict one out from under a live slot.
+    weatherSlotsRef.current = weatherFade.slots;
+  }, [weatherFade.slots]);
   const overlayTiles = useOverlayLabelTiles(
     (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
   );
@@ -336,16 +393,22 @@ export function MapScreen() {
   // marine chart fetch) needs a focus gate — declared here because the style
   // memo below already depends on it through the marine chart.
   const [screenFocused, setScreenFocused] = useState(true);
+  // Re-arm the getViewState gate whenever <Map> itself is NOT mounted (3D,
+  // or before the persisted camera seed). This replaces the old
+  // onWillStartLoadingMap reset, which also fired on every style reload —
+  // see the handler's note on the reload storm that caused.
+  const mapMounted = !terrain3d && settingsHydrated;
+  useEffect(() => {
+    if (mapMounted) return;
+    const t = setTimeout(() => setMapLoaded(false), 0);
+    return () => clearTimeout(t);
+  }, [mapMounted]);
   useFocusEffect(
     useCallback(() => {
       setScreenFocused(true);
       return () => setScreenFocused(false);
     }, []),
   );
-  // Settled viewport bounds, written on every camera settle (and seeded once
-  // the map loads). The marine chart re-anchors off this — unlike the wind
-  // field's own settled bounds it is NOT gated on the wind overlay.
-  const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
   // Marine chart drape (wave D §D2): the client-rendered ENC depth bands +
   // contours + spot soundings for the settled region, replacing the CHS
   // server's blocky pre-coloured mosaic. Silent on every failure — `fallback`
@@ -378,9 +441,10 @@ export function MapScreen() {
       // as the silent fallback while the client pipeline has nothing.
       ...(marineActive
         ? {
+            // The client drape + soundings are NOT in here: they mount as
+            // MapView children so a re-anchored chart never reloads the
+            // whole native style (see MarineChartLayers).
             marineChart: {
-              drape: marineChart.chart?.drape ?? null,
-              soundings: marineChart.chart?.soundings ?? null,
               wmsFallback: marineChart.fallback && !offlineOnly,
               // Which imagery the coverage ladder fell back to, if any
               // (GEBCO worldwide / NOAA ENC in US waters); null keeps the
@@ -391,14 +455,10 @@ export function MapScreen() {
         : {}),
       ...(weatherLayer !== null && !offlineOnly
         ? {
-            weather: {
-              slots: weatherFade.slots,
-              activeSlot: weatherFade.activeSlot,
-              attribution: ECCC_ATTRIBUTION,
-              // M3: the wind speed gradient reads a touch stronger under the
-              // particle streaks (design §3); other layers keep the default.
-              ...(weatherLayer === 'wind' ? { opacity: 0.75 } : {}),
-            },
+            // The frames themselves mount as MapView children
+            // (WeatherDrapeLayers) — a frame URL in this object would reload
+            // the entire native style twice per playback tick.
+            //
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
             // through it — strong enough that the weather gradient reads as THE
@@ -433,9 +493,12 @@ export function MapScreen() {
     markedTrailsNetworks,
     marineLayers,
     marineActive,
-    marineChart,
+    // Only the FALLBACK shape of the chart state restyles the map; the drape
+    // and the soundings are live children, so a new render must not rebuild
+    // (and therefore reload) the style.
+    marineChart.fallback,
+    marineChart.rasterUrl,
     weatherLayer,
-    weatherFade,
     overlayTiles,
   ]);
 
@@ -576,10 +639,6 @@ export function MapScreen() {
   // low-rate bits: "a gesture is in progress" and the settled bounds.
   const windViewRef = useRef<WindViewState | null>(null);
   const windSizeRef = useRef({ width: 0, height: 0 });
-  // The same size as low-rate STATE: the camera seed below must not run
-  // before the map has laid out (see its comment), and onLayout fires only
-  // on mount/rotation, so a re-render here costs nothing.
-  const [windLayout, setWindLayout] = useState({ width: 0, height: 0 });
   const [windInteracting, setWindInteracting] = useState(false);
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1253,8 +1312,21 @@ export function MapScreen() {
             if (!lngLat || (weatherLayer === null && !marineActive) || offlineOnly) return;
             setForecastAt({ longitude: lngLat[0], latitude: lngLat[1] });
           }}
-          onWillStartLoadingMap={() => setMapLoaded(false)}
+          // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
+          // every STYLE reload as well as a real (re)mount, and the false
+          // switched the marine chart off, which changed the style, which
+          // reloaded it again — a self-sustaining storm measured at ~15
+          // style reloads per second (perf fix 2026-08-10). The gate exists
+          // to keep getViewState() off an uninitialised native view, and
+          // only an unmounted <Map> can put us back in that state — which
+          // the effect above re-arms.
           onDidFinishLoadingMap={() => setMapLoaded(true)}
+          // Feeds the crossfade's "is the staged frame actually drawn yet"
+          // gate (see useWeatherCrossfade). A ref, so this fires at render
+          // rate without costing a React update.
+          onDidFinishRenderingFrameFully={() => {
+            renderedFramesRef.current += 1;
+          }}
           // Wind particles track the camera at gesture rate; the handler is
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
@@ -1333,6 +1405,36 @@ export function MapScreen() {
             maxZoom={18}
           />
 
+          {/* Live drapes, mounted as MapView children rather than style-JSON
+              layers (perf fix 2026-08-10). A changed `mapStyle` object makes
+              maplibre-react-native reload the ENTIRE native style — every
+              source rebuilt, every tile refetched, the vector coastlines and
+              labels dropped — which is what made playback blink and marine
+              mode thrash. As children they update incrementally.
+
+              Their z-order does NOT come from this mount order — a child is
+              inserted immediately below the layer it names, and every style
+              reload re-inserts them all — so each names its OWN invisible
+              anchor layer, which `buildOsmStyle` places at exactly the
+              height that drape must occupy (see `@core/geo/mapLayerStack`).
+              The PDF overlays and trails below carry no anchor at all, which
+              is what keeps them on top of everything. */}
+          {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
+          {weatherLayer !== null && !offlineOnly && (
+            <WeatherDrapeLayers
+              fade={weatherFade}
+              frames={weatherDrape.frames}
+              // M3: the wind speed gradient reads a touch stronger under the
+              // particle streaks (design §3); other layers keep the default.
+              opacity={weatherLayer === 'wind' ? 0.75 : 0.62}
+            />
+          )}
+          {marineActive && (
+            <MarineSoundingsLayer
+              soundings={overlayTiles !== null ? (marineChart.chart?.soundings ?? null) : null}
+            />
+          )}
+
           {showPdfOverlay &&
             overlays.map((o) => (
               <ImageSource key={o.id} id={o.id} url={o.imageUri} coordinates={o.coordinates}>
@@ -1366,46 +1468,12 @@ export function MapScreen() {
               shader does the true per-pixel version). */}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
-              <Layer
-                id="contours2d-minor-halo"
-                type="line"
-                paint={{
-                  'line-color': basemap === 'satellite' ? '#000000' : '#FFFFFF',
-                  'line-opacity': 0.35,
-                  'line-width': 2.2,
-                }}
-              />
-              <Layer
-                id="contours2d-minor-line"
-                type="line"
-                paint={{
-                  'line-color': basemap === 'satellite' ? '#FFFFFF' : '#4a3b2a',
-                  'line-opacity': basemap === 'satellite' ? 0.8 : 0.5,
-                  'line-width': 1,
-                }}
-              />
+              {contourLayerSet.minor}
             </GeoJSONSource>
           )}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-major" data={terrainOverlays2d.contours.major}>
-              <Layer
-                id="contours2d-major-halo"
-                type="line"
-                paint={{
-                  'line-color': basemap === 'satellite' ? '#000000' : '#FFFFFF',
-                  'line-opacity': 0.45,
-                  'line-width': 3.2,
-                }}
-              />
-              <Layer
-                id="contours2d-major-line"
-                type="line"
-                paint={{
-                  'line-color': basemap === 'satellite' ? '#FFFFFF' : '#4a3b2a',
-                  'line-opacity': basemap === 'satellite' ? 0.95 : 0.75,
-                  'line-width': 1.8,
-                }}
-              />
+              {contourLayerSet.major}
             </GeoJSONSource>
           )}
 
@@ -1423,53 +1491,7 @@ export function MapScreen() {
               BEFORE the lines below so it sits beneath them. */}
           {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
             <GeoJSONSource id="tracks-heat-points" data={trackHeat.heatPoints}>
-              <Layer
-                id="tracks-heatmap"
-                type="heatmap"
-                paint={{
-                  'heatmap-weight': 1,
-                  'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 16, 1.0],
-                  'heatmap-color': [
-                    'interpolate',
-                    ['linear'],
-                    ['heatmap-density'],
-                    0,
-                    'rgba(255,140,0,0)',
-                    0.15,
-                    'rgba(255,140,0,0)',
-                    0.4,
-                    'rgba(255,140,0,0.18)',
-                    0.7,
-                    'rgba(255,130,0,0.35)',
-                    1,
-                    'rgba(255,120,0,0.55)',
-                  ],
-                  'heatmap-radius': [
-                    'interpolate',
-                    ['exponential', 1.6],
-                    ['zoom'],
-                    6,
-                    3,
-                    10,
-                    8,
-                    13,
-                    16,
-                    16,
-                    28,
-                  ],
-                  'heatmap-opacity': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    0,
-                    0.5,
-                    15,
-                    0.5,
-                    18,
-                    0.35,
-                  ],
-                }}
-              />
+              {HEATMAP_LAYERS}
             </GeoJSONSource>
           )}
 
@@ -1487,16 +1509,7 @@ export function MapScreen() {
               (heatAt) is the only way in now. */}
           {showTrackOverlays && trackHeat.lines && (
             <GeoJSONSource id="tracks-lines" data={trackHeat.lines}>
-              <Layer
-                id="tracks-lines-layer"
-                type="line"
-                filter={hasSelection ? false : true}
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': ['get', 'color'],
-                  'line-width': 3,
-                }}
-              />
+              {hasSelection ? TRACKS_LINES_LAYER.hidden : TRACKS_LINES_LAYER.shown}
             </GeoJSONSource>
           )}
 
@@ -1510,12 +1523,7 @@ export function MapScreen() {
               simply follows whether there's a trail to draw. */}
           {focusLine && (
             <GeoJSONSource id="focused-trail-line" data={focusLine}>
-              <Layer
-                id="focused-trail-line-layer"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
-              />
+              {FOCUSED_TRAIL_LAYER}
             </GeoJSONSource>
           )}
 
@@ -1556,33 +1564,13 @@ export function MapScreen() {
                 properties: {},
               }}
             >
-              <Layer
-                id="inspect-marker-dot"
-                type="circle"
-                paint={{
-                  'circle-radius': 7,
-                  'circle-color': mapColors.userLocation,
-                  'circle-stroke-width': 2,
-                  'circle-stroke-color': '#ffffff',
-                }}
-              />
+              {INSPECT_MARKER_LAYER}
             </GeoJSONSource>
           )}
 
           {trailFeature && (
             <GeoJSONSource id="trail" data={trailFeature}>
-              <Layer
-                id="trail-casing"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
-              />
-              <Layer
-                id="trail-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{ 'line-color': mapColors.trail, 'line-width': 5 }}
-              />
+              {LIVE_TRAIL_LAYERS}
             </GeoJSONSource>
           )}
 
