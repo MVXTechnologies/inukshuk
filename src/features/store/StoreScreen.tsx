@@ -1,9 +1,6 @@
-import {
-  categoriesPresent,
-  countByCategory,
-  filterCatalogItems,
-} from '@core/catalog/filterCatalog';
-import { indexInstallStatus, type InstallStatus } from '@core/catalog/installStatus';
+import { filterCatalogItems } from '@core/catalog/filterCatalog';
+import { indexInstallStatus } from '@core/catalog/installStatus';
+import { nearbyCatalogItems } from '@core/catalog/nearby';
 import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
 import {
   CATALOG_CATEGORIES,
@@ -12,23 +9,18 @@ import {
   type CatalogItem,
   type CatalogSource,
 } from '@core/catalog/schema';
-import { formatByteSize } from '@core/storage/diskBudget';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { formatDistance } from '@lib/format';
 import { useRouter } from 'expo-router';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { FlatList, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
   Button,
-  Card,
   Chip,
-  IconButton,
   Portal,
-  ProgressBar,
   Searchbar,
   Snackbar,
   Text,
@@ -36,9 +28,9 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { CatalogItemCard } from './CatalogItemCard';
 import { CategoryGrid } from './CategoryGrid';
 import { DestinationFolderDialog } from './DestinationFolderDialog';
-import { LocatorThumb } from './LocatorThumb';
 import {
   CatalogDownloadCanceled,
   cancelCatalogDownload,
@@ -46,24 +38,33 @@ import {
 } from './downloadCatalogItem';
 
 /**
- * The Search tab — a free-map store (M1: NRCan CanTopo GeoPDFs; Wave C UX).
- * Lands on a category grid (search on top works globally); tapping a category
- * (or typing) shows the item list, sorted nearest-first from the last known
- * position, each row with an offline locator thumbnail showing where the map
- * is. Downloads land in the Library as regular imported maps with live
- * progress; dedup against the Library shows "Open"/"Update" instead of a
- * second Download.
+ * The Search tab — a free-map store over the world catalog.
+ *
+ * Lands on **"Around you"** (the nearest few items across every category, from
+ * the last known position) above the category grid, so a user standing on a
+ * shoreline sees the chart of that shoreline before anything else. With no
+ * known position the section simply isn't there and the grid takes the whole
+ * screen — browsing the world still works.
+ *
+ * The catalog is sharded (`/catalog/v2/`): the screen only ever has the index
+ * plus the shards nearest to wherever the user is looking, so opening the tab
+ * costs a few kilobytes, not the whole world. `ensureShardsNear` is re-run when
+ * the category changes, which is what fills the list on the way into it.
+ *
+ * Tapping a category (or typing) shows the item list, sorted nearest-first,
+ * each row with an offline locator thumbnail. Downloads land in the Library as
+ * regular imported maps with live progress; dedup against the Library shows
+ * "Open"/"Update" instead of a second Download.
  */
 
-const keyExtractor = (item: CatalogItem) => item.id;
+/** How many rows the landing's "Around you" section shows. */
+const NEARBY_ROWS = 5;
 
-/** "≈ 12 km" caption: standard distance formatting minus noise decimals. */
-function approxDistanceLabel(meters: number): string {
-  const clean = formatDistance(meters)
-    .replace(/(\.\d*?)0+(?=\s)/, '$1')
-    .replace(/\.(?=\s)/, '');
-  return `≈ ${clean}`;
-}
+/** Settle time before a query costs a digest lookup and a shard fetch. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Module-scope so the list's props don't churn on every render. */
+const keyExtractor = (item: CatalogItem) => item.id;
 
 export function StoreScreen() {
   const theme = useTheme();
@@ -71,11 +72,19 @@ export function StoreScreen() {
   const router = useRouter();
 
   const status = useCatalogStore((s) => s.status);
-  const manifest = useCatalogStore((s) => s.manifest);
+  const index = useCatalogStore((s) => s.index);
+  const items = useCatalogStore((s) => s.items);
+  const loadingShards = useCatalogStore((s) => s.loadingShards);
+  const loadingSearch = useCatalogStore((s) => s.loadingSearch);
+  const searchScope = useCatalogStore((s) => s.searchScope);
+  const pendingQueryShardIds = useCatalogStore((s) => s.pendingQueryShardIds);
   const fromCache = useCatalogStore((s) => s.fromCache);
   const downloads = useCatalogStore((s) => s.downloads);
   const lastFolderId = useCatalogStore((s) => s.lastFolderId);
   const load = useCatalogStore((s) => s.load);
+  const ensureShardsNear = useCatalogStore((s) => s.ensureShardsNear);
+  const ensureShardsForQuery = useCatalogStore((s) => s.ensureShardsForQuery);
+  const searchWholeCatalog = useCatalogStore((s) => s.searchWholeCatalog);
 
   const maps = useLibraryStore((s) => s.maps);
   const folders = useLibraryStore((s) => s.folders);
@@ -98,13 +107,38 @@ export function StoreScreen() {
     if (status === 'idle') void load();
   }, [status, load]);
 
-  const items = useMemo(() => manifest?.items ?? [], [manifest]);
+  // Pull the shards this view needs: nearest across all categories for the
+  // landing, nearest within the category once the user is inside one.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    void ensureShardsNear(lastKnownPosition, category);
+  }, [status, lastKnownPosition, category, ensureShardsNear]);
+
+  // …and the shards a *query* needs, which geography alone would never reach:
+  // the tab is called Search, and before this the query only ever filtered the
+  // handful of shards pulled for wherever the user happened to be standing.
+  // Debounced so a word costs one digest lookup, not one per keystroke.
+  //
+  // Deliberately keyed on the LIVE query, not the deferred one below: the
+  // 300 ms debounce is already the settle window, and the network round-trip
+  // is the long pole — starting it from the deferred copy would only push the
+  // fetch a render behind the user for no saved work.
+  const trimmedQuery = query.trim();
+  useEffect(() => {
+    if (status !== 'ready' || trimmedQuery === '') return;
+    const timer = setTimeout(() => {
+      void ensureShardsForQuery(trimmedQuery, lastKnownPosition);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [status, trimmedQuery, lastKnownPosition, ensureShardsForQuery]);
+
   // Typing must never wait on the list. Filtering + the nearest-first sort walk
-  // the whole catalog (and every new row rebuilds a locator thumbnail), so the
+  // every loaded item (and every new row rebuilds a locator thumbnail), so the
   // Searchbar keeps the live `query` while the list re-derives from a deferred
   // copy — React renders the keystroke first and the heavier list pass after,
   // dropping intermediate passes when the user keeps typing.
   const deferredQuery = useDeferredValue(query);
+  const deferredTrimmedQuery = deferredQuery.trim();
   const filtered = useMemo(
     () => filterCatalogItems(items, { text: deferredQuery, category }),
     [items, deferredQuery, category],
@@ -113,11 +147,18 @@ export function StoreScreen() {
     () => sortCatalogItems(filtered, lastKnownPosition),
     [filtered, lastKnownPosition],
   );
-  const chipCategories = useMemo(() => categoriesPresent(items, CATALOG_CATEGORIES), [items]);
-  const categoryCounts = useMemo(() => countByCategory(items), [items]);
+  const nearby = useMemo(
+    () => nearbyCatalogItems(items, lastKnownPosition, { limit: NEARBY_ROWS }),
+    [items, lastKnownPosition],
+  );
+  const categoryCounts = useMemo(() => index?.categoryCounts ?? {}, [index]);
+  const chipCategories = useMemo(
+    () => CATALOG_CATEGORIES.filter((c) => (categoryCounts[c] ?? 0) > 0),
+    [categoryCounts],
+  );
   const sourcesById = useMemo(
-    () => new Map<string, CatalogSource>((manifest?.sources ?? []).map((s) => [s.id, s])),
-    [manifest],
+    () => new Map<string, CatalogSource>((index?.sources ?? []).map((s) => [s.id, s])),
+    [index],
   );
   // Install state for the whole catalog, indexed once per (items, maps) change.
   // Doing it per row meant `installStatusFor` scanned the entire library for
@@ -125,17 +166,23 @@ export function StoreScreen() {
   // re-renders on each download-progress tick.
   const installStatusById = useMemo(() => indexInstallStatus(items, maps), [items, maps]);
 
-  // Landing (category grid) until the user types or enters a category.
+  // Landing (Around you + category grid) until the user types or picks one.
   //
   // Deliberately keyed on `deferredQuery`, not `query`: the list below derives
   // from the deferred copy, so switching on the LIVE query flips to the list
-  // branch one pass before the list has the new query — rendering the entire
-  // unfiltered catalog for that pass. It converges, but it is a visible flash
-  // on the first keystroke, and a very expensive one now the world catalog is
-  // tens of thousands of items. Both sides move together this way.
-  const home = !browsing && deferredQuery.trim() === '';
+  // branch one pass before the list has the new query — rendering everything
+  // loaded, unfiltered, for that pass. It converges, but it is a visible flash
+  // on the first keystroke, and a very expensive one now the catalog is the
+  // whole world. `searching` moves with it for the same reason: the empty
+  // state and footer describe the list, so they must describe the query the
+  // list is actually showing.
+  const home = !browsing && deferredTrimmedQuery === '';
+  /** True while a text query is active — the only time search scope matters. */
+  const searching = deferredTrimmedQuery !== '';
 
-  const enterCategory = (c: CatalogCategory) => {
+  const searchWholeCatalogNow = () => void searchWholeCatalog(trimmedQuery, lastKnownPosition);
+
+  const enterCategory = (c: CatalogCategory | null) => {
     setCategory(c);
     setBrowsing(true);
   };
@@ -181,121 +228,48 @@ export function StoreScreen() {
     router.navigate('/');
   };
 
-  const metaLine = (item: CatalogItem): string => {
-    const distance =
-      lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null;
-    const parts = [
-      distance !== null ? approxDistanceLabel(distance) : undefined,
-      sourcesById.get(item.sourceId)?.name,
-      item.sizeBytes !== undefined ? formatByteSize(item.sizeBytes) : undefined,
-      item.updatedAt,
-      item.lang?.toUpperCase(),
-    ];
-    return parts.filter((p): p is string => p !== undefined).join(' · ');
-  };
+  const renderCard = useCallback(
+    (item: CatalogItem, distanceMeters: number | null) => (
+      <CatalogItemCard
+        key={item.id}
+        item={item}
+        source={sourcesById.get(item.sourceId)}
+        // Read out of the prebuilt index, never re-scanned per row: see
+        // `installStatusById` above. An item the index has not seen (it is
+        // built from the same `items` these rows come from, so only reachable
+        // transiently) reads as not installed, exactly as a fresh scan would.
+        installStatus={installStatusById.get(item.id) ?? 'not-installed'}
+        downloading={item.id in downloads}
+        progress={downloads[item.id]}
+        expanded={expandedId === item.id}
+        distanceMeters={distanceMeters}
+        onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+        onDownload={() => setPendingItem(item)}
+        onUpdate={() => void startUpdate(item)}
+        onOpen={() => openInstalled(item)}
+        onCancel={() => cancelCatalogDownload(item.id)}
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers close over stable store actions
+    [sourcesById, installStatusById, maps, downloads, expandedId],
+  );
 
-  const renderActions = (item: CatalogItem, installStatus: InstallStatus, downloading: boolean) => {
-    if (downloading) {
-      return (
-        <IconButton
-          icon="close-circle-outline"
-          accessibilityLabel={`Cancel download of ${item.title}`}
-          onPress={() => cancelCatalogDownload(item.id)}
-        />
-      );
-    }
-    if (installStatus === 'installed') {
-      return (
-        <Button compact onPress={() => openInstalled(item)}>
-          Open
-        </Button>
-      );
-    }
-    if (installStatus === 'update-available') {
-      return (
-        <Button compact mode="contained-tonal" onPress={() => void startUpdate(item)}>
-          Update
-        </Button>
-      );
-    }
-    return (
-      <Button compact mode="contained-tonal" onPress={() => setPendingItem(item)}>
-        Download
-      </Button>
+  const renderItem = ({ item }: { item: CatalogItem }) =>
+    renderCard(
+      item,
+      lastKnownPosition !== null ? catalogItemDistanceMeters(item, lastKnownPosition) : null,
     );
-  };
-
-  const renderItem = ({ item }: { item: CatalogItem }) => {
-    const source = sourcesById.get(item.sourceId);
-    const installStatus = installStatusById.get(item.id) ?? 'not-installed';
-    const fraction = downloads[item.id];
-    const downloading = item.id in downloads;
-    const expanded = expandedId === item.id;
-    return (
-      <Card
-        mode="outlined"
-        style={styles.card}
-        onPress={() => setExpandedId(expanded ? null : item.id)}
-      >
-        <Card.Content>
-          <View style={styles.cardRow}>
-            <LocatorThumb bbox={item.bbox} size={56} />
-            <View style={styles.cardText}>
-              <Text variant="titleSmall">{item.title}</Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {metaLine(item)}
-              </Text>
-            </View>
-            {renderActions(item, installStatus, downloading)}
-          </View>
-          {downloading && (
-            <ProgressBar
-              style={styles.progress}
-              progress={fraction ?? 0}
-              indeterminate={fraction === null || fraction === undefined}
-            />
-          )}
-          {expanded && (
-            <View style={styles.details}>
-              {source !== undefined && (
-                <Text variant="bodySmall">
-                  {source.attribution} — {source.licence}
-                </Text>
-              )}
-              {item.region !== undefined && <Text variant="bodySmall">Region: {item.region}</Text>}
-              {item.bbox !== undefined && (
-                <Text variant="bodySmall">
-                  Coverage: {item.bbox[1].toFixed(2)}°–{item.bbox[3].toFixed(2)}°N,{' '}
-                  {Math.abs(item.bbox[2]).toFixed(2)}°–{Math.abs(item.bbox[0]).toFixed(2)}°W
-                </Text>
-              )}
-              {source?.homepage !== undefined && (
-                <Button
-                  compact
-                  icon="open-in-new"
-                  style={styles.sourceLink}
-                  onPress={() => void Linking.openURL(source.homepage ?? '')}
-                >
-                  About this source
-                </Button>
-              )}
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    );
-  };
 
   // Stable across renders: a fresh array literal here invalidates the list's
   // content container on every download-progress tick. `keyExtractor` is
   // module-scope for the same reason.
   //
-  // `renderItem` is deliberately NOT memoized: it closes over `downloads` and
-  // `expandedId`, which are exactly what changes on a progress tick, so a
-  // useCallback would only move the new identity around. Cells therefore still
-  // re-render on every tick. Fixing that for real needs a memoized row
-  // component with the progress subscribed per row — a UI refactor, not a
-  // mechanical one, so it is not done here.
+  // `renderCard`'s useCallback above buys nothing on a progress tick — it
+  // closes over `downloads` and `expandedId`, which are exactly what changes
+  // then — it is there so the landing's "Around you" rows and the list rows
+  // stay one code path. Cells therefore still re-render on every tick. Fixing
+  // that for real needs the progress subscribed per row inside
+  // `CatalogItemCard` — a UI refactor, not a mechanical one, so not done here.
   const listContentStyle = useMemo(
     () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
     [insets.bottom],
@@ -324,12 +298,117 @@ export function StoreScreen() {
         </View>
       );
     }
+    if (loadingShards || loadingSearch) {
+      return (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator />
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            {searching ? 'Searching the catalog…' : 'Loading maps for this area…'}
+          </Text>
+        </View>
+      );
+    }
+    if (!searching) {
+      return (
+        <View style={styles.emptyWrap}>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            {home ? 'The catalog is empty right now.' : 'No maps in this area yet.'}
+          </Text>
+        </View>
+      );
+    }
+    // A query with nothing to show. What we are allowed to say depends on how
+    // much of the catalog was actually searched: the store only reports
+    // 'complete' once every shard that could match is in.
+    if (searchScope === 'complete') {
+      return (
+        <View style={styles.emptyWrap}>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            No maps match your search.
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyWrap}>
         <Text variant="bodyMedium" style={styles.emptyText}>
-          {home ? 'The catalog is empty right now.' : 'No maps match your search.'}
+          {searchScope === 'partial'
+            ? `No matches yet — still ${pendingQueryShardIds.length} area${
+                pendingQueryShardIds.length === 1 ? '' : 's'
+              } of the catalog to search.`
+            : 'Searched the maps loaded for this area only — the rest of the catalog needs a connection.'}
         </Text>
+        <Button mode="contained-tonal" onPress={searchWholeCatalogNow}>
+          Search the whole catalog
+        </Button>
       </View>
+    );
+  };
+
+  /**
+   * Below a non-empty list: the spinner while shards land, and — when a query
+   * has matches but has not covered the catalog yet — the same explicit
+   * "there is more" affordance the empty state offers. Silence here would let
+   * a partial result read as the complete one.
+   */
+  const listFooter = () => {
+    if (sorted.length === 0) return null;
+    if (loadingShards || loadingSearch) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+    if (!searching || searchScope === 'complete') return null;
+    return (
+      <View style={styles.footer}>
+        <Text
+          variant="bodySmall"
+          style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
+        >
+          {searchScope === 'partial'
+            ? 'More of the catalog is still to search.'
+            : 'Showing matches from this area only.'}
+        </Text>
+        <Button compact mode="contained-tonal" onPress={searchWholeCatalogNow}>
+          Search the whole catalog
+        </Button>
+      </View>
+    );
+  };
+
+  const landing = () => {
+    if (status !== 'ready' || chipCategories.length === 0) return emptyState();
+    return (
+      <ScrollView
+        contentContainerStyle={[styles.landing, { paddingBottom: insets.bottom + 24 }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {nearby.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text variant="titleMedium">Around you</Text>
+              <Button compact onPress={() => enterCategory(null)}>
+                See all
+              </Button>
+            </View>
+            <View style={styles.sectionRows}>
+              {nearby.map((entry) => renderCard(entry.item, entry.distanceMeters))}
+            </View>
+          </View>
+        )}
+        {nearby.length === 0 && lastKnownPosition === null && (
+          <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
+            Open the Map tab once to let “Around you” show what’s near.
+          </Text>
+        )}
+        <CategoryGrid
+          categories={chipCategories}
+          counts={categoryCounts}
+          onSelect={enterCategory}
+        />
+      </ScrollView>
     );
   };
 
@@ -365,16 +444,7 @@ export function StoreScreen() {
       )}
 
       {home ? (
-        status === 'ready' && chipCategories.length > 0 ? (
-          <CategoryGrid
-            categories={chipCategories}
-            counts={categoryCounts}
-            bottomInset={insets.bottom}
-            onSelect={enterCategory}
-          />
-        ) : (
-          emptyState()
-        )
+        landing()
       ) : (
         <>
           {chipCategories.length > 0 && (
@@ -411,6 +481,16 @@ export function StoreScreen() {
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListEmptyComponent={emptyState()}
+            ListFooterComponent={listFooter()}
+            // Reaching the end of what is loaded pulls the next-nearest shards,
+            // so the grid's "65 877 maps" is something the user can actually
+            // scroll into rather than a number with 400 rows behind it.
+            onEndReached={() => {
+              if (loadingShards) return;
+              if (searching) return;
+              void ensureShardsNear(lastKnownPosition, category);
+            }}
+            onEndReachedThreshold={0.6}
             contentContainerStyle={listContentStyle}
             keyboardShouldPersistTaps="handled"
             // Each row builds an SVG locator thumbnail, so the defaults
@@ -420,6 +500,13 @@ export function StoreScreen() {
             // blank cells and dropped touches, these rows render react-native-
             // svg trees, and nothing else in this app uses it. The window
             // tuning above stands on its own.
+            //
+            // It does interact with `onEndReached`: a short initial window can
+            // put the end of the rendered content inside the threshold on
+            // mount, so the next ring of shards may be pulled straight away.
+            // That is the same work the first scroll would have done, and
+            // `ensureShardsNear` is bounded per call and skips what is loaded
+            // or in flight, so it costs one earlier batch, never a loop.
             initialNumToRender={6}
             maxToRenderPerBatch={5}
             windowSize={7}
@@ -459,13 +546,20 @@ const styles = StyleSheet.create({
   chipRowContent: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
   chip: { marginRight: 0 },
   cacheNote: { paddingHorizontal: 16, paddingBottom: 6 },
+  landing: { paddingTop: 2 },
+  section: { paddingBottom: 12 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingBottom: 4,
+  },
+  sectionRows: { paddingHorizontal: 12, gap: 8 },
+  hint: { paddingHorizontal: 16, paddingBottom: 10 },
   listContent: { paddingHorizontal: 12, gap: 8 },
-  card: { marginBottom: 0 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardText: { flex: 1 },
-  progress: { marginTop: 8, height: 5, borderRadius: 3 },
-  details: { marginTop: 10, gap: 3 },
-  sourceLink: { alignSelf: 'flex-start', marginTop: 4 },
+  footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
 });

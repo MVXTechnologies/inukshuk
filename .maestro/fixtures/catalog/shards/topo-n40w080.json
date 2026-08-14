@@ -1,0 +1,59 @@
+{
+  "id": "topo-n40w080",
+  "items": [
+    {
+      "id": "cantopo-021l11",
+      "sourceId": "nrcan-cantopo",
+      "title": "Lac-Saint-Joseph — CanTopo 021L11",
+      "category": "topo",
+      "bbox": [
+        -71.5,
+        46.5,
+        -71,
+        46.75
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 1155,
+      "url": "http://127.0.0.1:8787/cantopo_021l11_geopdf.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    },
+    {
+      "id": "cantopo-021l13",
+      "sourceId": "nrcan-cantopo",
+      "title": "Saint-Raymond — CanTopo 021L13",
+      "category": "topo",
+      "bbox": [
+        -72,
+        46.75,
+        -71.5,
+        47
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 1156,
+      "url": "http://127.0.0.1:8787/cantopo_021l13_geopdf.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    },
+    {
+      "id": "cantopo-021l14",
+      "sourceId": "nrcan-cantopo",
+      "title": "Québec — CanTopo 021L14",
+      "category": "topo",
+      "bbox": [
+        -71.5,
+        46.75,
+        -71,
+        47
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 1145,
+      "url": "http://127.0.0.1:8787/cantopo_021l14_geopdf.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    }
+  ]
+}

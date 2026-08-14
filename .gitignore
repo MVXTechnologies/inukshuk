@@ -56,3 +56,11 @@ build-vc*.log
 
 # Subagent-driven-development scratch
 .superpowers/
+
+# Catalog generator: bulk-index fragments (scripts/catalog/fragments/).
+# Rule — check in a fragment only when regenerating it is slow or fragile
+# (nrcan-cantopo.json is 128 crawled directory listings + HEAD requests, so it
+# stays). Fragments rebuilt from a single published bulk index are cheap to
+# redo (`npx tsx scripts/catalog/fetch-ustopo.ts`, ~20 s) and would otherwise
+# duplicate every byte of docs/catalog/v2/shards/ a second time in git.
+scripts/catalog/fragments/usgs-ustopo.json

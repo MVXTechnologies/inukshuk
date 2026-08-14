@@ -88,6 +88,46 @@ describe('migrateLibraryIndex', () => {
     expect(index.tracks[1]?.category).toBe('hike');
   });
 
+  // Builds before the primary-viewport fix stored one activePages entry per
+  // VIEWPORT, so a three-viewport US Topo / AUSTopo sheet persisted [0, 0, 0].
+  // The overlay pipeline drew that as three stacked copies of the same raster
+  // and the Library read "1 page(s) · 3/1 shown".
+  it('heals activePages persisted once per viewport instead of once per page', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps: [
+        {
+          id: 'm1',
+          name: 'Grand Canyon — US Topo',
+          fileUri: 'file://m1.pdf',
+          importedAt: 5,
+          pageCount: 1,
+          georeferences: [geoRef(0)],
+          activePages: [0, 0, 0],
+        },
+      ],
+    });
+    expect(index.maps[0]?.activePages).toEqual([0]);
+  });
+
+  it('sorts activePages and drops entries that cannot index a page', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps: [
+        {
+          id: 'm1',
+          name: 'Map',
+          fileUri: 'file://m1.pdf',
+          importedAt: 5,
+          pageCount: 3,
+          georeferences: [geoRef(0), geoRef(1), geoRef(2)],
+          activePages: [2, 0, 2, '1', -1, 1.5, null, Number.NaN, 1],
+        },
+      ],
+    });
+    expect(index.maps[0]?.activePages).toEqual([0, 1, 2]);
+  });
+
   it('passes a current v5 index through unchanged', () => {
     const v5: LibraryIndex = {
       schemaVersion: 5,

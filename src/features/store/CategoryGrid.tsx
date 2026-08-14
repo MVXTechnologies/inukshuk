@@ -1,13 +1,18 @@
 import { CATALOG_CATEGORY_LABELS, type CatalogCategory } from '@core/catalog/schema';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 
 /**
- * The Search tab's landing view (Wave C): large tappable category cards, so
- * browsing starts with "what kind of map" instead of a 128-row wall. Only
- * categories present in the manifest render — empty ones hide, and the grid
+ * The Search tab's landing grid: large tappable category cards, so browsing
+ * starts with "what kind of map" instead of a 30 000-row wall. Only categories
+ * the catalog index actually reports render — empty ones hide, and the grid
  * grows on its own as the catalog gains sources.
+ *
+ * Counts come from the index's per-category totals, not from the items loaded
+ * so far, so "Nautical · 1 204 charts" is honest before a single shard has been
+ * fetched. Renders a plain View: the landing owns one scroll container so
+ * "Around you" and the grid scroll together.
  */
 
 /** MaterialCommunityIcons name per category (UI concern — kept out of core). */
@@ -23,25 +28,25 @@ const CATEGORY_ICONS: Record<CatalogCategory, keyof typeof MaterialCommunityIcon
   river: 'kayaking',
 };
 
+/** "1 map" / "1,204 maps" — thousands separated, because world counts are big. */
+function countLabel(count: number): string {
+  return count === 1 ? '1 map' : `${count.toLocaleString('en-US')} maps`;
+}
+
 export function CategoryGrid({
   categories,
   counts,
-  bottomInset,
   onSelect,
 }: {
   categories: readonly CatalogCategory[];
-  counts: ReadonlyMap<CatalogCategory, number>;
-  bottomInset: number;
+  counts: Partial<Record<CatalogCategory, number>>;
   onSelect: (category: CatalogCategory) => void;
 }) {
   const theme = useTheme();
   return (
-    <ScrollView
-      contentContainerStyle={[styles.grid, { paddingBottom: bottomInset + 24 }]}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.grid}>
       {categories.map((category) => {
-        const count = counts.get(category) ?? 0;
+        const count = counts[category] ?? 0;
         return (
           <Card
             key={category}
@@ -62,13 +67,13 @@ export function CategoryGrid({
               </View>
               <Text variant="titleMedium">{CATALOG_CATEGORY_LABELS[category]}</Text>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {count === 1 ? '1 map' : `${count} maps`}
+                {countLabel(count)}
               </Text>
             </Card.Content>
           </Card>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 

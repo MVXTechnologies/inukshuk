@@ -1,0 +1,41 @@
+{
+  "id": "nautical-n40w080",
+  "items": [
+    {
+      "id": "fixture-chart-14771",
+      "sourceId": "noaa-bookletchart",
+      "title": "Chart 14771 — Fixture Harbour",
+      "category": "nautical",
+      "bbox": [
+        -71.3,
+        46.75,
+        -71.1,
+        46.9
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 1151,
+      "url": "http://127.0.0.1:8787/bookletchart_14771.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    },
+    {
+      "id": "fixture-chart-14772",
+      "sourceId": "noaa-bookletchart",
+      "title": "Chart 14772 — Fixture Approaches",
+      "category": "nautical",
+      "bbox": [
+        -71.6,
+        46.6,
+        -71.3,
+        46.8
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 1148,
+      "url": "http://127.0.0.1:8787/bookletchart_14772.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    }
+  ]
+}

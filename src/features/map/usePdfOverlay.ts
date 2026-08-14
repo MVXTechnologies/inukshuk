@@ -5,6 +5,7 @@ import {
   extrapolatePageCorners,
   isDegenerateBBox,
 } from '@core/geo/geomath';
+import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { File } from 'expo-file-system';
@@ -54,13 +55,24 @@ function rasterCacheKey(docId: string, pageIndex: number): string {
   return `${docId}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
 }
 
-/** Collect every active, georeferenced page across all imported maps. */
-function activeTargets(maps: MapDocument[]): Target[] {
+/**
+ * Collect every active, georeferenced page across all imported maps.
+ *
+ * `activePages` is de-duplicated here as well as in the persistence migration:
+ * builds before the primary-viewport fix stored one entry per *viewport*, so a
+ * three-viewport US Topo / AUSTopo sheet persisted `[0, 0, 0]` and would
+ * otherwise push three identical targets — three stacked copies of the same
+ * raster, compounded opacity and three native layers for one map.
+ */
+export function activeTargets(maps: MapDocument[]): Target[] {
   const targets: Target[] = [];
   for (const m of maps) {
     if (!m.fileUri) continue;
-    for (const pageIndex of m.activePages) {
-      const geo = m.georeferences.find((g) => g.pageIndex === pageIndex);
+    for (const pageIndex of new Set(m.activePages)) {
+      // The PRIMARY viewport, not the first one listed: AUSTopo sheets put a
+      // whole-of-Australia locator inset ahead of the map, and taking the
+      // first georeference draws the sheet stretched across the continent.
+      const geo = primaryGeoreferenceForPage(m.georeferences, pageIndex);
       if (geo) targets.push({ docId: m.id, fileUri: m.fileUri, geo });
     }
   }

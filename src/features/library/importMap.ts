@@ -1,5 +1,6 @@
 import type { MapDocument } from '@core/models';
 import { parseGeoPdf } from '@core/geo/geopdf';
+import { primaryGeoreferences } from '@core/geo/geopdf/primary';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
@@ -35,9 +36,13 @@ export async function mapDocumentFromStoredPdf(
     fileUri,
     importedAt: Date.now(),
     pageCount: parsed.pageCount,
-    // Default to showing every georeferenced page; the user can uncheck pages later.
+    // Default to showing every georeferenced page; the user can uncheck pages
+    // later. One PAGE may carry several viewports (AUSTopo and US Topo sheets
+    // carry a locator inset and an adjoining-sheet diagram beside the map), so
+    // active pages are the distinct page indexes — never one entry per
+    // viewport, which would activate the same page three times.
     georeferences: parsed.georeferences,
-    activePages: parsed.georeferences.map((g) => g.pageIndex),
+    activePages: primaryGeoreferences(parsed.georeferences).map((g) => g.pageIndex),
     georeferenceWarning:
       parsed.georeferences.length > 0
         ? undefined

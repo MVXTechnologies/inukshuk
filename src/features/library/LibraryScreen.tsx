@@ -1,4 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
+import { primaryGeoreferences } from '@core/geo/geopdf/primary';
 import type { TrackPoint, TrackSummary, Waypoint } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import * as storage from '@data/storage';
@@ -469,7 +470,7 @@ export function LibraryScreen() {
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
                 {hasPages
-                  ? `${m.pageCount} page(s) · ${active}/${m.georeferences.length} shown`
+                  ? `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`
                   : m.georeferenceWarning}
               </Text>
             </View>
@@ -489,7 +490,7 @@ export function LibraryScreen() {
             <Text variant="labelMedium" style={styles.overlayLabel}>
               Show as overlay
             </Text>
-            {m.georeferences.map((g) => (
+            {primaryGeoreferences(m.georeferences).map((g) => (
               <Checkbox.Item
                 key={g.pageIndex}
                 label={`Page ${g.pageIndex + 1}`}
