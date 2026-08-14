@@ -12,5 +12,23 @@
     // on-device validation of the PDF overlay pipeline (see the pipeline's
     // device-only-bug history) before it can land.
     "GHSA-wgrm-67xf-hhpq",
+
+    // image-size (all published 1.x): infinite loops in the ICNS, JXL and
+    // HEIF parsers, i.e. denial of service on a malicious image. Reached
+    // only through metro — it is the BUNDLER's image reader, running on a
+    // developer or CI machine over files already in this repo. It is not in
+    // the app bundle, so no user-supplied image ever reaches it, and the
+    // worst case is a hung build we would notice immediately.
+    //
+    // No fix is available to take: every 1.x release is affected, and npm's
+    // suggested remedy is a react-native DOWNGRADE to 0.72.17 (semver-major)
+    // — which would break the SDK 56 pin and the app itself. image-size 2.x
+    // is not API-compatible with metro's caller.
+    //
+    // Exit plan: drop BOTH entries when an Expo SDK bump brings a metro that
+    // depends on a patched image-size. Re-check on every SDK upgrade; do not
+    // let them outlive metro 0.84.
+    "GHSA-w3rx-r6r6-pgpr",
+    "GHSA-5p2g-fcmc-qvqq",
   ],
 }
