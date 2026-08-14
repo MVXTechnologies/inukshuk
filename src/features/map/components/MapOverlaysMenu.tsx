@@ -5,7 +5,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { PixelRatio, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { FAB, Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
   CONTOUR_INTERVALS,
@@ -241,10 +241,22 @@ function TopologySubmenu({
 
   return (
     <View>
-      {/* No scroll container here: these rows host sliders, and wrapping them
-          stole the gesture and hid rows from the a11y tree (two flows failed,
-          2026-08-10). Topology already fits — the Weather list was the one
-          that grew. */}
+      {/* No scroll container here — b39ebc9 wrapped these rows in one and
+          f3180c8 reverted it. Two mechanisms make a ScrollView wrong for
+          THIS list specifically:
+          - Gesture: the rows host RangeSlider/DetentSlider. A vertical
+            ScrollView competes with the thumbs' pan responder, so drags get
+            claimed by the scroll instead of the slider.
+          - Reach: rows past the capped height are off-screen, and Android's
+            removeClippedSubviews may unmount them outright. (They are NOT
+            "hidden from the a11y tree" — the tree still describes them; they
+            simply aren't on screen, which is what Maestro's tapOn needs.)
+          Flows that depend on every Topology row staying reachable and
+          draggable: map-overlays.yaml (Slope, Contours, the interval detents
+          and the slope-range label), folders.yaml and heatmap.yaml (the
+          Content row). Verify against those three before adding a cap here.
+          Topology fits its sheet as-is — the Weather list was the one that
+          grew, so the cap lives there instead. */}
       <SubmenuHeader title="Topology" onBack={onBack} />
       <ItemRow
         icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
@@ -316,6 +328,23 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
   // the coverage edge.
   const radarOutside = useMapStore((s) => !radarAvailableAt(s.mapCenter));
 
+  // Scroll cap, derived rather than a magic number. A row is its vertical
+  // padding plus its tallest child — normally the selection ring, but the
+  // label overtakes it once the user's text size scales up, which is exactly
+  // the case a fixed cap used to clip INSIDE the row instead of scrolling.
+  const { height: windowH } = useWindowDimensions();
+  const rowH =
+    2 * WEATHER_ROW_PAD_V +
+    Math.max(WEATHER_RING_D, WEATHER_LABEL_LINE * PixelRatio.getFontScale());
+  // Clamped against the window so landscape and small phones can't hand the
+  // sheet a cap taller than the screen it has to sit in — there the list DOES
+  // scroll, which is the correct degradation when the rows genuinely cannot
+  // fit. On a phone in portrait the budget wins and today's catalog shows in
+  // full. Note the cap is a function of rowH, so growing the row (touch
+  // targets, font scale) grows the cap in lockstep and can never push a row
+  // past the fold on its own.
+  const listMaxHeight = Math.min(rowH * WEATHER_VISIBLE_ROWS, windowH * 0.45);
+
   const row = (id: WeatherLayerId | null, label: string, hint?: string) => {
     const selected = weatherLayer === id;
     return (
@@ -332,7 +361,7 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
             <View style={styles.disc}>
               <Icon
                 source={id === null ? 'eye-off-outline' : WEATHER_LAYER_ICONS[id]}
-                size={17}
+                size={WEATHER_ICON}
                 color={id === null ? wc.inkMuted : wc.ink}
               />
             </View>
@@ -353,10 +382,23 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
     <View>
       <SubmenuHeader title="Weather" onBack={onBack} />
       {/* Owner call (2026-08-10): a sub-menu must occupy the SAME footprint as
-          the menu it replaces — no growing panel that swallows the map. The
-          ECCC explainer moved to Settings → System info → Maps & data; the
-          list scrolls inside a capped height instead of stretching. */}
-      <ScrollView style={styles.submenuScroll} showsVerticalScrollIndicator={false}>
+          the menu it replaces — no growing panel that swallows the map, so
+          the list scrolls inside a capped height instead of stretching.
+
+          The three-line ECCC explainer that used to sit here was DROPPED, not
+          moved — it cost more height than every row it explained. Both facts
+          it carried still reach the user, and earlier than before:
+          - Attribution: `mapDataCredits.ts` already folds ECCC_ATTRIBUTION
+            into Settings → System info → Maps & data (it was always there;
+            this sub-menu was a duplicate, not the source).
+          - "Needs a connection / hidden while Locally downloaded only is on":
+            carried by the Weather GROUP row in OverlaysDrilldown, which goes
+            disabled with a "Needs connection" subtitle and a matching a11y
+            label while offlineOnly is set. That states the caveat one level
+            UP, where it is actionable — under offlineOnly you can no longer
+            open this sub-menu at all, so a hint inside it was unreachable
+            exactly when it applied. */}
+      <ScrollView style={{ maxHeight: listMaxHeight }} showsVerticalScrollIndicator>
         {row(null, 'None')}
         {WEATHER_LAYERS.map((l) =>
           row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
@@ -549,6 +591,39 @@ const DISC_D = 40;
 /** Weather rows use a smaller disc so the sub-menu keeps the top level's
  * footprint (owner call 2026-08-10). */
 const WEATHER_DISC = 30;
+/** Glyph inside the weather disc, sized to leave a ring of padding around it. */
+const WEATHER_ICON = Math.round(WEATHER_DISC * 0.57);
+/** Selection ring around the disc — the tallest fixed child of a weather row. */
+const WEATHER_RING_D = WEATHER_DISC + 6;
+/**
+ * Row padding. 6 keeps the row at WEATHER_RING_D + 12 = 48 px, which clears
+ * both the iOS HIG 44 pt and the Material 48 dp touch minimums; 3 (briefly
+ * shipped on this branch) put it at 42 and missed both.
+ */
+const WEATHER_ROW_PAD_V = 6;
+/** Label line box at fontScale 1 — the row grows past the ring beyond that. */
+const WEATHER_LABEL_LINE = 20;
+/**
+ * Rows the list shows before it starts scrolling.
+ *
+ * Sized so TODAY's catalog fits with NO scrolling: None + the five entries in
+ * WEATHER_LAYERS is 6 rows. At the previous 5.5 the sixth row (Precipitation)
+ * sat permanently half below the fold — a layer that is only discoverable by
+ * scrolling is a discoverability regression, not an affordance, and it was
+ * the one row no e2e flow happened to reach so nothing caught it.
+ *
+ * The extra half row IS the "there is more below" affordance, but it now only
+ * appears once the catalog GROWS past today's six rows. `weatherLayers.ts`
+ * says the catalog shape deliberately tolerates more entries, so the excess
+ * has to degrade to scrolling.
+ *
+ * Deliberately a fixed budget rather than `WEATHER_LAYERS.length + 1.5`:
+ * deriving it from the catalog would let the sheet grow without bound as
+ * entries are appended, and the owner's call (2026-08-10) is that a sub-menu
+ * keeps the footprint of the menu it replaces. The window clamp at the use
+ * site is the other bound, for landscape and small phones.
+ */
+const WEATHER_VISIBLE_ROWS = 6.5;
 
 const styles = StyleSheet.create({
   controlFab: { borderRadius: 24 },
@@ -593,14 +668,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   backTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: wc.ink },
-  submenuScroll: { maxHeight: 268 },
-  hint: {
-    color: wc.inkMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    marginHorizontal: 10,
-    marginBottom: 8,
-  },
   itemRow: { borderRadius: 12 },
   itemRowInner: {
     flexDirection: 'row',
@@ -630,13 +697,13 @@ const styles = StyleSheet.create({
   layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rightCol: { width: 170, alignItems: 'flex-end' },
   // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
-  weatherRow: { borderRadius: 12, paddingVertical: 3, paddingHorizontal: 6 },
+  weatherRow: { borderRadius: 12, paddingVertical: WEATHER_ROW_PAD_V, paddingHorizontal: 6 },
   weatherRowInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   // Constant-size ring wrapper so selection never shifts the layout.
   discRing: {
-    width: WEATHER_DISC + 6,
-    height: WEATHER_DISC + 6,
-    borderRadius: (WEATHER_DISC + 6) / 2,
+    width: WEATHER_RING_D,
+    height: WEATHER_RING_D,
+    borderRadius: WEATHER_RING_D / 2,
     borderWidth: 2,
     borderColor: 'transparent',
     alignItems: 'center',
@@ -646,13 +713,13 @@ const styles = StyleSheet.create({
   disc: {
     width: WEATHER_DISC,
     height: WEATHER_DISC,
-    borderRadius: DISC_D / 2,
+    borderRadius: WEATHER_DISC / 2,
     backgroundColor: '#353B43',
     alignItems: 'center',
     justifyContent: 'center',
   },
   weatherRowText: { flex: 1 },
-  weatherRowLabel: { fontSize: 15, lineHeight: 20, color: wc.ink },
+  weatherRowLabel: { fontSize: 15, color: wc.ink },
   weatherRowLabelSelected: { fontWeight: '700' },
-  weatherRowHint: { fontSize: 11, lineHeight: 14, color: wc.inkFaint },
+  weatherRowHint: { fontSize: 11, color: wc.inkFaint },
 });

@@ -17,6 +17,7 @@ import {
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import { resolveEffectiveModel } from '@core/weather/modelCoverage';
+import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
 import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
@@ -433,7 +434,15 @@ export function MapScreen() {
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
       ...(overlayTiles !== null
-        ? { overlayLabels: { dark: theme.dark, tiles: overlayTiles } }
+        ? {
+            overlayLabels: {
+              dark: theme.dark,
+              tiles: overlayTiles,
+              // Major-road reference pass: weather only. Marine chart mode
+              // dims land on purpose so the water reads as the content.
+              roads: weatherLayer !== null,
+            },
+          }
         : {}),
       // Marine chart mode (wave D): the whole map restyles as a nautical
       // chart — tan land, flat chart-blue water, the client-rendered depth
@@ -457,7 +466,8 @@ export function MapScreen() {
         ? {
             // The frames themselves mount as MapView children
             // (WeatherDrapeLayers) — a frame URL in this object would reload
-            // the entire native style twice per playback tick.
+            // the entire native style twice per playback tick. The drape's
+            // opacity travels with them, at that call site.
             //
             // Windy-style muted background under weather: desaturated raster +
             // a neutral dim screen (theme-matched), city labels staying legible
@@ -1424,9 +1434,11 @@ export function MapScreen() {
             <WeatherDrapeLayers
               fade={weatherFade}
               frames={weatherDrape.frames}
-              // M3: the wind speed gradient reads a touch stronger under the
-              // particle streaks (design §3); other layers keep the default.
-              opacity={weatherLayer === 'wind' ? 0.75 : 0.62}
+              // Wind runs LIGHTER than every other weather layer, and
+              // deliberately so: it is the only layer that also draws its own
+              // ink on top. The value and the ladder of everything tried before
+              // it live with the constant in @core/weather/windLook.
+              opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : 0.62}
             />
           )}
           {marineActive && (

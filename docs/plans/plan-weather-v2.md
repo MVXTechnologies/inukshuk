@@ -164,6 +164,11 @@ mode" — the drape alone is already today's wind UX, so degradation never looks
 Measured via GLView frame timestamps logged behind a dev flag; failing a gate drops particle
 count by 25% steps to 1,000 before questioning the approach.
 
+The 2,000 above is the GATE — what the device must sustain — not the count we draw. The overlay
+seeds `DEFAULT_PARTICLES` (`windPerf.ts`), deliberately below the gate, because density is a
+visual decision and the gate is an acceptance criterion. Retuning the look moves
+`DEFAULT_PARTICLES`; this table only moves if the perf contract itself changes.
+
 ## 3. Color gradient underlay (M3) — decision: GeoMet WMS drape (existing mechanism)
 
 Reuse the shipped raster-drape path (`mapStyle.ts options.weather`) with the wind **speed**
@@ -171,10 +176,79 @@ layer (`HRDPS.CONTINENTAL_WSPD` etc.) instead of the barb composite `_UU` curren
 catalog. The WMS default style for WSPD is a continuous speed ramp; MapLibre's raster
 bilinear magnification smooths the 2.5 km cells into a Windy-like gradient at trail zooms.
 Client-rendering the gradient from the U/V grid would give pixel-identical-to-Windy colours but
-duplicates what the drape already does for zero code — not worth it at M3 scope. Keep
-`raster-opacity` ≈ 0.75 under the particles. If the default WMS style looks too classed/stepped
+duplicates what the drape already does for zero code — not worth it at M3 scope. The drape runs
+at `raster-opacity` **0.30**, deliberately BELOW the 0.62 default every other weather layer
+uses: wind is the only layer that also draws its own ink on top, so drape + streaks at the
+normal strength read heavier than any other layer at the normal strength. The measured ladder,
+Québec City, both themes: 0.75 (M3's original) buried the coastlines (owner, 2026-08-10); 0.62
+still washed the street grid out at 24 km/h; 0.50 was legible in isolation but the owner's
+verdict across all four capture cases was still "the map is always under a wash". The value
+itself lives in `@core/weather/windLook` (`WIND_DRAPE_OPACITY`) with the full rationale — this
+doc must not restate it as a literal, which is how it drifted to claiming 0.75 while the code
+shipped something else. If the default WMS style looks too classed/stepped
 on device, the WMS `styles=` parameter can select an alternative ramp before we ever consider
 client rendering (owner question Q3).
+
+The drape is only half the legibility story, and on the owner's 2026-08-13 review it turned out
+to be the half that does NOT move the needle: successive rounds of streak alpha/count/trail
+tuning were reported as indistinguishable ("in the screenshots, I see no differences"). The
+live direction is the opposite one — strengthen the BASEMAP under the weather (thicker,
+higher-contrast coast and feature linework) rather than keep weakening the weather. See §3a.
+
+## 3a. Map legibility under weather — decision: strengthen the basemap, not weaken the drape
+
+Owner, 2026-08-13, after eight matched device captures: _"honestly in the screenshots, I see no
+differences. One thing I notice, it is that it should be much easier to differentiate coasts and
+features, have lines thicker and maybe even over the wind."_
+
+That retires a whole line of work. Four rounds of streak alpha / particle count / trail-length
+tuning were, to the person the feature is for, indistinguishable from each other. The knob that
+matters is not how much ink the weather puts down; it is how strongly the map asserts itself
+underneath.
+
+**Shipped:** the wave B `overlayLabels` reference overlay already redrew water outlines and
+place labels above every drape, but at hairline weight (0.6/1.1/1.7 px, ~0.60 alpha) with
+nothing for roads. It is now a CASING + CORE pair per line in opposite polarity, water roughly
+doubled to 1.4/2.4/3.4 px at 0.95 alpha, plus a restrained major-road pass (motorway/trunk/
+primary, from z9). The pair matters more than the width: the drape is a full-spectrum colour
+ramp, so no single ink reads over all of it, and a line that carries its own contrast is the
+only kind that survives an arbitrary background. Constants: `WEATHER_REFERENCE_INK`,
+`WATER_LINE_W`, `ROAD_LINE_W` in `mapStyle.ts`.
+
+### Can coasts draw ABOVE the wind particles? No — and the fix is not worth its price
+
+The particle canvas is **not** a MapLibre layer. `WindParticleOverlay` renders an `expo-gl`
+`GLView` at `StyleSheet.absoluteFill`, mounted in `MapScreen` as a SIBLING after `</Map>`
+(`MapScreen.tsx`, the `windEnabled &&` block). It is composited over the entire MapView by the
+React Native view hierarchy, so **no `beforeId`, and no position in the style's layer list, can
+put anything above it** — including the `mapLayerStack.ts` drape anchors, which order layers
+_within_ the style and therefore all sit below the GLView by construction.
+
+Options, with honest prices:
+
+| #   | Option                                                                   | Effort                                                                                                                                                                             | Verdict                                           |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| a   | Move particles into the MapLibre stack as a native custom layer          | Weeks. `@maplibre/maplibre-react-native` exposes no custom-GL-layer API to JS, so this is a new native module on both platforms, sharing a GL context with MapLibre's own renderer | No. Large, risky, and it buys only layer ordering |
+| b   | A second transparent MapView above the GLView drawing only coasts/labels | Days. Two map instances: double tile/memory/battery, camera sync every frame, touch pass-through                                                                                   | No. Trades the complaint for a perf complaint     |
+| c   | Let the lines read THROUGH the particles instead of above them           | Done — this section                                                                                                                                                                | Yes                                               |
+
+Option (c) is the recommendation and what is implemented. It works because the particle field is
+not an opaque sheet: streaks are thin, sparse, semi-transparent and now length-capped, so a
+2.4-3.4 px cased line beneath them stays continuous to the eye where a hairline did not. The
+owner's test — _can you tell where the coast is at a glance, with weather running_ — does not
+actually require the lines to be on top; it requires them to be legible. If (c) proves
+insufficient on device, the next cheap lever is the particle overlay's existing global opacity
+uniform, not a re-architecture.
+
+### Composing with the `mapLayerStack` anchors (merged separately)
+
+The anchor system (`@core/geo/mapLayerStack`: `drape-marine-chart`, `drape-weather`,
+`drape-soundings`) orders LIVE drapes that mount as MapView children. The reference linework is
+static style JSON emitted by `buildOsmStyle` above every anchor, so the two do not interact and
+the documented bottom→top stack is unchanged apart from the new lines sitting beside
+`overlay-water-line`. One real rebase conflict to expect: this branch still sets the wind
+drape's opacity through the style's `weather` option, whereas main mounts that drape as a child
+— `WIND_DRAPE_OPACITY` has to move to the child's paint at integration time.
 
 ## 4. M2 — models + comparison table
 
