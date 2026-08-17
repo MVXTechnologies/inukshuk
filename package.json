@@ -4,7 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.39.2",
-    "@dr.pogodin/react-native-static-server": "^0.27.0",
+    "@dr.pogodin/react-native-static-server": "^0.28.0",
     "@expo/vector-icons": "^15.0.2",
     "@maplibre/maplibre-react-native": "^11.3.6",
     "buffer": "^6.0.3",
