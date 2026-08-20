@@ -38,6 +38,11 @@
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
   --scrim: rgba(6, 9, 12, 0.6);
   --danger: #f4795f;
+  /* Library cards sit ON a panel, so they need their own step above it. */
+  --card: rgba(255, 255, 255, 0.045);
+  --card-hover: rgba(255, 255, 255, 0.08);
+  --up: #7fc79a;
+  --down: #e79a86;
 }
 
 :root[data-theme='light'] {
@@ -55,6 +60,10 @@
   --shadow: 0 8px 28px rgba(16, 32, 46, 0.16), 0 1px 2px rgba(16, 32, 46, 0.1);
   --scrim: rgba(255, 255, 255, 0.62);
   --danger: #c0442a;
+  --card: rgba(16, 32, 46, 0.035);
+  --card-hover: rgba(16, 32, 46, 0.07);
+  --up: #2f7d4f;
+  --down: #b2532f;
 }
 
 * {
@@ -795,6 +804,900 @@ input {
   margin-bottom: 10px;
 }
 
+/* ------------------------------------------------------------- library --- */
+
+/*
+ * The Library is a floating column over the map, not a page.
+ *
+ * Two widths, and the pair is the point: `phone` is 390px, which is a real
+ * device width, so a trail card here wraps exactly where it wraps on the phone.
+ * `wide` is 720px — what the same list could be if the screen were allowed to
+ * use the room it has. Deciding between them is one of the open questions this
+ * screen exists to answer, so both are one click (and one URL) apart.
+ */
+.library {
+  position: absolute;
+  top: 62px;
+  left: 14px;
+  bottom: 26px;
+  width: 390px;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 6;
+}
+
+.library.wide {
+  width: 720px;
+}
+
+.head-count {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* A compact segmented control that can sit inside a header row. */
+.seg.inline {
+  height: 24px;
+  padding: 2px;
+  background: var(--panel-hover);
+  border-radius: 7px;
+  flex: none;
+}
+
+.seg.inline button {
+  padding: 0 8px;
+  font-size: 10.5px;
+  border-radius: 5px;
+}
+
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.tool:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tool[aria-pressed='true'] {
+  background: var(--panel-active);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.badge {
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+/* ---- section headers (also the drag-and-drop targets) ---- */
+
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 14px 0 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease);
+}
+
+section:first-of-type .sec-head {
+  margin-top: 4px;
+}
+
+/* The drop highlight has to read at a glance while a card is under the
+   cursor, so it is a filled row plus an accent hairline, not a tint. */
+.sec-head.drop {
+  background: var(--panel-active);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.sec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  color: var(--text);
+  text-align: left;
+}
+
+.sec-toggle > svg {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.sec-title {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sec-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding-right: 4px;
+}
+
+/* ---- trail / waypoint card ---- */
+
+.card {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--border);
+  /* The category colour lives on the left edge, as it does on the phone. The
+     transparent default keeps every card the same width whether or not it has
+     a category — a card that grows 4px when categorised would make the list
+     ripple as the filter changes. */
+  border-left: 4px solid transparent;
+  transition:
+    background var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.card:hover {
+  background: var(--card-hover);
+}
+
+.card.dragging {
+  opacity: 0.4;
+}
+
+.card-grip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.card:hover .card-grip {
+  opacity: 0.75;
+}
+
+.card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 4px 9px 2px;
+  text-align: left;
+}
+
+.card-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-faint);
+}
+
+.card-icon-blank {
+  display: block;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+}
+
+.wpt-icon {
+  color: #d9a441;
+}
+
+.card-text {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+
+.card-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-sub {
+  display: flex;
+  gap: 7px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.card-cat {
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
+}
+
+.card-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+/*
+ * The stats row.
+ *
+ * `auto-fit` + a 54px floor is what makes the two panel widths worth
+ * comparing: at 390px the five values wrap to two rows, at 720px they sit on
+ * one and the whole list becomes a table you can read down. Same markup, same
+ * numbers, same formatters — only the room changes.
+ */
+.card-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  gap: 2px 10px;
+  margin-top: 6px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-family: var(--font);
+}
+
+.stat-value {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.stat.up .stat-value {
+  color: var(--up);
+}
+
+.stat.down .stat-value {
+  color: var(--down);
+}
+
+.card .row-action {
+  align-self: flex-start;
+  margin: 8px 6px 0 0;
+}
+
+.empty.small {
+  padding: 12px 14px;
+  font-size: 11.5px;
+}
+
+/* ---- filter sheet ---- */
+
+.sheet {
+  padding: 10px 11px 8px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+  border: 1px solid var(--border);
+}
+
+.sheet .section-label:first-child {
+  margin-top: 0;
+}
+
+.sheet .unit {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  outline: none;
+  font-size: 11.5px;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.field.wide {
+  width: 100%;
+  height: 34px;
+  font-size: 13px;
+}
+
+.field:focus {
+  border-color: var(--accent);
+}
+
+.field::placeholder {
+  color: var(--text-faint);
+}
+
+.dash {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.chip.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip.solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chip.solid.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------ trail ------ */
+
+.focus-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.focus-head .row-action {
+  margin-top: 2px;
+}
+
+.focus-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.focus-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+}
+
+.focus-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.focus-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+/* The stat block. `auto-fit` again, so it is 3 columns in the phone width and
+   5 in the wide one without a second layout to maintain. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 1px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--border);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px 9px;
+  background: var(--panel-solid);
+}
+
+.tile.wide {
+  grid-column: span 2;
+}
+
+.tile-value {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.tile-value.up {
+  color: var(--up);
+}
+
+.tile-value.down {
+  color: var(--down);
+}
+
+/* ---- elevation profile ---- */
+
+.profile {
+  margin-bottom: 6px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.profile-head .stat {
+  flex-direction: row;
+  font-weight: 600;
+}
+
+.profile-head .stat.up {
+  color: var(--up);
+}
+
+.profile-head .stat.down {
+  color: var(--down);
+}
+
+.profile-band {
+  color: var(--text-faint);
+}
+
+.prof-toggle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 12px;
+  border: 1.2px solid transparent;
+  color: var(--text-faint);
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.profile-chart {
+  border-radius: 10px;
+  background: var(--panel-hover);
+  overflow: hidden;
+  color: var(--text-dim);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.profile-chart svg {
+  display: block;
+}
+
+.profile-readout {
+  min-height: 18px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.profile-readout .dim {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+}
+
+/* ---- notes ---- */
+
+.note-row {
+  display: flex;
+  gap: 9px;
+  padding: 7px 2px;
+  border-top: 1px solid var(--border);
+}
+
+.note-num {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.note-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.note-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.note-at {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* ---- trim ---- */
+
+.trim-body {
+  padding: 2px 0 4px;
+}
+
+/*
+ * Two native range inputs stacked on one rail.
+ *
+ * The whole trick is `pointer-events: none` on the inputs and `auto` on their
+ * thumbs: without it the upper input swallows every press, including the ones
+ * meant for the lower thumb, and the start handle becomes undraggable past the
+ * midpoint. Everything else (keyboard stepping, Home/End, screen-reader
+ * announcements) then comes free from the native control.
+ */
+.trim-slider {
+  position: relative;
+  height: 30px;
+  margin: 10px 0 6px;
+}
+
+.trim-rail,
+.trim-kept {
+  position: absolute;
+  top: 13px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.trim-rail {
+  left: 0;
+  right: 0;
+  background: var(--panel-active);
+}
+
+.trim-kept {
+  background: var(--accent);
+}
+
+.trim-range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.trim-range::-webkit-slider-runnable-track {
+  height: 30px;
+  background: none;
+}
+
+.trim-range::-moz-range-track {
+  height: 30px;
+  background: none;
+}
+
+.trim-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--accent-ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.trim-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--accent-ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.trim-readout {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.trim-readout .warn {
+  color: var(--danger);
+}
+
+.trim-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.wide-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background var(--dur) var(--ease);
+}
+
+.wide-action:hover {
+  background: var(--panel-active);
+}
+
+.focus-foot {
+  margin-top: 16px;
+}
+
+/* The playground's own controls, marked as such: a hairline box and a caption,
+   so nothing here is ever mistaken for shipped chrome in a screenshot. */
+.lab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+}
+
+/* The rail placement candidate: a floating action over the map. */
+.fab {
+  position: absolute;
+  right: 14px;
+  bottom: 104px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 23px;
+  color: var(--text);
+  z-index: 7;
+  transition: background var(--dur) var(--ease);
+}
+
+.fab:hover {
+  background: var(--panel-active);
+}
+
+/* ---------------------------------------------------- menus & dialogs ---- */
+
+.menu {
+  position: fixed;
+  z-index: 60;
+  padding: 5px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: left;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.menu-item:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.menu-item.danger:hover {
+  color: var(--danger);
+}
+
+.menu-item.ruled {
+  margin-top: 5px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 7px 7px;
+}
+
+.menu-icon {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-check {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.menu-caption {
+  padding: 9px 9px 4px;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.dialog {
+  max-width: calc(100vw - 28px);
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  transition: background var(--dur) var(--ease);
+}
+
+.pick:hover {
+  background: var(--panel-hover);
+}
+
+.pick-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.pick-label {
+  flex: 1;
+  text-align: left;
+}
+
 /* --------------------------------------------------------------- misc ---- */
 
 .dropzone {
@@ -881,5 +1784,11 @@ input {
 
   .legend {
     display: none;
+  }
+
+  .library,
+  .library.wide {
+    width: auto;
+    right: 14px;
   }
 }

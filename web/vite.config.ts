@@ -17,6 +17,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@core': fileURLToPath(new URL('../src/core', import.meta.url)),
+      // `@lib` reaches ONE file: `src/lib/format.ts`, the app's distance /
+      // elevation / duration / pace / timestamp formatters. They are pure and
+      // dependency-free, but they live outside `src/core`, so the Library's
+      // number formatting is the one piece of shared logic that is not behind
+      // the `@core` boundary. Reused rather than re-typed, because a card that
+      // rounds differently from the app is a card you cannot judge. See the
+      // README's "what leaked" note — this belongs in `@core/format`.
+      '@lib': fileURLToPath(new URL('../src/lib', import.meta.url)),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
     // `src/core/geo/gpx` imports fast-xml-parser. Resolved from the importer it

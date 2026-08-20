@@ -28,6 +28,9 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["../src/core/*"],
+      /* Only `@lib/format` is imported — see the note in vite.config.ts. The
+         rest of `src/lib` is platform code and must never be pulled in here. */
+      "@lib/*": ["../src/lib/*"],
       "@/*": ["./src/*"]
     }
   },
