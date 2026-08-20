@@ -226,9 +226,10 @@ export function TrailFocus({
           value={
             s.minAltitudeM === undefined || s.maxAltitudeM === undefined
               ? '—'
-              : `${formatElevation(s.minAltitudeM)} – ${formatElevation(s.maxAltitudeM)}`
+              : // One unit, on the pair — "264–548 m" fits a single column where
+                // "264 m – 548 m" does not, and loses nothing.
+                `${formatElevation(s.minAltitudeM).replace(/\s\D+$/, '')}–${formatElevation(s.maxAltitudeM)}`
           }
-          wide
         />
         <Tile label="Points" value={s.pointCount.toLocaleString('en-CA')} />
       </div>
@@ -334,19 +335,9 @@ export function TrailFocus({
   );
 }
 
-function Tile({
-  label,
-  value,
-  tone,
-  wide,
-}: {
-  label: string;
-  value: string;
-  tone?: 'up' | 'down';
-  wide?: boolean;
-}) {
+function Tile({ label, value, tone }: { label: string; value: string; tone?: 'up' | 'down' }) {
   return (
-    <div className={`tile${wide === true ? ' wide' : ''}`}>
+    <div className="tile">
       <span className="micro">{label}</span>
       <span className={`tile-value num${tone === undefined ? '' : ` ${tone}`}`}>{value}</span>
     </div>

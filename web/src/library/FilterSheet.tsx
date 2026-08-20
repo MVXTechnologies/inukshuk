@@ -111,17 +111,25 @@ export function FilterSheet({
 }) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
 
-  // Every edit applies immediately: there is no Apply button, because in a
-  // panel that keeps the list on screen the result IS the confirmation.
+  /**
+   * Every edit applies immediately: there is no Apply button, because in a
+   * panel that keeps the list on screen the result IS the confirmation.
+   *
+   * `next` is computed from the current `draft` and the parent is notified
+   * OUTSIDE the state updater. Calling `onChange` inside `setDraft(prev => …)`
+   * looks equivalent and is not: the updater runs during React's render pass,
+   * so the parent's `setFilter` fires mid-render — React logs "Cannot update a
+   * component while rendering a different component" and the update is not
+   * guaranteed to be scheduled. Each edit comes from one click on one control,
+   * so reading `draft` from the closure is safe.
+   */
   const edit = useCallback(
     (patch: Partial<Draft>) => {
-      setDraft((prev) => {
-        const next = { ...prev, ...patch };
-        onChange(toFilter(next));
-        return next;
-      });
+      const next = { ...draft, ...patch };
+      setDraft(next);
+      onChange(toFilter(next));
     },
-    [onChange],
+    [draft, onChange],
   );
 
   const categories = allCategories(customCategories);

@@ -1067,16 +1067,26 @@ section:first-of-type .sec-head {
 /*
  * The stats row.
  *
- * `auto-fit` + a 54px floor is what makes the two panel widths worth
- * comparing: at 390px the five values wrap to two rows, at 720px they sit on
- * one and the whole list becomes a table you can read down. Same markup, same
- * numbers, same formatters — only the room changes.
+ * A fixed 3-up grid, NOT `auto-fit`: auto-fit packed four of the five values
+ * onto the first row at phone width and left D- alone on the second, which
+ * reads as a mistake. Three columns puts distance/time/pace on one line and the
+ * elevation pair on the next, and — because the columns are fixed — the same
+ * value sits at the same x in every card, so the list can be read down a
+ * column instead of across each row.
+ *
+ * The wide panel gets all five on one line. Same markup, same numbers, same
+ * formatters; only the room changes, which is what makes the two widths worth
+ * comparing.
  */
 .card-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
-  gap: 2px 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px 10px;
   margin-top: 6px;
+}
+
+.library.wide .card-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .stat {
@@ -1251,16 +1261,26 @@ section:first-of-type .sec-head {
   font-weight: 600;
 }
 
-/* The stat block. `auto-fit` again, so it is 3 columns in the phone width and
-   5 in the wide one without a second layout to maintain. */
+/*
+ * The stat block: a fixed 3-up grid (5-up in the wide panel).
+ *
+ * The separators are INSET SHADOWS on each tile, not a 1px gap over a
+ * border-coloured container. The gap trick draws a hairline cross wherever a
+ * row is short — an untimed trail has five tiles, so the last row was two
+ * cells and a lit-up hole where the third would be. Shadows only exist where a
+ * tile exists.
+ */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-  gap: 1px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 14px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--border);
+}
+
+.library.wide .tiles {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .tile {
@@ -1268,11 +1288,9 @@ section:first-of-type .sec-head {
   flex-direction: column;
   gap: 3px;
   padding: 8px 10px 9px;
-  background: var(--panel-solid);
-}
-
-.tile.wide {
-  grid-column: span 2;
+  box-shadow:
+    inset -1px 0 0 var(--border),
+    inset 0 -1px 0 var(--border);
 }
 
 .tile-value {

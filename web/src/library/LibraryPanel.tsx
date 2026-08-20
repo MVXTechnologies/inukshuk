@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { allCategories, findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
@@ -119,14 +119,36 @@ export function LibraryPanel({
     [],
   );
 
+  /**
+   * What the drag is carrying, mirrored into a ref.
+   *
+   * `dragging` state drives the visuals (the card's dimming), but the DROP
+   * must not read it: the handler bound to the DOM was created before
+   * `setDragging` re-rendered, so it closes over `null` and the drop silently
+   * does nothing. A real pointer drag is slow enough to hide that — a fast or
+   * synthetic one is not, which is exactly how it was found.
+   */
+  const draggingRef = useRef<Dragging | null>(null);
+
+  const startDrag = useCallback((item: Dragging) => {
+    draggingRef.current = item;
+    setDragging(item);
+  }, []);
+
+  const endDrag = useCallback(() => {
+    draggingRef.current = null;
+    setDragging(null);
+    setHovered(null);
+  }, []);
+
   const drop = useCallback(
     (folderId: string | null) => {
-      if (dragging === null) return;
-      lib.setItemFolder(dragging.kind, dragging.id, folderId);
-      setDragging(null);
-      setHovered(null);
+      const item = draggingRef.current;
+      if (item === null) return;
+      lib.setItemFolder(item.kind, item.id, folderId);
+      endDrag();
     },
-    [dragging, lib],
+    [endDrag, lib],
   );
 
   const hasFolders = index.folders.length > 0;
@@ -157,11 +179,8 @@ export function LibraryPanel({
           run: () => lib.removeTrack(track.id),
         })
       }
-      onDragStart={() => setDragging({ kind: 'track', id: track.id })}
-      onDragEnd={() => {
-        setDragging(null);
-        setHovered(null);
-      }}
+      onDragStart={() => startDrag({ kind: 'track', id: track.id })}
+      onDragEnd={endDrag}
     />
   );
 
@@ -180,11 +199,8 @@ export function LibraryPanel({
           run: () => lib.removeWaypoint(waypoint.id),
         })
       }
-      onDragStart={() => setDragging({ kind: 'waypoint', id: waypoint.id })}
-      onDragEnd={() => {
-        setDragging(null);
-        setHovered(null);
-      }}
+      onDragStart={() => startDrag({ kind: 'waypoint', id: waypoint.id })}
+      onDragEnd={endDrag}
     />
   );
 

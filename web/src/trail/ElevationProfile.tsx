@@ -589,11 +589,16 @@ function AverageLine({
         strokeDasharray="2,4"
         strokeOpacity={0.85}
       />
+      {/* The app puts the pace average in the right margin and the heart-rate
+          average in the left gutter. The right one is free space; the left one
+          is NOT — it is the elevation-label column, and "119 bpm" landed on top
+          of "480 m". So the HR average is drawn just inside the plot, above its
+          own dashed line, where nothing else is. */}
       <text
-        x={side === 'right' ? width - AXIS_RIGHT + 3 : AXIS_LEFT - 3}
-        y={y + 3}
+        x={side === 'right' ? width - AXIS_RIGHT + 3 : AXIS_LEFT + 4}
+        y={side === 'right' ? y + 3 : y - 3}
         fontSize={8}
-        textAnchor={side === 'right' ? 'start' : 'end'}
+        textAnchor="start"
         fill={color}
       >
         {format(avg)}
