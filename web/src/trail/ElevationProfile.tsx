@@ -101,12 +101,28 @@ function gridLevels(min: number, max: number): number[] {
 
 const TICK_STEPS = [100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000];
 
-function distanceTicks(total: number): number[] {
-  const step = TICK_STEPS.find((s) => total / s <= 8) ?? 100_000;
+/** Widest a `formatDistance` label gets at 8px ("12.34 km"), plus breathing room. */
+const TICK_LABEL_PX = 46;
+
+/**
+ * Distance ticks, spaced in PIXELS as well as in metres.
+ *
+ * The app picks the first step with at most 8 intervals and then appends the
+ * total unless it is within 0.4 × step of the last tick. That rule is about
+ * metres, and at phone width it is not enough: an 8.92 km trail got a tick at
+ * 8.00 km (0.92 km away, so the rule kept both) and the two labels overlapped,
+ * because 0.92 km is only 12 px on a 290 px plot. So the step also has to clear
+ * a minimum pixel spacing, and the final total-tick is dropped on the same
+ * pixel test rather than a metric one.
+ */
+function distanceTicks(total: number, plotW: number): number[] {
+  const step =
+    TICK_STEPS.find((s) => total / s <= 8 && (s / (total || 1)) * plotW >= TICK_LABEL_PX) ??
+    TICK_STEPS[TICK_STEPS.length - 1]!;
   const out: number[] = [];
   for (let d = 0; d < total; d += step) out.push(d);
   const last = out[out.length - 1] ?? 0;
-  if (total - last > 0.4 * step) out.push(total);
+  if (((total - last) / (total || 1)) * plotW >= TICK_LABEL_PX) out.push(total);
   return out;
 }
 
@@ -403,7 +419,7 @@ export function ElevationProfile({
             strokeWidth={0.5}
             opacity={0.2}
           />
-          {distanceTicks(totalDistanceM).map((d) => (
+          {distanceTicks(totalDistanceM, plotW).map((d) => (
             <g key={d}>
               <line
                 x1={xFor(d)}

@@ -430,17 +430,22 @@ infinite teardown loop.
 - **Seeding the demo library takes ~10–15 s on first load** (dev build,
   unminified) and blocks nothing but shows a progress line. It runs once and
   persists; clear site data to redo it. In a production build it is ~2 s.
-- **The demo tracks are synthetic and say so.** The geometry follows real
-  corridors and the elevations are hand-read, but the second-by-second pace,
-  the GPS jitter and the heart rate come out of a model, not a watch. They are
-  right for judging a card, a list and a profile; they are not a dataset.
+- **The demo tracks are synthetic and say so.** The ANCHORS are real
+  coordinates on real corridors and their elevations are hand-read, but the
+  curve between two anchors is a spline, not the actual trail — zoom in on a
+  Mont-Sainte-Anne switchback and the line goes through the trees. The
+  second-by-second pace, the GPS jitter and the heart rate come out of a model,
+  not a watch. They are right for judging a card, a list and a profile; they are
+  not a dataset, and they are not navigation.
 - **The trail on the map is the 600-vertex preview, not the real trace.** At
   overview zooms it is sub-pixel-accurate; zoom far enough into a switchback and
   you will see the decimation. The profile and every number always use the full
   point list.
 - **OpenFreeMap tiles are occasionally slow to appear** after a style swap or a
-  large camera jump. It is their CDN, not the layer stack — wait a few seconds
-  before concluding a basemap is broken.
+  large camera jump, and the canvas sometimes needs one wheel tick before it
+  paints the first frame. It is their CDN plus a MapLibre repaint, not the layer
+  stack — if you are unsure, `__map.queryRenderedFeatures({layers:['lib-track-line']})`
+  in the console will tell you whether the data is there.
 
 - **The legend ramps are approximate.** `WEATHER_LAYERS[].swatch` in
   `@core/geo/weatherLayers` is documented as approximating GeoMet's default WMS
