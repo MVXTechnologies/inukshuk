@@ -6,7 +6,7 @@
     "@dr.pogodin/react-native-fs": "^2.40.0",
     "@dr.pogodin/react-native-static-server": "^0.28.0",
     "@expo/vector-icons": "^15.0.2",
-    "@maplibre/maplibre-react-native": "^11.3.6",
+    "@maplibre/maplibre-react-native": "^11.3.7",
     "buffer": "^6.0.3",
     "expo": "~56.0.19",
     "expo-asset": "^56.0.17",
