@@ -3,7 +3,7 @@
   "version": "1.3.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@dr.pogodin/react-native-fs": "^2.40.0",
+    "@dr.pogodin/react-native-fs": "^2.40.1",
     "@dr.pogodin/react-native-static-server": "^0.28.0",
     "@expo/vector-icons": "^15.0.2",
     "@maplibre/maplibre-react-native": "^11.3.7",
