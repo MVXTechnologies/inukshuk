@@ -1,0 +1,50 @@
+Inukshuk turns the maps you already trust into a live, offline navigator.
+
+Import a georeferenced PDF — a park map, a topographic sheet, a ski-hill plan — and Inukshuk draws your GPS position right on top of it. No signal, no data plan, no account. Everything happens on your phone.
+
+BRING YOUR OWN MAPS
+• Import georeferenced PDFs and see yourself on them, page by page.
+• Stack several maps at once and choose which pages are drawn.
+• Everything is rendered on the device — your map never leaves your phone.
+
+A FREE LIBRARY OF OFFICIAL TOPO SHEETS
+Search thousands of free government map sheets — USGS US Topo, Natural Resources Canada CanTopo and Geoscience Australia — and download them straight into a folder. Browse what is around you, by category, or by name.
+
+MAKE YOUR OWN MAP
+No sheet for where you are going? Draw a box on the map and Inukshuk composes a georeferenced PDF of it: contour lines, slope shading, marked trails, a graticule, and your own tracks and waypoints, at the scale and page size you pick.
+
+WORKS WITH NO SIGNAL
+• Download map regions for offline use — choose the area, the basemap (map, satellite or relief) and the level of detail.
+• "Locally downloaded only" mode keeps the app off the network entirely.
+• An OpenStreetMap base layer fills in wherever your imported map ends.
+
+RECORD YOUR TRAILS
+• Start a recording, pick the activity, and watch live distance, time, elevation gain and pace.
+• Recording keeps going with the screen off or the app in the background, and survives a restart.
+• Every outing is saved and can be shared as a standard GPX file.
+• Import GPX from friends, from the web, or straight from "Open with".
+
+READ THE TERRAIN IN 3D
+Open any saved trail in real 3D relief with your chosen basemap draped over the landscape. Add slope-angle shading, contour lines or elevation tint, scrub the camera along the route, trim a track, or export the whole trail as a PDF.
+
+ELEVATION PROFILES, NOTES AND PHOTOS
+Every trail gets an interactive elevation profile you can scrub point by point, coloured by gradient or by pace. Drop notes and photos anywhere along the route — the lookout, the tricky crossing, the last water — and they appear on the map, on the profile and in 3D.
+
+SEE WHERE YOU KEEP GOING
+A heatmap over your own tracks shows the ground you cover most, and repeat outings on the same trail are grouped so you can compare them.
+
+ORGANISE IT ALL
+Folders keep maps, trails and waypoints together by area or by trip; drag items between them and show a whole folder on the map in one tap. A dashboard charts your last week, quarter or year, with a calendar of every outing.
+
+PRIVATE BY DESIGN
+• No account, no sign-up, no ads, no analytics, no advertising identifier, no tracking.
+• Your maps, trails and notes are stored on your device and are never uploaded — sharing is always something you choose to do.
+• Map tiles are fetched from OpenStreetMap and other map providers as you pan, the way any map app works; nothing sent identifies you.
+• Export everything you have as a single zip whenever you want, and delete anything in one tap.
+
+Free and open source under the MIT licence — read the code, file an issue, send a patch.
+
+Metric or imperial, light or dark, three visual styles. Built for hikers, skiers, paddlers, hunters and anyone whose map matters more than their signal.
+
+Source code and issue tracker: https://github.com/MVXTechnologies/inukshuk
+Privacy policy: https://inukshuk.mvxtechnologies.com/privacy/

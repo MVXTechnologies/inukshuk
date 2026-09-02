@@ -1,0 +1,9 @@
+# App Store Connect URL fields (App Information + version page).
+# Paste each value into the named field; none of them may 404 at review time.
+
+Support URL:      https://github.com/MVXTechnologies/inukshuk/issues
+Marketing URL:    https://inukshuk.mvxtechnologies.com/
+Privacy Policy:   https://inukshuk.mvxtechnologies.com/privacy/
+Copyright:        2026 Marc-André Vigneault
+Primary category: Navigation
+Secondary:        Sports
