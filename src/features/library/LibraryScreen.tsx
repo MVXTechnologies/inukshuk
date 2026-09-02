@@ -100,6 +100,7 @@ export function LibraryScreen() {
   const addTrack = useLibraryStore((s) => s.addTrack);
   const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
+  const renameTrack = useLibraryStore((s) => s.renameTrack);
   const folders = useLibraryStore((s) => s.folders);
   const addFolder = useLibraryStore((s) => s.addFolder);
   const renameFolder = useLibraryStore((s) => s.renameFolder);
@@ -128,6 +129,7 @@ export function LibraryScreen() {
   const [importOpen, setImportOpen] = useState(false);
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
+  const [renamingTrack, setRenamingTrack] = useState<{ id: string; name: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
   // Trail multi-select (long-press a trail to enter): ids in selection order,
   // which is the merge order for untimed tracks.
@@ -287,6 +289,13 @@ export function LibraryScreen() {
   const commitRenameFolder = (name: string) => {
     if (renamingFolder && name) renameFolder(renamingFolder.id, name);
     setRenamingFolder(null);
+  };
+
+  // Same guard as folders: NameDialog hands back a trimmed string, and an
+  // empty one means "the user cleared the field" — keep the current name.
+  const commitRenameTrack = (name: string) => {
+    if (renamingTrack && name) renameTrack(renamingTrack.id, name);
+    setRenamingTrack(null);
   };
 
   const onConfirmDelete = () => {
@@ -524,6 +533,14 @@ export function LibraryScreen() {
         />
       }
     >
+      <Menu.Item
+        leadingIcon="pencil-outline"
+        title="Rename"
+        onPress={() => {
+          setCardMenu(null);
+          setRenamingTrack({ id: t.id, name: t.name });
+        }}
+      />
       <Menu.Item
         leadingIcon="map-outline"
         title="View on map"
@@ -1064,6 +1081,16 @@ export function LibraryScreen() {
           initialValue={renamingFolder?.name ?? ''}
           onDismiss={() => setRenamingFolder(null)}
           onSubmit={commitRenameFolder}
+        />
+
+        <NameDialog
+          visible={renamingTrack !== null}
+          title="Rename trail"
+          label="Trail name"
+          confirmLabel="Rename"
+          initialValue={renamingTrack?.name ?? ''}
+          onDismiss={() => setRenamingTrack(null)}
+          onSubmit={commitRenameTrack}
         />
 
         {/* Single confirm flow for every destructive delete (map/trail/bundle/folder). */}

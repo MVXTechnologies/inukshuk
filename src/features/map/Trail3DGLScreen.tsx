@@ -66,6 +66,7 @@ import {
   fetchDrapeTexture,
 } from './terrain3d/sceneSetup';
 import { currentOverlaySettings, useTerrainOverlaySync } from './terrain3d/overlayControls';
+import { NameDialog } from '../library/NameDialog';
 import { TrailViewerRail } from './TrailViewerRail';
 import {
   applyTerrainOverlaySettings,
@@ -126,6 +127,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const track = useLibraryStore((s) => s.tracks.find((t) => t.id === trackId));
   const addTrack = useLibraryStore((s) => s.addTrack);
   const updateTrack = useLibraryStore((s) => s.updateTrack);
+  const renameTrack = useLibraryStore((s) => s.renameTrack);
   const addTrackNote = useLibraryStore((s) => s.addTrackNote);
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
@@ -172,6 +174,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [trimRange, setTrimRange] = useState<TrimRange | null>(null);
   const [trimSaving, setTrimSaving] = useState(false);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  // Rename-this-trail prompt, opened by tapping the summary card's title.
+  const [renaming, setRenaming] = useState(false);
   // Bumped after an overwrite trim to force the GLView to remount and rebuild
   // the terrain from the freshly-trimmed GPX file (onContextCreate re-reads
   // fileUri from disk on every mount).
@@ -896,9 +900,17 @@ export function Trail3DGLScreen({ trackId }: Props) {
             elevation={3}
             onLayout={(e) => setSummaryH(e.nativeEvent.layout.height)}
           >
-            <Text variant="titleSmall" numberOfLines={1}>
-              {track.name}
-            </Text>
+            {/* The title doubles as the rename affordance — the Library's ⋮ →
+                Rename, reachable without going back to the list. */}
+            <Pressable
+              onPress={() => setRenaming(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Rename trail ${track.name}`}
+            >
+              <Text variant="titleSmall" numberOfLines={1}>
+                {track.name}
+              </Text>
+            </Pressable>
             <View style={styles.summaryRow}>
               <Text variant="labelMedium">{formatDistance(s.distanceM)}</Text>
               <Text variant="labelMedium">↑ {formatElevation(s.ascentM)}</Text>
@@ -1068,6 +1080,19 @@ export function Trail3DGLScreen({ trackId }: Props) {
       </ScrollView>
 
       <Portal>
+        <NameDialog
+          visible={renaming}
+          title="Rename trail"
+          label="Trail name"
+          confirmLabel="Rename"
+          initialValue={track.name}
+          onDismiss={() => setRenaming(false)}
+          onSubmit={(name) => {
+            setRenaming(false);
+            if (name) renameTrack(track.id, name);
+          }}
+        />
+
         <Dialog visible={confirmOverwrite} onDismiss={() => setConfirmOverwrite(false)}>
           <Dialog.Title>Overwrite trail</Dialog.Title>
           <Dialog.Content>
