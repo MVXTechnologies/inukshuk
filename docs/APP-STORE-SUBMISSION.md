@@ -27,13 +27,28 @@ Ready-made copy lives in [`store/appstore/`](../store/appstore); screenshots in
 | Strava                 | same command — are `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` set?                                   | if set, the app can upload a GPX track to Strava, which changes §4    |
 | Map catalogue          | open <https://inukshuk.mvxtechnologies.com/catalog/v2/index.json>                                     | the Search tab is empty (and looks broken to a reviewer) if this 404s |
 
-**Known gap — fix before submitting:** `docs/privacy/index.html` is out of date
-relative to the code. It does not mention (a) the Strava upload, (b) the map
-store and the USGS / NRCan / Geoscience Australia download hosts, (c) that
-naming a saved recording reverse-geocodes its first point through the platform
-(Apple) geocoder, or (d) the Waymarked Trails and OpenFreeMap tile hosts. The
-App Privacy answers below must not contradict the published policy, so update
-the policy page first, or soften §4's location answer as noted there.
+**Pre-flight was run on 2026-09-02 — results, so you do not have to repeat it:**
+
+| Check                | Result                                                                        |
+| -------------------- | ----------------------------------------------------------------------------- |
+| Privacy policy live  | **200** — and now carries the corrected disclosures (see below)               |
+| Support URL live     | **200**                                                                       |
+| Map catalogue live   | **200** — 325 shards, 79,391 items                                            |
+| `ERROR_REPORT_TOKEN` | **SET** → answer the **Diagnostics** questions in §4 as written               |
+| `STRAVA_CLIENT_*`    | **NOT SET** → Strava is inert in this build. **Do NOT tick Health & Fitness** |
+
+**The privacy-policy gap is CLOSED.** `docs/privacy/index.html` was rewritten on
+2026-09-02 and is live. It had claimed location "is not sent to us or to any
+server" and that recorded files "are not uploaded anywhere" — both false in
+narrow cases, and exactly the contradiction that fails review 5.1.1. It now
+discloses: the saved-recording auto-name sending the track's FIRST RECORDED
+POINT to the platform geocoder, the Nominatim→platform-geocoder fallback for
+region naming, Waymarked Trails and OpenFreeMap, the map store plus the USGS /
+NRCan / Geoscience Australia download hosts, and the Strava upload path.
+
+Because `STRAVA_CLIENT_*` are unset, the shipped binary cannot reach Strava even
+though the policy describes it. Describing a capability you do not exercise is
+safe; the reverse is not.
 
 ---
 
