@@ -1,3 +1,11 @@
+# ============================================================================
+# PARKED — cannot pass on the shipping build; see WEATHER_ENABLED in
+# src/core/features/flags.ts. The Weather row in the Overlays menu is disabled
+# ("Coming soon") this release, so the sub-menu this flow drills into never
+# opens. Kept so that flipping the flag back to true restores the feature and
+# its coverage together. Not in the Android CI flow list
+# (.github/scripts/e2e-attempts.sh), so CI is unaffected.
+# ============================================================================
 # Weather UX v2 (M2) e2e: forecast models. Open a forecast layer, open the
 # model sheet from the scrubber chevron, switch HRDPS → RDPS (the drape/
 # timeline rebuild in place must not kill the map), open the model-comparison

@@ -1,3 +1,4 @@
+import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
@@ -7,6 +8,7 @@ import {
   marinePackOffer,
   snoozedPackRegions,
 } from '@core/geo/marinePacks';
+import type { MarineLayerId } from '@core/geo/marineLayers';
 import { offlinePackMaxZoom } from '@core/geo/tiles';
 import { unionBoundingBoxes } from '@core/geo/geomath';
 import { weatherLayerById } from '@core/geo/weatherLayers';
@@ -112,6 +114,14 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 // new fixes, whichever comes first.
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
+
+/**
+ * The empty marine-layer set used while marine is parked (see
+ * `@core/features/flags`). Module-level so it keeps ONE identity — the style
+ * memo below lists `marineLayers` in its dependency array, and a fresh `[]`
+ * per render would rebuild the whole MapLibre style on every render.
+ */
+const NO_MARINE_LAYERS: readonly MarineLayerId[] = [];
 
 /** MapLibre ViewState bounds ([w,s,e,n]) → the wind layer's bbox shape. */
 function windBoundsOf(vs: ViewState): WindBbox {
@@ -278,7 +288,15 @@ export function MapScreen() {
   // trails: while offline-only is on the layer is dropped from the style
   // entirely and the timeline hook is parked, so the map stays byte-identical
   // to a weatherless one.
-  const weatherLayer = useSettingsStore((s) => s.weatherLayer);
+  //
+  // PARKED (2026-09, see `@core/features/flags`): while WEATHER_ENABLED is
+  // false the persisted choice is READ BUT NOT USED — every weather surface
+  // and every weather fetch below is derived from `weatherLayer`, so forcing
+  // it to null here parks the whole feature at one point. The stored value is
+  // deliberately left untouched: flip the flag and the user's layer comes
+  // back exactly as they left it.
+  const persistedWeatherLayer = useSettingsStore((s) => s.weatherLayer);
+  const weatherLayer = WEATHER_ENABLED ? persistedWeatherLayer : null;
   // M2: which ECCC model the forecast drapes resolve against (persisted;
   // radar ignores it). The model sheet floats above the scrubber, toggled by
   // its chevron — plain dock state, never a Portal.
@@ -336,7 +354,15 @@ export function MapScreen() {
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
   // network-only treatment as the marked trails. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
-  const marineLayers = useSettingsStore((s) => s.marineLayers);
+  //
+  // PARKED (2026-09, see `@core/features/flags`): same treatment as weather —
+  // the persisted array is read but swapped for a stable empty one while
+  // MARINE_ENABLED is false, which switches off the chart drape, the
+  // soundings, the depth legend, the disclaimer chip, the pack banner and
+  // every marine fetch in one place. NO_MARINE_LAYERS is module-level so the
+  // style memo's dependency identity stays stable across renders.
+  const persistedMarineLayers = useSettingsStore((s) => s.marineLayers);
+  const marineLayers = MARINE_ENABLED ? persistedMarineLayers : NO_MARINE_LAYERS;
   // Offline marine packs (wave D §D4): a downloaded reach renders and answers
   // tap-for-depth with the radio off, so chart mode survives offline-only
   // mode as soon as ANY pack exists — the one place `offlineOnly` doesn't
@@ -1206,11 +1232,18 @@ export function MapScreen() {
   const marinePackSnoozes = useSettingsStore((s) => s.marinePackSnoozes);
   const marinePackAutoUpdate = useSettingsStore((s) => s.marinePackAutoUpdate);
   const setSetting = useSettingsStore((s) => s.set);
+  //
+  // PARKED (see `@core/features/flags`): this pair is the ONE marine code
+  // path that does not hang off `marineActive` — it hydrates and re-downloads
+  // packs on every cold start and every foreground, whether or not chart mode
+  // is on. So it needs its own flag guard, or a parked feature would still
+  // put pack downloads on the wire.
   useEffect(() => {
+    if (!MARINE_ENABLED) return;
     void useMarinePackStore.getState().hydrate();
   }, []);
   useEffect(() => {
-    if (!marinePackAutoUpdate || offlineOnly) return;
+    if (!MARINE_ENABLED || !marinePackAutoUpdate || offlineOnly) return;
     const sweep = (): void => {
       // hydrate() may still be in flight on a cold start; chaining off it
       // means the first sweep sees the real inventory instead of an empty one.

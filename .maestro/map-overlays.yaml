@@ -22,6 +22,12 @@
 #   it auto-dismisses and nothing below asserts during that window.
 # - A far-left tap lands on the sheet's dismiss backdrop and only closes the
 #   menu (see trail-view.yaml).
+# - Weather and Marine are PARKED behind WEATHER_ENABLED / MARINE_ENABLED in
+#   src/core/features/flags.ts. Their rows stay visible but disabled with a
+#   "Coming soon" subtitle, and this flow asserts exactly that — the parked
+#   state is shipped behaviour, so it gets coverage like any other. When a
+#   flag flips back to true, delete the parked-row block below (marked) and
+#   re-enable .maestro/weather.yaml / .maestro/marine.yaml.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -54,6 +60,20 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Topology.*'
           timeout: 10000
+# --- Parked features (src/core/features/flags.ts): Weather and Marine stay
+# in the list, greyed, with a "Coming soon" subtitle. Assert the a11y LABELS,
+# not the visible subtitle text: GroupRow sets `accessible`, which merges the
+# row into one element whose label is authoritative on both platforms (the
+# same reason 'Topology' is matched as a label above). The trailing .* covers
+# iOS merging extra state into the accessible string.
+- assertVisible: 'Weather.*coming soon.*'
+- assertVisible: 'Marine.*coming soon.*'
+# Disabled means disabled: tapping the parked Weather row must NOT drill into
+# the weather sub-menu. Staying at the top level (Topology row still there,
+# no sub-menu back button) is the proof.
+- tapOn: 'Weather.*coming soon.*'
+- assertVisible: 'Topology.*'
+- assertNotVisible: 'Back to overlays'
 - tapOn: 'Topology.*'
 - extendedWaitUntil:
     visible: 'Slope'

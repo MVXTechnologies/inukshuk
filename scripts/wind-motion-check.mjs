@@ -45,6 +45,32 @@ const flag = (name, fallback = null) => {
 };
 const has = (name) => argv.includes(`--${name}`);
 
+// --- Parked-feature guard ----------------------------------------------
+// Weather (and with it the wind particles) is parked behind WEATHER_ENABLED
+// in src/core/features/flags.ts. With the flag off the Wind layer cannot be
+// selected at all, so the setup flow strands the app on a plain map and the
+// pixel diff reads ~0 — a RED gate on a feature that is deliberately absent,
+// which is noise, not signal.
+//
+// The honest handling is to refuse to run and say why, rather than to keep
+// gating (always red) or to loosen the thresholds (always green on nothing).
+// The flag is read from the TS source rather than duplicated here, so the
+// gate comes back by itself the moment the constant flips — no second switch
+// to remember. `npm run wind:motion` is not wired into any GitHub workflow
+// (checked: ci.yml, nightly.yml, e2e.yml), so nothing in CI turns red or
+// silently green either way; this only affects local/manual runs.
+const flagsSrc = readFileSync(new URL('../src/core/features/flags.ts', import.meta.url), 'utf8');
+if (/export const WEATHER_ENABLED: boolean = false;/.test(flagsSrc)) {
+  console.log('=== wind:motion SKIPPED — the weather feature is PARKED ===');
+  console.log('WEATHER_ENABLED is false in src/core/features/flags.ts, so the app has no');
+  console.log('Wind layer to measure: the Weather row in the Overlays menu ships disabled');
+  console.log('("Coming soon") and .maestro/wind-motion.yaml cannot reach the overlay.');
+  console.log('');
+  console.log('This gate is NOT passing — it did not run. To restore it, set');
+  console.log('WEATHER_ENABLED = true, rebuild the app, and run this command again.');
+  process.exit(0);
+}
+
 const APP = flag('app');
 const FLOW = flag('flow', '.maestro/wind-motion.yaml');
 const SETTLE_MS = Number(flag('settle', 15000));

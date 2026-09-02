@@ -1,5 +1,6 @@
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
+import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -457,8 +458,10 @@ export function OverlaysDrilldown({
 
   // Marine chart mode is all-or-nothing (D-6 amendment): depth bands and
   // seamarks drape together as one iBoating-style mode. The store keeps the
-  // marineLayers array shape — on = every catalog layer, off = none.
-  const marineOn = marineLayers.length > 0;
+  // marineLayers array shape — on = every catalog layer, off = none. While
+  // parked the persisted array is left ALONE but reads as off, so the row
+  // never shows a checkbox for a mode the map is not drawing.
+  const marineOn = MARINE_ENABLED && marineLayers.length > 0;
 
   return (
     <View>
@@ -470,7 +473,15 @@ export function OverlaysDrilldown({
         accessibilityLabel="Topology"
         onPress={() => setGroup('topology')}
       />
-      {/* Weather and marine are network-only: while "Locally downloaded
+      {/* Weather and Marine are PARKED for this release (see
+          `@core/features/flags`): the rows stay in the list, greyed, with a
+          "Coming soon" subtitle. Deliberately not removed — a feature that
+          silently disappears reads as a bug, and the row is the one place the
+          user is told this is a roadmap item rather than a failure. Parking
+          outranks the offline-only hint below: it is the permanent condition
+          this release, so it must not be masked by a transient one.
+
+          Otherwise these are network-only layers: while "Locally downloaded
           only" is on (Settings → Data settings) the layers are dropped from
           the style, so the rows are disabled with a hint instead of
           pretending a pick would show anything. */}
@@ -478,28 +489,49 @@ export function OverlaysDrilldown({
         icon="weather-partly-cloudy"
         name="Weather"
         subtitle={
-          offlineOnly
-            ? 'Needs connection'
-            : weatherLayer !== null
-              ? weatherLayerById(weatherLayer).label
-              : 'off'
+          !WEATHER_ENABLED
+            ? PARKED_LABEL
+            : offlineOnly
+              ? 'Needs connection'
+              : weatherLayer !== null
+                ? weatherLayerById(weatherLayer).label
+                : 'off'
         }
         accessibilityLabel={
-          offlineOnly
-            ? 'Weather (needs connection)'
-            : weatherLayer !== null
-              ? `Weather: ${weatherLayerById(weatherLayer).label}`
-              : 'Weather'
+          !WEATHER_ENABLED
+            ? `Weather (${PARKED_LABEL.toLowerCase()})`
+            : offlineOnly
+              ? 'Weather (needs connection)'
+              : weatherLayer !== null
+                ? `Weather: ${weatherLayerById(weatherLayer).label}`
+                : 'Weather'
         }
-        disabled={offlineOnly}
+        disabled={!WEATHER_ENABLED || offlineOnly}
         onPress={() => setGroup('weather')}
       />
       <GroupRow
         icon="anchor"
         name="Marine"
-        subtitle={offlineOnly ? 'Needs connection' : marineOn ? 'on' : 'off'}
-        accessibilityLabel={offlineOnly ? 'Marine (needs connection)' : 'Marine'}
-        disabled={offlineOnly}
+        subtitle={
+          !MARINE_ENABLED
+            ? PARKED_LABEL
+            : offlineOnly
+              ? 'Needs connection'
+              : marineOn
+                ? 'on'
+                : 'off'
+        }
+        accessibilityLabel={
+          !MARINE_ENABLED
+            ? `Marine (${PARKED_LABEL.toLowerCase()})`
+            : offlineOnly
+              ? 'Marine (needs connection)'
+              : 'Marine'
+        }
+        disabled={!MARINE_ENABLED || offlineOnly}
+        // No checkbox while parked — a drill-down chevron would be just as
+        // wrong, so the row keeps its toggle affordance in a plainly off,
+        // plainly dimmed state.
         checked={marineOn}
         onPress={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
       />

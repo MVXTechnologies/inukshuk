@@ -1,3 +1,11 @@
+# ============================================================================
+# PARKED — cannot pass on the shipping build; see WEATHER_ENABLED in
+# src/core/features/flags.ts. The Weather row in the Overlays menu is disabled
+# ("Coming soon") this release, so the Wind layer cannot be turned on and the
+# GL overlay never mounts. Kept so that flipping the flag back to true
+# restores the feature and its coverage together. Not in the Android CI flow
+# list (.github/scripts/e2e-attempts.sh), so CI is unaffected.
+# ============================================================================
 # Weather UX v2 (M3) e2e: the wind particle overlay's crash gate. Turn the
 # Wind layer on (which mounts the transparent GLView over the map), pan and
 # zoom-ish gesture the map (region events + gesture fade + settle re-seed +
