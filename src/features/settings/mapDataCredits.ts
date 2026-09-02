@@ -1,3 +1,4 @@
+import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { MARINE_DISCLAIMER, OPENSEAMAP_ATTRIBUTION } from '@core/geo/marineLayers';
 import { MARINE_SOURCES, NOAA_ENC_ATTRIBUTION } from '@core/geo/marineSources';
 import { ECCC_ATTRIBUTION } from '@core/geo/weatherLayers';
@@ -21,17 +22,37 @@ function withoutDisclaimer(line: string): string {
   return line.replace(new RegExp(`\\s*${MARINE_DISCLAIMER}\\.?$`, 'i'), '');
 }
 
+/**
+ * Credits follow the FEATURES, not the codebase (see `@core/features/flags`).
+ * Attribution is owed for data the app actually fetches and shows; a parked
+ * feature fetches nothing, so crediting ECCC or CHS while weather and marine
+ * are greyed out would list sources this build never contacts — and would
+ * leave the reader hunting a map layer that isn't there. The lines come back
+ * with the features, from the same attribution constants as before, so no
+ * source can ship uncredited once it is live again.
+ */
 const PARTS: readonly string[] = [
   '© OpenStreetMap contributors',
   'Esri/ArcGIS basemaps',
   'AWS Terrain Tiles',
   'MapLibre',
-  `Weather: ${ECCC_ATTRIBUTION}`,
-  'Weather-mode labels: OpenFreeMap (© OpenMapTiles)',
-  ...MARINE_SOURCES.map((s) => withoutDisclaimer(s.attribution)),
-  withoutDisclaimer(NOAA_ENC_ATTRIBUTION),
-  OPENSEAMAP_ATTRIBUTION,
-  `Tides: ${CHS_TIDES_ATTRIBUTION}`,
+  ...(WEATHER_ENABLED
+    ? [`Weather: ${ECCC_ATTRIBUTION}`, 'Weather-mode labels: OpenFreeMap (© OpenMapTiles)']
+    : []),
+  ...(MARINE_ENABLED
+    ? [
+        ...MARINE_SOURCES.map((s) => withoutDisclaimer(s.attribution)),
+        withoutDisclaimer(NOAA_ENC_ATTRIBUTION),
+        OPENSEAMAP_ATTRIBUTION,
+      ]
+    : []),
+  // Tides ride the forecast card, which is gated on weather OR marine.
+  ...(WEATHER_ENABLED || MARINE_ENABLED ? [`Tides: ${CHS_TIDES_ATTRIBUTION}`] : []),
 ];
 
-export const MAP_DATA_CREDITS = `${PARTS.join(' · ')} · All depth data is for reference only — ${MARINE_DISCLAIMER.toLowerCase()}.`;
+/** The closing non-navigational notice only applies when depth data ships. */
+const DEPTH_NOTICE = MARINE_ENABLED
+  ? ` · All depth data is for reference only — ${MARINE_DISCLAIMER.toLowerCase()}.`
+  : '';
+
+export const MAP_DATA_CREDITS = `${PARTS.join(' · ')}${DEPTH_NOTICE}`;

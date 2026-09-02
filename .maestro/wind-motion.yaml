@@ -1,3 +1,13 @@
+# ============================================================================
+# PARKED — cannot pass on the shipping build; see WEATHER_ENABLED in
+# src/core/features/flags.ts. The Weather row in the Overlays menu is disabled
+# ("Coming soon") this release, so there is no live Wind layer to drive to.
+# Its driver, `npm run wind:motion` (scripts/wind-motion-check.mjs), reads the
+# same flag and refuses to run rather than pretending to gate a dead feature.
+# Kept so that flipping the flag back to true restores the feature, this flow
+# and the pixel gate together. Not in the Android CI flow list
+# (.github/scripts/e2e-attempts.sh), so CI is unaffected.
+# ============================================================================
 # Drives the app to a live Wind layer and stops — the setup half of the
 # wind-particle MOTION gate (scripts/wind-motion-check.mjs takes it from here
 # with two screen captures and a pixel diff).

@@ -1,6 +1,7 @@
+import { WEATHER_ENABLED } from '@core/features/flags';
 import { sanitizeWeatherLayer } from '@core/geo/weatherLayers';
 import { WeatherCompareScreen } from '@features/map/weather/WeatherCompareScreen';
-import { useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 
 /** Québec City — the harmless last-resort point for junk deep-link params. */
@@ -17,5 +18,11 @@ export default function WeatherCompareRoute() {
       ? { latitude, longitude }
       : FALLBACK;
   }, [lat, lng]);
+  // PARKED (see `@core/features/flags`): nothing in the app links here while
+  // weather is parked, but the route still exists and a stale deep link (or a
+  // notification from an older build) could land on it. Bounce to the map
+  // rather than mount a screen that would immediately start fetching ECCC
+  // model data for a feature the user cannot see.
+  if (!WEATHER_ENABLED) return <Redirect href="/" />;
   return <WeatherCompareScreen at={at} layer={sanitizeWeatherLayer(layer)} />;
 }

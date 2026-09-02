@@ -39,6 +39,14 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   addTracks: (items: readonly ImportedTrack[]) => void;
   /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
   updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id' | 'fileUri'>>) => void;
+  /**
+   * Rename a saved trail (the user-facing title of an activity). A blank or
+   * whitespace-only name is rejected — the trail keeps its current one, the
+   * same guard `renameFolder` applies. Duplicate names are allowed: trails are
+   * addressed by id everywhere, and the data export dedupes colliding file
+   * names on its own.
+   */
+  renameTrack: (id: string, name: string) => void;
   removeTrack: (id: string) => void;
   // Trail overlays — which saved trails are drawn on the main map. Persisted
   // (like maps' activePages) so the selection survives an app restart.
@@ -253,6 +261,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateTrack: (id, patch) =>
     set((s) => {
       const next = { ...s, tracks: s.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
+      persist(next);
+      return next;
+    }),
+
+  renameTrack: (id, name) =>
+    set((s) => {
+      const next = {
+        ...s,
+        tracks: s.tracks.map((t) => (t.id === id ? { ...t, name: name.trim() || t.name } : t)),
+      };
       persist(next);
       return next;
     }),

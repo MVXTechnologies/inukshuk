@@ -1,4 +1,5 @@
 import { planDataArchive } from '@core/export/archivePlan';
+import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { setOfflineOnly } from '@data/offline';
 import * as storage from '@data/storage';
@@ -322,13 +323,22 @@ export function SettingsScreen() {
                     />
                   )}
                 />
-                <List.Item
-                  title="Animated wind streaks"
-                  description="Windy-style flow animation on the Wind weather layer"
-                  right={() => (
-                    <Switch value={windParticles} onValueChange={(v) => set('windParticles', v)} />
-                  )}
-                />
+                {/* PARKED with the weather feature (see
+                    `@core/features/flags`): a kill switch for an overlay the
+                    user can no longer turn on is pure confusion. The setting
+                    itself is untouched, so its value survives the parking. */}
+                {WEATHER_ENABLED && (
+                  <List.Item
+                    title="Animated wind streaks"
+                    description="Windy-style flow animation on the Wind weather layer"
+                    right={() => (
+                      <Switch
+                        value={windParticles}
+                        onValueChange={(v) => set('windParticles', v)}
+                      />
+                    )}
+                  />
+                )}
                 <List.Item
                   title="Base map tiles"
                   description={tileUrl === DEFAULT_TILE_URL ? 'OpenStreetMap (default)' : tileUrl}
@@ -364,7 +374,19 @@ export function SettingsScreen() {
                   flag plus the native tile/download gate flip together. */}
               <List.Item
                 title="Locally downloaded only"
-                description="Use only content stored on this device — online base map, weather and marine layers wait until this is off"
+                // The description names the online layers it gates, so it has
+                // to drop the parked ones — promising the switch holds back
+                // "weather and marine layers" that no longer exist would be a
+                // dangling reference (see `@core/features/flags`).
+                description={`Use only content stored on this device — online base map${
+                  WEATHER_ENABLED && MARINE_ENABLED
+                    ? ', weather and marine layers'
+                    : WEATHER_ENABLED
+                      ? ' and weather layers'
+                      : MARINE_ENABLED
+                        ? ' and marine layers'
+                        : ''
+                } wait until this is off`}
                 descriptionNumberOfLines={3}
                 right={() => (
                   <Switch
@@ -384,9 +406,19 @@ export function SettingsScreen() {
 
               <Divider />
 
-              <MarinePacksSection />
+              {/* PARKED with marine chart mode (see `@core/features/flags`):
+                  the section's own empty state tells the user to "Turn on
+                  Marine in Map overlays", which is exactly the dead end the
+                  parking exists to avoid. Its divider goes with it so the
+                  category body has no double rule. Installed packs stay on
+                  disk — un-parking shows them again untouched. */}
+              {MARINE_ENABLED && (
+                <>
+                  <MarinePacksSection />
 
-              <Divider />
+                  <Divider />
+                </>
+              )}
 
               <List.Section>
                 <List.Subheader>Your data</List.Subheader>

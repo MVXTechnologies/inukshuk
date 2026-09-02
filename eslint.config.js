@@ -55,6 +55,13 @@ module.exports = [
     ignores: [
       'dist/*',
       'node_modules/*',
+      // The two above are root-anchored, so they miss NESTED build output and
+      // dependency trees — e.g. a sibling npm project's `web/dist` left in the
+      // working tree lints its minified bundle and buries the real findings
+      // under thousands of warnings. Never lint generated or vendored code,
+      // at any depth.
+      '**/dist/**',
+      '**/node_modules/**',
       '.expo/*',
       'assets/pdfjs/*',
       'coverage/*',

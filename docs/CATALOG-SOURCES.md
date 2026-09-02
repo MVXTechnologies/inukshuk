@@ -1,6 +1,6 @@
 # World catalog — sources and licence verdicts
 
-Verified live on **2026-08-10**. The test every source must pass:
+Verified live on **2026-08-10**; CanTopo re-crawled **2026-09-02**. The test every source must pass:
 
 > We never rehost. The manifest points at the publisher's own download URL and
 > the phone fetches from them directly. So: does the licence permit a
@@ -14,13 +14,13 @@ turns out to be the binding constraint on marine charts (§2).
 
 ## 1. Shipping now
 
-| Source                                | Category | Items  | Format                 | Licence                | Evidence                       |
-| ------------------------------------- | -------- | ------ | ---------------------- | ---------------------- | ------------------------------ |
-| **USGS US Topo**                      | topo     | 65,240 | GeoPDF, 11–51 MB       | Public domain (US Gov) | see §1.1                       |
-| **NRCan CanTopo 50k**                 | topo     | 128    | GeoPDF (zipped), ~5 MB | OGL-Canada-2.0         | pre-existing source, unchanged |
-| **Geoscience Australia AUSTopo 250k** | topo     | 509    | GeoPDF, 3.4–51 MB      | CC BY 4.0              | see §1.2                       |
+| Source                                | Category | Items  | Format                 | Licence                | Evidence |
+| ------------------------------------- | -------- | ------ | ---------------------- | ---------------------- | -------- |
+| **USGS US Topo**                      | topo     | 65,240 | GeoPDF, 11–51 MB       | Public domain (US Gov) | see §1.1 |
+| **NRCan CanTopo 50k**                 | topo     | 2,234  | GeoPDF (zipped), ~5 MB | OGL-Canada-2.0         | see §1.3 |
+| **Geoscience Australia AUSTopo 250k** | topo     | 509    | GeoPDF, 3.4–51 MB      | CC BY 4.0              | see §1.2 |
 
-**65,877 items** total.
+**67,983 items** total.
 
 ### 1.1 USGS US Topo — INCLUDE
 
@@ -83,6 +83,42 @@ Licence"`.
   into the overlay, import and Library paths. US Topo ships the same
   three-viewport layout and only happens to list the map first — so this was
   latent for the US source too.
+
+### 1.3 NRCan CanTopo 1:50 000 — INCLUDE (whole country, 2026-09-02)
+
+- **Licence.** Open Government Licence – Canada 2.0. We link NRCan's own files
+  under `ftp.maps.canada.ca`; we never rehost.
+- **Enumeration — this is where the source was broken.** The crawler walks the
+  published directory index at
+  `https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/`:
+  **64 primary NTS quadrangles, 294 letter directories, 2,234 sheet zips.** It
+  used to carry a hardcoded eight-quad list (`021 022 023 024 031 032 033 034`,
+  two of which do not exist upstream) and therefore shipped **128** sheets —
+  Maritimes and eastern Ontario only. Quadrangles are now discovered, never
+  listed; the CLI still takes `[quad...]` for a targeted re-run.
+- **Extents.** `ntsSheetBbox` models only the regular NTS zone and returns null
+  from 60°N up, and **1,829 of the 2,234 sheets (82%) reach 60°N or beyond** —
+  under the old approach they would have had no bbox and fallen into the
+  catalog's `nogeo` shard, invisible to "Around you" and to nearest-shard
+  ranking. Extents now come from NRCan's own sheet index,
+  `.../vector/index/nts_snrc.kmz` (19,017 1:50k placemarks, every one with a
+  polygon; parsed by `@core/catalog/ntsIndex`). All 2,234 sheets are placed, and
+  the shapes match the real grid: every sheet is 0.25° tall, and widths step
+  0.5° → 1° → 2° as latitude rises, up to **83°N** on Ellesmere Island.
+- **Toponyms.** The same index supplies sheet names, but **1,070 of the 2,234
+  sheets have an empty `NOM`** upstream (mostly unnamed northern sheets). Those
+  keep a bare `CanTopo 012L02` title rather than a guess.
+- **HEAD budget.** 2,234 zips, HEADed at concurrency 4 with retry/backoff;
+  results cached under `scripts/catalog/.cache/` (gitignored, 30-day TTL) so a
+  re-run resumes instead of re-asking. Last full crawl: 0 failures.
+- **Known gap — Québec City is not in this series.** `021L14` (QUÉBEC) has **no
+  GeoPDF**: quadrangle `021/` upstream contains only `a g h i j p`. The sheet
+  exists only in the older **CanMatrix** series as
+  `canmatrix_021l14_tif.zip` — a GeoTIFF, which needs the unbuilt M3 GeoTIFF
+  pipeline (see §2's "What would unlock marine" — same missing capability).
+  CanTopo's coverage of southern Québec is genuinely thin: 032 has one sheet,
+  033 seventeen, while 026 (Baffin) has 225. The nearest CanTopo sheet to
+  Québec City is 021G14 Canterbury, **318 km** away in New Brunswick.
 
 ## 2. Marine charts — nothing shippable, and the reason is format
 

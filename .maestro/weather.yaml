@@ -1,3 +1,18 @@
+# ============================================================================
+# PARKED — this flow CANNOT PASS on the shipping build, and that is correct.
+#
+# Weather is parked behind WEATHER_ENABLED in src/core/features/flags.ts
+# (owner call, 2026-09: park the weather features and grey them out for the
+# next release). The Weather row in the Overlays menu is present but DISABLED
+# with a "Coming soon" subtitle, so every step below that drills into the
+# Weather sub-menu will fail at the first tap.
+#
+# It is kept, not deleted, because flipping WEATHER_ENABLED back to true must
+# restore the feature AND its coverage in one step. Android CI never ran it —
+# .github/scripts/e2e-attempts.sh has an explicit flow list and this file is
+# not on it — so nothing in CI changes. To use it: set WEATHER_ENABLED = true,
+# rebuild, run.
+# ============================================================================
 # Weather UX v2 (M1, reworked in wave A + the D-6 drill-down) e2e: open the
 # Overlays menu, drill into the Weather group's in-place icon picker, confirm
 # the bottom time scrubber appears, scrub forward, flip playback from the

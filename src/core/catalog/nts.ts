@@ -9,10 +9,12 @@
  * sheets (0.5°×0.25°, 1–16); both walk a boustrophedon starting at the
  * southeast corner (east→west, then west→east on the row above, …).
  *
- * Used by the catalog generator to derive each CanTopo sheet's WGS84 bbox from
- * its id alone (the NRCan file tree carries no extents), and unit-tested here
- * so the manifest's bboxes are trustworthy. Sheets north of 60°N (quad rows
- * ≥ 5) are out of model — see the guard in {@link parseNtsSheetId}.
+ * Derives a sheet's WGS84 bbox from its id alone (the NRCan file tree carries
+ * no extents), and unit-tested here so the bboxes are trustworthy. Sheets north
+ * of 60°N (quad rows ≥ 5) are out of model — see the guard in
+ * {@link parseNtsSheetId} — which is why the catalog generator reads extents
+ * from NRCan's published sheet index (`./ntsIndex`) and keeps this formula only
+ * as the fallback for a sheet that index omits.
  */
 
 export interface NtsSheet {
