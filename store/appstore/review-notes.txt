@@ -1,0 +1,40 @@
+Notes for App Review (paste into "Notes" on the Version Information page).
+
+No account is required and there is nothing to sign in to, so no demo account
+is needed. Every feature is reachable from a fresh install.
+
+BACKGROUND LOCATION
+The app declares UIBackgroundModes: location. It is used for one thing only:
+continuing a trail recording the user explicitly started, so the GPS track is
+not cut short when the screen turns off or the user switches apps. Background
+updates start when the user taps "Start recording" and stop when the recording
+is stopped. Location is never used in the background for any other purpose, and
+the app works normally if the user grants "While Using the App" only.
+
+To see it: Map tab -> "+" (Map actions) -> Record track -> pick an activity ->
+Start recording. Live distance/time/elevation appear in the HUD; Stop saves the
+trail into the Library.
+
+OFFLINE USE
+The app is built for places with no signal. With an imported or downloaded map
+it is fully functional in Airplane Mode. Settings -> Data settings ->
+"Locally downloaded only" forces that behaviour.
+
+LOCAL NETWORKING
+NSAppTransportSecurity/NSAllowsLocalNetworking is enabled. During an offline
+map-region download the app runs a short-lived HTTP server bound to 127.0.0.1
+that serves the map style document to the rendering engine. Nothing is exposed
+off the device and the server is torn down when the download finishes.
+
+THIRD-PARTY CONTENT
+Base map tiles come from OpenStreetMap and Esri. Elevation data comes from the
+public AWS Terrain Tiles dataset. The in-app map catalogue links to free
+government topographic sheets (USGS, Natural Resources Canada, Geoscience
+Australia) hosted by those agencies. Attribution is shown in
+Settings -> System info -> "Maps & data".
+
+DIAGNOSTICS
+Crash and error reports are sent automatically in the background (message,
+stack trace, app version, OS version, device model). They contain no location,
+no map or trail content and no identifier. Users can turn this off at
+Settings -> System settings -> Privacy -> Automatic error reporting.

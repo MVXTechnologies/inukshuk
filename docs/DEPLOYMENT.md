@@ -50,6 +50,12 @@ cost of being on the stores, not the user's.
 EAS manages the distribution certificate and provisioning profile for you
 (`eas build` will create them on first run, or run `eas credentials`).
 
+Going from TestFlight to a **public App Store release** needs a pile of App
+Store Connect forms only the account holder can fill in (App Privacy, age
+rating, pricing, screenshots, review notes). That ordered checklist — plus the
+ready-made listing copy in `store/appstore/` and the screenshot sets in
+`store/screenshots/` — is in **`docs/APP-STORE-SUBMISSION.md`**.
+
 ### 2. Android — Play Store
 
 1. Create a **Google Play Developer account** ($25 once).

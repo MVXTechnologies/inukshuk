@@ -1,0 +1,6 @@
+First public release.
+
+Inukshuk is an offline trail navigator: import georeferenced PDF maps, download
+official topo sheets or compose your own, record your outings with waypoints,
+notes and photos, and read the terrain in real 3D — all on your device, with no
+account and no tracking.

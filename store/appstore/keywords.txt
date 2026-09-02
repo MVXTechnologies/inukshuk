@@ -1,0 +1,1 @@
+topo,gpx,geopdf,hiking,backcountry,navigation,compass,elevation,waypoint,track,ski,snowshoe,route
