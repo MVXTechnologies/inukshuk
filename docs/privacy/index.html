@@ -84,14 +84,24 @@
       <li>
         <strong>Location (GPS).</strong> With your permission, the app reads your device location
         while it is open to show where you are on the map and, when you start a recording, to build
-        your trail. Location is processed <strong>on your device only</strong>. It is not sent to us
-        or to any server, and it is not used for advertising or analytics.
+        your trail. <strong>We never receive your location</strong> — Inukshuk has no server of ours
+        that it sends positions to, and your location is never used for advertising or analytics.
+        Your trail itself stays on your device.
+      </li>
+      <li>
+        <strong>The two exceptions, both narrow.</strong> Naming a saved recording sends that
+        outing's <em>first recorded point</em> to your device's own built-in geocoder to look up a
+        place name, and connecting a Strava account lets you upload chosen outings to Strava. Both
+        are described in detail under "Network connections" below. Everything else about your
+        position is handled on your device.
       </li>
       <li>
         <strong>Files you import and create.</strong> PDF maps you import and the GPX tracks you
         record are stored <strong>locally on your device</strong>, inside the app's private storage.
-        They are not uploaded anywhere. You can delete any map or track inside the app at any time,
-        and uninstalling the app removes all of them.
+        We never upload them, and the only way one leaves your device is if you choose to share or
+        export it yourself — or upload an outing to Strava, if you have connected an account. You
+        can delete any map or track inside the app at any time, and uninstalling the app removes all
+        of them.
       </li>
     </ul>
 
@@ -142,7 +152,42 @@
         <a href="https://osmfoundation.org/wiki/Privacy_Policy">Nominatim</a> service for the name
         of the nearest place, so the download can be labelled something memorable ("Sainte-Adèle")
         instead of a set of coordinates. That request sends the centre coordinates of the area you
-        chose to download — not your own position, and only at the moment you start a download.
+        chose to download — not your own position, and only at the moment you start a download. If
+        Nominatim does not answer, the app falls back to your device's own built-in geocoder (Apple
+        on iOS, Google Play services on Android), which receives the same coordinates.
+      </li>
+      <li>
+        <strong>Naming a saved recording.</strong> When a recording is saved, the app asks your
+        device's built-in geocoder (Apple on iOS, Google Play services on Android) for the place
+        name at the recording's <em>first recorded point</em>, so the outing can be titled
+        "Sainte-Adèle — morning" instead of a timestamp. Unlike the map-area case above, these
+        coordinates <em>are</em> a position you actually visited — the place you started. The
+        request goes to your device's operating system, which handles it under
+        <a href="https://www.apple.com/legal/privacy/">Apple's</a> or
+        <a href="https://policies.google.com/privacy">Google's</a> own privacy policy; it is not
+        sent to us. If the geocoder does not answer within five seconds the app gives up and names
+        the outing by time of day instead.
+      </li>
+      <li>
+        <strong>Marked trails and map labels.</strong> Turning on the marked-trail overlay loads
+        route tiles from <a href="https://waymarkedtrails.org/">Waymarked Trails</a>, and place
+        labels and coastlines are drawn from vector tiles and fonts served by
+        <a href="https://openfreemap.org/">OpenFreeMap</a>.
+      </li>
+      <li>
+        <strong>The map store.</strong> The Search tab downloads a catalogue of free public maps
+        from our own site (<code>inukshuk.mvxtechnologies.com</code>). That request carries no
+        location and no identity. When you then download a map, the file comes directly from the
+        publisher that hosts it — the U.S. Geological Survey, Natural Resources Canada or Geoscience
+        Australia — and that publisher's server sees your IP address and which map sheet you asked
+        for.
+      </li>
+      <li>
+        <strong>Strava (only if you connect it).</strong> Inukshuk can upload a saved outing to
+        <a href="https://www.strava.com/legal/privacy">Strava</a>, and this happens only after you
+        explicitly sign in to Strava and only for outings you choose to upload. Doing so sends that
+        outing's route and statistics to Strava under your Strava account. If you never connect a
+        Strava account, the app never contacts Strava.
       </li>
       <li>
         <strong>App updates.</strong> On launch the app asks
