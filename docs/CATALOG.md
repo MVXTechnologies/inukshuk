@@ -30,7 +30,7 @@ Pages root, so `docs/catalog/v2/index.json` serves at
       "homepage": "https://…",
     },
   ],
-  "categoryCounts": { "topo": 65877 },
+  "categoryCounts": { "topo": 67983 },
   "shards": [
     {
       "id": "topo-n40w080-3",
@@ -44,17 +44,17 @@ Pages root, so `docs/catalog/v2/index.json` serves at
 }
 ```
 
-`categoryCounts` exists so the landing grid can say "Topo · 65,877 maps"
+`categoryCounts` exists so the landing grid can say "Topo · 67,983 maps"
 **before a single shard is fetched**. `bbox` is the union of the shard's item
 bboxes — deliberately not the cell, so a sheet whose coverage spills into the
 next cell is still found by nearest-shard ranking. `byteSize` lets the client
 budget a prefetch instead of guessing.
 
-**As published today:** 65,877 items in **255 shards**, index **61.6 KB**,
-search digest **429.9 KB** (142.6 KB gzipped, lazy),
-shard bodies 23 MB in total, largest shard 147 KB / 400 items. Measured
-worst-case first paint from three places on Earth — Québec City 300 KB, Denver
-434 KB, Alice Springs 51 KB (index + three nearest shards).
+**As published today:** 67,983 items in **281 shards**, index **67.4 KB**,
+search digest **474.0 KB** (153.8 KB gzipped, lazy),
+shard bodies 23.9 MB in total, largest shard 147 KB / 400 items. Measured first
+paint (index + the three nearest shards) — Québec City 367 KB, Denver 501 KB,
+Iqaluit 275 KB, Alice Springs 118 KB.
 
 ### `v2/shards/<id>.json` — fetched on demand
 
@@ -69,10 +69,10 @@ Item fields are unchanged from v1 (`id`, `sourceId`, `title`, `category`,
 ### `v1/manifest.json` — frozen, for old clients
 
 Builds shipped before the world catalog read one flat manifest and know nothing
-about shards. That file is still published, carrying **only** the original
-Canadian CanTopo set (`LEGACY_FRAGMENTS` in `build-manifest.ts`). Pouring 30 000
-worldwide sheets into it would hand those clients a multi-megabyte download they
-cannot page. New clients never read it — but `parseCatalogIndex` still _accepts_
+about shards. That file is still published, carrying **only** the Canadian
+CanTopo set (`LEGACY_FRAGMENTS` in `build-manifest.ts`) — 2,234 sheets, ~1.0 MB
+since the crawl went nationwide. Pouring the other 65 000 worldwide sheets into
+it would hand those clients a 24 MB download they cannot page. New clients never read it — but `parseCatalogIndex` still _accepts_
 it, which is what keeps a cache written by an older build usable after an
 update.
 
@@ -203,6 +203,13 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
 - The shard directory is rewritten from scratch each run, so a shard that no
   longer exists can never linger and serve items the index no longer lists.
 - Sharding is deterministic: same items in, byte-identical output.
+- `fetch-cantopo.ts` **discovers** NRCan's published NTS quadrangles from the
+  directory index instead of carrying a list (a stale hardcoded list is what
+  once held this source to 128 Maritimes/Ontario sheets), and takes each
+  sheet's extent from NRCan's `nts_snrc.kmz` sheet index rather than the
+  `ntsSheetBbox` grid formula, which returns null at 60°N and above — where
+  four fifths of CanTopo's sheets are. Its ~2 200 HEADs are cached under
+  `scripts/catalog/.cache/` (gitignored, 30-day TTL) so a re-run resumes.
 
 ### The e2e fixture is sharded too
 

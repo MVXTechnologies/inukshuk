@@ -64,3 +64,6 @@ build-vc*.log
 # redo (`npx tsx scripts/catalog/fetch-ustopo.ts`, ~20 s) and would otherwise
 # duplicate every byte of docs/catalog/v2/shards/ a second time in git.
 scripts/catalog/fragments/usgs-ustopo.json
+
+# Catalog generator: resumable HEAD cache for the CanTopo crawl.
+scripts/catalog/.cache/
