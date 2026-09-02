@@ -28,6 +28,7 @@ module.exports = {
     '!src/core/models/index.ts',
     // Test-only fixture helpers.
     '!src/core/geo/geopdf/testUtils.ts',
+    '!src/core/geo/geotiff/testUtils.ts',
   ],
   coverageThreshold: {
     // Pure logic in src/core is the safety-critical part — hold it to a high bar.

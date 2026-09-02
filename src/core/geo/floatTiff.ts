@@ -14,7 +14,20 @@
  * mercator metres for 3857) — callers own the interpretation. Anything
  * outside the documented shape returns null; this never throws on arbitrary
  * bytes (WCS errors arrive as XML bodies, which fail the magic check).
+ *
+ * The TIFF *container* — byte order, IFD entries, tag values — is read by
+ * `@core/geo/tiff/container`, shared with the palette-raster decoder in
+ * `@core/geo/geotiff`. This module owns only the float32 pixel interpretation.
  */
+import {
+  readTiffHeader,
+  readTiffIfd,
+  readTiffScalar,
+  readTiffValues,
+  tiffWindow,
+  type TiffEntry,
+  type TiffWindow,
+} from './tiff/container';
 
 export interface FloatGrid {
   /** Grid width in pixels (columns, +x). */
@@ -55,36 +68,6 @@ const TAG_MODEL_PIXEL_SCALE = 33550;
 const TAG_MODEL_TIEPOINT = 33922;
 const TAG_MODEL_TRANSFORMATION = 34264;
 
-// TIFF field types.
-const TYPE_SHORT = 3;
-const TYPE_LONG = 4;
-const TYPE_DOUBLE = 12;
-
-const TYPE_SIZE: Record<number, number> = { [TYPE_SHORT]: 2, [TYPE_LONG]: 4, [TYPE_DOUBLE]: 8 };
-
-interface TiffEntry {
-  type: number;
-  count: number;
-  /** Byte offset of the value data (inline in the IFD or pointed-to). */
-  valueOffset: number;
-}
-
-/** Read a tag's numeric values (SHORT/LONG/DOUBLE), or null on junk. */
-function readValues(view: DataView, entry: TiffEntry, le: boolean): number[] | null {
-  const size = TYPE_SIZE[entry.type];
-  if (size === undefined) return null;
-  const total = size * entry.count;
-  if (entry.valueOffset + total > view.byteLength) return null;
-  const out: number[] = [];
-  for (let i = 0; i < entry.count; i++) {
-    const o = entry.valueOffset + i * size;
-    if (entry.type === TYPE_SHORT) out.push(view.getUint16(o, le));
-    else if (entry.type === TYPE_LONG) out.push(view.getUint32(o, le));
-    else out.push(view.getFloat64(o, le));
-  }
-  return out;
-}
-
 interface Georef {
   x0: number;
   y0: number;
@@ -96,12 +79,12 @@ interface Georef {
  * Georeference from either PixelScale+Tiepoint (GeoMet) or a rotation-free
  * ModelTransformation matrix (NONNA). Null when neither is present/sane.
  */
-function readGeoref(view: DataView, entries: Map<number, TiffEntry>, le: boolean): Georef | null {
+function readGeoref(win: TiffWindow, entries: ReadonlyMap<number, TiffEntry>): Georef | null {
   const scaleEntry = entries.get(TAG_MODEL_PIXEL_SCALE);
   const tieEntry = entries.get(TAG_MODEL_TIEPOINT);
   if (scaleEntry !== undefined && tieEntry !== undefined) {
-    const scale = readValues(view, scaleEntry, le);
-    const tie = readValues(view, tieEntry, le);
+    const scale = readTiffValues(win, scaleEntry);
+    const tie = readTiffValues(win, tieEntry);
     if (scale === null || scale.length < 2 || tie === null || tie.length < 6) return null;
     const [dx, dy] = scale;
     const [rasterI, rasterJ, , tieX, tieY] = tie;
@@ -121,7 +104,7 @@ function readGeoref(view: DataView, entries: Map<number, TiffEntry>, le: boolean
   }
   const txEntry = entries.get(TAG_MODEL_TRANSFORMATION);
   if (txEntry !== undefined) {
-    const m = readValues(view, txEntry, le);
+    const m = readTiffValues(win, txEntry);
     if (m === null || m.length < 16) return null;
     const [a, b, , x0, c, e, , y0] = m;
     if (a === undefined || b === undefined || x0 === undefined) return null;
@@ -141,43 +124,15 @@ function readGeoref(view: DataView, entries: Map<number, TiffEntry>, le: boolean
  * shape — never throws on arbitrary bytes.
  */
 export function parseFloat32Grid(bytes: Uint8Array): FloatGrid | null {
-  if (bytes.byteLength < 8) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const b0 = view.getUint8(0);
-  const b1 = view.getUint8(1);
-  let le: boolean;
-  if (b0 === 0x49 && b1 === 0x49) le = true;
-  else if (b0 === 0x4d && b1 === 0x4d) le = false;
-  else return null;
-  if (view.getUint16(2, le) !== 42) return null;
+  const header = readTiffHeader(bytes);
+  if (header === null) return null;
+  const { le, ifdOffset } = header;
+  const win = tiffWindow(bytes, 0, le);
+  const { view } = win;
+  const entries = readTiffIfd(win, ifdOffset);
+  if (entries === null) return null;
 
-  const ifdOffset = view.getUint32(4, le);
-  if (ifdOffset + 2 > view.byteLength) return null;
-  const entryCount = view.getUint16(ifdOffset, le);
-  if (ifdOffset + 2 + entryCount * 12 > view.byteLength) return null;
-
-  const entries = new Map<number, TiffEntry>();
-  for (let i = 0; i < entryCount; i++) {
-    const e = ifdOffset + 2 + i * 12;
-    const tag = view.getUint16(e, le);
-    const type = view.getUint16(e + 2, le);
-    const count = view.getUint32(e + 4, le);
-    const size = TYPE_SIZE[type];
-    // Unknown types are skipped (ASCII/RATIONAL tags exist but aren't needed).
-    if (size === undefined) continue;
-    const inline = size * count <= 4;
-    // Inline values are left-justified in the 4-byte field for both endians,
-    // so reading the value's own type at e+8 is correct either way.
-    const valueOffset = inline ? e + 8 : view.getUint32(e + 8, le);
-    entries.set(tag, { type, count, valueOffset });
-  }
-
-  const scalar = (tag: number): number | null => {
-    const entry = entries.get(tag);
-    if (entry === undefined) return null;
-    const vals = readValues(view, entry, le);
-    return vals !== null && vals.length >= 1 ? (vals[0] ?? null) : null;
-  };
+  const scalar = (tag: number): number | null => readTiffScalar(win, entries, tag);
 
   const width = scalar(TAG_WIDTH);
   const height = scalar(TAG_HEIGHT);
@@ -191,7 +146,7 @@ export function parseFloat32Grid(bytes: Uint8Array): FloatGrid | null {
   if ((scalar(TAG_SAMPLES_PER_PIXEL) ?? 1) !== 1) return null;
   if (scalar(TAG_SAMPLE_FORMAT) !== 3) return null;
 
-  const georef = readGeoref(view, entries, le);
+  const georef = readGeoref(win, entries);
   if (georef === null) return null;
   const { x0, y0, dx, dy } = georef;
   if (!Number.isFinite(x0) || !Number.isFinite(y0)) return null;
@@ -207,8 +162,8 @@ export function parseFloat32Grid(bytes: Uint8Array): FloatGrid | null {
     const offsetsEntry = entries.get(TAG_TILE_OFFSETS);
     const countsEntry = entries.get(TAG_TILE_BYTE_COUNTS);
     if (offsetsEntry === undefined || countsEntry === undefined) return null;
-    const tileOffsets = readValues(view, offsetsEntry, le);
-    const tileCounts = readValues(view, countsEntry, le);
+    const tileOffsets = readTiffValues(win, offsetsEntry);
+    const tileCounts = readTiffValues(win, countsEntry);
     if (tileOffsets === null || tileCounts === null) return null;
     const across = Math.ceil(width / tileW);
     const down = Math.ceil(height / tileH);
@@ -241,8 +196,8 @@ export function parseFloat32Grid(bytes: Uint8Array): FloatGrid | null {
   const offsetsEntry = entries.get(TAG_STRIP_OFFSETS);
   const countsEntry = entries.get(TAG_STRIP_BYTE_COUNTS);
   if (offsetsEntry === undefined || countsEntry === undefined) return null;
-  const stripOffsets = readValues(view, offsetsEntry, le);
-  const stripCounts = readValues(view, countsEntry, le);
+  const stripOffsets = readTiffValues(win, offsetsEntry);
+  const stripCounts = readTiffValues(win, countsEntry);
   if (stripOffsets === null || stripCounts === null) return null;
   const stripCount = Math.ceil(height / rowsPerStrip);
   if (stripOffsets.length !== stripCount || stripCounts.length !== stripCount) return null;

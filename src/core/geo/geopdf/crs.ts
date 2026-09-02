@@ -20,6 +20,12 @@ export interface Reprojector {
   isWgs84: boolean;
   /** Map a native (x, y) — already in (lng, lat) order for geographic CRS — to WGS84. */
   toWgs84(x: number, y: number): LngLat;
+  /**
+   * The inverse: WGS84 lon/lat -> native (x, y). Needed to place a known
+   * geographic outline (an NTS sheet's neatline, say) into a projected
+   * raster's own pixel grid without inverse-projecting every pixel.
+   */
+  fromWgs84(lng: number, lat: number): [number, number];
 }
 
 /** Build a UTM proj4 definition string for a zone + hemisphere. */
@@ -40,6 +46,21 @@ export function utmFromEpsg(epsg: number): { zone: number; north: boolean } | nu
 }
 
 /**
+ * Is an EPSG code a North-American-datum UTM zone? NAD83 north is 269zz
+ * (zones 3–23) and NAD27 north is 267zz (zones 3–22). Every NRCan CanMatrix
+ * scan is one of the NAD83 ones — 021L14 is 26919, 103I09 is 26909 — so
+ * without this the whole Canadian GeoTIFF catalog would fall through to the
+ * "unknown CRS, assume lon/lat" branch and land off the coast of Africa.
+ */
+export function northAmericanUtmFromEpsg(
+  epsg: number,
+): { zone: number; datum: 'NAD83' | 'NAD27' } | null {
+  if (epsg >= 26903 && epsg <= 26923) return { zone: epsg - 26900, datum: 'NAD83' };
+  if (epsg >= 26703 && epsg <= 26722) return { zone: epsg - 26700, datum: 'NAD27' };
+  return null;
+}
+
+/**
  * Resolve a proj4 source definition for a known EPSG code. Returns null if we
  * don't have a built-in mapping (proj4 only ships 4326 + 3857 by default).
  */
@@ -48,8 +69,12 @@ export function proj4DefForEpsg(epsg: number): string | null {
   if (epsg === 3857 || epsg === 900913) {
     return '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs';
   }
+  if (epsg === 4269) return '+proj=longlat +datum=NAD83 +no_defs';
+  if (epsg === 4267) return '+proj=longlat +datum=NAD27 +no_defs';
   const utm = utmFromEpsg(epsg);
   if (utm) return utmProj4(utm.zone, utm.north);
+  const na = northAmericanUtmFromEpsg(epsg);
+  if (na) return `+proj=utm +zone=${na.zone} +datum=${na.datum} +units=m +no_defs`;
   return null;
 }
 
@@ -109,9 +134,13 @@ export function makeReprojector(opts: {
 }): Reprojector {
   const { epsg, wkt, proj4Def } = opts;
 
-  if (epsg === 4326) {
-    return { epsg, isWgs84: true, toWgs84: (x, y) => [x, y] };
-  }
+  const identity: Reprojector = {
+    ...(epsg !== undefined ? { epsg } : {}),
+    isWgs84: true,
+    toWgs84: (x, y) => [x, y],
+    fromWgs84: (lng, lat) => [lng, lat],
+  };
+  if (epsg === 4326) return identity;
 
   let sourceDef: string | undefined = proj4Def ?? undefined;
   if (!sourceDef && epsg != null) {
@@ -123,21 +152,25 @@ export function makeReprojector(opts: {
 
   if (!sourceDef) {
     // Unknown CRS — assume it's already lon/lat WGS84 to avoid throwing.
-    return { epsg, isWgs84: true, toWgs84: (x, y) => [x, y] };
+    return identity;
   }
 
   let transformer: proj4.Converter;
   try {
     transformer = proj4(sourceDef, WGS84);
   } catch {
-    return { epsg, isWgs84: true, toWgs84: (x, y) => [x, y] };
+    return identity;
   }
   return {
-    epsg,
+    ...(epsg !== undefined ? { epsg } : {}),
     isWgs84: false,
     toWgs84: (x, y) => {
       const out = transformer.forward([x, y]);
       return [out[0]!, out[1]!] as LngLat;
+    },
+    fromWgs84: (lng, lat) => {
+      const out = transformer.inverse([lng, lat]);
+      return [out[0]!, out[1]!];
     },
   };
 }

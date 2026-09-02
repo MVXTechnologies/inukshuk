@@ -69,16 +69,30 @@ function guardWrite<T>(fn: () => T): T {
 }
 
 /**
- * Copy a picked PDF into app storage under a stable id. Returns the new file
- * uri. The original (often a temporary cache file from the picker) is untouched.
+ * Copy a picked map file into app storage under a stable id and extension.
+ * Returns the new file uri; the original (often a temporary cache file from
+ * the picker) is untouched.
+ *
+ * The extension is load-bearing, not decoration: it is what tells the overlay
+ * layer whether a map is a PDF to rasterize or a raster to draw as-is, and
+ * what the export archive names the entry (`@core/export/archivePlan`).
  */
-export async function importPdf(sourceUri: string, id: string): Promise<string> {
+export async function importMapFile(
+  sourceUri: string,
+  id: string,
+  ext: string = 'pdf',
+): Promise<string> {
   ensureStorage();
   const source = new File(sourceUri);
-  const dest = new File(mapsDir(), `${id}.pdf`);
+  const dest = new File(mapsDir(), `${id}.${ext}`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
   return dest.uri;
+}
+
+/** {@link importMapFile} for the PDF case — the original picker path. */
+export async function importPdf(sourceUri: string, id: string): Promise<string> {
+  return importMapFile(sourceUri, id, 'pdf');
 }
 
 /**
@@ -387,14 +401,22 @@ export async function readFileText(uri: string): Promise<string> {
   return new File(uri).text();
 }
 
-/** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
-export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
+/**
+ * Write map bytes into the maps store under a stable id and extension;
+ * returns its uri. See {@link importMapFile} on why the extension matters.
+ */
+export function writeMapBytes(id: string, bytes: Uint8Array, ext: string = 'pdf'): string {
   ensureStorage();
-  const file = new File(mapsDir(), `${id}.pdf`);
+  const file = new File(mapsDir(), `${id}.${ext}`);
   if (file.exists) file.delete();
   file.create();
   guardWrite(() => file.write(bytes));
   return file.uri;
+}
+
+/** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
+export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
+  return writeMapBytes(id, bytes, 'pdf');
 }
 
 /** Write a GPX (or any text) document and return its uri. */
@@ -521,6 +543,42 @@ export function readFileChunks(
       // exactly once so streaming consumers (zip entries) are always closed.
       onChunk(chunk, read >= total || chunk.length === 0);
       if (chunk.length === 0) break;
+    }
+  } finally {
+    handle.close();
+  }
+}
+
+/**
+ * {@link readFileChunks}, but yielding to the event loop between chunks.
+ *
+ * A 30 MB CanMatrix zip inflates to ~92 MB and is walked twice; done in one
+ * synchronous burst that is tens of seconds with the JS thread pinned — no
+ * progress bar, no scrolling, an app that looks hung. `onChunk` still runs
+ * synchronously (fflate's streaming inflate is), but control returns to React
+ * between chunks. `onProgress` gets the fraction of the file consumed.
+ */
+export async function readFileChunksYielding(
+  uri: string,
+  chunkSize: number,
+  onChunk: (chunk: Uint8Array, final: boolean) => void,
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  const handle = new File(uri).open(FileMode.ReadOnly);
+  try {
+    const total = handle.size ?? 0;
+    if (total === 0) {
+      onChunk(new Uint8Array(0), true);
+      return;
+    }
+    let read = 0;
+    while (read < total) {
+      const chunk = handle.readBytes(Math.min(chunkSize, total - read));
+      read += chunk.length;
+      onChunk(chunk, read >= total || chunk.length === 0);
+      onProgress?.(read / total);
+      if (chunk.length === 0) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   } finally {
     handle.close();

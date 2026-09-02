@@ -38,6 +38,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ntsCoverageKey, SOURCE_RANK_CANTOPO } from '../../src/core/catalog/coverage';
 import { ntsSheetBbox } from '../../src/core/catalog/nts';
 import { parseNtsIndexKml, type NtsIndexEntry } from '../../src/core/catalog/ntsIndex';
 import type { CatalogBbox, CatalogItem, CatalogSource } from '../../src/core/catalog/schema';
@@ -290,7 +291,9 @@ async function main(): Promise<void> {
   let fromIndex = 0;
   let fromGrid = 0;
   let placeless = 0;
-  const items: CatalogItem[] = [];
+  /** Fragment item plus the build-time-only coverage fields. */
+  type CanTopoItem = CatalogItem & { coverageKey: string; sourceRank: number };
+  const items: CanTopoItem[] = [];
   zipUrls.forEach((url, i) => {
     const sheetLower = /cantopo_(\d{3}[a-p]\d{2})_geopdf\.zip$/.exec(url)?.[1];
     if (sheetLower === undefined) return;
@@ -317,6 +320,11 @@ async function main(): Promise<void> {
       packaging: 'zip',
       url,
       lang: 'bilingual',
+      // Same ground as the CanMatrix scan of this sheet, and this is the one
+      // to keep: the build drops the scan wherever these two collide (see
+      // `@core/catalog/coverage`). Generator-only — stripped before publishing.
+      coverageKey: ntsCoverageKey(sheet),
+      sourceRank: SOURCE_RANK_CANTOPO,
       ...metas[i],
     });
   });

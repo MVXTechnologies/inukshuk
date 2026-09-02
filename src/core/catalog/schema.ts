@@ -60,9 +60,21 @@ export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = {
   river: 'River runs',
 };
 
-/** File formats this client can land in the Library. GeoTIFF is deferred (M3). */
-export const SUPPORTED_FORMATS = ['geopdf', 'pdf'] as const;
+/**
+ * File formats this client can land in the Library.
+ *
+ * `geotiff` is the NRCan CanMatrix series — scanned 1:50k sheets, the only
+ * 1:50k coverage that exists for eastern Québec, the north and much of BC.
+ * They arrive as uncompressed palette rasters and are decoded by
+ * `@core/geo/geotiff`, never by the PDF rasterizer.
+ */
+export const SUPPORTED_FORMATS = ['geopdf', 'pdf', 'geotiff'] as const;
 export type CatalogFormat = (typeof SUPPORTED_FORMATS)[number];
+
+/** Formats whose bytes are a PDF (the pdf.js rasterizer path). */
+export function isPdfFormat(format: CatalogFormat): boolean {
+  return format === 'pdf' || format === 'geopdf';
+}
 
 /** How the downloaded bytes are wrapped. CanTopo serves its GeoPDFs zipped. */
 export type CatalogPackaging = 'none' | 'zip';

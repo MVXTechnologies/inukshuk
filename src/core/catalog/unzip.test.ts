@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
-import { extractPdf, looksLikePdf } from './unzip';
+import { extractPdf, isTiffEntryName, looksLikePdf, looksLikeTiff } from './unzip';
 
 const pdfBytes = (marker: string, pad = 0) =>
   strToU8(`%PDF-1.7\n% ${marker}\n${'x'.repeat(pad)}\n%%EOF`);
@@ -9,6 +9,35 @@ describe('looksLikePdf', () => {
     expect(looksLikePdf(pdfBytes('a'))).toBe(true);
     expect(looksLikePdf(strToU8('PK\x03\x04not a pdf'))).toBe(false);
     expect(looksLikePdf(new Uint8Array(0))).toBe(false);
+  });
+});
+
+describe('looksLikeTiff', () => {
+  it('recognizes both byte orders of a classic TIFF', () => {
+    expect(looksLikeTiff(new Uint8Array([0x49, 0x49, 42, 0, 8]))).toBe(true);
+    expect(looksLikeTiff(new Uint8Array([0x4d, 0x4d, 0, 42, 0]))).toBe(true);
+  });
+
+  it('rejects BigTIFF (version 43) — the decoder reads 32-bit offsets only', () => {
+    expect(looksLikeTiff(new Uint8Array([0x49, 0x49, 43, 0, 8]))).toBe(false);
+  });
+
+  it('rejects a zip, a PDF and a runt buffer', () => {
+    expect(looksLikeTiff(strToU8('PK\x03\x04'))).toBe(false);
+    expect(looksLikeTiff(pdfBytes('a'))).toBe(false);
+    expect(looksLikeTiff(new Uint8Array([0x49, 0x49]))).toBe(false);
+  });
+});
+
+describe('isTiffEntryName', () => {
+  it('matches the sheet raster and skips the metadata sidecar', () => {
+    expect(isTiffEntryName('021l14_1_1.tif')).toBe(true);
+    expect(isTiffEntryName('sheet.TIFF')).toBe(true);
+    expect(isTiffEntryName('canmatrix_021l14_1_1_pna.xml')).toBe(false);
+  });
+
+  it('skips macOS resource forks', () => {
+    expect(isTiffEntryName('__MACOSX/._021l14.tif')).toBe(false);
   });
 });
 

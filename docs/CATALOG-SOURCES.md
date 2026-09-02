@@ -9,8 +9,11 @@ Verified live on **2026-08-10**; CanTopo re-crawled **2026-09-02**. The test eve
 > session cookie, CAPTCHA or click-through EULA**?
 
 A source also has to ship a format we can actually render. Today that is
-**GeoPDF or plain PDF** — we have no GeoTIFF, BSB/KAP or S-57 support. That
-turns out to be the binding constraint on marine charts (§2).
+**GeoPDF, plain PDF, or an uncompressed GeoTIFF** — the last added in M3 to
+reach NRCan's CanMatrix scans (§1.4), and deliberately narrow: 8-bit,
+uncompressed, strip-organized, north-up. We still have no LZW/JPEG-compressed
+TIFF, no BSB/KAP and no S-57 support, which remains the binding constraint on
+marine charts (§2).
 
 ## 1. Shipping now
 
@@ -112,13 +115,49 @@ Licence"`.
   results cached under `scripts/catalog/.cache/` (gitignored, 30-day TTL) so a
   re-run resumes instead of re-asking. Last full crawl: 0 failures.
 - **Known gap — Québec City is not in this series.** `021L14` (QUÉBEC) has **no
-  GeoPDF**: quadrangle `021/` upstream contains only `a g h i j p`. The sheet
-  exists only in the older **CanMatrix** series as
-  `canmatrix_021l14_tif.zip` — a GeoTIFF, which needs the unbuilt M3 GeoTIFF
-  pipeline (see §2's "What would unlock marine" — same missing capability).
-  CanTopo's coverage of southern Québec is genuinely thin: 032 has one sheet,
-  033 seventeen, while 026 (Baffin) has 225. The nearest CanTopo sheet to
-  Québec City is 021G14 Canterbury, **318 km** away in New Brunswick.
+  GeoPDF**: quadrangle `021/` upstream contains only `a g h i j p`. CanTopo's
+  coverage of southern Québec is genuinely thin: 032 has one sheet, 033
+  seventeen, while 026 (Baffin) has 225. The nearest CanTopo sheet to Québec
+  City is 021G14 Canterbury, **318 km** away in New Brunswick. **Closed in M3**
+  by CanMatrix (§1.4), which publishes all sixteen 021L sheets.
+
+### 1.4 NRCan CanMatrix 1:50 000 (scanned) — INCLUDE (2026-09-02)
+
+The **archival** side of the same NTS series: every 1:50k sheet Canada ever
+printed, scanned at 300 dpi. It is the only 1:50k coverage that exists for
+eastern Québec, the north and much of BC, and it is what finally puts Québec
+City in the catalog.
+
+- **Licence.** Open Government Licence – Canada 2.0, same as CanTopo. We link
+  NRCan's own files under `ftp.maps.canada.ca`; we never rehost.
+- **Enumeration.** `.../raster/canmatrix/50k_300dpi/`, walked the same way as
+  CanTopo: **89 primary quadrangles, 882 letter directories, 12,126 zips** —
+  against CanTopo's 64 quadrangles and 2,234 sheets. CanMatrix adds exactly the
+  quadrangles CanTopo lacks (022, 023, 083, 094, 095, 102, 103, 104, 106, 114,
+  116, 117 and more).
+- **There is no PDF edition, at any resolution.** `50k_300dpi` ships GeoTIFF or
+  nothing, which is why the client grew a GeoTIFF decoder before this crawler
+  was written. What the sheets actually are, verified on four of them (021L14
+  Québec, 031G05 Ottawa, 095J01, 103I09): classic little-endian TIFF,
+  ~11 000 × 8 000 px, **8-bit palette colour, no compression, one row per
+  strip**, 4.2334 m pixels, `ProjectedCSTypeGeoKey = 269xx` (NAD83 / UTM zone
+  N). 021L14 is a 29.6 MB zip holding a 92.4 MB TIFF.
+- **Half-sheets.** ~430 sheets were printed in two halves and are published as
+  `canmatrix_013d04_e_tif.zip` + `…_w_…` (860 of the 12,126 files). Both are
+  kept — they are two different maps — and each gets half of the sheet's extent,
+  split at the middle meridian.
+- **CanTopo wins where both exist.** Every item carries a coverage key, and the
+  build drops the scan wherever a CanTopo GeoPDF covers the same sheet (see
+  `docs/CATALOG.md` §4). The user never sees two rows for one sheet, and never
+  gets steered to the older product.
+- **The listing says so.** Titles read `Québec — CanMatrix 021L14 (scanned)`,
+  and the source name is "NRCan CanMatrix (scanned sheets)". These are scans of
+  printed paper — 021L14 is Edition 8, printed 1997 — and nothing about the
+  listing should suggest otherwise.
+- **Extents and toponyms** come from `nts_snrc.kmz`, exactly as for CanTopo;
+  `ntsSheetBbox` is the fallback for a sheet the index omits.
+- **HEAD budget.** 12,126 zips at concurrency 4 with retry/backoff, cached under
+  `scripts/catalog/.cache/` (gitignored, 30-day TTL) so a re-run resumes.
 
 ## 2. Marine charts — nothing shippable, and the reason is format
 
@@ -138,12 +177,24 @@ login-gated. The blocker is **our format support, not licensing**.
 | Peru, Argentina, Chile, Colombia, Mexico SEMAR                                                 | EXCLUDE                            | Sold, non-commercial reservations, or CAPTCHA-gated.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | UKHO, Australia AHO, Denmark, Netherlands, Germany BSH, Sweden, Russia, Japan JHOD, Korea KHOA | **UNVERIFIED**                     | The research pass covering these never returned. UKHO and AHO are near-certain commercial excludes but we hold **no quoted evidence**, so they are recorded as open, not as negatives.                                                                                                                                                                                                                                                                             |
 
-**What would unlock marine.** Adding **GeoTIFF import** (already scoped as M3 in
-`docs/plans/plan-map-store.md` for Québec BDTQ) would immediately make NZ LINZ's
-184 CC BY 4.0 charts and Norway's 12 open Kystkart charts shippable — except
-that the LINZ TIFFs would still need georeferencing supplied from the index
-polygon rather than the file. That is the single highest-value next step for
-this initiative, and it is a format project, not a licensing one.
+**What would unlock marine — partly done, and it moved the goalposts.** M3
+shipped GeoTIFF import (`@core/geo/geotiff`) for CanMatrix, but deliberately
+narrow: **8-bit, uncompressed, strip-organized, north-up, with georeferencing in
+the file**. That is not yet enough for any of the charts above:
+
+- **NZ LINZ** — the TIFFs carry an **empty GeoKeyDirectory**, so the decoder
+  correctly refuses them. They would need the extent supplied from the index
+  polygon rather than the file — a georeferencing feature, not a decoding one,
+  and the closest of the three to shippable.
+- **Norway Kystkart, Brazil DHN** — chart TIFFs of this vintage are normally
+  LZW- or JPEG-compressed; the decoder rejects compressed files by name rather
+  than drawing noise. Verify the actual compression tag before scoping.
+- **COG world-topo sources (§3)** — tiled and Deflate/LZW-compressed, so they
+  need both a tile reader and a decompressor.
+
+The next format step, in value order: a **Deflate + LZW** decompressor (Deflate
+comes free from `fflate`, LZW is ~100 lines) and the tiled layout, which
+together open most of §3 as well as the marine set.
 
 ## 3. World topo — licence-clean but format-blocked
 

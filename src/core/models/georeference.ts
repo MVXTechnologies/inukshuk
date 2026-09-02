@@ -28,6 +28,7 @@ export type GeoReferenceSource =
   | 'lgidict' // OGC Best Practice / TerraGo LGIDict
   | 'world-file' // sidecar .pgw / .pdfw world file
   | 'aux-xml' // sidecar .aux.xml (GDAL)
+  | 'geotiff' // GeoTIFF model tags + GeoKeyDirectory (NRCan CanMatrix scans)
   | 'manual'; // user-placed control points
 
 /**

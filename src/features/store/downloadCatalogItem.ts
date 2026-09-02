@@ -1,12 +1,12 @@
 import { findInstalledMap } from '@core/catalog/installStatus';
 import type { CatalogItem } from '@core/catalog/schema';
 import type { MapDocument } from '@core/models';
-import { downloadCatalogPdf, CatalogDownloadCanceled } from '@data/catalogDownload';
+import { downloadCatalogMap, CatalogDownloadCanceled } from '@data/catalogDownload';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
-import { mapDocumentFromStoredPdf } from '../library/importMap';
+import { mapDocumentFromRasterOverlay, mapDocumentFromStoredPdf } from '../library/importMap';
 
 export { CatalogDownloadCanceled };
 
@@ -44,17 +44,24 @@ export async function downloadCatalogItemToLibrary(
   const fileId = storage.newId();
 
   catalog.setDownloadProgress(item.id, item.sizeBytes !== undefined ? 0 : null);
-  const handle = downloadCatalogPdf(item, fileId, (fraction) =>
+  const handle = downloadCatalogMap(item, fileId, (fraction) =>
     useCatalogStore.getState().setDownloadProgress(item.id, fraction),
   );
   cancels.set(item.id, handle.cancel);
 
   try {
-    const fileUri = await handle.promise;
+    const { fileUri, georeference } = await handle.promise;
+    const name = existing?.name ?? item.title;
     let doc: MapDocument;
     try {
-      // Parses the stored PDF; on failure it deletes the file so nothing orphans.
-      doc = await mapDocumentFromStoredPdf(fileId, fileUri, existing?.name ?? item.title);
+      // A GeoTIFF arrives already rendered and already georeferenced (the
+      // stored file is the overlay, not the scan), so there is nothing to
+      // parse. A PDF is parsed from the stored file; on failure that path
+      // deletes it so nothing orphans.
+      doc =
+        georeference !== undefined
+          ? mapDocumentFromRasterOverlay(fileId, fileUri, name, georeference)
+          : await mapDocumentFromStoredPdf(fileId, fileUri, name);
     } catch (err) {
       // The generator pre-verifies georeferencing, so a store file that fails
       // to parse is a catalog bug worth a report, not a user error.

@@ -1,6 +1,8 @@
-import type { MapDocument } from '@core/models';
+import type { GeoReference, MapDocument } from '@core/models';
 import { parseGeoPdf } from '@core/geo/geopdf';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
+import { looksLikeGeoTiffFile } from '@core/library/mapFile';
+import { installGeoTiffMap } from '@data/geotiffImport';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
@@ -50,24 +52,62 @@ export async function mapDocumentFromStoredPdf(
   };
 }
 
-/** Copy + parse one picked PDF asset into a MapDocument (throws on failure). */
+/**
+ * A MapDocument for a map that is already a rendered, georeferenced raster —
+ * the GeoTIFF path, where `installGeoTiffMap` has written the overlay PNG and
+ * resolved the georeferencing on the way through.
+ *
+ * There is nothing to parse and nothing to page through: one image, one
+ * georeference, always active. The `.png` extension on `fileUri` is what tells
+ * the overlay hook to draw the file rather than run the PDF rasterizer over it.
+ */
+export function mapDocumentFromRasterOverlay(
+  id: string,
+  fileUri: string,
+  name: string,
+  georeference: GeoReference,
+): MapDocument {
+  return {
+    id,
+    name,
+    fileUri,
+    importedAt: Date.now(),
+    pageCount: 1,
+    georeferences: [georeference],
+    activePages: [georeference.pageIndex],
+  };
+}
+
+/** Copy + parse one picked asset into a MapDocument (throws on failure). */
 async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<MapDocument> {
   const id = storage.newId();
-  const fileUri = await storage.importPdf(asset.uri, id);
-  return mapDocumentFromStoredPdf(id, fileUri, asset.name?.replace(/\.pdf$/i, '') ?? 'Map');
+  const name = asset.name?.replace(/\.(pdf|tiff?)$/i, '') ?? 'Map';
+  if (looksLikeGeoTiffFile(asset)) {
+    // A GeoTIFF is rendered to its overlay here and now — the scan itself is
+    // never stored (see `@data/geotiffImport`). No sheet is known for a
+    // hand-picked file, so there is no neatline to crop to: the whole image is
+    // drawn, collar and all.
+    const installed = await installGeoTiffMap(asset.uri, id);
+    return mapDocumentFromRasterOverlay(id, installed.fileUri, name, installed.georeference);
+  }
+  const fileUri = await storage.importMapFile(asset.uri, id, 'pdf');
+  return mapDocumentFromStoredPdf(id, fileUri, name);
 }
 
 /**
- * Let the user pick one or more PDFs, copy them into app storage, and resolve
- * each one's embedded georeferencing. PDFs with no recognizable georeferencing
- * are still imported (viewable as plain documents) but flagged with a warning.
- * Files that fail to import are counted in `failed` rather than aborting the lot.
+ * Let the user pick one or more maps, copy them into app storage, and resolve
+ * each one's georeferencing. PDFs with no recognizable georeferencing are still
+ * imported (viewable as plain documents) but flagged with a warning. Files that
+ * fail to import are counted in `failed` rather than aborting the lot.
  */
 export async function pickAndImportMaps(): Promise<BulkImportResult> {
   let picked: DocumentPicker.DocumentPickerResult;
   try {
     picked = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
+      // `image/tiff` for the CanMatrix-style scans; `octet-stream` because
+      // several Android file providers type a .tif as exactly that, and
+      // without it the picker greys those files out.
+      type: ['application/pdf', 'image/tiff', 'application/octet-stream'],
       copyToCacheDirectory: true,
       multiple: true,
     });
@@ -84,7 +124,7 @@ export async function pickAndImportMaps(): Promise<BulkImportResult> {
       docs.push(await importOne(asset));
     } catch (err) {
       // Counted in the user-facing "N failed" summary; report the cause too.
-      reportError(err, 'pdf-import');
+      reportError(err, 'map-import');
       failed += 1;
     }
   }

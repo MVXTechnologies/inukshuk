@@ -1,10 +1,10 @@
 import type { CatalogItem } from '@core/catalog/schema';
 import type { MapDocument } from '@core/models';
-import { downloadCatalogPdf } from '@data/catalogDownload';
+import { downloadCatalogMap } from '@data/catalogDownload';
 import * as storage from '@data/storage';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
-import { mapDocumentFromStoredPdf } from '../library/importMap';
+import { mapDocumentFromRasterOverlay, mapDocumentFromStoredPdf } from '../library/importMap';
 import {
   CatalogDownloadCanceled,
   cancelCatalogDownload,
@@ -22,7 +22,7 @@ jest.mock('@data/storage', () => ({
 jest.mock('@data/catalogDownload', () => ({
   __esModule: true,
   CatalogDownloadCanceled: class CatalogDownloadCanceled extends Error {},
-  downloadCatalogPdf: jest.fn(),
+  downloadCatalogMap: jest.fn(),
 }));
 
 jest.mock('@data/catalogCache', () => ({
@@ -31,14 +31,16 @@ jest.mock('@data/catalogCache', () => ({
 
 jest.mock('../library/importMap', () => ({
   mapDocumentFromStoredPdf: jest.fn(),
+  mapDocumentFromRasterOverlay: jest.fn(),
 }));
 
 jest.mock('@lib/errorReporting', () => ({
   reportError: jest.fn(),
 }));
 
-const downloadMock = downloadCatalogPdf as jest.Mock;
+const downloadMock = downloadCatalogMap as jest.Mock;
 const parseMock = mapDocumentFromStoredPdf as jest.Mock;
+const rasterMock = mapDocumentFromRasterOverlay as jest.Mock;
 const newIdMock = storage.newId as jest.Mock;
 
 const item: CatalogItem = {
@@ -88,6 +90,8 @@ beforeEach(() => {
     hydrated: true,
   });
   useCatalogStore.setState({ downloads: {}, lastFolderId: null });
+  parseMock.mockReset();
+  rasterMock.mockReset();
   newIdMock.mockReturnValue('new-file-id');
 });
 
@@ -95,7 +99,10 @@ describe('downloadCatalogItemToLibrary', () => {
   it('lands a fresh download as a regular Library map with provenance + folder', async () => {
     downloadMock.mockImplementation((_item, mapId: string, onProgress) => {
       onProgress(0.5);
-      return { promise: Promise.resolve(`file://maps/${mapId}.pdf`), cancel: jest.fn() };
+      return {
+        promise: Promise.resolve({ fileUri: `file://maps/${mapId}.pdf` }),
+        cancel: jest.fn(),
+      };
     });
     parseMock.mockResolvedValue(parsedDoc('new-file-id'));
 
@@ -123,11 +130,11 @@ describe('downloadCatalogItemToLibrary', () => {
 
   it('publishes progress into the catalog store while downloading', async () => {
     let capturedProgress: ((f: number | null) => void) | undefined;
-    let resolveDownload!: (uri: string) => void;
+    let resolveDownload!: (result: { fileUri: string }) => void;
     downloadMock.mockImplementation((_i, _id, onProgress) => {
       capturedProgress = onProgress;
       return {
-        promise: new Promise<string>((resolve) => {
+        promise: new Promise<{ fileUri: string }>((resolve) => {
           resolveDownload = resolve;
         }),
         cancel: jest.fn(),
@@ -139,7 +146,7 @@ describe('downloadCatalogItemToLibrary', () => {
     expect(useCatalogStore.getState().downloads['cantopo-021l14']).toBe(0);
     capturedProgress?.(0.75);
     expect(useCatalogStore.getState().downloads['cantopo-021l14']).toBe(0.75);
-    resolveDownload('file://maps/new-file-id.pdf');
+    resolveDownload({ fileUri: 'file://maps/new-file-id.pdf' });
     await pending;
     expect(useCatalogStore.getState().downloads).toEqual({});
   });
@@ -159,7 +166,7 @@ describe('downloadCatalogItemToLibrary', () => {
     });
     newIdMock.mockReturnValue('replacement-file');
     downloadMock.mockReturnValue({
-      promise: Promise.resolve('file://maps/replacement-file.pdf'),
+      promise: Promise.resolve({ fileUri: 'file://maps/replacement-file.pdf' }),
       cancel: jest.fn(),
     });
     parseMock.mockResolvedValue(parsedDoc('replacement-file'));
@@ -204,7 +211,7 @@ describe('downloadCatalogItemToLibrary', () => {
 
   it('surfaces a parse failure (and still clears the progress row)', async () => {
     downloadMock.mockReturnValue({
-      promise: Promise.resolve('file://maps/new-file-id.pdf'),
+      promise: Promise.resolve({ fileUri: 'file://maps/new-file-id.pdf' }),
       cancel: jest.fn(),
     });
     parseMock.mockRejectedValue(new Error('not a pdf'));
@@ -212,6 +219,40 @@ describe('downloadCatalogItemToLibrary', () => {
     await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('not a pdf');
     expect(useLibraryStore.getState().maps).toHaveLength(0);
     expect(useCatalogStore.getState().downloads).toEqual({});
+  });
+
+  it('lands a GeoTIFF sheet from the georeference the install resolved, without parsing', async () => {
+    // A CanMatrix scan is stored as its rendered overlay PNG, so there is no
+    // document to parse: the download hands back the georeference it derived
+    // from the TIFF tags on the way past.
+    const geo = parsedDoc('new-file-id').georeferences[0]!;
+    downloadMock.mockReturnValue({
+      promise: Promise.resolve({ fileUri: 'file://maps/new-file-id.png', georeference: geo }),
+      cancel: jest.fn(),
+    });
+    rasterMock.mockReturnValue({
+      ...parsedDoc('new-file-id'),
+      fileUri: 'file://maps/new-file-id.png',
+    });
+
+    const scan: CatalogItem = {
+      ...item,
+      id: 'canmatrix-021l14',
+      sourceId: 'nrcan-canmatrix',
+      title: 'Québec — CanMatrix 021L14 (scanned)',
+      format: 'geotiff',
+    };
+    const doc = await downloadCatalogItemToLibrary(scan, null);
+
+    expect(parseMock).not.toHaveBeenCalled();
+    expect(rasterMock).toHaveBeenCalledWith(
+      'new-file-id',
+      'file://maps/new-file-id.png',
+      'Québec — CanMatrix 021L14 (scanned)',
+      geo,
+    );
+    expect(doc.fileUri).toBe('file://maps/new-file-id.png');
+    expect(useLibraryStore.getState().maps[0]?.sourceItemId).toBe('canmatrix-021l14');
   });
 
   it('rejects a second download of an item already in flight', async () => {

@@ -6,6 +6,7 @@ import {
   isDegenerateBBox,
 } from '@core/geo/geomath';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
+import { isRenderedRasterMap } from '@core/library/mapFile';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { File } from 'expo-file-system';
@@ -152,14 +153,30 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               firstError ??= `Page ${geo.pageIndex + 1} has invalid georeferencing — skipped`;
               continue;
             }
-            // The raster is geo-independent (the whole page at a fixed width),
-            // so a cached PNG stays valid even if the georeference changes;
-            // only the corners above are recomputed. The OS may purge the cache
-            // directory at any time, so verify the file still exists.
-            let imageUri = rasterCache.get(rasterCacheKey(t.docId, geo.pageIndex));
-            if (imageUri && !new File(imageUri).exists) {
-              rasterCache.delete(rasterCacheKey(t.docId, geo.pageIndex));
-              imageUri = undefined;
+            // A GeoTIFF sheet was rendered to a PNG when it was imported (the
+            // 92 MB scan is far too big to keep, let alone rasterize on
+            // demand), so its stored file IS the overlay: no read, no
+            // rasterizer, no cache entry — just hand MapLibre the file. It
+            // lives in permanent storage, not the purgeable overlay cache, so
+            // a missing one is a real loss and says so.
+            let imageUri: string | undefined;
+            if (isRenderedRasterMap(t.fileUri)) {
+              if (!new File(t.fileUri).exists) {
+                firstError ??= 'This map’s image file is missing — re-download it.';
+                continue;
+              }
+              imageUri = t.fileUri;
+            } else {
+              // The raster is geo-independent (the whole page at a fixed
+              // width), so a cached PNG stays valid even if the georeference
+              // changes; only the corners above are recomputed. The OS may
+              // purge the cache directory at any time, so verify it still
+              // exists.
+              imageUri = rasterCache.get(rasterCacheKey(t.docId, geo.pageIndex));
+              if (imageUri && !new File(imageUri).exists) {
+                rasterCache.delete(rasterCacheKey(t.docId, geo.pageIndex));
+                imageUri = undefined;
+              }
             }
             if (!imageUri) {
               base64 ??= await storage.readFileBase64(t.fileUri);

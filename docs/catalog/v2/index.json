@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-02T15:32:56.905Z",
+  "generatedAt": "2026-09-02T18:23:26.810Z",
   "sources": [
     {
       "id": "ga-austopo",
@@ -8,6 +8,13 @@
       "licence": "CC-BY-4.0",
       "attribution": "Geoscience Australia",
       "homepage": "https://www.ga.gov.au/scientific-topics/national-location-information/topographic-maps-data"
+    },
+    {
+      "id": "nrcan-canmatrix",
+      "name": "NRCan CanMatrix (scanned sheets)",
+      "licence": "OGL-Canada-2.0",
+      "attribution": "Natural Resources Canada",
+      "homepage": "https://natural-resources.canada.ca/science-and-data/science-and-research/earth-sciences/geography/topographic-information/maps/canada-topographic-maps"
     },
     {
       "id": "nrcan-cantopo",
@@ -1173,66 +1180,105 @@
       "id": "topo-n40w060",
       "category": "topo",
       "path": "shards/topo-n40w060.json",
-      "itemCount": 17,
+      "itemCount": 146,
       "bbox": [
-        -58.5,
-        47,
+        -60,
+        43.75,
         -52.5,
-        49.75
+        50
       ],
-      "byteSize": 5931
+      "byteSize": 53315
     },
     {
       "id": "topo-n40w070-0",
       "category": "topo",
       "path": "shards/topo-n40w070-0.json",
-      "itemCount": 198,
+      "itemCount": 218,
       "bbox": [
         -70,
         41.125,
-        -65.5,
+        -65,
         45
       ],
-      "byteSize": 71970
+      "byteSize": 79299
     },
     {
       "id": "topo-n40w070-1",
       "category": "topo",
       "path": "shards/topo-n40w070-1.json",
-      "itemCount": 8,
+      "itemCount": 17,
       "bbox": [
         -65,
-        44.25,
-        -62.5,
+        43.75,
+        -62,
         45
       ],
-      "byteSize": 2817
+      "byteSize": 6110
     },
     {
-      "id": "topo-n40w070-2",
+      "id": "topo-n40w070-20",
       "category": "topo",
-      "path": "shards/topo-n40w070-2.json",
-      "itemCount": 369,
+      "path": "shards/topo-n40w070-20.json",
+      "itemCount": 358,
       "bbox": [
         -70,
+        45,
+        -67.5,
+        47.5
+      ],
+      "byteSize": 132182
+    },
+    {
+      "id": "topo-n40w070-21",
+      "category": "topo",
+      "path": "shards/topo-n40w070-21.json",
+      "itemCount": 61,
+      "bbox": [
+        -67.5,
         45,
         -65,
         47.5
       ],
-      "byteSize": 135748
+      "byteSize": 22066
+    },
+    {
+      "id": "topo-n40w070-22",
+      "category": "topo",
+      "path": "shards/topo-n40w070-22.json",
+      "itemCount": 47,
+      "bbox": [
+        -70,
+        47.5,
+        -67.5,
+        50
+      ],
+      "byteSize": 17331
+    },
+    {
+      "id": "topo-n40w070-23",
+      "category": "topo",
+      "path": "shards/topo-n40w070-23.json",
+      "itemCount": 38,
+      "bbox": [
+        -67.5,
+        47.5,
+        -65,
+        50
+      ],
+      "byteSize": 14051
     },
     {
       "id": "topo-n40w070-3",
       "category": "topo",
       "path": "shards/topo-n40w070-3.json",
-      "itemCount": 26,
+      "itemCount": 103,
       "bbox": [
         -65,
         45,
         -60,
-        46.75
+        50
       ],
-      "byteSize": 9060
+      "byteSize": 37348
     },
     {
       "id": "topo-n40w080-00",
@@ -1264,27 +1310,27 @@
       "id": "topo-n40w080-02",
       "category": "topo",
       "path": "shards/topo-n40w080-02.json",
-      "itemCount": 105,
+      "itemCount": 129,
       "bbox": [
         -80,
         42.5,
         -77.5,
         45
       ],
-      "byteSize": 37854
+      "byteSize": 46600
     },
     {
       "id": "topo-n40w080-03",
       "category": "topo",
       "path": "shards/topo-n40w080-03.json",
-      "itemCount": 273,
+      "itemCount": 276,
       "bbox": [
         -77.5,
         42.5,
         -75,
         45
       ],
-      "byteSize": 99095
+      "byteSize": 100193
     },
     {
       "id": "topo-n40w080-10",
@@ -1342,27 +1388,27 @@
       "id": "topo-n40w080-2",
       "category": "topo",
       "path": "shards/topo-n40w080-2.json",
-      "itemCount": 26,
+      "itemCount": 200,
       "bbox": [
         -80,
         45,
-        -76,
-        47.25
+        -75,
+        50
       ],
-      "byteSize": 9059
+      "byteSize": 73012
     },
     {
       "id": "topo-n40w080-3",
       "category": "topo",
       "path": "shards/topo-n40w080-3.json",
-      "itemCount": 96,
+      "itemCount": 294,
       "bbox": [
         -75,
         45,
         -70,
-        46.75
+        50
       ],
-      "byteSize": 36099
+      "byteSize": 109090
     },
     {
       "id": "topo-n40w090-00",
@@ -1420,53 +1466,53 @@
       "id": "topo-n40w090-10",
       "category": "topo",
       "path": "shards/topo-n40w090-10.json",
-      "itemCount": 372,
+      "itemCount": 378,
       "bbox": [
         -85,
         40,
         -82.5,
         42.5
       ],
-      "byteSize": 133522
+      "byteSize": 135716
     },
     {
       "id": "topo-n40w090-11",
       "category": "topo",
       "path": "shards/topo-n40w090-11.json",
-      "itemCount": 293,
+      "itemCount": 296,
       "bbox": [
         -82.5,
         40,
         -80,
-        42.25
+        42.5
       ],
-      "byteSize": 105812
+      "byteSize": 106905
     },
     {
       "id": "topo-n40w090-12",
       "category": "topo",
       "path": "shards/topo-n40w090-12.json",
-      "itemCount": 348,
+      "itemCount": 349,
       "bbox": [
         -85,
         42.5,
         -82.5,
         45
       ],
-      "byteSize": 126015
+      "byteSize": 126383
     },
     {
       "id": "topo-n40w090-13",
       "category": "topo",
       "path": "shards/topo-n40w090-13.json",
-      "itemCount": 7,
+      "itemCount": 46,
       "bbox": [
         -82.5,
-        42.625,
+        42.5,
         -80,
-        44.75
+        45
       ],
-      "byteSize": 2555
+      "byteSize": 16785
     },
     {
       "id": "topo-n40w090-20",
@@ -1485,40 +1531,53 @@
       "id": "topo-n40w090-21",
       "category": "topo",
       "path": "shards/topo-n40w090-21.json",
-      "itemCount": 210,
+      "itemCount": 211,
       "bbox": [
         -87.5,
         45,
         -85,
-        46.875
+        47.5
       ],
-      "byteSize": 77703
+      "byteSize": 78077
     },
     {
       "id": "topo-n40w090-22",
       "category": "topo",
       "path": "shards/topo-n40w090-22.json",
-      "itemCount": 32,
+      "itemCount": 67,
       "bbox": [
         -90,
         47.75,
-        -88.25,
-        48.5
+        -87.5,
+        50
       ],
-      "byteSize": 12033
+      "byteSize": 24906
+    },
+    {
+      "id": "topo-n40w090-23",
+      "category": "topo",
+      "path": "shards/topo-n40w090-23.json",
+      "itemCount": 39,
+      "bbox": [
+        -87.5,
+        47.5,
+        -85,
+        50
+      ],
+      "byteSize": 14381
     },
     {
       "id": "topo-n40w090-3",
       "category": "topo",
       "path": "shards/topo-n40w090-3.json",
-      "itemCount": 166,
+      "itemCount": 305,
       "bbox": [
         -85,
         45,
         -80,
-        48.5
+        50
       ],
-      "byteSize": 60062
+      "byteSize": 111141
     },
     {
       "id": "topo-n40w100-00",
@@ -1654,27 +1713,27 @@
       "id": "topo-n40w100-22",
       "category": "topo",
       "path": "shards/topo-n40w100-22.json",
-      "itemCount": 256,
+      "itemCount": 272,
       "bbox": [
         -100,
         47.5,
         -97.5,
         50
       ],
-      "byteSize": 93396
+      "byteSize": 99205
     },
     {
       "id": "topo-n40w100-23",
       "category": "topo",
       "path": "shards/topo-n40w100-23.json",
-      "itemCount": 259,
+      "itemCount": 277,
       "bbox": [
         -97.5,
         47.5,
         -95,
         50
       ],
-      "byteSize": 94261
+      "byteSize": 100823
     },
     {
       "id": "topo-n40w100-30",
@@ -1706,27 +1765,27 @@
       "id": "topo-n40w100-32",
       "category": "topo",
       "path": "shards/topo-n40w100-32.json",
-      "itemCount": 214,
+      "itemCount": 234,
       "bbox": [
         -95,
         47.5,
         -92.5,
         50
       ],
-      "byteSize": 78548
+      "byteSize": 85881
     },
     {
       "id": "topo-n40w100-33",
       "category": "topo",
       "path": "shards/topo-n40w100-33.json",
-      "itemCount": 117,
+      "itemCount": 149,
       "bbox": [
         -92.5,
         47.5,
         -90,
-        49.5
+        50
       ],
-      "byteSize": 43182
+      "byteSize": 54912
     },
     {
       "id": "topo-n40w110-00",
@@ -1862,27 +1921,27 @@
       "id": "topo-n40w110-22",
       "category": "topo",
       "path": "shards/topo-n40w110-22.json",
-      "itemCount": 244,
+      "itemCount": 264,
       "bbox": [
         -110,
         47.5,
         -107.5,
-        49.125
+        50
       ],
-      "byteSize": 91167
+      "byteSize": 98521
     },
     {
       "id": "topo-n40w110-23",
       "category": "topo",
       "path": "shards/topo-n40w110-23.json",
-      "itemCount": 242,
+      "itemCount": 262,
       "bbox": [
         -107.5,
         47.5,
         -105,
-        49.125
+        50
       ],
-      "byteSize": 90468
+      "byteSize": 97807
     },
     {
       "id": "topo-n40w110-30",
@@ -1914,27 +1973,27 @@
       "id": "topo-n40w110-32",
       "category": "topo",
       "path": "shards/topo-n40w110-32.json",
-      "itemCount": 242,
+      "itemCount": 260,
       "bbox": [
         -105,
         47.5,
         -102.5,
-        49.5
+        50
       ],
-      "byteSize": 89315
+      "byteSize": 95887
     },
     {
       "id": "topo-n40w110-33",
       "category": "topo",
       "path": "shards/topo-n40w110-33.json",
-      "itemCount": 241,
+      "itemCount": 260,
       "bbox": [
         -102.5,
         47.5,
         -100,
-        49.5
+        50
       ],
-      "byteSize": 88825
+      "byteSize": 95762
     },
     {
       "id": "topo-n40w120-00",
@@ -2070,27 +2129,27 @@
       "id": "topo-n40w120-22",
       "category": "topo",
       "path": "shards/topo-n40w120-22.json",
-      "itemCount": 259,
+      "itemCount": 279,
       "bbox": [
         -120,
         47.5,
         -117.5,
-        49.125
+        50
       ],
-      "byteSize": 96574
+      "byteSize": 103930
     },
     {
       "id": "topo-n40w120-23",
       "category": "topo",
       "path": "shards/topo-n40w120-23.json",
-      "itemCount": 260,
+      "itemCount": 272,
       "bbox": [
         -117.5,
         47.5,
         -115,
         50
       ],
-      "byteSize": 96114
+      "byteSize": 100513
     },
     {
       "id": "topo-n40w120-30",
@@ -2122,27 +2181,27 @@
       "id": "topo-n40w120-32",
       "category": "topo",
       "path": "shards/topo-n40w120-32.json",
-      "itemCount": 248,
+      "itemCount": 267,
       "bbox": [
         -115,
         47.5,
         -112.5,
-        49.25
+        50
       ],
-      "byteSize": 92172
+      "byteSize": 99165
     },
     {
       "id": "topo-n40w120-33",
       "category": "topo",
       "path": "shards/topo-n40w120-33.json",
-      "itemCount": 240,
+      "itemCount": 260,
       "bbox": [
         -112.5,
         47.5,
         -110,
-        49
+        50
       ],
-      "byteSize": 89157
+      "byteSize": 96493
     },
     {
       "id": "topo-n40w130-10",
@@ -2200,14 +2259,14 @@
       "id": "topo-n40w130-2",
       "category": "topo",
       "path": "shards/topo-n40w130-2.json",
-      "itemCount": 5,
+      "itemCount": 19,
       "bbox": [
-        -126,
-        49,
+        -127.5,
+        48.5,
         -125,
         50
       ],
-      "byteSize": 1801
+      "byteSize": 6967
     },
     {
       "id": "topo-n40w130-30",
@@ -2239,27 +2298,27 @@
       "id": "topo-n40w130-32",
       "category": "topo",
       "path": "shards/topo-n40w130-32.json",
-      "itemCount": 164,
+      "itemCount": 176,
       "bbox": [
         -125,
         47.5,
         -122.5,
         50
       ],
-      "byteSize": 60853
+      "byteSize": 65272
     },
     {
       "id": "topo-n40w130-33",
       "category": "topo",
       "path": "shards/topo-n40w130-33.json",
-      "itemCount": 267,
+      "itemCount": 276,
       "bbox": [
         -122.5,
         47.5,
         -120,
         50
       ],
-      "byteSize": 99529
+      "byteSize": 102841
     },
     {
       "id": "topo-n50e170",
@@ -2278,131 +2337,404 @@
       "id": "topo-n50w060",
       "category": "topo",
       "path": "shards/topo-n50w060.json",
-      "itemCount": 3,
+      "itemCount": 197,
       "bbox": [
         -60,
-        54,
-        -56.5,
+        50,
+        -55,
         56
       ],
-      "byteSize": 1024
+      "byteSize": 72649
     },
     {
-      "id": "topo-n50w070",
+      "id": "topo-n50w070-0",
       "category": "topo",
-      "path": "shards/topo-n50w070.json",
-      "itemCount": 5,
+      "path": "shards/topo-n50w070-0.json",
+      "itemCount": 227,
       "bbox": [
-        -69,
+        -70,
+        50,
+        -65,
+        55
+      ],
+      "byteSize": 84247
+    },
+    {
+      "id": "topo-n50w070-1",
+      "category": "topo",
+      "path": "shards/topo-n50w070-1.json",
+      "itemCount": 231,
+      "bbox": [
+        -65,
         50,
         -60,
-        59.5
+        55
       ],
-      "byteSize": 1762
+      "byteSize": 84705
     },
     {
-      "id": "topo-n50w080",
+      "id": "topo-n50w070-2",
       "category": "topo",
-      "path": "shards/topo-n50w080.json",
-      "itemCount": 45,
+      "path": "shards/topo-n50w070-2.json",
+      "itemCount": 185,
       "bbox": [
-        -80,
-        51.75,
-        -77,
+        -70,
+        55,
+        -65,
         60
       ],
-      "byteSize": 15415
+      "byteSize": 68438
     },
     {
-      "id": "topo-n50w090",
+      "id": "topo-n50w070-3",
       "category": "topo",
-      "path": "shards/topo-n50w090.json",
-      "itemCount": 22,
+      "path": "shards/topo-n50w070-3.json",
+      "itemCount": 142,
       "bbox": [
-        -83.5,
-        52.25,
-        -80,
+        -65,
+        55,
+        -60,
         60
       ],
-      "byteSize": 7572
+      "byteSize": 51873
     },
     {
-      "id": "topo-n50w100",
+      "id": "topo-n50w080-0",
       "category": "topo",
-      "path": "shards/topo-n50w100.json",
-      "itemCount": 9,
+      "path": "shards/topo-n50w080-0.json",
+      "itemCount": 199,
       "bbox": [
-        -99,
+        -80,
         50,
-        -94,
-        51.75
+        -75,
+        55
       ],
-      "byteSize": 3181
+      "byteSize": 73039
     },
     {
-      "id": "topo-n50w110",
+      "id": "topo-n50w080-1",
       "category": "topo",
-      "path": "shards/topo-n50w110.json",
-      "itemCount": 52,
+      "path": "shards/topo-n50w080-1.json",
+      "itemCount": 203,
       "bbox": [
-        -106,
-        52,
+        -75,
+        50,
+        -70,
+        55
+      ],
+      "byteSize": 74832
+    },
+    {
+      "id": "topo-n50w080-2",
+      "category": "topo",
+      "path": "shards/topo-n50w080-2.json",
+      "itemCount": 174,
+      "bbox": [
+        -80,
+        55,
+        -75,
+        60
+      ],
+      "byteSize": 63653
+    },
+    {
+      "id": "topo-n50w080-3",
+      "category": "topo",
+      "path": "shards/topo-n50w080-3.json",
+      "itemCount": 203,
+      "bbox": [
+        -75,
+        55,
+        -70,
+        60
+      ],
+      "byteSize": 74686
+    },
+    {
+      "id": "topo-n50w090-0",
+      "category": "topo",
+      "path": "shards/topo-n50w090-0.json",
+      "itemCount": 200,
+      "bbox": [
+        -90,
+        50,
+        -85,
+        55
+      ],
+      "byteSize": 72727
+    },
+    {
+      "id": "topo-n50w090-1",
+      "category": "topo",
+      "path": "shards/topo-n50w090-1.json",
+      "itemCount": 169,
+      "bbox": [
+        -85,
+        50,
+        -80,
+        55
+      ],
+      "byteSize": 60970
+    },
+    {
+      "id": "topo-n50w090-2",
+      "category": "topo",
+      "path": "shards/topo-n50w090-2.json",
+      "itemCount": 54,
+      "bbox": [
+        -90,
+        55,
+        -85,
+        57
+      ],
+      "byteSize": 19357
+    },
+    {
+      "id": "topo-n50w090-3",
+      "category": "topo",
+      "path": "shards/topo-n50w090-3.json",
+      "itemCount": 23,
+      "bbox": [
+        -85,
+        55,
+        -80,
+        60
+      ],
+      "byteSize": 8069
+    },
+    {
+      "id": "topo-n50w100-0",
+      "category": "topo",
+      "path": "shards/topo-n50w100-0.json",
+      "itemCount": 193,
+      "bbox": [
         -100,
-        56
+        50,
+        -95,
+        55
       ],
-      "byteSize": 18251
+      "byteSize": 70816
     },
     {
-      "id": "topo-n50w120",
+      "id": "topo-n50w100-1",
       "category": "topo",
-      "path": "shards/topo-n50w120.json",
-      "itemCount": 11,
+      "path": "shards/topo-n50w100-1.json",
+      "itemCount": 201,
       "bbox": [
-        -118,
+        -95,
+        50,
+        -90,
+        55
+      ],
+      "byteSize": 73861
+    },
+    {
+      "id": "topo-n50w100-2",
+      "category": "topo",
+      "path": "shards/topo-n50w100-2.json",
+      "itemCount": 200,
+      "bbox": [
+        -100,
+        55,
+        -95,
+        60
+      ],
+      "byteSize": 73568
+    },
+    {
+      "id": "topo-n50w100-3",
+      "category": "topo",
+      "path": "shards/topo-n50w100-3.json",
+      "itemCount": 140,
+      "bbox": [
+        -95,
+        55,
+        -90,
+        60
+      ],
+      "byteSize": 51489
+    },
+    {
+      "id": "topo-n50w110-0",
+      "category": "topo",
+      "path": "shards/topo-n50w110-0.json",
+      "itemCount": 200,
+      "bbox": [
+        -110,
+        50,
+        -105,
+        55
+      ],
+      "byteSize": 73372
+    },
+    {
+      "id": "topo-n50w110-1",
+      "category": "topo",
+      "path": "shards/topo-n50w110-1.json",
+      "itemCount": 200,
+      "bbox": [
+        -105,
+        50,
+        -100,
+        55
+      ],
+      "byteSize": 72795
+    },
+    {
+      "id": "topo-n50w110-2",
+      "category": "topo",
+      "path": "shards/topo-n50w110-2.json",
+      "itemCount": 202,
+      "bbox": [
+        -110,
+        55,
+        -105,
+        60
+      ],
+      "byteSize": 74777
+    },
+    {
+      "id": "topo-n50w110-3",
+      "category": "topo",
+      "path": "shards/topo-n50w110-3.json",
+      "itemCount": 200,
+      "bbox": [
+        -105,
+        55,
+        -100,
+        60
+      ],
+      "byteSize": 73929
+    },
+    {
+      "id": "topo-n50w120-0",
+      "category": "topo",
+      "path": "shards/topo-n50w120-0.json",
+      "itemCount": 200,
+      "bbox": [
+        -120,
         50,
         -115,
-        52
+        55
       ],
-      "byteSize": 3908
+      "byteSize": 73720
     },
     {
-      "id": "topo-n50w130",
+      "id": "topo-n50w120-1",
       "category": "topo",
-      "path": "shards/topo-n50w130.json",
-      "itemCount": 30,
+      "path": "shards/topo-n50w120-1.json",
+      "itemCount": 200,
+      "bbox": [
+        -115,
+        50,
+        -110,
+        55
+      ],
+      "byteSize": 73427
+    },
+    {
+      "id": "topo-n50w120-2",
+      "category": "topo",
+      "path": "shards/topo-n50w120-2.json",
+      "itemCount": 200,
+      "bbox": [
+        -120,
+        55,
+        -115,
+        60
+      ],
+      "byteSize": 73325
+    },
+    {
+      "id": "topo-n50w120-3",
+      "category": "topo",
+      "path": "shards/topo-n50w120-3.json",
+      "itemCount": 200,
+      "bbox": [
+        -115,
+        55,
+        -110,
+        60
+      ],
+      "byteSize": 73388
+    },
+    {
+      "id": "topo-n50w130-0",
+      "category": "topo",
+      "path": "shards/topo-n50w130-0.json",
+      "itemCount": 171,
       "bbox": [
         -130,
         50,
-        -121,
-        55.375
+        -125,
+        55
       ],
-      "byteSize": 10613
+      "byteSize": 63331
+    },
+    {
+      "id": "topo-n50w130-1",
+      "category": "topo",
+      "path": "shards/topo-n50w130-1.json",
+      "itemCount": 201,
+      "bbox": [
+        -125,
+        50,
+        -120,
+        55
+      ],
+      "byteSize": 73823
+    },
+    {
+      "id": "topo-n50w130-2",
+      "category": "topo",
+      "path": "shards/topo-n50w130-2.json",
+      "itemCount": 205,
+      "bbox": [
+        -130,
+        55,
+        -125,
+        60
+      ],
+      "byteSize": 75996
+    },
+    {
+      "id": "topo-n50w130-3",
+      "category": "topo",
+      "path": "shards/topo-n50w130-3.json",
+      "itemCount": 252,
+      "bbox": [
+        -125,
+        55,
+        -120,
+        60
+      ],
+      "byteSize": 94519
     },
     {
       "id": "topo-n50w140-1",
       "category": "topo",
       "path": "shards/topo-n50w140-1.json",
-      "itemCount": 48,
+      "itemCount": 94,
       "bbox": [
         -133.8333333,
-        54.625,
-        -130.1666667,
+        51.75,
+        -130,
         55
       ],
-      "byteSize": 19328
+      "byteSize": 36534
     },
     {
       "id": "topo-n50w140-2",
       "category": "topo",
       "path": "shards/topo-n50w140-2.json",
-      "itemCount": 326,
+      "itemCount": 350,
       "bbox": [
         -140.0625,
         56.375,
         -135,
         60
       ],
-      "byteSize": 125994
+      "byteSize": 134895
     },
     {
       "id": "topo-n50w140-30",
@@ -2421,27 +2753,40 @@
       "id": "topo-n50w140-31",
       "category": "topo",
       "path": "shards/topo-n50w140-31.json",
-      "itemCount": 197,
+      "itemCount": 224,
       "bbox": [
         -132.5,
         55,
         -130,
         57.5
       ],
-      "byteSize": 76882
+      "byteSize": 86875
     },
     {
       "id": "topo-n50w140-32",
       "category": "topo",
       "path": "shards/topo-n50w140-32.json",
-      "itemCount": 140,
+      "itemCount": 174,
       "bbox": [
         -135,
         57.5,
         -132.5,
-        59.5
+        60
       ],
-      "byteSize": 53217
+      "byteSize": 65830
+    },
+    {
+      "id": "topo-n50w140-33",
+      "category": "topo",
+      "path": "shards/topo-n50w140-33.json",
+      "itemCount": 65,
+      "bbox": [
+        -132.5,
+        57.5,
+        -130,
+        60
+      ],
+      "byteSize": 24422
     },
     {
       "id": "topo-n50w150",
@@ -2642,105 +2987,339 @@
       "id": "topo-n60w070",
       "category": "topo",
       "path": "shards/topo-n60w070.json",
-      "itemCount": 326,
+      "itemCount": 389,
       "bbox": [
         -70,
         60,
         -61,
         70
       ],
-      "byteSize": 110669
+      "byteSize": 133718
     },
     {
-      "id": "topo-n60w080",
+      "id": "topo-n60w080-0",
       "category": "topo",
-      "path": "shards/topo-n60w080.json",
-      "itemCount": 295,
+      "path": "shards/topo-n60w080-0.json",
+      "itemCount": 129,
       "bbox": [
         -80,
-        61.5,
+        60,
+        -75,
+        65
+      ],
+      "byteSize": 47043
+    },
+    {
+      "id": "topo-n60w080-1",
+      "category": "topo",
+      "path": "shards/topo-n60w080-1.json",
+      "itemCount": 171,
+      "bbox": [
+        -75,
+        60,
+        -70,
+        65
+      ],
+      "byteSize": 61727
+    },
+    {
+      "id": "topo-n60w080-2",
+      "category": "topo",
+      "path": "shards/topo-n60w080-2.json",
+      "itemCount": 69,
+      "bbox": [
+        -80,
+        65,
+        -75,
+        70
+      ],
+      "byteSize": 23568
+    },
+    {
+      "id": "topo-n60w080-3",
+      "category": "topo",
+      "path": "shards/topo-n60w080-3.json",
+      "itemCount": 140,
+      "bbox": [
+        -75,
+        65,
         -70,
         70
       ],
-      "byteSize": 99971
+      "byteSize": 47353
     },
     {
       "id": "topo-n60w090",
       "category": "topo",
       "path": "shards/topo-n60w090.json",
-      "itemCount": 228,
+      "itemCount": 372,
       "bbox": [
         -90,
         61.5,
         -80,
         70
       ],
-      "byteSize": 78303
+      "byteSize": 129964
     },
     {
-      "id": "topo-n60w100",
+      "id": "topo-n60w100-0",
       "category": "topo",
-      "path": "shards/topo-n60w100.json",
-      "itemCount": 17,
+      "path": "shards/topo-n60w100-0.json",
+      "itemCount": 200,
       "bbox": [
         -100,
-        62.25,
+        60,
+        -95,
+        65
+      ],
+      "byteSize": 71959
+    },
+    {
+      "id": "topo-n60w100-1",
+      "category": "topo",
+      "path": "shards/topo-n60w100-1.json",
+      "itemCount": 128,
+      "bbox": [
+        -95,
+        60,
+        -90,
+        65
+      ],
+      "byteSize": 46000
+    },
+    {
+      "id": "topo-n60w100-2",
+      "category": "topo",
+      "path": "shards/topo-n60w100-2.json",
+      "itemCount": 165,
+      "bbox": [
+        -100,
+        65,
+        -95,
+        70
+      ],
+      "byteSize": 58792
+    },
+    {
+      "id": "topo-n60w100-3",
+      "category": "topo",
+      "path": "shards/topo-n60w100-3.json",
+      "itemCount": 159,
+      "bbox": [
+        -95,
+        65,
         -90,
         70
       ],
-      "byteSize": 5907
+      "byteSize": 56306
     },
     {
-      "id": "topo-n60w110",
+      "id": "topo-n60w110-0",
       "category": "topo",
-      "path": "shards/topo-n60w110.json",
-      "itemCount": 1,
+      "path": "shards/topo-n60w110-0.json",
+      "itemCount": 200,
       "bbox": [
-        -106,
-        69,
+        -110,
+        60,
         -105,
-        69.25
+        65
       ],
-      "byteSize": 381
+      "byteSize": 72985
     },
     {
-      "id": "topo-n60w120",
+      "id": "topo-n60w110-1",
       "category": "topo",
-      "path": "shards/topo-n60w120.json",
-      "itemCount": 11,
+      "path": "shards/topo-n60w110-1.json",
+      "itemCount": 200,
       "bbox": [
-        -117.5,
-        60.5,
-        -112,
-        68
+        -105,
+        60,
+        -100,
+        65
       ],
-      "byteSize": 3883
+      "byteSize": 72147
     },
     {
-      "id": "topo-n60w130",
+      "id": "topo-n60w110-2",
       "category": "topo",
-      "path": "shards/topo-n60w130.json",
-      "itemCount": 2,
+      "path": "shards/topo-n60w110-2.json",
+      "itemCount": 162,
       "bbox": [
-        -122.5,
-        65.25,
-        -120.5,
-        66.5
+        -110,
+        65,
+        -105,
+        70
       ],
-      "byteSize": 719
+      "byteSize": 58184
     },
     {
-      "id": "topo-n60w140",
+      "id": "topo-n60w110-3",
       "category": "topo",
-      "path": "shards/topo-n60w140.json",
-      "itemCount": 33,
+      "path": "shards/topo-n60w110-3.json",
+      "itemCount": 163,
+      "bbox": [
+        -105,
+        65,
+        -100,
+        70
+      ],
+      "byteSize": 58450
+    },
+    {
+      "id": "topo-n60w120-0",
+      "category": "topo",
+      "path": "shards/topo-n60w120-0.json",
+      "itemCount": 198,
+      "bbox": [
+        -120,
+        60,
+        -115,
+        65
+      ],
+      "byteSize": 71708
+    },
+    {
+      "id": "topo-n60w120-1",
+      "category": "topo",
+      "path": "shards/topo-n60w120-1.json",
+      "itemCount": 204,
+      "bbox": [
+        -115,
+        60,
+        -110,
+        65
+      ],
+      "byteSize": 75531
+    },
+    {
+      "id": "topo-n60w120-2",
+      "category": "topo",
+      "path": "shards/topo-n60w120-2.json",
+      "itemCount": 148,
+      "bbox": [
+        -120,
+        65,
+        -115,
+        70
+      ],
+      "byteSize": 53647
+    },
+    {
+      "id": "topo-n60w120-3",
+      "category": "topo",
+      "path": "shards/topo-n60w120-3.json",
+      "itemCount": 168,
+      "bbox": [
+        -115,
+        65,
+        -110,
+        70
+      ],
+      "byteSize": 60540
+    },
+    {
+      "id": "topo-n60w130-0",
+      "category": "topo",
+      "path": "shards/topo-n60w130-0.json",
+      "itemCount": 204,
+      "bbox": [
+        -130,
+        60,
+        -125,
+        65
+      ],
+      "byteSize": 74589
+    },
+    {
+      "id": "topo-n60w130-1",
+      "category": "topo",
+      "path": "shards/topo-n60w130-1.json",
+      "itemCount": 207,
+      "bbox": [
+        -125,
+        60,
+        -120,
+        65
+      ],
+      "byteSize": 75191
+    },
+    {
+      "id": "topo-n60w130-2",
+      "category": "topo",
+      "path": "shards/topo-n60w130-2.json",
+      "itemCount": 162,
+      "bbox": [
+        -130,
+        65,
+        -125,
+        70
+      ],
+      "byteSize": 58761
+    },
+    {
+      "id": "topo-n60w130-3",
+      "category": "topo",
+      "path": "shards/topo-n60w130-3.json",
+      "itemCount": 152,
+      "bbox": [
+        -125,
+        65,
+        -120,
+        70
+      ],
+      "byteSize": 54469
+    },
+    {
+      "id": "topo-n60w140-0",
+      "category": "topo",
+      "path": "shards/topo-n60w140-0.json",
+      "itemCount": 231,
       "bbox": [
         -140.0625,
         60,
-        -134.5,
-        62
+        -135,
+        65
       ],
-      "byteSize": 12603
+      "byteSize": 86173
+    },
+    {
+      "id": "topo-n60w140-1",
+      "category": "topo",
+      "path": "shards/topo-n60w140-1.json",
+      "itemCount": 205,
+      "bbox": [
+        -135,
+        60,
+        -130,
+        65
+      ],
+      "byteSize": 75320
+    },
+    {
+      "id": "topo-n60w140-2",
+      "category": "topo",
+      "path": "shards/topo-n60w140-2.json",
+      "itemCount": 164,
+      "bbox": [
+        -140,
+        65,
+        -135,
+        69.75
+      ],
+      "byteSize": 60782
+    },
+    {
+      "id": "topo-n60w140-3",
+      "category": "topo",
+      "path": "shards/topo-n60w140-3.json",
+      "itemCount": 178,
+      "bbox": [
+        -135,
+        65,
+        -130,
+        70
+      ],
+      "byteSize": 64790
     },
     {
       "id": "topo-n60w150-00",
@@ -2811,14 +3390,14 @@
       "id": "topo-n60w150-11",
       "category": "topo",
       "path": "shards/topo-n60w150-11.json",
-      "itemCount": 167,
+      "itemCount": 185,
       "bbox": [
         -142.5,
         60,
-        -140.0625,
+        -140,
         62.5
       ],
-      "byteSize": 65062
+      "byteSize": 71728
     },
     {
       "id": "topo-n60w150-12",
@@ -2837,14 +3416,14 @@
       "id": "topo-n60w150-13",
       "category": "topo",
       "path": "shards/topo-n60w150-13.json",
-      "itemCount": 120,
+      "itemCount": 140,
       "bbox": [
         -142.5,
         62.5,
-        -141,
+        -140,
         65
       ],
-      "byteSize": 44903
+      "byteSize": 52309
     },
     {
       "id": "topo-n60w150-20",
@@ -2915,14 +3494,14 @@
       "id": "topo-n60w150-31",
       "category": "topo",
       "path": "shards/topo-n60w150-31.json",
-      "itemCount": 120,
+      "itemCount": 140,
       "bbox": [
         -142.5,
         65,
-        -141,
+        -140,
         67.5
       ],
-      "byteSize": 46283
+      "byteSize": 53582
     },
     {
       "id": "topo-n60w150-32",
@@ -2941,14 +3520,14 @@
       "id": "topo-n60w150-33",
       "category": "topo",
       "path": "shards/topo-n60w150-33.json",
-      "itemCount": 100,
+      "itemCount": 112,
       "bbox": [
         -142.5,
         67.5,
-        -141,
+        -140,
         70
       ],
-      "byteSize": 39273
+      "byteSize": 43710
     },
     {
       "id": "topo-n60w160-00",
@@ -3305,105 +3884,105 @@
       "id": "topo-n70w070",
       "category": "topo",
       "path": "shards/topo-n70w070.json",
-      "itemCount": 5,
+      "itemCount": 9,
       "bbox": [
         -70,
         70,
         -67,
         71
       ],
-      "byteSize": 1679
+      "byteSize": 3159
     },
     {
       "id": "topo-n70w080",
       "category": "topo",
       "path": "shards/topo-n70w080.json",
-      "itemCount": 144,
+      "itemCount": 198,
       "bbox": [
         -80,
         70,
         -70,
         80
       ],
-      "byteSize": 47977
+      "byteSize": 67634
     },
     {
       "id": "topo-n70w090",
       "category": "topo",
       "path": "shards/topo-n70w090.json",
-      "itemCount": 266,
+      "itemCount": 355,
       "bbox": [
         -90,
         70,
         -80,
         80
       ],
-      "byteSize": 89025
+      "byteSize": 121156
     },
     {
       "id": "topo-n70w100",
       "category": "topo",
       "path": "shards/topo-n70w100.json",
-      "itemCount": 168,
+      "itemCount": 300,
       "bbox": [
         -100,
-        71.25,
+        70,
         -90,
         80
       ],
-      "byteSize": 57478
+      "byteSize": 105225
     },
     {
       "id": "topo-n70w110",
       "category": "topo",
       "path": "shards/topo-n70w110.json",
-      "itemCount": 62,
+      "itemCount": 221,
       "bbox": [
         -110,
-        71.75,
+        70,
         -100,
         79.5
       ],
-      "byteSize": 21231
+      "byteSize": 78462
     },
     {
       "id": "topo-n70w120",
       "category": "topo",
       "path": "shards/topo-n70w120.json",
-      "itemCount": 145,
+      "itemCount": 260,
       "bbox": [
         -120,
-        70.25,
+        70,
         -110,
         79
       ],
-      "byteSize": 49306
+      "byteSize": 90515
     },
     {
       "id": "topo-n70w130",
       "category": "topo",
       "path": "shards/topo-n70w130.json",
-      "itemCount": 16,
+      "itemCount": 101,
       "bbox": [
-        -124,
-        75.5,
+        -130,
+        70,
         -120,
         77.25
       ],
-      "byteSize": 5527
+      "byteSize": 36331
     },
     {
       "id": "topo-n70w140",
       "category": "topo",
       "path": "shards/topo-n70w140.json",
-      "itemCount": 1,
+      "itemCount": 3,
       "bbox": [
         -132,
         70,
-        -131,
+        -130,
         70.25
       ],
-      "byteSize": 362
+      "byteSize": 1122
     },
     {
       "id": "topo-n70w150",
@@ -3448,53 +4027,53 @@
       "id": "topo-n80w070",
       "category": "topo",
       "path": "shards/topo-n80w070.json",
-      "itemCount": 16,
+      "itemCount": 36,
       "bbox": [
         -70,
         80,
         -60,
-        83
+        83.25
       ],
-      "byteSize": 5429
+      "byteSize": 12743
     },
     {
       "id": "topo-n80w080",
       "category": "topo",
       "path": "shards/topo-n80w080.json",
-      "itemCount": 38,
+      "itemCount": 64,
       "bbox": [
         -80,
         80,
         -70,
-        83
+        83.25
       ],
-      "byteSize": 12721
+      "byteSize": 22248
     },
     {
       "id": "topo-n80w090",
       "category": "topo",
       "path": "shards/topo-n80w090.json",
-      "itemCount": 49,
+      "itemCount": 53,
       "bbox": [
         -90,
         80,
         -80,
         83
       ],
-      "byteSize": 16565
+      "byteSize": 18039
     },
     {
       "id": "topo-n80w100",
       "category": "topo",
       "path": "shards/topo-n80w100.json",
-      "itemCount": 23,
+      "itemCount": 24,
       "bbox": [
-        -98,
+        -100,
         80,
         -90,
         82
       ],
-      "byteSize": 7915
+      "byteSize": 8280
     },
     {
       "id": "topo-s10e140",
@@ -3681,10 +4260,10 @@
   ],
   "search": {
     "path": "search.json",
-    "byteSize": 485387,
-    "tokenCount": 23273
+    "byteSize": 764689,
+    "tokenCount": 39920
   },
   "categoryCounts": {
-    "topo": 67983
+    "topo": 79391
   }
 }

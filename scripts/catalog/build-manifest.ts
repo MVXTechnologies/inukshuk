@@ -43,21 +43,48 @@ import {
   type CatalogShardRef,
   type CatalogSource,
 } from '../../src/core/catalog/schema';
+import { dedupeByCoverage } from '../../src/core/catalog/coverage';
 import {
   buildCatalogSearchDigest,
   parseCatalogSearchDigest,
 } from '../../src/core/catalog/searchDigest';
 import { planCatalogShards } from '../../src/core/catalog/shard';
 
-/** Fragments that also feed the frozen v1 manifest for pre-world-catalog apps. */
+/**
+ * Fragments that also feed the frozen v1 manifest for pre-world-catalog apps.
+ *
+ * **This set is capped on purpose.** Those clients have no shard support, so
+ * every item listed here is inlined into one JSON file they must download
+ * whole; CanTopo alone already makes it ~1 MB. CanMatrix's 12 000 scanned
+ * sheets would push it past 5 MB — and those builds could not open a GeoTIFF
+ * anyway. They keep the Canadian GeoPDF catalog they shipped with.
+ */
 const LEGACY_FRAGMENTS = new Set(['nrcan-cantopo.json']);
+
+/**
+ * Generator-only fields a fragment may carry (see `@core/catalog/coverage`).
+ * They decide which of two products for the same ground survives, and are
+ * stripped before anything is published — a phone never re-derives this.
+ */
+interface CoverageFields {
+  coverageKey?: string;
+  sourceRank?: number;
+}
+
+type FragmentItem = CatalogItem & CoverageFields;
 
 interface Fragment {
   sources?: CatalogSource[];
-  items?: CatalogItem[];
+  items?: FragmentItem[];
 }
 
-function readFragments(dir: string): { sources: CatalogSource[]; items: CatalogItem[] } {
+/** The item as it goes on the wire, with the build-time fields removed. */
+function publishable(item: FragmentItem): CatalogItem {
+  const { coverageKey: _key, sourceRank: _rank, ...rest } = item;
+  return rest;
+}
+
+function readFragments(dir: string): { sources: CatalogSource[]; items: FragmentItem[] } {
   const files = readdirSync(dir)
     .filter((f) => f.endsWith('.json'))
     .sort();
@@ -65,7 +92,7 @@ function readFragments(dir: string): { sources: CatalogSource[]; items: CatalogI
     throw new Error(`no fragments in ${dir} — run a fetch-<source>.ts first`);
   }
   const sources: CatalogSource[] = [];
-  const items: CatalogItem[] = [];
+  const items: FragmentItem[] = [];
   for (const file of files) {
     const fragment = JSON.parse(readFileSync(join(dir, file), 'utf8')) as Fragment;
     sources.push(...(fragment.sources ?? []));
@@ -85,7 +112,7 @@ function writeLegacyManifest(dir: string, outPath: string): void {
     if (!LEGACY_FRAGMENTS.has(file)) continue;
     const fragment = JSON.parse(readFileSync(join(dir, file), 'utf8')) as Fragment;
     sources.push(...(fragment.sources ?? []));
-    items.push(...(fragment.items ?? []));
+    items.push(...(fragment.items ?? []).map(publishable));
   }
   if (items.length === 0) {
     console.log('no legacy fragments — leaving /catalog/v1/manifest.json untouched');
@@ -118,12 +145,26 @@ function main(): void {
 
   // Drop duplicate ids up front so the shard plan and the parser agree on the
   // item count (the parser would silently drop the second occurrence later).
-  const byId = new Map<string, CatalogItem>();
+  const byId = new Map<string, FragmentItem>();
   for (const item of items) if (!byId.has(item.id)) byId.set(item.id, item);
-  const unique = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
-  if (unique.length !== items.length) {
-    console.log(`dropped ${items.length - unique.length} duplicate item ids across fragments`);
+  const byIdItems = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  if (byIdItems.length !== items.length) {
+    console.log(`dropped ${items.length - byIdItems.length} duplicate item ids across fragments`);
   }
+
+  // Then one product per patch of ground: where two sources publish the same
+  // NTS sheet, the better-ranked series wins (CanTopo's modern GeoPDF over a
+  // CanMatrix scan of the same sheet). The store must never offer the user two
+  // rows for one map.
+  const { kept, dropped } = dedupeByCoverage(byIdItems);
+  if (dropped.length > 0) {
+    const sample = dropped[0];
+    console.log(
+      `coverage dedupe: dropped ${dropped.length} superseded items` +
+        (sample !== undefined ? ` (e.g. ${sample.id} → ${sample.supersededBy})` : ''),
+    );
+  }
+  const unique = kept.map(publishable);
 
   const sourceIds = new Set(sources.map((s) => s.id));
   const orphans = unique.filter((item) => !sourceIds.has(item.sourceId));

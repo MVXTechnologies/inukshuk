@@ -142,6 +142,19 @@ export function extrapolatePageCorners(
   viewportCorners: CornerCoordinates,
   targetRect: PointRect,
 ): CornerCoordinates {
+  // Nothing to extrapolate when the target IS the georeferenced rectangle —
+  // and the least-squares fit below would not reproduce the given corners
+  // exactly, because four projected corners rarely form a true parallelogram
+  // (grid north differs from true north across a UTM sheet). A GeoTIFF is
+  // always this case; so is a GeoPDF whose neatline fills the page.
+  if (
+    viewportRect.x0 === targetRect.x0 &&
+    viewportRect.y0 === targetRect.y0 &&
+    viewportRect.x1 === targetRect.x1 &&
+    viewportRect.y1 === targetRect.y1
+  ) {
+    return viewportCorners;
+  }
   // Viewport page-space corners, matched to their geographic corners. Visual
   // top corresponds to the larger Y in PDF point space.
   const src: [number, number][] = [

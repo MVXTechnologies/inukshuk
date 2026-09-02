@@ -69,13 +69,23 @@ describe('parseCatalogManifest', () => {
           { ...item, id: 'no-url', url: undefined },
           { ...item, id: 'ftp-url', url: 'ftp://example.com/x.zip' },
           { ...item, id: 'bad-category', category: 'submarine' },
-          { ...item, id: 'geotiff-item', format: 'geotiff' }, // M3 — not downloadable yet
+          { ...item, id: 'shapefile-item', format: 'shp' },
           { ...item, id: 'no-title', title: '   ' },
         ],
       }),
     );
     expect(parsed?.items.map((i) => i.id)).toEqual(['cantopo-021l14']);
     expect(warnings).toHaveLength(6);
+  });
+
+  it('accepts a GeoTIFF item — CanMatrix scans are downloadable since M3', () => {
+    const { manifest: parsed, warnings } = parseCatalogManifest(
+      manifest({
+        items: [{ ...item, id: 'canmatrix-021l14', format: 'geotiff' }],
+      }),
+    );
+    expect(parsed?.items.map((i) => i.format)).toEqual(['geotiff']);
+    expect(warnings).toEqual([]);
   });
 
   it('drops items whose sourceId has no source (no attribution ⇒ no listing)', () => {

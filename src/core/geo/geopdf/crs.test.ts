@@ -1,4 +1,11 @@
-import { epsgFromText, makeReprojector, proj4DefForEpsg, utmEpsg, utmFromEpsg } from './crs';
+import {
+  epsgFromText,
+  makeReprojector,
+  northAmericanUtmFromEpsg,
+  proj4DefForEpsg,
+  utmEpsg,
+  utmFromEpsg,
+} from './crs';
 
 describe('crs — EPSG detection', () => {
   it('reads EPSG from WKT AUTHORITY', () => {
@@ -45,6 +52,17 @@ describe('crs — UTM helpers', () => {
     expect(proj4DefForEpsg(32618)).toContain('zone=18');
     expect(proj4DefForEpsg(99999)).toBeNull();
   });
+
+  it('knows the North American UTM zones the Canadian scans use', () => {
+    expect(northAmericanUtmFromEpsg(26919)).toEqual({ zone: 19, datum: 'NAD83' });
+    expect(northAmericanUtmFromEpsg(26909)).toEqual({ zone: 9, datum: 'NAD83' });
+    expect(northAmericanUtmFromEpsg(26718)).toEqual({ zone: 18, datum: 'NAD27' });
+    expect(northAmericanUtmFromEpsg(26902)).toBeNull(); // zone 2 is off the grid
+    expect(northAmericanUtmFromEpsg(32619)).toBeNull(); // that is WGS84 UTM
+    expect(proj4DefForEpsg(26919)).toContain('+datum=NAD83');
+    expect(proj4DefForEpsg(26919)).toContain('zone=19');
+    expect(proj4DefForEpsg(4269)).toContain('longlat');
+  });
 });
 
 describe('crs — reprojector', () => {
@@ -68,5 +86,24 @@ describe('crs — reprojector', () => {
     const r = makeReprojector({ epsg: 99999 });
     expect(r.isWgs84).toBe(true);
     expect(r.toWgs84(1, 2)).toEqual([1, 2]);
+    expect(r.fromWgs84(1, 2)).toEqual([1, 2]);
+  });
+
+  it('reprojects NAD83 / UTM 19N — every CanMatrix sheet names a 269xx code', () => {
+    // 021L14's top-left tiepoint. Without a NAD83 UTM definition this would
+    // pass straight through and put Québec City in the Gulf of Guinea.
+    const r = makeReprojector({ epsg: 26919 });
+    expect(r.isWgs84).toBe(false);
+    const [lon, lat] = r.toWgs84(307633.073099, 5209773.397729);
+    expect(lon).toBeCloseTo(-71.531, 2);
+    expect(lat).toBeCloseTo(47.0135, 3);
+  });
+
+  it('round-trips through fromWgs84, which places a neatline in a raster grid', () => {
+    const r = makeReprojector({ epsg: 26919 });
+    const [x, y] = r.fromWgs84(-71.5, 47);
+    const [lon, lat] = r.toWgs84(x, y);
+    expect(lon).toBeCloseTo(-71.5, 9);
+    expect(lat).toBeCloseTo(47, 9);
   });
 });

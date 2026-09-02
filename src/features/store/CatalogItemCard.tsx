@@ -119,6 +119,11 @@ export function CatalogItemCard({
                 {source.attribution} — {source.licence}
               </Text>
             )}
+            {item.format === 'geotiff' && (
+              <Text variant="bodySmall">
+                Scanned paper sheet — an archival printing, which may be decades old.
+              </Text>
+            )}
             {item.region !== undefined && <Text variant="bodySmall">Region: {item.region}</Text>}
             {item.bbox !== undefined && (
               <Text variant="bodySmall">Coverage: {coverageLabel(item.bbox)}</Text>

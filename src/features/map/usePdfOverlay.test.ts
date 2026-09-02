@@ -1,4 +1,5 @@
 import type { GeoReference, MapDocument } from '@core/models';
+import { isRenderedRasterMap } from '@core/library/mapFile';
 import { activeTargets } from './usePdfOverlay';
 
 jest.mock('expo-file-system', () => ({ File: class {} }));
@@ -55,5 +56,19 @@ describe('activeTargets', () => {
   it('skips maps with no file and pages with no georeference', () => {
     expect(activeTargets([{ ...mapDoc([0], [viewport(0, 540)]), fileUri: '' }])).toEqual([]);
     expect(activeTargets([mapDoc([7], [viewport(0, 540)])])).toEqual([]);
+  });
+
+  it('targets a rendered raster map (a GeoTIFF sheet) the same way, PNG and all', () => {
+    // A CanMatrix sheet is stored as its rendered overlay, so it reaches this
+    // function as a one-page map whose fileUri is a .png. Nothing here should
+    // care; the fork happens later, where the rasterizer would otherwise run.
+    const scan: MapDocument = {
+      ...mapDoc([0], [{ ...viewport(0, 9189), source: 'geotiff' }]),
+      fileUri: 'file://maps/m1.png',
+    };
+    const targets = activeTargets([scan]);
+    expect(targets).toHaveLength(1);
+    expect(targets[0]?.fileUri).toBe('file://maps/m1.png');
+    expect(isRenderedRasterMap(targets[0]?.fileUri ?? '')).toBe(true);
   });
 });

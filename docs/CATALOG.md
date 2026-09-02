@@ -76,6 +76,12 @@ it would hand those clients a 24 MB download they cannot page. New clients never
 it, which is what keeps a cache written by an older build usable after an
 update.
 
+**It is capped there deliberately.** CanMatrix's ~11 700 scanned sheets are
+_not_ added to `LEGACY_FRAGMENTS`: they would take this file past 5 MB, and a
+build old enough to be reading v1 has no GeoTIFF decoder and could not open one
+anyway. Those clients keep the GeoPDF catalog they shipped with; everything new
+is v2-only.
+
 ## 2. The sharding scheme
 
 **Shard key = category × geographic cell.** Both halves matter: the category
@@ -195,11 +201,20 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
 
 - Fragments are plain `{ sources, items }` JSON: one per source, either crawled
   by a `fetch-*.ts` or hand-curated.
-- `build-manifest.ts` merges them, drops duplicate ids, refuses items whose
-  `sourceId` was never declared, plans the shards with the **same**
-  `planCatalogShards` the client's ranking assumes, and validates every shard
-  and the index with the **app's own parsers** before writing. Generator and
-  client cannot drift.
+- `build-manifest.ts` merges them, drops duplicate ids, resolves **coverage
+  collisions** (below), refuses items whose `sourceId` was never declared, plans
+  the shards with the **same** `planCatalogShards` the client's ranking assumes,
+  and validates every shard and the index with the **app's own parsers** before
+  writing. Generator and client cannot drift.
+- **One map per patch of ground.** Canada is published twice — CanTopo's modern
+  GeoPDFs where they exist, CanMatrix's scanned sheets everywhere. A fragment
+  may tag an item with `coverageKey` (a name for the _ground_, e.g.
+  `nts50k:021L14`) and `sourceRank` (higher wins); `dedupeByCoverage`
+  (`@core/catalog/coverage`) then keeps only the best-ranked source for each
+  key, so the store never shows two rows for one sheet. Both fields are
+  **generator-only** and stripped before publishing — a phone never re-derives
+  this. Note it keeps _every_ item of the winning source for a key, not one:
+  a few dozen NTS sheets are published as two half-sheets that share a key.
 - The shard directory is rewritten from scratch each run, so a shard that no
   longer exists can never linger and serve items the index no longer lists.
 - Sharding is deterministic: same items in, byte-identical output.
@@ -210,6 +225,13 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
   `ntsSheetBbox` grid formula, which returns null at 60°N and above — where
   four fifths of CanTopo's sheets are. Its ~2 200 HEADs are cached under
   `scripts/catalog/.cache/` (gitignored, 30-day TTL) so a re-run resumes.
+- `fetch-canmatrix.ts` crawls the same tree for the **scanned** 1:50k series —
+  the only 1:50k coverage that exists for eastern Québec, the north and much of
+  BC. Same discipline (discovered quads, extents from `nts_snrc.kmz`, cached
+  HEADs), plus: it tags every item with a coverage key so CanTopo wins where
+  both series publish a sheet, it keeps both halves of the ~430 sheets printed
+  as east/west halves, and every title carries the word "scanned" so nobody
+  downloads a decades-old printing thinking it is current.
 
 ### The e2e fixture is sharded too
 

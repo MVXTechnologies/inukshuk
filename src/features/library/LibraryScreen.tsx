@@ -43,6 +43,7 @@ import {
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
+import { isRenderedRasterMap } from '@core/library/mapFile';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -459,6 +460,17 @@ export function LibraryScreen() {
     const hasPages = m.georeferences.length > 0;
     const active = m.activePages.length;
     const expanded = expandedMap === m.id;
+    // A scanned sheet (GeoTIFF) is one image, not a document: it was rendered
+    // to its overlay at import time and has no pages to page through. Saying
+    // "1 page(s) · 1/1 shown" and offering a "Page 1" checkbox would be noise.
+    const singleImage = isRenderedRasterMap(m.fileUri);
+    const caption = !hasPages
+      ? m.georeferenceWarning
+      : singleImage
+        ? active > 0
+          ? 'Scanned sheet · shown as overlay'
+          : 'Scanned sheet · hidden'
+        : `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`;
     return (
       <Card key={m.id} style={styles.trackCard} mode="contained">
         <View style={styles.trackRow}>
@@ -478,9 +490,7 @@ export function LibraryScreen() {
                 numberOfLines={1}
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
-                {hasPages
-                  ? `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`
-                  : m.georeferenceWarning}
+                {caption}
               </Text>
             </View>
           </Pressable>
@@ -502,7 +512,7 @@ export function LibraryScreen() {
             {primaryGeoreferences(m.georeferences).map((g) => (
               <Checkbox.Item
                 key={g.pageIndex}
-                label={`Page ${g.pageIndex + 1}`}
+                label={singleImage ? 'Scanned sheet' : `Page ${g.pageIndex + 1}`}
                 position="leading"
                 status={m.activePages.includes(g.pageIndex) ? 'checked' : 'unchecked'}
                 onPress={() => toggleMapPage(m.id, g.pageIndex)}
