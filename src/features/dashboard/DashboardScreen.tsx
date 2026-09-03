@@ -15,6 +15,7 @@ import { Chip, Icon, Menu, SegmentedButtons, Text, useTheme } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityGraph } from './ActivityGraph';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
+import { LifetimeSummary } from './LifetimeSummary';
 import { MonthCalendar } from './MonthCalendar';
 
 /**
@@ -256,6 +257,10 @@ export function DashboardScreen() {
         canNext={canNextMonth}
         onDayPress={onDayPress}
       />
+
+      {/* Running totals for the same (category-filtered) set the graph and
+          calendar show, with no 7d/3m/1y window. */}
+      <LifetimeSummary tracks={matching} customCategories={customCategories} />
 
       <DayActivitiesDialog
         title={
