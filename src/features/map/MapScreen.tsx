@@ -1,4 +1,5 @@
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
@@ -936,9 +937,14 @@ export function MapScreen() {
     // inflation + deck-clearing margins landed way too zoomed out): fit the
     // union bbox itself, with just enough pixel padding that the trail's
     // line width and end markers aren't clipped by the very edge — the
-    // carousel deck overlapping a corner of the fit is accepted.
+    // carousel deck overlapping a corner of the fit is accepted. The padding
+    // lives in @core/geo/cameraFit, where `cameraFit.test.ts` pins what it
+    // frames: on a portrait phone this fit is WIDTH-limited, so the union
+    // spans ~92% of the screen width and the vertical padding never reaches
+    // the zoom at all (padding the top "to clear the deck" is a no-op, not a
+    // fix — see that test before tuning anything here).
     const bounds = toLngLatBounds(union);
-    const padding = { top: insets.top + 16, left: 16, right: 16, bottom: 16 };
+    const padding = carouselFitPadding(insets.top);
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
     if (restoreCameraRef.current === null && mapLoaded) {
       void mapRef.current
