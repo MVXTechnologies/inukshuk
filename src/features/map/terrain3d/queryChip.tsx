@@ -1,4 +1,4 @@
-import { formatElevation } from '@lib/format';
+import { formatElevation } from '@state/formatters';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Surface, Text } from 'react-native-paper';

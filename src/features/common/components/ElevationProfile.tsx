@@ -5,7 +5,7 @@ import {
   type TrackPointAt,
 } from '@core/geo/track';
 import type { TrackPoint } from '@core/models';
-import { formatDistance, formatElevation, formatPace } from '@lib/format';
+import { formatDistance, formatElevation, formatPace } from '@state/formatters';
 import { Fragment, useMemo, useState } from 'react';
 import {
   PanResponder,

@@ -17,7 +17,7 @@ import {
   formatElevation,
   formatPace,
   formatSpeed,
-} from '@lib/format';
+} from '@state/formatters';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';

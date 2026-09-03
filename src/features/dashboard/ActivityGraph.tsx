@@ -1,5 +1,5 @@
 import type { ActivityBucket } from '@core/dashboard/aggregate';
-import { formatDistance } from '@lib/format';
+import { formatDistance } from '@state/formatters';
 import { useMemo, useState } from 'react';
 import {
   PanResponder,

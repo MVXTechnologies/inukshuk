@@ -1,6 +1,6 @@
 import { findCategory } from '@core/library/categories';
 import type { TrackSummary } from '@core/models';
-import { formatDistance, formatDuration, formatTimestamp } from '@lib/format';
+import { formatDistance, formatDuration, formatTimestamp } from '@state/formatters';
 import { useLibraryStore } from '@state/libraryStore';
 import { useEffect, useMemo, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';

@@ -6,7 +6,7 @@ import {
   type DashboardPeriod,
 } from '@core/dashboard/aggregate';
 import { allCategories, categoryColor, findCategory } from '@core/library/categories';
-import { formatDistance, formatDuration, formatElevation } from '@lib/format';
+import { formatDistance, formatDuration, formatElevation } from '@state/formatters';
 import { useLibraryStore } from '@state/libraryStore';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';

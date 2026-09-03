@@ -1,6 +1,6 @@
 import { packCellLabel, type MarinePackRecord } from '@core/geo/marinePacks';
 import { marineSourceById } from '@core/geo/marineSources';
-import { formatBytes } from '@lib/format';
+import { formatBytes } from '@core/format';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useState } from 'react';

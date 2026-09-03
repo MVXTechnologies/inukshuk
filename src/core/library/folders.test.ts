@@ -101,3 +101,37 @@ describe('groupByFolder', () => {
     expect(folderItemCount(groups[0]!)).toBe(4);
   });
 });
+
+/**
+ * Generic over the trail type, so a caller with a richer trail (the web
+ * playground's `WebTrack` adds a preview polyline and a colour) reads its own
+ * fields straight off the grouping instead of re-resolving every element
+ * through an id map.
+ */
+describe('groupByFolder (widened trail types)', () => {
+  interface RichTrack extends TrackSummary {
+    color: string;
+  }
+  const richTrack = (id: string, folderId?: string): RichTrack => ({
+    ...track(id, folderId),
+    color: `#${id}`,
+  });
+
+  it('flows the caller trail type into groups and leftovers', () => {
+    const grouping = groupByFolder(
+      [folder('A', 'Alpha')],
+      [],
+      [richTrack('t1', 'A'), richTrack('t2')],
+      [],
+    );
+    // Both reads are typed RichTrack — no cast, no id map. They are the
+    // assertion: with a widened return type neither line would compile.
+    expect(grouping.groups[0]!.tracks.map((t) => t.color)).toEqual(['#t1']);
+    expect(grouping.ungroupedTracks.map((t) => t.color)).toEqual(['#t2']);
+  });
+
+  it('still counts a widened group', () => {
+    const { groups } = groupByFolder([folder('A', 'Alpha')], [], [richTrack('t1', 'A')], []);
+    expect(folderItemCount(groups[0]!)).toBe(1);
+  });
+});

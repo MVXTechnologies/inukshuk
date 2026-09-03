@@ -1,4 +1,16 @@
-/** Human-readable formatting for the live HUD and library. Pure functions. */
+/**
+ * Human-readable formatting for the live HUD, the Library and the exports.
+ *
+ * Every function here is REFERENTIALLY TRANSPARENT: the unit system is an
+ * argument, never hidden module state. It used to be a `let displayUnits`
+ * that the settings store poked through `setDisplayUnits()`, which meant
+ * `formatDistance(1609)` returned "1.61 km" or "1.00 mi" depending on state
+ * this module could not see — the one thing `src/core` must not do.
+ *
+ * The `(value) => string` call shape the ~50 UI call sites want is now built
+ * by {@link createFormatters}; `src/state/formatters.ts` holds the instance
+ * bound to the settings store, which is the single source of truth for units.
+ */
 
 /** Display unit system for distance/elevation/speed/pace formatting. */
 export type Units = 'metric' | 'imperial';
@@ -7,24 +19,12 @@ const M_PER_FT = 0.3048;
 const M_PER_MI = 1609.344;
 const MPH_PER_MPS = 3600 / M_PER_MI;
 
-let displayUnits: Units = 'metric';
-
-/**
- * Select the unit system used by formatDistance/formatElevation/formatSpeed/
- * formatPace. Module-level so the many existing call sites keep their
- * `(value) => string` signatures — the settings store calls this on hydrate,
- * on change, and on reset.
- */
-export function setDisplayUnits(units: Units): void {
-  displayUnits = units;
-}
-
 /** Metres -> "1.23 km" / "840 m" (metric) or "1.23 mi" / "840 ft" (imperial). */
-export function formatDistance(meters: number): string {
+export function formatDistance(meters: number, units: Units): string {
   if (!Number.isFinite(meters) || meters < 0) {
-    return displayUnits === 'imperial' ? '0 ft' : '0 m';
+    return units === 'imperial' ? '0 ft' : '0 m';
   }
-  if (displayUnits === 'imperial') {
+  if (units === 'imperial') {
     const feet = meters / M_PER_FT;
     // Switch to miles at the same threshold the rounding uses, so a value that
     // would round to 1000 ft renders as miles instead of "1000 ft".
@@ -38,13 +38,13 @@ export function formatDistance(meters: number): string {
 }
 
 /** Metres -> "1 234 m" or "4 049 ft" (elevation, no decimals). */
-export function formatElevation(meters: number): string {
-  if (!Number.isFinite(meters)) return displayUnits === 'imperial' ? '0 ft' : '0 m';
-  if (displayUnits === 'imperial') return `${Math.round(meters / M_PER_FT)} ft`;
+export function formatElevation(meters: number, units: Units): string {
+  if (!Number.isFinite(meters)) return units === 'imperial' ? '0 ft' : '0 m';
+  if (units === 'imperial') return `${Math.round(meters / M_PER_FT)} ft`;
   return `${Math.round(meters)} m`;
 }
 
-/** Seconds -> "H:MM:SS" or "M:SS". */
+/** Seconds -> "H:MM:SS" or "M:SS". Unit-system independent. */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
   const s = Math.floor(seconds % 60);
@@ -55,34 +55,34 @@ export function formatDuration(seconds: number): string {
 }
 
 /** m/s -> "4.2 km/h" or "2.6 mph". */
-export function formatSpeed(mps: number): string {
+export function formatSpeed(mps: number, units: Units): string {
   if (!Number.isFinite(mps) || mps < 0) {
-    return displayUnits === 'imperial' ? '0.0 mph' : '0.0 km/h';
+    return units === 'imperial' ? '0.0 mph' : '0.0 km/h';
   }
-  if (displayUnits === 'imperial') return `${(mps * MPH_PER_MPS).toFixed(1)} mph`;
+  if (units === 'imperial') return `${(mps * MPH_PER_MPS).toFixed(1)} mph`;
   return `${(mps * 3.6).toFixed(1)} km/h`;
 }
 
 /** m/s -> "6:00/km" or "9:39/mi" pace. Returns "—" for non-positive/implausible speeds. */
-export function formatPace(mps: number): string {
+export function formatPace(mps: number, units: Units): string {
   if (!Number.isFinite(mps) || mps <= 0.1) return '—';
-  const secPerUnit = (displayUnits === 'imperial' ? M_PER_MI : 1000) / mps;
+  const secPerUnit = (units === 'imperial' ? M_PER_MI : 1000) / mps;
   if (secPerUnit > 99 * 60) return '—';
   const m = Math.floor(secPerUnit / 60);
   const s = Math.round(secPerUnit % 60);
   const mm = s === 60 ? m + 1 : m;
   const ss = s === 60 ? 0 : s;
-  return `${mm}:${ss.toString().padStart(2, '0')}/${displayUnits === 'imperial' ? 'mi' : 'km'}`;
+  return `${mm}:${ss.toString().padStart(2, '0')}/${units === 'imperial' ? 'mi' : 'km'}`;
 }
 
-/** Heading degrees -> cardinal abbreviation (N, NE, …). */
+/** Heading degrees -> cardinal abbreviation (N, NE, …). Unit-system independent. */
 export function headingToCardinal(deg: number): string {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const idx = Math.round((((deg % 360) + 360) % 360) / 45) % 8;
   return dirs[idx] ?? 'N';
 }
 
-/** Epoch ms -> short local date+time, e.g. "Jun 15, 14:32". */
+/** Epoch ms -> short local date+time, e.g. "Jun 15, 14:32". Unit-system independent. */
 export function formatTimestamp(epochMs: number): string {
   const d = new Date(epochMs);
   return d.toLocaleDateString(undefined, {
@@ -99,4 +99,27 @@ export function formatBytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(0)} MB`;
   return `${(n / 1e3).toFixed(0)} KB`;
+}
+
+/** The unit-dependent formatters, pre-bound to one unit system. */
+export interface Formatters {
+  formatDistance: (meters: number) => string;
+  formatElevation: (meters: number) => string;
+  formatSpeed: (mps: number) => string;
+  formatPace: (mps: number) => string;
+}
+
+/**
+ * Bind the unit-dependent formatters to a unit system.
+ *
+ * This is what keeps the call sites terse without a hidden global: the units
+ * are captured here, once, by whoever knows them (the settings store).
+ */
+export function createFormatters(units: Units): Formatters {
+  return {
+    formatDistance: (meters) => formatDistance(meters, units),
+    formatElevation: (meters) => formatElevation(meters, units),
+    formatSpeed: (mps) => formatSpeed(mps, units),
+    formatPace: (mps) => formatPace(mps, units),
+  };
 }

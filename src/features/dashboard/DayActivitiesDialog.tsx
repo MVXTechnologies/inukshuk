@@ -1,6 +1,6 @@
 import { findCategory, type CustomCategory } from '@core/library/categories';
 import type { TrackSummary } from '@core/models';
-import { formatDistance, formatDuration } from '@lib/format';
+import { formatDistance, formatDuration } from '@state/formatters';
 import { ScrollView } from 'react-native';
 import { Button, Dialog, List, Portal } from 'react-native-paper';
 

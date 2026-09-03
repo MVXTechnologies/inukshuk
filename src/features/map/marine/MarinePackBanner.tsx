@@ -1,5 +1,5 @@
 import { marinePackOfferMessage, type MarinePackOffer } from '@core/geo/marinePacks';
-import { formatBytes } from '@lib/format';
+import { formatBytes } from '@core/format';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Surface, Text, TouchableRipple } from 'react-native-paper';
 

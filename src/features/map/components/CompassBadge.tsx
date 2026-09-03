@@ -1,5 +1,5 @@
 import { unwrapDeg } from '@core/signal/heading';
-import { headingToCardinal } from '@lib/format';
+import { headingToCardinal } from '@core/format';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, useAnimatedValue } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';

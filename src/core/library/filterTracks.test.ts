@@ -221,3 +221,40 @@ describe('combined criteria (AND across criteria)', () => {
     ).toBe(6);
   });
 });
+
+/**
+ * `filterTracks` is generic OVER `TrackSummary`, not typed ON it. A caller
+ * holding a richer trail type must get ITS type back — otherwise every kept
+ * element has to be recovered through an id map at the call site, which is
+ * exactly the workaround the web playground had to carry.
+ */
+describe('filterTracks (widened element types)', () => {
+  interface RichTrack extends TrackSummary {
+    color: string;
+    preview: [number, number][];
+  }
+  const rich = (t: TrackSummary): RichTrack => ({
+    ...t,
+    color: `#${t.id}`,
+    preview: [[-71, 46]],
+  });
+  const RICH: readonly RichTrack[] = ALL.map(rich);
+
+  it('returns the caller element type, extras intact', () => {
+    const kept = filterTracks(RICH, { distanceM: { min: 5000 } });
+    // `kept` is typed readonly RichTrack[], so the extras are reachable with
+    // no cast and no id map. Reaching them IS the assertion: a widened return
+    // type would not compile here.
+    expect(kept.map((t) => t.color)).toEqual(['#climb', '#run', '#plain']);
+    expect(kept[0]?.preview).toEqual([[-71, 46]]);
+  });
+
+  it('returns the identities the caller passed in', () => {
+    const kept = filterTracks(RICH, { categories: ['run'] });
+    expect(kept[0]).toBe(RICH.find((t) => t.id === 'run'));
+  });
+
+  it('still returns the input array itself when no criterion is active', () => {
+    expect(filterTracks(RICH, {})).toBe(RICH);
+  });
+});
