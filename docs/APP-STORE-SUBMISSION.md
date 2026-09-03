@@ -9,7 +9,7 @@ Work top to bottom. Every step names the exact screen and field.
 - Apple Team **8S5UZVMQFA** (Individual), Apple ID **marc-andre.vigneault.02@hotmail.com**
 - ASC app record **Inukshuk**, Apple ID **6797629589**, bundle `com.inukshuk.app`,
   SKU `inukshuk-001`, primary language **English (Canada)**
-- Version to ship: **1.5.0**, build **4** (`app.config.ts`)
+- Version to ship: **1.5.0**, build **5** (`app.config.ts`)
 
 Ready-made copy lives in [`store/appstore/`](../store/appstore); screenshots in
 [`store/screenshots/ios/6.9-inch/`](../store/screenshots/ios/6.9-inch) and
@@ -67,9 +67,9 @@ eas submit --platform ios --profile production --latest
 needs no extra flags. (The tag-driven path in `docs/DEPLOYMENT.md` —
 `npm version …` + `git push --follow-tags` — does the same thing through
 `release.yml`; use whichever you prefer, but do **not** bump `version`: 1.5.0
-build 4 is what these screenshots and this checklist describe.)
+build 5 is what these screenshots and this checklist describe.)
 
-Wait for **TestFlight → Builds → iOS** to show `1.5.0 (4)` in state **Ready to
+Wait for **TestFlight → Builds → iOS** to show `1.5.0 (5)` in state **Ready to
 Submit** / **Valid** (processing is 5–30 min). If it lands in _Missing
 Compliance_, see §6.
 
@@ -225,7 +225,7 @@ Paste verbatim from `store/appstore/`:
 
 ### 6.3 Build
 
-**Build** section → **+** → pick `1.5.0 (4)`.
+**Build** section → **+** → pick `1.5.0 (5)`.
 
 ### 6.4 App Review Information
 

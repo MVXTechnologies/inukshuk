@@ -28,9 +28,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Must increase for every TestFlight upload of the same version (Apple
-    // rejects duplicate version+build pairs). 1 = first 1.5.0 upload; 4 is the
-    // first App Store submission (see docs/APP-STORE-SUBMISSION.md).
-    buildNumber: '4',
+    // rejects duplicate version+build pairs). Builds 1-4 were all uploaded on
+    // 2026-08-03 while getting the pipeline working, so 4 was already taken —
+    // and that August binary predates the parked weather/marine, the Canadian
+    // catalog and rename. 5 is the first App Store submission
+    // (see docs/APP-STORE-SUBMISSION.md).
+    buildNumber: '5',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
