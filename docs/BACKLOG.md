@@ -103,13 +103,44 @@ before build, device screenshots/recordings before merge.
 5. **Trail navigation mode** — tapping a navigation-category trail offers
    "Start navigating": guidance along the trail, and an off-trail alarm
    (beep/vibrate) that works with the screen off.
-6. **Move the trim (scissors) button out of trail focus** — it edits the GPX
+6. ~~**Move the trim (scissors) button out of trail focus**~~ — shipped in PR #226 (2026-09-03, OTA'd 1.5.0 + 1.4.0): beside the title, right side; device-verified light + dark.
+   Original ask: — it edits the GPX
    (different from map viewing); move it next to the GPX title (right side) or
    to the bottom of the trail view.
-7. **Carousel zoom still too far out (verify first)** — multi-trace carousel
+7. ~~**Carousel zoom still too far out (verify first)**~~ — verified correct in PR #227 (2026-09-03): the fit is width-limited at 91.9% of the viewport, 32 px of padding headroom total; pinned by `core/geo/cameraFit.test.ts`. If still seen on device after two restarts, the remaining lead is an iOS follow-mode timing race, not the arithmetic.
+   Original ask: — multi-trace carousel
    should zoom so all trails fit roughly centred; content under the carousel
    is fine. A border-to-border fit shipped via OTA on 2026-08-07 — re-test
    after two app restarts before more tuning.
+
+## Shipped 2026-09-03 — Tier 1 + Tier 2 pass (all OTA'd to 1.5.0 + 1.4.0)
+
+- **Perf:** saving a recording is ONE index write instead of 1+N (PR #219).
+- **Core purity:** `format` moved into `@core` and made pure (units explicit;
+  store-bound wrapper in `@state/formatters`); `filterTracks`/`groupByFolder`
+  generic; map style constants hoisted to `@core/weather/weatherLook` (PR #220).
+- **Library:** rename maps + waypoints (PR #221, also fixed `makeMap` badge
+  numbering that rename would have exposed); sort by date/distance/duration/
+  D+/pace/name, persisted (PR #225); collapsible accent-insensitive search on
+  name/folder/note (PR #228).
+- **Dashboard:** y-axis clipping at two-digit totals fixed, same latent clip
+  fixed in `ElevationProfile` (PR #222); lifetime totals with per-category
+  breakdown (PR #228, closes #99).
+- **Map (#97, PR #224):** scale bar (zoom + latitude aware, Settings switch),
+  coordinate readout/entry (DD/DDM/DMS, strict parser), drop-a-pin destination
+  with live bearing/distance. Routing deliberately left for #95.
+- **Web playground** rebased and merged (PR #223); its `@core` workarounds
+  deleted.
+- **Play listing:** dead contact URL replaced.
+
+**OPEN, HIGH for iOS — needs a decision:** `library.json` persists ABSOLUTE
+`file://` URIs (`storage.ts` returns `file.uri`; read paths use them
+verbatim; no relativising helper). iOS changes the app-container UUID on
+updates, so every trail/map/photo path goes stale after an App Store update —
+files intact, index unopenable. Reproduced on the simulator 2026-09-03. Fix =
+store Documents-relative paths, resolve on read, migrate on hydrate; OTA-able.
+Android container paths are stable; the Android auto-reports are a different
+cause. #127 (iOS pack shows 0 KB) is plausibly the same class.
 
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
