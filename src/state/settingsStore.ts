@@ -96,6 +96,12 @@ export interface Settings {
   marinePackSnoozes: string[];
   /** Native MapLibre heatmap density layer under the trail lines. */
   showHeatmap: boolean;
+  /**
+   * Latitude-aware scale bar under the compass badge. On by default — a map
+   * you navigate by needs a distance reference — but switchable, because map
+   * chrome has been pruned here before for clutter.
+   */
+  showScaleBar: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -146,6 +152,7 @@ const DEFAULTS: Settings = {
   marinePackAutoUpdate: true,
   marinePackSnoozes: [],
   showHeatmap: true,
+  showScaleBar: true,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -190,6 +197,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackAutoUpdate,
     marinePackSnoozes,
     showHeatmap,
+    showScaleBar,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -220,6 +228,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackAutoUpdate,
     marinePackSnoozes,
     showHeatmap,
+    showScaleBar,
     errorReporting,
     terrainSlope,
     terrainContours,

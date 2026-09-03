@@ -60,6 +60,21 @@ export function useCameraControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusWaypoint]);
 
+  /**
+   * Fly to a single coordinate at the same comfortable width the locate
+   * button uses — the "go to coordinates" jump (#97) and anywhere else a bare
+   * point becomes the view. Follow-user is dropped first, or MapLibre would
+   * yank the camera straight back to the GPS dot.
+   */
+  const flyToPoint = (at: { latitude: number; longitude: number }) => {
+    setFollowUser(false);
+    cameraRef.current?.flyTo({
+      center: [at.longitude, at.latitude],
+      zoom: zoomForVisibleWidth(LOCATE_VIEW_WIDTH_M, at.latitude, Dimensions.get('window').width),
+      duration: 600,
+    });
+  };
+
   /** Fly the camera to one overlay's bounds (the fit FAB's PDF tour). */
   const fitOverlayBounds = (bbox: BoundingBox) => {
     setFollowUser(false);
@@ -97,5 +112,5 @@ export function useCameraControls({
     }
   };
 
-  return { fitOverlayBounds, resetNorth, zoomToLocateLevel };
+  return { fitOverlayBounds, flyToPoint, resetNorth, zoomToLocateLevel };
 }
