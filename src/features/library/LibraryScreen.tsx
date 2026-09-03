@@ -95,6 +95,7 @@ export function LibraryScreen() {
   const tracks = useLibraryStore((s) => s.tracks);
   const addMaps = useLibraryStore((s) => s.addMaps);
   const removeMap = useLibraryStore((s) => s.removeMap);
+  const renameMap = useLibraryStore((s) => s.renameMap);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
   const addTrack = useLibraryStore((s) => s.addTrack);
@@ -111,6 +112,7 @@ export function LibraryScreen() {
   const waypoints = useLibraryStore((s) => s.waypoints);
   const updateWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeWaypoint = useLibraryStore((s) => s.removeWaypoint);
+  const renameWaypoint = useLibraryStore((s) => s.renameWaypoint);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
   const stravaConnected = useStravaStore((s) => s.connection !== null);
@@ -130,6 +132,10 @@ export function LibraryScreen() {
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [renamingTrack, setRenamingTrack] = useState<{ id: string; name: string } | null>(null);
+  const [renamingMap, setRenamingMap] = useState<{ id: string; name: string } | null>(null);
+  const [renamingWaypoint, setRenamingWaypoint] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [confirmDelete, setConfirmDelete] = useState<DeleteTarget | null>(null);
   // Trail multi-select (long-press a trail to enter): ids in selection order,
   // which is the merge order for untimed tracks.
@@ -298,6 +304,16 @@ export function LibraryScreen() {
     setRenamingTrack(null);
   };
 
+  const commitRenameMap = (name: string) => {
+    if (renamingMap && name) renameMap(renamingMap.id, name);
+    setRenamingMap(null);
+  };
+
+  const commitRenameWaypoint = (name: string) => {
+    if (renamingWaypoint && name) renameWaypoint(renamingWaypoint.id, name);
+    setRenamingWaypoint(null);
+  };
+
   const onConfirmDelete = () => {
     if (!confirmDelete) return;
     const { kind, id } = confirmDelete;
@@ -420,6 +436,18 @@ export function LibraryScreen() {
         />
       }
     >
+      {/* First item, matching a trail's ⋮ → Rename. The rename is index-level
+          only: the stored file (the map's PDF) is never rewritten, so its own
+          embedded title is left alone — same reasoning as a trail's GPX. */}
+      <Menu.Item
+        leadingIcon="pencil-outline"
+        title="Rename"
+        onPress={() => {
+          setCardMenu(null);
+          if (kind === 'map') setRenamingMap({ id, name });
+          else setRenamingTrack({ id, name });
+        }}
+      />
       {folders.length > 0 && (
         <>
           <Menu.Item disabled title="Move to folder" />
@@ -742,6 +770,19 @@ export function LibraryScreen() {
         />
       }
     >
+      {/* A waypoint's label is renamed here rather than inside
+          WaypointEditorDialog: that dialog is shared with the map, where it
+          also edits *live recording* waypoints that have no library row to
+          rename — and stacking NameDialog's Portal over an open Paper Dialog
+          is the touch-swallow trap. This mirrors a trail's ⋮ → Rename. */}
+      <Menu.Item
+        leadingIcon="pencil-outline"
+        title="Rename"
+        onPress={() => {
+          setCardMenu(null);
+          setRenamingWaypoint({ id: w.id, name: w.label });
+        }}
+      />
       <Menu.Item
         leadingIcon="map-marker-radius-outline"
         title="Show on map"
@@ -1091,6 +1132,26 @@ export function LibraryScreen() {
           initialValue={renamingTrack?.name ?? ''}
           onDismiss={() => setRenamingTrack(null)}
           onSubmit={commitRenameTrack}
+        />
+
+        <NameDialog
+          visible={renamingMap !== null}
+          title="Rename map"
+          label="Map name"
+          confirmLabel="Rename"
+          initialValue={renamingMap?.name ?? ''}
+          onDismiss={() => setRenamingMap(null)}
+          onSubmit={commitRenameMap}
+        />
+
+        <NameDialog
+          visible={renamingWaypoint !== null}
+          title="Rename waypoint"
+          label="Waypoint name"
+          confirmLabel="Rename"
+          initialValue={renamingWaypoint?.name ?? ''}
+          onDismiss={() => setRenamingWaypoint(null)}
+          onSubmit={commitRenameWaypoint}
         />
 
         {/* Single confirm flow for every destructive delete (map/trail/bundle/folder). */}

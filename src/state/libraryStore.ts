@@ -40,6 +40,16 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    */
   addMaps: (docs: readonly MapDocument[]) => void;
   updateMap: (id: string, patch: Partial<MapDocument>) => void;
+  /**
+   * Rename an imported map (the title shown on its Library card, its drag
+   * ghost and its delete confirmation). Same guard as
+   * {@link renameTrack}: the name is trimmed and a blank one is rejected.
+   * Index-level only — the PDF on disk is never rewritten, so the document's
+   * own embedded title is left alone (the same reason a trail rename does not
+   * touch the GPX's `<name>`). Duplicate names are allowed: maps are addressed
+   * by id everywhere, and the data export dedupes colliding file names itself.
+   */
+  renameMap: (id: string, name: string) => void;
   removeMap: (id: string) => void;
   setActiveMap: (id: string | null) => void;
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
@@ -115,6 +125,15 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   addWaypoint: (latitude: number, longitude: number) => string;
   /** Edit a waypoint's note text and/or photo (empty photoUri removes the photo). */
   updateWaypoint: (id: string, patch: { note?: string; photoUri?: string }) => void;
+  /**
+   * Rename a waypoint (its `label` — the title shown on the pin, the Library
+   * row, the drag ghost and the delete confirmation). Same guard as
+   * {@link renameTrack}: trimmed, and a blank name keeps the current label.
+   * Duplicates are allowed — waypoints are addressed by id, and `addWaypoint`
+   * only ever reads labels still matching `Waypoint N` to pick its next
+   * number, so a renamed one simply stops taking part in that numbering.
+   */
+  renameWaypoint: (id: string, label: string) => void;
   /** Remove a waypoint and any photo it owns. */
   removeWaypoint: (id: string) => void;
   activeMap: () => MapDocument | null;
@@ -216,6 +235,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateMap: (id, patch) =>
     set((s) => {
       const next = { ...s, maps: s.maps.map((m) => (m.id === id ? { ...m, ...patch } : m)) };
+      persist(next);
+      return next;
+    }),
+
+  renameMap: (id, name) =>
+    set((s) => {
+      const next = {
+        ...s,
+        maps: s.maps.map((m) => (m.id === id ? { ...m, name: name.trim() || m.name } : m)),
+      };
       persist(next);
       return next;
     }),
@@ -531,6 +560,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           }
           return updated;
         }),
+      };
+      persist(next);
+      return next;
+    }),
+
+  renameWaypoint: (id, label) =>
+    set((s) => {
+      const next = {
+        ...s,
+        waypoints: s.waypoints.map((w) =>
+          w.id === id ? { ...w, label: label.trim() || w.label } : w,
+        ),
       };
       persist(next);
       return next;
