@@ -384,6 +384,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const beginTrim = () => {
     if (points && points.length >= 3) setTrimRange({ start: 0, end: points.length - 1 });
   };
+  // Offer trim only when there's something to cut, and hide it while the trim
+  // panel is already open below (same predicate the rail FAB used).
+  const canTrim = !trimRange && points !== null && points.length >= 3;
   const cancelTrim = () => setTrimRange(null);
   const changeTrim = (start: number, end: number) => setTrimRange({ start, end });
 
@@ -900,17 +903,38 @@ export function Trail3DGLScreen({ trackId }: Props) {
             elevation={3}
             onLayout={(e) => setSummaryH(e.nativeEvent.layout.height)}
           >
-            {/* The title doubles as the rename affordance — the Library's ⋮ →
-                Rename, reachable without going back to the list. */}
-            <Pressable
-              onPress={() => setRenaming(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`Rename trail ${track.name}`}
-            >
-              <Text variant="titleSmall" numberOfLines={1}>
-                {track.name}
-              </Text>
-            </Pressable>
+            {/* Title row: the name doubles as the rename affordance (the
+                Library's ⋮ → Rename, reachable without going back to the
+                list), and trim sits beside it because it EDITS the GPX —
+                it isn't a map-viewing control like the rail's FABs.
+                The two affordances don't fight: the Pressable takes the
+                flexed remainder and the icon button its own fixed box.
+                A flex ROW is safe inside this absolutely-positioned Surface
+                (its left/right pin the width); the documented iOS Surface
+                collapse hits flex COLUMNS, which need a height the inner
+                shadow wrapper doesn't inherit. Same shape as
+                WaypointViewerCard's header, which already ships this way. */}
+            <View style={styles.summaryTitleRow}>
+              <Pressable
+                onPress={() => setRenaming(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Rename trail ${track.name}`}
+                style={styles.summaryTitle}
+              >
+                <Text variant="titleSmall" numberOfLines={1}>
+                  {track.name}
+                </Text>
+              </Pressable>
+              {canTrim && (
+                <IconButton
+                  icon="content-cut"
+                  size={18}
+                  onPress={beginTrim}
+                  style={styles.summaryTrim}
+                  accessibilityLabel="Trim trail"
+                />
+              )}
+            </View>
             <View style={styles.summaryRow}>
               <Text variant="labelMedium">{formatDistance(s.distanceM)}</Text>
               <Text variant="labelMedium">↑ {formatElevation(s.ascentM)}</Text>
@@ -927,7 +951,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
             basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
             overlaysAvailable={overlaysAvailable}
             overlaysDisabled={switching}
-            onTrim={!trimRange && points && points.length >= 3 ? beginTrim : undefined}
           />
           {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
           {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
@@ -1249,6 +1272,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 4,
   },
+  summaryTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  summaryTitle: { flex: 1 },
+  // Kill Paper's default IconButton margin so the scissors don't inflate the
+  // card, and pull it into the card's right padding to sit flush with the edge.
+  summaryTrim: { margin: 0, marginRight: -8, marginVertical: -4 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   // Small basemap-rebuild spinner, bottom-centred where the old pills sat.
   switchSpin: { position: 'absolute', bottom: 14, alignSelf: 'center', pointerEvents: 'none' },

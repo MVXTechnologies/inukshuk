@@ -11,9 +11,14 @@ import {
 
 /**
  * Right-edge control rail for the focused trail viewer (2D and 3D modes): a
- * layers FAB opening the basemap picker and an overlays FAB opening the
- * analytical-overlay switches — the same circular-button idiom as the main
- * map's MapControlsRail/LayersMenu.
+ * 2D↔3D toggle, a layers FAB opening the basemap picker, and an overlays FAB
+ * opening the analytical-overlay switches — the same circular-button idiom as
+ * the main map's MapControlsRail/LayersMenu.
+ *
+ * The rail is strictly for VIEWING the trail. Trim used to live here as a
+ * fourth FAB, but it edits the GPX rather than changing how the map is drawn,
+ * so it now sits beside the trail name in Trail3DGLScreen's summary card,
+ * next to the thing it edits (backlog item 6).
  */
 
 /** Base-map choices: the same trio (labels, icons, colours) as the main map. */
@@ -44,9 +49,6 @@ interface Props {
   overlaysAvailable: boolean;
   /** Disable the overlay switches while the terrain is rebuilding. */
   overlaysDisabled?: boolean;
-  /** Opens the trim tool over the docked profile below. Omit to hide the FAB
-   * (e.g. the trail has too few points to trim). */
-  onTrim?: () => void;
 }
 
 export function TrailViewerRail({
@@ -56,7 +58,6 @@ export function TrailViewerRail({
   basemapDisabled,
   overlaysAvailable,
   overlaysDisabled,
-  onTrim,
 }: Props) {
   const trailViewMode = useSettingsStore((s) => s.trailViewMode);
   const set = useSettingsStore((s) => s.set);
@@ -74,16 +75,6 @@ export function TrailViewerRail({
         // know which way the toggle will flip before pressing it.
         accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
       />
-      {onTrim && (
-        <FAB
-          icon="content-cut"
-          size="small"
-          variant="surface"
-          onPress={onTrim}
-          style={styles.controlFab}
-          accessibilityLabel="Trim trail"
-        />
-      )}
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
       {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
     </View>
