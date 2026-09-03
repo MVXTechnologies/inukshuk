@@ -14,6 +14,7 @@ import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
@@ -42,6 +43,7 @@ import {
 } from 'react-native-paper';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
+import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -149,10 +151,24 @@ export function LibraryScreen() {
   const [filter, setFilter] = useState<TrackFilter>({});
   const [filterOpen, setFilterOpen] = useState(false);
   const activeFilterCount = countActiveFilters(filter);
+  // Trail order, chosen in the same panel. Unlike the filter (a session-scoped
+  // query) this is a durable preference, so it lives in settings.json.
+  const sortKey = useSettingsStore((s) => s.librarySortKey);
+  const setSetting = useSettingsStore((s) => s.set);
+  const applyFilterAndSort = (next: TrackFilter, nextSort: SortKey) => {
+    setFilter(next);
+    setSetting('librarySortKey', nextSort);
+  };
   // Derived once per data change, not per render: this screen re-renders on
   // every card-menu open, every section collapse, every selection tap and every
   // drag-hover, and both of these walk (and re-allocate) the whole library.
-  const visibleTracks = useMemo(() => filterTracks(tracks, filter), [tracks, filter]);
+  // filter → sort → group, the same three pure passes in the same order
+  // everywhere. Sorting BEFORE grouping is what orders trails inside each
+  // folder while leaving the folders themselves in their user-defined order.
+  const visibleTracks = useMemo(
+    () => sortTracks(filterTracks(tracks, filter), sortKey),
+    [tracks, filter, sortKey],
+  );
 
   const grouped = useMemo(
     () => groupByFolder(folders, maps, visibleTracks, waypoints),
@@ -1190,7 +1206,8 @@ export function LibraryScreen() {
       <TrackFilterDialog
         visible={filterOpen}
         onDismiss={() => setFilterOpen(false)}
-        onApply={setFilter}
+        sortKey={sortKey}
+        onApply={applyFilterAndSort}
       />
 
       <Snackbar

@@ -11,9 +11,10 @@
 # - Clear all     -> plain "Recorded trails (m)" and the empty state is gone
 #
 # The filter chips carry accessibilityLabel "Filter category <Name>[, on]".
-# The appbar filter icon is accessibilityLabel "Filter trails" — the SAME
-# string as the dialog title, so post-tap waits key on dialog-only content
-# ("Category", "Apply") instead.
+# The appbar filter icon is accessibilityLabel "Filter trails"; the dialog it
+# opens is titled "Filter & sort" (it carries the Sort row too), so the two no
+# longer collide. Post-tap waits still key on dialog-only content ("Category",
+# "Apply") rather than the title, which is cheap insurance either way.
 appId: com.inukshuk.app
 ---
 - runFlow:
