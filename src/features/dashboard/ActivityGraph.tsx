@@ -1,3 +1,4 @@
+import { axisGutterWidth } from '@core/chart/axis';
 import type { ActivityBucket } from '@core/dashboard/aggregate';
 import { formatDistance } from '@state/formatters';
 import { useMemo, useState } from 'react';
@@ -24,8 +25,19 @@ import Svg, { Circle, Line, Polygon, Polyline, Text as SvgText } from 'react-nat
 const PLOT_HEIGHT = 150;
 /** Band under the plot for the day / month x labels. */
 const X_AXIS_H = 18;
-/** Left gutter for the distance labels, clear of the plot. */
-const AXIS_LEFT = 40;
+/** Font size of the y-axis distance labels. */
+const AXIS_FONT = 9;
+/** Space between a label's right edge and the axis line. */
+const AXIS_GAP = 5;
+/**
+ * Floor for the left gutter, so an all-metres period ("840 m") doesn't pull the
+ * plot hard against the card edge. NOT a maximum: the gutter grows to fit the
+ * widest label actually drawn — a fixed 40 px used to clip "10.00 km" down to
+ * "0.00 km" the moment a weekly total reached two digits.
+ */
+const AXIS_MIN = 34;
+/** Ceiling, as a fraction of the card width, so a huge label can't eat the plot. */
+const AXIS_MAX_FRACTION = 0.3;
 /** Plot insets so aura circles and baseline dots never clip the card edge. */
 const PAD_X = 14;
 const PAD_TOP = 22;
@@ -49,6 +61,11 @@ function gridLevels(maxDistanceM: number): number[] {
   return out.slice(0, 3);
 }
 
+/** Width of the left gutter for `labels`, floored at {@link AXIS_MIN}. */
+function gutterFor(labels: readonly string[]): number {
+  return axisGutterWidth(labels, { fontSize: AXIS_FONT, gap: AXIS_GAP, min: AXIS_MIN });
+}
+
 export function ActivityGraph({
   buckets,
   selectedIndex,
@@ -67,7 +84,19 @@ export function ActivityGraph({
   const r = radiusFor(buckets.length);
   const daily = buckets.length <= 7;
   const maxDistance = Math.max(...buckets.map((b) => b.distanceM), 1);
-  const plotL = AXIS_LEFT + PAD_X;
+
+  // Size the gutter from the strings we are about to draw. SVG text can't be
+  // measured before it renders, so the width is estimated from the glyphs —
+  // which is enough for the digits, decimal points and unit suffixes the
+  // distance formatter emits, and unlike a fixed gutter it holds for "840 m",
+  // "10.00 km", "300.00 km" and "186.4 mi" alike.
+  const gridTicks = gridLevels(maxDistance).map((m) => ({ m, label: formatDistance(m) }));
+  const axisLeft = Math.min(
+    gutterFor(gridTicks.map((t) => t.label)),
+    width > 0 ? width * AXIS_MAX_FRACTION : Number.POSITIVE_INFINITY,
+  );
+
+  const plotL = axisLeft + PAD_X;
   const plotR = width - PAD_X;
   const xFor = (i: number) =>
     buckets.length <= 1
@@ -85,7 +114,7 @@ export function ActivityGraph({
     const pick = (e: GestureResponderEvent) => {
       if (width <= 0 || buckets.length === 0) return;
       const x = e.nativeEvent.locationX;
-      const L = AXIS_LEFT + PAD_X;
+      const L = axisLeft + PAD_X;
       const span = buckets.length <= 1 ? width : (width - PAD_X - L) / (buckets.length - 1);
       const i = Math.round((x - L) / span);
       onSelect(Math.max(0, Math.min(buckets.length - 1, i)));
@@ -100,10 +129,9 @@ export function ActivityGraph({
       onPanResponderGrant: pick,
       onPanResponderMove: pick,
     });
-  }, [width, buckets, onSelect]);
+  }, [width, buckets, onSelect, axisLeft]);
 
   const line = buckets.map((b, i) => `${xFor(i).toFixed(1)},${yFor(b).toFixed(1)}`).join(' ');
-  const levels = gridLevels(maxDistance);
 
   /**
    * X labels: daily periods label every day by day-of-month (month name on
@@ -141,10 +169,10 @@ export function ActivityGraph({
       {width > 0 && (
         <Svg width={width} height={PLOT_HEIGHT + X_AXIS_H}>
           {/* Distance gridlines, labelled in the left gutter. */}
-          {levels.map((m) => (
+          {gridTicks.map(({ m }) => (
             <Line
               key={`g${m}`}
-              x1={AXIS_LEFT}
+              x1={axisLeft}
               y1={yForDistance(m)}
               x2={width}
               y2={yForDistance(m)}
@@ -153,20 +181,20 @@ export function ActivityGraph({
               opacity={0.12}
             />
           ))}
-          {levels.map((m) => (
+          {gridTicks.map(({ m, label }) => (
             <SvgText
               key={`gl${m}`}
-              x={AXIS_LEFT - 5}
+              x={axisLeft - AXIS_GAP}
               y={yForDistance(m) + 3}
-              fontSize={9}
+              fontSize={AXIS_FONT}
               fill={dim}
               textAnchor="end"
             >
-              {formatDistance(m)}
+              {label}
             </SvgText>
           ))}
           <Line
-            x1={AXIS_LEFT}
+            x1={axisLeft}
             y1={baseline}
             x2={width}
             y2={baseline}
