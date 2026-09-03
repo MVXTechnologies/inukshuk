@@ -1,5 +1,6 @@
 import { allCategories } from '@core/library/categories';
 import { UNCATEGORIZED, type NumericRange, type TrackFilter } from '@core/library/filterTracks';
+import { DEFAULT_SORT, SORTS, type SortKey } from '@core/library/sortTracks';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
@@ -9,8 +10,10 @@ import { Button, Chip, Dialog, Icon, Portal, Text, TextInput, useTheme } from 'r
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  /** Apply the built criteria (an empty object clears the filter). */
-  onApply: (filter: TrackFilter) => void;
+  /** The sort currently applied to the list; seeds the draft on first mount. */
+  sortKey: SortKey;
+  /** Apply the built criteria (an empty object clears the filter) and the sort. */
+  onApply: (filter: TrackFilter, sortKey: SortKey) => void;
 }
 
 const M_PER_MI = 1609.344;
@@ -44,13 +47,20 @@ function range(minRaw: string, maxRaw: string, scale: number): NumericRange | un
 }
 
 /**
- * Library filter panel (opened from the appbar's filter icon): distance,
- * duration, elevation gain, date, pace and category criteria feed the pure
- * `filterTracks` predicate. The draft inputs live in this component's state,
- * which survives close/reopen (the dialog stays mounted), so the panel always
- * reflects the active filter. User-initiated, so a Portal Dialog is fine.
+ * Library filter & sort panel (opened from the appbar's filter icon):
+ * distance, duration, elevation gain, date, pace and category criteria feed
+ * the pure `filterTracks` predicate, and the Sort row feeds `sortTracks`.
+ *
+ * Sort lives HERE rather than behind an appbar control of its own: the header
+ * already carries a filter icon and a new-folder icon, and "which trails do I
+ * see, in what order" is one question the user asks once. One surface, one
+ * Apply — no third icon.
+ *
+ * The draft inputs live in this component's state, which survives close/reopen
+ * (the dialog stays mounted), so the panel always reflects what is applied.
+ * User-initiated, so a Portal Dialog is fine.
  */
-export function TrackFilterDialog({ visible, onDismiss, onApply }: Props) {
+export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Props) {
   const theme = useTheme();
   const units = useSettingsStore((s) => s.units);
   const customCategories = useLibraryStore((s) => s.customCategories);
@@ -66,6 +76,12 @@ export function TrackFilterDialog({ visible, onDismiss, onApply }: Props) {
   const [paceMin, setPaceMin] = useState('');
   const [paceMax, setPaceMax] = useState('');
   const [datePreset, setDatePreset] = useState<DatePreset>('any');
+  // Sort draft. `null` = untouched, so the row mirrors whatever is applied —
+  // which matters because `librarySortKey` arrives from disk asynchronously:
+  // seeding a state variable once at mount would leave the row showing
+  // "Newest" while the list was already sorted by the persisted key.
+  const [sortDraft, setSortDraft] = useState<SortKey | null>(null);
+  const sort = sortDraft ?? sortKey;
 
   const toggleCategory = (id: string) =>
     setCategories((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
@@ -102,11 +118,12 @@ export function TrackFilterDialog({ visible, onDismiss, onApply }: Props) {
     setPaceMin('');
     setPaceMax('');
     setDatePreset('any');
-    onApply({});
+    setSortDraft(null);
+    onApply({}, DEFAULT_SORT);
   };
 
   const apply = () => {
-    onApply(buildFilter());
+    onApply(buildFilter(), sort);
     onDismiss();
   };
 
@@ -151,9 +168,28 @@ export function TrackFilterDialog({ visible, onDismiss, onApply }: Props) {
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
-        <Dialog.Title>Filter trails</Dialog.Title>
+        {/* NOT "Filter trails": that is the appbar icon's accessibilityLabel,
+            and a title repeating it made every tap on it ambiguous in E2E. */}
+        <Dialog.Title>Filter &amp; sort</Dialog.Title>
         <Dialog.ScrollArea style={styles.scrollArea}>
           <ScrollView contentContainerStyle={styles.content}>
+            <View style={styles.section}>
+              <Text variant="labelLarge">Sort by</Text>
+              <View style={styles.chipWrap}>
+                {SORTS.map((o) => (
+                  <Chip
+                    key={o.key}
+                    mode="outlined"
+                    selected={sort === o.key}
+                    onPress={() => setSortDraft(o.key)}
+                    accessibilityLabel={`Sort by ${o.label}${sort === o.key ? ', on' : ''}`}
+                  >
+                    {o.label}
+                  </Chip>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.section}>
               <Text variant="labelLarge">Category</Text>
               <View style={styles.chipWrap}>

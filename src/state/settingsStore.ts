@@ -2,6 +2,7 @@ import { type Units } from '@core/format';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
+import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import type { UiStyle } from '@ui/theme';
@@ -117,6 +118,15 @@ export interface Settings {
   /** Last activity category picked at record start (the picker's default). */
   lastActivityCategory: string;
   /**
+   * Trail ordering picked in the Library's "Filter & sort" panel (see
+   * `@core/library/sortTracks`). A *preference*, not a query: the filter
+   * itself is deliberately session-only — reopening the app to a list
+   * silently hiding most of the library would be a bug report — but "I read
+   * my trails longest-first" should still hold tomorrow, so this one is
+   * persisted. Junk hydrates back to the default via `isSortKey`.
+   */
+  librarySortKey: SortKey;
+  /**
    * Last known map position, used to seed the camera on a cold launch so the
    * map opens where the user last was instead of MapLibre's [0,0] default
    * ("null island") while waiting for the first GPS fix. `null` = never saved
@@ -155,6 +165,7 @@ const DEFAULTS: Settings = {
   terrainSlopeMaxDeg: 90,
   slopeDisclaimerShown: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
+  librarySortKey: DEFAULT_SORT,
   lastKnownPosition: null,
 };
 
@@ -199,6 +210,7 @@ function snapshot(s: SettingsState): Settings {
     terrainSlopeMaxDeg,
     slopeDisclaimerShown,
     lastActivityCategory,
+    librarySortKey,
     lastKnownPosition,
   } = s;
   return {
@@ -229,6 +241,7 @@ function snapshot(s: SettingsState): Settings {
     terrainSlopeMaxDeg,
     slopeDisclaimerShown,
     lastActivityCategory,
+    librarySortKey,
     lastKnownPosition,
   };
 }
@@ -259,6 +272,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // weatherModel's default is a string, so the ladder keeps any string —
     // including junk ids from older builds. Deep-validate to the catalog.
     next.weatherModel = sanitizeWeatherModel(next.weatherModel);
+    // Same story for the Library sort: the ladder keeps any string, so a key
+    // retired by a later build would survive as an unmatched switch case.
+    if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
     set({ ...next, hydrated: true });
   },
 
