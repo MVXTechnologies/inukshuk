@@ -12,11 +12,21 @@ import { nextFolderVisibility } from '@core/library/visibility';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
 
+/**
+ * A note to seed on a trail as it is added to the library: an {@link
+ * ImportedNote} from a GPX import, or a live recorder waypoint — which can
+ * additionally carry a photo.
+ */
+export interface SeedNote extends ImportedNote {
+  /** Absolute file:// uri of an attached photo (already copied into storage). */
+  photoUri?: string;
+}
+
 /** A trail as it comes out of an import: the parsed track, its GPX file and any notes. */
 export interface ImportedTrack {
   track: Track;
   fileUri: string;
-  notes?: readonly ImportedNote[];
+  notes?: readonly SeedNote[];
 }
 
 interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
@@ -34,7 +44,12 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   setActiveMap: (id: string | null) => void;
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
   toggleMapPage: (id: string, pageIndex: number) => void;
-  addTrack: (track: Track, fileUri: string, notes?: readonly ImportedNote[]) => void;
+  /**
+   * Add a trail with all of its seeded notes in ONE index write — the recorder's
+   * save path relies on this: a per-note `addTrackNote` loop cost one full
+   * serialization + atomic swap of the whole library per dropped waypoint.
+   */
+  addTrack: (track: Track, fileUri: string, notes?: readonly SeedNote[]) => void;
   /** Add several imported trails in `items` order, in ONE index write. */
   addTracks: (items: readonly ImportedTrack[]) => void;
   /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
@@ -134,6 +149,7 @@ function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
           distanceM: Math.max(0, n.distanceM),
           text: n.text.trim(),
           createdAt: Date.now(),
+          ...(n.photoUri ? { photoUri: n.photoUri } : {}),
         }))
       : undefined;
   return {

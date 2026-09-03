@@ -382,21 +382,23 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       });
       const fileUri = storage.writeTrackGpx(track.id, gpx);
       const lib = useLibraryStore.getState();
-      lib.addTrack(track, fileUri);
+      // Materialize live waypoints as notes on the saved trail (their typed note,
+      // or the auto label), carrying any photo, clamped to the final track length
+      // — seeded WITH the trail rather than through a per-waypoint
+      // `addTrackNote` loop, which serialized and atomically swapped the whole
+      // library index once per waypoint (1 + N writes, scaling with the user's
+      // library size) at the very end of a hike. One write now, and it is
+      // already the complete trail: nothing durable is traded away.
+      const notes = waypoints.map((wp) => ({
+        distanceM: Math.min(wp.distanceM, finalStats.distanceM),
+        text: wp.note?.trim() || wp.label,
+        ...(wp.photoUri ? { photoUri: wp.photoUri } : {}),
+      }));
+      lib.addTrack(track, fileUri, notes);
       // Auto-named recording → try for a friendlier region title, async.
       const first = points[0];
       if (first && name === defaultName(startedAt)) {
         void upgradeAutoName(track.id, name, startedAt, category, first);
-      }
-      // Materialize live waypoints as notes on the saved trail (their typed note,
-      // or the auto label), carrying any photo, clamped to the final track length.
-      for (const wp of waypoints) {
-        lib.addTrackNote(
-          track.id,
-          Math.min(wp.distanceM, finalStats.distanceM),
-          wp.note?.trim() || wp.label,
-          wp.photoUri,
-        );
       }
     } else {
       // Nothing saved — drop any waypoint photos so they don't orphan.
