@@ -15,6 +15,10 @@
 # opens is titled "Filter & sort" (it carries the Sort row too), so the two no
 # longer collide. Post-tap waits still key on dialog-only content ("Category",
 # "Apply") rather than the title, which is cheap insurance either way.
+#
+# The filter icon's neighbour is "Search trails" (a collapsible Searchbar this
+# flow never opens). Its own no-match state reads 'No trails match "<query>"',
+# so it can never satisfy the 'No trails match the filters.*' assertions below.
 appId: com.inukshuk.app
 ---
 - runFlow:

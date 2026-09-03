@@ -36,6 +36,7 @@ import {
   List,
   Menu,
   Portal,
+  Searchbar,
   Snackbar,
   Text,
   TouchableRipple,
@@ -43,6 +44,7 @@ import {
 } from 'react-native-paper';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
+import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
@@ -159,15 +161,31 @@ export function LibraryScreen() {
     setFilter(next);
     setSetting('librarySortKey', nextSort);
   };
+  // Trail search (appbar magnify icon). A query is not a preference: it is
+  // never persisted, and closing the field CLEARS it, so a library can never
+  // come back narrowed by a needle the user can no longer see — the same
+  // reasoning that keeps `filter` session-only, one step stricter because the
+  // search field, unlike the filter icon, has no badge once it is collapsed.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searching = isSearchActive(searchQuery);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
+  // Either narrowing in effect: both hide trails, so both switch the section
+  // header to its "(visible/total)" form and stand the Maps section down.
+  const narrowed = activeFilterCount > 0 || searching;
   // Derived once per data change, not per render: this screen re-renders on
   // every card-menu open, every section collapse, every selection tap and every
   // drag-hover, and both of these walk (and re-allocate) the whole library.
-  // filter → sort → group, the same three pure passes in the same order
-  // everywhere. Sorting BEFORE grouping is what orders trails inside each
-  // folder while leaving the folders themselves in their user-defined order.
+  // search → filter → sort → group, the same four pure passes in the same
+  // order everywhere. Search runs first because it is the coarsest cut; sorting
+  // BEFORE grouping is what orders trails inside each folder while leaving the
+  // folders themselves in their user-defined order.
   const visibleTracks = useMemo(
-    () => sortTracks(filterTracks(tracks, filter), sortKey),
-    [tracks, filter, sortKey],
+    () => sortTracks(filterTracks(searchTracks(tracks, searchQuery, folders), filter), sortKey),
+    [tracks, searchQuery, folders, filter, sortKey],
   );
 
   const grouped = useMemo(
@@ -916,9 +934,9 @@ export function LibraryScreen() {
             />
           ) : (
             [
-              // Trail filters are about trails — maps drop out of results
-              // while any filter is active.
-              ...(activeFilterCount > 0 ? [] : g.maps.map(renderMapCard)),
+              // Trail filters and trail search are about trails — maps drop
+              // out of results while either narrowing is active.
+              ...(narrowed ? [] : g.maps.map(renderMapCard)),
               ...g.tracks.map(renderTrackCard),
               ...(sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointCard),
             ]
@@ -954,6 +972,15 @@ export function LibraryScreen() {
       ) : (
         <Appbar.Header>
           <Appbar.Content title="Library" />
+          {/* Search is a collapsible field, not a permanent Searchbar row: the
+              header already carries two icons and a standing search box would
+              cost every user vertical space for a control most of them use on
+              a library too small to need it. Collapsed = zero chrome. */}
+          <Appbar.Action
+            icon={searchOpen ? 'close' : 'magnify'}
+            onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            accessibilityLabel={searchOpen ? 'Close search' : 'Search trails'}
+          />
           {/* Trail filter: the badge counts active criteria (distance, date,
               category, …) so a filtered-down list is never mistaken for a
               small library. */}
@@ -979,6 +1006,19 @@ export function LibraryScreen() {
         </Appbar.Header>
       )}
 
+      {!selectionMode && searchOpen && (
+        <Searchbar
+          placeholder="Search trails"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onIconPress={closeSearch}
+          icon="arrow-left"
+          autoFocus
+          style={styles.searchbar}
+          accessibilityLabel="Search trails by name or folder"
+        />
+      )}
+
       <ScrollView
         ref={dragScrollRef}
         scrollEnabled={dragging === null}
@@ -993,6 +1033,17 @@ export function LibraryScreen() {
           </Banner>
         )}
 
+        {/* The folder layout has no per-section empty state (each folder just
+            renders its matches), so a search that found nothing needs one row
+            of its own — otherwise the screen is a wall of folder headers with
+            nothing under them and no explanation. */}
+        {hasFolders && searching && visibleTracks.length === 0 && (
+          <List.Item
+            title={`No trails match “${searchQuery.trim()}”`}
+            description="Try another word, or a folder name"
+          />
+        )}
+
         {renderFolderGroups()}
 
         {hasFolders
@@ -1003,7 +1054,7 @@ export function LibraryScreen() {
                 {collapsed.ungrouped
                   ? null
                   : [
-                      ...(activeFilterCount > 0 ? [] : grouped.ungroupedMaps.map(renderMapCard)),
+                      ...(narrowed ? [] : grouped.ungroupedMaps.map(renderMapCard)),
                       ...grouped.ungroupedTracks.map(renderTrackCard),
                       ...sortedUngroupedWaypoints.map(renderWaypointCard),
                     ]}
@@ -1011,9 +1062,9 @@ export function LibraryScreen() {
             )
           : // No folders yet: keep the familiar Maps + Recorded-trails split.
             [
-              // Trail filters are about trails: the Maps section steps aside
-              // entirely while any filter is active.
-              ...(activeFilterCount > 0
+              // Trail filters and trail search are about trails: the Maps
+              // section steps aside entirely while either is narrowing.
+              ...(narrowed
                 ? []
                 : [
                     <List.Section key="maps">
@@ -1034,7 +1085,7 @@ export function LibraryScreen() {
                   'trails',
                   `Recorded trails${
                     tracks.length
-                      ? activeFilterCount > 0
+                      ? narrowed
                         ? ` (${visibleTracks.length}/${tracks.length})`
                         : ` (${tracks.length})`
                       : ''
@@ -1046,10 +1097,25 @@ export function LibraryScreen() {
                     description="Record one from the Map tab, or import a GPX file via the Import button"
                   />
                 ) : visibleTracks.length === 0 ? (
-                  <List.Item
-                    title="No trails match the filters"
-                    description="Adjust or clear the filters from the appbar's filter icon"
-                  />
+                  // Two honest empty states, not one: a query that found
+                  // nothing says so, and quotes what was typed, instead of
+                  // blaming filters the user may not have set. `library-filter`
+                  // asserts on the filter wording, which is unchanged.
+                  searching ? (
+                    <List.Item
+                      title={`No trails match “${searchQuery.trim()}”`}
+                      description={
+                        activeFilterCount > 0
+                          ? 'Try another word, or clear the filters too'
+                          : 'Try another word, or a folder name'
+                      }
+                    />
+                  ) : (
+                    <List.Item
+                      title="No trails match the filters"
+                      description="Adjust or clear the filters from the appbar's filter icon"
+                    />
+                  )
                 ) : (
                   visibleTracks.map(renderTrackCard)
                 )}
@@ -1252,4 +1318,5 @@ const styles = StyleSheet.create({
   fabWrap: { position: 'absolute', right: 16 },
   fab: { borderRadius: 28 },
   filterBadge: { position: 'absolute', top: 4, right: 4 },
+  searchbar: { marginHorizontal: 12, marginBottom: 4 },
 });
