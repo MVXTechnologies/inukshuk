@@ -10,7 +10,7 @@ import {
   flushErrorQueue,
   getErrorQueueStatus,
 } from '@lib/errorReporting';
-import { formatBytes } from '@lib/format';
+import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import type { UiStyle } from '@ui/theme';

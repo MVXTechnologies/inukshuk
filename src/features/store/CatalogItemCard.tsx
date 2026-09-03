@@ -1,7 +1,7 @@
 import type { InstallStatus } from '@core/catalog/installStatus';
 import type { CatalogItem, CatalogSource } from '@core/catalog/schema';
 import { formatByteSize } from '@core/storage/diskBudget';
-import { formatDistance } from '@lib/format';
+import { formatDistance } from '@state/formatters';
 import { Linking, StyleSheet, View } from 'react-native';
 import { Button, Card, IconButton, ProgressBar, Text, useTheme } from 'react-native-paper';
 

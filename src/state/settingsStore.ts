@@ -1,9 +1,9 @@
+import { type Units } from '@core/format';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
-import { setDisplayUnits, type Units } from '@lib/format';
 import type { UiStyle } from '@ui/theme';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
@@ -259,7 +259,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // weatherModel's default is a string, so the ladder keeps any string —
     // including junk ids from older builds. Deep-validate to the catalog.
     next.weatherModel = sanitizeWeatherModel(next.weatherModel);
-    setDisplayUnits(next.units);
     set({ ...next, hydrated: true });
   },
 
@@ -271,12 +270,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (Object.is(get()[key], value)) return;
     set({ [key]: value } as Pick<Settings, typeof key>);
     const next = snapshot(get());
-    setDisplayUnits(next.units);
     persist(next);
   },
 
   reset: () => {
-    setDisplayUnits(DEFAULTS.units);
     set({ ...DEFAULTS });
     persist(DEFAULTS);
   },

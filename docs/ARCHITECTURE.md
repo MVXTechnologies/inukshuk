@@ -16,7 +16,10 @@ a thin shell around it.**
   no business math themselves.
 - `src/features/**` — screens and hooks. Composition and platform APIs
   (location, sensors, WebView, expo-gl).
-- `src/ui/**`, `src/lib/**` — theme, shared components, formatting.
+- `src/ui/**`, `src/lib/**` — theme, shared components, native-only glue
+  (background location, Strava, error reporting). Value formatting is pure and
+  lives in `@core/format`; `src/state/formatters.ts` binds it to the user's
+  chosen units.
 - `app/**` — expo-router routes only; each file just renders a feature screen.
   `+native-intent.tsx` intercepts "Open with" file intents (GPX import) before
   routing.

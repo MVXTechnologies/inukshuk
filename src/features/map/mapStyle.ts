@@ -15,6 +15,12 @@ import {
 } from '@core/geo/mapLayerStack';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
 import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
+import {
+  ROAD_LINE_W,
+  WATER_LINE_W,
+  WEATHER_REFERENCE_INK,
+  type ReferenceLineWidths,
+} from '@core/weather/weatherLook';
 import type { Feature, Polygon } from 'geojson';
 
 /**
@@ -249,58 +255,18 @@ const WEATHER_MUTED_PAINT: Record<string, number> = {
 };
 
 /**
- * Ink for the reference overlay that redraws geography ABOVE the colour
- * drapes (`overlayLabels`).
- *
- * Owner review, 2026-08-13: with a weather layer running you could not tell
- * where the coast was — "it should be much easier to differentiate coasts and
- * features, have lines thicker". The previous treatment was a single hairline
- * at ~0.6 alpha, which loses twice over: once against the drape (a
- * full-spectrum colour ramp — no single ink reads over all of it) and again
- * against the wind particle field drawn on top of the whole map.
- *
- * So each reference line is a CASING + CORE pair in opposite polarity. The
- * pair brings its own contrast, so it reads identically over blue, green or
- * magenta drape, and the casing doubles as separation from the white streaks.
- * Alphas are high on purpose: this overlay only exists while a drape is up,
- * and under a drape "subtle" means "invisible".
- *
- * Polarity follows the theme, matching the label ink/halo a few lines down:
- * dark ink on a light casing in light theme, and the reverse in dark.
- */
-const WEATHER_REFERENCE_INK = {
-  light: {
-    coast: 'rgba(11, 45, 74, 0.95)',
-    road: 'rgba(60, 48, 38, 0.80)',
-    casing: 'rgba(255, 255, 255, 0.85)',
-    casingAdd: 2.6,
-  },
-  dark: {
-    coast: 'rgba(190, 224, 248, 0.95)',
-    road: 'rgba(236, 222, 200, 0.78)',
-    casing: 'rgba(6, 11, 16, 0.85)',
-    casingAdd: 2.6,
-  },
-} as const;
-
-/**
- * Core stroke widths by zoom for the reference lines, roughly double the
- * hairlines they replace (water was 0.6/1.1/1.7). Water carries the shape of
- * the land so it leads; roads stay a step behind it so the coast still wins
- * the eye when the two run together along a waterfront.
- */
-const WATER_LINE_W = { z5: 1.4, z10: 2.4, z14: 3.4 } as const;
-const ROAD_LINE_W = { z5: 0.8, z10: 1.4, z14: 2.2 } as const;
-
-/**
  * A zoom-interpolated `line-width`, optionally widened by a fixed casing
  * allowance. The casing is a constant amount wider at every zoom rather than
  * a multiple: a proportional casing vanishes at low zoom, which is exactly
  * where the coastline most needs help.
+ *
+ * The reference ink and the width tables themselves live in
+ * `@core/weather/weatherLook` — they are pure data that other renderers
+ * (the web playground) draw from too.
  */
 type LineWidth = NonNullable<NonNullable<LineLayerSpecification['paint']>['line-width']>;
 
-function widthAtZoom(w: { z5: number; z10: number; z14: number }, add: number): LineWidth {
+function widthAtZoom(w: ReferenceLineWidths, add: number): LineWidth {
   return ['interpolate', ['linear'], ['zoom'], 5, w.z5 + add, 10, w.z10 + add, 14, w.z14 + add];
 }
 

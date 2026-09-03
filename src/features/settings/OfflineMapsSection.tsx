@@ -1,4 +1,4 @@
-import { formatBytes } from '@lib/format';
+import { formatBytes } from '@core/format';
 import { useOfflineStore } from '@state/offlineStore';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';

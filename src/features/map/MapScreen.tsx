@@ -19,6 +19,7 @@ import {
 } from '@core/weather/weatherModels';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import { resolveEffectiveModel } from '@core/weather/modelCoverage';
+import { WEATHER_DRAPE_OPACITY } from '@core/weather/weatherLook';
 import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
 import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
@@ -1471,7 +1472,7 @@ export function MapScreen() {
               // deliberately so: it is the only layer that also draws its own
               // ink on top. The value and the ladder of everything tried before
               // it live with the constant in @core/weather/windLook.
-              opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : 0.62}
+              opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : WEATHER_DRAPE_OPACITY}
             />
           )}
           {marineActive && (

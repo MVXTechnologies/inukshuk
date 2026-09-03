@@ -9,7 +9,7 @@ import {
   formatElevation,
   formatSpeed,
   formatTimestamp,
-} from '@lib/format';
+} from '@state/formatters';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 

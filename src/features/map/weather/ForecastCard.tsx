@@ -1,7 +1,7 @@
 import type { WeatherLayerId } from '@core/geo/weatherLayers';
 import type { LatLng } from '@core/models';
 import { TIDE_MARINE_MAX_M, TIDE_NEARBY_MAX_M } from '@core/weather/tides';
-import { formatDistance, formatTimestamp } from '@lib/format';
+import { formatDistance, formatTimestamp } from '@state/formatters';
 import { useSettingsStore } from '@state/settingsStore';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { IconButton, Surface, Text } from 'react-native-paper';

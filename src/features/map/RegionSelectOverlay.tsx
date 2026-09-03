@@ -17,7 +17,7 @@ import {
 } from '@core/geo/tiles';
 import { layoutMadeMap } from '@core/mapmaker/layout';
 import type { BoundingBox } from '@core/models';
-import { formatBytes } from '@lib/format';
+import { formatBytes } from '@core/format';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, View } from 'react-native';

@@ -9,7 +9,7 @@ import {
   formatElevation,
   formatPace,
   formatTimestamp,
-} from '@lib/format';
+} from '@state/formatters';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';

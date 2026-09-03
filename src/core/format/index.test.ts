@@ -1,0 +1,178 @@
+import {
+  createFormatters,
+  formatBytes,
+  formatDistance,
+  formatDuration,
+  formatElevation,
+  formatPace,
+  formatSpeed,
+  formatTimestamp,
+  headingToCardinal,
+} from './index';
+
+describe('formatDistance (metric)', () => {
+  it('uses metres below 1 km', () => {
+    expect(formatDistance(0, 'metric')).toBe('0 m');
+    expect(formatDistance(840, 'metric')).toBe('840 m');
+    expect(formatDistance(999, 'metric')).toBe('999 m');
+  });
+  it('uses km at or above 1 km', () => {
+    expect(formatDistance(1000, 'metric')).toBe('1.00 km');
+    expect(formatDistance(1234, 'metric')).toBe('1.23 km');
+  });
+  it('never renders "1000 m" on the rounding boundary', () => {
+    expect(formatDistance(999.4, 'metric')).toBe('999 m');
+    expect(formatDistance(999.5, 'metric')).toBe('1.00 km');
+    expect(formatDistance(999.99, 'metric')).toBe('1.00 km');
+  });
+  it('guards bad input', () => {
+    expect(formatDistance(-5, 'metric')).toBe('0 m');
+    expect(formatDistance(NaN, 'metric')).toBe('0 m');
+  });
+});
+
+describe('formatDistance (imperial)', () => {
+  it('uses whole feet for short distances', () => {
+    expect(formatDistance(0, 'imperial')).toBe('0 ft');
+    expect(formatDistance(100, 'imperial')).toBe('328 ft');
+  });
+  it('switches to miles where feet would round to 1000', () => {
+    expect(formatDistance(999.4 * 0.3048, 'imperial')).toBe('999 ft');
+    expect(formatDistance(1000 * 0.3048, 'imperial')).toBe('0.19 mi');
+  });
+  it('uses 2 decimals below 10 mi and 1 decimal above', () => {
+    expect(formatDistance(1609.344, 'imperial')).toBe('1.00 mi');
+    expect(formatDistance(5 * 1609.344, 'imperial')).toBe('5.00 mi');
+    expect(formatDistance(12 * 1609.344, 'imperial')).toBe('12.0 mi');
+  });
+  it('guards bad input', () => {
+    expect(formatDistance(-5, 'imperial')).toBe('0 ft');
+    expect(formatDistance(NaN, 'imperial')).toBe('0 ft');
+  });
+});
+
+describe('unit independence', () => {
+  it('is a pure function of its arguments: same input, same output', () => {
+    // The regression this module was moved into @core to prevent: the answer
+    // used to depend on a module-level `displayUnits` set from elsewhere.
+    expect(formatDistance(1609.344, 'metric')).toBe('1.61 km');
+    expect(formatDistance(1609.344, 'imperial')).toBe('1.00 mi');
+    expect(formatDistance(1609.344, 'metric')).toBe('1.61 km');
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats minutes and seconds', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(65)).toBe('1:05');
+  });
+  it('formats hours', () => {
+    expect(formatDuration(3661)).toBe('1:01:01');
+  });
+  it('guards negatives', () => {
+    expect(formatDuration(-10)).toBe('0:00');
+    expect(formatDuration(NaN)).toBe('0:00');
+  });
+});
+
+describe('formatElevation', () => {
+  it('rounds to whole metres', () => {
+    expect(formatElevation(1234.6, 'metric')).toBe('1235 m');
+    expect(formatElevation(NaN, 'metric')).toBe('0 m');
+  });
+  it('renders whole feet in imperial', () => {
+    expect(formatElevation(1234, 'imperial')).toBe('4049 ft');
+    expect(formatElevation(NaN, 'imperial')).toBe('0 ft');
+  });
+});
+
+describe('formatSpeed', () => {
+  it('converts m/s to km/h', () => {
+    expect(formatSpeed(0, 'metric')).toBe('0.0 km/h');
+    expect(formatSpeed(10, 'metric')).toBe('36.0 km/h');
+    expect(formatSpeed(-1, 'metric')).toBe('0.0 km/h');
+  });
+  it('converts m/s to mph in imperial', () => {
+    expect(formatSpeed(10, 'imperial')).toBe('22.4 mph');
+    expect(formatSpeed(-1, 'imperial')).toBe('0.0 mph');
+  });
+});
+
+describe('formatPace', () => {
+  it('converts m/s to min/km', () => {
+    expect(formatPace(1000 / 360, 'metric')).toBe('6:00/km'); // 360 s/km
+    expect(formatPace(10 / 3.6, 'metric')).toBe('6:00/km'); // 10 km/h
+  });
+  it('converts m/s to min/mi in imperial', () => {
+    expect(formatPace(1609.344 / 360, 'imperial')).toBe('6:00/mi'); // 360 s/mi
+    expect(formatPace(0, 'imperial')).toBe('—');
+  });
+  it('returns a dash for non-positive or implausible speeds', () => {
+    expect(formatPace(0, 'metric')).toBe('—');
+    expect(formatPace(-1, 'metric')).toBe('—');
+    expect(formatPace(0.01, 'metric')).toBe('—');
+    expect(formatPace(NaN, 'metric')).toBe('—');
+  });
+  it('carries a second that rounds to 60 into the minute', () => {
+    // 359.7 s/km rounds to 5:60 naively; it must read 6:00.
+    expect(formatPace(1000 / 359.7, 'metric')).toBe('6:00/km');
+  });
+});
+
+describe('headingToCardinal', () => {
+  it('maps degrees to cardinals', () => {
+    expect(headingToCardinal(0)).toBe('N');
+    expect(headingToCardinal(45)).toBe('NE');
+    expect(headingToCardinal(90)).toBe('E');
+    expect(headingToCardinal(180)).toBe('S');
+    expect(headingToCardinal(270)).toBe('W');
+    expect(headingToCardinal(360)).toBe('N');
+    expect(headingToCardinal(-90)).toBe('W');
+  });
+});
+
+describe('formatTimestamp', () => {
+  it('renders a short local date with a time component', () => {
+    // Construct in local time so the assertion is timezone-independent.
+    const epoch = new Date(2026, 5, 15, 14, 32).getTime();
+    const out = formatTimestamp(epoch);
+    expect(out).toContain('15');
+    expect(out).toMatch(/\d{1,2}:32/);
+  });
+});
+
+describe('formatBytes', () => {
+  it('formats KB and MB', () => {
+    expect(formatBytes(0)).toBe('0 KB');
+    expect(formatBytes(840_000)).toBe('840 KB');
+    expect(formatBytes(12_000_000)).toBe('12 MB');
+  });
+  it('has a GB tier', () => {
+    expect(formatBytes(1_200_000_000)).toBe('1.2 GB');
+  });
+  it('guards NaN and negative input', () => {
+    expect(formatBytes(NaN)).toBe('0 KB');
+    expect(formatBytes(-1)).toBe('0 KB');
+    expect(formatBytes(Infinity)).toBe('0 KB');
+  });
+});
+
+describe('createFormatters', () => {
+  it('binds the unit system into (value) => string helpers', () => {
+    const metric = createFormatters('metric');
+    expect(metric.formatDistance(1609.344)).toBe('1.61 km');
+    expect(metric.formatElevation(1234)).toBe('1234 m');
+    expect(metric.formatSpeed(10)).toBe('36.0 km/h');
+    expect(metric.formatPace(1000 / 360)).toBe('6:00/km');
+  });
+  it('gives two instances independent unit systems', () => {
+    const metric = createFormatters('metric');
+    const imperial = createFormatters('imperial');
+    expect(imperial.formatDistance(1609.344)).toBe('1.00 mi');
+    expect(imperial.formatElevation(1234)).toBe('4049 ft');
+    expect(imperial.formatSpeed(10)).toBe('22.4 mph');
+    expect(imperial.formatPace(1609.344 / 360)).toBe('6:00/mi');
+    // Creating the imperial one must not have disturbed the metric one.
+    expect(metric.formatDistance(1609.344)).toBe('1.61 km');
+  });
+});

@@ -1,6 +1,6 @@
 import type { GpsQuality } from '@core/geo/track/gpsQuality';
 import type { TrackStats } from '@core/models';
-import { formatDistance, formatDuration, formatElevation, formatSpeed } from '@lib/format';
+import { formatDistance, formatDuration, formatElevation, formatSpeed } from '@state/formatters';
 import { StatTile } from '@ui/components/StatTile';
 import { StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';

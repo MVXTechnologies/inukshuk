@@ -108,11 +108,16 @@ export function matchesFilter(track: TrackSummary, filter: TrackFilter): boolean
 /**
  * Apply a filter to the trail list, preserving order. With no active criteria
  * the input array is returned as-is (stable identity for memoized consumers).
+ *
+ * Generic OVER `TrackSummary` rather than typed ON it: a caller holding a
+ * richer trail type (the web playground's `WebTrack`, which adds a preview
+ * polyline and a colour) gets its own element type back instead of a widened
+ * `TrackSummary` it then has to recover through an id map.
  */
-export function filterTracks(
-  tracks: readonly TrackSummary[],
+export function filterTracks<T extends TrackSummary>(
+  tracks: readonly T[],
   filter: TrackFilter,
-): readonly TrackSummary[] {
+): readonly T[] {
   if (!hasActiveFilters(filter)) return tracks;
   return tracks.filter((t) => matchesFilter(t, filter));
 }

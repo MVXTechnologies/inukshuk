@@ -1,5 +1,5 @@
 // src/state/settingsStore.units.test.ts
-import { formatDistance } from '@lib/format';
+import { formatDistance } from '@state/formatters';
 import { useSettingsStore } from './settingsStore';
 
 jest.mock('@data/storage', () => ({
