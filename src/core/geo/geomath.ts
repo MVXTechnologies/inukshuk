@@ -21,6 +21,25 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/**
+ * Initial great-circle bearing from `a` to `b`, in degrees clockwise from true
+ * north (`[0, 360)`).
+ *
+ * "Initial" because a great circle's bearing changes along the way: over a few
+ * kilometres of trail the difference is negligible, but this is the number a
+ * compass user should walk on RIGHT NOW, which is exactly what the destination
+ * readout needs. Returns 0 for coincident points (no direction exists).
+ */
+export function initialBearingDeg(a: LatLng, b: LatLng): number {
+  const lat1 = a.latitude * DEG2RAD;
+  const lat2 = b.latitude * DEG2RAD;
+  const dLng = (b.longitude - a.longitude) * DEG2RAD;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  if (y === 0 && x === 0) return 0;
+  return (Math.atan2(y, x) / DEG2RAD + 360) % 360;
+}
+
 /** A 2D affine transform mapping (x, y) -> (a*x + b*y + c, d*x + e*y + f). */
 export interface Affine2D {
   a: number;

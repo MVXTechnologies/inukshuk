@@ -99,6 +99,7 @@ export function SettingsScreen() {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
+  const showScaleBar = useSettingsStore((s) => s.showScaleBar);
   const windParticles = useSettingsStore((s) => s.windParticles);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
@@ -321,6 +322,13 @@ export function SettingsScreen() {
                       value={rotateMap}
                       onValueChange={(v) => set('rotateMapWithHeading', v)}
                     />
+                  )}
+                />
+                <List.Item
+                  title="Scale bar"
+                  description="Distance reference under the compass"
+                  right={() => (
+                    <Switch value={showScaleBar} onValueChange={(v) => set('showScaleBar', v)} />
                   )}
                 />
                 {/* PARKED with the weather feature (see

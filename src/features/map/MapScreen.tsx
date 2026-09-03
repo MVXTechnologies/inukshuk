@@ -55,16 +55,21 @@ import type { ComposeHandle, MakeMapOptions } from './mapmaker/composeMapPdf';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
+import { DestinationChip } from './components/DestinationChip';
+import { DestinationMarkerPin } from './components/DestinationMarkerPin';
+import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { HeadingCone } from './components/HeadingCone';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RecordControls } from './components/RecordControls';
+import { ScaleBar } from './components/ScaleBar';
 import { StatsHud } from './components/StatsHud';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 import { formatLatLng } from '@core/geo/formatCoords';
+import { destinationReadout } from '@core/geo/destination';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
@@ -341,6 +346,22 @@ export function MapScreen() {
   // field's own settled bounds it is NOT gated on the wind overlay — and so
   // does the weather drape, which is why both live this high up.
   const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  // Settled camera zoom + centre latitude, the two inputs the scale bar needs
+  // (a Web-Mercator pixel is ~8× less ground at 83°N than at the equator).
+  // SETTLE-driven on purpose: `onRegionIsChanging` fires at gesture rate and
+  // would re-render this whole tree per frame — see ScaleBar's own note. The
+  // setter collapses no-op updates so a pan along a parallel costs nothing.
+  const showScaleBar = useSettingsStore((s) => s.showScaleBar);
+  const [scaleAt, setScaleAt] = useState<{ zoom: number; latitude: number } | null>(null);
+  const updateScaleAt = useCallback((zoom: number, latitude: number) => {
+    setScaleAt((prev) =>
+      prev !== null &&
+      Math.abs(prev.zoom - zoom) < 0.01 &&
+      Math.abs(prev.latitude - latitude) < 0.01
+        ? prev
+        : { zoom, latitude },
+    );
+  }, []);
   // The MapView's laid-out size as low-rate STATE: the wind camera seed must
   // not run before the map has laid out (see its comment), and the weather
   // drape sizes its GetMap from it. onLayout fires only on mount/rotation,
@@ -375,6 +396,21 @@ export function MapScreen() {
   // Long-pressed point whose forecast/tides card is open (shown while a
   // weather or marine layer is active).
   const [forecastAt, setForecastAt] = useState<LatLng | null>(null);
+  // Drop-a-pin destination (#97): a long-press on the bare map (or the "Set
+  // destination" button in the coordinates dialog) plants ONE pin, and the
+  // top-centre chip reads out live distance + bearing to it from the current
+  // fix. Session state on purpose — a destination is a "right now" thing, not
+  // a library object; saving a place is what waypoints are for.
+  //
+  // This is emphatically NOT route following: no legs, no turns, no ETA, no
+  // snapping to a trail. That is issue #95.
+  const [destination, setDestination] = useState<LatLng | null>(null);
+  // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
+  // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
+  // than tracked per settle — nothing else needs a metre-accurate centre, and
+  // the scale bar's own settled state is deliberately coarse.
+  const [goToOpen, setGoToOpen] = useState(false);
+  const [goToCenter, setGoToCenter] = useState<LatLng | null>(null);
   // Tap-anywhere point readout (wave A item 7, generalized by marine wave D
   // §D1/D-5): a bare tap drops/moves ONE chip here whatever the active
   // layers — coordinates on the plain map, the weather value with a weather
@@ -626,11 +662,50 @@ export function MapScreen() {
     })();
   }, [forecastAt, mapLoaded, lastKnownPosition, router, weatherLayer]);
 
-  const { fitOverlayBounds, resetNorth, zoomToLocateLevel } = useCameraControls({
+  const { fitOverlayBounds, flyToPoint, resetNorth, zoomToLocateLevel } = useCameraControls({
     cameraRef,
     mapRef,
     overlays,
   });
+  // Live distance + bearing to the destination pin (#97). Recomputed on every
+  // fix, which is exactly what "live" means here — the maths is two trig
+  // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
+  const destReadout = useMemo(
+    () => destinationReadout(location, destination, units),
+    [location, destination, units],
+  );
+
+  // Open the coordinates dialog with an exact map centre. getViewState is
+  // gated on `mapLoaded`: called before the native view is initialised it
+  // NPEs on the native thread, a process crash no JS catch can intercept.
+  const openGoToCoordinates = useCallback(async () => {
+    let center: LatLng | null = null;
+    if (mapLoaded) {
+      try {
+        const vs = await mapRef.current?.getViewState();
+        if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
+      } catch {
+        // Map mid-teardown — open with the readout half empty rather than not
+        // at all; the entry half still works.
+      }
+    }
+    setGoToCenter(center);
+    setGoToOpen(true);
+  }, [mapLoaded]);
+
+  // Aim at a coordinate: plant the pin, point the camera at it, and say so.
+  const aimAt = useCallback(
+    (at: LatLng) => {
+      setDestination(at);
+      flyToPoint(at);
+      showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
+    },
+    // flyToPoint is recreated every render (it closes over refs only), so it
+    // is deliberately not a dependency — listing it would defeat the memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showSnack],
+  );
+
   // Rotation index for the fit FAB's PDF tour (reset when the set changes).
   const fitCycleRef = useRef(0);
   useEffect(() => {
@@ -1148,7 +1223,8 @@ export function MapScreen() {
         // idiom as the waypoint pins. On the plain map (no weather, no
         // marine) the chip shows the coordinates and dismissing it copies
         // them, which is the only affordance a pointerEvents-none chip can
-        // offer.
+        // offer. #97 widened the copy to EVERY mode, since the chip now
+        // always carries a coordinates line.
         if (lngLatArr) {
           if (pointAt !== null) {
             try {
@@ -1157,10 +1233,8 @@ export function MapScreen() {
                 p != null &&
                 Math.hypot(px - p[0], py - (p[1] - POINT_CHIP_OFFSET)) < POINT_CHIP_HIT_PX
               ) {
-                if (weatherLayer === null && !marineActive) {
-                  void Clipboard.setStringAsync(formatLatLng(pointAt.latitude, pointAt.longitude));
-                  showSnack('Coordinates copied');
-                }
+                void Clipboard.setStringAsync(formatLatLng(pointAt.latitude, pointAt.longitude));
+                showSnack('Coordinates copied');
                 setPointAt(null);
                 setViewWp(null);
                 setForecastAt(null);
@@ -1184,8 +1258,6 @@ export function MapScreen() {
       restoreCameraOnDeselect,
       location,
       setFollowUser,
-      weatherLayer,
-      marineActive,
       pointAt,
       showSnack,
     ],
@@ -1353,8 +1425,21 @@ export function MapScreen() {
           // today when both are off.
           onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
             const lngLat = e.nativeEvent?.lngLat;
-            if (!lngLat || (weatherLayer === null && !marineActive) || offlineOnly) return;
-            setForecastAt({ longitude: lngLat[0], latitude: lngLat[1] });
+            if (!lngLat) return;
+            const at = { longitude: lngLat[0], latitude: lngLat[1] };
+            // Weather/marine gesture (unchanged): long-press opens the
+            // forecast card (ECCC forecast + CHS tides) for that point.
+            if ((weatherLayer !== null || marineActive) && !offlineOnly) {
+              setForecastAt(at);
+              return;
+            }
+            // Bare map: long-press DROPS THE DESTINATION PIN (#97). This is
+            // the "drop a pin" gesture people already expect, and it costs no
+            // permanent chrome — the only thing it adds to the screen is the
+            // pin and its readout chip, both of which the ✕ clears. A second
+            // long-press moves the pin rather than stacking another.
+            setDestination(at);
+            showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
           }}
           // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
           // every STYLE reload as well as a real (re)mount, and the false
@@ -1364,7 +1449,16 @@ export function MapScreen() {
           // to keep getViewState() off an uninitialised native view, and
           // only an unmounted <Map> can put us back in that state — which
           // the effect above re-arms.
-          onDidFinishLoadingMap={() => setMapLoaded(true)}
+          onDidFinishLoadingMap={() => {
+            setMapLoaded(true);
+            // Seed the scale bar: onRegionDidChange is not guaranteed to fire
+            // before the user's first gesture, and a map with no scale on it
+            // until you pan looks broken.
+            void mapRef.current
+              ?.getViewState()
+              .then((vs) => updateScaleAt(vs.zoom, vs.center[1]))
+              .catch(() => undefined); // mid-teardown — the next settle seeds it
+          }}
           // Feeds the crossfade's "is the staged frame actually drawn yet"
           // gate (see useWeatherCrossfade). A ref, so this fires at render
           // rate without costing a React update.
@@ -1380,6 +1474,7 @@ export function MapScreen() {
             // Settled bounds for the marine chart's re-anchor check (the
             // wind layer keeps its own copy behind the windEnabled gate).
             setSettledBounds(windBoundsOf(e.nativeEvent));
+            updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1639,6 +1734,19 @@ export function MapScreen() {
             </Marker>
           ))}
 
+          {/* Destination pin (#97). Visual only, like the waypoint pins —
+              it is cleared from the chip's ✕, never by tapping the map, so a
+              destination survives every other tap interaction. */}
+          {destination !== null && (
+            <Marker
+              id="destination"
+              lngLat={[destination.longitude, destination.latitude]}
+              anchor="bottom"
+            >
+              <DestinationMarkerPin />
+            </Marker>
+          )}
+
           {/* Tap-anywhere readout chip (wave A item 7, unified by wave D
               §D1/D-5): ONE compact Windy-style chip at the tapped spot —
               the weather value pinned to the scrubbed TIME, the surveyed
@@ -1661,12 +1769,14 @@ export function MapScreen() {
                   />
                 )}
                 {marineActive && <DepthPointLine at={pointAt} />}
-                {weatherLayer === null && !marineActive && (
-                  <>
-                    <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
-                    <MapPointLine text="Tap to copy" muted />
-                  </>
-                )}
+                {/* Coordinates (#97): promoted from "only on the bare map" to
+                    ALWAYS — a nav app that hides where you just tapped behind
+                    a weather value is answering the wrong question. This is
+                    the app's one coordinate readout for a point you can see;
+                    the map CENTRE's readout lives in the coordinates dialog
+                    rather than in a second competing chip. */}
+                <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                <MapPointLine text="Tap to copy" muted />
               </MapPointChip>
             </Marker>
           )}
@@ -1742,6 +1852,13 @@ export function MapScreen() {
           rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
         <CompassBadge onPress={resetNorth} />
+        {/* Scale bar (#97), docked under the compass: the map's two reference
+            instruments read as one stack, and the bottom-left corner stays
+            clear — it was deliberately emptied of chrome and now belongs to
+            the recording HUD. 2D only; the 3D view has no Mercator zoom. */}
+        {showScaleBar && !terrain3d && scaleAt !== null && (
+          <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+        )}
       </View>
 
       {/* Mandatory marine notice (marine M3): whenever a marine layer is
@@ -1752,6 +1869,16 @@ export function MapScreen() {
       {marineActive && !terrain3d && (
         <View style={[styles.marineChip, { top: insets.top + 12 }]} pointerEvents="none">
           <MarineDisclaimerChip />
+        </View>
+      )}
+
+      {/* Destination readout (#97): top-centre, between the compass+scale
+          stack (left) and the controls rail (right) — the same free lane the
+          marine notice uses, so the two are mutually exclusive. Only while a
+          destination exists; the ✕ on it is the way out. */}
+      {destination !== null && !marineActive && !terrain3d && (
+        <View style={[styles.topCenterChip, { top: insets.top + 12 }]} pointerEvents="box-none">
+          <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
         </View>
       )}
 
@@ -1806,6 +1933,9 @@ export function MapScreen() {
                           inspect(null);
                           beginRegionSelect();
                         },
+                  // Coordinate readout/entry (#97) — always available; it
+                  // needs neither a GPS fix nor the flat 2D camera.
+                  onGoToCoordinates: () => void openGoToCoordinates(),
                   // The region box needs the flat 2D map, like the selector.
                   onMakeMap: terrain3d
                     ? undefined
@@ -2077,6 +2207,33 @@ export function MapScreen() {
           />
         )}
 
+      {/* Coordinate readout + entry (#97): the map centre in all three
+          notations (tap a line to copy), and a box that accepts decimal
+          degrees, degrees-minutes or degrees-minutes-seconds. "Go" flies the
+          camera; "Set destination" plants the pin — with the box empty that
+          is the map centre, i.e. drop a pin on the crosshair. */}
+      {goToOpen && (
+        <GoToCoordinatesDialog
+          center={goToCenter}
+          onDismiss={() => setGoToOpen(false)}
+          onCopy={(text) => {
+            void Clipboard.setStringAsync(text);
+            showSnack('Coordinates copied');
+          }}
+          onGo={(at) => {
+            setGoToOpen(false);
+            flyToPoint(at);
+            // Drop the readout chip on the target so the jump lands on
+            // something visible rather than an unmarked patch of map.
+            setPointAt(at);
+          }}
+          onSetDestination={(at) => {
+            setGoToOpen(false);
+            aimAt(at);
+          }}
+        />
+      )}
+
       <WaypointEditorDialog
         waypoint={editWaypoint}
         draft={wpDraft}
@@ -2111,9 +2268,12 @@ export function MapScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  topLeft: { position: 'absolute', left: 12 },
+  // Column: compass badge, then the scale bar under it (#97).
+  topLeft: { position: 'absolute', left: 12, gap: 8, alignItems: 'flex-start' },
   // Centred between the compass (left) and the controls rail (right).
   marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
+  // Same free top-centre lane, used by the destination readout (#97).
+  topCenterChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center', zIndex: 5 },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
   bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 12, paddingBottom: 6 },
   // Collapsed: center-align the pill against the (bigger) icon buttons so

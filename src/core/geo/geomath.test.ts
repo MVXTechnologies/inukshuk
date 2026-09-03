@@ -6,6 +6,7 @@ import {
   cornersAreValid,
   extrapolatePageCorners,
   fitAffine,
+  initialBearingDeg,
   isDegenerateBBox,
   isInsideBBox,
   isValidLngLat,
@@ -235,5 +236,53 @@ describe('coordinate validation (native-crash guard)', () => {
     expect(isDegenerateBBox({ minLat: 47.6, minLng: -71.0, maxLat: 47.8, maxLng: -71.0 })).toBe(
       true,
     );
+  });
+});
+
+describe('initialBearingDeg', () => {
+  it('reads due north / east / south / west off the cardinal offsets', () => {
+    const at = { latitude: 46.8139, longitude: -71.2082 };
+    expect(initialBearingDeg(at, { ...at, latitude: at.latitude + 0.1 })).toBeCloseTo(0, 6);
+    expect(initialBearingDeg(at, { ...at, longitude: at.longitude + 0.1 })).toBeCloseTo(90, 1);
+    expect(initialBearingDeg(at, { ...at, latitude: at.latitude - 0.1 })).toBeCloseTo(180, 6);
+    expect(initialBearingDeg(at, { ...at, longitude: at.longitude - 0.1 })).toBeCloseTo(270, 1);
+  });
+
+  it('always reports a compass bearing in [0, 360)', () => {
+    const at = { latitude: 46.8139, longitude: -71.2082 };
+    for (let d = 0; d < 360; d += 17) {
+      const r = (d * Math.PI) / 180;
+      const to = {
+        latitude: at.latitude + 0.05 * Math.cos(r),
+        longitude: at.longitude + 0.05 * Math.sin(r),
+      };
+      const b = initialBearingDeg(at, to);
+      expect(b).toBeGreaterThanOrEqual(0);
+      expect(b).toBeLessThan(360);
+    }
+  });
+
+  it('is the initial bearing of a great circle, not the rhumb line', () => {
+    // The classic worked example (Baltimore -> Kansas City, same latitude):
+    // the great circle bows poleward, so it departs at 273°39', not due west.
+    const b = initialBearingDeg(
+      { latitude: 39.099912, longitude: -76.348327 },
+      { latitude: 39.099912, longitude: -94.581213 },
+    );
+    expect(b).toBeGreaterThan(270); // a rhumb line would read exactly 270
+    expect(b).toBeCloseTo(275.78, 1);
+  });
+
+  it('handles the antimeridian without wrapping the long way round', () => {
+    const b = initialBearingDeg(
+      { latitude: 0, longitude: 179.9 },
+      { latitude: 0, longitude: -179.9 },
+    );
+    expect(b).toBeCloseTo(90, 4);
+  });
+
+  it('returns 0 for coincident points instead of NaN', () => {
+    const at = { latitude: 46.8139, longitude: -71.2082 };
+    expect(initialBearingDeg(at, { ...at })).toBe(0);
   });
 });

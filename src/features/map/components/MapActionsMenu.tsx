@@ -23,7 +23,8 @@ import { InukshukIcon } from './InukshukIcon';
  * action rows keep 'Record track' / 'Add waypoint' / 'Download offline
  * area' / 'Make a map'. The guarded-tap idiom still holds — the action
  * labels only exist while the sheet is open, so they remain the open-state
- * sentinels.
+ * sentinels. New rows are appended, never inserted, so an existing flow's
+ * tap targets keep their position.
  */
 
 export interface MapActions {
@@ -34,6 +35,13 @@ export interface MapActions {
   onDownload?: () => void;
   /** Open the map maker. Omitted in 3D. */
   onMakeMap?: () => void;
+  /**
+   * Open the coordinate readout/entry dialog (#97). This is the entry point
+   * for BOTH halves of that feature — read the map centre out, or type a
+   * coordinate to fly to / aim a destination at — which is why one row buys
+   * the whole thing instead of two.
+   */
+  onGoToCoordinates?: () => void;
 }
 
 export function MapActionsMenu({
@@ -97,6 +105,8 @@ export function MapActionsMenu({
           {actions.onDownload !== undefined &&
             row('tray-arrow-down', 'Download offline area', run(actions.onDownload))}
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}
+          {actions.onGoToCoordinates !== undefined &&
+            row('crosshairs', 'Go to coordinates', run(actions.onGoToCoordinates))}
         </View>
       )}
     </>
