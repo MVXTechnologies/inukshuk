@@ -1,3 +1,4 @@
+import { axisGutterWidth } from '@core/chart/axis';
 import {
   buildElevationProfile,
   interpolateTrackAtDistance,
@@ -30,8 +31,18 @@ import Svg, {
 const CHART_HEIGHT = 140;
 /** Band under the plot for the 45°-tilted distance ticks. */
 const X_AXIS_H = 30;
-/** Left gutter reserved for the elevation labels, clear of the curve. */
-const AXIS_LEFT = 38;
+/**
+ * Floor for the left gutter that holds the elevation labels, clear of the
+ * curve. The gutter itself is MEASURED from the labels (see `axisLeft` below);
+ * this is only the width below which it never shrinks, so the plot keeps the
+ * geometry it has always had for ordinary metric elevations.
+ */
+const AXIS_LEFT_MIN = 38;
+/** Ceiling, as a fraction of the card width, so a huge label can't eat the plot. */
+const AXIS_LEFT_MAX_FRACTION = 0.3;
+/** Font size and right-hand gap of the gutter labels. */
+const AXIS_FONT = 8;
+const AXIS_GAP = 5;
 /**
  * Right margin of the plot. The card clips at its rounded edge
  * (overflow: hidden), so the last tilted tick label and the curves' final
@@ -186,9 +197,37 @@ export function ElevationProfile({
   const drawPace = hasPace && showPaceCurve;
   const drawHr = hasHr && showHrCurve;
 
-  const plotW = Math.max(0, width - AXIS_LEFT - AXIS_RIGHT);
+  // Elevation gridlines: three round-number levels between min and max.
+  const gridLevels = useMemo(() => {
+    const step = range / 4;
+    const nice = 10 ** Math.floor(Math.log10(step || 1));
+    const inc = Math.max(nice, Math.ceil(step / nice) * nice);
+    const out: number[] = [];
+    for (let e = Math.ceil(minElevationM / inc) * inc; e < maxElevationM; e += inc) out.push(e);
+    return out.slice(0, 4);
+  }, [minElevationM, maxElevationM, range]);
+  const gridTicks = gridLevels.map((e) => ({ e, label: formatElevation(e) }));
+
+  // The gutter is measured from the labels it must hold, not fixed: a
+  // right-anchored label wider than its gutter runs off the left of the SVG
+  // viewport and loses its leading digits (the Dashboard graph shipped that
+  // bug). AXIS_LEFT_MIN keeps the historic width as a floor, so the plot never
+  // shifts for the ordinary metric labels; the HR average ("### bpm", ~35 px
+  // with its 3 px gap) fits inside that floor and so needs no measuring.
+  const axisLeft = Math.min(
+    Math.max(
+      AXIS_LEFT_MIN,
+      axisGutterWidth(
+        gridTicks.map((t) => t.label),
+        { fontSize: AXIS_FONT, gap: AXIS_GAP },
+      ),
+    ),
+    width > 0 ? width * AXIS_LEFT_MAX_FRACTION : Number.POSITIVE_INFINITY,
+  );
+
+  const plotW = Math.max(0, width - axisLeft - AXIS_RIGHT);
   const xFor = (d: number) =>
-    AXIS_LEFT + (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * plotW;
+    axisLeft + (Math.max(0, Math.min(d, totalDistanceM)) / (totalDistanceM || 1)) * plotW;
 
   const pts =
     width > 0
@@ -260,16 +299,6 @@ export function ElevationProfile({
     return CHART_HEIGHT - 14 - t * (CHART_HEIGHT - 40) - 6;
   };
 
-  // Elevation gridlines: three round-number levels between min and max.
-  const gridLevels = useMemo(() => {
-    const step = range / 4;
-    const nice = 10 ** Math.floor(Math.log10(step || 1));
-    const inc = Math.max(nice, Math.ceil(step / nice) * nice);
-    const out: number[] = [];
-    for (let e = Math.ceil(minElevationM / inc) * inc; e < maxElevationM; e += inc) out.push(e);
-    return out.slice(0, 4);
-  }, [minElevationM, maxElevationM, range]);
-
   const ticks = useMemo(() => distanceTicks(totalDistanceM), [totalDistanceM]);
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
@@ -280,9 +309,9 @@ export function ElevationProfile({
   // finger drifts vertically — scrubbing keeps working off-axis.
   const pan = useMemo(() => {
     const onTouch = (e: GestureResponderEvent) => {
-      const plot = width - AXIS_LEFT - AXIS_RIGHT;
+      const plot = width - axisLeft - AXIS_RIGHT;
       if (plot <= 0) return;
-      const ratio = (e.nativeEvent.locationX - AXIS_LEFT) / plot;
+      const ratio = (e.nativeEvent.locationX - axisLeft) / plot;
       const res = scrubProfileAtRatio(points, samples, ratio);
       if (!res) return;
       setScrub(res.sampleIndex);
@@ -306,7 +335,7 @@ export function ElevationProfile({
       onPanResponderRelease: endScrub,
       onPanResponderTerminate: endScrub,
     });
-  }, [width, samples, points, onScrub]);
+  }, [width, samples, points, onScrub, axisLeft]);
 
   // Guard every index read: `scrub` indexes a PREVIOUS render's samples.
   const active = scrub === null ? null : (samples[scrub] ?? null);
@@ -432,12 +461,12 @@ export function ElevationProfile({
             {/* Elevation gridlines; labels live in the left gutter, clear of
                 the curve. */}
             {drawElev &&
-              gridLevels.map((e) => {
+              gridTicks.map(({ e, label }) => {
                 const y = CHART_HEIGHT - ((e - minElevationM) / range) * (CHART_HEIGHT - 14) - 6;
                 return (
                   <Fragment key={`g${e}`}>
                     <Line
-                      x1={AXIS_LEFT}
+                      x1={axisLeft}
                       y1={y}
                       x2={width}
                       y2={y}
@@ -446,14 +475,14 @@ export function ElevationProfile({
                       opacity={0.12}
                     />
                     <SvgText
-                      x={AXIS_LEFT - 5}
+                      x={axisLeft - AXIS_GAP}
                       y={y + 2.5}
-                      fontSize={8}
+                      fontSize={AXIS_FONT}
                       fill={dim}
                       textAnchor="end"
                       opacity={0.9}
                     >
-                      {formatElevation(e)}
+                      {label}
                     </SvgText>
                   </Fragment>
                 );
@@ -494,7 +523,7 @@ export function ElevationProfile({
             {drawPace && speedRange && speedAvg !== null && (
               <>
                 <Line
-                  x1={AXIS_LEFT}
+                  x1={axisLeft}
                   y1={bandY(speedAvg, speedRange.lo, speedRange.hi)}
                   x2={width - AXIS_RIGHT}
                   y2={bandY(speedAvg, speedRange.lo, speedRange.hi)}
@@ -533,7 +562,7 @@ export function ElevationProfile({
             {drawHr && hrRange && hrAvg !== null && (
               <>
                 <Line
-                  x1={AXIS_LEFT}
+                  x1={axisLeft}
                   y1={bandY(hrAvg, hrRange.lo, hrRange.hi)}
                   x2={width - AXIS_RIGHT}
                   y2={bandY(hrAvg, hrRange.lo, hrRange.hi)}
@@ -543,7 +572,7 @@ export function ElevationProfile({
                   strokeOpacity={0.85}
                 />
                 <SvgText
-                  x={AXIS_LEFT - 3}
+                  x={axisLeft - 3}
                   y={bandY(hrAvg, hrRange.lo, hrRange.hi) + 3}
                   fontSize={8}
                   fill={HR_COLOR}
@@ -557,7 +586,7 @@ export function ElevationProfile({
             {/* Distance ticks, horizontal in the band below the plot (angled
                 labels kept clipping at the card edge — user call). */}
             <Line
-              x1={AXIS_LEFT}
+              x1={axisLeft}
               y1={CHART_HEIGHT}
               x2={width}
               y2={CHART_HEIGHT}
