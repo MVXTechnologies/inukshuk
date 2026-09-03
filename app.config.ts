@@ -74,7 +74,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 was
     // 1.0.2; vc45 was 1.0.3; vc46 was 1.1.0; vc47 was 1.2.0; vc48 was 1.3.0;
     // see version above.)
-    versionCode: 50, // vc50 is 1.5.0 (see version above)
+    // vc50 was 1.5.0 on the INTERNAL track only. vc51 is the same 1.5.0 rebuilt
+    // for the first PRODUCTION release: vc50's embedded bundle predates the
+    // weather/marine parking, so a fresh install would have shown both features
+    // working until the OTA landed. The embedded bundle has to match what we
+    // intend to ship, not rely on an update arriving.
+    versionCode: 51, // vc51 is 1.5.0, first Play production release
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
