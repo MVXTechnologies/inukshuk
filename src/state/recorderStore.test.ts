@@ -1,6 +1,7 @@
 import type { TrackPoint } from '@core/models';
 import { computeTrackStats } from '@core/geo/track';
 import * as checkpoint from '@data/recorderCheckpoint';
+import * as storage from '@data/storage';
 import { useLibraryStore } from './libraryStore';
 import {
   initRecorderRecovery,
@@ -544,5 +545,103 @@ describe('ghost-session guard (stale checkpoint for an already-saved trail)', ()
     expect(await initRecorderRecovery()).toBe(true);
     expect(useRecorderStore.getState().status).toBe('paused');
     expect(useRecorderStore.getState().name).toBe('Ghost hike');
+  });
+});
+
+describe('index writes on save (stop())', () => {
+  // Saving a recording used to rewrite library.json once for the trail plus
+  // once per live waypoint — 1 + N full serializations and atomic swaps of the
+  // WHOLE library, i.e. a stall proportional to the user's library size at the
+  // very end of a hike. The trail and its notes now land in a single index
+  // write; this call-count assertion is the regression gate.
+  const recordWithWaypoints = () => {
+    const s = useRecorderStore.getState();
+    s.start('Waypointy hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    expect(useRecorderStore.getState().addWaypoint()).toBe(1);
+    const wp1 = useRecorderStore.getState().waypoints[0]!;
+    useRecorderStore
+      .getState()
+      .updateWaypoint(wp1.id, { note: '  Spring  ', photoUri: 'file://photo1.jpg' });
+    useRecorderStore.getState().addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    useRecorderStore.getState().addWaypoint(); // keeps its auto label, no photo
+    useRecorderStore.getState().addPoint(pt({ time: 1_004_000, latitude: 46.80005 }));
+    useRecorderStore.getState().addWaypoint();
+    const wp3 = useRecorderStore.getState().waypoints[2]!;
+    useRecorderStore.getState().updateWaypoint(wp3.id, { note: 'Summit' });
+  };
+
+  beforeEach(() => {
+    useLibraryStore.setState({ tracks: [], hydrated: true });
+  });
+
+  afterEach(() => {
+    useLibraryStore.setState({ tracks: [], hydrated: false });
+  });
+
+  it('writes the library index exactly once, trail + notes together', async () => {
+    recordWithWaypoints();
+    (storage.writeIndex as jest.Mock).mockClear();
+
+    const track = await useRecorderStore.getState().stop();
+    expect(track).not.toBeNull();
+    expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+
+    // ...and that one write already carries the trail AND all of its notes, so
+    // a crash right after it loses nothing the old N+1 sequence would have kept.
+    const written = (storage.writeIndex as jest.Mock).mock.calls[0]?.[0] as {
+      tracks: { id: string; notes?: { text: string }[] }[];
+    };
+    const persisted = written.tracks.find((t) => t.id === track!.id);
+    expect(persisted?.notes?.map((n) => n.text)).toEqual(['Spring', 'Waypoint 2', 'Summit']);
+  });
+
+  it('saves the same trail, stats, notes and photos as the per-note writes did', async () => {
+    recordWithWaypoints();
+    const live = useRecorderStore.getState();
+    const expectedStats = computeTrackStats(live.points);
+    const expectedDistances = live.waypoints.map((w) =>
+      Math.min(w.distanceM, expectedStats.distanceM),
+    );
+
+    const track = await useRecorderStore.getState().stop();
+    const saved = useLibraryStore.getState().tracks.find((t) => t.id === track!.id);
+
+    expect(saved).toBeDefined();
+    expect(saved?.name).toBe('Waypointy hike');
+    expect(saved?.fileUri).toBe('file://tracks/test.gpx');
+    expect(saved?.stats).toEqual(expectedStats);
+    expect(track?.stats).toEqual(expectedStats);
+    expect(
+      saved?.notes?.map((n) => ({ text: n.text, distanceM: n.distanceM, photoUri: n.photoUri })),
+    ).toEqual([
+      { text: 'Spring', distanceM: expectedDistances[0], photoUri: 'file://photo1.jpg' },
+      { text: 'Waypoint 2', distanceM: expectedDistances[1], photoUri: undefined },
+      { text: 'Summit', distanceM: expectedDistances[2], photoUri: undefined },
+    ]);
+    // Notes stay real, addressable annotations: distinct ids, creation stamps.
+    expect(new Set(saved?.notes?.map((n) => n.id)).size).toBe(3);
+    for (const n of saved?.notes ?? []) expect(typeof n.createdAt).toBe('number');
+  });
+
+  it('saves a waypoint-less recording in one index write too', async () => {
+    const s = useRecorderStore.getState();
+    s.start('Plain hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    useRecorderStore.getState().addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+    (storage.writeIndex as jest.Mock).mockClear();
+
+    const track = await useRecorderStore.getState().stop();
+    expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+    const saved = useLibraryStore.getState().tracks.find((t) => t.id === track!.id);
+    // No waypoints ⇒ no `notes` key at all, exactly as before.
+    expect(saved).not.toHaveProperty('notes');
+  });
+
+  it('writes no index at all when the recording had no points', async () => {
+    useRecorderStore.getState().start('Empty');
+    (storage.writeIndex as jest.Mock).mockClear();
+    await useRecorderStore.getState().stop();
+    expect(storage.writeIndex).not.toHaveBeenCalled();
   });
 });
