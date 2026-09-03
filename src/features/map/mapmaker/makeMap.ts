@@ -46,7 +46,12 @@ export async function makeMap(
     }
   }
   const waypoints: ComposeInput['waypoints'] = lib.waypoints.map((w, i) => {
-    const n = /(\d+)\s*$/.exec(w.label)?.[1];
+    // The badge number printed beside a pin. Only an untouched auto label
+    // carries a meaningful one, so match that exact shape: since waypoints
+    // became renameable the label is arbitrary user text, and the old loose
+    // trailing-digit match would print "2026" for a "Bivouac 2026". Anything
+    // else falls back to the waypoint's position on the sheet.
+    const n = /^Waypoint (\d+)$/.exec(w.label)?.[1];
     return { index: n ? Number(n) : i + 1, pos: [w.longitude, w.latitude] as LngLat };
   });
 
