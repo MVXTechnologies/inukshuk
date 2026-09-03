@@ -86,28 +86,17 @@ export function LibraryPanel({
 
   const activeFilters = countActiveFilters(filter);
 
-  /**
-   * `filterTracks` and `groupByFolder` are typed ON `TrackSummary` rather than
-   * generic OVER it, so anything they touch comes back widened and a
-   * `WebTrack`'s extras (`preview`, `color`) are gone. Every trail is therefore
-   * resolved back through this map after a `@core` pass — no cast, and the card
-   * always gets the same object identity. (`sortTracks`, written here, IS
-   * generic; making the two `@core` helpers generic would remove this map
-   * entirely and is worth doing.)
-   */
-  const byId = useMemo(() => new Map(index.tracks.map((t) => [t.id, t])), [index.tracks]);
-  const widen = useCallback((summary: { id: string }) => byId.get(summary.id), [byId]);
-
   // Filter, then sort. Both operate on the whole list before grouping, so a
   // folder's count is the count of what the folder actually shows — the same
   // order of operations the app uses (it just has no sort step).
-  const visibleTracks = useMemo(() => {
-    const kept = filterTracks(index.tracks, filter).flatMap((t) => {
-      const web = byId.get(t.id);
-      return web === undefined ? [] : [web];
-    });
-    return sortTracks(kept, sort);
-  }, [index.tracks, filter, sort, byId]);
+  //
+  // `filterTracks`, `groupByFolder` and `sortTracks` are all generic OVER
+  // `TrackSummary`, so a `WebTrack` survives the whole pipeline with its
+  // extras (`preview`, `color`) and its identity intact — no re-widening map.
+  const visibleTracks = useMemo(
+    () => sortTracks(filterTracks(index.tracks, filter), sort),
+    [index.tracks, filter, sort],
+  );
 
   const grouping = useMemo(
     () => groupByFolder(index.folders, [], visibleTracks, index.waypoints),
@@ -152,12 +141,6 @@ export function LibraryPanel({
   );
 
   const hasFolders = index.folders.length > 0;
-
-  /** Render one grouped/ungrouped trail, re-widened through `byId`. */
-  const cardById = (summary: { id: string }) => {
-    const track = widen(summary);
-    return track === undefined ? null : cardFor(track);
-  };
 
   const cardFor = (track: WebTrack) => (
     <TrackCard
@@ -367,7 +350,7 @@ export function LibraryPanel({
                     </div>
                   ) : (
                     <>
-                      {group.tracks.map(cardById)}
+                      {group.tracks.map(cardFor)}
                       {sortWaypointsNewestFirst(group.waypoints).map(cardForWaypoint)}
                     </>
                   )
@@ -389,7 +372,7 @@ export function LibraryPanel({
               />
               {collapsed['ungrouped'] !== true ? (
                 <>
-                  {grouping.ungroupedTracks.map(cardById)}
+                  {grouping.ungroupedTracks.map(cardFor)}
                   {sortWaypointsNewestFirst(grouping.ungroupedWaypoints).map(cardForWaypoint)}
                 </>
               ) : null}

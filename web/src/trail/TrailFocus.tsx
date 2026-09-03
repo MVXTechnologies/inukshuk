@@ -6,6 +6,7 @@ import type { TrackPointAt } from '@core/geo/track';
 import { findCategory } from '@core/library/categories';
 import { orderNotes } from '@core/library/notes';
 import type { TrackPoint } from '@core/models';
+
 import {
   formatDistance,
   formatDuration,
@@ -13,8 +14,7 @@ import {
   formatPace,
   formatSpeed,
   formatTimestamp,
-} from '@lib/format';
-
+} from '@/lib/format';
 import type { LibraryState } from '@/library/useLibrary';
 import { CategoryIcon } from '@/ui/CategoryIcon';
 import { IconBack, IconDots, IconScissors, IconTag, IconTarget, IconTrash } from '@/ui/Icons';

@@ -51,7 +51,7 @@ comparison can be shared:
 ?sort=recent|oldest|distance|ascent|duration|pace|name
 ?w=phone|wide              Library column width: 390 px or 720 px
 ?trimAt=rail|title|bottom  where the trim scissors sit (backlog item 6)
-?units=metric|imperial     unit system handed to the app's own @lib/format
+?units=metric|imperial     unit system @core/format is bound to for this page
 ```
 
 Unlike the map parameters, the Library/trail ones are also written BACK into the
@@ -240,6 +240,7 @@ a change in the app's logic shows up here on the next HMR tick.
 | Drape           | `@core/weather/weatherDrape` — `weatherDrapeAnchor` (padding, span/centre snapping, pixel budget), `drapeNeedsReanchor`, `weatherDrapeUrl`                                                                                      |
 | Crossfade       | `@core/weather/weatherCrossfade` — the whole A/B slot state machine and its timing constants                                                                                                                                    |
 | Wind look       | `@core/weather/windLook` — `WIND_DRAPE_OPACITY`                                                                                                                                                                                 |
+| Weather look    | `@core/weather/weatherLook` — `WEATHER_DRAPE_OPACITY`, `WEATHER_REFERENCE_INK`, `WATER_LINE_W`, `ROAD_LINE_W`                                                                                                                   |
 | Colour ramps    | `@core/weather/colorRamp` — `interpolateRamp` drives the picker thumbnails and the legend                                                                                                                                       |
 | Catalog         | `@core/catalog/schema`, `shard`, `nearby`, `searchDigest`, `filterCatalog` — parsing, shard selection, URL resolution, nearest-first ranking, the search digest                                                                 |
 | GPX             | `@core/geo/gpx` — `parseGpx`                                                                                                                                                                                                    |
@@ -254,6 +255,7 @@ a change in the app's logic shows up here on the next HMR tick.
 | Waypoints       | `@core/library/waypoints` — `sortWaypointsNewestFirst`, `notePreview` (the 80-char rule)                                                                                                                                        |
 | Trail notes     | `@core/library/notes` — `orderNotes`                                                                                                                                                                                            |
 | Library schema  | `@core/library/migrations` — `LIBRARY_SCHEMA_VERSION`, `MapVisibilityMode`; `@core/library/toggleId`                                                                                                                            |
+| Formatting      | `@core/format` — `formatDistance`, `formatElevation`, `formatDuration`, `formatPace`, `formatSpeed`, `formatTimestamp`, `createFormatters`                                                                                      |
 | Models          | `@core/models` — `LatLng`, `LngLat`, `BoundingBox`, `TrackPoint`, `TrackStats`, `TrackSummary`, `TrackNote`, `Folder`, `Waypoint`                                                                                               |
 
 The browser half of the app is only fetch, timers, DOM and MapLibre plumbing.
@@ -261,41 +263,33 @@ Every decision with a number in it comes from `@core`.
 
 ### What had to be re-expressed for the browser
 
-- **The number formatting is NOT behind `@core`.** `formatDistance`,
-  `formatElevation`, `formatDuration`, `formatPace`, `formatSpeed` and
-  `formatTimestamp` live in `src/lib/format.ts` — ~100 lines, zero imports,
-  completely pure — but OUTSIDE `src/core`. Every number on a trail card and in
-  the trail-focus stat block comes from them, and re-typing them here would mean
-  cards that round differently from the app, which is exactly what makes a
-  playground useless. So `@lib` is aliased at `../src/lib` in `vite.config.ts`
-  and `tsconfig.json`, and **exactly one file** is imported through it.
+- **Units are bound per page, not per store.** `@core/format` is pure — every
+  unit-dependent formatter takes the unit system as an argument, and
+  `createFormatters(units)` binds them. The app binds to `settingsStore.units`
+  in `src/state/formatters.ts`; the playground has no Zustand store and must
+  not import that one (it would drag `react-native` into the browser bundle),
+  so this project's `src/lib/format.ts` binds to `?units=` instead, once, at
+  module load. Same rounding as the app, no shared mutable state.
 
-  **This is the one place the pure-core boundary leaked, and it should be fixed
-  in the app**: `src/lib/format.ts` belongs at `src/core/format/`, tests and
-  all. Its `displayUnits` module-global deserves a look at the same time — it
-  means `formatDistance` is not referentially transparent. The playground sets
-  it once, from `?units=`, before the first render.
-
-- **Two `@core/library` helpers are typed on `TrackSummary` instead of generic
-  over it.** `filterTracks` and `groupByFolder` both take and return
-  `TrackSummary`, so a caller holding a widened item type (here `WebTrack`, on
-  device a summary joined with anything) loses the extra fields on the way
-  through and has to resolve every item back through an id map. Adding
-  `<T extends TrackSummary>` to both — the way `sortTracks` in this project is
-  written — would delete that map and change nothing else.
+  (This bullet used to read "the number formatting is NOT behind `@core`" — the
+  app's `src/lib/format.ts` has since moved to `src/core/format/` with its
+  tests, and the `displayUnits` module-global is gone. The `@lib` alias the
+  playground needed to reach it went with it.)
 
 - **The map style.** `src/features/map/mapStyle.ts` cannot be imported: it types
   itself against `@maplibre/maplibre-react-native` (native-only) and reads
-  `MapBasemap` out of a Zustand store. Its _numbers_ are what matter, so
-  `src/map/mapStyle.ts` copies them verbatim with their provenance —
-  `WEATHER_REFERENCE_INK` (the cased coast/road ink, both polarities),
-  `WATER_LINE_W`, `ROAD_LINE_W`, the casing allowance, the zoom interpolation,
-  the road-class filter, the label layers. `useWeather.ts` copies the
-  non-wind drape opacity (`0.62`) from `MapScreen.tsx`, and `ui/theme.ts` copies
-  the weather dim (`#101418` @ 0.45 dark, `#F4F1EC` @ 0.38 light).
+  `MapBasemap` out of a Zustand store. Its _numbers_ are what matter, and the
+  shared ones now live in `@core/weather/weatherLook`, so `src/map/mapStyle.ts`
+  **imports** `WEATHER_REFERENCE_INK` (the cased coast/road ink, both
+  polarities), `WATER_LINE_W` and `ROAD_LINE_W`, and `useWeather.ts` imports
+  `WEATHER_DRAPE_OPACITY`. Neither can drift from the app any more. What this
+  project still writes for itself is the plumbing a vector basemap needs — the
+  casing allowance's application, the zoom interpolation, the road-class
+  filter, the label layers — plus `ui/theme.ts`, which still copies the weather
+  dim (`#101418` @ 0.45 dark, `#F4F1EC` @ 0.38 light) from `MapScreen.tsx`.
 
-  **If you change a number in one place, change it in the other**, or the
-  playground stops being a baseline.
+  **For anything still copied, if you change a number in one place, change it
+  in the other**, or the playground stops being a baseline.
 
 - **The basemap mute.** The app's basemap is raster, so weather mode applies
   `raster-saturation: -0.85` to the tile pixels plus the dim. A vector basemap

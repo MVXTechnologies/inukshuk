@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { buildElevationProfile, scrubProfileAtRatio, type TrackPointAt } from '@core/geo/track';
 import type { TrackNote, TrackPoint } from '@core/models';
-import { formatDistance, formatElevation, formatPace } from '@lib/format';
 
+import { formatDistance, formatElevation, formatPace } from '@/lib/format';
 import { IconChart, IconHeart, IconMountain, IconShoe } from '@/ui/Icons';
 
 /**

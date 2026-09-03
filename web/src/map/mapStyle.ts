@@ -7,6 +7,13 @@ import type {
   SymbolLayerSpecification,
 } from 'maplibre-gl';
 
+import {
+  ROAD_LINE_W,
+  WATER_LINE_W,
+  WEATHER_REFERENCE_INK,
+  type ReferenceLineWidths,
+} from '@core/weather/weatherLook';
+
 import type { Theme } from '@/ui/theme';
 
 /**
@@ -19,11 +26,14 @@ import type { Theme } from '@/ui/theme';
  * `MapBasemap` out of `@state/mapStore` (a Zustand store full of RN concerns).
  * Its *numbers*, though, are the whole point of the playground — they were
  * measured on device, over four capture cases, in both themes, and the owner
- * signed off on them. So they are copied here VERBATIM with their provenance,
- * and the app file stays the source of truth.
+ * signed off on them. The shared ones now live in `@core/weather/weatherLook`
+ * (`WEATHER_REFERENCE_INK`, `WATER_LINE_W`, `ROAD_LINE_W`,
+ * `WEATHER_DRAPE_OPACITY`) and are IMPORTED, not copied: the app's style
+ * builder and this one render from the same constants, so neither can drift.
+ * What stays here is only the layer plumbing the vector basemap needs.
  *
- * If you change a number here, you are proposing a change to the app. If you
- * change one there, copy it here or the playground stops being a baseline.
+ * If you change a number in `weatherLook`, you are changing it for the app
+ * too — which is the point.
  *
  * ## The one deliberate divergence
  *
@@ -44,45 +54,6 @@ export const TRACK_SOURCE_ID = 'gpx-tracks';
 /** The vector source id inside every OpenFreeMap style (OpenMapTiles schema). */
 const OMT_SOURCE = 'openmaptiles';
 
-/**
- * Ink for the reference overlay that redraws geography ABOVE the colour drapes.
- * Copied verbatim from `src/features/map/mapStyle.ts` (WEATHER_REFERENCE_INK).
- *
- * Owner review, 2026-08-13: with a weather layer running you could not tell
- * where the coast was — "it should be much easier to differentiate coasts and
- * features, have lines thicker". A single hairline loses twice: once against
- * the drape (a full-spectrum ramp — no single ink reads over all of it) and
- * again against the wind streaks drawn on top.
- *
- * So each reference line is a CASING + CORE pair in opposite polarity. The pair
- * brings its own contrast, so it reads identically over blue, green or magenta
- * drape. Alphas are high on purpose: this overlay only exists while a drape is
- * up, and under a drape "subtle" means "invisible".
- */
-const WEATHER_REFERENCE_INK = {
-  light: {
-    coast: 'rgba(11, 45, 74, 0.95)',
-    road: 'rgba(60, 48, 38, 0.80)',
-    casing: 'rgba(255, 255, 255, 0.85)',
-    casingAdd: 2.6,
-  },
-  dark: {
-    coast: 'rgba(190, 224, 248, 0.95)',
-    road: 'rgba(236, 222, 200, 0.78)',
-    casing: 'rgba(6, 11, 16, 0.85)',
-    casingAdd: 2.6,
-  },
-} as const;
-
-/**
- * Core stroke widths by zoom, roughly double the hairlines they replaced
- * (water was 0.6/1.1/1.7). Water carries the shape of the land so it leads;
- * roads stay a step behind so the coast still wins the eye when the two run
- * together along a waterfront. Verbatim from the app.
- */
-const WATER_LINE_W = { z5: 1.4, z10: 2.4, z14: 3.4 } as const;
-const ROAD_LINE_W = { z5: 0.8, z10: 1.4, z14: 2.2 } as const;
-
 type LineWidth = NonNullable<NonNullable<LineLayerSpecification['paint']>['line-width']>;
 
 /**
@@ -91,7 +62,7 @@ type LineWidth = NonNullable<NonNullable<LineLayerSpecification['paint']>['line-
  * multiple: a proportional casing vanishes at low zoom, which is exactly where
  * the coastline most needs help.
  */
-function widthAtZoom(w: { z5: number; z10: number; z14: number }, add: number): LineWidth {
+function widthAtZoom(w: ReferenceLineWidths, add: number): LineWidth {
   return ['interpolate', ['linear'], ['zoom'], 5, w.z5 + add, 10, w.z10 + add, 14, w.z14 + add];
 }
 

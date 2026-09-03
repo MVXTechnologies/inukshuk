@@ -34,6 +34,7 @@ import {
   weatherDrapeUrl,
   type DrapeAnchor,
 } from '@core/weather/weatherDrape';
+import { WEATHER_DRAPE_OPACITY } from '@core/weather/weatherLook';
 import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
 
 import { useNow } from '@/lib/useNow';
@@ -41,17 +42,16 @@ import { DRAPE_SLOT_IDS } from '@/map/mapStyle';
 import type { MapView } from '@/map/MapCanvas';
 
 /**
- * `raster-opacity` for every weather layer that is NOT wind.
+ * `raster-opacity` for one weather layer's colour drape.
  *
- * Verbatim from `MapScreen.tsx:1441` — `weatherLayer === 'wind' ?
- * WIND_DRAPE_OPACITY : 0.62`. Wind gets its own (much lower) constant because
- * it is the only layer that also draws its own particle ink on top; the full
- * reasoning, and the ladder of rejected values, is in `@core/weather/windLook`.
+ * The same rule the app applies: wind gets its own (much lower) constant
+ * because it is the only layer that also draws its own particle ink on top;
+ * everything else gets the shared default. Both numbers come from `@core`, so
+ * the playground cannot drift from the device-reviewed values — the full
+ * reasoning is in `weatherLook.ts` and `windLook.ts`.
  */
-export const DEFAULT_DRAPE_OPACITY = 0.62;
-
 export function drapeOpacityFor(id: WeatherLayerId): number {
-  return id === 'wind' ? WIND_DRAPE_OPACITY : DEFAULT_DRAPE_OPACITY;
+  return id === 'wind' ? WIND_DRAPE_OPACITY : WEATHER_DRAPE_OPACITY;
 }
 
 /** How long one frame is held during playback. Matches the app's 700 ms tick. */

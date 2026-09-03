@@ -45,7 +45,7 @@ export interface UrlState {
   trimAt: TrimPlacement | null;
   /** Library panel width: a phone column, or a desktop-wide take. */
   width: 'phone' | 'wide' | null;
-  /** Unit system handed to the app's own `@lib/format`. */
+  /** Unit system the formatters bind to (see `lib/format.ts`). */
   units: 'metric' | 'imperial' | null;
 }
 

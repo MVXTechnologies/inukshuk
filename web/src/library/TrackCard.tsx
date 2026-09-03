@@ -1,13 +1,13 @@
 import { findCategory, type CustomCategory } from '@core/library/categories';
 import type { Folder } from '@core/models';
+
 import {
   formatDistance,
   formatDuration,
   formatElevation,
   formatPace,
   formatTimestamp,
-} from '@lib/format';
-
+} from '@/lib/format';
 import { CategoryIcon } from '@/ui/CategoryIcon';
 import { IconDots, IconGrip, IconScissors, IconTag, IconTrash } from '@/ui/Icons';
 import { Menu, useMenuAnchor, type MenuItem } from '@/ui/Menu';

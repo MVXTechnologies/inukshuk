@@ -1,7 +1,7 @@
 import { notePreview } from '@core/library/waypoints';
 import type { Folder, Waypoint } from '@core/models';
-import { formatTimestamp } from '@lib/format';
 
+import { formatTimestamp } from '@/lib/format';
 import { IconDots, IconGrip, IconPin, IconTrash } from '@/ui/Icons';
 import { Menu, useMenuAnchor, type MenuItem } from '@/ui/Menu';
 

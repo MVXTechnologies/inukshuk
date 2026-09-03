@@ -6,7 +6,6 @@ import type { TrackPointAt } from '@core/geo/track';
 import { isWeatherLayerId, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import type { BoundingBox, LatLng, TrackPoint, Waypoint } from '@core/models';
-import { setDisplayUnits } from '@lib/format';
 
 import { CatalogPanel } from '@/catalog/CatalogPanel';
 import { LibraryPanel } from '@/library/LibraryPanel';
@@ -65,11 +64,6 @@ function store(key: string, value: string | null): void {
 /** Query-string overrides win over stored preferences, so a shared capture
  *  URL always opens on the state it names. Read once, at mount. */
 const URL_STATE = readUrlState(window.location.search);
-
-// `@lib/format` keeps the unit system in a module-level variable (the app's
-// settings store calls this on hydrate). Set it before the first render so no
-// card ever paints in the wrong units and then swaps.
-setDisplayUnits(URL_STATE.units ?? 'metric');
 
 export function App() {
   const [themeName, setThemeName] = useState<ThemeName>(
