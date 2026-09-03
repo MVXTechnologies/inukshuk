@@ -70,6 +70,11 @@ module.exports = [
       // Agent tooling can leave whole checkouts under .claude/worktrees —
       // their copied sources must not be linted as part of this repo.
       '.claude/*',
+      // The web playground is its own npm project with its own toolchain
+      // (Vite, react-dom, maplibre-gl) and its own lint/typecheck scripts.
+      // It reuses src/core by alias but must not be linted with the app's
+      // React Native config, which knows nothing about the DOM.
+      'web/*',
     ],
   },
 ];

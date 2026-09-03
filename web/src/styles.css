@@ -1,0 +1,1812 @@
+/*
+ * Playground chrome.
+ *
+ * Aesthetic gate (owner's standing rule): Windy-level cleanliness. What that
+ * means concretely, and what this file is trying to hold to:
+ *   - the map is the content; every control floats over it in a translucent,
+ *     blurred panel and nothing ever boxes the map in with opaque furniture;
+ *   - one accent colour, used only for "this is on";
+ *   - micro-labels are 10px uppercase with wide tracking, values are tabular;
+ *   - hairline borders, never a heavy rule;
+ *   - one motion curve and one duration, everywhere.
+ * Both themes are defined for every token. No token exists in only one.
+ */
+
+:root {
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur: 160ms;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --blur: saturate(1.5) blur(20px);
+
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-num: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+:root[data-theme='dark'] {
+  --panel: rgba(17, 22, 28, 0.82);
+  --panel-solid: #11161c;
+  --panel-hover: rgba(255, 255, 255, 0.07);
+  --panel-active: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text: #e9eef3;
+  --text-dim: #93a2b0;
+  --text-faint: #64717e;
+  --accent: #5cb0e8;
+  --accent-ink: #06121c;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(6, 9, 12, 0.6);
+  --danger: #f4795f;
+  /* Library cards sit ON a panel, so they need their own step above it. */
+  --card: rgba(255, 255, 255, 0.045);
+  --card-hover: rgba(255, 255, 255, 0.08);
+  --up: #7fc79a;
+  --down: #e79a86;
+}
+
+:root[data-theme='light'] {
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-solid: #ffffff;
+  --panel-hover: rgba(16, 32, 46, 0.06);
+  --panel-active: rgba(16, 32, 46, 0.11);
+  --border: rgba(16, 32, 46, 0.12);
+  --border-strong: rgba(16, 32, 46, 0.24);
+  --text: #16222e;
+  --text-dim: #5b6b7a;
+  --text-faint: #8a98a5;
+  --accent: #1a72ad;
+  --accent-ink: #ffffff;
+  --shadow: 0 8px 28px rgba(16, 32, 46, 0.16), 0 1px 2px rgba(16, 32, 46, 0.1);
+  --scrim: rgba(255, 255, 255, 0.62);
+  --danger: #c0442a;
+  --card: rgba(16, 32, 46, 0.035);
+  --card-hover: rgba(16, 32, 46, 0.07);
+  --up: #2f7d4f;
+  --down: #b2532f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--panel-solid);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.shell {
+  position: fixed;
+  inset: 0;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+/* MapLibre's own chrome, re-skinned to the panel language and kept out of the
+   way of ours: the attribution sits BELOW the scrubber and the nav control
+   below the top bar, so nothing overlaps at any window size. */
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left {
+  z-index: 4;
+}
+
+.maplibregl-ctrl-attrib {
+  background: var(--panel) !important;
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  color: var(--text-dim) !important;
+  font-size: 9.5px !important;
+  line-height: 1.5 !important;
+  border-radius: var(--radius-sm) 0 0 0;
+  padding: 1px 6px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--text-dim) !important;
+}
+
+.maplibregl-ctrl-attrib-button {
+  background-color: transparent !important;
+}
+
+/* Clear the top bar (14px inset + 38px tall + 10px breathing room). */
+.maplibregl-ctrl-top-right {
+  margin-top: 62px;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl {
+  background: var(--panel) !important;
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl button {
+  width: 30px;
+  height: 30px;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl button + button {
+  border-top: 1px solid var(--border);
+}
+
+/* The control glyphs ship as black SVGs; invert them for the dark theme. */
+:root[data-theme='dark'] .maplibregl-ctrl-top-right .maplibregl-ctrl button .maplibregl-ctrl-icon {
+  filter: invert(1) brightness(1.6);
+}
+
+/* --------------------------------------------------------------- panels -- */
+
+.panel {
+  background: var(--panel);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.micro {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------- top bar --- */
+
+.topbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px 8px 11px;
+  height: 38px;
+}
+
+.brand-mark {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--accent);
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.brand-tag {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding-left: 9px;
+  margin-left: 2px;
+  border-left: 1px solid var(--border);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.seg {
+  display: flex;
+  height: 38px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.seg button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+  white-space: nowrap;
+}
+
+.seg button:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.seg button[aria-pressed='true'] {
+  background: var(--panel-active);
+  color: var(--text);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  color: var(--text-dim);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------- layer rail -- */
+
+.rail {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 5;
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.rail-item:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.rail-item[aria-pressed='true'] {
+  background: var(--panel-active);
+  color: var(--text);
+}
+
+/*
+ * The circular colour thumbnail: the layer's identity, built by expanding its
+ * `swatch` stops through `@core/weather/colorRamp`. Same idea as the app's
+ * picker thumbnails — thin adjacent segments read as a continuous ramp with no
+ * gradient asset (OTA-clean there, dependency-free here).
+ */
+.thumb {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+  display: flex;
+  transform: rotate(-90deg);
+}
+
+.thumb span {
+  flex: 1;
+  height: 100%;
+}
+
+.thumb.off {
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transform: none;
+  color: var(--text-faint);
+}
+
+.rail-label {
+  font-size: 12.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------- legend --- */
+
+.legend {
+  position: absolute;
+  left: 14px;
+  bottom: 104px;
+  padding: 10px 12px 9px;
+  width: 258px;
+  z-index: 5;
+}
+
+.legend-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+
+.legend-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.legend-unit {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.legend-ramp {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.legend-ramp span {
+  flex: 1;
+}
+
+.legend-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+/* Provenance line: the drape opacity under review on the left, the WMS layer
+   name on the right. The name is long and must never push the number off or
+   wrap onto a second line — it truncates instead, with the full value in the
+   title attribute. */
+.legend-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.legend-foot .micro {
+  white-space: nowrap;
+}
+
+.legend-foot .wms {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------ scrubber --- */
+
+.scrubber {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 26px;
+  padding: 9px 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 5;
+}
+
+.play {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  transition: filter var(--dur) var(--ease);
+}
+
+.play:hover {
+  filter: brightness(1.12);
+}
+
+.scrub-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.scrub-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.scrub-now {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.scrub-src {
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The tick strip sits UNDER a transparent range input that owns every pointer
+   event, so the ticks can stay purely decorative and the drag stays native
+   (keyboard, touch and screen readers included). */
+.scrub-track {
+  position: relative;
+  height: 18px;
+}
+
+/* Day boundaries tall, whole hours medium, the rest hairline. */
+.ticks {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+/* `flex: 1` spreads the ticks evenly; the max-width keeps each one a TICK
+   rather than a block when a short timeline has to fill a wide strip. */
+.tick {
+  flex: 1;
+  max-width: 2px;
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+
+.tick.day {
+  height: 12px;
+  background: var(--text-faint);
+}
+
+.tick.hour {
+  height: 7px;
+}
+
+.tick.plain {
+  height: 3px;
+}
+
+.day-labels {
+  position: relative;
+  height: 12px;
+  margin-top: 1px;
+}
+
+.day-label {
+  position: absolute;
+  font-size: 9.5px;
+  color: var(--text-faint);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 18px;
+  background: none;
+  margin: 0;
+  display: block;
+  cursor: grab;
+}
+
+.range:active {
+  cursor: grabbing;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 18px;
+  background: none;
+}
+
+.range::-moz-range-track {
+  height: 18px;
+  background: none;
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--panel-solid);
+}
+
+.range::-moz-range-thumb {
+  width: 3px;
+  height: 18px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--panel-solid);
+}
+
+/* -------------------------------------------------------------- drawer --- */
+
+.drawer {
+  position: absolute;
+  top: 62px;
+  right: 14px;
+  bottom: 26px;
+  width: 348px;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 6;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.drawer-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  flex: 1;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 14px;
+}
+
+.drawer-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.drawer-body::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+  border: 1px solid transparent;
+  transition: border-color var(--dur) var(--ease);
+  margin-bottom: 10px;
+}
+
+.search:focus-within {
+  border-color: var(--border-strong);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  font-size: 12.5px;
+}
+
+.search input::placeholder {
+  color: var(--text-faint);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-dim);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chip-count {
+  opacity: 0.65;
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-label {
+  margin: 14px 0 7px;
+}
+
+.section-label:first-child {
+  margin-top: 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background var(--dur) var(--ease);
+}
+
+.row:hover {
+  background: var(--panel-hover);
+}
+
+.row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  margin-top: 5px;
+  background: var(--accent);
+}
+
+/* `display: block` matters: `.row-main` is a <span>, and `overflow: hidden` /
+   `text-overflow: ellipsis` on the title inside it do nothing while the chain
+   is still inline — long sheet names ran straight under the action icons. */
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+
+.row-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.32;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.row-action {
+  flex: none;
+  color: var(--text-faint);
+  padding: 3px;
+  border-radius: 5px;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.row-action:hover {
+  color: var(--text);
+  background: var(--panel-active);
+}
+
+.row-action.danger:hover {
+  color: var(--danger);
+}
+
+.empty {
+  padding: 26px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.55;
+}
+
+.note {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+  margin-bottom: 10px;
+}
+
+/* ------------------------------------------------------------- library --- */
+
+/*
+ * The Library is a floating column over the map, not a page.
+ *
+ * Two widths, and the pair is the point: `phone` is 390px, which is a real
+ * device width, so a trail card here wraps exactly where it wraps on the phone.
+ * `wide` is 720px — what the same list could be if the screen were allowed to
+ * use the room it has. Deciding between them is one of the open questions this
+ * screen exists to answer, so both are one click (and one URL) apart.
+ */
+.library {
+  position: absolute;
+  top: 62px;
+  left: 14px;
+  bottom: 26px;
+  width: 390px;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 6;
+}
+
+.library.wide {
+  width: 720px;
+}
+
+.head-count {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* A compact segmented control that can sit inside a header row. */
+.seg.inline {
+  height: 24px;
+  padding: 2px;
+  background: var(--panel-hover);
+  border-radius: 7px;
+  flex: none;
+}
+
+.seg.inline button {
+  padding: 0 8px;
+  font-size: 10.5px;
+  border-radius: 5px;
+}
+
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.tool:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.tool[aria-pressed='true'] {
+  background: var(--panel-active);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.badge {
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+/* ---- section headers (also the drag-and-drop targets) ---- */
+
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 14px 0 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease);
+}
+
+section:first-of-type .sec-head {
+  margin-top: 4px;
+}
+
+/* The drop highlight has to read at a glance while a card is under the
+   cursor, so it is a filled row plus an accent hairline, not a tint. */
+.sec-head.drop {
+  background: var(--panel-active);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.sec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  color: var(--text);
+  text-align: left;
+}
+
+.sec-toggle > svg {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.sec-title {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sec-actions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding-right: 4px;
+}
+
+/* ---- trail / waypoint card ---- */
+
+.card {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--border);
+  /* The category colour lives on the left edge, as it does on the phone. The
+     transparent default keeps every card the same width whether or not it has
+     a category — a card that grows 4px when categorised would make the list
+     ripple as the filter changes. */
+  border-left: 4px solid transparent;
+  transition:
+    background var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.card:hover {
+  background: var(--card-hover);
+}
+
+.card.dragging {
+  opacity: 0.4;
+}
+
+.card-grip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.card:hover .card-grip {
+  opacity: 0.75;
+}
+
+.card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 4px 9px 2px;
+  text-align: left;
+}
+
+.card-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-faint);
+}
+
+.card-icon-blank {
+  display: block;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+}
+
+.wpt-icon {
+  color: #d9a441;
+}
+
+.card-text {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+
+.card-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-sub {
+  display: flex;
+  gap: 7px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.card-cat {
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
+}
+
+.card-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+/*
+ * The stats row.
+ *
+ * A fixed 3-up grid, NOT `auto-fit`: auto-fit packed four of the five values
+ * onto the first row at phone width and left D- alone on the second, which
+ * reads as a mistake. Three columns puts distance/time/pace on one line and the
+ * elevation pair on the next, and — because the columns are fixed — the same
+ * value sits at the same x in every card, so the list can be read down a
+ * column instead of across each row.
+ *
+ * The wide panel gets all five on one line. Same markup, same numbers, same
+ * formatters; only the room changes, which is what makes the two widths worth
+ * comparing.
+ */
+.card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px 10px;
+  margin-top: 6px;
+}
+
+.library.wide .card-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-family: var(--font);
+}
+
+.stat-value {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.stat.up .stat-value {
+  color: var(--up);
+}
+
+.stat.down .stat-value {
+  color: var(--down);
+}
+
+.card .row-action {
+  align-self: flex-start;
+  margin: 8px 6px 0 0;
+}
+
+.empty.small {
+  padding: 12px 14px;
+  font-size: 11.5px;
+}
+
+/* ---- filter sheet ---- */
+
+.sheet {
+  padding: 10px 11px 8px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+  border: 1px solid var(--border);
+}
+
+.sheet .section-label:first-child {
+  margin-top: 0;
+}
+
+.sheet .unit {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  outline: none;
+  font-size: 11.5px;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.field.wide {
+  width: 100%;
+  height: 34px;
+  font-size: 13px;
+}
+
+.field:focus {
+  border-color: var(--accent);
+}
+
+.field::placeholder {
+  color: var(--text-faint);
+}
+
+.dash {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.chip.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip.solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chip.solid.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------ trail ------ */
+
+.focus-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.focus-head .row-action {
+  margin-top: 2px;
+}
+
+.focus-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.focus-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+}
+
+.focus-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.focus-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+/*
+ * The stat block: a fixed 3-up grid (5-up in the wide panel).
+ *
+ * The separators are INSET SHADOWS on each tile, not a 1px gap over a
+ * border-coloured container. The gap trick draws a hairline cross wherever a
+ * row is short — an untimed trail has five tiles, so the last row was two
+ * cells and a lit-up hole where the third would be. Shadows only exist where a
+ * tile exists.
+ */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.library.wide .tiles {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px 9px;
+  box-shadow:
+    inset -1px 0 0 var(--border),
+    inset 0 -1px 0 var(--border);
+}
+
+.tile-value {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.tile-value.up {
+  color: var(--up);
+}
+
+.tile-value.down {
+  color: var(--down);
+}
+
+/* ---- elevation profile ---- */
+
+.profile {
+  margin-bottom: 6px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.profile-head .stat {
+  flex-direction: row;
+  font-weight: 600;
+}
+
+.profile-head .stat.up {
+  color: var(--up);
+}
+
+.profile-head .stat.down {
+  color: var(--down);
+}
+
+.profile-band {
+  color: var(--text-faint);
+}
+
+.prof-toggle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 12px;
+  border: 1.2px solid transparent;
+  color: var(--text-faint);
+  transition:
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.profile-chart {
+  border-radius: 10px;
+  background: var(--panel-hover);
+  overflow: hidden;
+  color: var(--text-dim);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.profile-chart svg {
+  display: block;
+}
+
+.profile-readout {
+  min-height: 18px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.profile-readout .dim {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+}
+
+/* ---- notes ---- */
+
+.note-row {
+  display: flex;
+  gap: 9px;
+  padding: 7px 2px;
+  border-top: 1px solid var(--border);
+}
+
+.note-num {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.note-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.note-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.note-at {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* ---- trim ---- */
+
+.trim-body {
+  padding: 2px 0 4px;
+}
+
+/*
+ * Two native range inputs stacked on one rail.
+ *
+ * The whole trick is `pointer-events: none` on the inputs and `auto` on their
+ * thumbs: without it the upper input swallows every press, including the ones
+ * meant for the lower thumb, and the start handle becomes undraggable past the
+ * midpoint. Everything else (keyboard stepping, Home/End, screen-reader
+ * announcements) then comes free from the native control.
+ */
+.trim-slider {
+  position: relative;
+  height: 30px;
+  margin: 10px 0 6px;
+}
+
+.trim-rail,
+.trim-kept {
+  position: absolute;
+  top: 13px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.trim-rail {
+  left: 0;
+  right: 0;
+  background: var(--panel-active);
+}
+
+.trim-kept {
+  background: var(--accent);
+}
+
+.trim-range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.trim-range::-webkit-slider-runnable-track {
+  height: 30px;
+  background: none;
+}
+
+.trim-range::-moz-range-track {
+  height: 30px;
+  background: none;
+}
+
+.trim-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--accent-ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.trim-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--accent-ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.trim-readout {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.trim-readout .warn {
+  color: var(--danger);
+}
+
+.trim-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.wide-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background var(--dur) var(--ease);
+}
+
+.wide-action:hover {
+  background: var(--panel-active);
+}
+
+.focus-foot {
+  margin-top: 16px;
+}
+
+/* The playground's own controls, marked as such: a hairline box and a caption,
+   so nothing here is ever mistaken for shipped chrome in a screenshot. */
+.lab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+}
+
+/* The rail placement candidate: a floating action over the map. */
+.fab {
+  position: absolute;
+  right: 14px;
+  bottom: 104px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 23px;
+  color: var(--text);
+  z-index: 7;
+  transition: background var(--dur) var(--ease);
+}
+
+.fab:hover {
+  background: var(--panel-active);
+}
+
+/* ---------------------------------------------------- menus & dialogs ---- */
+
+.menu {
+  position: fixed;
+  z-index: 60;
+  padding: 5px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: left;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.menu-item:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+.menu-item.danger:hover {
+  color: var(--danger);
+}
+
+.menu-item.ruled {
+  margin-top: 5px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 7px 7px;
+}
+
+.menu-icon {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-check {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.menu-caption {
+  padding: 9px 9px 4px;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.dialog {
+  max-width: calc(100vw - 28px);
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  transition: background var(--dur) var(--ease);
+}
+
+.pick:hover {
+  background: var(--panel-hover);
+}
+
+.pick-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.pick-label {
+  flex: 1;
+  text-align: left;
+}
+
+/* --------------------------------------------------------------- misc ---- */
+
+.dropzone {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.dropzone-inner {
+  padding: 26px 34px;
+  text-align: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.dropzone-inner small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.toast {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 9px 15px;
+  font-size: 12px;
+  z-index: 30;
+  max-width: 76vw;
+  text-align: center;
+  animation: rise var(--dur) var(--ease);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Narrow viewports: the rail loses its labels and the drawer goes full-width. */
+@media (max-width: 720px) {
+  .rail-label {
+    display: none;
+  }
+
+  .rail-item {
+    padding: 6px;
+  }
+
+  .drawer {
+    width: auto;
+    left: 14px;
+  }
+
+  .legend {
+    display: none;
+  }
+
+  .library,
+  .library.wide {
+    width: auto;
+    right: 14px;
+  }
+}
