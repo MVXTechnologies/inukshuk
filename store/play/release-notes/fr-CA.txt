@@ -1,10 +1,10 @@
 Inukshuk 1.5.0 — navigation de sentier hors ligne avec de vraies cartes topo.
 
-• Feuillets topo officiels gratuits (USGS, RNCan, Geoscience Australia) dans l'onglet Recherche
-• Importez des cartes PDF géoréférencées et voyez votre position GPS dessus, hors ligne
-• Enregistrez randos, ski et pagaie; l'enregistrement continue écran éteint
-• Profil d'altitude, notes et photos sur chaque sentier; terrain en 3D
-• Téléchargez des zones de carte pour l'absence de réseau
+• Feuillets topo officiels gratuits (USGS, RNCan, GA), onglet Recherche
+• Importez des cartes PDF géoréférencées; votre position GPS dessus, hors ligne
+• Enregistrez randos, ski et pagaie — continue écran éteint
+• Profil d'altitude, notes, photos et terrain 3D par sentier
+• Zones de carte téléchargeables sans réseau
 • Aucun compte, aucune pub, aucun suivi
 
-Test fermé : essayez de télécharger un feuillet et d'enregistrer une courte marche.
+Test fermé : téléchargez un feuillet, enregistrez une marche.
