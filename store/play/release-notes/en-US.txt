@@ -1,10 +1,10 @@
-Inukshuk 1.0 — offline trail navigation with your own maps.
+Inukshuk 1.5.0 — offline trail navigation with real topo maps.
 
-• Import georeferenced PDF maps, overlaid on live GPS
-• OpenStreetMap base layer when you're off the map
-• Record trails with live time, distance and elevation (D+/D-)
-• Save and share routes as GPX
-• Elevation profile for every recorded trail
-• Foreground-only location — nothing tracked in the background
+• Free official topo sheets (USGS, NRCan, Geoscience Australia) in the Search tab
+• Import georeferenced PDF maps and see your GPS position on them, offline
+• Record hikes, ski and paddle outings; keeps recording with the screen off
+• Elevation profile, notes and photos on every trail; 3D terrain view
+• Download map areas for use without signal
+• No account, no ads, no tracking
 
-Thanks for testing! Please send feedback on map import and GPS accuracy.
+Closed test: please try downloading a sheet and recording a short walk.
