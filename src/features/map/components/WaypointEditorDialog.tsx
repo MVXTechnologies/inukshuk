@@ -62,6 +62,19 @@ export function WaypointEditorDialog({
 }: Props) {
   const theme = useTheme();
 
+  /**
+   * #235 — put the keyboard away BEFORE the dialog unmounts. Closing on top of
+   * a live keyboard tears the input accessory view down while iOS still holds
+   * it, which leaves a dangling accessory behind the keyboard's own dismissal
+   * animation; XCUITest reproducibly died snapshotting the hierarchy in that
+   * window. It is also simply better: no keyboard flashing over the map after
+   * the dialog is gone.
+   */
+  const close = (then: () => void) => () => {
+    Keyboard.dismiss();
+    then();
+  };
+
   const pickPhoto = async (fromCamera: boolean) => {
     if (!waypoint) return;
     if (fromCamera) {
@@ -86,7 +99,7 @@ export function WaypointEditorDialog({
           unreachable; the margin re-centers the dialog in the space above it. */}
       <Dialog
         visible={waypoint !== null}
-        onDismiss={onSave}
+        onDismiss={close(onSave)}
         style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
       >
         <Dialog.Title>{waypoint?.label ?? 'Waypoint'}</Dialog.Title>
@@ -129,11 +142,11 @@ export function WaypointEditorDialog({
           <KeyboardDoneBar />
         </Dialog.Content>
         <Dialog.Actions>
-          <Button textColor={theme.colors.error} onPress={onDelete}>
+          <Button textColor={theme.colors.error} onPress={close(onDelete)}>
             Delete
           </Button>
           <View style={styles.fill} />
-          <Button onPress={onSave}>Done</Button>
+          <Button onPress={close(onSave)}>Done</Button>
         </Dialog.Actions>
       </Dialog>
     </Portal>

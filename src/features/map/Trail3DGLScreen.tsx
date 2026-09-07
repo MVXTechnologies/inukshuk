@@ -25,7 +25,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -744,6 +744,22 @@ export function Trail3DGLScreen({ trackId }: Props) {
     }
   };
 
+  /**
+   * #235 — leave the note editor with the keyboard already down. Unmounting
+   * the field's input accessory view while iOS still holds a live keyboard
+   * leaves a dangling accessory (it reproducibly crashed XCUITest's hierarchy
+   * snapshot), and it looks better besides.
+   */
+  const closeNoteEditor = () => {
+    Keyboard.dismiss();
+    setEditing(null);
+  };
+
+  const commitNote = () => {
+    Keyboard.dismiss();
+    void commit();
+  };
+
   const commit = async () => {
     const text = draft.trim();
     if (!editing || !text) {
@@ -1139,7 +1155,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={editing !== null} onDismiss={() => setEditing(null)}>
+        {/* #235 — every exit from this dialog puts the keyboard away first;
+            unmounting the note field's accessory bar under a live keyboard
+            leaves a dangling accessory (see WaypointEditorDialog's `close`). */}
+        <Dialog visible={editing !== null} onDismiss={closeNoteEditor}>
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
             <KeyboardDismissArea>
@@ -1178,8 +1197,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
             <KeyboardDoneBar />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setEditing(null)}>Cancel</Button>
-            <Button onPress={commit} disabled={!draft.trim()}>
+            <Button onPress={closeNoteEditor}>Cancel</Button>
+            <Button onPress={commitNote} disabled={!draft.trim()}>
               Save
             </Button>
           </Dialog.Actions>
