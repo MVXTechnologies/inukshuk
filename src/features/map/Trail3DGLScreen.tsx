@@ -39,6 +39,7 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -750,6 +751,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
    * leaves a dangling accessory (it reproducibly crashed XCUITest's hierarchy
    * snapshot), and it looks better besides.
    */
+  // #235 — Paper centres the dialog and its Modal defeats KeyboardAvoidingView,
+  // so with the keyboard (plus the Done bar) up, Cancel/Save sat underneath it.
+  // Shifting by the measured height is the same fix the waypoint editor and the
+  // coordinate dialog already carry.
+  const noteKeyboardHeight = useIosKeyboardHeight();
+
   const closeNoteEditor = () => {
     Keyboard.dismiss();
     setEditing(null);
@@ -1158,7 +1165,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
         {/* #235 — every exit from this dialog puts the keyboard away first;
             unmounting the note field's accessory bar under a live keyboard
             leaves a dangling accessory (see WaypointEditorDialog's `close`). */}
-        <Dialog visible={editing !== null} onDismiss={closeNoteEditor}>
+        <Dialog
+          visible={editing !== null}
+          onDismiss={closeNoteEditor}
+          style={noteKeyboardHeight > 0 ? { marginBottom: noteKeyboardHeight } : null}
+        >
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
             <KeyboardDismissArea>

@@ -1,32 +1,10 @@
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
-import { Image, Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { Image, Keyboard, StyleSheet, View } from 'react-native';
+import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
-
-/**
- * Current iOS keyboard height (0 on Android, where the window resizes
- * instead). Paper's Dialog is absolutely positioned by its Modal wrapper, so
- * a plain KeyboardAvoidingView around it has no effect — the dialog must be
- * shifted explicitly or the keyboard covers its Delete/Done actions.
- */
-function useIosKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    const show = Keyboard.addListener('keyboardWillShow', (e) =>
-      setHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardWillHide', () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
-}
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live

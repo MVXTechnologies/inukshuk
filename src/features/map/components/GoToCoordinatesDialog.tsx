@@ -1,9 +1,10 @@
 import { formatLatLng, formatLatLngDdm, formatLatLngDms } from '@core/geo/formatCoords';
 import { parseLatLng } from '@core/geo/parseCoords';
 import type { LatLng } from '@core/models';
+import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
-import { useEffect, useState } from 'react';
-import { Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Keyboard, StyleSheet, View } from 'react-native';
 import {
   Button,
   Dialog,
@@ -32,28 +33,6 @@ import {
  * than guessing — a silently mis-read coordinate is a wrong bearing in the
  * bush, so the box stays red instead.
  */
-
-/**
- * Current iOS keyboard height (0 on Android, which resizes the window
- * instead). Paper's Dialog is absolutely positioned by its Modal wrapper, so
- * it must be shifted explicitly or the keyboard covers its actions — the same
- * fix WaypointEditorDialog carries.
- */
-function useIosKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    const show = Keyboard.addListener('keyboardWillShow', (e) =>
-      setHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardWillHide', () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
-}
 
 interface Props {
   /** The map centre to read out; null before the camera has settled once. */
