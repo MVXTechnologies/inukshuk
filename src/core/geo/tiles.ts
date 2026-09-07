@@ -157,3 +157,96 @@ export function estimateRegionDownload(
   }
   return { tiles, bytes };
 }
+
+// ---------------------------------------------------------------------------
+// Live-viewport tile arithmetic (#230 — why zooming out costs so much)
+// ---------------------------------------------------------------------------
+
+/**
+ * MapLibre's canonical tile size in logical pixels. Zoom is defined against it:
+ * at zoom `z` the world is `512 * 2^z` px wide, whatever a source declares.
+ */
+export const CANONICAL_TILE_PX = 512;
+
+/** A device viewport in logical (CSS/dp) pixels. */
+export interface ViewportPx {
+  width: number;
+  height: number;
+}
+
+/**
+ * The tile zoom MapLibre asks a source for at a given CAMERA zoom.
+ *
+ * Because zoom is defined against {@link CANONICAL_TILE_PX}, a source that
+ * declares **256-px tiles is requested one zoom level DEEPER than the camera**
+ * (`z + log2(512/256)`), while a 512-px source is requested at the camera's own
+ * zoom — the same view, a quarter of the tiles. Past the source's `maxzoom`
+ * MapLibre stops fetching and overscales the deepest real tiles instead.
+ */
+export function sourceTileZoom(
+  cameraZoom: number,
+  tileSize: number,
+  sourceMaxZoom: number,
+): number {
+  const ideal = Math.max(0, Math.floor(cameraZoom + Math.log2(CANONICAL_TILE_PX / tileSize)));
+  return Math.min(sourceMaxZoom, ideal);
+}
+
+/**
+ * How many tiles of a source a viewport needs at one camera zoom.
+ *
+ * NOTE — this is (deliberately) almost flat in zoom: a viewport covers the same
+ * number of tiles at z8 as at z12. Zooming out does **not** put more tiles on
+ * screen; what it does is cross pyramid LEVELS, and each level crossed is a
+ * whole fresh set of tiles to fetch, decode and — for a `raster-dem` feeding a
+ * hillshade — prepare. See {@link zoomOutTileLoad}, which is the number that
+ * actually explains #230.
+ *
+ * Assumes integer camera zooms (tiles at their nominal screen size), which is
+ * the worst case: a fractional zoom draws tiles larger, so fewer of them.
+ */
+export function viewportTileCount(
+  cameraZoom: number,
+  viewport: ViewportPx,
+  tileSize: number,
+  sourceMaxZoom: number,
+): number {
+  const ideal = Math.max(0, Math.floor(cameraZoom + Math.log2(CANONICAL_TILE_PX / tileSize)));
+  const tileZ = Math.min(sourceMaxZoom, ideal);
+  // Past `maxzoom` one tile is stretched over 2^(ideal - tileZ) times its width.
+  const screenPx = tileSize * 2 ** (ideal - tileZ);
+  const across = Math.ceil(viewport.width / screenPx) + 1;
+  const down = Math.ceil(viewport.height / screenPx) + 1;
+  return across * down;
+}
+
+/**
+ * Tiles a source has to load over one continuous zoom-OUT from `fromZoom` to
+ * `toZoom` — the cost of the gesture, not of a resting frame.
+ *
+ * Every integer camera zoom crossed maps to a different pyramid level, and each
+ * level is a full viewport of brand-new tiles. `layerMinZoom` models a zoom-gated
+ * layer: MapLibre only keeps a source loaded while some layer using it is within
+ * its zoom range, so camera zooms below the gate cost nothing at all.
+ */
+export function zoomOutTileLoad(
+  fromZoom: number,
+  toZoom: number,
+  viewport: ViewportPx,
+  tileSize: number,
+  sourceMaxZoom: number,
+  layerMinZoom = 0,
+): number {
+  /** Worst-case tiles per pyramid level touched; the `maxzoom` clamp can map
+   *  several camera zooms onto one level, and only the largest set is fetched. */
+  const perLevel = new Map<number, number>();
+  for (let z = Math.floor(fromZoom); z >= Math.ceil(toZoom); z--) {
+    if (z < layerMinZoom) continue;
+    const tileZ = sourceTileZoom(z, tileSize, sourceMaxZoom);
+    const count = viewportTileCount(z, viewport, tileSize, sourceMaxZoom);
+    perLevel.set(tileZ, Math.max(perLevel.get(tileZ) ?? 0, count));
+  }
+  let total = 0;
+  for (const n of perLevel.values()) total += n;
+  return total;
+}
