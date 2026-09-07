@@ -296,15 +296,24 @@ export function LibraryScreen() {
   // photo picked inside it shows up immediately.
   const [editWpId, setEditWpId] = useState<string | null>(null);
   const [wpDraft, setWpDraft] = useState('');
+  // #232 — the editor's Name field. Here it is a second way to the same
+  // rename the row's ⋮ → Rename does; the row menu stays, since it renames
+  // without opening the note/photo form.
+  const [wpName, setWpName] = useState('');
   const editWaypoint =
     editWpId === null ? null : (waypoints.find((w) => w.id === editWpId) ?? null);
 
   const openWaypointEditor = (w: Waypoint) => {
+    setWpName(w.label);
     setWpDraft(w.note ?? '');
     setEditWpId(w.id);
   };
   const saveWaypoint = () => {
-    if (editWpId) updateWaypoint(editWpId, { note: wpDraft.trim() });
+    if (editWpId) {
+      updateWaypoint(editWpId, { note: wpDraft.trim() });
+      // Blank is a no-op in the store — the label is never lost.
+      renameWaypoint(editWpId, wpName);
+    }
     setEditWpId(null);
   };
   const deleteWaypointFromEditor = () => {
@@ -825,11 +834,11 @@ export function LibraryScreen() {
         />
       }
     >
-      {/* A waypoint's label is renamed here rather than inside
-          WaypointEditorDialog: that dialog is shared with the map, where it
-          also edits *live recording* waypoints that have no library row to
-          rename — and stacking NameDialog's Portal over an open Paper Dialog
-          is the touch-swallow trap. This mirrors a trail's ⋮ → Rename. */}
+      {/* Renaming without opening the note/photo form — the same shape as a
+          trail's ⋮ → Rename. The editor dialog grew its own Name field in
+          #232 (an inline TextInput, NOT a stacked NameDialog Portal over an
+          open Paper Dialog — that is the touch-swallow trap); this row is the
+          quick path from the list. */}
       <Menu.Item
         leadingIcon="pencil-outline"
         title="Rename"
@@ -1288,6 +1297,8 @@ export function LibraryScreen() {
           pins open, dispatching to the same libraryStore actions. */}
       <WaypointEditorDialog
         waypoint={editWaypoint}
+        name={wpName}
+        onChangeName={setWpName}
         draft={wpDraft}
         onChangeDraft={setWpDraft}
         onSave={saveWaypoint}
