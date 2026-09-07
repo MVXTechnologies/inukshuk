@@ -79,6 +79,7 @@ import { toLineFeature, toLngLatBounds } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
+import { useMapBearing } from './hooks/useMapBearing';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
@@ -680,11 +681,15 @@ export function MapScreen() {
     })();
   }, [forecastAt, mapLoaded, lastKnownPosition, router, weatherLayer]);
 
-  const { fitOverlayBounds, flyToPoint, resetNorth, zoomToLocateLevel } = useCameraControls({
-    cameraRef,
-    mapRef,
-    overlays,
-  });
+  const { fitOverlayBounds, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel } =
+    useCameraControls({
+      cameraRef,
+      mapRef,
+      overlays,
+    });
+  // Settled map bearing → the compass badge's red north needle, plus the
+  // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
+  const { mapBearing, onSettleBearing } = useMapBearing({ snapToNorth });
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig
   // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
@@ -1577,7 +1582,10 @@ export function MapScreen() {
             // until you pan looks broken.
             void mapRef.current
               ?.getViewState()
-              .then((vs) => updateScaleAt(vs.zoom, vs.center[1]))
+              .then((vs) => {
+                updateScaleAt(vs.zoom, vs.center[1]);
+                onSettleBearing(vs.bearing);
+              })
               .catch(() => undefined); // mid-teardown — the next settle seeds it
           }}
           // Feeds the crossfade's "is the staged frame actually drawn yet"
@@ -1596,6 +1604,9 @@ export function MapScreen() {
             // wind layer keeps its own copy behind the windEnabled gate).
             setSettledBounds(windBoundsOf(e.nativeEvent));
             updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
+            // Settled bearing → the badge's red north needle, and the
+            // snap-back detent for a rotation too small to have been meant.
+            onSettleBearing(e.nativeEvent.bearing);
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1993,7 +2004,7 @@ export function MapScreen() {
       {/* Top-left compass. The badge subscribes to the compass itself so the
           rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <CompassBadge onPress={resetNorth} />
+        <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
       </View>
 
       {/* Mandatory marine notice (marine M3): whenever a marine layer is

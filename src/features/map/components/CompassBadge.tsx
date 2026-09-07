@@ -1,3 +1,4 @@
+import { isNorthUp, normalizeBearingDeg } from '@core/geo/northSnap';
 import { unwrapDeg } from '@core/signal/heading';
 import { headingToCardinal } from '@core/format';
 import { useEffect, useRef } from 'react';
@@ -9,6 +10,12 @@ import { useCompass } from '../useCompass';
 interface CompassBadgeProps {
   /** Called when the badge is tapped (used to reset the map to north). */
   onPress?: () => void;
+  /**
+   * Current **map** bearing in degrees (clockwise, 0 = north-up), from the
+   * camera settle path. `null`/omitted means north-up. Anything past
+   * `NORTH_UP_EPSILON_DEG` draws the red north needle.
+   */
+  mapBearing?: number | null;
 }
 
 /**
@@ -18,6 +25,14 @@ interface CompassBadgeProps {
  * than landing and re-starting.
  */
 const NEEDLE_ANIM_MS = 200;
+
+/**
+ * How long the red north needle eases toward a new map bearing. Longer than
+ * the heading needle's: map bearing arrives on camera *settle* (a handful of
+ * events per gesture, not a stream), so this is a single visible move rather
+ * than a link in a chain, and it should read as a glide.
+ */
+const NORTH_ANIM_MS = 250;
 
 /**
  * A small floating compass that rotates its needle to the device heading.
@@ -37,8 +52,21 @@ const NEEDLE_ANIM_MS = 200;
  * The needle animates on the native driver toward an **unwrapped** continuous
  * angle (349° → 361°, not → 1°), so crossing north eases through the boundary
  * instead of spinning 350° the wrong way.
+ *
+ * ## The red north needle (#248)
+ *
+ * While the map is rotated, a red tick on the badge's rim points at **true
+ * north on screen** — it is the only thing that says "the map is turned, and
+ * tapping here straightens it". It is drawn rotated by `−mapBearing` (the map
+ * turned clockwise puts north counter-clockwise of the screen's up), eased the
+ * same unwrapped way so a bearing crossing 0° never spins the long way round.
+ * At north-up it is hidden: nothing to point out.
+ *
+ * With "rotate map with heading" on, the map bearing tracks the device, so the
+ * red needle shows constantly. That is correct — under heading-follow it is the
+ * only north reference on the screen.
  */
-export function CompassBadge({ onPress }: CompassBadgeProps) {
+export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
   const sample = useCompass();
   const theme = useTheme();
   const heading = sample?.headingDeg ?? null;
@@ -68,6 +96,31 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
     }).start();
   }, [heading, rotationAnim]);
 
+  // Same treatment for the map bearing: signed (-180, 180] so a bearing of 350°
+  // reads as -10°, then unwrapped against the last value so the tick eases
+  // across north the short way.
+  const bearing = normalizeBearingDeg(mapBearing ?? 0);
+  const rotated = !isNorthUp(bearing);
+  const northContinuousRef = useRef<number | null>(null);
+  const northAnim = useAnimatedValue(0);
+
+  useEffect(() => {
+    const prev = northContinuousRef.current;
+    if (prev === null) {
+      northContinuousRef.current = bearing;
+      northAnim.setValue(bearing);
+      return;
+    }
+    const next = unwrapDeg(prev, bearing);
+    northContinuousRef.current = next;
+    Animated.timing(northAnim, {
+      toValue: next,
+      duration: NORTH_ANIM_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [bearing, northAnim]);
+
   // The arrow points to NORTH: as the device heading increases (you turn
   // clockwise), north sits counter-clockwise from you, so the needle
   // counter-rotates. Linear extrapolation makes this valid for any continuous
@@ -76,8 +129,15 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
     inputRange: [0, 360],
     outputRange: ['0deg', '-360deg'],
   });
+  // Identical relationship, for the same reason: the map bearing turns the
+  // world clockwise, so north on screen is at −bearing.
+  const northRotate = northAnim.interpolate({
+    inputRange: [0, 360],
+    outputRange: ['0deg', '-360deg'],
+  });
 
   const deg = heading ?? 0;
+  const offNorth = Math.round(Math.abs(bearing));
   return (
     <Surface
       style={[styles.surface, { backgroundColor: theme.colors.elevation?.level2 }]}
@@ -89,12 +149,30 @@ export function CompassBadge({ onPress }: CompassBadgeProps) {
         borderless
         style={styles.touch}
         accessibilityRole="button"
-        accessibilityLabel="Reset map to north"
+        accessibilityLabel={rotated ? `Map rotated ${offNorth}°, realign north` : 'Compass'}
       >
         <View style={styles.content}>
-          <Animated.View style={[styles.needleWrap, { transform: [{ rotate }] }]}>
-            <MaterialCommunityIcons name="navigation" size={26} color={theme.colors.tertiary} />
-          </Animated.View>
+          <View style={styles.needleBox}>
+            <Animated.View style={[styles.needleWrap, { transform: [{ rotate }] }]}>
+              <MaterialCommunityIcons name="navigation" size={26} color={theme.colors.tertiary} />
+            </Animated.View>
+            {/* Rim tick, not a second arrow: it rides the edge of the same
+                28-pt box the heading needle fills, so the badge keeps its
+                footprint and the two never read as one ambiguous pointer. */}
+            {rotated && (
+              <Animated.View
+                testID="compass-north-needle"
+                pointerEvents="none"
+                style={[
+                  styles.needleWrap,
+                  styles.northWrap,
+                  { transform: [{ rotate: northRotate }] },
+                ]}
+              >
+                <View style={[styles.northTick, { backgroundColor: theme.colors.error }]} />
+              </Animated.View>
+            )}
+          </View>
           <Text variant="labelMedium" style={styles.label}>
             {heading === null ? '--' : `${Math.round(deg) % 360}° ${headingToCardinal(deg)}`}
           </Text>
@@ -117,11 +195,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   },
+  needleBox: {
+    width: 28,
+    height: 28,
+  },
   needleWrap: {
     width: 28,
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  northWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    // Top-aligned inside the same 28-pt square the heading needle fills, so
+    // the tick rides the rim while still rotating about the badge's centre.
+    justifyContent: 'flex-start',
+  },
+  northTick: {
+    width: 3,
+    height: 9,
+    borderRadius: 1.5,
   },
   label: {
     fontVariant: ['tabular-nums'],
