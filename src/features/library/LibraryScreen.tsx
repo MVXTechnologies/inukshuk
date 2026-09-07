@@ -47,6 +47,7 @@ import { countActiveFilters, filterTracks, type TrackFilter } from '@core/librar
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
+import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -535,14 +536,18 @@ export function LibraryScreen() {
               <Text variant="titleSmall" numberOfLines={1}>
                 {m.name}
               </Text>
+              {/* A map with no georeferenced page must SAY so: the raw parser
+                  warning was jargon and was simply absent on some documents,
+                  which rendered as a blank line under the name — a map that
+                  can never be drawn and never explains why (#236). */}
               <Text
                 variant="bodySmall"
-                numberOfLines={1}
+                numberOfLines={hasPages ? 1 : 2}
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
                 {hasPages
                   ? `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`
-                  : m.georeferenceWarning}
+                  : NO_GEOREFERENCE_NOTICE}
               </Text>
             </View>
           </Pressable>
@@ -561,11 +566,23 @@ export function LibraryScreen() {
             <Text variant="labelMedium" style={styles.overlayLabel}>
               Show as overlay
             </Text>
+            {/* mode="android" is REQUIRED, not cosmetic. Paper's default
+                Checkbox is platform-adaptive, and its iOS variant renders the
+                checkmark at `opacity: 0` when unchecked — so on iPhone an
+                inactive page showed no control at all, only a stranded "Page
+                N" label, and a page toggled off could never be toggled back
+                on. That is #236: "imported PDFs have no checkbox". The
+                Material box draws both states on both platforms.
+                labelStyle keeps the label beside its box: `position="leading"`
+                makes Paper right-align the label, which parked it against the
+                far edge of the card. */}
             {primaryGeoreferences(m.georeferences).map((g) => (
               <Checkbox.Item
                 key={g.pageIndex}
+                mode="android"
                 label={`Page ${g.pageIndex + 1}`}
                 position="leading"
+                labelStyle={styles.checkboxLabel}
                 status={m.activePages.includes(g.pageIndex) ? 'checked' : 'unchecked'}
                 onPress={() => toggleMapPage(m.id, g.pageIndex)}
                 style={styles.checkboxItem}
@@ -1301,6 +1318,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: '700', paddingVertical: 12 },
   overlayLabel: { marginBottom: 2, marginTop: 4 },
   checkboxItem: { paddingVertical: 0, paddingHorizontal: 0 },
+  // Paper right-aligns a leading-position label; left-align it so "Page N"
+  // reads as the label of the box next to it, not as a stray right-edge word.
+  checkboxLabel: { textAlign: 'left', marginLeft: 4 },
   trackCard: { marginHorizontal: 12, marginVertical: 6 },
   loader: { paddingVertical: 24 },
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },

@@ -1,6 +1,6 @@
 import type { MapDocument } from '@core/models';
 import { parseGeoPdf } from '@core/geo/geopdf';
-import { primaryGeoreferences } from '@core/geo/geopdf/primary';
+import { defaultActivePages } from '@core/library/overlayPages';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
@@ -37,12 +37,10 @@ export async function mapDocumentFromStoredPdf(
     importedAt: Date.now(),
     pageCount: parsed.pageCount,
     // Default to showing every georeferenced page; the user can uncheck pages
-    // later. One PAGE may carry several viewports (AUSTopo and US Topo sheets
-    // carry a locator inset and an adjoining-sheet diagram beside the map), so
-    // active pages are the distinct page indexes — never one entry per
-    // viewport, which would activate the same page three times.
+    // later. The rule lives in @core/library/overlayPages so the Library card
+    // and this path can never disagree about what a map "has pages" means.
     georeferences: parsed.georeferences,
-    activePages: primaryGeoreferences(parsed.georeferences).map((g) => g.pageIndex),
+    activePages: defaultActivePages(parsed.georeferences),
     georeferenceWarning:
       parsed.georeferences.length > 0
         ? undefined
@@ -60,8 +58,16 @@ async function importOne(asset: DocumentPicker.DocumentPickerAsset): Promise<Map
 /**
  * Let the user pick one or more PDFs, copy them into app storage, and resolve
  * each one's embedded georeferencing. PDFs with no recognizable georeferencing
- * are still imported (viewable as plain documents) but flagged with a warning.
- * Files that fail to import are counted in `failed` rather than aborting the lot.
+ * are still imported (viewable as plain documents) but flagged with a warning
+ * — `parseGeoPdf` never throws, so that case is a *parsed* map the card
+ * explains, not a failure.
+ *
+ * A file that genuinely fails (its bytes could not be read back) is NOT added:
+ * a MapDocument over an unreadable file can be neither drawn nor opened, so
+ * adding it "flagged" would only leave a permanently broken row. Failures are
+ * counted in `failed`, and when EVERY picked file failed the result is an
+ * `error` carrying the reason — so a whole import can never end in a cheerful
+ * "Imported 0 maps" with nothing said about why (#236).
  */
 export async function pickAndImportMaps(): Promise<BulkImportResult> {
   let picked: DocumentPicker.DocumentPickerResult;
@@ -79,6 +85,7 @@ export async function pickAndImportMaps(): Promise<BulkImportResult> {
 
   const docs: MapDocument[] = [];
   let failed = 0;
+  let firstFailure: string | null = null;
   for (const asset of picked.assets) {
     try {
       docs.push(await importOne(asset));
@@ -86,7 +93,13 @@ export async function pickAndImportMaps(): Promise<BulkImportResult> {
       // Counted in the user-facing "N failed" summary; report the cause too.
       reportError(err, 'pdf-import');
       failed += 1;
+      firstFailure ??= err instanceof Error ? err.message : 'Could not read that PDF';
     }
+  }
+  // Nothing imported at all: say why, through the caller's error snackbar,
+  // instead of reporting a successful import of zero maps.
+  if (docs.length === 0 && failed > 0) {
+    return { kind: 'error', message: firstFailure ?? 'Could not read that PDF' };
   }
   return { kind: 'imported', docs, failed };
 }
