@@ -1,3 +1,7 @@
 dist
 node_modules
 package-lock.json
+
+# Generated from docs/catalog/v2 by scripts/build-store-facets.mjs — byte-stable
+# generator output, not hand-edited (mirrors the root .prettierignore rule).
+src/store/facets.generated.json

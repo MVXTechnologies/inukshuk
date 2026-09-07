@@ -1,7 +1,7 @@
 # Inukshuk — web playground
 
-A browser copy of the app's **map**, **Library** and **trail focus** surfaces,
-built to **explore and decide UI and features faster**. Speed of iteration is
+A browser copy of the app's **map**, **Library**, **trail focus** and **map
+store** surfaces, built to **explore and decide UI and features faster**. Speed of iteration is
 the product: this is a design surface, not a shipping app, and nothing here goes
 anywhere near a phone.
 
@@ -17,6 +17,10 @@ It is a self-contained npm project. It does **not** share `package.json`,
 cd web
 npm install      # first time only. NEVER run npm install at the repo root.
 npm run dev      # http://localhost:5173  — Vite, HMR on
+```
+
+```bash
+node scripts/build-store-facets.mjs   # rebuild the map store's facet fixture
 ```
 
 Other scripts:
@@ -46,12 +50,24 @@ comparison can be shared:
                            (for comparing cartography under identical chrome)
 ?panel=catalog|tracks      open a side drawer on load
 
-?view=map|library|trail    which primary surface is up
+?view=map|library|trail|store
+                           which primary surface is up (?screen=store also
+                           opens the map store)
 ?trail=<id>                the focused trail (implies view=trail)
 ?sort=recent|oldest|distance|ascent|duration|pace|name
 ?w=phone|wide              Library column width: 390 px or 720 px
 ?trimAt=rail|title|bottom  where the trim scissors sit (backlog item 6)
 ?units=metric|imperial     unit system @core/format is bound to for this page
+
+# The map store's facets (see docs/store-filter-mockup.md)
+?sheet=1                   open the store's filter sheet
+?near=25|100|500|2500      radius in km from the fixed Québec City origin
+?country=US,CA,AU          comma list
+?region=US-VT,CA-QC        comma list, ISO 3166-2
+?scale=24000,50000         comma list of scale denominators
+?lang=en,bilingual         comma list
+?maxsize=10|50             download-size ceiling in MB
+?q=<text>                  store search text
 ```
 
 Unlike the map parameters, the Library/trail ones are also written BACK into the
@@ -138,6 +154,34 @@ bottom of the trail screen:
 - `bottom` — candidate B: a full-width action under the profile.
 
 The three can be captured back to back on the same trail in the same session.
+
+---
+
+## The map store
+
+The app's Search tab, prototyped for issue #250 — real facets with **live
+result counts**, over the real catalogue. `docs/store-filter-mockup.md` is the
+design write-up (facet order and why, phase 1 vs phase 2, what the RN build
+needs); the short version:
+
+- The counts are **exact over all 67 983 catalogue items** and cost no network.
+  `scripts/build-store-facets.mjs` sweeps `docs/catalog/v2` (index + 281 shards,
+  24 MB) into `src/store/facets.generated.json` — a 207-row facet cube plus a
+  783-sheet sample of real items for the list. Regenerate with
+  `node scripts/build-store-facets.mjs`.
+- Facet order: **Near me** (radius chips over a distance histogram) → Country →
+  Scale → Region → Language → Download size → a greyed **phase-2** group for
+  activities and non-topo categories. There is no category grid, because 100 %
+  of the catalogue is `topo` and a category filter divides nothing.
+- Options with a zero count are disabled with their zero showing, which is how
+  "nothing within 25 km of Québec City" reads as a fact about the catalogue
+  rather than a bug.
+- The matched sheets are drawn on the map as their real bbox footprints
+  (`map/useStoreLayers.ts`), so a facet tap has a visible consequence on the map.
+- **One thing here is not real data and is marked as such**: CanTopo publishes no
+  `region` at all, so the generator derives `CA-<province>` from each sheet's
+  bbox and the UI badges those chips `≈`. The fix belongs in
+  `scripts/catalog/fetch-cantopo.ts`, not in the UI.
 
 ---
 
@@ -373,6 +417,7 @@ web/
       MapCanvas.tsx     the MapLibre GL JS instance, style swaps, viewport
       mapStyle.ts       the app's style numbers, copied with provenance
       useMapOverlays.ts rebuilds the layer stack on every style load
+      useStoreLayers.ts bbox footprints of the store's current matches
     weather/
       useWeather.ts     timeline + anchor + drape URL + crossfade
       LayerRail.tsx     picker with interpolateRamp thumbnails
@@ -389,6 +434,11 @@ web/
       WaypointCard.tsx  the waypoint row
       FilterSheet.tsx   TrackFilterDialog's criteria, inline
       sortTracks.ts     NEW pure logic (the app has no sort) — see above
+    store/
+      facets.ts             the facet cube + counting rules (issue #250)
+      facets.generated.json GENERATED from docs/catalog/v2 — do not hand-edit
+      StorePanel.tsx        search, count, applied-filter strip, result list
+      StoreFilterSheet.tsx  the facet groups
     trail/
       TrailFocus.tsx    stat block, notes, trim, the trim-placement switch
       ElevationProfile.tsx  the app's SVG chart, ported

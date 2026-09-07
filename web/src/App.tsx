@@ -13,9 +13,19 @@ import type { WebTrack } from '@/library/types';
 import { useLibrary } from '@/library/useLibrary';
 import type { SortKey } from '@/library/sortTracks';
 import { readUrlState, syncUrl } from '@/lib/urlState';
+import { StorePanel } from '@/store/StorePanel';
+import {
+  CATALOG,
+  filterFromUrl,
+  filterToUrlPatch,
+  formatCount,
+  matchingSheets,
+  type StoreFilter,
+} from '@/store/facets';
 import { MapCanvas, type MapView } from '@/map/MapCanvas';
 import { useLibraryLayers } from '@/map/useLibraryLayers';
 import { useMapOverlays } from '@/map/useMapOverlays';
+import { useStoreLayers } from '@/map/useStoreLayers';
 import { TracksPanel } from '@/tracks/TracksPanel';
 import { useTracks } from '@/tracks/useTracks';
 import { TrailFocus, type TrimPlacement, type TrimState } from '@/trail/TrailFocus';
@@ -27,6 +37,7 @@ import {
   IconMoon,
   IconRoute,
   IconScissors,
+  IconSearch,
   IconSun,
 } from '@/ui/Icons';
 import { THEMES, type ThemeName } from '@/ui/theme';
@@ -40,6 +51,9 @@ type Drawer = 'catalog' | 'tracks' | null;
 /** Stable identity for "no points loaded" — a fresh `[]` each render would
  *  re-run every memo in the profile on every keystroke elsewhere. */
 const EMPTY_POINTS: TrackPoint[] = [];
+
+/** Catalogue size, formatted once — it is a constant of the fixture. */
+const STORE_TOTAL = formatCount(CATALOG.total);
 
 const THEME_KEY = 'inukshuk-playground:theme';
 const LAYER_KEY = 'inukshuk-playground:layer';
@@ -102,7 +116,7 @@ export function App() {
 
   // ----------------------------------------------------------- library ----
   const lib = useLibrary();
-  const [surface, setSurface] = useState<'map' | 'library' | 'trail'>(URL_STATE.view);
+  const [surface, setSurface] = useState<'map' | 'library' | 'trail' | 'store'>(URL_STATE.view);
   const [trailId, setTrailId] = useState<string | null>(URL_STATE.trail);
   // Keyed by trail id, so leaving the screen needs no clearing setState in an
   // effect: the points are simply not the ones being asked for any more.
@@ -113,6 +127,12 @@ export function App() {
   const [trimAt, setTrimAt] = useState<TrimPlacement>(URL_STATE.trimAt ?? 'rail');
   const [panelWidth, setPanelWidth] = useState<'phone' | 'wide'>(URL_STATE.width ?? 'phone');
   const [filter, setFilter] = useState({});
+
+  // ------------------------------------------------------------- store ----
+  // The map store's facets (issue #250). Opening state comes from the URL and
+  // goes straight back into it, so "two facets applied" is a link.
+  const [storeFilter, setStoreFilter] = useState<StoreFilter>(() => filterFromUrl(URL_STATE.store));
+  const [storeSheet, setStoreSheet] = useState(URL_STATE.store.sheet);
 
   const tracks = useTracks();
 
@@ -126,15 +146,30 @@ export function App() {
   // The address bar mirrors the view, so any screenshot can be handed back as
   // a link that reopens exactly this state.
   useEffect(() => {
+    const storeParams =
+      surface === 'store'
+        ? filterToUrlPatch(storeFilter, storeSheet)
+        : {
+            country: null,
+            region: null,
+            scale: null,
+            lang: null,
+            near: null,
+            maxsize: null,
+            q: null,
+            sheet: null,
+          };
     syncUrl({
       theme: themeName,
       view: surface === 'map' ? null : surface,
+      screen: null,
       trail: surface === 'trail' ? trailId : null,
-      sort: sort === 'recent' ? null : sort,
+      sort: surface === 'store' || sort === 'recent' ? null : sort,
       trimAt: surface === 'trail' ? trimAt : null,
       w: panelWidth === 'phone' ? null : panelWidth,
+      ...storeParams,
     });
-  }, [themeName, surface, trailId, sort, trimAt, panelWidth]);
+  }, [themeName, surface, trailId, sort, trimAt, panelWidth, storeFilter, storeSheet]);
 
   const onReady = useCallback((m: MlMap, epoch: number) => {
     setMap(m);
@@ -165,6 +200,17 @@ export function App() {
     [lib.index],
   );
 
+  const libraryOpen = surface === 'library' || surface === 'trail';
+  /** The left column is occupied — by the Library, a trail, OR the store. */
+  const columnOpen = surface !== 'map';
+
+  // What the store's facets match right now, for the map footprints. Cheap:
+  // the fixture's sample is a few hundred rows and the filter is a scan.
+  const storeSheets = useMemo(
+    () => (surface === 'store' ? matchingSheets(storeFilter) : []),
+    [surface, storeFilter],
+  );
+
   // Overlays must be registered BEFORE the weather hook: it fills the drape
   // sources that these layers point at, and layer order is add order.
   useMapOverlays(map, styleEpoch, theme, weatherLayer, tracks.features);
@@ -174,11 +220,15 @@ export function App() {
     map,
     styleEpoch,
     theme,
-    surface === 'map' ? [] : shownTracks,
-    surface === 'map' ? [] : shownWaypoints,
+    libraryOpen ? shownTracks : [],
+    libraryOpen ? shownWaypoints : [],
     surface === 'trail' ? trailId : null,
     scrub,
   );
+
+  // The store draws the footprints of whatever the facets currently match, so
+  // a tap on "Canada" is visible on the map and not only in the count.
+  useStoreLayers(map, styleEpoch, theme, storeSheets);
 
   const origin: LatLng | null =
     view === null
@@ -331,8 +381,6 @@ export function App() {
     [map],
   );
 
-  const libraryOpen = surface !== 'map';
-
   // ------------------------------------------------------------- render ---
   return (
     <div className="shell">
@@ -376,6 +424,19 @@ export function App() {
               <span className="chip-count num">{lib.index.tracks.length}</span>
             ) : null}
           </button>
+          <button
+            type="button"
+            aria-pressed={surface === 'store'}
+            onClick={() => {
+              setSurface(surface === 'store' ? 'map' : 'store');
+              setTrailId(null);
+              setScrub(null);
+            }}
+            title="The map store — the app's Search tab (issue #250)"
+          >
+            <IconSearch size={15} />
+            Store
+          </button>
         </div>
 
         <span className="spacer" />
@@ -415,11 +476,11 @@ export function App() {
 
       {/* The layer rail and the legend share the left edge with the Library,
           so they stand down while it is up rather than fighting it. */}
-      {libraryOpen ? null : <LayerRail value={weatherLayer} onChange={setWeatherLayer} />}
+      {columnOpen ? null : <LayerRail value={weatherLayer} onChange={setWeatherLayer} />}
 
       {weatherLayer !== null ? (
         <>
-          {libraryOpen ? null : <Legend layerId={weatherLayer} />}
+          {columnOpen ? null : <Legend layerId={weatherLayer} />}
           <TimeScrubber
             timeline={weather.timeline}
             frameIndex={weather.frameIndex}
@@ -430,6 +491,55 @@ export function App() {
             loading={weather.loading}
           />
         </>
+      ) : null}
+
+      {/* The map store (issue #250). Same floating column, same Phone/Wide
+          switch as the Library, so the two filter surfaces can be judged side
+          by side at the same width. */}
+      {surface === 'store' ? (
+        <div className={`library store panel${panelWidth === 'wide' ? ' wide' : ''}`}>
+          <div className="drawer-head">
+            <span className="drawer-title">
+              Map store
+              <span className="head-count micro">{STORE_TOTAL} sheets · 3 sources</span>
+            </span>
+            <div className="seg inline">
+              <button
+                type="button"
+                aria-pressed={panelWidth === 'phone'}
+                title="Phone-width column (390 px)"
+                onClick={() => setPanelWidth('phone')}
+              >
+                Phone
+              </button>
+              <button
+                type="button"
+                aria-pressed={panelWidth === 'wide'}
+                title="Desktop-width column (720 px)"
+                onClick={() => setPanelWidth('wide')}
+              >
+                Wide
+              </button>
+            </div>
+            <button
+              type="button"
+              className="row-action"
+              onClick={() => setSurface('map')}
+              aria-label="Close"
+            >
+              <IconClose size={14} />
+            </button>
+          </div>
+
+          <StorePanel
+            filter={storeFilter}
+            onFilter={setStoreFilter}
+            sheetOpen={storeSheet}
+            onSheetOpen={setStoreSheet}
+            wide={panelWidth === 'wide'}
+            onLocate={flyToBbox}
+          />
+        </div>
       ) : null}
 
       {libraryOpen ? (

@@ -35,8 +35,10 @@ export interface UrlState {
   /** Open a side drawer on load, e.g. `?panel=catalog`. */
   panel: 'catalog' | 'tracks' | null;
 
-  /** Which primary surface is up: the bare map, the Library, or one trail. */
-  view: 'map' | 'library' | 'trail';
+  /** Which primary surface is up: the bare map, the Library, one trail, or
+   *  the map store. `?screen=store` is accepted as an alias for `?view=store`,
+   *  because that is what issue #250 asks for and both are cheap to read. */
+  view: 'map' | 'library' | 'trail' | 'store';
   /** Trail id for `view=trail`. */
   trail: string | null;
   /** Library trail ordering. */
@@ -47,6 +49,34 @@ export interface UrlState {
   width: 'phone' | 'wide' | null;
   /** Unit system the formatters bind to (see `lib/format.ts`). */
   units: 'metric' | 'imperial' | null;
+  /** The map store's facet selection — see {@link StoreUrlState}. */
+  store: StoreUrlState;
+}
+
+/**
+ * The store filter, as query parameters.
+ *
+ * The whole point of the playground is that a screenshot is a link, and a
+ * filter mockup is worth nothing if "two facets applied" cannot be reopened
+ * exactly. Multi-select groups are comma lists; the two single-select bounds
+ * are the value shown on the chip, in the chip's own unit (km, MB), so the URL
+ * reads the way the UI does:
+ *
+ *     ?view=store&near=500&country=CA&sheet=1
+ */
+export interface StoreUrlState {
+  countries: string[];
+  regions: string[];
+  /** Scale denominators, e.g. 24000. */
+  scales: number[];
+  langs: string[];
+  /** Radius in km, matching a chip. */
+  near: number | null;
+  /** Download-size ceiling in MB, matching a chip. */
+  maxSizeMb: number | null;
+  query: string;
+  /** Whether the filter sheet is up. */
+  sheet: boolean;
 }
 
 /** The OpenFreeMap styles worth comparing. Anything else is ignored. */
@@ -89,11 +119,11 @@ export function readUrlState(search: string): UrlState {
   const panel = rawPanel === 'catalog' || rawPanel === 'tracks' ? rawPanel : null;
 
   const trail = params.get('trail');
-  const rawView = params.get('view');
+  const rawView = params.get('view') ?? params.get('screen');
   // `?trail=` implies the trail view even without `?view=`, so a link to one
   // trail is as short as it can be.
   const view: UrlState['view'] =
-    rawView === 'library' || rawView === 'trail' || rawView === 'map'
+    rawView === 'library' || rawView === 'trail' || rawView === 'map' || rawView === 'store'
       ? rawView
       : trail !== null
         ? 'trail'
@@ -111,6 +141,34 @@ export function readUrlState(search: string): UrlState {
   const rawUnits = params.get('units');
   const units = rawUnits === 'metric' || rawUnits === 'imperial' ? rawUnits : null;
 
+  const list = (key: string): string[] => {
+    const raw = params.get(key);
+    if (raw === null || raw.trim() === '') return [];
+    return raw
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v !== '');
+  };
+  const positive = (key: string): number | null => {
+    const raw = params.get(key);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const store: StoreUrlState = {
+    countries: list('country'),
+    regions: list('region'),
+    scales: list('scale')
+      .map((v) => Number(v))
+      .filter((n) => Number.isFinite(n) && n > 0),
+    langs: list('lang'),
+    near: positive('near'),
+    maxSizeMb: positive('maxsize'),
+    query: params.get('q') ?? '',
+    sheet: params.get('sheet') === '1',
+  };
+
   return {
     theme,
     layer,
@@ -124,6 +182,7 @@ export function readUrlState(search: string): UrlState {
     trimAt,
     width,
     units,
+    store,
   };
 }
 
