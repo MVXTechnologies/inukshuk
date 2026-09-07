@@ -93,8 +93,13 @@ interface RecorderState {
   mergeBackgroundPoints: (incoming: TrackPoint[]) => void;
   /** Drop a waypoint at the current position (becomes a numbered note on stop). */
   addWaypoint: () => number;
-  /** Edit a live waypoint's note text and/or photo (empty photoUri removes it). */
-  updateWaypoint: (id: string, patch: { note?: string; photoUri?: string }) => void;
+  /**
+   * Edit a live waypoint's name, note text and/or photo (empty photoUri
+   * removes it). `label` is the shared editor's Name field (#232): a live
+   * waypoint has no library row to rename from, so the rename has to live
+   * here. Blank keeps the current label — the auto number is never lost.
+   */
+  updateWaypoint: (id: string, patch: { label?: string; note?: string; photoUri?: string }) => void;
   /** Remove a live waypoint and any photo it owns. */
   removeWaypoint: (id: string) => void;
   pause: () => void;
@@ -307,6 +312,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         waypoints: s.waypoints.map((w) => {
           if (w.id !== id) return w;
           const next: PendingWaypoint = { ...w };
+          // Blank is "leave it alone", exactly as libraryStore.renameWaypoint:
+          // a live waypoint's label is also its fallback note text on stop, so
+          // clearing it would silently erase the note.
+          if (patch.label !== undefined && patch.label.trim() !== '') {
+            next.label = patch.label.trim();
+          }
           if (patch.note !== undefined) next.note = patch.note;
           if (patch.photoUri !== undefined) {
             if (patch.photoUri) next.photoUri = patch.photoUri;

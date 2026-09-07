@@ -16,7 +16,10 @@ import {
 } from 'react-native-paper';
 
 /**
- * Coordinate READOUT + ENTRY (#97), opened from the map-actions sheet.
+ * Coordinate READOUT + ENTRY (#97) — "Navigate to coordinates" since #232,
+ * opened from the tap chip's action row (seeded with the tapped point) and,
+ * as a secondary entry for typing a coordinate you have not tapped, from the
+ * map-actions sheet (empty box).
  *
  * Both halves live in one dialog because they are the same question asked in
  * two directions — "where am I looking?" and "take me there" — and because a
@@ -37,6 +40,13 @@ import {
 interface Props {
   /** The map centre to read out; null before the camera has settled once. */
   center: LatLng | null;
+  /**
+   * Seed for the entry box (#232): the point the user just tapped, so the
+   * chip's "Navigate to coordinates" arrives with its subject already typed
+   * in and Go / Set destination live on the first frame. Null (the "+" sheet
+   * entry) opens on an empty box, where the map centre is the subject.
+   */
+  initial?: LatLng | null;
   onDismiss: () => void;
   /** Fly the camera to a coordinate. */
   onGo: (at: LatLng) => void;
@@ -48,17 +58,23 @@ interface Props {
 
 /**
  * Mounted only while it is open (the caller renders it conditionally), so
- * every opening starts from a blank box with no reset effect — a stale
- * coordinate from last time is the one thing worse than none.
+ * every opening starts from `initial` — the tapped point, or a blank box —
+ * with no reset effect. A stale coordinate from last time is the one thing
+ * worse than none.
  */
 export function GoToCoordinatesDialog({
   center,
+  initial = null,
   onDismiss,
   onGo,
   onSetDestination,
   onCopy,
 }: Props) {
-  const [draft, setDraft] = useState('');
+  // Seeded once at mount — the dialog is mounted only while open, so there is
+  // no reset effect and no stale coordinate from last time.
+  const [draft, setDraft] = useState(() =>
+    initial === null ? '' : formatLatLng(initial.latitude, initial.longitude),
+  );
   const keyboardHeight = useIosKeyboardHeight();
 
   const typed = draft.trim();
@@ -92,7 +108,7 @@ export function GoToCoordinatesDialog({
         onDismiss={onDismiss}
         style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
       >
-        <Dialog.Title>Coordinates</Dialog.Title>
+        <Dialog.Title>Navigate to coordinates</Dialog.Title>
         <Dialog.Content>
           <KeyboardDismissArea>
             {center !== null ? (
@@ -106,10 +122,12 @@ export function GoToCoordinatesDialog({
               <Text variant="bodyMedium">Waiting for the map to settle…</Text>
             )}
             <TextInput
-              label="Go to coordinates"
+              label="Coordinates"
               // Paper's floating `label` is a sibling Text, not the input's
-              // accessible name — screen readers (and tests) need it spelled out.
-              accessibilityLabel="Go to coordinates"
+              // accessible name — screen readers (and tests) need it spelled
+              // out. Kept distinct from the dialog title so the two are not
+              // two elements answering to the same string.
+              accessibilityLabel="Coordinates to navigate to"
               value={draft}
               onChangeText={setDraft}
               mode="outlined"

@@ -31,3 +31,34 @@ export function notePreview(
   if (flat === '') return null;
   return flat.length <= maxChars ? flat : `${flat.slice(0, maxChars).trimEnd()}…`;
 }
+
+/**
+ * The auto-generated waypoint name: `Waypoint 1`, `Waypoint 2`, … Only labels
+ * still matching this shape take part in the numbering, so a waypoint the user
+ * named ("Camp", "Source") simply stops competing for a number.
+ */
+const AUTO_LABEL = /^Waypoint (\d+)$/;
+
+/**
+ * Next free auto-number for a new waypoint: one past the highest `Waypoint N`
+ * currently in the list. Deliberately NOT `length + 1` — deleting "Waypoint 1"
+ * and dropping a new one must never mint a duplicate name.
+ *
+ * Shared by the store (which stamps the label at creation) and by the editor
+ * (which pre-fills its Name field with the very same string, so a name the
+ * user leaves alone numbers exactly as it always did).
+ */
+export function nextWaypointNumber(labels: readonly string[]): number {
+  return (
+    1 +
+    labels.reduce((max, label) => {
+      const m = AUTO_LABEL.exec(label);
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, 0)
+  );
+}
+
+/** {@link nextWaypointNumber} as the label itself, e.g. `Waypoint 7`. */
+export function nextWaypointLabel(labels: readonly string[]): string {
+  return `Waypoint ${nextWaypointNumber(labels)}`;
+}

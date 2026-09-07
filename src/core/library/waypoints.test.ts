@@ -1,4 +1,10 @@
-import { NOTE_PREVIEW_MAX_CHARS, notePreview, sortWaypointsNewestFirst } from './waypoints';
+import {
+  NOTE_PREVIEW_MAX_CHARS,
+  nextWaypointLabel,
+  nextWaypointNumber,
+  notePreview,
+  sortWaypointsNewestFirst,
+} from './waypoints';
 
 describe('sortWaypointsNewestFirst', () => {
   it('orders by createdAt descending', () => {
@@ -58,5 +64,36 @@ describe('notePreview', () => {
   it('respects a custom max length', () => {
     expect(notePreview('abcdef', 4)).toBe('abcd…');
     expect(notePreview('abcd', 4)).toBe('abcd');
+  });
+});
+
+// #232 — the same numbering the store stamps at creation and the editor
+// pre-fills its Name field with; they MUST agree, or a name left untouched
+// would change the numbering.
+describe('nextWaypointNumber', () => {
+  it('starts at 1 on an empty library', () => {
+    expect(nextWaypointNumber([])).toBe(1);
+    expect(nextWaypointLabel([])).toBe('Waypoint 1');
+  });
+
+  it('numbers past the highest auto label, not past the count', () => {
+    // "Waypoint 1" deleted: the count says 2, but re-using 3 would duplicate.
+    expect(nextWaypointNumber(['Waypoint 2', 'Waypoint 3'])).toBe(4);
+  });
+
+  it('ignores labels the user has renamed', () => {
+    expect(nextWaypointNumber(['Camp', 'Source froide', 'Waypoint 2'])).toBe(3);
+    expect(nextWaypointNumber(['Camp', 'Source froide'])).toBe(1);
+  });
+
+  it('ignores near-misses rather than guessing at them', () => {
+    expect(nextWaypointNumber(['Waypoint', 'Waypoint 4b', 'waypoint 9', 'Waypoint 12 north'])).toBe(
+      1,
+    );
+  });
+
+  it('is order-independent', () => {
+    expect(nextWaypointLabel(['Waypoint 7', 'Waypoint 2'])).toBe('Waypoint 8');
+    expect(nextWaypointLabel(['Waypoint 2', 'Waypoint 7'])).toBe('Waypoint 8');
   });
 });

@@ -18,6 +18,13 @@ interface EditableWaypoint {
 interface Props {
   /** The waypoint being edited; the dialog is visible while this is non-null. */
   waypoint: EditableWaypoint | null;
+  /**
+   * Current NAME draft (#232), owned by the caller like the note draft.
+   * Pre-filled with the waypoint's label — for a not-yet-created one that is
+   * the next auto number, so a name left untouched numbers exactly as before.
+   */
+  name: string;
+  onChangeName: (text: string) => void;
   /** Current note draft (owned by the caller so it survives photo updates). */
   draft: string;
   onChangeDraft: (text: string) => void;
@@ -32,6 +39,8 @@ interface Props {
 /** Editor dialog for a waypoint's note + photo (camera or library). */
 export function WaypointEditorDialog({
   waypoint,
+  name,
+  onChangeName,
   draft,
   onChangeDraft,
   onSave,
@@ -80,9 +89,32 @@ export function WaypointEditorDialog({
         onDismiss={close(onSave)}
         style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
       >
-        <Dialog.Title>{waypoint?.label ?? 'Waypoint'}</Dialog.Title>
+        {/* Static title since #232: the name is now an editable field right
+            below, and a title echoing it would be a second element reading
+            "Waypoint N" — ambiguous for screen readers and for Maestro, whose
+            waypoint flow reads the auto number off exactly one element. */}
+        <Dialog.Title>Waypoint</Dialog.Title>
         <Dialog.Content>
           <KeyboardDismissArea>
+            {/* #232 — the name, first, because naming the place is the point
+                of stopping to save it. Blank falls back to the auto label at
+                the call site, so clearing it can never leave a nameless pin. */}
+            <TextInput
+              label="Name"
+              // Paper's floating `label` is a sibling Text, not the input's
+              // accessible name — screen readers need it spelled out.
+              accessibilityLabel="Waypoint name"
+              value={name}
+              onChangeText={onChangeName}
+              mode="outlined"
+              autoCorrect={false}
+              style={styles.name}
+              // #235/#240 — single line: Return is the iOS way out, and here
+              // it just puts the keyboard away (Done is the dialog's action).
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={() => Keyboard.dismiss()}
+            />
             <TextInput
               label="Note"
               value={draft}
@@ -133,6 +165,7 @@ export function WaypointEditorDialog({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  name: { marginBottom: 10 },
   wpPhotoWrap: { marginTop: 12, alignItems: 'flex-start', gap: 6 },
   wpPhoto: { width: '100%', height: 180, borderRadius: 10 },
   wpPhotoButtons: { marginTop: 12, flexDirection: 'row', gap: 8 },

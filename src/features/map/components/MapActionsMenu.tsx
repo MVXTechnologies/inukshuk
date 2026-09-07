@@ -40,6 +40,10 @@ export interface MapActions {
    * for BOTH halves of that feature — read the map centre out, or type a
    * coordinate to fly to / aim a destination at — which is why one row buys
    * the whole thing instead of two.
+   *
+   * Since #232 the PRIMARY way in is the map-tap chip's "Navigate to
+   * coordinates", which opens the same dialog seeded with the tapped point.
+   * This row survives as the way to type a coordinate you have not tapped.
    */
   onGoToCoordinates?: () => void;
 }
@@ -106,7 +110,7 @@ export function MapActionsMenu({
             row('tray-arrow-down', 'Download offline area', run(actions.onDownload))}
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}
           {actions.onGoToCoordinates !== undefined &&
-            row('crosshairs', 'Go to coordinates', run(actions.onGoToCoordinates))}
+            row('crosshairs', 'Navigate to coordinates', run(actions.onGoToCoordinates))}
         </View>
       )}
     </>
