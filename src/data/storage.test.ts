@@ -1,10 +1,17 @@
 import {
+  deleteFileAt,
+  documentDirUri,
   downloadBytes,
+  fileExists,
   OfflineOnlyError,
   pickEvictions,
+  readFileText,
   readJson,
+  resolveDocumentPath,
   setNetworkAllowed,
+  toDocumentPath,
   writeJson,
+  writeTrackGpx,
   type CacheEntry,
 } from './storage';
 
@@ -316,5 +323,78 @@ describe('downloadBytes', () => {
     serveDownload([9]);
     const bytes = await downloadBytes('https://tiles/6.bin', 'tile-6.bin');
     expect(Array.from(bytes)).toEqual([9]);
+  });
+});
+
+// --- #247: document-relative paths -----------------------------------------
+//
+// The mock's document directory is `/doc`, so `documentDirUri()` is
+// `file:///doc` — the stand-in for the container UUID iOS rotates on updates.
+
+describe('document-relative paths', () => {
+  const OLD_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/DEAD-BEEF-0000-1111/Documents';
+
+  it('documentDirUri reports the current document directory', () => {
+    expect(documentDirUri()).toBe('file:///doc');
+  });
+
+  it('resolveDocumentPath builds an absolute uri against the current directory', () => {
+    expect(resolveDocumentPath('tracks/a.gpx')).toBe('file:///doc/tracks/a.gpx');
+  });
+
+  it('resolveDocumentPath passes absolute input through untouched', () => {
+    // content:// intent uris, cache files and foreign paths must survive: read
+    // helpers resolve unconditionally, so this is the escape hatch.
+    expect(resolveDocumentPath('content://downloads/7')).toBe('content://downloads/7');
+    expect(resolveDocumentPath('file:///cache/overlays/x.png')).toBe(
+      'file:///cache/overlays/x.png',
+    );
+  });
+
+  it('toDocumentPath strips the current directory, and a rotated container', () => {
+    expect(toDocumentPath('file:///doc/tracks/a.gpx')).toBe('tracks/a.gpx');
+    expect(toDocumentPath(`${OLD_CONTAINER}/tracks/a.gpx`)).toBe('tracks/a.gpx');
+  });
+
+  it('toDocumentPath is idempotent and leaves foreign absolutes alone', () => {
+    expect(toDocumentPath('tracks/a.gpx')).toBe('tracks/a.gpx');
+    expect(toDocumentPath('file:///cache/overlays/x.png')).toBe('file:///cache/overlays/x.png');
+  });
+
+  it('round-trips: resolve(toDocumentPath(uri)) is the uri again', () => {
+    const uri = 'file:///doc/photos/p1.jpg';
+    expect(resolveDocumentPath(toDocumentPath(uri))).toBe(uri);
+  });
+
+  it('rehomes a path stranded by a rotated container onto the current one', () => {
+    // The whole point of #247: what 1.5.0 wrote, read back after the update.
+    expect(resolveDocumentPath(toDocumentPath(`${OLD_CONTAINER}/tracks/a.gpx`))).toBe(
+      'file:///doc/tracks/a.gpx',
+    );
+  });
+
+  it('readers and stats accept a relative path as readily as an absolute one', async () => {
+    const uri = writeTrackGpx('t1', '<gpx/>');
+    expect(uri).toBe('file:///doc/tracks/t1.gpx');
+
+    // Both forms name the same file — that is what lets every existing call
+    // site keep passing whatever it holds.
+    expect(fileExists('tracks/t1.gpx')).toBe(true);
+    expect(fileExists(uri)).toBe(true);
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx/>');
+    await expect(readFileText(uri)).resolves.toBe('<gpx/>');
+
+    deleteFileAt('tracks/t1.gpx');
+    expect(fileExists(uri)).toBe(false);
+  });
+
+  it('a reader given a path stranded under an old container still finds the file', async () => {
+    writeTrackGpx('t2', '<gpx>2</gpx>');
+    // deleteFileAt/readFileText do NOT relativise (they only resolve), so a
+    // stale absolute path is still a miss here — healing is the migration's
+    // job, on hydrate. Assert that boundary rather than pretend otherwise.
+    expect(fileExists(`${OLD_CONTAINER}/tracks/t2.gpx`)).toBe(false);
+    expect(fileExists(toDocumentPath(`${OLD_CONTAINER}/tracks/t2.gpx`))).toBe(true);
   });
 });

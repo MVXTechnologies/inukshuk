@@ -4,6 +4,9 @@ import { useLibraryStore } from './libraryStore';
 jest.mock('@data/storage', () => {
   let n = 0;
   return {
+    ...jest
+      .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+      .documentPathMocks(),
     newId: () => `id_${++n}`,
     ensureStorage: jest.fn(),
     deleteFileAt: jest.fn(),

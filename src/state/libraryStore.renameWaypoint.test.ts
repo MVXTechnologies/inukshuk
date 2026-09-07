@@ -3,6 +3,9 @@ import type { Waypoint } from '@core/models';
 import { useLibraryStore } from './libraryStore';
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   newId: () => 'r_' + Math.random().toString(36).slice(2, 8),
   deleteFileAt: jest.fn(),
   writeJson: jest.fn(),

@@ -1,4 +1,5 @@
 import type { Folder, GeoReference, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 
 /**
@@ -14,7 +15,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 5;
+export const LIBRARY_SCHEMA_VERSION = 6;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -162,6 +163,14 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // pre-v5 map by definition (the store didn't exist), so this is a pure
   // version-stamp bump; the fields ride through normalizeMapDoc when present.
   4: (doc) => ({ ...doc, schemaVersion: 5 }),
+  // v5 → v6: stored file paths (`fileUri`, `photoUri`) became **document
+  // relative** — `tracks/<id>.gpx` instead of an absolute
+  // `file:///…/Application/<UUID>/Documents/tracks/<id>.gpx` (#247). iOS
+  // rotates that UUID on every app update, so absolute paths went stale and
+  // every trail, map and photo looked lost. A pure version stamp here: the
+  // rewrite itself runs in the sanitize pass below, which is idempotent and so
+  // also heals a v6 index written with a stray absolute path.
+  5: (doc) => ({ ...doc, schemaVersion: 6 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -170,16 +179,56 @@ function recordsWithId<T extends { id: string }>(value: unknown): T[] {
 }
 
 /**
+ * Apply `map` to every stored file path in an index — the maps' `fileUri`, the
+ * trails' `fileUri`, their notes' `photoUri`, and standalone waypoints'
+ * `photoUri`. **This is the complete list of persisted paths in
+ * `library.json`**; anything new that stores a path must be added here, or it
+ * will go stale on the next iOS container rotation (#247).
+ *
+ * Used in both directions: relativised on the way to disk, resolved against
+ * the current document directory on the way back.
+ */
+export function mapLibraryIndexPaths(
+  index: LibraryIndex,
+  map: (path: string) => string,
+): LibraryIndex {
+  return {
+    ...index,
+    maps: index.maps.map((m) => ({ ...m, fileUri: map(m.fileUri) })),
+    tracks: index.tracks.map((t) => ({
+      ...t,
+      fileUri: map(t.fileUri),
+      ...(t.notes
+        ? {
+            notes: t.notes.map((n) =>
+              n.photoUri === undefined ? n : { ...n, photoUri: map(n.photoUri) },
+            ),
+          }
+        : {}),
+    })),
+    waypoints: index.waypoints.map((w) =>
+      w.photoUri === undefined ? w : { ...w, photoUri: map(w.photoUri) },
+    ),
+  };
+}
+
+/**
  * Migrate a raw parsed `library.json` (any version, or junk) to the current
  * {@link LibraryIndex}. Never throws; dangling `activeTrackIds` / `activeMapId`
  * references are pruned so deleted items can't leak back in as overlays.
+ *
+ * `documentDir` (the app document directory as a `file://` uri) lets the path
+ * pass strip the *current* container's prefix as well as a rotated one; it is
+ * optional so the migration stays pure and callable from tests. Paths that are
+ * absolute but under no document directory are left exactly as they are —
+ * they are not ours to rewrite (the caller logs them).
  */
-export function migrateLibraryIndex(raw: unknown): LibraryIndex {
+export function migrateLibraryIndex(raw: unknown, documentDir?: string): LibraryIndex {
   const doc = runLadder(asRecord(raw), LIBRARY_UPGRADERS, LIBRARY_SCHEMA_VERSION);
   const maps = asArray(doc.maps).filter(isRecord).map(normalizeMapDoc);
   const tracks = recordsWithId<TrackSummary>(doc.tracks);
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
-  return {
+  const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps,
     tracks,
@@ -203,6 +252,10 @@ export function migrateLibraryIndex(raw: unknown): LibraryIndex {
       (c) => typeof c.name === 'string' && c.name.trim() !== '' && typeof c.color === 'string',
     ),
   };
+  // #247 — runs on EVERY load, not just the v5→v6 step: the population that
+  // needs healing is already at v5/v6 with absolute paths burned in, and the
+  // rewrite is idempotent so a second pass costs nothing.
+  return mapLibraryIndexPaths(index, (path) => toDocumentRelativePath(path, documentDir));
 }
 
 // --- settings.json -----------------------------------------------------------

@@ -4,9 +4,11 @@ import { toggleId } from '@core/library/toggleId';
 import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
+  mapLibraryIndexPaths,
   migrateLibraryIndex,
   type LibraryIndex,
 } from '@core/library/migrations';
+import { isAbsolutePath } from '@core/storage/documentPaths';
 import { removeNoteById } from '@core/library/notes';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
@@ -153,7 +155,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
   // initial state and wipe the on-disk library. Callers that can run that early
   // must `await hydrate()` first; this guard is the backstop.
   if (!state.hydrated) return;
-  storage.writeIndex({
+  const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps: state.maps,
     tracks: state.tracks,
@@ -164,7 +166,38 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     activeTrackIds: state.activeTrackIds,
     customCategories: state.customCategories,
     waypoints: state.waypoints,
-  } satisfies LibraryIndex);
+  };
+  // #247 — the store holds ABSOLUTE uris (every consumer, from <Image> to
+  // Sharing to the GPX reader, wants one), but the index on disk must hold
+  // document-RELATIVE paths: iOS rotates the container UUID on app updates and
+  // an absolute path written by the previous build points at nothing.
+  // Relativising here, and resolving in `hydrate`, keeps that translation in
+  // exactly one place per direction.
+  storage.writeIndex(mapLibraryIndexPaths(index, storage.toDocumentPath));
+}
+
+/**
+ * Turn a just-migrated index's document-relative paths back into absolute uris
+ * against the CURRENT container (#247) — the form every consumer expects.
+ *
+ * A path that is still absolute here is one the migration deliberately left
+ * alone: it lives under no document directory, so we have no basis to rewrite
+ * it. Warn rather than mangle it — that is the shape a genuinely foreign path
+ * (or a future bug) would take, and it should be visible in the logs.
+ */
+function resolveStoredPaths(index: LibraryIndex): LibraryIndex {
+  const foreign: string[] = [];
+  const resolved = mapLibraryIndexPaths(index, (path) => {
+    if (path !== '' && isAbsolutePath(path)) foreign.push(path);
+    return storage.resolveDocumentPath(path);
+  });
+  if (foreign.length > 0) {
+    console.warn(
+      `[library] ${foreign.length} stored path(s) outside the document directory, left as-is:`,
+      foreign.slice(0, 3),
+    );
+  }
+  return resolved;
 }
 
 /** The persisted summary for a freshly imported/recorded trail. */
@@ -215,7 +248,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       if (raw) {
         // Route every load through the schema-version migration ladder: legacy
         // unversioned indexes are normalized, junk is dropped, never throws.
-        const { schemaVersion: _v, ...index } = migrateLibraryIndex(raw);
+        // The ladder also relativises stored paths (#247), healing an index
+        // written under a container UUID iOS has since rotated away.
+        const { schemaVersion: _v, ...index } = resolveStoredPaths(
+          migrateLibraryIndex(raw, storage.documentDirUri()),
+        );
         set({ ...index, hydrated: true });
       } else {
         set({ hydrated: true });
