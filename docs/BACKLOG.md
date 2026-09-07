@@ -178,7 +178,7 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
 
 ## On ice
 
-- **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
+- **iOS map performance** — THAW: reproducible symptom filed 2026-09-06 as #230 (map/relief stutter on zoom-out, satellite smooth; hillshade layer suspected). Was paused 2026-08-08 (owner had no iPhone access for
   the two diagnostic readings). Findings so far: simulator JS rates clean
   (~1 render/s while panning); Samsung error queue was a red herring; the
   iPhone TestFlight build has the dead ERROR_REPORT_TOKEN baked in, so iOS
