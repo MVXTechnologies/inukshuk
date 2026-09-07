@@ -142,6 +142,19 @@ store Documents-relative paths, resolve on read, migrate on hydrate; OTA-able.
 Android container paths are stable; the Android auto-reports are a different
 cause. #127 (iOS pack shows 0 KB) is plausibly the same class.
 
+## Queued (owner requests, 2026-09-06)
+
+1. **BUG — PDF maps cannot be hidden any more** (#233): the "PDF maps" master
+   switch vanished in the overlays drill-down (#201); `togglePdfOverlay` is
+   orphaned. Restore the row, persist it, and make the overlay list follow the
+   folder selection. Regression — fix first.
+2. **Waypoint placement by tapping the map** (#232): place a waypoint somewhere
+   other than the current position. Long-press is taken by the destination pin
+   (#224) — needs a placement mode (crosshair + confirm recommended).
+3. **Place search** (#231): type a place name, fly there. Extend the "Go to
+   coordinates" dialog from #224 with a Nominatim-backed name lookup; privacy
+   policy needs a bullet before it ships.
+
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
 Design packages live in `docs/plans/`. Shipped 2026-08-08/09 (all OTA'd to
