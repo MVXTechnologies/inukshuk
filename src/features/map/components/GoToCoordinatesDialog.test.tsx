@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { GoToCoordinatesDialog } from './GoToCoordinatesDialog';
 
@@ -63,6 +64,32 @@ describe('GoToCoordinatesDialog', () => {
     // Whole seconds ≈ 30 m, which is the tolerance the notation itself carries.
     expect(at.latitude).toBeCloseTo(46.8139, 3);
     expect(at.longitude).toBeCloseTo(-71.2082, 3);
+  });
+
+  // #235 — on iOS the Return key is the ONLY way out of a single-line field,
+  // so it has to be wired; here the useful thing for it to do is the dialog's
+  // primary action, and it must put the keyboard away either way.
+  it('goes on Return, and always dismisses the keyboard', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+    const handlers = await setup();
+    await screen.findByText('Go');
+    await type('46.8139, -71.2082');
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Go to coordinates'), 'submitEditing');
+    });
+    expect(handlers.onGo).toHaveBeenCalledTimes(1);
+    expect(dismiss).toHaveBeenCalled();
+
+    // A box that does not parse must not fly the camera anywhere — but the
+    // user still gets the keyboard back off the screen.
+    dismiss.mockClear();
+    await type('somewhere over there');
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Go to coordinates'), 'submitEditing');
+    });
+    expect(handlers.onGo).toHaveBeenCalledTimes(1);
+    expect(dismiss).toHaveBeenCalled();
+    dismiss.mockRestore();
   });
 
   it('refuses garbage instead of guessing, and says why', async () => {

@@ -25,7 +25,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -39,6 +39,9 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
@@ -742,6 +745,28 @@ export function Trail3DGLScreen({ trackId }: Props) {
     }
   };
 
+  /**
+   * #235 — leave the note editor with the keyboard already down. Unmounting
+   * the field's input accessory view while iOS still holds a live keyboard
+   * leaves a dangling accessory (it reproducibly crashed XCUITest's hierarchy
+   * snapshot), and it looks better besides.
+   */
+  // #235 — Paper centres the dialog and its Modal defeats KeyboardAvoidingView,
+  // so with the keyboard (plus the Done bar) up, Cancel/Save sat underneath it.
+  // Shifting by the measured height is the same fix the waypoint editor and the
+  // coordinate dialog already carry.
+  const noteKeyboardHeight = useIosKeyboardHeight();
+
+  const closeNoteEditor = () => {
+    Keyboard.dismiss();
+    setEditing(null);
+  };
+
+  const commitNote = () => {
+    Keyboard.dismiss();
+    void commit();
+  };
+
   const commit = async () => {
     const text = draft.trim();
     if (!editing || !text) {
@@ -1137,38 +1162,54 @@ export function Trail3DGLScreen({ trackId }: Props) {
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={editing !== null} onDismiss={() => setEditing(null)}>
+        {/* #235 — every exit from this dialog puts the keyboard away first;
+            unmounting the note field's accessory bar under a live keyboard
+            leaves a dangling accessory (see WaypointEditorDialog's `close`). */}
+        <Dialog
+          visible={editing !== null}
+          onDismiss={closeNoteEditor}
+          style={noteKeyboardHeight > 0 ? { marginBottom: noteKeyboardHeight } : null}
+        >
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
-            <TextInput
-              label="Note"
-              value={draft}
-              onChangeText={setDraft}
-              autoFocus
-              multiline
-              mode="outlined"
-            />
-            {draftPhoto ? (
-              <View style={styles.photoPreviewWrap}>
-                <Image source={{ uri: draftPhoto }} style={styles.photoPreview} />
-                <Button compact icon="image-remove" onPress={() => setDraftPhoto(null)}>
-                  Remove photo
-                </Button>
-              </View>
-            ) : (
-              <View style={styles.photoButtons}>
-                <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
-                  Photo
-                </Button>
-                <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
-                  Camera
-                </Button>
-              </View>
-            )}
+            <KeyboardDismissArea>
+              <TextInput
+                label="Note"
+                value={draft}
+                onChangeText={setDraft}
+                autoFocus
+                multiline
+                mode="outlined"
+                // #235 — Return inserts a newline in a multiline field, so iOS
+                // has no way out without the shared accessory bar's Done.
+                inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
+              />
+              {draftPhoto ? (
+                <View style={styles.photoPreviewWrap}>
+                  <Image source={{ uri: draftPhoto }} style={styles.photoPreview} />
+                  <Button compact icon="image-remove" onPress={() => setDraftPhoto(null)}>
+                    Remove photo
+                  </Button>
+                </View>
+              ) : (
+                <View style={styles.photoButtons}>
+                  <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
+                    Photo
+                  </Button>
+                  <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
+                    Camera
+                  </Button>
+                </View>
+              )}
+            </KeyboardDismissArea>
+            {/* Mounted with the dialog, not at the app root — see the note in
+                WaypointEditorDialog: the native accessory binds to its field
+                once, when it moves to the window. */}
+            <KeyboardDoneBar />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setEditing(null)}>Cancel</Button>
-            <Button onPress={commit} disabled={!draft.trim()}>
+            <Button onPress={closeNoteEditor}>Cancel</Button>
+            <Button onPress={commitNote} disabled={!draft.trim()}>
               Save
             </Button>
           </Dialog.Actions>

@@ -16,7 +16,8 @@ import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import type { UiStyle } from '@ui/theme';
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { Image, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -229,7 +230,11 @@ export function SettingsScreen() {
         <Appbar.Content title="Settings" />
       </Appbar.Header>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Five collapsible categories (owner's grouping, backlog item 4);
             AccordionGroup keeps one open at a time. Each body is a single
             View: Paper clones a paddingLeft onto direct accordion children
@@ -587,21 +592,29 @@ export function SettingsScreen() {
         <Dialog visible={tileDialogVisible} onDismiss={() => setTileDialogVisible(false)}>
           <Dialog.Title>Base map tiles</Dialog.Title>
           <Dialog.Content>
-            <TextInput
-              label="Tile URL template"
-              value={tileDraft}
-              onChangeText={setTileDraft}
-              mode="outlined"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder={DEFAULT_TILE_URL}
-            />
-            <HelperText type={draftValid ? 'info' : 'error'} visible>
-              {draftValid
-                ? 'Leave empty to use the default OpenStreetMap tiles.'
-                : 'Must start with http(s):// and contain {z}, {x} and {y} placeholders.'}
-            </HelperText>
+            <KeyboardDismissArea>
+              <TextInput
+                label="Tile URL template"
+                value={tileDraft}
+                onChangeText={setTileDraft}
+                mode="outlined"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder={DEFAULT_TILE_URL}
+                // #235 — Return puts the keyboard away; Save stays an explicit
+                // tap because an unvalidated template must not be committed by
+                // a stray Return.
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
+              />
+              <HelperText type={draftValid ? 'info' : 'error'} visible>
+                {draftValid
+                  ? 'Leave empty to use the default OpenStreetMap tiles.'
+                  : 'Must start with http(s):// and contain {z}, {x} and {y} placeholders.'}
+              </HelperText>
+            </KeyboardDismissArea>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setTileDialogVisible(false)}>Cancel</Button>

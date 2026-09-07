@@ -99,7 +99,11 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
         <Text variant="titleMedium" style={styles.title}>
           What are you recording?
         </Text>
-        <ScrollView style={styles.chipScroll}>
+        <ScrollView
+          style={styles.chipScroll}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.chipWrap}>
             {categories.map((c) => {
               const isSelected = c.id === selectedId;
@@ -151,6 +155,9 @@ function SheetContent({ onStart, onDismiss }: Omit<Props, 'visible'>) {
               dense
               autoFocus
               maxLength={MAX_CATEGORY_NAME_LENGTH + 8}
+              // #235 — Return dismisses the keyboard and adds the category.
+              returnKeyType="done"
+              blurOnSubmit
               onSubmitEditing={commitNewCategory}
               error={nameError !== null}
             />

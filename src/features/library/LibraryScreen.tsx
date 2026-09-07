@@ -19,7 +19,7 @@ import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -1014,6 +1014,11 @@ export function LibraryScreen() {
           onIconPress={closeSearch}
           icon="arrow-left"
           autoFocus
+          // #235 — the search key is this field's iOS exit: the list is
+          // already live-filtered, so Return only needs to free the screen.
+          returnKeyType="search"
+          blurOnSubmit
+          onSubmitEditing={() => Keyboard.dismiss()}
           style={styles.searchbar}
           accessibilityLabel="Search trails by name or folder"
         />
@@ -1026,6 +1031,8 @@ export function LibraryScreen() {
         scrollEventThrottle={32}
         onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
       >
         {maps.length === 0 && tracks.length === 0 && (
           <Banner visible icon="map-search-outline" style={styles.banner}>
