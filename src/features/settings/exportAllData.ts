@@ -1,4 +1,5 @@
 import { dataArchiveName, type ArchivePlan } from '@core/export/archivePlan';
+import { migrateLibraryIndex } from '@core/library/migrations';
 import * as storage from '@data/storage';
 import * as Sharing from 'expo-sharing';
 import { strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
@@ -73,7 +74,13 @@ export async function exportAllData(
       if (zipError) throw zipError;
     };
 
-    const indexText = (await storage.readIndexText()) ?? JSON.stringify(fallbackIndex);
+    // The on-disk index is packed verbatim (it is already document-relative,
+    // #247). The in-memory fallback holds absolute uris, so run it through the
+    // same migration the persist path applies — a backup naming files under a
+    // container UUID that no longer exists would restore to nothing.
+    const indexText =
+      (await storage.readIndexText()) ??
+      JSON.stringify(migrateLibraryIndex(fallbackIndex, storage.documentDirUri()));
     const indexEntry = new ZipDeflate('library.json', { level: 6 });
     zip.add(indexEntry);
     indexEntry.push(strToU8(indexText), true);
