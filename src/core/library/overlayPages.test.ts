@@ -83,6 +83,28 @@ describe('defaultActivePages', () => {
   });
 });
 
+/**
+ * A page whose corners never left the PDF's projected CRS — the shape every
+ * CanTopo sheet persisted before #243: real georeferencing, in metres.
+ */
+function unplaceable(pageIndex: number, sourceCrs?: string): GeoReference {
+  const corners = {
+    topLeft: [300848, 5236961] as [number, number],
+    topRight: [351625, 5236961] as [number, number],
+    bottomRight: [351625, 5202313] as [number, number],
+    bottomLeft: [300848, 5202313] as [number, number],
+  };
+  return {
+    pageIndex,
+    source: 'lgidict',
+    ...(sourceCrs === undefined ? {} : { sourceCrs }),
+    pageWidthPt: 2880,
+    pageHeightPt: 2016,
+    viewport: { rect: { x0: 0, y0: 0, x1: 2484, y1: 1678 }, corners },
+    bbox: { minLng: 300848, minLat: 5202313, maxLng: 351625, maxLat: 5236961 },
+  };
+}
+
 describe('georeferenceNotice', () => {
   it('explains, in plain language, that an ungeoreferenced PDF cannot be placed', () => {
     expect(georeferenceNotice({ georeferences: [] })).toBe(NO_GEOREFERENCE_NOTICE);
@@ -90,5 +112,37 @@ describe('georeferenceNotice', () => {
 
   it('is silent for a map that has georeferenced pages', () => {
     expect(georeferenceNotice({ georeferences: [geo(0, 600)] })).toBeNull();
+  });
+
+  it('names the projection it cannot place instead of showing page counts', () => {
+    expect(georeferenceNotice({ georeferences: [unplaceable(0, 'Polyconic, datum NAD27')] })).toBe(
+      'Map projection not supported (Polyconic, datum NAD27) — cannot be placed on the map',
+    );
+  });
+
+  it('says so even for a map imported before the CRS was recorded', () => {
+    // Migration decision (#243): hydrate does NOT re-derive these. The raw
+    // projection was never persisted and projected metres alone cannot identify
+    // it — 300848/5202313 is a UTM easting/northing in *some* zone, and nothing
+    // stored says which. Such a map keeps its (unusable) georeference, says why
+    // it cannot be drawn, and must be re-imported or re-downloaded to be fixed.
+    expect(georeferenceNotice({ georeferences: [unplaceable(0)] })).toBe(
+      'Map projection not supported — cannot be placed on the map',
+    );
+  });
+
+  it('stays silent when at least one page CAN be drawn', () => {
+    // A mixed document still shows its counts: the placeable page draws.
+    expect(georeferenceNotice({ georeferences: [unplaceable(0, 'x'), geo(1, 600)] })).toBeNull();
+  });
+
+  it('judges the PRIMARY viewport, not a decorative inset', () => {
+    // The CanTopo layout: a placeable little MGRS legend box beside a map frame
+    // in an unresolvable projection. The sheet is unplaceable, and must say so
+    // rather than be excused by its legend.
+    const legend = { ...geo(0, 60), sourceCrs: 'Geographic lon/lat (WGS 84)' };
+    expect(georeferenceNotice({ georeferences: [legend, unplaceable(0, 'Polyconic')] })).toBe(
+      'Map projection not supported (Polyconic) — cannot be placed on the map',
+    );
   });
 });

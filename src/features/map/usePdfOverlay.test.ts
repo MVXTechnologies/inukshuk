@@ -1,5 +1,5 @@
 import type { GeoReference, MapDocument } from '@core/models';
-import { activeTargets } from './usePdfOverlay';
+import { activeTargets, describeSourceCrs } from './usePdfOverlay';
 
 jest.mock('expo-file-system', () => ({ File: class {} }));
 jest.mock('@data/storage', () => ({}));
@@ -55,5 +55,21 @@ describe('activeTargets', () => {
   it('skips maps with no file and pages with no georeference', () => {
     expect(activeTargets([{ ...mapDoc([0], [viewport(0, 540)]), fileUri: '' }])).toEqual([]);
     expect(activeTargets([mapDoc([7], [viewport(0, 540)])])).toEqual([]);
+  });
+});
+
+describe('describeSourceCrs', () => {
+  // A skipped page must reach the error report NAMED (#243): with no CRS in the
+  // message, an unsupported source is indistinguishable from a corrupt file,
+  // which is how 2,234 CanTopo sheets stayed undrawable and unreported.
+  it('prefers the recorded CRS string', () => {
+    expect(
+      describeSourceCrs({ ...viewport(0, 540), sourceCrs: 'NAD83 / UTM zone 19N (EPSG:26919)' }),
+    ).toBe('NAD83 / UTM zone 19N (EPSG:26919)');
+  });
+
+  it('falls back to the EPSG code, then to an explicit "unknown"', () => {
+    expect(describeSourceCrs({ ...viewport(0, 540), sourceEpsg: 26919 })).toBe('EPSG:26919');
+    expect(describeSourceCrs(viewport(0, 540))).toBe('unknown CRS');
   });
 });

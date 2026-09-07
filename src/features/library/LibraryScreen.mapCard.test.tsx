@@ -155,6 +155,37 @@ it('explains an ungeoreferenced PDF instead of showing an empty section', async 
   expect(view.queryAllByRole('checkbox')).toHaveLength(0);
 });
 
+it('names the projection of a sheet it cannot place, instead of a page count', async () => {
+  // #243: a CanTopo sheet whose corners stayed in NAD83 / UTM metres. Before
+  // the fix the card read "1 page(s) · 1/1 shown" over a map the overlay
+  // silently skipped — the count was the lie.
+  const unplaceable: GeoReference = {
+    ...geo(0),
+    source: 'lgidict',
+    sourceEpsg: 26919,
+    sourceCrs: 'NAD83 / UTM zone 19N (EPSG:26919)',
+    viewport: {
+      rect: { x0: 0, y0: 0, x1: 2484, y1: 1678 },
+      corners: {
+        topLeft: [300848, 5236961],
+        topRight: [351625, 5236961],
+        bottomRight: [351625, 5202313],
+        bottomLeft: [300848, 5202313],
+      },
+    },
+    bbox: { minLng: 300848, minLat: 5202313, maxLng: 351625, maxLat: 5236961 },
+  };
+  const view = await show(
+    mapDoc({ name: 'CanTopo 021G14', georeferences: [unplaceable], activePages: [0] }),
+  );
+  expect(
+    view.getByText(
+      'Map projection not supported (NAD83 / UTM zone 19N (EPSG:26919)) — cannot be placed on the map',
+    ),
+  ).toBeOnTheScreen();
+  expect(view.queryByText('1 page(s) · 1/1 shown')).toBeNull();
+});
+
 it('toggling a page updates activePages', async () => {
   const view = await show(
     mapDoc({ pageCount: 2, georeferences: [geo(0), geo(1)], activePages: [0, 1] }),
