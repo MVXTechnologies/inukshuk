@@ -19,7 +19,11 @@ describe('KeyboardDoneBar on iOS', () => {
         <KeyboardDoneBar />
       </PaperProvider>,
     );
-    fireEvent.press(await screen.findByLabelText('Done'));
+    // Reads "Done"; announced as "Hide keyboard" so it never collides with
+    // the waypoint dialog's own "Done" save button (waypoint.yaml taps that
+    // one on iOS with the keyboard still up).
+    expect(await screen.findByText('Done')).toBeOnTheScreen();
+    fireEvent.press(screen.getByLabelText('Hide keyboard'));
     expect(dismiss).toHaveBeenCalled();
     dismiss.mockRestore();
   });
