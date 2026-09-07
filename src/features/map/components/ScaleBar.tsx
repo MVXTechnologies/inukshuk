@@ -4,13 +4,15 @@ import { StyleSheet, View } from 'react-native';
 import { Surface, Text, useTheme } from 'react-native-paper';
 
 /**
- * The map scale bar, docked under the compass badge in the top-left column.
+ * The map scale bar, bottom-left (owner call, 2026-09-08; #97 had originally
+ * docked it under the compass badge, believing that corner was reserved for
+ * the recording HUD).
  *
- * Placement: the compass and the scale are the map's two *reference*
- * instruments, so they read as one small stack. The bottom-left corner — the
- * cartographic default — was deliberately cleared of chrome (the old
- * logo/attribution) and now belongs to the recording HUD, so nothing new goes
- * back there.
+ * Placement: the bottom-left corner is the cartographic default and reads as
+ * the scale's home. It is NOT absolutely positioned there — MapScreen mounts
+ * it as the top item of the bottom chrome column, so when the recording HUD,
+ * the marine legend or the weather dock are up the bar rides above them
+ * instead of sharing the corner with them.
  *
  * It updates on camera SETTLE, not during the gesture: `onRegionIsChanging`
  * fires at gesture rate and every event here would re-render the whole

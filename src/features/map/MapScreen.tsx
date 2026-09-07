@@ -1994,13 +1994,6 @@ export function MapScreen() {
           rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
         <CompassBadge onPress={resetNorth} />
-        {/* Scale bar (#97), docked under the compass: the map's two reference
-            instruments read as one stack, and the bottom-left corner stays
-            clear — it was deliberately emptied of chrome and now belongs to
-            the recording HUD. 2D only; the 3D view has no Mercator zoom. */}
-        {showScaleBar && !terrain3d && scaleAt !== null && (
-          <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
-        )}
       </View>
 
       {/* Mandatory marine notice (marine M3): whenever a marine layer is
@@ -2130,6 +2123,18 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View style={styles.bottom} pointerEvents="box-none">
+        {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
+            under the compass). It is the FIRST child of the bottom chrome
+            COLUMN rather than absolutely positioned in the corner, so it
+            stacks ABOVE the recording bar, the marine legend and the weather
+            dock instead of colliding with them; with none of those up it sits
+            just above the tab bar, in the cartographic corner. 2D only; the
+            3D view has no Mercator zoom. */}
+        {showScaleBar && !terrain3d && scaleAt !== null && (
+          <View style={styles.scaleBarSlot} pointerEvents="none">
+            <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+          </View>
+        )}
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
         {!selecting && status !== 'idle' && (
@@ -2415,8 +2420,9 @@ export function MapScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  // Column: compass badge, then the scale bar under it (#97).
-  topLeft: { position: 'absolute', left: 12, gap: 8, alignItems: 'flex-start' },
+  // Top-left instrument column: the compass badge alone since the scale bar
+  // moved to the bottom-left corner — no gap left floating under it.
+  topLeft: { position: 'absolute', left: 12, alignItems: 'flex-start' },
   // Centred between the compass (left) and the controls rail (right).
   marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
   // Same free top-centre lane, used by the destination readout (#97).
@@ -2426,6 +2432,9 @@ const styles = StyleSheet.create({
   // Collapsed: center-align the pill against the (bigger) icon buttons so
   // they visibly pop out of the bar (item 3).
   recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // The scale bar keeps the column's left edge and shrinks to its own width
+  // (the column itself is full-bleed for the recording bar and the dock).
+  scaleBarSlot: { alignItems: 'flex-start' },
   // The HUD yields width before the record buttons do (see the guard's
   // comment at the call site).
   hudShrink: { flexShrink: 1 },
