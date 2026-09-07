@@ -353,6 +353,8 @@ export function MapScreen() {
   // would re-render this whole tree per frame — see ScaleBar's own note. The
   // setter collapses no-op updates so a pan along a parallel costs nothing.
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
+  /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
   const [scaleAt, setScaleAt] = useState<{ zoom: number; latitude: number } | null>(null);
   const updateScaleAt = useCallback((zoom: number, latitude: number) => {
     setScaleAt((prev) =>
@@ -555,10 +557,11 @@ export function MapScreen() {
           }
         : {}),
     };
-    return buildOsmStyle(tileUrl, false, basemap, true, options);
+    return buildOsmStyle(tileUrl, false, basemap, showHillshade, options);
   }, [
     tileUrl,
     basemap,
+    showHillshade,
     offlineOnly,
     offlineRegions,
     theme.dark,

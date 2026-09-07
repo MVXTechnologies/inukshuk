@@ -100,6 +100,7 @@ export function SettingsScreen() {
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
   const rotateMap = useSettingsStore((s) => s.rotateMapWithHeading);
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
   const windParticles = useSettingsStore((s) => s.windParticles);
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
@@ -329,6 +330,18 @@ export function SettingsScreen() {
                   description="Distance reference under the compass"
                   right={() => (
                     <Switch value={showScaleBar} onValueChange={(v) => set('showScaleBar', v)} />
+                  )}
+                />
+                {/* #230: the A/B switch for the under-map hillshade. Defaults
+                    per platform (off on iOS while the zoom-out stutter is
+                    unmeasured — see DEFAULT_SHOW_HILLSHADE) and is meant to be
+                    toggled on the device, not admired: one row, no new map
+                    chrome. */}
+                <List.Item
+                  title="Shaded relief"
+                  description="Hillshade under the Map and Relief basemaps"
+                  right={() => (
+                    <Switch value={showHillshade} onValueChange={(v) => set('showHillshade', v)} />
                   )}
                 />
                 {/* PARKED with the weather feature (see
