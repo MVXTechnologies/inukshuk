@@ -12,7 +12,6 @@ import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
-import { KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { resolveTheme } from '@ui/theme';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -70,11 +69,6 @@ export default function RootLayout() {
               </Stack>
               <ImportFeedbackSnackbar />
               <StravaPushPrompt />
-              {/* #235 — the iOS "Done" key. One app-wide instance: the native
-                  accessory id is global and WaypointEditorDialog alone is
-                  mounted twice over (map + library). Renders nothing on
-                  Android and nothing on iOS until a field asks for it. */}
-              <KeyboardDoneBar />
             </PdfRasterizerProvider>
           </ErrorBoundary>
         </PaperProvider>

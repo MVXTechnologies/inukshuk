@@ -40,7 +40,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
-import { KEYBOARD_DONE_BAR_ID } from '@ui/components/KeyboardDoneBar';
+import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
@@ -1172,6 +1172,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
                 </View>
               )}
             </KeyboardDismissArea>
+            {/* Mounted with the dialog, not at the app root — see the note in
+                WaypointEditorDialog: the native accessory binds to its field
+                once, when it moves to the window. */}
+            <KeyboardDoneBar />
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setEditing(null)}>Cancel</Button>

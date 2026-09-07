@@ -27,14 +27,21 @@ import { Button, useTheme } from 'react-native-paper';
 export const KEYBOARD_DONE_BAR_ID = 'inukshuk-keyboard-done';
 
 /**
- * Mounted ONCE, app-wide, from `app/_layout.tsx` — not per screen.
+ * Mount this INSIDE the dialog/screen that owns the field, after the field
+ * itself — never once at the app root.
  *
- * `InputAccessoryView` registers its content under a native id that is global
- * to the app, and `WaypointEditorDialog` alone is mounted by both MapScreen
- * and LibraryScreen at the same time (both live in the tab stack). Two live
- * views claiming one id is undefined behaviour, so there is exactly one
- * instance and every field simply points at it. It renders offscreen until a
- * field that references it takes focus, so a root mount costs nothing.
+ * On the New Architecture `RCTInputAccessoryComponentView` binds to its text
+ * input exactly once, in `didMoveToWindow`, by walking the window for a field
+ * whose `inputAccessoryViewID` matches; there is no later retry. A bar mounted
+ * at launch therefore finds no field and silently does nothing — the keyboard
+ * comes up bare, which is the bug we are fixing. Mounted with the dialog, the
+ * field is already in the window when the bar lands, and the two find each
+ * other. Paper's Modal renders nothing while hidden, so only the open dialog's
+ * bar is ever live and the shared id is never claimed twice.
+ *
+ * NOT needed for numeric fields: RN builds its own Done toolbar for number
+ * pads straight from `returnKeyType`, and skips doing so if the field carries
+ * an `inputAccessoryViewID`. Give those `returnKeyType` alone.
  */
 export function KeyboardDoneBar() {
   // InputAccessoryView is iOS-only; on Android the platform's own back gesture

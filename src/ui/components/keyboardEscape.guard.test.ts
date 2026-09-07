@@ -12,10 +12,12 @@ import { join, resolve } from 'node:path';
  *
  * - **multiline** — Return types a newline, so the ONLY exit is the shared
  *   accessory bar: it must carry `inputAccessoryViewID`.
- * - **numeric / decimal / phone pads** — those iOS keyboards have no Return
- *   key at all, so they need the accessory bar too.
- * - **anything else** (single line) — Return is the exit, so it must declare
- *   `returnKeyType` (and, being single-line, blur on submit by default).
+ * - **everything else** (single line, number pads included) — it must declare
+ *   `returnKeyType`. On a normal keyboard that IS the Return key; on a number
+ *   pad, which has no Return key, `returnKeyType` is what makes RN synthesise
+ *   its own Done toolbar (`setDefaultInputAccessoryView`) — which it refuses
+ *   to do if the field also carries an `inputAccessoryViewID`, so number pads
+ *   must NOT have one.
  *
  * A field may of course have both. If this test fails on a field you just
  * added, the fix is one prop — see `KeyboardDoneBar.tsx`.
@@ -55,6 +57,11 @@ interface Field {
  * `{}` nesting, which keeps inline arrow bodies (`onSubmitEditing={() => …}`)
  * from ending the element early.
  */
+/** Drop `//` and block comments so prose never counts as a prop. */
+function stripComments(jsx: string): string {
+  return jsx.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
 function fieldsIn(file: string): Field[] {
   const src = readFileSync(file, 'utf8');
   const found: Field[] = [];
@@ -74,7 +81,10 @@ function fieldsIn(file: string): Field[] {
       file: file.slice(REPO_ROOT.length + 1),
       line: src.slice(0, m.index).split('\n').length,
       tag,
-      props: src.slice(m.index, i),
+      // Comments are stripped: several of these fields carry a note ABOUT
+      // `inputAccessoryViewID` explaining why they must not have one, and a
+      // scanner that reads prose would take that as the prop itself.
+      props: stripComments(src.slice(m.index, i)),
     });
   }
   return found;
@@ -95,14 +105,17 @@ describe('every text field can be escaped on iOS (#235)', () => {
       const hasAccessory = field.props.includes(ACCESSORY);
       const hasReturnKey = field.props.includes(RETURN_KEY);
       const multiline = /(^|\s)multiline(\s|=|\/|$)/m.test(field.props);
-      const padWithoutReturnKey =
-        /keyboardType=["'{](numeric|decimal-pad|number-pad|phone-pad)/.test(field.props);
+      const numberPad = /keyboardType=["'{](numeric|decimal-pad|number-pad|phone-pad)/.test(
+        field.props,
+      );
 
-      if (multiline || padWithoutReturnKey) {
-        // No Return key exists (or it types a newline) — only the bar frees it.
+      if (multiline) {
+        // Return types a newline here, so the shared bar is the only exit.
         expect(hasAccessory).toBe(true);
       } else {
-        expect(hasAccessory || hasReturnKey).toBe(true);
+        expect(hasReturnKey).toBe(true);
+        // An accessory id on a number pad suppresses RN's own Done toolbar.
+        if (numberPad) expect(hasAccessory).toBe(false);
       }
     },
   );

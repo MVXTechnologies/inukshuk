@@ -5,7 +5,6 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
-import { KEYBOARD_DONE_BAR_ID } from '@ui/components/KeyboardDoneBar';
 import { Button, Chip, Dialog, Icon, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 
 interface Props {
@@ -148,10 +147,12 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
           keyboardType="numeric"
           returnKeyType="done"
           blurOnSubmit
+          // #235 — the iOS numeric pad has no Return key at all. RN builds
+          // its own Done toolbar for number pads when returnKeyType is set
+          // (RCTTextInputComponentView setDefaultInputAccessoryView) — but it
+          // bails out the moment inputAccessoryViewID is present, so these
+          // fields must NOT carry one.
           onSubmitEditing={() => Keyboard.dismiss()}
-          // #235 — the iOS numeric pad has no Return key at all, so these
-          // fields are as trapped as a multiline one: they need the Done bar.
-          inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
           style={styles.rangeInput}
           accessibilityLabel={`${label} minimum`}
         />
@@ -167,10 +168,12 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
           keyboardType="numeric"
           returnKeyType="done"
           blurOnSubmit
+          // #235 — the iOS numeric pad has no Return key at all. RN builds
+          // its own Done toolbar for number pads when returnKeyType is set
+          // (RCTTextInputComponentView setDefaultInputAccessoryView) — but it
+          // bails out the moment inputAccessoryViewID is present, so these
+          // fields must NOT carry one.
           onSubmitEditing={() => Keyboard.dismiss()}
-          // #235 — the iOS numeric pad has no Return key at all, so these
-          // fields are as trapped as a multiline one: they need the Done bar.
-          inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
           style={styles.rangeInput}
           accessibilityLabel={`${label} maximum`}
         />

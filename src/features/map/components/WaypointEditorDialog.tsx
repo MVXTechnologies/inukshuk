@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Image, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
-import { KEYBOARD_DONE_BAR_ID } from '@ui/components/KeyboardDoneBar';
+import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
 
 /**
@@ -121,6 +121,12 @@ export function WaypointEditorDialog({
               </View>
             )}
           </KeyboardDismissArea>
+          {/* Mounted HERE, not at the app root: on the New Architecture
+              RCTInputAccessoryComponentView binds to its text input once, in
+              didMoveToWindow, by searching the window for a field carrying the
+              matching id. A bar mounted before the field exists finds nothing
+              and never retries — so it has to arrive with the dialog. */}
+          <KeyboardDoneBar />
         </Dialog.Content>
         <Dialog.Actions>
           <Button textColor={theme.colors.error} onPress={onDelete}>
