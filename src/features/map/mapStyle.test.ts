@@ -5,8 +5,11 @@ import {
   MARINE_SOUNDINGS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
 } from '@core/geo/mapLayerStack';
-import type { RasterSourceSpecification } from '@maplibre/maplibre-react-native';
-import { buildOsmStyle } from './mapStyle';
+import type {
+  RasterDEMSourceSpecification,
+  RasterSourceSpecification,
+} from '@maplibre/maplibre-react-native';
+import { buildOsmStyle, HILLSHADE_2D_MIN_ZOOM } from './mapStyle';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -51,6 +54,72 @@ describe('buildOsmStyle', () => {
     // no shadedRelief arg — assert that path yields no DEM source/tiles.
     const s = buildOsmStyle(TILE, false, 'relief');
     expect(s.sources.dem).toBeUndefined();
+  });
+
+  /**
+   * #230 — map/relief stutter on zoom-out on iOS, satellite is smooth. The
+   * arithmetic behind these constants lives in `@core/geo/tiles`
+   * ("live-viewport DEM tile load"); this pins the style that spends it.
+   */
+  describe('shaded-relief cost controls (#230)', () => {
+    const hillshade2d = (s: ReturnType<typeof buildOsmStyle>) =>
+      s.layers.find((l) => l.id === 'hillshade-2d');
+
+    it.each(['map', 'relief'] as const)('zoom-gates the %s hillshade at z11', (basemap) => {
+      const layer = hillshade2d(buildOsmStyle(TILE, false, basemap, true));
+      expect(layer).toBeDefined();
+      expect(layer?.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
+      expect(HILLSHADE_2D_MIN_ZOOM).toBe(11);
+    });
+
+    it('ramps the exaggeration up from 0 at the gate so the shading fades in', () => {
+      const layer = hillshade2d(buildOsmStyle(TILE, false, 'map', true));
+      expect(layer?.paint).toMatchObject({
+        'hillshade-exaggeration': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          HILLSHADE_2D_MIN_ZOOM,
+          0,
+          HILLSHADE_2D_MIN_ZOOM + 1,
+          0.45,
+        ],
+      });
+    });
+
+    it('declares the 2D DEM at 512 px — a quarter of the tiles per viewport', () => {
+      const dem = buildOsmStyle(TILE, false, 'map', true).sources
+        .dem as RasterDEMSourceSpecification;
+      expect(dem.tileSize).toBe(512);
+      expect(dem.encoding).toBe('terrarium');
+      expect(dem.maxzoom).toBe(15);
+    });
+
+    it('leaves the 3D terrain DEM at 256 px (there the DEM is the geometry)', () => {
+      const dem = buildOsmStyle(TILE, true, 'map', true).sources
+        .dem as RasterDEMSourceSpecification;
+      expect(dem.tileSize).toBe(256);
+      // ...and the 3D hillshade keeps its flat exaggeration and no zoom gate.
+      const layer = buildOsmStyle(TILE, true, 'map', true).layers.find((l) => l.id === 'hillshade');
+      expect(layer?.minzoom).toBeUndefined();
+      expect(layer?.paint).toMatchObject({ 'hillshade-exaggeration': 0.7 });
+    });
+
+    it('emits NO hillshade layer and NO DEM source when the setting is off', () => {
+      // showHillshade=false must cost zero DEM fetches, not a hidden layer.
+      for (const basemap of ['map', 'relief'] as const) {
+        const s = buildOsmStyle(TILE, false, basemap, false);
+        expect(layerIds(s)).not.toContain('hillshade-2d');
+        expect(s.sources.dem).toBeUndefined();
+        expect(JSON.stringify(s)).not.toContain('elevation-tiles-prod');
+      }
+    });
+
+    it('still shades nothing on satellite, gate or no gate', () => {
+      const s = buildOsmStyle(TILE, false, 'satellite', true);
+      expect(layerIds(s)).not.toContain('hillshade-2d');
+      expect(s.sources.dem).toBeUndefined();
+    });
   });
 
   describe('overzoom (blurry upscaled tiles instead of "map unavailable")', () => {

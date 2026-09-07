@@ -127,6 +127,42 @@ const PASTEL_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
 const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
 
 /**
+ * Camera zoom below which the 2D shaded relief is not drawn — and, because
+ * MapLibre only keeps a source loaded while some layer using it is in range,
+ * below which the DEM is not even FETCHED (#230).
+ *
+ * The owner reported map/relief hitching on zoom-out on iOS while satellite
+ * (the one basemap with no hillshade) stayed smooth. Zooming out does not put
+ * more DEM tiles on screen — a viewport needs the same ~15 of them at z8 as at
+ * z12 — it crosses pyramid LEVELS, and every level crossed is a fresh set of
+ * Terrarium PNGs to fetch, decode and hillshade-prepare. Measured with
+ * {@link zoomOutTileLoad} on a 440x956 phone viewport, one z15 -> z8 pinch-out
+ * cost 105 DEM tiles as shipped in 1.5.0; the gate alone drops that to 60 and
+ * the 512-px declaration below drops it to 30, with a hard zero under z11.
+ *
+ * z11 is roughly "a whole mountain range on screen", where a hillshade carries
+ * almost no information anyway — so this is a free win on every platform, not
+ * an iOS-only workaround.
+ */
+export const HILLSHADE_2D_MIN_ZOOM = 11;
+
+/**
+ * Tile size DECLARED for the 2D shaded-relief DEM source (#230).
+ *
+ * The Terrarium PNGs really are 256 px, but MapLibre's zoom is defined against
+ * a 512-px canonical tile: a source declaring 256 is asked for one level
+ * DEEPER than the camera (camera z12 fetches DEM z13), so it pulls four times
+ * the tiles a 512 declaration would for exactly the same view. Declaring 512
+ * trades half the DEM sample rate — invisible in a soft shading pass blended
+ * UNDER the basemap at exaggeration 0.45 — for a quarter of the tile traffic
+ * and a quarter of the per-tile hillshade prepare work.
+ *
+ * Deliberately NOT applied to the 3D terrain DEM below: there the DEM is the
+ * geometry, and halving its sample rate would visibly flatten the surface.
+ */
+const HILLSHADE_2D_DEM_TILE_SIZE = 512;
+
+/**
  * The raster SOURCE's `maxzoom` per basemap — the highest zoom at which each
  * tile service reliably serves REAL tiles worldwide. Beyond it MapLibre
  * OVERSCALES the deepest real tiles (blurry but correct) instead of fetching,
@@ -446,7 +482,8 @@ export function buildOsmStyle(
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
       encoding: 'terrarium',
-      tileSize: 256,
+      // See HILLSHADE_2D_DEM_TILE_SIZE: a quarter of the tiles per view.
+      tileSize: HILLSHADE_2D_DEM_TILE_SIZE,
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
@@ -454,8 +491,20 @@ export function buildOsmStyle(
       id: 'hillshade-2d',
       type: 'hillshade',
       source: 'dem',
+      // The zoom gate (#230) — no shading, and no DEM traffic at all, below it.
+      minzoom: HILLSHADE_2D_MIN_ZOOM,
       paint: {
-        'hillshade-exaggeration': 0.45,
+        // Ramp the exaggeration up over the first zoom level above the gate so
+        // the shading fades in instead of popping when the gate is crossed.
+        'hillshade-exaggeration': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          HILLSHADE_2D_MIN_ZOOM,
+          0,
+          HILLSHADE_2D_MIN_ZOOM + 1,
+          0.45,
+        ],
         'hillshade-shadow-color': 'rgba(74, 62, 45, 0.55)',
         'hillshade-highlight-color': 'rgba(255, 250, 240, 0.25)',
         'hillshade-accent-color': 'rgba(120, 105, 80, 0.30)',
