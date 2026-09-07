@@ -148,6 +148,12 @@ cause. #127 (iOS pack shows 0 KB) is plausibly the same class.
   (Valhalla/OSRM on the NAS first, on-device graphs for true offline) — Google
   Places/Directions are paid and their ToS forbid use on non-Google maps.
 
+- **Map store: real filters + design pass** (#250, owner 2026-09-08): the
+  current chips divide nothing (100% of items are `topo`; CanTopo has no
+  `region`). Phase 1 facets from existing data (country/source, scale, region,
+  near-me, language), phase 2 categories/activity tags as sources grow.
+  Mockup in the web playground first.
+
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
 Design packages live in `docs/plans/`. Shipped 2026-08-08/09 (all OTA'd to
