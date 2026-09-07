@@ -1,4 +1,5 @@
 import type { GeoReference, MapDocument } from '@core/models';
+import { cornersAreValid } from '@core/geo/geomath';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
 
 /**
@@ -41,11 +42,37 @@ export const NO_GEOREFERENCE_NOTICE =
   'No georeferencing found — this PDF cannot be placed on the map';
 
 /**
- * The subtitle line for a map card, or `null` when the map has georeferenced
- * pages (the card then shows its page/overlay counts instead).
+ * The line for a map that IS georeferenced but in a projection we could not
+ * resolve, so its corners never became lon/lat.
+ *
+ * This is the other half of the same failure mode as
+ * {@link NO_GEOREFERENCE_NOTICE}: every CanTopo sheet carried a perfectly good
+ * NAD83 / UTM georeference that `crs.ts` did not recognize, so its corners
+ * stayed in projected metres, `cornersAreValid` rejected them, and the overlay
+ * pipeline skipped the page **without a word** — 2,234 sheets that could be
+ * downloaded and listed but never drawn (#243). Naming the CRS is what makes
+ * the next unsupported source visible instead of invisible.
  */
-export function georeferenceNotice(
-  map: Pick<MapDocument, 'georeferences'>,
-): typeof NO_GEOREFERENCE_NOTICE | null {
-  return map.georeferences.length === 0 ? NO_GEOREFERENCE_NOTICE : null;
+export function unsupportedProjectionNotice(crs?: string): string {
+  return `Map projection not supported${crs ? ` (${crs})` : ''} — cannot be placed on the map`;
+}
+
+/** Can this georeference's corners actually be handed to the map? */
+export function isPlaceable(geo: GeoReference): boolean {
+  return cornersAreValid(geo.viewport.corners);
+}
+
+/**
+ * The subtitle line for a map card, or `null` when the map has at least one
+ * page that can be drawn (the card then shows its page/overlay counts instead).
+ */
+export function georeferenceNotice(map: Pick<MapDocument, 'georeferences'>): string | null {
+  if (map.georeferences.length === 0) return NO_GEOREFERENCE_NOTICE;
+  const primaries = primaryGeoreferences(map.georeferences);
+  if (primaries.some(isPlaceable)) return null;
+  // Report the CRS of the first page that failed. Documents imported before
+  // #243 have no `sourceCrs` at all — they still get the notice, without a
+  // name, and must be re-imported to be drawn (the raw projection was never
+  // persisted, and projected metres alone cannot identify the projection).
+  return unsupportedProjectionNotice(primaries.find((g) => g.sourceCrs)?.sourceCrs);
 }

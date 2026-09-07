@@ -1,6 +1,13 @@
 import type { CornerCoordinates, GeoReference, LngLat, PointRect } from '@core/models';
 import { applyAffine, bboxFromCorners, fitAffine } from '@core/geo/geomath';
-import { type Reprojector, epsgFromText, makeReprojector, utmEpsg } from './crs';
+import {
+  type LgiProjection,
+  type ResolvedCrs,
+  type Reprojector,
+  WGS84,
+  makeReprojector,
+  resolveLgiProjection,
+} from './crs';
 import type { PdfDocument } from './pdfReader';
 import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } from './types';
 
@@ -27,39 +34,64 @@ function nameOf(v: PdfValue | undefined): string | undefined {
   return v && isName(v) ? v.name : typeof v === 'string' ? v : undefined;
 }
 
-/** Resolve a reprojector from an LGIDict /Projection sub-dict. */
-function reprojectorFromProjection(doc: PdfDocument, projVal: PdfValue | undefined): Reprojector {
+/** A number from the dict, or undefined — LGIDict writes them as PDF strings. */
+function optionalNum(doc: PdfDocument, v: PdfValue | undefined): number | undefined {
+  if (v === undefined) return undefined;
+  const n = asNum(doc.resolve(v));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Read an LGIDict `/Projection` sub-dict into its parameters. */
+function readProjection(doc: PdfDocument, projVal: PdfValue | undefined): LgiProjection | null {
   const proj = doc.resolve(projVal);
-  if (!isDict(proj)) return makeReprojector({ epsg: 4326 });
-  const dict = proj as PdfDict;
+  if (!isDict(proj)) return null;
+  const e = (proj as PdfDict).entries;
+  const str = (key: string): string | undefined => nameOf(doc.resolve(e.get(key)));
+  const num = (key: string): number | undefined => optionalNum(doc, e.get(key));
+  const params: LgiProjection = {};
+  const set = <K extends keyof LgiProjection>(key: K, value: LgiProjection[K]): void => {
+    if (value !== undefined) params[key] = value;
+  };
+  set('projectionType', str('ProjectionType'));
+  set('datum', str('Datum'));
+  set('hemisphere', str('Hemisphere'));
+  set('wkt', str('WKT'));
+  set('zone', num('Zone'));
+  set('epsg', num('EPSG'));
+  set('centralMeridian', num('CentralMeridian'));
+  set('originLatitude', num('OriginLatitude'));
+  set('scaleFactor', num('ScaleFactor'));
+  set('falseEasting', num('FalseEasting'));
+  set('falseNorthing', num('FalseNorthing'));
+  set('standardParallelOne', num('StandardParallelOne'));
+  set('standardParallelTwo', num('StandardParallelTwo'));
+  return params;
+}
 
-  // Explicit EPSG hint.
-  const epsgVal = doc.resolve(dict.entries.get('EPSG'));
-  if (typeof epsgVal === 'number') return makeReprojector({ epsg: epsgVal });
-
-  const wkt = nameOf(dict.entries.get('WKT'));
-  const projType = nameOf(doc.resolve(dict.entries.get('ProjectionType')));
-  const datum = nameOf(doc.resolve(dict.entries.get('Datum')));
-
-  // UTM: /ProjectionType (UT or UTM) + /Zone + /Hemisphere.
-  if (projType && /^UT/i.test(projType)) {
-    const zone = asNum(doc.resolve(dict.entries.get('Zone')));
-    const hemi = nameOf(doc.resolve(dict.entries.get('Hemisphere'))) ?? 'N';
-    const north = /^N/i.test(hemi);
-    if (!Number.isNaN(zone)) {
-      const epsg = datum && /WG|WGS|WE/i.test(datum) ? utmEpsg(zone, north) : utmEpsg(zone, north);
-      return makeReprojector({ epsg });
-    }
+/**
+ * Resolve a reprojector from an LGIDict `/Projection` sub-dict, together with
+ * the CRS string to report it under. `crs.proj4Def === null` means we could not
+ * place this projection at all — the caller records that on the georeference so
+ * the Library card and the error report can name it (#243).
+ */
+function crsFromProjection(
+  doc: PdfDocument,
+  projVal: PdfValue | undefined,
+): { reproj: Reprojector; crs: ResolvedCrs } {
+  const params = readProjection(doc, projVal);
+  if (!params) {
+    // No /Projection dict at all: the OGC BP default is geographic WGS84.
+    return {
+      reproj: makeReprojector({ epsg: 4326 }),
+      crs: { proj4Def: WGS84, epsg: 4326, label: 'Geographic lon/lat (WGS 84)' },
+    };
   }
-
-  // Geographic / lon-lat (GEOGRAPHIC, GDBD, etc.).
-  if (projType && /^(GE|LL|LONG|GEOG)/i.test(projType)) {
-    return makeReprojector({ epsg: 4326 });
-  }
-
-  // WKT or free-text datum we can map to EPSG.
-  const epsg = epsgFromText(wkt) ?? epsgFromText(projType) ?? epsgFromText(datum);
-  return makeReprojector({ epsg, wkt });
+  const crs = resolveLgiProjection(params);
+  const reproj = makeReprojector({
+    ...(crs.epsg === undefined ? {} : { epsg: crs.epsg }),
+    ...(crs.proj4Def === null ? {} : { proj4Def: crs.proj4Def }),
+  });
+  return { reproj, crs };
 }
 
 /** Read /Registration into matched page->geo point pairs. */
@@ -119,7 +151,13 @@ function fromOneLgiDict(
   page: { index: number; mediaBox: [number, number, number, number] },
   warnings: string[],
 ): GeoReference | undefined {
-  const reproj = reprojectorFromProjection(doc, lgi.entries.get('Projection'));
+  const { reproj, crs } = crsFromProjection(doc, lgi.entries.get('Projection'));
+  if (crs.proj4Def === null) {
+    // Not fatal — the georeference is still emitted, with its corners left in
+    // the native CRS and `sourceCrs` naming it, so the Library card can say
+    // "Map projection not supported (...)" rather than showing nothing (#243).
+    warnings.push(`page ${page.index}: unsupported map projection (${crs.label})`);
+  }
 
   const [mx0, my0, mx1, my1] = page.mediaBox;
   const pageWidthPt = Math.abs(mx1 - mx0);
@@ -176,6 +214,7 @@ function fromOneLgiDict(
     pageIndex: page.index,
     source: 'lgidict',
     sourceEpsg: reproj.epsg,
+    sourceCrs: crs.label,
     pageWidthPt,
     pageHeightPt,
     viewport: { rect, corners },

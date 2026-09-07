@@ -43,6 +43,14 @@ export interface GeoReference {
   source: GeoReferenceSource;
   /** EPSG code of the PDF's native CRS, if identified (e.g. 4326, 3857, 32618). */
   sourceEpsg?: number;
+  /**
+   * Human-readable native CRS ("NAD83 / UTM zone 19N (EPSG:26919)"), as the
+   * PDF spelled it. Present whether or not we could reproject it, so a sheet we
+   * cannot place can *name* the projection it is in — on the Library card and
+   * in the error report — instead of failing silently (#243). Absent on
+   * documents imported before that fix.
+   */
+  sourceCrs?: string;
   /** Page MediaBox size in PDF points (1/72 inch). */
   pageWidthPt: number;
   pageHeightPt: number;
