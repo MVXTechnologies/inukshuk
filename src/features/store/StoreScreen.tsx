@@ -14,7 +14,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -431,6 +431,10 @@ export function StoreScreen() {
         placeholder="Search maps"
         value={query}
         onChangeText={setQuery}
+        // #235 — results are live-filtered; Return just puts the keyboard away.
+        returnKeyType="search"
+        blurOnSubmit
+        onSubmitEditing={() => Keyboard.dismiss()}
         style={styles.searchbar}
       />
 

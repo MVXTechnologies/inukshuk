@@ -1,3 +1,4 @@
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { useRef } from 'react';
 import { Button, Dialog, TextInput } from 'react-native-paper';
 
@@ -48,16 +49,22 @@ export function NameDialog({
     <Dialog visible={visible} onDismiss={dismiss}>
       <Dialog.Title>{title}</Dialog.Title>
       <Dialog.Content>
-        <TextInput
-          key={`${visible}-${initialValue}`}
-          label={label}
-          defaultValue={initialValue}
-          onChangeText={(t) => {
-            typedRef.current = t;
-          }}
-          autoFocus
-          onSubmitEditing={submit}
-        />
+        <KeyboardDismissArea>
+          <TextInput
+            key={`${visible}-${initialValue}`}
+            label={label}
+            defaultValue={initialValue}
+            onChangeText={(t) => {
+              typedRef.current = t;
+            }}
+            autoFocus
+            // #235 — Return is the only iOS exit from a single-line field, and
+            // here the obvious thing for it to do is the dialog's primary action.
+            returnKeyType="done"
+            blurOnSubmit
+            onSubmitEditing={submit}
+          />
+        </KeyboardDismissArea>
       </Dialog.Content>
       <Dialog.Actions>
         <Button onPress={dismiss}>Cancel</Button>

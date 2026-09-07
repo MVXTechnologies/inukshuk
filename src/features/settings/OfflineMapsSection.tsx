@@ -1,5 +1,6 @@
 import { formatBytes } from '@core/format';
 import { useOfflineStore } from '@state/offlineStore';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import {
@@ -97,14 +98,19 @@ export function OfflineMapsSection() {
         <Dialog visible={renaming !== null} onDismiss={() => setRenaming(null)}>
           <Dialog.Title>Rename offline area</Dialog.Title>
           <Dialog.Content>
-            <TextInput
-              label="Name"
-              mode="outlined"
-              value={renameText}
-              onChangeText={setRenameText}
-              autoFocus
-              onSubmitEditing={confirmRename}
-            />
+            <KeyboardDismissArea>
+              <TextInput
+                label="Name"
+                mode="outlined"
+                value={renameText}
+                onChangeText={setRenameText}
+                autoFocus
+                // #235 — Return dismisses the keyboard and renames.
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={confirmRename}
+              />
+            </KeyboardDismissArea>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setRenaming(null)}>Cancel</Button>

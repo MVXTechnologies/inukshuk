@@ -1,7 +1,7 @@
 import type { BoundingBox } from '@core/models';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -182,7 +182,12 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
           ]}
           style={styles.tabs}
         />
-        <ScrollView style={styles.drawerScroll} contentContainerStyle={styles.drawerInner}>
+        <ScrollView
+          style={styles.drawerScroll}
+          contentContainerStyle={styles.drawerInner}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+        >
           {tab === 'layers' && (
             <>
               {row('Contour lines', contours, () => setContours(!contours))}
@@ -216,6 +221,10 @@ export function MakeMapSheet({ bbox, progress, onCreate, onCancel }: Props) {
                 label="Map name"
                 defaultValue={name}
                 onChangeText={setName}
+                // #235 — Return is the only iOS way out of this field.
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
                 style={styles.nameInput}
               />
               <SegmentedButtons

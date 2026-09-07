@@ -39,6 +39,8 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { KEYBOARD_DONE_BAR_ID } from '@ui/components/KeyboardDoneBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
@@ -1140,31 +1142,36 @@ export function Trail3DGLScreen({ trackId }: Props) {
         <Dialog visible={editing !== null} onDismiss={() => setEditing(null)}>
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
-            <TextInput
-              label="Note"
-              value={draft}
-              onChangeText={setDraft}
-              autoFocus
-              multiline
-              mode="outlined"
-            />
-            {draftPhoto ? (
-              <View style={styles.photoPreviewWrap}>
-                <Image source={{ uri: draftPhoto }} style={styles.photoPreview} />
-                <Button compact icon="image-remove" onPress={() => setDraftPhoto(null)}>
-                  Remove photo
-                </Button>
-              </View>
-            ) : (
-              <View style={styles.photoButtons}>
-                <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
-                  Photo
-                </Button>
-                <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
-                  Camera
-                </Button>
-              </View>
-            )}
+            <KeyboardDismissArea>
+              <TextInput
+                label="Note"
+                value={draft}
+                onChangeText={setDraft}
+                autoFocus
+                multiline
+                mode="outlined"
+                // #235 — Return inserts a newline in a multiline field, so iOS
+                // has no way out without the shared accessory bar's Done.
+                inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
+              />
+              {draftPhoto ? (
+                <View style={styles.photoPreviewWrap}>
+                  <Image source={{ uri: draftPhoto }} style={styles.photoPreview} />
+                  <Button compact icon="image-remove" onPress={() => setDraftPhoto(null)}>
+                    Remove photo
+                  </Button>
+                </View>
+              ) : (
+                <View style={styles.photoButtons}>
+                  <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
+                    Photo
+                  </Button>
+                  <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
+                    Camera
+                  </Button>
+                </View>
+              )}
+            </KeyboardDismissArea>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setEditing(null)}>Cancel</Button>

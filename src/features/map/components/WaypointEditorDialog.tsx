@@ -2,6 +2,8 @@ import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Image, Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { KEYBOARD_DONE_BAR_ID } from '@ui/components/KeyboardDoneBar';
 import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
 
 /**
@@ -89,32 +91,36 @@ export function WaypointEditorDialog({
       >
         <Dialog.Title>{waypoint?.label ?? 'Waypoint'}</Dialog.Title>
         <Dialog.Content>
-          <TextInput
-            label="Note"
-            value={draft}
-            onChangeText={onChangeDraft}
-            autoFocus
-            multiline
-            mode="outlined"
-            placeholder="What's here?"
-          />
-          {waypoint?.photoUri ? (
-            <View style={styles.wpPhotoWrap}>
-              <Image source={{ uri: waypoint.photoUri }} style={styles.wpPhoto} />
-              <Button compact icon="image-remove" onPress={() => onSetPhoto('')}>
-                Remove photo
-              </Button>
-            </View>
-          ) : (
-            <View style={styles.wpPhotoButtons}>
-              <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
-                Photo
-              </Button>
-              <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
-                Camera
-              </Button>
-            </View>
-          )}
+          <KeyboardDismissArea>
+            <TextInput
+              label="Note"
+              value={draft}
+              onChangeText={onChangeDraft}
+              autoFocus
+              multiline
+              mode="outlined"
+              placeholder="What's here?"
+              // #235 — multiline: Return types a newline, so Done is the only exit.
+              inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
+            />
+            {waypoint?.photoUri ? (
+              <View style={styles.wpPhotoWrap}>
+                <Image source={{ uri: waypoint.photoUri }} style={styles.wpPhoto} />
+                <Button compact icon="image-remove" onPress={() => onSetPhoto('')}>
+                  Remove photo
+                </Button>
+              </View>
+            ) : (
+              <View style={styles.wpPhotoButtons}>
+                <Button compact icon="image-outline" onPress={() => pickPhoto(false)}>
+                  Photo
+                </Button>
+                <Button compact icon="camera-outline" onPress={() => pickPhoto(true)}>
+                  Camera
+                </Button>
+              </View>
+            )}
+          </KeyboardDismissArea>
         </Dialog.Content>
         <Dialog.Actions>
           <Button textColor={theme.colors.error} onPress={onDelete}>
