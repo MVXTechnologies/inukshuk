@@ -15,9 +15,29 @@ import {
   sanitizeWeatherModel,
   type WeatherModelId,
 } from '@core/weather/weatherModels';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 const SETTINGS_FILE = 'settings.json';
+
+/**
+ * TEMPORARY per-platform default for the shaded-relief hillshade (#230), and
+ * the ONLY place that decision is made.
+ *
+ * Field report on 1.5.0 build 5: on a current iPhone the `map` and `relief`
+ * basemaps skip frames when zooming out while `satellite` — the one basemap
+ * with no hillshade — stays smooth; not reproducible on Android with the same
+ * build. The under-map hillshade is the only render-path difference, so iOS
+ * opens with it OFF until the owner can A/B it on the device (see
+ * `docs/plans/ios-hillshade-230.md`). Android keeps it ON: the shading looks
+ * good there and costs nothing measurable.
+ *
+ * This is a mitigation, not a diagnosis. The zoom gate and the 512-px DEM
+ * declaration in `mapStyle.ts` are the real fix and apply on both platforms;
+ * once a device A/B shows they are enough, flip this back to a plain `true`
+ * and keep the switch.
+ */
+export const DEFAULT_SHOW_HILLSHADE = Platform.OS !== 'ios';
 
 /**
  * The default OpenStreetMap raster tile endpoint. NOTE: the public OSM tile
@@ -103,6 +123,12 @@ export interface Settings {
    * chrome has been pruned here before for clutter.
    */
   showScaleBar: boolean;
+  /**
+   * Shaded-relief hillshade blended under the `map` and `relief` basemaps (the
+   * `hillshade-2d` layer in `mapStyle.ts`). Platform-defaulted — see
+   * {@link DEFAULT_SHOW_HILLSHADE} and #230.
+   */
+  showHillshade: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -163,6 +189,7 @@ const DEFAULTS: Settings = {
   marinePackSnoozes: [],
   showHeatmap: true,
   showScaleBar: true,
+  showHillshade: DEFAULT_SHOW_HILLSHADE,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -209,6 +236,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackSnoozes,
     showHeatmap,
     showScaleBar,
+    showHillshade,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -241,6 +269,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackSnoozes,
     showHeatmap,
     showScaleBar,
+    showHillshade,
     errorReporting,
     terrainSlope,
     terrainContours,
