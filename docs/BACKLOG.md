@@ -142,6 +142,12 @@ store Documents-relative paths, resolve on read, migrate on hydrate; OTA-able.
 Android container paths are stable; the Android auto-reports are a different
 cause. #127 (iOS pack shows 0 KB) is plausibly the same class.
 
+- **[Parked] Navigation like Google Maps** (#241, owner 2026-09-07): route by
+  road / on foot / straight line with turn guidance, plus a places search bar.
+  Anchored to #95, #231, #232 and backlog item 5; needs a routing engine
+  (Valhalla/OSRM on the NAS first, on-device graphs for true offline) — Google
+  Places/Directions are paid and their ToS forbid use on non-Google maps.
+
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
 Design packages live in `docs/plans/`. Shipped 2026-08-08/09 (all OTA'd to
