@@ -494,3 +494,27 @@ host checks pass 53 iOS validation/render cases with the original Eco PDF, and
 49 Android geometry/private-URI cases. Both native development builds pass and
 were installed without clearing libraries or settings. Native changes require
 new compatible binaries; this work does not publish an OTA or store release.
+
+NORD remains an iOS performance follow-up. Its page paints 135 unique Flate RGB
+or indexed-palette images 140 times, mostly 2048×2048, composing a 27,452×19,866
+raster. The current PDF.js tiles completed roughly every 10–14 seconds in the
+simulator run. A future bounded mosaic renderer could decode only intersecting
+source images sequentially; constructing the entire raster would exceed 1.5 GB
+of RGB memory. That path requires separate filter/palette/placement validation,
+allocation bounds and pixel/memory benchmarks before enabling it. The current
+single-JPEG native path correctly rejects this file. The full-view NORD run was
+interrupted by host disk exhaustion during a concurrent release build, so this
+increment does not claim a complete NORD release-mode performance pass.
+
+The iOS Release simulator build subsequently passed after deleting generated
+build intermediates from this test run. It was installed on both iPhones and
+launched with its embedded bundle, without Metro or inspector attachment. Fresh
+native Eco tiles on Pro Max and PDF.js Anticosti tiles on iPhone 17 were visible
+in release-mode screenshots. Both libraries retained all maps and both settings
+files matched their pre-install backups; one Pro Max map visibility selection
+changed and was preserved. Double-tap zoom and 90-degree camera rotation were
+verified in the development build; coordinate-based UI automation became
+unavailable for the final release gesture check, so that exact check remains
+unclaimed. The rebuilt Android app also loaded the tile planner and native
+module and displayed progressive Eco detail. Quality and Expo Doctor CI passed
+for commit 7a2809b; native CI was still running at this report update.
