@@ -2,11 +2,14 @@ import { runInNewContext } from 'node:vm';
 import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
-import { PdfRasterizerProvider, usePdfRasterizer } from './PdfRasterizer';
+import { PdfRasterizerProvider, usePdfRasterizer, usePdfRasterizerServer } from './PdfRasterizer';
 import { deleteNativePdfOutput, nativePdfAvailable, renderNativePdfCrop } from '@data/nativePdf';
 
 const mockInject = jest.fn();
+const mockDownloadAsset = jest.fn(async () => ({ localUri: 'file://asset' }));
 let mockProps: {
+  onContentProcessDidTerminate?: () => void;
+  onRenderProcessGone?: () => void;
   onMessage: (event: { nativeEvent: { data: string } }) => void;
   onError: (event: { nativeEvent: { url: string; description: string } }) => void;
 };
@@ -27,7 +30,7 @@ jest.mock('react-native-webview', () => {
 jest.mock('../../../assets/pdfjs/pdf.legacy.min.js.pdfjs', () => 1);
 jest.mock('../../../assets/pdfjs/pdf.worker.legacy.min.js.pdfjs', () => 2);
 jest.mock('expo-asset', () => ({
-  Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: 'file://asset' }) }) },
+  Asset: { fromModule: () => ({ downloadAsync: mockDownloadAsset }) },
 }));
 jest.mock('expo-file-system', () => ({
   File: class {
@@ -60,8 +63,34 @@ const renders = () =>
 beforeEach(() => {
   jest.useFakeTimers();
   mockMounts = 0;
+  mockDownloadAsset.mockReset().mockResolvedValue({ localUri: 'file://asset' });
 });
 afterEach(() => jest.useRealTimers());
+
+it('settles server readiness when unmounted before PDF.js assets finish loading', async () => {
+  mockDownloadAsset.mockImplementation(() => new Promise(() => {}));
+  const view = await renderHook(usePdfRasterizerServer, { wrapper });
+  const settled = jest.fn();
+  const origin = view.result.current().then(settled);
+  await view.unmount();
+  await act(async () => {});
+  expect(settled).toHaveBeenCalledWith(null);
+  await origin;
+});
+
+it('rejects work submitted after unmount without allocating a render timeout', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const rasterize = view.result.current;
+  await view.unmount();
+  const timers = jest.getTimerCount();
+  const rejected = jest.fn();
+  const pending = rasterize(request).catch(rejected);
+  expect(jest.getTimerCount()).toBe(timers);
+  await act(async () => {});
+  expect(rejected).toHaveBeenCalledWith(new Error('PdfRasterizer: provider unmounted'));
+  expect(renders()).toHaveLength(0);
+  await pending;
+});
 
 it('removes a request that expires while the engine is still loading', async () => {
   const view = await renderHook(usePdfRasterizer, { wrapper });
@@ -357,14 +386,33 @@ it.each(['timeout', 'unmount'] as const)(
 );
 
 it.each([
-  { rotate: 0, userUnit: 1, pageView: [0, 0, 1000, 800], eligible: true },
-  { rotate: 90, userUnit: 1, pageView: [0, 0, 1000, 800], eligible: false },
-  { rotate: 0, userUnit: 2, pageView: [0, 0, 1000, 800], eligible: false },
-  { rotate: 0, userUnit: 1, pageView: [10, 0, 1010, 800], eligible: false },
-  { rotate: 0, userUnit: 1, pageView: [0, 0, 900, 800], eligible: false },
+  { rotate: 0, userUnit: 1, pageView: [0, 0, 1000, 800], eligible: true, crop: nativeRequest.crop },
+  {
+    rotate: 90,
+    userUnit: 1,
+    pageView: [0, 0, 1000, 800],
+    eligible: false,
+    crop: nativeRequest.crop,
+  },
+  {
+    rotate: 0,
+    userUnit: 2,
+    pageView: [0, 0, 1000, 800],
+    eligible: false,
+    crop: nativeRequest.crop,
+  },
+  {
+    rotate: 0,
+    userUnit: 1,
+    pageView: [10, 0, 1010, 800],
+    eligible: false,
+    crop: nativeRequest.crop,
+  },
+  { rotate: 0, userUnit: 1, pageView: [0, 0, 900, 800], eligible: false, crop: nativeRequest.crop },
+  { rotate: 0, userUnit: 1, pageView: [0, 0, 1000, 800], eligible: true, crop: null },
 ])(
   'guards native geometry and releases PDF.js before handoff: %j',
-  async ({ rotate, userUnit, pageView, eligible }) => {
+  async ({ rotate, userUnit, pageView, eligible, crop }) => {
     const view = await renderHook(usePdfRasterizer, { wrapper });
     const html = jest.mocked(writeServedText).mock.calls.at(-1)![1];
     const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
@@ -415,7 +463,7 @@ it.each([
         0,
         1000,
         'http://localhost/maps/a.pdf',
-        nativeRequest.crop,
+        crop,
         nativeRequest.nativePage,
       );
     });
@@ -479,6 +527,34 @@ it('rearms the timeout after geometry validation before starting native work', a
   await view.unmount();
 });
 
+it('retries a transient served-page load failure without losing URL rendering', async () => {
+  const view = await renderHook(
+    () => ({ rasterize: usePdfRasterizer(), serverOrigin: usePdfRasterizerServer() }),
+    { wrapper },
+  );
+  await ready();
+  await act(async () => {
+    mockProps.onError({ nativeEvent: { url: '', description: 'temporary load failure' } });
+  });
+  expect(await view.result.current.serverOrigin()).toBe('http://127.0.0.1:8080');
+  expect(mockMounts).toBe(2);
+  const pending = view.result.current
+    .rasterize({ ...request, source: { url: 'http://127.0.0.1:8080/maps/test.pdf' } })
+    .catch((error: Error) => error);
+  expect(renders()).toHaveLength(0);
+  await ready();
+  expect(renders()).toHaveLength(1);
+  const { fileUri: _fileUri, ...metadata } = nativeResult;
+  const rendered = { ...metadata, pngDataUri: 'data:image/png;base64,PNG' };
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: { data: JSON.stringify({ id: 'req-1', ok: true, ...rendered }) },
+    });
+  });
+  expect(await pending).toEqual(rendered);
+  await view.unmount();
+});
+
 it('keeps native ownership through served-page fallback until late output is disposed', async () => {
   let finish!: (result: typeof nativeResult) => void;
   jest.mocked(renderNativePdfCrop).mockImplementation(
@@ -495,6 +571,9 @@ it('keeps native ownership through served-page fallback until late output is dis
   const third = view.result.current(request).catch(() => undefined);
   await act(async () => {
     mockProps.onError({ nativeEvent: { url: '', description: 'server lost' } });
+  });
+  await act(async () => {
+    mockProps.onError({ nativeEvent: { url: '', description: 'server still lost' } });
   });
   expect(await native).toBeInstanceOf(Error);
   await ready();
@@ -676,4 +755,271 @@ it('does not resurrect timed-out native work when unsupported is reported late',
   expect(renders()[1]?.[0]).toContain('req-2');
   await view.unmount();
   await next;
+});
+
+// Content-process loss is a separate native event: it need not emit onError
+// or another onLoadStart. A dead idle engine must recover without an app restart.
+it.each(['onContentProcessDidTerminate', 'onRenderProcessGone'] as const)(
+  'recovers from %s and renders the next map without waiting for timeouts',
+  async (event) => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    await ready();
+    const failed = view.result.current(request).catch((error: Error) => error);
+    const next = view.result.current(request).catch((error: Error) => error);
+    await act(async () => mockProps[event]?.());
+    expect(mockMounts).toBe(2);
+    expect(await failed).toBeInstanceOf(Error);
+    expect(renders()).toHaveLength(1);
+    await ready();
+    expect(renders()).toHaveLength(2);
+    await act(async () => {
+      mockProps.onMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            id: 'req-2',
+            ok: true,
+            pngDataUri: 'data:image/png;base64,RECOVERED',
+            widthPx: 100,
+            heightPx: 100,
+            pageWidthPt: 100,
+            pageHeightPt: 100,
+            pageCount: 1,
+            loadMs: 1,
+            renderMs: 1,
+          }),
+        },
+      });
+    });
+    await expect(next).resolves.toMatchObject({ pngDataUri: 'data:image/png;base64,RECOVERED' });
+    await view.unmount();
+  },
+);
+
+it('replaces an idle dead content process before accepting the next map', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  const next = view.result.current(request).catch(() => undefined);
+  expect(renders()).toHaveLength(0);
+  expect(mockMounts).toBe(2);
+  await ready();
+  expect(renders()).toHaveLength(1);
+  await view.unmount();
+  await next;
+});
+
+it('recovers a non-ready engine after a queued startup request expires', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const first = view.result.current(request).catch((error: Error) => error);
+  await act(async () => {
+    jest.advanceTimersByTime(45_000);
+  });
+  expect(await first).toBeInstanceOf(Error);
+  expect(mockMounts).toBe(2);
+  const next = view.result.current(request).catch(() => undefined);
+  await ready();
+  expect(renders()).toHaveLength(1);
+  await view.unmount();
+  await next;
+});
+
+it('keeps an active native render exclusive when its idle WebView process dies', async () => {
+  let finish!: (result: typeof nativeResult) => void;
+  jest.mocked(renderNativePdfCrop).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const native = view.result.current(nativeRequest);
+  await handoff();
+  const next = view.result.current(request).catch(() => undefined);
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  expect(mockMounts).toBe(2);
+  await ready();
+  expect(renders()).toHaveLength(1);
+  await act(async () => {
+    finish(nativeResult);
+  });
+  await expect(native).resolves.toEqual(nativeResult);
+  expect(renders()).toHaveLength(2);
+  await view.unmount();
+  await next;
+});
+
+it('ignores readiness and process-loss callbacks from a replaced engine', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const retired = mockProps;
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  const next = view.result.current(request).catch(() => undefined);
+  await act(async () => {
+    retired.onMessage({ nativeEvent: { data: JSON.stringify({ id: '__ready__', ok: true }) } });
+  });
+  expect(renders()).toHaveLength(0);
+  await act(async () => retired.onRenderProcessGone?.());
+  expect(mockMounts).toBe(2);
+  await ready();
+  expect(renders()).toHaveLength(1);
+  await view.unmount();
+  await next;
+});
+
+it('remembers an unsupported native request but probes a new document revision', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValue(
+      Object.assign(new Error('unsupported image encoding'), { code: 'E_PDF_UNSUPPORTED' }),
+    );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const first = view.result.current(nativeRequest);
+  const second = view.result.current(nativeRequest).catch(() => undefined);
+  await handoff();
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: {
+        data: JSON.stringify({
+          id: 'req-1',
+          ok: true,
+          pngDataUri: 'data:image/png;base64,FALLBACK',
+          widthPx: 100,
+          heightPx: 100,
+          pageWidthPt: 1000,
+          pageHeightPt: 800,
+          pageCount: 1,
+          loadMs: 1,
+          renderMs: 1,
+        }),
+      },
+    });
+  });
+  await expect(first).resolves.toMatchObject({ pngDataUri: 'data:image/png;base64,FALLBACK' });
+  expect(renders()).toHaveLength(3);
+  expect(renders()[2]?.[0]).not.toContain('expectedPageWidthPt');
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: { data: JSON.stringify({ id: 'req-2', ok: false, error: 'test finished' }) },
+    });
+  });
+  await second;
+  const revised = view.result
+    .current({ ...nativeRequest, nativePage: { ...nativeRequest.nativePage, revision: 'changed' } })
+    .catch(() => undefined);
+  expect(renders()[3]?.[0]).toContain('expectedPageWidthPt');
+  await view.unmount();
+  await revised;
+});
+
+it('bounds unsupported request memory and reprobes the evicted oldest request', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValue(Object.assign(new Error('unsupported'), { code: 'E_PDF_UNSUPPORTED' }));
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  for (let i = 0; i < 17; i++) {
+    const requestId = `req-${i + 1}`;
+    const pending = view.result
+      .current({
+        ...nativeRequest,
+        nativePage: {
+          ...nativeRequest.nativePage,
+          revision: String(i),
+        },
+      })
+      .catch(() => undefined);
+    await handoff(requestId);
+    await act(async () => {
+      mockProps.onMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            id: requestId,
+            ok: false,
+            error: 'fallback unavailable',
+          }),
+        },
+      });
+    });
+    await pending;
+  }
+  const pending = view.result
+    .current({
+      ...nativeRequest,
+      nativePage: {
+        ...nativeRequest.nativePage,
+        revision: '0',
+      },
+    })
+    .catch(() => undefined);
+  expect(renders().at(-1)?.[0]).toContain('expectedPageWidthPt');
+  await view.unmount();
+  await pending;
+});
+
+it('does not disable a small native crop when a full-page request is unsupported', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValue(
+      Object.assign(new Error('crop exceeds decoder budget'), { code: 'E_PDF_UNSUPPORTED' }),
+    );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const full = view.result
+    .current({ ...nativeRequest, crop: { x0: 0, y0: 0, x1: 1, y1: 1 } })
+    .catch(() => undefined);
+  await handoff();
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: { data: JSON.stringify({ id: 'req-1', ok: false, error: 'fallback failed' }) },
+    });
+  });
+  await full;
+  const small = view.result.current(nativeRequest).catch(() => undefined);
+  expect(renders().at(-1)?.[0]).toContain('expectedPageWidthPt');
+  await view.unmount();
+  await small;
+});
+
+it('hands an overview to native with a full-page crop after geometry validation', async () => {
+  jest.mocked(renderNativePdfCrop).mockResolvedValue(nativeResult);
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result
+    .current({ ...nativeRequest, crop: null })
+    .catch((error: Error) => error);
+  expect(renders().at(-1)?.[0]).toContain('expectedPageWidthPt');
+  await handoff();
+  await expect(pending).resolves.toEqual(nativeResult);
+  expect(renderNativePdfCrop).toHaveBeenCalledWith(
+    expect.objectContaining({ crop: { x0: 0, y0: 0, x1: 1, y1: 1 } }),
+  );
+  await view.unmount();
+});
+
+it('retains a null PDF.js crop when a native overview is unsupported', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValue(Object.assign(new Error('unsupported'), { code: 'E_PDF_UNSUPPORTED' }));
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result.current({ ...nativeRequest, crop: null }).catch(() => undefined);
+  expect(renders().at(-1)?.[0]).toContain('expectedPageWidthPt');
+  await handoff();
+  expect(renders()).toHaveLength(2);
+  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null)');
+  await view.unmount();
+  await pending;
+});
+
+it('keeps an overview on the original PDF.js budget when native is unavailable', async () => {
+  jest.mocked(nativePdfAvailable).mockReturnValueOnce(false);
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result.current({ ...nativeRequest, crop: null }).catch(() => undefined);
+  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null)');
+  expect(renderNativePdfCrop).not.toHaveBeenCalled();
+  await view.unmount();
+  await pending;
 });

@@ -62,6 +62,12 @@ const OVERLAY_TARGET_WIDTH_PX = 2048;
  * may reclaim that directory at any time; both lookups verify the file.
  */
 const rasterCache = new Map<string, string>();
+// Active-set changes share work, but a replacement provider must not inherit
+// an unresolved request owned by an engine that has already unmounted.
+const pendingRastersByProvider = new WeakMap<
+  ReturnType<typeof usePdfRasterizer>,
+  Map<string, Promise<string>>
+>();
 
 function rasterCacheKey(docId: string, pageIndex: number, revision: string): string {
   return `${docId}:${revision}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
@@ -174,6 +180,11 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
 
   useEffect(() => {
     let cancelled = false;
+    let pendingRasters = pendingRastersByProvider.get(rasterize);
+    if (!pendingRasters) {
+      pendingRasters = new Map<string, Promise<string>>();
+      pendingRastersByProvider.set(rasterize, pendingRasters);
+    }
     // A page that left the active set stops reporting on its card at once.
     retainStatuses(targets.map((t) => overlayStatusKey(t.docId, t.geo.pageIndex)));
 
@@ -191,11 +202,23 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
       // base64-read at most once per batch — and not at all when every one of
       // its pages hits the cache. (The served path reads nothing here.)
       const byDoc = new Map<string, Target[]>();
-      for (const t of targets) {
-        const list = byDoc.get(t.docId);
+      const cached = new Set(
+        targets.filter((t) => cachedRaster(t.docId, t.geo.pageIndex, t.revision) !== undefined),
+      );
+      // Publish disk hits before waiting on any cold PDF, but preserve the
+      // library stacking order when publishing the resulting overlays.
+      for (const t of [
+        ...targets.filter((t) => cached.has(t)),
+        ...targets.filter((t) => !cached.has(t)),
+      ]) {
+        const group = `${cached.has(t) ? 'cached' : 'cold'}:${t.docId}`;
+        const list = byDoc.get(group);
         if (list) list.push(t);
-        else byDoc.set(t.docId, [t]);
+        else byDoc.set(group, [t]);
       }
+      const stackingOrder = new Map(
+        targets.map((t, index) => [`${t.docId}:${t.geo.pageIndex}`, index]),
+      );
 
       for (const docTargets of byDoc.values()) {
         // Read lazily, only when some page of this document misses the cache
@@ -247,47 +270,60 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               // Served over loopback when the engine has a server; the bridge
               // only for small files without one; a clear refusal otherwise —
               // never a 45 s hang on a file that was always going to OOM.
-              const origin = await serverOrigin();
-              if (cancelled) return;
-              const choice = chooseRasterSource({
-                origin,
-                documentPath: storage.toDocumentPath(t.fileUri),
-                sizeBytes: storage.fileSizeAt(t.fileUri),
-              });
-              if (choice.kind === 'unrenderable') throw new Error(choice.reason);
-              let source: RasterizeSource;
-              if (choice.kind === 'url') {
-                source = { url: choice.url };
-              } else {
-                base64 ??= await storage.readFileBase64(t.fileUri);
-                source = { base64 };
+              const cacheKey = rasterCacheKey(t.docId, geo.pageIndex, t.revision);
+              let pending = pendingRasters.get(cacheKey);
+              if (!pending) {
+                pending = (async () => {
+                  const origin = await serverOrigin();
+                  const choice = chooseRasterSource({
+                    origin,
+                    documentPath: storage.toDocumentPath(t.fileUri),
+                    sizeBytes: storage.fileSizeAt(t.fileUri),
+                  });
+                  if (choice.kind === 'unrenderable') throw new Error(choice.reason);
+                  let source: RasterizeSource;
+                  if (choice.kind === 'url') {
+                    source = { url: choice.url };
+                  } else {
+                    base64 ??= await storage.readFileBase64(t.fileUri);
+                    source = { base64 };
+                  }
+                  const startedAt = Date.now();
+                  const raster = await rasterize({
+                    source,
+                    pageIndex: geo.pageIndex,
+                    targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
+                    nativePage: {
+                      fileUri: storage.resolveDocumentPath(t.fileUri),
+                      revision: t.revision,
+                      expectedPageWidthPt: geo.pageWidthPt,
+                      expectedPageHeightPt: geo.pageHeightPt,
+                    },
+                  });
+                  console.log(
+                    `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
+                      `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
+                      `${raster.widthPx}x${raster.heightPx})`,
+                  );
+                  // MapLibre's ImageSource needs a file:// url, not a data: URI — write
+                  // the rasterized PNG to the cache and reference it by file path.
+                  // Done even if this run was superseded: the raster is still
+                  // valid, and the next run finds it in the cache instead of
+                  // paying for the render twice.
+                  const name = rasterFileName(t.docId, geo.pageIndex, t.revision);
+                  const renderedUri =
+                    raster.fileUri !== undefined
+                      ? storage.adoptOverlayPng(name, raster.fileUri)
+                      : storage.writeOverlayPng(
+                          name,
+                          raster.pngDataUri.replace(/^data:image\/png;base64,/, ''),
+                        );
+                  rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), renderedUri);
+                  return renderedUri;
+                })().finally(() => pendingRasters.delete(cacheKey));
+                pendingRasters.set(cacheKey, pending);
               }
-              const startedAt = Date.now();
-              const raster = await rasterize({
-                source,
-                pageIndex: geo.pageIndex,
-                targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
-              });
-              console.log(
-                `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
-                  `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
-                  `${raster.widthPx}x${raster.heightPx})`,
-              );
-              // MapLibre's ImageSource needs a file:// url, not a data: URI — write
-              // the rasterized PNG to the cache and reference it by file path.
-              // Done even if this run was superseded: the raster is still
-              // valid, and the next run finds it in the cache instead of
-              // paying for the render twice.
-              if (raster.fileUri !== undefined) {
-                storage.deleteFileAt(raster.fileUri);
-                throw new Error('PDF overview unexpectedly returned a native detail file');
-              }
-              const pngBase64 = raster.pngDataUri.replace(/^data:image\/png;base64,/, '');
-              imageUri = storage.writeOverlayPng(
-                rasterFileName(t.docId, geo.pageIndex, t.revision),
-                pngBase64,
-              );
-              rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), imageUri);
+              imageUri = await pending;
               if (cancelled) return;
             }
             setStatus(statusKey, { phase: 'rendered' });
@@ -302,6 +338,11 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               ],
               bbox,
             });
+            overlays.sort(
+              (a, b) => (stackingOrder.get(a.id) ?? 0) - (stackingOrder.get(b.id) ?? 0),
+            );
+            // Do not hold ready maps behind another document's slow render.
+            if (!cancelled) setState({ overlays: [...overlays], loading: true, error: firstError });
           } catch (err) {
             if (cancelled) return;
             reportError(err, 'pdf-overlay-render');

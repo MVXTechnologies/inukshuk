@@ -2,7 +2,7 @@ Pod::Spec.new do |s|
   s.name = 'InukshukPdf'
   s.version = '1.0.0'
   s.summary = 'Bounded private PDF crop rendering for Inukshuk'
-  s.description = 'Local Expo module for memory-bounded single JPEG PDF crops.'
+  s.description = 'Local Expo module for serial JPEG and raster-mosaic PDF crops.'
   s.license = { :type => 'MIT' }
   s.author = 'Inukshuk'
   s.homepage = 'https://github.com/MVXTechnologies/inukshuk'

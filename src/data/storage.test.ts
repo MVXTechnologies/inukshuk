@@ -1,6 +1,9 @@
 import { File } from 'expo-file-system';
 
 import {
+  adoptOverlayPng,
+  existingOverlayPng,
+  clearPdfDetailPngs,
   deleteFileAt,
   documentDirUri,
   downloadBytes,
@@ -549,4 +552,49 @@ it('finds an interrupted GPX backup and removes its recovery files on deletion',
   deleteFileAt('tracks/recovered.gpx');
   expect(fileExists('tracks/recovered.gpx')).toBe(false);
   expect(fsMock.__has('/doc/tracks/recovered.gpx.tmp')).toBe(false);
+});
+
+describe('native overview ownership', () => {
+  it('moves the native PNG into the persistent overview name without reading its bytes', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-one.png', 'PNG');
+    const uri = adoptOverlayPng(
+      'sheet_revision_0_2048',
+      'file:///cache/overlays/pdf-detail-native-one.png',
+    );
+    expect(uri).toBe('file:///cache/overlays/sheet_revision_0_2048.png');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-one.png')).toBe(false);
+    expect(fsMock.__read('/cache/overlays/sheet_revision_0_2048.png')).toBe('PNG');
+    clearPdfDetailPngs();
+    expect(existingOverlayPng('sheet_revision_0_2048')).toBe(uri);
+  });
+
+  it('keeps the completed immutable overview and discards a redundant native output', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    fsMock.__seed('/cache/overlays/pdf-detail-native-duplicate.png', 'DUPLICATE');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/pdf-detail-native-duplicate.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-duplicate.png')).toBe(false);
+  });
+
+  it('does not delete an output already stored at its final name', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/same.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+  });
+
+  it('cleans the unowned native PNG when promotion fails', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-failed.png', 'PNG');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() =>
+      adoptOverlayPng('failed', 'file:///cache/overlays/pdf-detail-native-failed.png'),
+    ).toThrow('Not enough free space');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-failed.png')).toBe(false);
+    expect(existingOverlayPng('failed')).toBeNull();
+  });
 });

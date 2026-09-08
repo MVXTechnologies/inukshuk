@@ -187,6 +187,26 @@ export function writeOverlayPng(id: string, base64Png: string): string {
   return file.uri;
 }
 
+/** Take ownership of a native PNG without bringing its bytes across the JS bridge. */
+export function adoptOverlayPng(id: string, sourceUri: string): string {
+  const source = new File(sourceUri);
+  try {
+    return guardWrite(() => {
+      const dir = overlaysDir();
+      if (!dir.exists) dir.create({ intermediates: true });
+      const destination = new File(dir, `${id}.png`);
+      if (source.uri === destination.uri) return destination.uri;
+      // A revision names immutable pixels. Keep an existing completed overview.
+      if (!destination.exists) source.moveSync(destination);
+      return destination.uri;
+    });
+  } finally {
+    // moveSync changes source.uri; only the original temporary path is unowned.
+    const original = new File(sourceUri);
+    if (original.uri !== new File(overlaysDir(), `${id}.png`).uri) discardFile(original);
+  }
+}
+
 /**
  * The `file://` uri of a PNG {@link writeOverlayPng} wrote earlier under
  * `id`, or `null` when it is gone (never written, or the OS reclaimed the

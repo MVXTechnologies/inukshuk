@@ -46,6 +46,7 @@ export function usePdfDetails(
   bounds: PdfDetailBounds | null,
   viewportWidthPx: number,
   viewport?: PdfDetailViewport,
+  enabled = true,
 ): PdfOverlay[] {
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
@@ -57,6 +58,7 @@ export function usePdfDetails(
     cache: new Map<string, Detail>(),
     serial: 0,
     pinned: new Set<string>(),
+    paused: false,
   });
   const targets: Target[] = [];
   if (bounds) {
@@ -141,10 +143,19 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const epoch = w.epoch;
+    w.paused = !enabled;
+    if (!enabled) {
+      // A mounted but hidden map must not compete with foreground PDF work.
+      // Let its single submitted render settle into the cache, but discard all
+      // waiting tiles and retain the currently displayed files for return.
+      w.desired = [];
+      return;
+    }
     // Invalidate the old snapshot immediately, debounce only starting work.
     const next: Target[] = JSON.parse(key);
     w.desired = next;
     const publish = () => {
+      if (w.paused) return;
       const current: Detail[] = [];
       let pixels = 0;
       for (const target of w.desired) {
@@ -275,7 +286,7 @@ export function usePdfDetails(
       });
     }, 250);
     return () => clearTimeout(timer);
-  }, [key, rasterize, serverOrigin]);
+  }, [key, rasterize, serverOrigin, enabled]);
 
   useEffect(() => {
     const w = worker.current;

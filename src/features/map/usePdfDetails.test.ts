@@ -216,6 +216,49 @@ it('reuses matching tiles immediately on pan while rendering only newly visible 
   await v.unmount();
 });
 
+it('stops scheduling on blur and reuses completed tiles when focus returns', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25), tile('b', 0.375), tile('c', 0.5)]);
+  let finish!: (value: typeof raster) => void;
+  mockRasterize.mockResolvedValueOnce(raster).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = await renderHook(
+    ({ focused }: { focused: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, focused),
+    { initialProps: { focused: true } },
+  );
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  const cachedUri = view.result.current[0]?.imageUri;
+  await view.rerender({ focused: false });
+  await act(async () => finish(raster));
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  expect(view.result.current[0]?.imageUri).toBe(cachedUri);
+  await view.rerender({ focused: true });
+  expect(view.result.current.map((d) => d.id)).toEqual(['map:0:tile:a', 'map:0:tile:b']);
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(3);
+  expect(view.result.current).toHaveLength(3);
+  await view.unmount();
+});
+
+it('cancels debounced refinement when focus leaves before dispatch', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25)]);
+  const view = await renderHook(
+    ({ focused }: { focused: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, focused),
+    { initialProps: { focused: true } },
+  );
+  await view.rerender({ focused: false });
+  await flush();
+  expect(mockRasterize).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
 it('divides the six Mi-pixel visible budget by the number of eligible pages', async () => {
   mockPlans.mockReturnValue([tile('a', 0.25)]);
   const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));

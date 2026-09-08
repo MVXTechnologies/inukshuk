@@ -134,6 +134,7 @@ let symlink = documents.appendingPathComponent("escape.pdf")
 try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: outside)
 rejectRender(request(symlink))
 expect(!PdfJpegCrop.within(temp.appendingPathComponent("Documents-other/a.pdf"), documents), "Private path sibling is rejected")
+try runMosaicTests(documents: documents, caches: caches)
 if CommandLine.arguments.count > 1 {
   let original = URL(fileURLWithPath: CommandLine.arguments[1])
   let local = documents.appendingPathComponent("eco.pdf")
