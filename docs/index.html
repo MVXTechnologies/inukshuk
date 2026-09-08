@@ -525,12 +525,37 @@
           transition: none;
         }
       }
-      /* ---- Language switch ---- */
-      nav a.navlink.lang {
+      /* ---- Language selector (EN | FR) ---- */
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
         border: 1px solid var(--card-border);
-        padding: 0.25rem 0.55rem;
-        font-size: 0.85rem;
-        letter-spacing: 0.04em;
+        border-radius: 999px;
+        padding: 2px;
+        margin-left: 0.35rem;
+        background: color-mix(in srgb, var(--surface) 60%, transparent);
+      }
+      .lang-switch a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 700;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        padding: 0.4rem 0.6rem;
+        border-radius: 999px;
+      }
+      .lang-switch a:hover {
+        color: var(--ink);
+      }
+      .lang-switch a[aria-current='page'] {
+        background: var(--foliage);
+        color: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        .lang-switch a[aria-current='page'] {
+          color: #1a230b;
+        }
       }
     </style>
   </head>
@@ -544,9 +569,10 @@
         <a class="navlink hide-sm" href="#community">Community</a>
         <a class="navlink hide-sm" href="./privacy/">Privacy</a>
         <a class="navlink" href="https://github.com/MVXTechnologies/inukshuk">GitHub</a>
-        <a class="navlink lang" href="./fr/" lang="fr" hreflang="fr" title="Version française"
-          >FR</a
-        >
+        <div class="lang-switch" role="navigation" aria-label="Language / Langue">
+          <a href="./" lang="en" hreflang="en" aria-current="page">EN</a
+          ><a href="./fr/" lang="fr" hreflang="fr">FR</a>
+        </div>
       </div>
     </nav>
 

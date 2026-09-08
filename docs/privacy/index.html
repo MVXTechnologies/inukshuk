@@ -66,20 +66,47 @@
       .back:hover {
         text-decoration: underline;
       }
-      .lang {
+      .lang-switch {
         float: right;
-        font-size: 0.92rem;
-        font-weight: 600;
-        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
         border: 1px solid rgba(127, 127, 127, 0.35);
-        border-radius: 8px;
-        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        padding: 2px;
+      }
+      .lang-switch a {
+        text-decoration: none;
+        color: inherit;
+        opacity: 0.75;
+        font-weight: 700;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        padding: 0.4rem 0.6rem;
+        border-radius: 999px;
+      }
+      .lang-switch a:hover {
+        opacity: 1;
+      }
+      .lang-switch a[aria-current='page'] {
+        opacity: 1;
+        background: #0b3d2e;
+        color: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        .lang-switch a[aria-current='page'] {
+          background: #7fd6a6;
+          color: #10140f;
+        }
       }
     </style>
   </head>
   <body>
     <a class="back" href="../">← Back to Inukshuk</a>
-    <a class="lang" href="../fr/privacy/" lang="fr" hreflang="fr" title="Version française">FR</a>
+    <div class="lang-switch" role="navigation" aria-label="Language / Langue">
+      <a href="./" lang="en" hreflang="en" aria-current="page">EN</a
+      ><a href="../fr/privacy/" lang="fr" hreflang="fr">FR</a>
+    </div>
     <h1>Inukshuk — Privacy Policy</h1>
     <p class="updated">Last updated: 2 September 2026</p>
 
