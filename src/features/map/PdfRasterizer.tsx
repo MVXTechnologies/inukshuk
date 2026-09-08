@@ -19,13 +19,15 @@ import { type PdfCrop } from '@core/geo/pdfDetail';
  *   way every map did before #269. That path OOMs on big files (#218), so
  *   callers only take it for small ones (`@core/library/rasterSource`).
  *
- * The PNG result comes back over `postMessage` in both modes.
+ * PDF.js returns a PNG through `postMessage`. Eligible Android detail crops
+ * instead hand validated geometry to the native renderer and return a file URI.
  *
  * See `PdfRasterizer.README.md` for the bundling/offline design and limitations.
  */
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import { acquireLocalServer, writeServedText, type LocalServerLease } from '@data/localServer';
+import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { reportError } from '@lib/errorReporting';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
@@ -95,11 +97,17 @@ export interface RasterizeArgs {
   targetWidthPx?: number;
   /** Visible crop in normalized, unrotated top-left page space. */
   crop?: PdfCrop | null;
+  nativePage?: {
+    fileUri: string;
+    revision: string;
+    expectedPageWidthPt: number;
+    expectedPageHeightPt: number;
+  } | null;
 }
 
-export interface RasterResult {
-  /** PNG image as a data URI ("data:image/png;base64,...") ready for MapLibre ImageSource.url. */
-  pngDataUri: string;
+export type RasterResult = (
+  { pngDataUri: string; fileUri?: undefined } | { fileUri: string; pngDataUri?: undefined }
+) & {
   /** Rendered raster size in pixels. */
   widthPx: number;
   heightPx: number;
@@ -111,10 +119,11 @@ export interface RasterResult {
   /** Wall-clock ms inside the WebView: document open, and page render. */
   loadMs: number;
   renderMs: number;
-}
+};
 
 /** Shape of the success/error messages the WebView posts back to RN. */
 interface WebViewSuccessMessage {
+  kind?: undefined;
   id: string;
   ok: true;
   pngDataUri: string;
@@ -127,6 +136,7 @@ interface WebViewSuccessMessage {
   renderMs: number;
 }
 interface WebViewErrorMessage {
+  kind?: undefined;
   id: string;
   ok: false;
   error: string;
@@ -136,7 +146,14 @@ interface WebViewReadyMessage {
   id: '__ready__';
   ok: boolean;
 }
-type WebViewResultMessage = WebViewSuccessMessage | WebViewErrorMessage;
+interface WebViewNativeMessage {
+  id: string;
+  ok: true;
+  kind: 'native-geometry';
+  pageWidthPt: number;
+  pageHeightPt: number;
+}
+type WebViewResultMessage = WebViewSuccessMessage | WebViewErrorMessage | WebViewNativeMessage;
 type WebViewMessage = WebViewResultMessage | WebViewReadyMessage;
 
 /** True for render-result messages (everything that is not the readiness ping). */
@@ -144,7 +161,24 @@ function isResultMessage(message: WebViewMessage): message is WebViewResultMessa
   return message.id !== '__ready__';
 }
 
+/** Geometry belongs to one immutable document revision, page, and served source. */
+function nativeGeometryKey(args: Required<RasterizeArgs>): string | null {
+  const page = args.nativePage;
+  return page && args.crop
+    ? JSON.stringify([
+        page.fileUri,
+        page.revision,
+        args.pageIndex,
+        page.expectedPageWidthPt,
+        page.expectedPageHeightPt,
+        args.source.url ?? fnv1a32(args.source.base64),
+      ])
+    : null;
+}
+const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
+
 interface PendingRequest {
+  args: Required<RasterizeArgs>;
   resolve: (result: RasterResult) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -271,7 +305,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   var LOAD_WATCHDOG_MS = 12000;
   var RANGE_CHUNK_BYTES = 1048576;
 
-  function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop) {
+  function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage) {
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -324,7 +358,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (attempt === 0) {
           // Drop to the main-thread fake worker and retry once.
           try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
-          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop);
+          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage);
         } else {
           post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' });
         }
@@ -360,6 +394,16 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var baseViewport = page.getViewport({ scale: 1, rotation: 0 });
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
+          if (nativePage && crop && page.rotate === 0 && page.userUnit === 1 &&
+              Array.isArray(page.view) && page.view.length === 4 &&
+              page.view[0] === 0 && page.view[1] === 0 &&
+              page.view[2] === nativePage.expectedPageWidthPt &&
+              page.view[3] === nativePage.expectedPageHeightPt &&
+              pageWidthPt === nativePage.expectedPageWidthPt && pageHeightPt === nativePage.expectedPageHeightPt) {
+            return releaseDocument().then(function () {
+              post({ id: id, ok: true, kind: 'native-geometry', pageWidthPt: pageWidthPt, pageHeightPt: pageHeightPt });
+            }, releaseFailure);
+          }
           var geometry = cropGeometry(pageWidthPt, pageHeightPt, targetWidthPx, crop);
           var scale = geometry.scale;
           var viewport = page.getViewport({ scale: scale, rotation: 0 });
@@ -412,7 +456,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   }
 
   // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
-  window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop) {
+  window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop, nativePage) {
     var input;
     if (url) {
       input = { url: url };
@@ -420,7 +464,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       input = { base64: chunks.join('') };
     }
     chunks = [];
-    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop);
+    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage);
   };
 
   post({ id: '__ready__', ok: true });
@@ -469,6 +513,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
   const queueRef = useRef<{ id: string; args: Required<RasterizeArgs> }[]>([]);
   const busyRef = useRef(false);
+  const nativeActiveRef = useRef<string | null>(null);
+  const verifiedGeometryRef = useRef(new Set<string>());
+  const pumpQueueRef = useRef<() => void>(() => {});
+  const mountedRef = useRef(true);
   const activeRequestRef = useRef<string | null>(null);
   const idCounterRef = useRef(0);
 
@@ -539,8 +587,67 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [applyEngine]);
 
+  const startNative = useCallback((id: string, pending: PendingRequest) => {
+    if (nativeActiveRef.current !== null) return;
+    const { nativePage, crop, pageIndex, targetWidthPx } = pending.args;
+    if (!nativePage || !crop) return;
+    const cacheKey = nativeGeometryKey(pending.args);
+    nativeActiveRef.current = id;
+    clearTimeout(pending.timeout);
+    pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
+    void (async () => {
+      try {
+        const result = await renderNativePdfCrop({
+          fileUri: nativePage.fileUri,
+          pageIndex,
+          pageWidthPt: nativePage.expectedPageWidthPt,
+          pageHeightPt: nativePage.expectedPageHeightPt,
+          crop,
+          targetWidthPx,
+        });
+        if (
+          !mountedRef.current ||
+          pendingRef.current.get(id) !== pending ||
+          activeRequestRef.current !== id
+        ) {
+          deleteNativePdfOutput(result.fileUri);
+          return;
+        }
+        clearTimeout(pending.timeout);
+        pendingRef.current.delete(id);
+        if (cacheKey !== null) {
+          const cache = verifiedGeometryRef.current;
+          cache.delete(cacheKey);
+          cache.add(cacheKey);
+          while (cache.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+            const oldest = cache.values().next().value;
+            if (oldest === undefined) break;
+            cache.delete(oldest);
+          }
+        }
+        pending.resolve(result);
+      } catch (error) {
+        if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
+        if (pendingRef.current.get(id) === pending) {
+          clearTimeout(pending.timeout);
+          pendingRef.current.delete(id);
+          pending.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      } finally {
+        if (nativeActiveRef.current === id) {
+          nativeActiveRef.current = null;
+          if (mountedRef.current) {
+            busyRef.current = false;
+            activeRequestRef.current = null;
+            pumpQueueRef.current();
+          }
+        }
+      }
+    })();
+  }, []);
+
   const pumpQueue = useCallback(() => {
-    if (busyRef.current || !readyRef.current) {
+    if (busyRef.current || nativeActiveRef.current !== null || !readyRef.current) {
       return;
     }
     const next = queueRef.current.shift();
@@ -550,6 +657,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     busyRef.current = true;
     const { id, args } = next;
     activeRequestRef.current = id;
+    const cachedKey = nativeGeometryKey(args);
+    const nativePending = pendingRef.current.get(id);
+    if (cachedKey !== null && verifiedGeometryRef.current.has(cachedKey) && nativePending) {
+      startNative(id, nativePending);
+      return;
+    }
     const wv = webviewRef.current;
     if (!wv) {
       busyRef.current = false;
@@ -576,7 +689,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       // Served: the request is four small values; pdf.js fetches the bytes.
       const urlLiteral = JSON.stringify(source.url);
       wv.injectJavaScript(
-        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}, ${JSON.stringify(args.crop)}); true;`,
+        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}); true;`,
       );
       return;
     }
@@ -588,9 +701,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       wv.injectJavaScript(`window.__pdfAppend && window.__pdfAppend(${chunkLiteral}); true;`);
     }
     wv.injectJavaScript(
-      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}); true;`,
+      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}); true;`,
     );
-  }, []);
+  }, [startNative]);
 
   // Whenever the engine becomes ready (initial load or after a reload), drain
   // any queued requests.
@@ -627,6 +740,21 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!pending || activeRequestRef.current !== message.id) {
         return;
       }
+      if (message.ok && message.kind === 'native-geometry') {
+        if (nativeActiveRef.current !== null) return;
+        const { nativePage, crop } = pending.args;
+        if (
+          !nativePage ||
+          !crop ||
+          message.pageWidthPt !== nativePage.expectedPageWidthPt ||
+          message.pageHeightPt !== nativePage.expectedPageHeightPt
+        )
+          return;
+        startNative(message.id, pending);
+        return;
+      }
+      // Once handed off, only the native promise owns this request.
+      if (nativeActiveRef.current === message.id) return;
       clearTimeout(pending.timeout);
       pendingRef.current.delete(message.id);
       if (message.ok) {
@@ -653,7 +781,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       finishCurrent();
     },
-    [finishCurrent],
+    [finishCurrent, startNative],
   );
 
   // If the WebView process reloads/crashes, the engine is no longer ready and
@@ -681,8 +809,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       readyRef.current = false;
       setReady(false);
       applyEngine({ kind: 'inline', html });
-      busyRef.current = false;
-      activeRequestRef.current = null;
+      // Replacing the WebView cannot stop PdfRenderer. Its completion still
+      // owns queue release even when its caller is rejected below.
+      if (nativeActiveRef.current === null) {
+        busyRef.current = false;
+        activeRequestRef.current = null;
+      }
       // Requests that can still run on the inline page stay queued; every other
       // pending request — the in-flight one, and every queued URL request — is
       // rejected now.
@@ -723,7 +855,6 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // `rasterize` is stable (empty deps) but needs the latest pumpQueue; bridge
   // them through a ref so we don't recreate the public function on every render.
-  const pumpQueueRef = useRef(pumpQueue);
   useEffect(() => {
     pumpQueueRef.current = pumpQueue;
   }, [pumpQueue]);
@@ -748,6 +879,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         pageIndex: args.pageIndex,
         targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
         crop: args.crop ?? null,
+        nativePage: args.crop && nativePdfAvailable() ? (args.nativePage ?? null) : null,
       };
       const expire = () => {
         const stillPending = pendingRef.current.get(id);
@@ -757,6 +889,13 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             new Error(`PdfRasterizer: render timed out after ${RENDER_TIMEOUT_MS}ms`),
           );
           queueRef.current = queueRef.current.filter((queued) => queued.id !== id);
+          if (nativeActiveRef.current === id) {
+            const key = nativeGeometryKey(normalized);
+            if (key !== null) verifiedGeometryRef.current.delete(key);
+            // PdfRenderer cannot be interrupted by replacing a WebView. Keep
+            // queue ownership until its promise settles; delete late output.
+            return;
+          }
           if (activeRequestRef.current === id) {
             // A timeout does not stop pdf.js. Destroy the old WebView/canvas
             // and wait for the replacement's ready message before proceeding.
@@ -773,7 +912,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       };
       const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
 
-      pendingRef.current.set(id, { resolve, reject, timeout, expire });
+      pendingRef.current.set(id, { args: normalized, resolve, reject, timeout, expire });
       queueRef.current.push({ id, args: normalized });
       pumpQueueRef.current();
     });
@@ -787,12 +926,24 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   // Reject everything still pending on unmount so callers never hang.
   useEffect(() => {
     const pending = pendingRef.current;
+    const verifiedGeometry = verifiedGeometryRef.current;
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       pending.forEach((req) => {
         clearTimeout(req.timeout);
         req.reject(new Error('PdfRasterizer: provider unmounted'));
       });
       pending.clear();
+      verifiedGeometry.clear();
+      // StrictMode can replay setup on these same refs. Discard abandoned JS
+      // queue entries, but never release an unfinished native operation.
+      queueRef.current = [];
+      readyRef.current = false;
+      if (nativeActiveRef.current === null) {
+        busyRef.current = false;
+        activeRequestRef.current = null;
+      }
     };
   }, []);
 

@@ -1,8 +1,8 @@
 # PdfRasterizer
 
-Fully-offline rasterizer that turns a single page of a PDF into a PNG data URI,
-ready to drop into a MapLibre `ImageSource` (`source.url = pngDataUri`). It is
-used to draw a georeferenced PDF map as an image overlay.
+Fully offline rasterizer for georeferenced PDF map overlays. PDF.js returns a PNG
+data URI that callers write to cache before passing a file URI to MapLibre.
+Eligible Android detail crops return an owned PNG file directly.
 
 ## Public API
 
@@ -33,6 +33,31 @@ const result = await rasterize({
 `@core/library/rasterSource` is the rule callers use to pick the source: the
 URL whenever there is an origin, base64 only for files under 16 MB without
 one, and a clear refusal above that (#269).
+
+## Android detail acceleration
+
+Detail requests can provide `crop` and `nativePage: {fileUri, revision,
+expectedPageWidthPt, expectedPageHeightPt}`. On rebuilt Android binaries,
+PDF.js first verifies rotation 0, UserUnit 1, and a zero-origin visible page box
+matching the georeference dimensions. It releases its document before handing
+the crop to the local `InukshukPdf` module. Other geometries, iOS and binaries
+without the optional module retain PDF.js rendering.
+
+The native worker renders only a bounded crop bitmap and writes lossless opaque
+PNG directly to cache. The result has `fileUri` instead of `pngDataUri`; callers
+own this file and must delete abandoned results. Successful geometry checks are
+cached in a 16-entry LRU keyed by file revision, source, page and dimensions, so
+later crops skip PDF.js. Native failure or timeout invalidates eligibility.
+Native rendering errors retain the overview instead of retrying an expensive
+PDF.js render. The existing detail hook coalesces camera changes and bounds its
+image cache separately.
+
+On the API 35 Android emulator, the original EcoLL1 1896×1659 crop took 335 s in
+PDF.js. The integrated native path completed three successive crops in
+1.3–1.4 s each, including writing PNG; Anticosti and NORD sample crops took
+0.84 s and 2.94 s. These are provider timings, not measured frame-presentation
+latency or physical-device guarantees. Rebuilding Android is required to gain
+the native module; an OTA alone cannot add native code.
 
 ## How it works
 
@@ -87,7 +112,9 @@ with the file.
   runs at a time because the WebView and its canvas are a single shared
   resource.
 - Each request has a **45s timeout**; on timeout the promise rejects and the
-  engine is freed so the queue keeps draining.
+  PDF.js WebView is replaced before the queue resumes. Native rendering cannot
+  be interrupted through PdfRenderer: a timeout rejects the caller but retains
+  the slot until native work settles, then deletes its abandoned file.
 - A **12s load watchdog** inside the page guards against the Android System
   WebView's Blob worker wedging silently: if `getDocument` makes no progress
   for 12s the page forces pdf.js's main-thread fake worker and retries once.

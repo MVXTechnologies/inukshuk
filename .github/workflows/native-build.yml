@@ -51,6 +51,9 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Verify native PDF geometry and private paths
+        run: sh modules/inukshuk-pdf/scripts/test-geometry.sh
+
       - uses: android-actions/setup-android@v4
 
       # Gradle's dependency caches live in ~/.gradle regardless of the

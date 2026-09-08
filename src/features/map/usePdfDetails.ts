@@ -18,6 +18,9 @@ interface Target {
   id: string;
   fileUri: string;
   pageIndex: number;
+  pageWidthPt: number;
+  pageHeightPt: number;
+  revision: string;
   plan: NonNullable<ReturnType<typeof planPdfDetail>>;
   bbox: PdfOverlay['bbox'];
 }
@@ -63,6 +66,9 @@ export function usePdfDetails(
         id: o.id,
         fileUri: map.fileUri,
         pageIndex,
+        pageWidthPt: geo.pageWidthPt,
+        pageHeightPt: geo.pageHeightPt,
+        revision: String(map.importedAt),
         plan,
         bbox: o.bbox,
       });
@@ -124,12 +130,24 @@ export function usePdfDetails(
                   pageIndex: target.pageIndex,
                   targetWidthPx: target.plan.targetWidthPx,
                   crop: target.plan.crop,
+                  nativePage: {
+                    fileUri: storage.resolveDocumentPath(target.fileUri),
+                    revision: target.revision,
+                    expectedPageWidthPt: target.pageWidthPt,
+                    expectedPageHeightPt: target.pageHeightPt,
+                  },
                 });
-                if (w.epoch !== epoch) return;
-                const imageUri = storage.writeOverlayPng(
-                  `pdf-detail-${fnv1a32(target.key)}-${++w.serial}`,
-                  result.pngDataUri.replace(/^data:image\/png;base64,/, ''),
-                );
+                if (w.epoch !== epoch) {
+                  if (result.fileUri !== undefined) storage.deleteFileAt(result.fileUri);
+                  return;
+                }
+                const imageUri =
+                  result.fileUri !== undefined
+                    ? result.fileUri
+                    : storage.writeOverlayPng(
+                        `pdf-detail-${fnv1a32(target.key)}-${++w.serial}`,
+                        result.pngDataUri.replace(/^data:image\/png;base64,/, ''),
+                      );
                 detail = {
                   id: target.id,
                   overviewKey: target.overviewKey,

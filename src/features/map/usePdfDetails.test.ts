@@ -13,6 +13,7 @@ jest.mock('./PdfRasterizer', () => ({
 jest.mock('@data/storage', () => ({
   clearPdfDetailPngs: () => undefined,
   toDocumentPath: (p: string) => p,
+  resolveDocumentPath: (p: string) => p,
   fileSizeAt: () => 216_000_000,
   readFileBase64: () => {
     throw new Error('Large file must not cross bridge');
@@ -166,5 +167,37 @@ it('does not write a crop completing after unmount', async () => {
   await flush();
   await v.unmount();
   await act(async () => resolve(raster));
+  expect(mockFiles.size).toBe(0);
+});
+
+it('uses a native PNG directly and includes verified page dimensions in the request', async () => {
+  const uri = 'file://pdf-detail-native-current.png';
+  mockFiles.set(uri, 'native');
+  mockRasterize.mockResolvedValue({ fileUri: uri });
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(v.result.current[0]?.imageUri).toBe(uri);
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({
+    nativePage: { fileUri: map.fileUri, expectedPageWidthPt: 1000, expectedPageHeightPt: 1000 },
+  });
+  expect(mockFiles.size).toBe(1);
+  await v.unmount();
+  expect(mockFiles.size).toBe(0);
+});
+
+it('deletes a native file returned after the detail hook unmounted', async () => {
+  let resolve!: (value: { fileUri: string }) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  await v.unmount();
+  const uri = 'file://pdf-detail-native-obsolete.png';
+  mockFiles.set(uri, 'native');
+  await act(async () => resolve({ fileUri: uri }));
   expect(mockFiles.size).toBe(0);
 });

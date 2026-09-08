@@ -276,6 +276,10 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               // Done even if this run was superseded: the raster is still
               // valid, and the next run finds it in the cache instead of
               // paying for the render twice.
+              if (raster.fileUri !== undefined) {
+                storage.deleteFileAt(raster.fileUri);
+                throw new Error('PDF overview unexpectedly returned a native detail file');
+              }
               const pngBase64 = raster.pngDataUri.replace(/^data:image\/png;base64,/, '');
               imageUri = storage.writeOverlayPng(
                 rasterFileName(t.docId, geo.pageIndex, t.revision),

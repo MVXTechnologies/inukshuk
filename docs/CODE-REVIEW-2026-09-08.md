@@ -398,8 +398,8 @@ Remaining release/operational follow-ups: public client credentials, branch
 protection/rulesets, the reported upstream Hermes/runtime issue, and validation
 on the owner's physical 256 MB-heap Android phone. Existing imported map
 metadata and cached old track statistics are not automatically rebuilt.
-Fresh document-picker imports of all three original maps and a clean Android
-EcoLL1 detail run remain device-test gaps. No OTA/store release or merge was
+Fresh document-picker imports of all three original maps remain a device-test
+gap. The Android EcoLL1 detail failure is addressed in the follow-up below. No OTA/store release or merge was
 performed.
 
 Additional source-review limits: catalog-generation scripts validate published
@@ -410,3 +410,34 @@ retain their existing abort-only timeout; unlike the new point/forecast helper,
 a transport that ignores abort can leave comparison cells pending. These are
 recorded separately from the fixed application regressions. This review does
 not certify every possible UI/device/network combination.
+
+## Android zoom performance follow-up
+
+A clean EcoLL1 run reproduced the 45-second refinement timeout. Letting the same
+1896×1659 crop finish diagnostically measured 335.4 seconds of PDF.js rendering,
+so merely increasing the timeout was not a usable fix.
+
+The local Android Expo module now renders guarded detail crops with PdfRenderer,
+returns cache files directly, and uses a process-wide single-render gate. PDF.js
+verifies the page geometry first and releases its resources before native work.
+A bounded cache of successful geometry checks lets subsequent crops bypass that
+probe. Timeout, stale completion, server fallback and unmount retain correct
+ownership and delete abandoned output. Opaque PNG removes unused alpha without
+changing decoded RGB pixels; its measured encode time halved.
+
+The rebuilt Android development app displays EcoLL1 native detail. Integrated
+provider measurements for three successive Eco crops were 1402, 1338 and 1434 ms;
+Anticosti and NORD sample crops were 839 and 2935 ms. Native PNGs from all three
+were visually inspected for detail and orientation. These timings include the
+provider/render/file path but not the final MapLibre presentation frame. The
+standalone Eco benchmark peaked around 256–258 MiB RSS, excluding the rest of
+the app; this is not a physical-phone memory guarantee.
+
+Validation: `npm run check` passes 216 suites / 2649 tests. The module has 41
+host-JVM geometry/private-path checks, also added to Android CI. Android debug
+build and data-preserving installation pass. Independent lifecycle review and
+regressions cover the accelerated path. iOS and older Android binaries keep the
+existing PDF.js path; adding this Android module requires a native rebuild.
+The previous audit commit passed quality, Expo Doctor, Android and iOS CI.
+Further work and testing now focus on the mobile app; the browser prototype is
+not used as a substitute for mobile validation.
