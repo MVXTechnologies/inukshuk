@@ -58,7 +58,8 @@ import { useEffect, useRef, useState } from 'react';
  */
 
 const FETCH_TIMEOUT_MS = 20_000;
-const CACHE_MAX = 6;
+// writeChartPng retains only the current and previous raster for this chart id.
+const CACHE_MAX = 2;
 
 export interface MarineChartDrape {
   uri: string;
@@ -78,6 +79,25 @@ export interface MarineChart {
 
 /** Rendered charts by bbox cache key (session-only, like the wind cache). */
 const chartCache = new Map<string, MarineChart>();
+const packIdentities = new WeakMap<ReadonlySet<string>, number>();
+let nextPackIdentity = 0;
+
+function packIdentity(installed: ReadonlySet<string>): number {
+  let identity = packIdentities.get(installed);
+  if (identity === undefined) {
+    identity = ++nextPackIdentity;
+    packIdentities.set(installed, identity);
+  }
+  return identity;
+}
+
+function chartFileExists(uri: string): boolean {
+  try {
+    return storage.fileExists(uri);
+  } catch {
+    return false;
+  }
+}
 
 async function fetchGrid(url: string, signal: AbortSignal): Promise<FloatGrid | null> {
   const res = await fetch(url, { signal });
@@ -189,7 +209,7 @@ export function useMarineChart(
 ): MarineChartState {
   const [state, setState] = useState<MarineChartState>(IDLE);
   // The bbox a render is anchored to; a settled camera inside it is a no-op.
-  const anchorRef = useRef<GeoBbox | null>(null);
+  const anchorRef = useRef<{ bbox: GeoBbox; contextKey: string; uri: string | null } | null>(null);
 
   useEffect(() => {
     // State resets go through a 0-timeout, never a synchronous setState in
@@ -205,19 +225,38 @@ export function useMarineChart(
     };
     if (!active) return clearLater();
     if (bounds === null) return;
+    // Inventory identity also changes on a same-size pack refresh, where the
+    // caller's size/byte-count version may be unchanged. Weak keys do not keep
+    // old inventories alive just to identify session-cache entries.
+    const contextKey = `${packIdentity(installedPacks)}|${packVersion}|${imperial ? 'ft' : 'm'}`;
     const anchor = anchorRef.current;
-    if (anchor !== null && !needsDepthReanchor(anchor, bounds)) return;
+    if (
+      anchor !== null &&
+      anchor.contextKey === contextKey &&
+      !needsDepthReanchor(anchor.bbox, bounds) &&
+      (anchor.uri === null || chartFileExists(anchor.uri))
+    )
+      return;
     const bbox = depthFetchBbox(bounds);
     // Too wide / degenerate: the flat chart-blue water fill carries the
     // look, no drape. Not a failure — no raster fallback either (a 450 m
     // global grid magnified to a continent is exactly what wave D removed).
     if (bbox === null) return clearLater();
-    const key = `${depthChartCacheKey(bbox)}|${packVersion}`;
+    const key = `${depthChartCacheKey(bbox)}|${contextKey}`;
+    // Progressive paints and OS cache reclamation can remove a file before
+    // its metadata reaches the entry limit. Never hand back a dead URI.
+    for (const [oldKey, old] of chartCache) {
+      if (!chartFileExists(old.drape.uri)) chartCache.delete(oldKey);
+    }
     const cached = chartCache.get(key);
     if (cached !== undefined) {
       chartCache.delete(key);
       chartCache.set(key, cached);
-      anchorRef.current = bbox;
+      anchorRef.current = {
+        bbox: cached.offline ? cached.bbox : bbox,
+        contextKey,
+        uri: cached.drape.uri,
+      };
       return settle(stateForChart(cached));
     }
 
@@ -229,6 +268,7 @@ export function useMarineChart(
       let chart: MarineChart | null = null;
       // True once the progressive coarse pass has put something on screen.
       let previewed = false;
+      let previewUri: string | null = null;
       // --- 1. A downloaded pack that covers the viewport wins outright. ---
       for (const source of ladder) {
         if (chart !== null || source.grid === null) continue;
@@ -239,6 +279,7 @@ export function useMarineChart(
         if (cell === null) continue;
         try {
           const bytes = await marinePackFiles.readPackCell(cell.key);
+          if (cancelled) return;
           if (bytes === null) continue;
           const grid = maskForSource(parseFloat32Grid(bytes), source);
           if (!hasData(grid) || grid === null) continue;
@@ -287,6 +328,7 @@ export function useMarineChart(
               const preview = buildChart(source, masked, null, bbox, imperial, false);
               if (preview === null || cancelled) return;
               previewed = true;
+              previewUri = preview.drape.uri;
               setState(stateForChart(preview));
             })
             .catch(() => undefined);
@@ -311,7 +353,11 @@ export function useMarineChart(
       // Anchor either way so a failed region doesn't refetch on every settle.
       // A pack drape anchors to its own CELL, so panning off the cell edge
       // re-renders instead of trailing an image that stops mid-screen.
-      anchorRef.current = chart !== null && chart.offline ? chart.bbox : bbox;
+      anchorRef.current = {
+        bbox: chart !== null && chart.offline ? chart.bbox : bbox,
+        contextKey,
+        uri: chart?.drape.uri ?? previewUri,
+      };
       if (chart !== null) {
         chartCache.set(key, chart);
         if (chartCache.size > CACHE_MAX) {

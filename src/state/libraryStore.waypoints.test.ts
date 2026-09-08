@@ -14,7 +14,7 @@ jest.mock('@data/storage', () => ({
 const wp = (id: string) => useLibraryStore.getState().waypoints.find((w) => w.id === id);
 
 beforeEach(() => {
-  useLibraryStore.setState({ waypoints: [] });
+  useLibraryStore.setState({ hydrated: true, waypoints: [] });
 });
 
 it('addWaypoint stores the position with an auto label and returns the id', () => {

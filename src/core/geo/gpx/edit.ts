@@ -30,7 +30,8 @@ export interface MergeResult {
 /** First real timestamp of a point series, or undefined when untimed. */
 function startTime(points: readonly TrackPoint[]): number | undefined {
   for (const p of points) {
-    if (Number.isFinite(p.time) && p.time > 0) return p.time;
+    if (p.hasTime !== false && Number.isFinite(p.time) && (p.time > 0 || p.hasTime === true))
+      return p.time;
   }
   return undefined;
 }

@@ -54,3 +54,10 @@ describe('interpolateTrackAtDistance', () => {
     expect(mid.elevation).toBe(100);
   });
 });
+
+it('does not fabricate timestamps while scrubbing untimed imported fixes', () => {
+  const points = [pt(45, -73, { hasTime: false }), pt(45.001, -73, { time: 1704067200000 })];
+  expect(interpolateTrackAtDistance(points, 50)?.time).toBeUndefined();
+  expect(interpolateTrackAtDistance([points[0]!], 0)?.time).toBeUndefined();
+  expect(interpolateTrackAtDistance([...points].reverse(), 1e9)?.time).toBeUndefined();
+});

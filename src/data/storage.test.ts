@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import {
   deleteFileAt,
   documentDirUri,
@@ -27,7 +29,7 @@ jest.mock('expo-file-system', () => {
     parts.map((p) => (typeof p === 'string' ? p.replace(/^file:\/\//, '') : p.path)).join('/');
 
   class File {
-    readonly path: string;
+    path: string;
     static downloadFileAsync = jest.fn();
     constructor(...parts: MockPathLike[]) {
       this.path = joinPath(parts);
@@ -57,6 +59,9 @@ jest.mock('expo-file-system', () => {
       files.set(this.path, { data, mtime: clock++ });
     }
     async text(): Promise<string> {
+      return this.textSync();
+    }
+    textSync(): string {
       const entry = files.get(this.path);
       if (!entry || typeof entry.data !== 'string') throw new Error(`text: ${this.path}`);
       return entry.data;
@@ -66,14 +71,23 @@ jest.mock('expo-file-system', () => {
       if (!entry) throw new Error(`bytes: ${this.path} does not exist`);
       return typeof entry.data === 'string' ? new TextEncoder().encode(entry.data) : entry.data;
     }
-    copy(dest: File): void {
+    async copy(dest: File): Promise<void> {
+      await Promise.resolve();
+      this.copySync(dest);
+    }
+    copySync(dest: File): void {
       const entry = files.get(this.path);
       if (!entry) throw new Error(`copy: ${this.path} does not exist`);
       files.set(dest.path, { data: entry.data, mtime: clock++ });
     }
-    move(dest: File): void {
-      this.copy(dest);
+    async move(dest: File): Promise<void> {
+      await Promise.resolve();
+      this.moveSync(dest);
+    }
+    moveSync(dest: File): void {
+      this.copySync(dest);
       files.delete(this.path);
+      this.path = dest.path;
     }
   }
 
@@ -136,6 +150,7 @@ function serveDownload(bytes: number[]): void {
 }
 
 beforeEach(() => {
+  jest.restoreAllMocks();
   fsMock.__reset();
   setNetworkAllowed(true);
 });
@@ -151,6 +166,82 @@ describe('writeJson / readJson atomicity', () => {
     writeJson('library.json', { maps: ['a', 'b'] });
     expect(fsMock.__has('/doc/library.json.tmp')).toBe(false);
     await expect(readJson('library.json')).resolves.toEqual({ maps: ['a', 'b'] });
+  });
+
+  it('surfaces a promotion failure synchronously and retains the recoverable stage', async () => {
+    fsMock.__seed('/doc/library.json', '{"v":"old"}');
+    jest.spyOn(File.prototype, 'move').mockImplementation(() => new Promise(() => {}));
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('Move denied');
+    });
+    expect(() => writeJson('library.json', { v: 'new' })).toThrow('Move denied');
+    expect(fsMock.__has('/doc/library.json')).toBe(false);
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'new' });
+  });
+
+  it.each(['create', 'write'] as const)(
+    'preserves the sole staged index when a retry fails during %s after promotion failure',
+    async (operation) => {
+      fsMock.__seed('/doc/library.json', '{"v":"old"}');
+      jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+        throw new Error('Move denied');
+      });
+      expect(() => writeJson('library.json', { v: 'saved' })).toThrow('Move denied');
+      await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+      jest.spyOn(File.prototype, operation).mockImplementationOnce(() => {
+        throw new Error('ENOSPC');
+      });
+      expect(() => writeJson('library.json', { v: 'retry' })).toThrow();
+      await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+    },
+  );
+
+  it('preserves a valid stage behind a corrupt target when the next write fails', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"saved"}');
+    jest.spyOn(File.prototype, 'write').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() => writeJson('library.json', { v: 'retry' })).toThrow();
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+  });
+
+  it('retains the sole staged index if recovery promotion itself fails', async () => {
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"saved"}');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('Move denied');
+    });
+    expect(() => writeJson('library.json', { v: 'retry' })).toThrow('Move denied');
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+  });
+
+  it('waits for the forensic copy before completing corrupt-file recovery', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"recovered"}');
+    let finishCopy: () => void = () => {};
+    const copy = new Promise<void>((resolve) => {
+      finishCopy = resolve;
+    });
+    jest.spyOn(File.prototype, 'copy').mockReturnValueOnce(copy);
+    let completed = false;
+    const result = readJson('library.json').then((value) => {
+      completed = true;
+      return value;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    finishCopy();
+    await expect(result).resolves.toEqual({ v: 'recovered' });
+  });
+
+  it('recovers staged JSON when the asynchronous forensic copy fails', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"recovered"}');
+    jest.spyOn(File.prototype, 'copy').mockRejectedValueOnce(new Error('Copy denied'));
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'recovered' });
+    expect(fsMock.__read('/doc/library.json')).toBe('broken');
   });
 
   it('readJson recovers the staged .tmp when a crash interrupted the swap', async () => {
@@ -397,4 +488,65 @@ describe('document-relative paths', () => {
     expect(fileExists(`${OLD_CONTAINER}/tracks/t2.gpx`)).toBe(false);
     expect(fileExists(toDocumentPath(`${OLD_CONTAINER}/tracks/t2.gpx`))).toBe(true);
   });
+});
+
+describe('GPX replacement durability', () => {
+  it.each(['create', 'write'] as const)(
+    'preserves the saved GPX when staging %s fails',
+    async (operation) => {
+      writeTrackGpx('t1', '<gpx>original</gpx>');
+      jest.spyOn(File.prototype, operation).mockImplementationOnce(() => {
+        throw new Error('ENOSPC');
+      });
+      expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow();
+      expect(fsMock.__read('/doc/tracks/t1.gpx')).toBe('<gpx>original</gpx>');
+      await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+    },
+  );
+
+  it('restores the saved GPX when promotion fails', async () => {
+    writeTrackGpx('t1', '<gpx>original</gpx>');
+    const move = File.prototype.moveSync;
+    jest.spyOn(File.prototype, 'moveSync').mockImplementation(function (
+      this: File,
+      destination,
+      options,
+    ) {
+      if (this.uri.endsWith('.tmp')) throw new Error('Move denied');
+      move.call(this, destination, options);
+    });
+    expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow('Move denied');
+    expect(fsMock.__read('/doc/tracks/t1.gpx')).toBe('<gpx>original</gpx>');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+  });
+
+  it('keeps the GPX readable if rollback fails and recovers it before retrying', async () => {
+    writeTrackGpx('t1', '<gpx>original</gpx>');
+    const move = File.prototype.moveSync;
+    jest.spyOn(File.prototype, 'moveSync').mockImplementation(function (
+      this: File,
+      destination,
+      options,
+    ) {
+      if (this.uri.endsWith('.tmp') || this.uri.endsWith('.bak')) throw new Error('Move denied');
+      move.call(this, destination, options);
+    });
+    expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow('Move denied');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+    jest.restoreAllMocks();
+    expect(writeTrackGpx('t1', '<gpx>retry</gpx>')).toBe('file:///doc/tracks/t1.gpx');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>retry</gpx>');
+    expect(fsMock.__has('/doc/tracks/t1.gpx.bak')).toBe(false);
+    expect(fsMock.__has('/doc/tracks/t1.gpx.tmp')).toBe(false);
+  });
+});
+
+it('finds an interrupted GPX backup and removes its recovery files on deletion', async () => {
+  fsMock.__seed('/doc/tracks/recovered.gpx.bak', '<gpx>saved</gpx>');
+  fsMock.__seed('/doc/tracks/recovered.gpx.tmp', '<partial');
+  expect(fileExists('tracks/recovered.gpx')).toBe(true);
+  await expect(readFileText('tracks/recovered.gpx')).resolves.toBe('<gpx>saved</gpx>');
+  deleteFileAt('tracks/recovered.gpx');
+  expect(fileExists('tracks/recovered.gpx')).toBe(false);
+  expect(fsMock.__has('/doc/tracks/recovered.gpx.tmp')).toBe(false);
 });

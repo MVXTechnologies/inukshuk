@@ -155,6 +155,9 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
 
   let distanceM = 0;
   let movingTimeS = 0;
+  let movingDistanceM = 0;
+  let firstTime: number | undefined;
+  let lastTime: number | undefined;
   let maxSpeedMps = 0;
   let minAltitudeM: number | undefined;
   let maxAltitudeM: number | undefined;
@@ -169,6 +172,11 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i]!;
     elevations[i] = p.altitude;
+    const hasTime = p.hasTime !== false && Number.isFinite(p.time);
+    if (hasTime) {
+      firstTime ??= p.time;
+      lastTime = p.time;
+    }
 
     if (p.latitude < minLat) minLat = p.latitude;
     if (p.latitude > maxLat) maxLat = p.latitude;
@@ -185,12 +193,15 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
       const segDist = haversineMeters(prev, p);
       distanceM += segDist;
       const dt = (p.time - prev.time) / 1000;
-      if (dt > 0) {
+      if (hasTime && prev.hasTime !== false && Number.isFinite(prev.time) && dt > 0) {
         const speed = segDist / dt;
         // Spike guard: only count physically plausible ground speeds toward
         // the max. dt<=0 segments are already excluded.
         if (speed > maxSpeedMps) maxSpeedMps = speed;
-        if (speed >= movingSpeedThresholdMps) movingTimeS += dt;
+        if (speed >= movingSpeedThresholdMps) {
+          movingTimeS += dt;
+          movingDistanceM += segDist;
+        }
       }
     }
   }
@@ -199,10 +210,11 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
     threshold: elevationThresholdM,
   });
 
-  const first = pts[0]!;
-  const last = pts[pts.length - 1]!;
-  const durationS = Math.max(0, (last.time - first.time) / 1000);
-  const avgSpeedMps = movingTimeS > 0 ? distanceM / movingTimeS : 0;
+  const durationS =
+    firstTime !== undefined && lastTime !== undefined
+      ? Math.max(0, (lastTime - firstTime) / 1000)
+      : 0;
+  const avgSpeedMps = movingTimeS > 0 ? movingDistanceM / movingTimeS : 0;
 
   const bbox: BoundingBox = { minLat, minLng, maxLat, maxLng };
 
@@ -284,12 +296,18 @@ export function reduceStatsWith(
   const distanceM = prev.distanceM + segDist;
 
   let movingTimeS = prev.movingTimeS;
+  // Recover the moving-distance numerator from the prior average so the fold
+  // also works after a background merge or checkpoint recovery computed in batch.
+  let movingDistanceM = prev.avgSpeedMps * prev.movingTimeS;
   let maxSpeedMps = prev.maxSpeedMps;
   const dt = (next.time - prevPoint.time) / 1000;
   if (dt > 0) {
     const speed = segDist / dt;
     if (speed > maxSpeedMps) maxSpeedMps = speed;
-    if (speed >= movingSpeedThresholdMps) movingTimeS += dt;
+    if (speed >= movingSpeedThresholdMps) {
+      movingTimeS += dt;
+      movingDistanceM += segDist;
+    }
   }
 
   // Per-step hysteresis (see the doc comment caveat).
@@ -330,7 +348,7 @@ export function reduceStatsWith(
 
   // durationS grows from the recorded duration plus this step's wall time.
   const durationS = Math.max(0, prev.durationS + (next.time - prevPoint.time) / 1000);
-  const avgSpeedMps = movingTimeS > 0 ? distanceM / movingTimeS : 0;
+  const avgSpeedMps = movingTimeS > 0 ? movingDistanceM / movingTimeS : 0;
 
   return {
     distanceM,

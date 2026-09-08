@@ -65,8 +65,8 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   addTrack: (track: Track, fileUri: string, notes?: readonly SeedNote[]) => void;
   /** Add several imported trails in `items` order, in ONE index write. */
   addTracks: (items: readonly ImportedTrack[]) => void;
-  /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
-  updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id' | 'fileUri'>>) => void;
+  /** Patch a saved trail, including switching its file URI to a committed revision. */
+  updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id'>>) => void;
   /**
    * Rename a saved trail (the user-facing title of an activity). A blank or
    * whitespace-only name is rejected — the trail keeps its current one, the
@@ -176,6 +176,23 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
   storage.writeIndex(mapLibraryIndexPaths(index, storage.toDocumentPath));
 }
 
+/** Commit metadata before best-effort cleanup of files it no longer references. */
+function persistAndDelete(
+  state: LibraryState,
+  orphanedUris: readonly (string | undefined)[],
+): void {
+  persist(state);
+  if (!state.hydrated) return;
+  for (const uri of orphanedUris) {
+    if (!uri) continue;
+    try {
+      storage.deleteFileAt(uri);
+    } catch {
+      // Metadata is committed: keep memory consistent even if an orphan remains.
+    }
+  }
+}
+
 /**
  * Turn a just-migrated index's document-relative paths back into absolute uris
  * against the CURRENT container (#247) — the form every consumer expects.
@@ -257,7 +274,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       } else {
         set({ hydrated: true });
       }
-    })();
+    })().finally(() => {
+      hydration = null;
+    });
     return hydration;
   },
 
@@ -297,13 +316,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeMap: (id) =>
     set((s) => {
       const doc = s.maps.find((m) => m.id === id);
-      if (doc) storage.deleteFileAt(doc.fileUri);
       const next = {
         ...s,
         maps: s.maps.filter((m) => m.id !== id),
         activeMapId: s.activeMapId === id ? null : s.activeMapId,
       };
-      persist(next);
+      persistAndDelete(next, [doc?.fileUri]);
       return next;
     }),
 
@@ -368,17 +386,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeTrack: (id) =>
     set((s) => {
       const t = s.tracks.find((x) => x.id === id);
-      if (t) {
-        storage.deleteFileAt(t.fileUri);
-        t.notes?.forEach((n) => n.photoUri && storage.deleteFileAt(n.photoUri));
-      }
       const next = {
         ...s,
         tracks: s.tracks.filter((x) => x.id !== id),
         // A deleted trail must not linger as (or come back as) a map overlay.
         activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
-      persist(next);
+      persistAndDelete(next, [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])]);
       return next;
     }),
 
@@ -421,10 +435,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateTrackNote: (trackId, noteId, text, photoUri) =>
     set((s) => {
       const old = s.tracks.find((t) => t.id === trackId)?.notes?.find((n) => n.id === noteId);
-      // Replacing or clearing the photo: delete the now-orphaned file.
-      if (old?.photoUri && photoUri !== undefined && photoUri !== old.photoUri) {
-        storage.deleteFileAt(old.photoUri);
-      }
       const next = {
         ...s,
         tracks: s.tracks.map((t) =>
@@ -444,21 +454,22 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             : t,
         ),
       };
-      persist(next);
+      persistAndDelete(next, [
+        photoUri !== undefined && photoUri !== old?.photoUri ? old?.photoUri : undefined,
+      ]);
       return next;
     }),
 
   removeTrackNote: (trackId, noteId) =>
     set((s) => {
       const old = s.tracks.find((t) => t.id === trackId)?.notes?.find((n) => n.id === noteId);
-      if (old?.photoUri) storage.deleteFileAt(old.photoUri);
       const next = {
         ...s,
         tracks: s.tracks.map((t) =>
           t.id === trackId ? { ...t, notes: removeNoteById(t.notes ?? [], noteId) } : t,
         ),
       };
-      persist(next);
+      persistAndDelete(next, [old?.photoUri]);
       return next;
     }),
 
@@ -585,10 +596,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateWaypoint: (id, patch) =>
     set((s) => {
       const old = s.waypoints.find((w) => w.id === id);
-      // Replacing or clearing a photo: delete the now-orphaned file.
-      if (old?.photoUri && patch.photoUri !== undefined && patch.photoUri !== old.photoUri) {
-        storage.deleteFileAt(old.photoUri);
-      }
       const next = {
         ...s,
         waypoints: s.waypoints.map((w) => {
@@ -602,7 +609,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           return updated;
         }),
       };
-      persist(next);
+      persistAndDelete(next, [
+        patch.photoUri !== undefined && patch.photoUri !== old?.photoUri
+          ? old?.photoUri
+          : undefined,
+      ]);
       return next;
     }),
 
@@ -621,9 +632,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeWaypoint: (id) =>
     set((s) => {
       const w = s.waypoints.find((x) => x.id === id);
-      if (w?.photoUri) storage.deleteFileAt(w.photoUri);
       const next = { ...s, waypoints: s.waypoints.filter((x) => x.id !== id) };
-      persist(next);
+      persistAndDelete(next, [w?.photoUri]);
       return next;
     }),
 

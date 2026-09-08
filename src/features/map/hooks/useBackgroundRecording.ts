@@ -85,8 +85,8 @@ export function useBackgroundRecording({
       if (cancelled) return;
       const started = await startBackgroundLocationUpdates(minDisplacement);
       if (cancelled) {
-        // Recording ended before the task finished starting — tear it down.
-        void stopBackgroundLocationUpdates();
+        // Cleanup already queued a stop behind this native start. A second
+        // stop here could cancel a newer recording's queued start.
         return;
       }
       if (!started) {

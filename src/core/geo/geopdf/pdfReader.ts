@@ -319,10 +319,17 @@ function inflateBounded(raw: Uint8Array, zlibWrapped: boolean): Uint8Array {
   const onData = (chunk: Uint8Array) => {
     total += chunk.length;
     if (total > MAX_DECODED_BYTES) throw new Error('decoded stream exceeds size cap');
-    chunks.push(chunk);
+    if (chunk.length > 0) chunks.push(chunk);
   };
   const inflater = zlibWrapped ? new Unzlib(onData) : new Inflate(onData);
-  inflater.push(raw, true);
+  // fflate emits only after each push, so a single whole-stream push can
+  // allocate far beyond the cap before onData runs. A 1 KiB compressed slice
+  // bounds each DEFLATE expansion to roughly 1 MiB plus decoder state.
+  const inputChunkSize = 1024;
+  for (let start = 0; start < raw.length || start === 0; start += inputChunkSize) {
+    const end = Math.min(start + inputChunkSize, raw.length);
+    inflater.push(raw.subarray(start, end), end === raw.length);
+  }
   const out = new Uint8Array(total);
   let o = 0;
   for (const c of chunks) {
@@ -601,6 +608,26 @@ export class PdfDocument {
       // TIFF predictor 2 — rare; leave as-is for our purposes.
       return data;
     }
+    // Validate metadata before allocating the previous-row buffer. The
+    // encoded data must contain complete rows, including their filter bytes.
+    if (
+      !Number.isInteger(predictor) ||
+      predictor < 10 ||
+      predictor > 15 ||
+      !Number.isSafeInteger(colors) ||
+      colors < 1 ||
+      ![1, 2, 4, 8, 16].includes(bpc) ||
+      !Number.isSafeInteger(columns) ||
+      columns < 1 ||
+      !Number.isSafeInteger(rowLen) ||
+      rowLen < 1 ||
+      rowLen > MAX_DECODED_BYTES ||
+      (data.length > 0 && rowLen + 1 > data.length) ||
+      data.length % (rowLen + 1) !== 0
+    ) {
+      throw new Error('invalid predictor row dimensions');
+    }
+    if (data.length === 0) return data;
     // PNG predictors: each row prefixed by a filter-type byte.
     const out = new Uint8Array(Math.floor(data.length / (rowLen + 1)) * rowLen);
     let prev = new Uint8Array(rowLen);
@@ -663,14 +690,44 @@ export class PdfDocument {
     }
     const n = Number(this.resolve(stmObj.dict.entries.get('N')) ?? 0);
     const first = Number(this.resolve(stmObj.dict.entries.get('First')) ?? 0);
+    // Each header pair requires at least "1 0" plus a separator between
+    // pairs, and each object body needs at least one byte. Never trust /N or
+    // /First as a loop/allocation bound independent of the decoded bytes.
+    if (
+      !Number.isSafeInteger(n) ||
+      n < 0 ||
+      !Number.isSafeInteger(first) ||
+      first < 0 ||
+      first > data.length ||
+      n > Math.floor((first + 1) / 4) ||
+      n > data.length - first
+    ) {
+      this.warnings.push(`object stream ${stmNum} has invalid header bounds`);
+      return result;
+    }
     // Header: N pairs of "<objNum> <offset>".
     const headLex = new Lexer(data, 0, first);
     const offsets: number[] = [];
     for (let i = 0; i < n; i++) {
       headLex.skipWs();
-      headLex.readRegular(); // obj num (positional via index)
+      const objNum = headLex.readRegular(); // positional via index
       headLex.skipWs();
-      const off = Number(headLex.readRegular());
+      const offset = headLex.readRegular();
+      const off = Number(offset);
+      const previous = offsets[i - 1];
+      if (
+        !/^\d+$/.test(objNum) ||
+        !Number.isSafeInteger(Number(objNum)) ||
+        Number(objNum) < 1 ||
+        !/^\d+$/.test(offset) ||
+        !Number.isSafeInteger(off) ||
+        off < 0 ||
+        off >= data.length - first ||
+        (previous !== undefined && off <= previous)
+      ) {
+        this.warnings.push(`object stream ${stmNum} has invalid header offsets`);
+        return result;
+      }
       offsets.push(off);
     }
     for (let i = 0; i < n; i++) {

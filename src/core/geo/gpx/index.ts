@@ -161,9 +161,10 @@ const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   const point: TrackPoint = {
     latitude: lat,
     longitude: lon,
-    // GPX has no time on every fix; default to 0 so downstream ordering is
-    // stable but callers can detect "no time" via metadata if needed.
+    // Keep the numeric field compatible with recorded fixes while explicitly
+    // distinguishing missing GPX time from a valid Unix epoch timestamp.
     time: time ?? 0,
+    hasTime: time !== undefined,
   };
   if (altitude !== undefined) point.altitude = altitude;
   if (speed !== undefined && speed >= 0) point.speed = speed;
@@ -298,7 +299,7 @@ export function buildGpx(args: {
     if (p.altitude !== undefined && Number.isFinite(p.altitude)) {
       node['ele'] = round(p.altitude, 2);
     }
-    if (p.time !== undefined && Number.isFinite(p.time) && p.time > 0) {
+    if (p.hasTime !== false && Number.isFinite(p.time) && (p.time > 0 || p.hasTime === true)) {
       node['time'] = epochMsToIso(p.time);
     }
     if (p.speed !== undefined && Number.isFinite(p.speed) && p.speed >= 0) {

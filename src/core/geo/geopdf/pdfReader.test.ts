@@ -1,4 +1,4 @@
-import { zlibSync } from 'fflate';
+import { Inflate, Unzlib, deflateSync, zlibSync } from 'fflate';
 import { parseGeoPdf } from './parseGeoPdf';
 import { PdfDocument } from './pdfReader';
 import { type PdfStream, isStream } from './types';
@@ -210,5 +210,114 @@ describe('pdfReader — hostile input hardening', () => {
     const stream = doc.getObject(1);
     expect(isStream(stream)).toBe(true);
     expect(() => doc.decodeStream(stream as PdfStream)).toThrow(/filter chain/);
+  });
+});
+
+describe('pdfReader — bounded stream work', () => {
+  it.each([true, false])(
+    'limits each inflate callback before the total cap (zlib: %s)',
+    (wrapped) => {
+      const payload = new Uint8Array(8 * 1024 * 1024);
+      const raw = wrapped ? zlibSync(payload) : deflateSync(payload);
+      const prototype = wrapped ? Unzlib.prototype : Inflate.prototype;
+      const push = prototype.push;
+      let largestOutput = 0;
+      const spy = jest.spyOn(prototype, 'push').mockImplementation(function (
+        this: Inflate | Unzlib,
+        chunk: Uint8Array,
+        final?: boolean,
+      ) {
+        const ondata = this.ondata;
+        this.ondata = (data, done) => {
+          largestOutput = Math.max(largestOutput, data.length);
+          ondata(data, done);
+        };
+        try {
+          push.call(this, chunk, final);
+        } finally {
+          this.ondata = ondata;
+        }
+      });
+      try {
+        const doc = PdfDocument.parse(new Uint8Array());
+        const decoded = doc.decodeStream({
+          kind: 'stream',
+          raw,
+          dict: {
+            kind: 'dict',
+            entries: new Map([['Filter', { kind: 'name', name: 'FlateDecode' }]]),
+          },
+        });
+        expect(decoded).toHaveLength(payload.length);
+        expect(decoded.every((value) => value === 0)).toBe(true);
+        expect(largestOutput).toBeLessThan(2 * 1024 * 1024);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it.each([1000000, -1, 0, NaN, Infinity, 0.5])(
+    'rejects unsafe predictor columns %s',
+    (columns) => {
+      const doc = PdfDocument.parse(new Uint8Array());
+      const stream: PdfStream = {
+        kind: 'stream',
+        raw: zlibSync(new Uint8Array([0, 1])),
+        dict: {
+          kind: 'dict',
+          entries: new Map([
+            ['Filter', { kind: 'name', name: 'FlateDecode' }],
+            [
+              'DecodeParms',
+              {
+                kind: 'dict',
+                entries: new Map([
+                  ['Predictor', 12],
+                  ['Columns', columns],
+                ]),
+              },
+            ],
+          ]),
+        },
+      };
+      expect(() => doc.decodeStream(stream)).toThrow(/predictor/);
+    },
+  );
+
+  it.each([
+    [10000, 4, '2 0 null '],
+    [1, 1000, '2 0 null '],
+    [2, 8, '2 0 4 0 null '],
+    [1, 4, '2 x null '],
+  ])('rejects malformed object-stream headers (%s, %s)', (count, first, data) => {
+    const prefix = '%PDF-1.7\n';
+    const object = `1 0 obj\n<< /Type /ObjStm /N ${count} /First ${first} /Length ${data.length} >>\nstream\n${data}\nendstream\nendobj\n`;
+    const offset = prefix.length + object.length;
+    const rows = String.fromCharCode(
+      1,
+      0,
+      prefix.length,
+      0,
+      2,
+      0,
+      1,
+      0,
+      1,
+      offset >> 8,
+      offset & 255,
+      0,
+    );
+    const pdf =
+      prefix +
+      object +
+      '3 0 obj\n<< /Type /XRef /W [1 2 1] /Index [1 3] /Root 2 0 R /Length 12 >>\nstream\n' +
+      rows +
+      '\nendstream\nendobj\nstartxref\n' +
+      offset +
+      '\n%%EOF';
+    const doc = PdfDocument.parse(latin1Bytes(pdf));
+    expect(doc.warnings.join(' ')).toMatch(/object stream.*header/);
+    expect(doc.getObject(2)).toBeUndefined();
   });
 });

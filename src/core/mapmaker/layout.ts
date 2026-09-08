@@ -53,7 +53,7 @@ export interface MadeMapLayout {
   scaleBar: { meters: number; widthPt: number; label: string };
 }
 
-/** Standard print-scale denominators the layout snaps to (exact scales). */
+/** Standard local/regional print scales; larger selections extend in million-scale steps. */
 export const SCALE_DENOMS = [
   1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000, 40000, 50000, 75000, 100000, 150000,
   200000, 250000, 500000, 1000000,
@@ -94,8 +94,12 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
   if (groundW / groundH > frameAspect) spanLatM = groundW / frameAspect;
   else spanLngM = groundH * frameAspect;
   const fitScaleDenom = spanLngM / mapRect.w / M_PER_PT;
+  // The box selector also permits zoomed-out regional selections. Never cap
+  // their denominator below the scale needed to fit: containment would expand
+  // drawBbox without updating the printed scale, scale bar, or raster budget.
   const scaleDenom =
-    SCALE_DENOMS.find((d) => d >= fitScaleDenom - 1e-9) ?? SCALE_DENOMS[SCALE_DENOMS.length - 1]!;
+    SCALE_DENOMS.find((d) => d >= fitScaleDenom - 1e-9) ??
+    Math.ceil(fitScaleDenom / 1000000) * 1000000;
   const metersPerPt = scaleDenom * M_PER_PT;
   spanLngM = metersPerPt * mapRect.w;
   spanLatM = metersPerPt * mapRect.h;

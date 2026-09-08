@@ -57,6 +57,18 @@ it('persist() is a no-op before hydration (anti-clobber guard)', () => {
   expect(storage.writeIndex).not.toHaveBeenCalled();
 });
 
+it('allows hydration retry after an initial read failure without persisting partial state', async () => {
+  jest.mocked(storage.readIndex).mockRejectedValueOnce(new Error('Read denied'));
+  await expect(useLibraryStore.getState().hydrate()).rejects.toThrow('Read denied');
+  expect(useLibraryStore.getState().hydrated).toBe(false);
+  expect(storage.writeIndex).not.toHaveBeenCalled();
+  jest.mocked(storage.readIndex).mockResolvedValueOnce({ tracks: [persisted] });
+  await expect(useLibraryStore.getState().hydrate()).resolves.toBeUndefined();
+  expect(useLibraryStore.getState().tracks.map((t) => t.id)).toEqual(['saved']);
+  expect(storage.writeIndex).not.toHaveBeenCalled();
+  useLibraryStore.setState({ hydrated: false });
+});
+
 it('hydrate is single-flight: concurrent calls read the index once', async () => {
   let resolveRead: (value: unknown) => void = () => {};
   (storage.readIndex as jest.Mock).mockReturnValue(

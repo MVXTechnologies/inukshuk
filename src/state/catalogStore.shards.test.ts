@@ -426,8 +426,129 @@ describe('catalogStore query search', () => {
     await useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
 
     // The shard is dead, not "still coming": the screen must stop saying it is
-    // searching. Scope is complete because nothing more can be fetched.
+    // searching, but unavailable shards do not prove that there are no matches.
     expect(useCatalogStore.getState().pendingQueryShardIds).toEqual([]);
+    expect(useCatalogStore.getState().searchScope).toBe('area-only');
+  });
+
+  it.each([true, false])(
+    'refresh retries the digest after a previous attempt (success: %s)',
+    async (success) => {
+      await loadSearchIndex();
+      loadDigestMock.mockResolvedValue(success ? { digest, fromCache: false, warnings: [] } : null);
+      await useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+      await useCatalogStore.getState().load(true);
+      expect(useCatalogStore.getState().searchDigest).toBeNull();
+      expect(useCatalogStore.getState().searchDigestTried).toBe(false);
+      loadDigestMock.mockResolvedValue({ digest, fromCache: false, warnings: [] });
+      await useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+      expect(loadDigestMock).toHaveBeenCalledTimes(2);
+      expect(loadDigestMock).toHaveBeenLastCalledWith(searchIndex.search, { force: true });
+    },
+  );
+
+  it('explicit whole-catalog search retries a failed matching shard immediately', async () => {
+    await loadSearchIndex();
+    loadDigestMock.mockResolvedValue({ digest, fromCache: false, warnings: [] });
+    loadShardMock.mockResolvedValueOnce(null);
+    await useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+    await useCatalogStore.getState().searchWholeCatalog('Grand Canyon', QUEBEC);
+    expect(useCatalogStore.getState().items).toContainEqual(canyonSheet);
     expect(useCatalogStore.getState().searchScope).toBe('complete');
   });
+
+  it('keeps the newest query coverage when an older query finishes later', async () => {
+    await loadSearchIndex();
+    loadDigestMock.mockResolvedValue({ digest, fromCache: false, warnings: [] });
+    await useCatalogStore.getState().ensureShardsForQuery('g', QUEBEC);
+    let finishOld: ((result: null) => void) | undefined;
+    loadShardMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    const old = useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+    await Promise.resolve();
+    await useCatalogStore.getState().ensureShardsForQuery('kilimanjaro', QUEBEC);
+    finishOld?.(null);
+    await old;
+    expect(useCatalogStore.getState().searchScope).toBe('complete');
+    expect(useCatalogStore.getState().pendingQueryShardIds).toEqual([]);
+  });
+
+  it('ignores an obsolete digest that finishes after refresh', async () => {
+    await loadSearchIndex();
+    type Result = Awaited<ReturnType<typeof loadCatalogSearchDigest>>;
+    let finishOld: ((value: Result) => void) | undefined;
+    const freshDigest = buildCatalogSearchDigest([]);
+    loadDigestMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ digest: freshDigest, fromCache: false, warnings: [] });
+    const old = useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+    await useCatalogStore.getState().load(true);
+    await useCatalogStore.getState().ensureShardsForQuery('kilimanjaro', QUEBEC);
+    finishOld?.({ digest, fromCache: false, warnings: [] });
+    await old;
+    expect(useCatalogStore.getState().searchDigest).toBe(freshDigest);
+    expect(useCatalogStore.getState().items).toEqual([]);
+    expect(useCatalogStore.getState().searchScope).toBe('complete');
+    expect(useCatalogStore.getState().loadingSearch).toBe(false);
+  });
+
+  it('shares one pending digest request across successive query calls', async () => {
+    await loadSearchIndex();
+    type Result = Awaited<ReturnType<typeof loadCatalogSearchDigest>>;
+    let finish: ((value: Result) => void) | undefined;
+    loadDigestMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const first = useCatalogStore.getState().ensureShardsForQuery('Grand Canyon', QUEBEC);
+    const second = useCatalogStore.getState().ensureShardsForQuery('kilimanjaro', QUEBEC);
+    finish?.({ digest, fromCache: false, warnings: [] });
+    await Promise.all([first, second]);
+    expect(loadDigestMock).toHaveBeenCalledTimes(1);
+    expect(useCatalogStore.getState().searchScope).toBe('complete');
+  });
+});
+
+it('keeps refreshed shard ownership when an old same-id load finishes', async () => {
+  await loadIndex();
+  type Result = Awaited<ReturnType<typeof loadCatalogShard>>;
+  let finishOld: ((value: Result) => void) | undefined;
+  let finishNew: ((value: Result) => void) | undefined;
+  loadShardMock
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOld = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishNew = resolve;
+        }),
+    );
+  const old = useCatalogStore.getState().ensureShardsNear(QUEBEC, 'nautical');
+  await useCatalogStore.getState().load(true);
+  const fresh = useCatalogStore.getState().ensureShardsNear(QUEBEC, 'nautical');
+  const newStarted = loadShardMock.mock.calls.length;
+  finishOld?.({ items: [item('old', 'nautical')], fromCache: false, warnings: [] });
+  await old;
+  const whileFresh = useCatalogStore.getState();
+  finishNew?.({ items: [item('new', 'nautical')], fromCache: false, warnings: [] });
+  await fresh;
+  expect(newStarted).toBe(2);
+  expect(whileFresh.items).toEqual([]);
+  expect(whileFresh.loadingShards).toBe(true);
+  expect(useCatalogStore.getState().items.map((entry) => entry.id)).toEqual(['new']);
 });

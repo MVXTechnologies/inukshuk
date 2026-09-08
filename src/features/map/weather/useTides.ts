@@ -13,7 +13,7 @@ import {
 } from '@core/weather/tides';
 import type { LatLng } from '@core/models';
 import { useEffect, useState } from 'react';
-import { WEATHER_USER_AGENT } from './useWeatherTimeline';
+import { fetchWeatherJson } from './fetchWeatherJson';
 
 /**
  * The forecast card's Tides section data (marine M2): nearest CHS IWLS
@@ -55,11 +55,9 @@ const ERROR: TidesQuery = { status: 'error', tides: null };
  */
 let stationsCache: TideStation[] | null = null;
 
-async function loadStations(): Promise<TideStation[]> {
+async function loadStations(signal: AbortSignal): Promise<TideStation[]> {
   if (stationsCache !== null) return stationsCache;
-  const res = await fetch(stationsUrl(), { headers: { 'User-Agent': WEATHER_USER_AGENT } });
-  if (!res.ok) throw new Error(`stations ${res.status}`);
-  const parsed = parseStations(await res.json());
+  const parsed = parseStations(await fetchWeatherJson(stationsUrl(), signal));
   if (parsed.length === 0) throw new Error('empty station list');
   stationsCache = parsed;
   return parsed;
@@ -70,11 +68,15 @@ async function fetchSeries(
   series: 'wlo' | 'wlp' | 'wlp-hilo',
   fromMs: number,
   toMs: number,
+  signal: AbortSignal,
 ): Promise<ReturnType<typeof parseSeries>> {
-  const res = await fetch(stationDataUrl(stationId, series, fromMs, toMs), {
-    headers: { 'User-Agent': WEATHER_USER_AGENT },
-  });
-  return res.ok ? parseSeries(await res.json()) : [];
+  try {
+    return parseSeries(
+      await fetchWeatherJson(stationDataUrl(stationId, series, fromMs, toMs), signal),
+    );
+  } catch {
+    return []; // Preserve any usable sibling series when one request fails.
+  }
 }
 
 function requestKey(at: LatLng, maxDistanceM: number): string {
@@ -90,9 +92,10 @@ export function useTides(at: LatLng | null, maxDistanceM: number): TidesQuery {
     if (at === null) return;
     const key = requestKey(at, maxDistanceM);
     let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       try {
-        const stations = await loadStations();
+        const stations = await loadStations(controller.signal);
         const near = nearestTideStation(stations, at, maxDistanceM);
         if (cancelled) return;
         if (near === null) {
@@ -111,8 +114,15 @@ export function useTides(at: LatLng | null, maxDistanceM: number): TidesQuery {
             nowMs - TIDE_OBSERVED_WINDOW_MS,
             // Predictions need a forward window to have a "closest to now".
             observed ? nowMs : nowMs + TIDE_OBSERVED_WINDOW_MS,
+            controller.signal,
           ),
-          fetchSeries(near.station.id, 'wlp-hilo', nowMs, nowMs + TIDE_PREDICTION_WINDOW_MS),
+          fetchSeries(
+            near.station.id,
+            'wlp-hilo',
+            nowMs,
+            nowMs + TIDE_PREDICTION_WINDOW_MS,
+            controller.signal,
+          ),
         ]);
         if (cancelled) return;
         const level = currentLevel(levels, nowMs);
@@ -143,6 +153,7 @@ export function useTides(at: LatLng | null, maxDistanceM: number): TidesQuery {
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [at, maxDistanceM]);
 

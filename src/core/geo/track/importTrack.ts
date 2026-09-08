@@ -23,7 +23,7 @@ export function buildImportedTrack(args: {
   let minT = Infinity;
   let maxT = -Infinity;
   for (const p of points) {
-    if (Number.isFinite(p.time) && p.time > 0) {
+    if (p.hasTime !== false && Number.isFinite(p.time) && (p.time > 0 || p.hasTime === true)) {
       if (p.time < minT) minT = p.time;
       if (p.time > maxT) maxT = p.time;
     }

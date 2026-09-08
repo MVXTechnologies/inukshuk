@@ -1,4 +1,11 @@
-import type { Folder, GeoReference, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type {
+  Folder,
+  GeoReference,
+  MapDocument,
+  TrackSummary,
+  TrackNote,
+  Waypoint,
+} from '@core/models';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 
@@ -92,6 +99,71 @@ function dedupePageIndices(value: readonly unknown[]): number[] {
   return [...pages].sort((a, b) => a - b);
 }
 
+function hasFilePath(raw: RawDoc): boolean {
+  return (
+    typeof raw.id === 'string' &&
+    raw.id !== '' &&
+    typeof raw.fileUri === 'string' &&
+    raw.fileUri.trim() !== ''
+  );
+}
+
+function finiteFields(raw: unknown, fields: readonly string[]): boolean {
+  return (
+    isRecord(raw) &&
+    fields.every((key) => typeof raw[key] === 'number' && Number.isFinite(raw[key]))
+  );
+}
+
+/** Reject incomplete geometry before consumers dereference viewport corners. */
+function isGeoReference(raw: unknown): raw is GeoReference {
+  if (
+    !isRecord(raw) ||
+    !Number.isInteger(raw.pageIndex) ||
+    Number(raw.pageIndex) < 0 ||
+    !finiteFields(raw, ['pageWidthPt', 'pageHeightPt']) ||
+    !isRecord(raw.viewport)
+  )
+    return false;
+  const corners = raw.viewport.corners;
+  return (
+    finiteFields(raw.viewport.rect, ['x0', 'y0', 'x1', 'y1']) &&
+    finiteFields(raw.bbox, ['minLat', 'maxLat', 'minLng', 'maxLng']) &&
+    isRecord(corners) &&
+    ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].every((key) => {
+      const point = corners[key];
+      return (
+        Array.isArray(point) &&
+        point.length === 2 &&
+        point.every((value) => typeof value === 'number' && Number.isFinite(value))
+      );
+    })
+  );
+}
+
+/** Invalid optional photos must not reach the document-path mapper. */
+function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
+  const { photoUri, ...rest } = raw;
+  return { ...rest, ...(typeof photoUri === 'string' && photoUri !== '' ? { photoUri } : {}) };
+}
+
+function normalizeNotes(raw: unknown): TrackNote[] {
+  return asArray(raw)
+    .filter(isRecord)
+    .filter((note) => typeof note.id === 'string')
+    .map((note) => ({
+      id: String(note.id),
+      distanceM:
+        typeof note.distanceM === 'number' && Number.isFinite(note.distanceM) ? note.distanceM : 0,
+      text: typeof note.text === 'string' ? note.text : '',
+      createdAt:
+        typeof note.createdAt === 'number' && Number.isFinite(note.createdAt) ? note.createdAt : 0,
+      ...(typeof note.photoUri === 'string' && note.photoUri !== ''
+        ? { photoUri: note.photoUri }
+        : {}),
+    }));
+}
+
 /**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
@@ -101,11 +173,9 @@ function dedupePageIndices(value: readonly unknown[]): number[] {
  */
 function normalizeMapDoc(raw: RawDoc): MapDocument {
   const legacy = raw as Partial<MapDocument> & { georeference?: GeoReference | null };
-  const georeferences = Array.isArray(legacy.georeferences)
-    ? legacy.georeferences
-    : legacy.georeference
-      ? [legacy.georeference]
-      : [];
+  const georeferences = (
+    Array.isArray(raw.georeferences) ? raw.georeferences : [raw.georeference]
+  ).filter(isGeoReference);
   // Page indices are a SET: one entry per page, never one per viewport.
   // Builds before the primary-viewport fix wrote `georeferences.map(pageIndex)`
   // straight through, so a three-viewport sheet (US Topo, AUSTopo) persisted
@@ -225,8 +295,13 @@ export function mapLibraryIndexPaths(
  */
 export function migrateLibraryIndex(raw: unknown, documentDir?: string): LibraryIndex {
   const doc = runLadder(asRecord(raw), LIBRARY_UPGRADERS, LIBRARY_SCHEMA_VERSION);
-  const maps = asArray(doc.maps).filter(isRecord).map(normalizeMapDoc);
-  const tracks = recordsWithId<TrackSummary>(doc.tracks);
+  const maps = asArray(doc.maps).filter(isRecord).filter(hasFilePath).map(normalizeMapDoc);
+  const tracks = recordsWithId<TrackSummary>(doc.tracks)
+    .filter((track) => typeof track.fileUri === 'string' && track.fileUri.trim() !== '')
+    .map((track) => ({
+      ...track,
+      ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
+    }));
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
   const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
@@ -243,9 +318,9 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
     ),
     // A waypoint without a finite coordinate can never be drawn or edited —
     // drop such junk rather than let it reach the map's marker projection.
-    waypoints: recordsWithId<Waypoint>(doc.waypoints).filter(
-      (w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude),
-    ),
+    waypoints: recordsWithId<Waypoint>(doc.waypoints)
+      .filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude))
+      .map(normalizePhoto),
     // Keep only well-formed custom categories: junk entries would render as
     // broken chips, and a missing color would defeat the theme-safety gate.
     customCategories: recordsWithId<CustomCategory>(doc.customCategories).filter(

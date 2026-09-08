@@ -106,7 +106,7 @@ export function useCompareMatrix(at: LatLng, variable: ModelVariable): CompareMa
     }
     const seed = setTimeout(() => {
       setCells(warm);
-      setSettled({ count: 0, successes: 0, total: requests.length });
+      setSettled({ count: 0, successes: warm.size, total: requests.length });
     }, 0);
 
     const delays = burstDelays(requests.length, BURST, REFILL_MS);

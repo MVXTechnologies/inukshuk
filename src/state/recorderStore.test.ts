@@ -31,6 +31,7 @@ jest.mock('@data/recorderCheckpoint', () => {
   return {
     writeCheckpoint: jest.fn((cp: unknown) => {
       stored = cp;
+      return true;
     }),
     maybeWriteCheckpoint: jest.fn((cp: unknown) => {
       stored = cp;
@@ -46,6 +47,10 @@ jest.mock('@data/recorderCheckpoint', () => {
     readBackgroundPoints: jest.fn(async () => bgStored.slice()),
     clearBackgroundPoints: jest.fn(() => {
       bgStored = [];
+    }),
+    acknowledgeBackgroundPoints: jest.fn((points: unknown[]) => {
+      const acknowledged = new Set(points);
+      bgStored = bgStored.filter((p) => !acknowledged.has(p));
     }),
   };
 });
@@ -256,6 +261,71 @@ describe('pause / resume feed gating', () => {
 });
 
 describe('checkpoint + recovery round-trip', () => {
+  it('saves background-journaled fixes when Stop wins the foreground merge race', async () => {
+    useRecorderStore.getState().start('Final journal');
+    useRecorderStore.getState().addPoint(pt());
+    await checkpoint.appendBackgroundPoints([pt({ time: 1_002_000, latitude: 46.800025 })]);
+    const saved = await useRecorderStore.getState().stop();
+    expect(saved?.points.map((point) => point.time)).toEqual([1_000_000, 1_002_000]);
+    await expect(checkpoint.readBackgroundPoints()).resolves.toEqual([]);
+  });
+
+  it('does not finalize a newer session after awaiting a stop snapshot', async () => {
+    useRecorderStore.getState().start('Old');
+    useRecorderStore.getState().addPoint(pt());
+    let finish!: (points: TrackPoint[]) => void;
+    jest.mocked(checkpoint.readBackgroundPoints).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const stopping = useRecorderStore.getState().stop();
+    useRecorderStore.getState().start('New');
+    const expected = useRecorderStore.getState();
+    finish([]);
+    expect(await stopping).toBeNull();
+    expect(useRecorderStore.getState()).toBe(expected);
+  });
+  it('retains journaled fixes if saving the recovered checkpoint fails', async () => {
+    useRecorderStore.getState().start('Interrupted');
+    useRecorderStore.getState().addPoint(pt());
+    simulateCrash();
+    const incoming = [pt({ time: 1_002_000, latitude: 46.800025 })];
+    await checkpoint.appendBackgroundPoints(incoming);
+    jest.mocked(checkpoint.writeCheckpoint).mockReturnValueOnce(false);
+    expect(await initRecorderRecovery()).toBe(true);
+    await expect(checkpoint.readBackgroundPoints()).resolves.toEqual(incoming);
+    simulateCrash();
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().points).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    'does not apply delayed recovery after a new session (discarded: %s)',
+    async (discard) => {
+      useRecorderStore.getState().start('Old hike');
+      useRecorderStore.getState().addPoint(pt());
+      const old = await checkpoint.readCheckpoint();
+      simulateCrash();
+      let finish!: (cp: typeof old) => void;
+      jest.mocked(checkpoint.readCheckpoint).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const recovery = initRecorderRecovery();
+      useRecorderStore.getState().start('New hike');
+      useRecorderStore.getState().addPoint(pt({ time: 2_000_000 }));
+      if (discard) useRecorderStore.getState().discard();
+      const expected = useRecorderStore.getState();
+      finish(old);
+      expect(await recovery).toBe(false);
+      expect(useRecorderStore.getState()).toBe(expected);
+      if (!discard) expect((await checkpoint.readCheckpoint())?.name).toBe('New hike');
+    },
+  );
   it('restores an interrupted recording as paused, with points and waypoints', async () => {
     const s = useRecorderStore.getState();
     s.start('Crashy hike');
@@ -328,7 +398,7 @@ describe('checkpoint + recovery round-trip', () => {
     // The merged session is re-checkpointed and the journal dropped, so a
     // second crash cannot lose the background points.
     expect(checkpoint.writeCheckpoint).toHaveBeenCalled();
-    expect(checkpoint.clearBackgroundPoints).toHaveBeenCalled();
+    expect(checkpoint.acknowledgeBackgroundPoints).toHaveBeenCalled();
   });
 
   it('background points pass through the GPS filter on recovery', async () => {
@@ -370,15 +440,15 @@ describe('mergeBackgroundPoints (foreground merge)', () => {
     expect(checkpoint.writeCheckpoint).toHaveBeenCalledTimes(1);
   });
 
-  it('skips the checkpoint write when nothing new was merged', () => {
+  it('keeps point identity when nothing new is merged while confirming durability', () => {
     const s = useRecorderStore.getState();
     s.start('No-op merge');
     s.addPoint(pt({ time: 1_000_000 }));
+    const points = useRecorderStore.getState().points;
     (checkpoint.writeCheckpoint as jest.Mock).mockClear();
 
-    useRecorderStore.getState().mergeBackgroundPoints([pt({ time: 1_000_000 })]);
-    expect(useRecorderStore.getState().points).toHaveLength(1);
-    expect(checkpoint.writeCheckpoint).not.toHaveBeenCalled();
+    expect(useRecorderStore.getState().mergeBackgroundPoints([pt({ time: 1_000_000 })])).toBe(true);
+    expect(useRecorderStore.getState().points).toBe(points);
   });
 
   it('is a no-op while idle (recovery owns that case)', () => {

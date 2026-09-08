@@ -242,7 +242,7 @@ export function writeChartPng(id: string, bytes: Uint8Array): string {
 }
 
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
-  return new File(resolveDocumentPath(uri)).bytes();
+  return readableFile(uri).bytes();
 }
 
 /** Thrown by {@link downloadBytes} when offline-only mode is on and the file is not cached. */
@@ -447,7 +447,7 @@ export async function downloadToCacheUri(
  *   return LegacyFS.readAsStringAsync(uri);
  */
 export async function readFileText(uri: string): Promise<string> {
-  return new File(resolveDocumentPath(uri)).text();
+  return readableFile(uri).text();
 }
 
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
@@ -460,23 +460,72 @@ export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
   return file.uri;
 }
 
-/** Write a GPX (or any text) document and return its uri. */
+/** Best-effort cleanup after a replacement has committed or failed. */
+function discardFile(file: File): void {
+  try {
+    if (file.exists) file.delete();
+  } catch {
+    // Keep the complete data; a leftover staging/backup file is recoverable.
+  }
+}
+
+/** Write a GPX without discarding the saved version before promotion succeeds. */
 export function writeTrackGpx(id: string, gpx: string): string {
-  ensureStorage();
   const file = new File(tracksDir(), `${id}.gpx`);
-  if (file.exists) file.delete();
-  file.create();
-  guardWrite(() => file.write(gpx));
-  return file.uri;
+  const staged = new File(tracksDir(), `${id}.gpx.tmp`);
+  const backupUri = `${file.uri}.bak`;
+  const targetUri = file.uri;
+  guardWrite(() => {
+    try {
+      ensureStorage();
+      const backup = new File(backupUri);
+      if (!file.exists && backup.exists) backup.moveSync(file);
+      if (staged.exists) staged.delete();
+      staged.create();
+      staged.write(gpx);
+      const saved = new File(backupUri);
+      if (saved.exists) saved.delete();
+      if (file.exists) file.moveSync(saved);
+      staged.moveSync(new File(targetUri));
+    } catch (error) {
+      try {
+        const target = new File(targetUri);
+        const saved = new File(backupUri);
+        if (!target.exists && saved.exists) saved.moveSync(target);
+      } catch {
+        // Readers can use the saved GPX if rollback itself fails.
+      }
+      throw error;
+    } finally {
+      // Native moveSync updates its source URI, so use a fresh stage reference.
+      discardFile(new File(`${targetUri}.tmp`));
+    }
+  });
+  discardFile(new File(backupUri));
+  return targetUri;
+}
+
+/** Recover interrupted GPX replacements without changing their persisted path. */
+function readableFile(uri: string): File {
+  const file = new File(resolveDocumentPath(uri));
+  if (!file.exists && file.uri.endsWith('.gpx')) {
+    const backup = new File(`${file.uri}.bak`);
+    if (backup.exists) return backup;
+  }
+  return file;
 }
 
 export function deleteFileAt(uri: string): void {
   const file = new File(resolveDocumentPath(uri));
   if (file.exists) file.delete();
+  if (file.uri.endsWith('.gpx')) {
+    discardFile(new File(`${file.uri}.bak`));
+    discardFile(new File(`${file.uri}.tmp`));
+  }
 }
 
 export function fileExists(uri: string): boolean {
-  return new File(resolveDocumentPath(uri)).exists;
+  return readableFile(uri).exists;
 }
 
 /**
@@ -496,7 +545,7 @@ export async function readJson<T>(name: string): Promise<T | null> {
       try {
         const evidence = new File(Paths.document, `${name}.corrupt`);
         if (evidence.exists) evidence.delete();
-        file.copy(evidence);
+        await file.copy(evidence);
       } catch {
         /* best-effort forensics only */
       }
@@ -513,21 +562,38 @@ export async function readJson<T>(name: string): Promise<T | null> {
   return null;
 }
 
+/** Whether an interrupted JSON write contains a complete, readable payload. */
+function hasReadableJson(file: File): boolean {
+  if (!file.exists) return false;
+  try {
+    JSON.parse(file.textSync());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Write a JSON document atomically: stage the full payload in `<name>.tmp`,
- * then swap it into place. A kill mid-write can no longer truncate the target
- * (the previous version survives, or the completed staging file is recovered
- * by {@link readJson}) — this index is rewritten on every library mutation, so
- * torn writes were a real data-loss path.
+ * Stage a complete JSON payload, then synchronously promote it to the target.
+ * A failed promotion leaves the completed stage available to {@link readJson}.
+ * Recover that sole valid stage before reusing its name on a later write, so
+ * a second failure cannot destroy the only remaining readable index.
+ * This is recoverable staging, not a filesystem transaction.
  */
 export function writeJson(name: string, value: unknown): void {
-  const staged = new File(Paths.document, `${name}.tmp`);
+  const file = new File(Paths.document, name);
+  let staged = new File(Paths.document, `${name}.tmp`);
+  if (staged.exists && !hasReadableJson(file) && hasReadableJson(staged)) {
+    if (file.exists) file.delete();
+    staged.moveSync(file);
+    // Native moveSync updates its source instance's URI.
+    staged = new File(Paths.document, `${name}.tmp`);
+  }
   if (staged.exists) staged.delete();
   staged.create();
   guardWrite(() => staged.write(JSON.stringify(value)));
-  const file = new File(Paths.document, name);
   if (file.exists) file.delete();
-  staged.move(file);
+  staged.moveSync(file);
 }
 
 /** Read the persisted library index, or null if it has never been written. */
