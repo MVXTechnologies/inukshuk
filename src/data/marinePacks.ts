@@ -32,38 +32,71 @@ function fileName(key: string): string {
   return `${key.replace(/:/g, '_')}.tif`;
 }
 
+/** Prefer the last complete cell if a promotion was interrupted. */
+function readableCell(key: string): File {
+  const file = new File(packsDir(), fileName(key));
+  const backup = new File(packsDir(), `${fileName(key)}.bak`);
+  return !file.exists && backup.exists ? backup : file;
+}
+
 /** Absolute URI of a stored pack cell (whether or not it exists). */
 export function packCellUri(key: string): string {
-  return new File(packsDir(), fileName(key)).uri;
+  return readableCell(key).uri;
 }
 
 export function packCellExists(key: string): boolean {
   try {
-    return new File(packsDir(), fileName(key)).exists;
+    return readableCell(key).exists;
   } catch {
     return false;
   }
 }
 
-/** Write a fetched cell; returns the bytes stored (0 on failure). */
+/** Write a fetched cell; returns the bytes stored and throws on failure. */
 export function writePackCell(key: string, bytes: Uint8Array): number {
   const dir = packsDir();
-  if (!dir.exists) dir.create({ intermediates: true });
-  const file = new File(dir, fileName(key));
-  if (file.exists) file.delete();
-  file.create();
+  const name = fileName(key);
+  const file = new File(dir, name);
+  const staged = new File(dir, `${name}.tmp`);
+  const backup = new File(dir, `${name}.bak`);
   try {
-    file.write(bytes);
+    if (!dir.exists) dir.create({ intermediates: true });
+    // Recover an interrupted promotion before attempting another replacement.
+    if (!file.exists && backup.exists) backup.moveSync(file);
+    if (staged.exists) staged.delete();
+    staged.create();
+    staged.write(bytes);
+    // Expo's overwrite move deletes its destination first. Keep a backup until
+    // the fully written stage has moved successfully, without overwriting it.
+    const saved = new File(dir, `${name}.bak`);
+    if (saved.exists) saved.delete();
+    if (file.exists) file.moveSync(saved);
+    staged.moveSync(new File(dir, name));
   } catch (err) {
-    // Out of space is the expected failure here; leave nothing half-written.
     try {
-      if (file.exists) file.delete();
+      const saved = new File(dir, `${name}.bak`);
+      const target = new File(dir, name);
+      if (!target.exists && saved.exists) saved.moveSync(target);
     } catch {
-      // Nothing more we can do.
+      // Keep the backup readable even if rollback itself fails.
     }
     const message = err instanceof Error ? err.message : String(err);
     if (isOutOfSpaceMessage(message)) throw new storage.StorageFullError(message);
     throw err;
+  } finally {
+    try {
+      // File.moveSync changes the instance URI: clean up using a fresh reference.
+      const leftover = new File(dir, `${name}.tmp`);
+      if (leftover.exists) leftover.delete();
+    } catch {
+      // A later attempt can discard the incomplete stage.
+    }
+  }
+  try {
+    const saved = new File(dir, `${name}.bak`);
+    if (saved.exists) saved.delete();
+  } catch {
+    // The new cell is committed; a leftover backup is harmless.
   }
   return bytes.byteLength;
 }
@@ -71,7 +104,7 @@ export function writePackCell(key: string, bytes: Uint8Array): number {
 /** Read a stored cell's raw bytes, or null when it isn't there. */
 export async function readPackCell(key: string): Promise<Uint8Array | null> {
   try {
-    const file = new File(packsDir(), fileName(key));
+    const file = readableCell(key);
     if (!file.exists) return null;
     return await file.bytes();
   } catch {
@@ -80,11 +113,13 @@ export async function readPackCell(key: string): Promise<Uint8Array | null> {
 }
 
 export function deletePackCell(key: string): void {
-  try {
-    const file = new File(packsDir(), fileName(key));
-    if (file.exists) file.delete();
-  } catch {
-    // Already gone / unreadable — the index write below is what matters.
+  for (const suffix of ['', '.bak', '.tmp']) {
+    try {
+      const file = new File(packsDir(), `${fileName(key)}${suffix}`);
+      if (file.exists) file.delete();
+    } catch {
+      // Already gone / unreadable — the index write below is what matters.
+    }
   }
 }
 

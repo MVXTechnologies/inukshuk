@@ -1,6 +1,7 @@
 import * as storage from '@data/storage';
 
 import {
+  acknowledgeBackgroundPoints,
   appendBackgroundPoints,
   CHECKPOINT_EVERY_MS,
   CHECKPOINT_EVERY_N_POINTS,
@@ -99,6 +100,13 @@ describe('write throttling', () => {
 });
 
 describe('failure handling', () => {
+  it('reports whether the checkpoint is durably written', () => {
+    jest.mocked(storage.writeJson).mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+    expect(writeCheckpoint(cp)).toBe(false);
+    expect(writeCheckpoint(cp)).toBe(true);
+  });
   it('swallows write errors and retries on the next point', () => {
     (storage.writeJson as jest.Mock).mockImplementation(() => {
       throw new Error('disk full');
@@ -150,6 +158,55 @@ describe('clearCheckpoint', () => {
 
 describe('background points journal', () => {
   const p = (time: number) => ({ latitude: 46.8, longitude: -71.2, time });
+
+  it('preserves both batches when initial appends overlap', async () => {
+    let finish!: (points: unknown) => void;
+    jest.mocked(storage.readJson).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const first = appendBackgroundPoints([p(2)]);
+    const second = appendBackgroundPoints([p(3)]);
+    finish([p(1)]);
+    await Promise.all([first, second]);
+    await expect(readBackgroundPoints()).resolves.toEqual([p(1), p(2), p(3)]);
+  });
+
+  it('does not resurrect an old append after the session journal is cleared', async () => {
+    let finish!: (points: unknown) => void;
+    jest.mocked(storage.readJson).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = appendBackgroundPoints([p(2)]);
+    clearBackgroundPoints();
+    finish([p(1)]);
+    await pending;
+    await expect(readBackgroundPoints()).resolves.toEqual([]);
+  });
+
+  it('acknowledges only the merged snapshot, retaining later fixes', async () => {
+    await appendBackgroundPoints([p(1)]);
+    const snapshot = await readBackgroundPoints();
+    await appendBackgroundPoints([p(2)]);
+    acknowledgeBackgroundPoints(snapshot);
+    await expect(readBackgroundPoints()).resolves.toEqual([p(2)]);
+  });
+
+  it('retains the whole journal when acknowledgement persistence fails', async () => {
+    await appendBackgroundPoints([p(1)]);
+    const snapshot = await readBackgroundPoints();
+    await appendBackgroundPoints([p(2)]);
+    jest.mocked(storage.writeJson).mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+    acknowledgeBackgroundPoints(snapshot);
+    await expect(readBackgroundPoints()).resolves.toEqual([p(1), p(2)]);
+  });
 
   it('flushes the very first append immediately, then throttles by point count', async () => {
     await appendBackgroundPoints([p(1)]);

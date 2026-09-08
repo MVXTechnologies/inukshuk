@@ -11,7 +11,7 @@ import {
 } from '@core/weather/forecast';
 import type { LatLng } from '@core/models';
 import { useEffect, useState } from 'react';
-import { WEATHER_USER_AGENT } from './useWeatherTimeline';
+import { fetchWeatherJson } from './fetchWeatherJson';
 
 /**
  * The forecast tap-card's data: the nearest ECCC citypage forecast around a
@@ -45,18 +45,25 @@ export function useForecast(at: LatLng | null, layer: WeatherLayerId | null): Fo
     if (at === null) return;
     const key = requestKey(at, layer);
     let cancelled = false;
-    const headers = { 'User-Agent': WEATHER_USER_AGENT };
-    const valuePromise: Promise<FeatureInfoValue | null> =
-      layer === null
-        ? Promise.resolve(null)
-        : fetch(getFeatureInfoUrl(layer, at), { headers })
-            .then(async (r) => (r.ok ? parseFeatureInfo(await r.json()) : null))
-            .catch(() => null);
+    const controller = new AbortController();
+    let layerValue: FeatureInfoValue | null = null;
+    if (layer !== null) {
+      void fetchWeatherJson(getFeatureInfoUrl(layer, at), controller.signal)
+        .then((json) => {
+          if (cancelled) return;
+          layerValue = parseFeatureInfo(json);
+          setResult((previous) =>
+            previous?.key === key && previous.query.status === 'ready'
+              ? { key, query: { ...previous.query, layerValue } }
+              : previous,
+          );
+        })
+        .catch(() => {}); // Optional details must not fail or delay the citypage.
+    }
     void (async () => {
       try {
-        const res = await fetch(citypageItemsUrl(at), { headers });
-        const forecast = res.ok ? parseCitypageCollection(await res.json(), at) : null;
-        const layerValue = await valuePromise;
+        const json = await fetchWeatherJson(citypageItemsUrl(at), controller.signal);
+        const forecast = parseCitypageCollection(json, at);
         if (cancelled) return;
         setResult({
           key,
@@ -73,6 +80,7 @@ export function useForecast(at: LatLng | null, layer: WeatherLayerId | null): Fo
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [at, layer]);
 

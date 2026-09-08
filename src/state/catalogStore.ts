@@ -44,8 +44,8 @@ export type CatalogStatus = 'idle' | 'loading' | 'ready' | 'error';
  *   inline). Zero results genuinely means "the catalog has none".
  * - `partial`: matching shards remain unfetched — more results are coming, so
  *   "no maps match" would be a lie.
- * - `area-only`: no digest (never published, or unreachable offline), so the
- *   query only ever saw the shards loaded for the user's area.
+ * - `area-only`: the digest or matching shards are unavailable, so only
+ *   already loaded areas have been searched.
  */
 export type SearchScope = 'complete' | 'partial' | 'area-only';
 
@@ -120,6 +120,11 @@ interface CatalogState {
 
 /** Shard ids currently being fetched, so two screens can't double-fetch one. */
 const inFlight = new Set<string>();
+let catalogGeneration = 0;
+let queryGeneration = 0;
+let forceCatalogData = false;
+let digestRequest: { generation: number; promise: Promise<CatalogSearchDigest | null> } | null =
+  null;
 
 /** Merge new items in, keeping the first row for any duplicated id. */
 function mergeItems(existing: CatalogItem[], incoming: readonly CatalogItem[]): CatalogItem[] {
@@ -162,8 +167,9 @@ async function fetchShards(
   set: SetState,
   get: GetState,
   wanted: readonly CatalogShardRef[],
+  generation: number,
 ): Promise<void> {
-  if (wanted.length === 0) return;
+  if (wanted.length === 0 || generation !== catalogGeneration) return;
   const index = get().index;
   if (index === null) return;
 
@@ -172,8 +178,16 @@ async function fetchShards(
   set({ loadingShards: true });
   try {
     const results = await Promise.all(
-      wanted.map(async (shard) => ({ shard, result: await loadCatalogShard(shard, sourceIds) })),
+      wanted.map(async (shard) => ({
+        shard,
+        result: await loadCatalogShard(
+          shard,
+          sourceIds,
+          forceCatalogData ? { force: true } : undefined,
+        ),
+      })),
     );
+    if (generation !== catalogGeneration) return;
     set((s) => {
       let items = s.items;
       const ids = [...s.loadedShardIds];
@@ -191,8 +205,10 @@ async function fetchShards(
       return { items, loadedShardIds: ids, shardFailures: failures };
     });
   } finally {
-    for (const shard of wanted) inFlight.delete(shard.id);
-    set({ loadingShards: inFlight.size > 0 });
+    if (generation === catalogGeneration) {
+      for (const shard of wanted) inFlight.delete(shard.id);
+      set({ loadingShards: inFlight.size > 0 });
+    }
   }
 }
 
@@ -204,20 +220,34 @@ async function fetchShards(
 async function ensureSearchDigest(
   set: SetState,
   get: GetState,
+  generation: number,
 ): Promise<CatalogSearchDigest | null> {
+  if (generation !== catalogGeneration) return null;
   const state = get();
   if (state.searchDigest !== null) return state.searchDigest;
+  if (digestRequest?.generation === generation) return digestRequest.promise;
   const ref = state.index?.search;
   if (ref === undefined || state.searchDigestTried) return null;
 
   set({ loadingSearch: true });
-  try {
-    const result = await loadCatalogSearchDigest(ref);
-    set({ searchDigest: result?.digest ?? null, searchDigestTried: true });
-    return result?.digest ?? null;
-  } finally {
-    set({ loadingSearch: false });
-  }
+  const promise = (async () => {
+    try {
+      const result = await loadCatalogSearchDigest(
+        ref,
+        forceCatalogData ? { force: true } : undefined,
+      );
+      if (generation !== catalogGeneration) return null;
+      set({ searchDigest: result?.digest ?? null, searchDigestTried: true });
+      return result?.digest ?? null;
+    } finally {
+      if (generation === catalogGeneration) {
+        digestRequest = null;
+        set({ loadingSearch: false });
+      }
+    }
+  })();
+  digestRequest = { generation, promise };
+  return promise;
 }
 
 export const useCatalogStore = create<CatalogState>((set, get) => ({
@@ -238,8 +268,22 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
 
   load: async (force) => {
     if (get().status === 'loading') return;
-    set({ status: 'loading' });
+    const generation = ++catalogGeneration;
+    queryGeneration++;
+    inFlight.clear();
+    digestRequest = null;
+    forceCatalogData = force === true;
+    set({
+      status: 'loading',
+      searchDigest: null,
+      searchDigestTried: false,
+      loadingSearch: false,
+      loadingShards: false,
+      pendingQueryShardIds: [],
+      searchScope: 'area-only',
+    });
     const result = await loadCatalogManifest(force === true ? { force: true } : undefined);
+    if (generation !== catalogGeneration) return;
     if (result === null) {
       // Keep any previously loaded index browsable; only flag error state
       // when there is nothing at all to show.
@@ -262,6 +306,8 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   },
 
   ensureShardsNear: async (origin, category) => {
+    const generation = catalogGeneration;
+    if (get().status === 'loading') return;
     const { index } = get();
     if (index === null || index.shards.length === 0) return;
     const wanted = selectShards(selectableShards(get()), origin, {
@@ -269,10 +315,14 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       limit: SHARD_FETCH_LIMIT,
       byteBudget: SHARD_BYTE_BUDGET,
     });
-    await fetchShards(set, get, wanted);
+    await fetchShards(set, get, wanted, generation);
   },
 
   ensureShardsForQuery: async (query, origin) => {
+    const generation = catalogGeneration;
+    const queryId = ++queryGeneration;
+    if (get().status === 'loading') return;
+    const isCurrent = () => generation === catalogGeneration && queryId === queryGeneration;
     const { index } = get();
     if (index === null) return;
     // A catalog with no shard directory is entirely inline: the item filter
@@ -282,7 +332,8 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       return;
     }
 
-    const digest = await ensureSearchDigest(set, get);
+    const digest = await ensureSearchDigest(set, get, generation);
+    if (!isCurrent()) return;
     if (digest === null) {
       // No digest: honest about only having searched the loaded area.
       set({ searchScope: 'area-only', pendingQueryShardIds: [] });
@@ -309,24 +360,29 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       origin,
       { category: null, limit: SHARD_FETCH_LIMIT, byteBudget: SHARD_BYTE_BUDGET },
     );
-    await fetchShards(set, get, wanted);
+    await fetchShards(set, get, wanted, generation);
 
+    if (!isCurrent()) return;
     const nowLoaded = new Set(get().loadedShardIds);
     const failed = get().shardFailures;
-    // A shard that failed is not "still coming": leaving it pending would keep
-    // the screen saying "searching" forever. It is excluded from the remaining
-    // work, and the scope stays partial only while real shards are left.
-    const remaining = candidateIds.filter((id) => !nowLoaded.has(id) && !isCoolingDown(failed[id]));
+    // Failed shards leave the automatic queue during cooldown, but their
+    // absence never establishes complete coverage.
+    const missing = candidateIds.filter((id) => !nowLoaded.has(id));
+    const remaining = missing.filter((id) => !isCoolingDown(failed[id]));
     set({
       pendingQueryShardIds: remaining,
-      searchScope: remaining.length === 0 ? 'complete' : 'partial',
+      searchScope:
+        missing.length === 0 ? 'complete' : remaining.length > 0 ? 'partial' : 'area-only',
     });
   },
 
   searchWholeCatalog: async (query, origin) => {
     // Let a digest that failed while offline be tried again — this is the
     // user explicitly asking, not a keystroke.
-    if (get().searchDigest === null) set({ searchDigestTried: false });
+    set({
+      shardFailures: {},
+      ...(get().searchDigest === null ? { searchDigestTried: false } : {}),
+    });
     await get().ensureShardsForQuery(query, origin);
   },
 

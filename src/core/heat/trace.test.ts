@@ -1,4 +1,5 @@
 import { cellAt, cellKey } from './grid';
+import * as grid from './grid';
 import { traceCells } from './trace';
 
 const pt = (lng: number, lat: number) => ({ longitude: lng, latitude: lat });
@@ -41,4 +42,72 @@ describe('traceCells', () => {
     expect(single.perPoint).toHaveLength(1);
     expect(single.dilated.size).toBe(9); // the cell + its ring
   });
+});
+
+describe('traceCells work bounds', () => {
+  it('crosses the dateline locally instead of filling cells around the globe', () => {
+    const trace = traceCells([pt(179.999, 0), pt(-179.999, 0)], 1000);
+    expect(trace.dilated.size).toBeLessThan(30);
+    expect(trace.dilated.has(cellKey(cellAt(0, 0, 1000)))).toBe(false);
+  });
+
+  it.each([1, -1])('normalizes intermediate dateline samples in direction %s', (direction) => {
+    const trace = traceCells([pt(direction * 179.99, 0), pt(direction * -179.99, 0)], 250);
+    expect(trace.dilated.size).toBeLessThan(100);
+    expect(trace.dilated.has(cellKey(cellAt(179.995, 0, 250)))).toBe(true);
+    expect(trace.dilated.has(cellKey(cellAt(-179.995, 0, 250)))).toBe(true);
+    expect(trace.dilated.has(cellKey(cellAt(0, 0)))).toBe(false);
+  });
+
+  it('keeps endpoints but does not fill implausibly long segments', () => {
+    const trace = traceCells([pt(0, 0), pt(20, 0)], 1000);
+    expect(trace.dilated.size).toBe(18);
+    expect(trace.perPoint).toHaveLength(2);
+  });
+
+  it('bounds interpolation across the whole track while preserving every input fix', () => {
+    const points = Array.from({ length: 40 }, (_, i) => pt(i % 2, i / 100));
+    const stamp = jest.spyOn(grid, 'ringKeys');
+    try {
+      const trace = traceCells(points, 200);
+      expect(trace.perPoint).toHaveLength(points.length);
+      expect(stamp.mock.calls.length).toBeLessThanOrEqual(points.length + 20000);
+      expect(trace.dilated.has(trace.perPoint.at(-1) ?? '')).toBe(true);
+    } finally {
+      stamp.mockRestore();
+    }
+  });
+
+  it('samples oversized tracks deterministically, retaining first and last fixes', () => {
+    const points = Array.from({ length: 100001 }, (_, i) => pt(i / 100000, 0));
+    const stamp = jest.spyOn(grid, 'ringKeys');
+    try {
+      const trace = traceCells(points);
+      expect(trace.perPoint).toHaveLength(100000);
+      expect(stamp.mock.calls.length).toBeLessThanOrEqual(120000);
+      expect(trace.perPoint[0]).toBe(cellKey(cellAt(0, 0)));
+      expect(trace.perPoint.at(-1)).toBe(cellKey(cellAt(1, 0)));
+      expect(trace.dilated.has(cellKey(cellAt(1, 0)))).toBe(true);
+      expect(traceCells(points).perPoint).toEqual(trace.perPoint);
+      expect(points).toHaveLength(100001);
+    } finally {
+      stamp.mockRestore();
+    }
+  });
+
+  it.each([0, -1, NaN, Infinity, Number.MIN_VALUE])('rejects unsafe cell size %s', (size) => {
+    expect(() => traceCells([], size)).toThrow(RangeError);
+  });
+
+  it.each([pt(Infinity, 0), pt(0, NaN), pt(181, 0), pt(0, -91)])(
+    'rejects invalid coordinates %s',
+    (point) => {
+      expect(() => traceCells([point])).toThrow(RangeError);
+    },
+  );
+});
+
+it('uses the custom grid size when stamping dateline neighbors', () => {
+  const trace = traceCells([pt(179.99999, 75)], 250);
+  expect(trace.dilated.has(cellKey(cellAt(-179.99999, 75, 250)))).toBe(true);
 });

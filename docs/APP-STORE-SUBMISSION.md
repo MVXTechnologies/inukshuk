@@ -9,7 +9,7 @@ Work top to bottom. Every step names the exact screen and field.
 - Apple Team **8S5UZVMQFA** (Individual), Apple ID **marc-andre.vigneault.02@hotmail.com**
 - ASC app record **Inukshuk**, Apple ID **6797629589**, bundle `com.inukshuk.app`,
   SKU `inukshuk-001`, primary language **English (Canada)**
-- Version to ship: **1.5.0**, build **5** (`app.config.ts`)
+- Version to ship: **1.5.1**, build **6** (`app.config.ts`)
 
 Ready-made copy lives in [`store/appstore/`](../store/appstore); screenshots in
 [`store/screenshots/ios/6.9-inch/`](../store/screenshots/ios/6.9-inch) and

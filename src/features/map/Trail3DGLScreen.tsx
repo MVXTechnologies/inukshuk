@@ -10,7 +10,7 @@ import { numberNotesOnTrack, orderNotes, type NumberedTrailNote } from '@core/li
 import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
-import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
+import type { ExpoWebGLRenderingContext } from 'expo-gl';
 import {
   formatDistance,
   formatDuration,
@@ -48,7 +48,12 @@ import { fetchHeightmap, type Heightmap } from './dem';
 import { SharingUnavailableError, exportTrailPdf } from '../common/exportTrailPdf';
 import { rayGroundHit, zoomTowardPoint } from '@core/geo/terrainRay';
 import { createCameraDynamics } from './terrain3d/cameraDynamics';
-import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
+import {
+  disposeGroup,
+  runRenderLoop,
+  ManagedGLView,
+  type GlLifetime,
+} from './terrain3d/glLifecycle';
 import {
   ORBIT_PHI_PER_PX,
   ORBIT_THETA_PER_PX,
@@ -245,9 +250,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
   const basemapRef = useRef<MapBasemap>(basemap);
-  // GL generation: every 2D↔3D toggle remounts the GLView; the render loop must
-  // not outlive its context (see useGlGeneration).
-  const glGenRef = useGlGeneration();
 
   const pan = useMemo(() => {
     // The ground point under a view-local screen position (tap / pinch
@@ -374,10 +376,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Re-read the (possibly just-overwritten) GPX file from disk — used after
   // an overwrite trim so the 2D trace/profile reflect the new geometry
   // without a full screen remount.
-  const reloadPoints = async () => {
-    if (!fileUri) return;
+  const reloadPoints = async (uri = fileUri) => {
+    if (!uri) return;
     try {
-      const gpx = await storage.readFileText(fileUri);
+      const gpx = await storage.readFileText(uri);
       setPoints(parseGpx(gpx).points);
     } catch {
       /* the trail stays on its pre-reload points; the trim itself already saved */
@@ -416,9 +418,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (!track || !points || !trimRange) return;
     setTrimSaving(true);
     try {
-      const { patch } = await overwriteWithTrim(track, points, trimRange.start, trimRange.end);
-      updateTrack(track.id, patch);
-      await reloadPoints();
+      const { patch } = await overwriteWithTrim(
+        track,
+        points,
+        trimRange.start,
+        trimRange.end,
+        (next) => updateTrack(track.id, next),
+      );
+      await reloadPoints(patch.fileUri);
       if (trailViewMode === '3d') setGlReloadGen((g) => g + 1);
       showSnack(`Trimmed "${track.name}"`);
       setTrimRange(null);
@@ -486,12 +493,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const keptM = trimRange ? (cumM[trimRange.end] ?? 0) - (cumM[trimRange.start] ?? 0) : 0;
   const totalM = cumM.length > 0 ? (cumM[cumM.length - 1] ?? 0) : 0;
 
-  const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
-    const gen = ++glGenRef.current;
+  const onContextCreate = async (gl: ExpoWebGLRenderingContext, lifetime: GlLifetime) => {
     try {
       const gpx = fileUri ? await storage.readFileText(fileUri) : '';
       const pts = gpx ? parseGpx(gpx).points : [];
-      if (gen !== glGenRef.current) return; // superseded while loading
+      if (!lifetime.isCurrent()) return; // superseded while loading
       setPoints(pts);
       if (!bbox) {
         setStatus('error');
@@ -500,13 +506,17 @@ export function Trail3DGLScreen({ trackId }: Props) {
       // Pad the trail's box so the terrain extends past the trace and fills the
       // viewport, instead of rendering as a tight floating slab.
       const hm = await fetchHeightmap(padBbox(bbox));
-      if (gen !== glGenRef.current) return;
+      if (!lifetime.isCurrent()) return;
       hmRef.current = hm;
       ptsRef.current = pts;
 
       // Renderer first, so the drape texture can use the GL context's max
       // anisotropy and stay sharp at grazing angles.
       const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
+      lifetime.onDispose(() => {
+        if (rendererRef.current === renderer) rendererRef.current = null;
+        renderer.dispose();
+      });
       maxAnisoRef.current = maxAnisotropy;
       rendererRef.current = renderer;
       // fwidth() needs derivatives (contour anti-aliasing); skip the overlay
@@ -521,18 +531,29 @@ export function Trail3DGLScreen({ trackId }: Props) {
         maxAnisoRef.current,
         injectOkRef.current,
       );
-      if (gen !== glGenRef.current) {
+      if (!lifetime.isCurrent()) {
         disposeGroup(build.group);
         return;
       }
 
       const scene = new THREE.Scene();
+      scene.add(build.group);
       sceneRef.current = scene;
+      lifetime.onDispose(() => {
+        if (sceneRef.current === scene) {
+          sceneRef.current = null;
+          groupRef.current = null;
+          overlayRef.current = null;
+          rendererRef.current = null;
+          cameraRef.current = null;
+          queryMarkerRef.current = null;
+        }
+        disposeGroup(scene);
+      });
       // Warm key light + soft hemisphere fill (matches the live 3D map), plus
       // the gradient sky dome and horizon fog so the slab edge never shows.
       addTerrainLights(scene);
       addSkyAndFog(scene, build.radius, 1.2, 3.8);
-      scene.add(build.group);
 
       const camera = createTerrainCamera(gl);
       cameraRef.current = camera;
@@ -554,7 +575,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         scene.remove(build.group);
         disposeGroup(build.group);
         build = await buildGroupFor(hm, pts, basemapRef.current, maxAnisoRef.current, false);
-        if (gen !== glGenRef.current) {
+        if (!lifetime.isCurrent()) {
           disposeGroup(build.group);
           return;
         }
@@ -584,11 +605,16 @@ export function Trail3DGLScreen({ trackId }: Props) {
       setStatus('ready');
 
       runRenderLoop({
-        isCurrent: () => gen === glGenRef.current,
+        lifetime,
         gl,
         scene,
         camera,
         renderer,
+        onError: (error) => {
+          reportError(error, 'trail3d-terrain');
+          setErrMsg(error instanceof Error ? error.message : String(error));
+          setStatus('error');
+        },
         onFrame: () => {
           const o = orbit.current;
           const dt = dyn.frameDt(performance.now());
@@ -650,19 +676,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
             }
           }
         },
-        onDisposed: () => {
-          if (sceneRef.current === scene) {
-            sceneRef.current = null;
-            groupRef.current = null;
-            overlayRef.current = null;
-            rendererRef.current = null;
-            cameraRef.current = null;
-            queryMarkerRef.current = null;
-          }
-        },
       });
     } catch (e) {
-      if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
+      const wasCurrent = lifetime.isCurrent();
+      lifetime.dispose();
+      if (!wasCurrent) return; // superseded — don't set state after unmount
       reportError(e, 'trail3d-terrain');
       setErrMsg(e instanceof Error ? e.message : String(e));
       setStatus('error');
@@ -696,6 +714,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
         maxAnisoRef.current,
         injectOkRef.current,
       );
+      if (sceneRef.current !== scene) {
+        disposeGroup(built.group);
+        return;
+      }
       if (groupRef.current) {
         scene.remove(groupRef.current);
         disposeGroup(groupRef.current);
@@ -713,6 +735,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
         scene.remove(built.group);
         disposeGroup(built.group);
         built = await buildGroupFor(hm, ptsRef.current, bm, maxAnisoRef.current, false);
+        if (sceneRef.current !== scene) {
+          disposeGroup(built.group);
+          return;
+        }
         scene.add(built.group);
       }
       groupRef.current = built.group;
@@ -722,9 +748,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
       overlayRef.current = built.overlay;
       if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
     } catch {
-      showSnack('Could not load that basemap');
+      if (sceneRef.current === scene) showSnack('Could not load that basemap');
+    } finally {
+      setSwitching(false);
     }
-    setSwitching(false);
   };
 
   const pickPhoto = async (fromCamera: boolean) => {
@@ -839,7 +866,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
           }}
         >
           {trailViewMode === '3d' ? (
-            <GLView
+            <ManagedGLView
               key={`gl-${glReloadGen}`}
               style={styles.fill}
               onContextCreate={onContextCreate}

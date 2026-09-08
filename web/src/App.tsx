@@ -233,13 +233,21 @@ export function App() {
   useEffect(() => {
     if (surface !== 'trail' || trailId === null) return;
     let live = true;
-    void lib.loadPoints(trailId).then((points) => {
-      if (!live) return;
-      setLoaded({ id: trailId, points });
-      // A trim intent arrives before the points do; open the full range once
-      // the length is known.
-      setTrim((t) => (t !== null && t.end === 0 ? { start: 0, end: points.length - 1 } : t));
-    });
+    void lib
+      .loadPoints(trailId)
+      .then((points) => {
+        if (!live) return;
+        setLoaded({ id: trailId, points });
+        // A trim intent arrives before the points do; open the full range once
+        // the length is known.
+        setTrim((t) => (t !== null && t.end === 0 ? { start: 0, end: points.length - 1 } : t));
+      })
+      .catch(() => {
+        if (live) {
+          setLoaded(null);
+          setToast('Could not load this trail. Please try again.');
+        }
+      });
     const bbox = lib.index.tracks.find((t) => t.id === trailId)?.stats.bbox;
     if (bbox !== undefined) flyToBbox(bbox);
     return () => {
@@ -285,7 +293,10 @@ export function App() {
           setDrawer('tracks');
         });
       } else {
-        void lib.importFiles(files).then(setToast);
+        void lib
+          .importFiles(files)
+          .then(setToast)
+          .catch(() => setToast('Import failed. Please try again.'));
       }
     };
     window.addEventListener('dragover', over);
@@ -336,6 +347,27 @@ export function App() {
   // ------------------------------------------------------------- render ---
   return (
     <div className="shell">
+      <div className="library-save-status panel" role="status" aria-live="polite">
+        {lib.persistence.state === 'saving' ? (
+          'Saving…'
+        ) : lib.persistence.state === 'saved' ? (
+          'Saved'
+        ) : (
+          <>
+            <strong>Not saved</strong>
+            <span>Changes are kept in this tab. Closing it may lose them.</span>
+            {lib.persistence.message ? <span>{lib.persistence.message}</span> : null}
+            <button
+              className="btn"
+              onClick={() => {
+                void lib.retrySave();
+              }}
+            >
+              Retry
+            </button>
+          </>
+        )}
+      </div>
       <MapCanvas
         theme={theme}
         muted={weatherLayer !== null}
@@ -473,7 +505,7 @@ export function App() {
             </button>
           </div>
 
-          <div className="drawer-body">
+          <div className="drawer-body" inert={!lib.ready}>
             {lib.seeding !== null ? (
               <div className="note">
                 Generating the Québec demo library — {Math.round(lib.seeding * 100)}%.
@@ -545,7 +577,7 @@ export function App() {
               <IconClose size={14} />
             </button>
           </div>
-          <div className="drawer-body">
+          <div className="drawer-body" inert={!lib.ready}>
             {drawer === 'catalog' ? (
               <CatalogPanel origin={origin} onLocate={locateItem} />
             ) : (

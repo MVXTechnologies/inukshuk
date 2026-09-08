@@ -27,8 +27,11 @@ Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
 ## Gating
 
-- `ci.yml` is the required check for merging. `npm run check` runs the same gate
-  locally.
+- Configure `ci.yml` as a required check in repository branch protection/rulesets;
+  defining a workflow alone does not enforce it. `npm run check` runs the quality
+  gate locally, alongside `npx expo install --check` for SDK dependency alignment.
+- OTA publishing and store release jobs run both checks on their own checkout
+  before publishing/build submission, independently of merge protection.
 - `native-build.yml` runs on native-affecting PRs so a broken pod/gradle change
   can't merge unnoticed.
 - Anything that needs secrets (`release.yml`, `ota-update.yml`) **no-ops cleanly

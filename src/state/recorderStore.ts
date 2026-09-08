@@ -90,7 +90,7 @@ interface RecorderState {
    * session: deduped by timestamp, gated by the GPS filter, stats recomputed.
    * No-op while idle (crash recovery owns that case).
    */
-  mergeBackgroundPoints: (incoming: TrackPoint[]) => void;
+  mergeBackgroundPoints: (incoming: TrackPoint[]) => boolean;
   /** Drop a waypoint at the current position (becomes a numbered note on stop). */
   addWaypoint: () => number;
   /**
@@ -183,6 +183,11 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
   };
 }
 
+let sessionGeneration = 0;
+
+/** Ownership token for asynchronous recovery and background-journal reads. */
+export const getRecorderSessionGeneration = (): number => sessionGeneration;
+
 export const useRecorderStore = create<RecorderState>((set, get) => ({
   status: 'idle',
   name: '',
@@ -199,6 +204,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   lastSavedTrackId: null,
 
   start: (name, category) => {
+    sessionGeneration += 1;
     const now = Date.now();
     // A fresh session supersedes any stale checkpoint from a previous crash.
     checkpoint.clearCheckpoint();
@@ -254,9 +260,14 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
   mergeBackgroundPoints: (incoming) => {
     const { status, points } = get();
-    if (status === 'idle') return;
+    if (status === 'idle') return false;
     const merged = mergeTrackPoints(points, incoming, { accept: shouldAcceptFix });
-    if (merged === points) return; // nothing new — keep identity, skip the I/O
+    if (merged === points) {
+      // A previous merge may have updated memory but failed to save. Retry
+      // durability even when this snapshot contains no new points.
+      const cp = checkpointOf(get());
+      return cp !== null && checkpoint.writeCheckpoint(cp);
+    }
     const newest = merged[merged.length - 1];
     // Out-of-order inserts invalidate both the incremental stats fold AND the
     // elevation accumulator's running reference — resynchronize both from the
@@ -275,7 +286,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     });
     // Force a checkpoint: the journal these came from is about to be cleared.
     const cp = checkpointOf(get());
-    if (cp) checkpoint.writeCheckpoint(cp);
+    return cp !== null && checkpoint.writeCheckpoint(cp);
   },
 
   addWaypoint: () => {
@@ -364,6 +375,11 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   stop: async () => {
+    if (get().status === 'idle') return null;
+    const generation = sessionGeneration;
+    const journaled = await checkpoint.readBackgroundPoints();
+    if (generation !== sessionGeneration) return null;
+    if (journaled.length > 0) get().mergeBackgroundPoints(journaled);
     const { points, name, category, startedAt, status, waypoints } = get();
     if (status === 'idle' || startedAt === null) return null;
 
@@ -418,6 +434,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
     // The recording is safely persisted (or intentionally empty) — the crash
     // journal is now stale and must not resurrect on next launch.
+    sessionGeneration += 1;
     checkpoint.clearCheckpoint();
     set({
       status: 'idle',
@@ -439,6 +456,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   acknowledgeSavedTrack: () => set({ lastSavedTrackId: null }),
 
   discard: () => {
+    sessionGeneration += 1;
     for (const wp of get().waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
     checkpoint.clearCheckpoint();
     set({
@@ -479,6 +497,9 @@ export async function initRecorderRecovery(): Promise<boolean> {
   recoveryAttempted = true;
   // Never clobber a live session (e.g. recovery raced a fast manual start).
   if (useRecorderStore.getState().status !== 'idle') return false;
+  const generation = sessionGeneration;
+  const ownsRecovery = () =>
+    generation === sessionGeneration && useRecorderStore.getState().status === 'idle';
 
   // A checkpoint/journal written by a crashed session can be malformed. Recovery
   // runs at launch, so ANY throw here (corrupt JSON, unexpected shape, stats
@@ -487,6 +508,7 @@ export async function initRecorderRecovery(): Promise<boolean> {
   // checkpoint+journal and start clean.
   try {
     const cp = await checkpoint.readCheckpoint();
+    if (!ownsRecovery()) return false;
     if (!cp || !Array.isArray(cp.points)) return false;
 
     // Ghost-session guard: clearCheckpoint's delete is best-effort — when it
@@ -504,12 +526,14 @@ export async function initRecorderRecovery(): Promise<boolean> {
         /* hydration failure → judge with whatever tracks we have */
       }
     }
+    if (!ownsRecovery()) return false;
     if (useLibraryStore.getState().tracks.some((t) => t.startedAt === cp.startedAt)) {
       checkpoint.clearCheckpoint();
       return false;
     }
 
     const journaled = await checkpoint.readBackgroundPoints();
+    if (!ownsRecovery()) return false;
     const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
     if (points.length === 0) return false;
 
@@ -536,10 +560,11 @@ export async function initRecorderRecovery(): Promise<boolean> {
     // The journal is folded in — re-checkpoint the merged session so a second
     // crash cannot lose the background points, then drop the journal.
     const merged = checkpointOf(useRecorderStore.getState());
-    if (merged) checkpoint.writeCheckpoint(merged);
-    checkpoint.clearBackgroundPoints();
+    if (merged && checkpoint.writeCheckpoint(merged))
+      checkpoint.acknowledgeBackgroundPoints(journaled);
     return true;
   } catch (err) {
+    if (generation !== sessionGeneration) return false;
     // Unrecoverable state: wipe it so the next launch is clean, and surface it.
     try {
       checkpoint.clearCheckpoint();

@@ -17,6 +17,7 @@ import { ActivityGraph } from './ActivityGraph';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
 import { LifetimeSummary } from './LifetimeSummary';
 import { MonthCalendar } from './MonthCalendar';
+import { useDashboardClock } from './useDashboardClock';
 
 /**
  * The profile/dashboard view (1.5.0): a Strava-like period graph (7d/3m/1y)
@@ -41,14 +42,14 @@ export function DashboardScreen() {
   // falling back to the newest bucket.
   const [selectedFromEnd, setSelectedFromEnd] = useState<number | null>(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
-  // Frozen at mount: the aggregation window only shifts at midnight, and a
-  // per-render Date.now() is impure under the render rules anyway.
-  const [now] = useState(() => Date.now());
-  const [visibleMonth, setVisibleMonth] = useState(() => {
-    const d = new Date();
-    return { year: d.getFullYear(), month: d.getMonth() };
-  });
-  const [dayPick, setDayPick] = useState<CalendarDayEntry | null>(null);
+  const now = useDashboardClock();
+  // Following the current month is the default; explicit browsing pins it.
+  const [browsedMonth, setBrowsedMonth] = useState<{ year: number; month: number } | null>(null);
+  const visibleMonth = useMemo(() => {
+    const d = new Date(now);
+    return browsedMonth ?? { year: d.getFullYear(), month: d.getMonth() };
+  }, [browsedMonth, now]);
+  const [dayPick, setDayPick] = useState<{ entry: CalendarDayEntry; dateMs: number } | null>(null);
 
   const buckets = useMemo(
     () => aggregateBuckets(tracks, period, now, categoryId),
@@ -117,18 +118,24 @@ export function DashboardScreen() {
     visibleMonth.year < nowDate.getFullYear() ||
     (visibleMonth.year === nowDate.getFullYear() && visibleMonth.month < nowDate.getMonth());
   const shiftMonth = (delta: number) =>
-    setVisibleMonth(({ year, month }) => {
+    setBrowsedMonth((previous) => {
+      const { year, month } = previous ?? visibleMonth;
       const d = new Date(year, month + delta, 1);
       return { year: d.getFullYear(), month: d.getMonth() };
     });
 
   const onDayPress = (entry: CalendarDayEntry) => {
     if (entry.tracks.length === 1) router.push(`/trail3d/${entry.tracks[0]!.id}`);
-    else setDayPick(entry);
+    else {
+      setDayPick({
+        entry,
+        dateMs: new Date(visibleMonth.year, visibleMonth.month, entry.day).getTime(),
+      });
+    }
   };
   const dayPickTracks = useMemo(() => {
     if (!dayPick) return [];
-    const ids = new Set(dayPick.tracks.map((t) => t.id));
+    const ids = new Set(dayPick.entry.tracks.map((t) => t.id));
     return tracks.filter((t) => ids.has(t.id));
   }, [dayPick, tracks]);
 
@@ -247,6 +254,7 @@ export function DashboardScreen() {
       </View>
 
       <MonthCalendar
+        todayMs={now}
         year={visibleMonth.year}
         month={visibleMonth.month}
         entries={monthEntries}
@@ -265,7 +273,7 @@ export function DashboardScreen() {
       <DayActivitiesDialog
         title={
           dayPick
-            ? `Activities on ${new Date(visibleMonth.year, visibleMonth.month, dayPick.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+            ? `Activities on ${new Date(dayPick.dateMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
             : null
         }
         tracks={dayPickTracks}

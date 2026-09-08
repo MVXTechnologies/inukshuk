@@ -64,15 +64,15 @@ function mapCheckpointPaths(
   };
 }
 
-/** Persist a checkpoint immediately (atomic swap). Failures are swallowed —
- * checkpointing must never take down the recording it protects. */
-export function writeCheckpoint(cp: RecorderCheckpoint): void {
+/** Persist immediately, reporting durability without interrupting recording. */
+export function writeCheckpoint(cp: RecorderCheckpoint): boolean {
   try {
     storage.writeJson(CHECKPOINT_FILE, mapCheckpointPaths(cp, storage.toDocumentPath));
     pointsSinceWrite = 0;
     lastWriteAt = Date.now();
+    return true;
   } catch {
-    /* best effort — keep recording */
+    return false;
   }
 }
 
@@ -158,6 +158,8 @@ function deleteJournalFiles(baseName: string): void {
 let bgPoints: TrackPoint[] | null = null;
 let bgPointsSinceWrite = 0;
 let bgLastWriteAt = 0;
+let bgGeneration = 0;
+let bgLoading: Promise<void> | null = null;
 
 function isValidPoint(p: unknown): p is TrackPoint {
   if (typeof p !== 'object' || p === null) return false;
@@ -181,6 +183,21 @@ async function readBgPointsFile(): Promise<TrackPoint[]> {
   }
 }
 
+/** Share the first read; an old session's pending read must never replace a new one. */
+function ensureBackgroundPoints(): Promise<void> {
+  if (bgPoints !== null) return Promise.resolve();
+  if (bgLoading === null) {
+    const generation = bgGeneration;
+    bgLoading = readBgPointsFile().then((points) => {
+      if (generation !== bgGeneration) return;
+      bgPoints = points;
+      bgLastWriteAt = Number.NEGATIVE_INFINITY;
+      bgLoading = null;
+    });
+  }
+  return bgLoading;
+}
+
 /**
  * Durably append fixes delivered by the background location task while no live
  * recorder session exists in this JS context. The first append after a (re)load
@@ -190,13 +207,10 @@ async function readBgPointsFile(): Promise<TrackPoint[]> {
  */
 export async function appendBackgroundPoints(points: TrackPoint[]): Promise<void> {
   if (points.length === 0) return;
+  const generation = bgGeneration;
   try {
-    if (bgPoints === null) {
-      bgPoints = await readBgPointsFile();
-      // Force the first append in this JS context to flush, so even a short
-      // background stint leaves a durable trace.
-      bgLastWriteAt = Number.NEGATIVE_INFINITY;
-    }
+    await ensureBackgroundPoints();
+    if (generation !== bgGeneration || bgPoints === null) return;
     bgPoints.push(...points);
     bgPointsSinceWrite += points.length;
     if (
@@ -217,12 +231,31 @@ export async function appendBackgroundPoints(points: TrackPoint[]): Promise<void
  * Corrupt/foreign entries are dropped rather than poisoning a merge.
  */
 export async function readBackgroundPoints(): Promise<TrackPoint[]> {
-  if (bgPoints !== null) return bgPoints.slice();
-  return readBgPointsFile();
+  const generation = bgGeneration;
+  await ensureBackgroundPoints();
+  return generation === bgGeneration && bgPoints !== null ? bgPoints.slice() : [];
+}
+
+/** Drop only the snapshot already saved in a checkpoint, retaining later appends. */
+export function acknowledgeBackgroundPoints(snapshot: readonly TrackPoint[]): void {
+  if (bgPoints === null || snapshot.length === 0) return;
+  const acknowledged = new Set(snapshot);
+  const remaining = bgPoints.filter((point) => !acknowledged.has(point));
+  try {
+    if (remaining.length > 0) storage.writeJson(BG_POINTS_FILE, remaining);
+    else deleteJournalFiles(BG_POINTS_FILE);
+    bgPoints = remaining;
+    bgPointsSinceWrite = 0;
+    bgLastWriteAt = Date.now();
+  } catch {
+    // Retaining duplicate fixes is safe: checkpoint merging deduplicates them.
+  }
 }
 
 /** Drop the journal (merged into the store, or the session ended). */
 export function clearBackgroundPoints(): void {
+  bgGeneration += 1;
+  bgLoading = null;
   bgPoints = null;
   bgPointsSinceWrite = 0;
   bgLastWriteAt = 0;

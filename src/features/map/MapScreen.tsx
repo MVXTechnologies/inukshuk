@@ -1,3 +1,4 @@
+import { fnv1a32 } from '@core/encoding/fnv1a';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
@@ -45,8 +46,8 @@ import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
@@ -95,6 +96,7 @@ import {
 import { buildOsmStyle } from './mapStyle';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
+import { usePdfDetails } from './usePdfDetails';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
@@ -351,6 +353,7 @@ export function MapScreen() {
   // field's own settled bounds it is NOT gated on the wind overlay — and so
   // does the weather drape, which is why both live this high up.
   const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  const pdfWindow = useWindowDimensions();
   // Settled camera zoom + centre latitude, the two inputs the scale bar needs
   // (a Web-Mercator pixel is ~8× less ground at 83°N than at the equator).
   // SETTLE-driven on purpose: `onRegionIsChanging` fires at gesture rate and
@@ -691,6 +694,16 @@ export function MapScreen() {
   // Settled map bearing → the compass badge's red north needle, plus the
   // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
   const { mapBearing, onSettleBearing } = useMapBearing({ snapToNorth });
+  // Use the laid-out map frame, not the window (which may include navigation
+  // chrome), and its settled bearing to size rotated PDF detail in pixels.
+  const pdfPixelRatio = Math.min(pdfWindow.scale, 3);
+  const pdfDetails = usePdfDetails(
+    shownMaps,
+    overlays,
+    showPdfOverlay ? settledBounds : null,
+    windLayout.width * pdfPixelRatio,
+    { heightPx: windLayout.height * pdfPixelRatio, bearing: mapBearing },
+  );
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig
   // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
@@ -868,6 +881,7 @@ export function MapScreen() {
         if (vs === undefined || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
         setSettledBounds(windBoundsOf(vs));
+        onSettleBearing(vs.bearing);
       } catch {
         // map mid-teardown — the first region settle seeds instead.
       }
@@ -875,7 +889,7 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mapLoaded, mapCenter, settledBounds, setMapCenter]);
+  }, [mapLoaded, mapCenter, settledBounds, setMapCenter, onSettleBearing]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -1721,9 +1735,27 @@ export function MapScreen() {
 
           {showPdfOverlay &&
             overlays.map((o) => (
-              <ImageSource key={o.id} id={o.id} url={o.imageUri} coordinates={o.coordinates}>
-                <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
-              </ImageSource>
+              <Fragment key={o.id}>
+                <ImageSource id={o.id} url={o.imageUri} coordinates={o.coordinates}>
+                  <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
+                </ImageSource>
+                {pdfDetails
+                  .filter((d) => (d.parentId ?? d.id) === o.id)
+                  .map((d) => (
+                    <ImageSource
+                      key={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                      id={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                      url={d.imageUri}
+                      coordinates={d.coordinates}
+                    >
+                      <Layer
+                        id={`${d.id}-detail-${fnv1a32(d.imageUri)}-layer`}
+                        type="raster"
+                        paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
+                      />
+                    </ImageSource>
+                  ))}
+              </Fragment>
             ))}
 
           {/* Terrain overlays sit above the (near-opaque) PDF maps — they're

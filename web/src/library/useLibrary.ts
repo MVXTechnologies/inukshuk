@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { parseGpx } from '@core/geo/gpx';
+import { buildGpx, parseGpx } from '@core/geo/gpx';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { toggleId } from '@core/library/toggleId';
 import { nextFolderVisibility } from '@core/library/visibility';
 import type { Folder, TrackPoint } from '@core/models';
 
-import { DEMO_CUSTOM_CATEGORIES, DEMO_FOLDERS, DEMO_ROUTES, DEMO_WAYPOINTS } from '@/demo/routes';
-import { synthGpx } from '@/demo/synth';
-import { GPX_STORE, idb, LIBRARY_STORE } from '@/lib/idb';
+import { DEMO_CUSTOM_CATEGORIES, DEMO_FOLDERS, DEMO_ROUTES, DEMO_WAYPOINTS } from '../demo/routes';
+import { synthGpx } from '../demo/synth';
+import { GPX_STORE, idb, LIBRARY_STORE } from '../lib/idb';
 
 import { importGpxText, TRACK_PALETTE } from './importGpx';
 import type { WebLibraryIndex, WebTrack } from './types';
+import { LibraryPersistence, type PersistenceStatus } from './persistence';
 
 const INDEX_KEY = 'index';
 
@@ -29,6 +30,8 @@ const EMPTY_INDEX: WebLibraryIndex = {
 export interface LibraryState {
   index: WebLibraryIndex;
   ready: boolean;
+  persistence: PersistenceStatus;
+  retrySave: () => Promise<boolean>;
   /** Non-null while the demo library is being generated, 0..1. */
   seeding: number | null;
 
@@ -81,25 +84,50 @@ export function useLibrary(): LibraryState {
   // already in IndexedDB.
   const pointCache = useRef(new Map<string, TrackPoint[]>());
 
-  const persist = useCallback((next: WebLibraryIndex) => {
-    setIndex(next);
-    void idb.put(LIBRARY_STORE, INDEX_KEY, next).catch(() => undefined);
-  }, []);
+  const indexRef = useRef(index);
+  const readGuard = useRef(false);
+  const initialized = useRef<Promise<void> | null>(null);
+  const [persistence, setPersistence] = useState<PersistenceStatus>({ state: 'saving' });
+  const [writer] = useState(
+    // The constructor stores this callback; it does not read the ref during render.
+    // eslint-disable-next-line react-hooks/refs
+    () =>
+      new LibraryPersistence<WebLibraryIndex>(async (write) => {
+        if (readGuard.current) {
+          const stored = await idb.get<WebLibraryIndex>(LIBRARY_STORE, INDEX_KEY);
+          if (stored?.demoSeeded) {
+            throw new Error(
+              'A saved library already exists. Reload to restore it; current changes are only in this tab.',
+            );
+          }
+          readGuard.current = false;
+        }
+        await idb.commitLibrary(write.index, write.files, write.replace);
+      }, setPersistence),
+  );
+  const retrySave = useCallback(() => writer.save(), [writer]);
 
-  /** Apply a pure transform to the index and persist the result. */
+  /** Publish session state immediately; only the transaction may report Saved. */
   const update = useCallback(
-    (fn: (prev: WebLibraryIndex) => WebLibraryIndex) => {
-      setIndex((prev) => {
-        const next = fn(prev);
-        void idb.put(LIBRARY_STORE, INDEX_KEY, next).catch(() => undefined);
-        return next;
-      });
+    (
+      fn: (prev: WebLibraryIndex) => WebLibraryIndex,
+      files = new Map<string, string | null>(),
+      replace = false,
+    ) => {
+      const next = fn(indexRef.current);
+      indexRef.current = next;
+      setIndex(next);
+      for (const id of files.keys()) pointCache.current.delete(id);
+      if (replace) pointCache.current.clear();
+      writer.stage(next, files, replace);
+      return writer.save();
     },
-    [setIndex],
+    [writer],
   );
 
   // ------------------------------------------------------------- seeding ---
-  const seed = useCallback(async (): Promise<WebLibraryIndex> => {
+  const seed = useCallback(async () => {
+    const files = new Map<string, string | null>();
     const tracks: WebTrack[] = [];
     setSeeding(0);
     for (let i = 0; i < DEMO_ROUTES.length; i++) {
@@ -113,7 +141,7 @@ export function useLibrary(): LibraryState {
         ...(route.folderId === undefined ? {} : { folderId: route.folderId }),
       });
       tracks.push(track);
-      await idb.put(GPX_STORE, route.id, xml).catch(() => undefined);
+      files.set(route.id, xml);
       setSeeding((i + 1) / DEMO_ROUTES.length);
       // Yield so the progress line actually paints between routes; synthesising
       // 23 multi-thousand-point recordings back to back would otherwise block
@@ -135,37 +163,40 @@ export function useLibrary(): LibraryState {
       demoSeeded: true,
     };
     setSeeding(null);
-    return next;
+    return { index: next, files };
   }, []);
 
   useEffect(() => {
-    void (async () => {
+    if (initialized.current) return;
+    initialized.current = (async () => {
       try {
-        const stored = await idb.get<WebLibraryIndex>(LIBRARY_STORE, INDEX_KEY);
-        if (stored !== undefined && stored.demoSeeded) {
+        let stored: WebLibraryIndex | undefined;
+        try {
+          stored = await idb.get<WebLibraryIndex>(LIBRARY_STORE, INDEX_KEY);
+        } catch {
+          readGuard.current = true;
+        }
+        if (stored?.demoSeeded) {
+          indexRef.current = stored;
           setIndex(stored);
+          setPersistence({ state: 'saved' });
           return;
         }
-        persist(await seed());
-      } catch {
-        // A blocked IndexedDB (private mode) must not take the screen down —
-        // seed into memory and accept that a reload starts over.
-        try {
-          setIndex(await seed());
-        } catch {
-          setIndex(EMPTY_INDEX);
-        }
+        const seeded = await seed();
+        await update(() => seeded.index, seeded.files, true);
+      } catch (error) {
+        setPersistence({ state: 'error', message: String(error) });
       } finally {
         setReady(true);
       }
     })();
-  }, [persist, seed]);
+  }, [seed, update, readGuard]);
 
   const reseed = useCallback(async () => {
-    pointCache.current.clear();
-    await idb.clear(GPX_STORE).catch(() => undefined);
-    persist(await seed());
-  }, [persist, seed]);
+    await initialized.current;
+    const seeded = await seed();
+    await update(() => seeded.index, seeded.files, true);
+  }, [update, seed]);
 
   // ----------------------------------------------------------- mutations ---
   const addFolder = useCallback(
@@ -259,9 +290,10 @@ export function useLibrary(): LibraryState {
 
   const removeTrack = useCallback(
     (id: string) => {
-      pointCache.current.delete(id);
-      void idb.remove(GPX_STORE, id).catch(() => undefined);
-      update((prev) => ({ ...prev, tracks: prev.tracks.filter((t) => t.id !== id) }));
+      void update(
+        (prev) => ({ ...prev, tracks: prev.tracks.filter((t) => t.id !== id) }),
+        new Map([[id, null]]),
+      );
     },
     [update],
   );
@@ -298,7 +330,9 @@ export function useLibrary(): LibraryState {
   // -------------------------------------------------------------- import ---
   const importFiles = useCallback(
     async (files: readonly File[]): Promise<string> => {
+      await initialized.current;
       const added: WebTrack[] = [];
+      const bodies = new Map<string, string | null>();
       const failed: string[] = [];
       const base = index.tracks.length;
 
@@ -308,7 +342,7 @@ export function useLibrary(): LibraryState {
           const { track } = importGpxText(xml, file.name.replace(/\.gpx$/i, ''), Date.now(), {
             color: TRACK_PALETTE[(base + added.length) % TRACK_PALETTE.length]!,
           });
-          await idb.put(GPX_STORE, track.id, xml).catch(() => undefined);
+          bodies.set(track.id, xml);
           added.push(track);
         } catch {
           failed.push(file.name);
@@ -316,23 +350,40 @@ export function useLibrary(): LibraryState {
       }
 
       if (added.length === 0) return `Could not read ${failed.join(', ') || 'that file'}`;
-      update((prev) => ({ ...prev, tracks: [...added, ...prev.tracks] }));
+      const saved = await update(
+        (prev) => ({ ...prev, tracks: [...added, ...prev.tracks] }),
+        bodies,
+      );
       const noun = added.length === 1 ? 'trail' : 'trails';
       const tail = failed.length > 0 ? ` · ${failed.length} failed` : '';
-      return `Imported ${added.length} ${noun}${tail}`;
+      return `Imported ${added.length} ${noun}${tail}${saved ? '' : ' · Not saved; kept in this tab'}`;
     },
     [index.tracks.length, update],
   );
 
-  const loadPoints = useCallback(async (id: string): Promise<TrackPoint[]> => {
-    const hit = pointCache.current.get(id);
-    if (hit !== undefined) return hit;
-    const xml = await idb.get<string>(GPX_STORE, id);
-    if (xml === undefined) return [];
-    const points = parseGpx(xml).points;
-    pointCache.current.set(id, points);
-    return points;
-  }, []);
+  const loadXml = useCallback(
+    async (id: string): Promise<string | undefined> => {
+      const memory = writer.read(id);
+      return memory !== undefined ? (memory ?? undefined) : idb.get<string>(GPX_STORE, id);
+    },
+    [writer],
+  );
+
+  const loadPoints = useCallback(
+    async (id: string): Promise<TrackPoint[]> => {
+      const hit = pointCache.current.get(id);
+      if (hit !== undefined) return hit;
+      const xml = await loadXml(id);
+      if (xml === undefined) return [];
+      const points = parseGpx(xml).points;
+      // A trim/delete may have replaced this XML while the read was pending.
+      const current = writer.read(id);
+      if (current !== undefined && current !== xml) return current ? parseGpx(current).points : [];
+      pointCache.current.set(id, points);
+      return points;
+    },
+    [loadXml, writer],
+  );
 
   // ---------------------------------------------------------------- trim ---
   const applyTrim = useCallback(
@@ -341,16 +392,20 @@ export function useLibrary(): LibraryState {
       points: readonly TrackPoint[],
       mode: 'overwrite' | 'copy',
     ): Promise<string> => {
-      const source = index.tracks.find((t) => t.id === id);
+      await initialized.current;
+      const source = indexRef.current.tracks.find((t) => t.id === id);
       if (source === undefined) return 'Trail is gone';
-      const xml = await idb.get<string>(GPX_STORE, id);
+      const xml = await loadXml(id);
       if (xml === undefined) return 'Trail file is gone';
 
       // Round-trip through GPX text on both paths, so the trimmed trail is
       // stored exactly as an imported one would be.
-      const { buildGpx } = await import('@core/geo/gpx');
+      if (indexRef.current.tracks.find((t) => t.id === id) !== source) {
+        throw new Error('Trail changed while trimming. Try again.');
+      }
       const body = buildGpx({
         points: [...points],
+        waypoints: parseGpx(xml).waypoints,
         metadata: { name: mode === 'copy' ? `${source.name} (trimmed)` : source.name },
       });
 
@@ -361,9 +416,13 @@ export function useLibrary(): LibraryState {
           ...(source.category === undefined ? {} : { category: source.category }),
           ...(source.folderId === undefined ? {} : { folderId: source.folderId }),
         });
-        await idb.put(GPX_STORE, track.id, body).catch(() => undefined);
-        update((prev) => ({ ...prev, tracks: [track, ...prev.tracks] }));
-        return `Saved "${track.name}" to the library`;
+        const saved = await update(
+          (prev) => ({ ...prev, tracks: [track, ...prev.tracks] }),
+          new Map([[track.id, body]]),
+        );
+        return saved
+          ? `Saved "${track.name}" to the library`
+          : `"${track.name}" · Not saved; kept in this tab`;
       }
 
       const { track } = importGpxText(body, source.name, source.startedAt, {
@@ -373,21 +432,28 @@ export function useLibrary(): LibraryState {
         ...(source.category === undefined ? {} : { category: source.category }),
         ...(source.folderId === undefined ? {} : { folderId: source.folderId }),
       });
-      await idb.put(GPX_STORE, id, body).catch(() => undefined);
-      pointCache.current.set(id, [...points]);
-      update((prev) => ({
-        ...prev,
-        tracks: prev.tracks.map((t) => (t.id === id ? track : t)),
-      }));
-      return `Trimmed "${source.name}"`;
+      const saved = await update(
+        (prev) => ({
+          ...prev,
+          tracks: prev.tracks.map((t) =>
+            t.id === id
+              ? { ...track, name: t.name, folderId: t.folderId, category: t.category }
+              : t,
+          ),
+        }),
+        new Map([[id, body]]),
+      );
+      return `Trimmed "${source.name}"${saved ? '' : ' · Not saved; kept in this tab'}`;
     },
-    [index.tracks, update],
+    [loadXml, update],
   );
 
   return useMemo(
     () => ({
       index,
       ready,
+      persistence,
+      retrySave,
       seeding,
       addFolder,
       renameFolder,
@@ -407,6 +473,8 @@ export function useLibrary(): LibraryState {
     [
       index,
       ready,
+      persistence,
+      retrySave,
       seeding,
       addFolder,
       renameFolder,

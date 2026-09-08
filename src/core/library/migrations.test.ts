@@ -195,6 +195,7 @@ describe('migrateLibraryIndex', () => {
       maps: [
         {
           id: 'm1',
+          fileUri: 'maps/m1.pdf',
           georeferences: [geoRef(0)],
           sourceItemId: 42,
           sourceUpdatedAt: { when: 'yesterday' },
@@ -224,7 +225,7 @@ describe('migrateLibraryIndex', () => {
   it('drops junk fields and entries without throwing', () => {
     const index = migrateLibraryIndex({
       schemaVersion: 2,
-      maps: [null, 42, { id: 'm1', georeferences: [geoRef(0)] }],
+      maps: [null, 42, { id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)] }],
       tracks: [track('t1'), 'not a track', { name: 'no id' }],
       bundles: 'nope',
       folders: [{ id: 'f1', name: 'F', createdAt: 1 }],
@@ -493,7 +494,7 @@ describe('migrateLibraryIndex', () => {
       sourceCrs: 'NAD83 / UTM zone 19N (EPSG:26919)',
     };
     const index = migrateLibraryIndex({
-      maps: [{ id: 'm1', georeferences: [withCrs], activePages: [0] }],
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [withCrs], activePages: [0] }],
     });
     expect(index.maps[0]?.georeferences[0]?.sourceCrs).toBe('NAD83 / UTM zone 19N (EPSG:26919)');
   });
@@ -536,5 +537,86 @@ describe('migrateSettings', () => {
     for (const junk of [null, undefined, 'x', 3, []]) {
       expect(migrateSettings(junk, defaults)).toEqual(defaults);
     }
+  });
+});
+
+describe('malformed nested library records', () => {
+  it('drops invalid georeferences while preserving valid map siblings', () => {
+    const index = migrateLibraryIndex({
+      maps: [
+        { id: 'mixed', fileUri: 'maps/mixed.pdf', georeferences: [null, {}, geoRef(0)] },
+        { id: 'legacy', fileUri: 'maps/legacy.pdf', georeference: null },
+      ],
+    });
+    expect(index.maps.map((m) => m.id)).toEqual(['mixed', 'legacy']);
+    expect(index.maps[0]?.georeferences).toEqual([geoRef(0)]);
+    expect(index.maps[1]?.georeferences).toEqual([]);
+  });
+
+  it.each([
+    { ...geoRef(0), pageIndex: -1 },
+    { ...geoRef(0), pageWidthPt: null },
+    { ...geoRef(0), viewport: null },
+    { ...geoRef(0), viewport: { ...geoRef(0).viewport, rect: null } },
+    { ...geoRef(0), viewport: { ...geoRef(0).viewport, corners: null } },
+    {
+      ...geoRef(0),
+      viewport: {
+        ...geoRef(0).viewport,
+        corners: { ...geoRef(0).viewport.corners, topLeft: null },
+      },
+    },
+    { ...geoRef(0), bbox: null },
+  ])('drops incomplete nested geometry while retaining a usable map', (bad) => {
+    const index = migrateLibraryIndex({
+      maps: [{ id: 'map', fileUri: 'maps/map.pdf', georeferences: [bad, geoRef(1)] }],
+    });
+    expect(index.maps[0]?.georeferences).toEqual([geoRef(1)]);
+    expect(index.maps[0]?.activePages).toEqual([1]);
+  });
+
+  it('drops records without usable file paths and prunes their active ids', () => {
+    const index = migrateLibraryIndex({
+      maps: [{ id: 'bad-map' }, { id: 'map', fileUri: 'maps/map.pdf' }],
+      tracks: [
+        { ...track('missing'), fileUri: undefined },
+        { ...track('bad'), fileUri: 42 },
+        track('good'),
+      ],
+      activeMapId: 'bad-map',
+      activeTrackIds: ['missing', 'bad', 'good'],
+    });
+    expect(index.maps.map((m) => m.id)).toEqual(['map']);
+    expect(index.tracks.map((t) => t.id)).toEqual(['good']);
+    expect(index.activeMapId).toBeNull();
+    expect(index.activeTrackIds).toEqual(['good']);
+  });
+
+  it('sanitizes non-array notes and invalid nested photo paths without losing trails', () => {
+    const note = { id: 'note', distanceM: 5, text: 'Saved', createdAt: 1 };
+    const index = migrateLibraryIndex({
+      tracks: [
+        { ...track('non-array'), notes: {} },
+        {
+          ...track('mixed'),
+          notes: [
+            null,
+            {},
+            { ...note, photoUri: 42 },
+            { ...note, id: 'photo', photoUri: 'photos/photo.jpg' },
+          ],
+        },
+      ],
+      waypoints: [
+        { id: 'w', latitude: 46, longitude: -71, label: 'W', createdAt: 1, photoUri: {} },
+      ],
+    });
+    expect(index.tracks.map((t) => t.id)).toEqual(['non-array', 'mixed']);
+    expect(index.tracks[0]?.notes).toEqual([]);
+    expect(index.tracks[1]?.notes).toEqual([
+      note,
+      { ...note, id: 'photo', photoUri: 'photos/photo.jpg' },
+    ]);
+    expect(index.waypoints[0]).not.toHaveProperty('photoUri');
   });
 });

@@ -7,7 +7,7 @@ import {
 import { resolveModelWmsLayer, type WeatherModelId } from '@core/weather/weatherModels';
 import type { LatLng } from '@core/models';
 import { useEffect, useState } from 'react';
-import { WEATHER_USER_AGENT } from './useWeatherTimeline';
+import { fetchWeatherJson } from './fetchWeatherJson';
 
 /**
  * The tap-anywhere point-value chip's data (wave A item 7): one WMS
@@ -47,11 +47,11 @@ export function useWeatherPointValue(
   useEffect(() => {
     const key = requestKey(at, layer, model, timeIso);
     let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       try {
         const url = getFeatureInfoUrlForLayer(resolveModelWmsLayer(layer, model), at, timeIso);
-        const res = await fetch(url, { headers: { 'User-Agent': WEATHER_USER_AGENT } });
-        const value = res.ok ? parseFeatureInfo(await res.json()) : null;
+        const value = parseFeatureInfo(await fetchWeatherJson(url, controller.signal));
         if (cancelled) return;
         setResult({
           key,
@@ -63,6 +63,7 @@ export function useWeatherPointValue(
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [at, layer, model, timeIso]);
 

@@ -2,7 +2,7 @@ import { padBbox } from '@core/geo/terrain';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import type { MapBasemap } from '@state/mapStore';
-import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
+import type { ExpoWebGLRenderingContext } from 'expo-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, IconButton, Text, useTheme } from 'react-native-paper';
@@ -10,7 +10,12 @@ import * as THREE from 'three';
 import { fetchHeightmap } from './dem';
 import { rayGroundHit, zoomTowardPoint } from '@core/geo/terrainRay';
 import { createCameraDynamics, type FlyTargets } from './terrain3d/cameraDynamics';
-import { disposeGroup, runRenderLoop, useGlGeneration } from './terrain3d/glLifecycle';
+import {
+  disposeGroup,
+  runRenderLoop,
+  ManagedGLView,
+  type GlLifetime,
+} from './terrain3d/glLifecycle';
 import {
   clamp,
   createTerrainPanResponder,
@@ -236,9 +241,6 @@ export function Terrain3DLiveView({
   const sceneRef = useRef<THREE.Scene | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   const reanchoringRef = useRef(false);
-  // GL generation: the GLView remounts on every basemap change / recenter (see
-  // its `key`); the render loop must not outlive its context (see useGlGeneration).
-  const glGenRef = useGlGeneration();
   const overlaysRef = useRef<THREE.Group | null>(null);
   const trailsRef = useRef(trails);
   const recordPointsRef = useRef(recordPoints);
@@ -307,6 +309,10 @@ export function Terrain3DLiveView({
           maxAnisoRef.current,
           injectOkRef.current,
         );
+        if (sceneRef.current !== scene) {
+          disposeGroup(built.group);
+          return;
+        }
         const old = groupRef.current;
         scene.add(built.group);
         if (old) {
@@ -435,8 +441,7 @@ export function Terrain3DLiveView({
     });
   }, [dyn, showTapInfo]);
 
-  const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
-    const gen = ++glGenRef.current;
+  const onContextCreate = async (gl: ExpoWebGLRenderingContext, lifetime: GlLifetime) => {
     const anchor = locRef.current;
     if (!anchor) {
       setStatus('error');
@@ -447,6 +452,9 @@ export function Terrain3DLiveView({
       // Create the renderer first so we can read the GL context's max anisotropy
       // and build the drape texture sharp from the very first frame.
       const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
+      lifetime.onDispose(() => {
+        renderer.dispose();
+      });
       maxAnisoRef.current = maxAnisotropy;
       // fwidth() needs derivatives (contour anti-aliasing); skip the overlay
       // shader entirely on the rare device without them.
@@ -459,19 +467,30 @@ export function Terrain3DLiveView({
         maxAnisoRef.current,
         injectOkRef.current,
       );
-      if (gen !== glGenRef.current) {
+      if (!lifetime.isCurrent()) {
         disposeGroup(built.group);
         return; // superseded while loading (remount/unmount)
       }
       const radius = built.radius;
 
       const scene = new THREE.Scene();
+      scene.add(built.group);
       sceneRef.current = scene;
+      lifetime.onDispose(() => {
+        if (sceneRef.current === scene) {
+          sceneRef.current = null;
+          groupRef.current = null;
+          overlaysRef.current = null;
+          overlayRef.current = null;
+          cameraRef.current = null;
+          queryMarkerRef.current = null;
+        }
+        disposeGroup(scene);
+      });
       // Gradient sky dome + horizon-tuned fog: terrain fades into the sky at
       // distance so its edges never read as a floating slab.
       addSkyAndFog(scene, radius, 0.7, 2.0);
       addTerrainLights(scene);
-      scene.add(built.group);
 
       const camera = createTerrainCamera(gl);
       cameraRef.current = camera;
@@ -489,7 +508,7 @@ export function Terrain3DLiveView({
         scene.remove(built.group);
         disposeGroup(built.group);
         built = await fetchAndBuild(anchor, basemapRef.current, maxAnisoRef.current, false);
-        if (gen !== glGenRef.current) {
+        if (!lifetime.isCurrent()) {
           disposeGroup(built.group);
           return;
         }
@@ -533,11 +552,15 @@ export function Terrain3DLiveView({
 
       const target = new THREE.Vector3();
       runRenderLoop({
-        isCurrent: () => gen === glGenRef.current,
+        lifetime,
         gl,
         scene,
         camera,
         renderer,
+        onError: (error) => {
+          reportError(error, 'terrain3d-live');
+          setStatus('error');
+        },
         onFrame: () => {
           const o = orbit.current;
           const dt = dyn.frameDt(performance.now());
@@ -605,19 +628,11 @@ export function Terrain3DLiveView({
           // heightAt clamps the eye above the surface (camera-terrain collision).
           positionCameraFromOrbit(camera, o, heightAtRef.current ?? undefined);
         },
-        onDisposed: () => {
-          if (sceneRef.current === scene) {
-            sceneRef.current = null;
-            groupRef.current = null;
-            overlaysRef.current = null;
-            overlayRef.current = null;
-            cameraRef.current = null;
-            queryMarkerRef.current = null;
-          }
-        },
       });
     } catch (e) {
-      if (gen !== glGenRef.current) return; // superseded — don't set state after unmount
+      const wasCurrent = lifetime.isCurrent();
+      lifetime.dispose();
+      if (!wasCurrent) return; // superseded — don't set state after unmount
       reportError(e, 'terrain3d-live');
       setStatus('error');
     }
@@ -658,7 +673,7 @@ export function Terrain3DLiveView({
 
   return (
     <View style={styles.fill}>
-      <GLView
+      <ManagedGLView
         // Remounting fully rebuilds the scene: on basemap change or manual recenter.
         key={`${basemap}:${recenter}`}
         style={styles.fill}

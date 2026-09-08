@@ -43,7 +43,7 @@ export function interpolateTrackAtDistance(
       distanceM: 0,
       elevation: first.altitude,
       speed: first.speed,
-      time: first.time,
+      time: first.hasTime === false ? undefined : first.time,
       heartRateBpm: first.heartRateBpm,
     };
   }
@@ -62,7 +62,7 @@ export function interpolateTrackAtDistance(
         distanceM: cum + seg * t,
         elevation: lerpOpt(a.altitude, b.altitude, t),
         speed: lerpOpt(a.speed, b.speed, t),
-        time: lerpOpt(a.time, b.time, t),
+        time: a.hasTime === false || b.hasTime === false ? undefined : lerpOpt(a.time, b.time, t),
         heartRateBpm: lerpOpt(a.heartRateBpm, b.heartRateBpm, t),
       };
     }
@@ -77,7 +77,7 @@ export function interpolateTrackAtDistance(
     distanceM: cum,
     elevation: last.altitude,
     speed: last.speed,
-    time: last.time,
+    time: last.hasTime === false ? undefined : last.time,
     heartRateBpm: last.heartRateBpm,
   };
 }
