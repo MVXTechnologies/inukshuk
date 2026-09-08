@@ -354,12 +354,6 @@ export function MapScreen() {
   // does the weather drape, which is why both live this high up.
   const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
   const pdfWindow = useWindowDimensions();
-  const pdfDetails = usePdfDetails(
-    shownMaps,
-    overlays,
-    showPdfOverlay ? settledBounds : null,
-    pdfWindow.width * Math.min(pdfWindow.scale, 3),
-  );
   // Settled camera zoom + centre latitude, the two inputs the scale bar needs
   // (a Web-Mercator pixel is ~8× less ground at 83°N than at the equator).
   // SETTLE-driven on purpose: `onRegionIsChanging` fires at gesture rate and
@@ -700,6 +694,16 @@ export function MapScreen() {
   // Settled map bearing → the compass badge's red north needle, plus the
   // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
   const { mapBearing, onSettleBearing } = useMapBearing({ snapToNorth });
+  // Use the laid-out map frame, not the window (which may include navigation
+  // chrome), and its settled bearing to size rotated PDF detail in pixels.
+  const pdfPixelRatio = Math.min(pdfWindow.scale, 3);
+  const pdfDetails = usePdfDetails(
+    shownMaps,
+    overlays,
+    showPdfOverlay ? settledBounds : null,
+    windLayout.width * pdfPixelRatio,
+    { heightPx: windLayout.height * pdfPixelRatio, bearing: mapBearing },
+  );
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig
   // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
@@ -877,6 +881,7 @@ export function MapScreen() {
         if (vs === undefined || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
         setSettledBounds(windBoundsOf(vs));
+        onSettleBearing(vs.bearing);
       } catch {
         // map mid-teardown — the first region settle seeds instead.
       }
@@ -884,7 +889,7 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mapLoaded, mapCenter, settledBounds, setMapCenter]);
+  }, [mapLoaded, mapCenter, settledBounds, setMapCenter, onSettleBearing]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -1735,7 +1740,7 @@ export function MapScreen() {
                   <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
                 </ImageSource>
                 {pdfDetails
-                  .filter((d) => d.id === o.id)
+                  .filter((d) => (d.parentId ?? d.id) === o.id)
                   .map((d) => (
                     <ImageSource
                       key={`${d.id}-detail-${fnv1a32(d.imageUri)}`}

@@ -1,5 +1,11 @@
 import { fnv1a32 } from '@core/encoding/fnv1a';
-import { planPdfDetail, type PdfDetailBounds } from '@core/geo/pdfDetail';
+import {
+  planPdfDetailTiles,
+  rasterCropGeometry,
+  type PdfDetailBounds,
+  type PdfDetailPlan,
+  type PdfDetailViewport,
+} from '@core/geo/pdfDetail';
 import { chooseRasterSource } from '@core/library/rasterSource';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
@@ -11,19 +17,26 @@ import type { PdfOverlay } from './usePdfOverlay';
 
 interface Detail extends PdfOverlay {
   overviewKey: string;
+  cacheKey: string;
+  pixels: number;
 }
 interface Target {
   key: string;
   overviewKey: string;
   id: string;
+  parentId: string;
   fileUri: string;
   pageIndex: number;
   pageWidthPt: number;
   pageHeightPt: number;
   revision: string;
-  plan: NonNullable<ReturnType<typeof planPdfDetail>>;
+  plan: PdfDetailPlan;
   bbox: PdfOverlay['bbox'];
 }
+const VISIBLE_PIXELS = 6 * 1024 * 1024;
+const HANDOFF_PIXELS = 18 * 1024 * 1024;
+const SETTLED_PIXELS = 12 * 1024 * 1024;
+const MAX_CACHE_FILES = 64;
 const overviewKey = (o: PdfOverlay) => JSON.stringify([o.id, o.imageUri, o.coordinates]);
 
 /** One in-flight refinement; later camera positions replace waiting work. */
@@ -32,6 +45,7 @@ export function usePdfDetails(
   overviews: PdfOverlay[],
   bounds: PdfDetailBounds | null,
   viewportWidthPx: number,
+  viewport?: PdfDetailViewport,
 ): PdfOverlay[] {
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
@@ -46,33 +60,67 @@ export function usePdfDetails(
   });
   const targets: Target[] = [];
   if (bounds) {
-    // Topmost pages first; limiting refinement does not remove any overview.
+    // Count eligible pages before dividing the visible budget. Overviews stay
+    // available for every page, including those outside this refinement budget.
+    const pages = [];
     for (const o of [...overviews].reverse()) {
       const map = maps.find((m) => o.id.startsWith(`${m.id}:`));
       const pageIndex = map ? Number(o.id.slice(map.id.length + 1)) : -1;
       const geo = map?.georeferences.find((g) => g.pageIndex === pageIndex);
       if (!map || !geo) continue;
-      const plan = planPdfDetail(
+      const plans = planPdfDetailTiles(
         o.coordinates,
         { width: geo.pageWidthPt, height: geo.pageHeightPt },
         bounds,
         viewportWidthPx,
+        VISIBLE_PIXELS,
+        viewport,
       );
-      if (!plan) continue;
+      if (!plans.length) continue;
+      pages.push({ o, map, pageIndex, geo, plans });
+      if (pages.length === 2) break;
+    }
+    if (pages.length === 2) {
+      for (const page of pages) {
+        page.plans = planPdfDetailTiles(
+          page.o.coordinates,
+          { width: page.geo.pageWidthPt, height: page.geo.pageHeightPt },
+          bounds,
+          viewportWidthPx,
+          VISIBLE_PIXELS / 2,
+          viewport,
+        );
+      }
+      const remaining = pages.filter((page) => page.plans.length);
+      if (remaining.length === 1) {
+        const page = remaining[0]!;
+        page.plans = planPdfDetailTiles(
+          page.o.coordinates,
+          { width: page.geo.pageWidthPt, height: page.geo.pageHeightPt },
+          bounds,
+          viewportWidthPx,
+          VISIBLE_PIXELS,
+          viewport,
+        );
+      }
+    }
+    for (const { o, map, pageIndex, geo, plans } of pages) {
       const baseKey = overviewKey(o);
-      targets.push({
-        key: JSON.stringify([baseKey, map.fileUri, map.importedAt, plan]),
-        overviewKey: baseKey,
-        id: o.id,
-        fileUri: map.fileUri,
-        pageIndex,
-        pageWidthPt: geo.pageWidthPt,
-        pageHeightPt: geo.pageHeightPt,
-        revision: String(map.importedAt),
-        plan,
-        bbox: o.bbox,
-      });
-      if (targets.length === 2) break;
+      for (const plan of plans) {
+        targets.push({
+          key: JSON.stringify([baseKey, map.fileUri, map.importedAt, plan]),
+          overviewKey: baseKey,
+          id: `${o.id}:tile:${plan.tileKey}`,
+          parentId: o.id,
+          fileUri: map.fileUri,
+          pageIndex,
+          pageWidthPt: geo.pageWidthPt,
+          pageHeightPt: geo.pageHeightPt,
+          revision: String(map.importedAt),
+          plan,
+          bbox: o.bbox,
+        });
+      }
     }
   }
   const key = JSON.stringify(targets);
@@ -96,13 +144,50 @@ export function usePdfDetails(
     // Invalidate the old snapshot immediately, debounce only starting work.
     const next: Target[] = JSON.parse(key);
     w.desired = next;
+    const publish = () => {
+      const current: Detail[] = [];
+      let pixels = 0;
+      for (const target of w.desired) {
+        const detail = w.cache.get(target.key);
+        if (!detail) continue;
+        if (!new File(detail.imageUri).exists) {
+          w.cache.delete(target.key);
+          continue;
+        }
+        // Native result dimensions are authoritative, even if an unexpected
+        // backend result is larger than the planner's requested raster.
+        if (pixels + detail.pixels > VISIBLE_PIXELS) continue;
+        pixels += detail.pixels;
+        current.push(detail);
+      }
+      w.pinned = new Set(current.map((detail) => detail.imageUri));
+      setDisplayed((previous) =>
+        previous.length === current.length &&
+        previous.every((detail, index) => detail === current[index])
+          ? previous
+          : current,
+      );
+    };
+    const prune = (budget: number) => {
+      let pixels = [...w.cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
+      for (const [cacheKey, detail] of w.cache) {
+        if (w.cache.size <= MAX_CACHE_FILES && pixels <= budget) break;
+        if (w.pinned.has(detail.imageUri)) continue;
+        storage.deleteFileAt(detail.imageUri);
+        w.cache.delete(cacheKey);
+        pixels -= detail.pixels;
+      }
+    };
+    // Reuse every cached tile in the new desired snapshot immediately. Waiting
+    // for a new center tile must not hide matching neighbors during a pan.
+    publish();
+    prune(HANDOFF_PIXELS);
     const timer = setTimeout(() => {
       if (w.busy || w.epoch !== epoch) return;
       w.busy = true;
       void (async () => {
         while (w.epoch === epoch) {
           const snapshot = w.desired;
-          const results: Detail[] = [];
           for (const target of snapshot) {
             if (w.desired !== snapshot || w.epoch !== epoch) break;
             try {
@@ -148,8 +233,21 @@ export function usePdfDetails(
                         `pdf-detail-${fnv1a32(target.key)}-${++w.serial}`,
                         result.pngDataUri.replace(/^data:image\/png;base64,/, ''),
                       );
+                const estimate = rasterCropGeometry(
+                  target.pageWidthPt,
+                  target.pageHeightPt,
+                  target.plan.targetWidthPx,
+                  target.plan.crop,
+                );
+                const actualPixels = result.widthPx * result.heightPx;
                 detail = {
+                  cacheKey: target.key,
+                  pixels:
+                    Number.isFinite(actualPixels) && actualPixels > 0
+                      ? actualPixels
+                      : estimate.widthPx * estimate.heightPx,
                   id: target.id,
+                  parentId: target.parentId,
                   overviewKey: target.overviewKey,
                   imageUri,
                   coordinates: target.plan.coordinates,
@@ -160,30 +258,17 @@ export function usePdfDetails(
               // Touch LRU order. Cache stale completions, but never display them.
               w.cache.delete(target.key);
               w.cache.set(target.key, detail);
-              results.push(detail);
-              // Bound superseded completions too: a moving camera may never
-              // reach setDisplayed. Keep two handoff images beyond the four
-              // settled cache entries, and never remove a currently shown URI.
-              for (const [oldKey, old] of w.cache) {
-                if (w.cache.size <= 6) break;
-                if (w.pinned.has(old.imageUri) || results.some((d) => d.imageUri === old.imageUri))
-                  continue;
-                storage.deleteFileAt(old.imageUri);
-                w.cache.delete(oldKey);
-              }
+              // A stale completion may be useful on a later pan. Only tiles
+              // belonging to the latest desired snapshot can become visible.
+              publish();
+              prune(HANDOFF_PIXELS);
             } catch (error) {
               reportError(error, 'pdf-detail-render');
               // The overview stays available if refinement fails.
             }
           }
           if (w.epoch !== epoch) return;
-          if (w.desired === snapshot) {
-            w.pinned = new Set(results.map((d) => d.imageUri));
-            setDisplayed(results);
-            // Retain the previous two generations as well as the current pair
-            // until MapLibre has had time to release their image URLs.
-            break;
-          }
+          if (w.desired === snapshot) break;
         }
       })().finally(() => {
         if (w.epoch === epoch) w.busy = false;
@@ -195,17 +280,18 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const timer = setTimeout(() => {
-      const pinned = new Set(displayed.map((d) => d.imageUri));
+      let pixels = [...w.cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
       for (const [cacheKey, detail] of w.cache) {
-        if (w.cache.size <= 4) break;
-        if (pinned.has(detail.imageUri)) continue;
+        if (w.cache.size <= MAX_CACHE_FILES && pixels <= SETTLED_PIXELS) break;
+        if (w.pinned.has(detail.imageUri)) continue;
         storage.deleteFileAt(detail.imageUri);
         w.cache.delete(cacheKey);
+        pixels -= detail.pixels;
       }
     }, 2000);
     return () => clearTimeout(timer);
   }, [displayed]);
 
-  const live = new Set(targets.map((t) => t.overviewKey));
-  return displayed.filter((d) => live.has(d.overviewKey));
+  const live = new Set(targets.map((t) => t.key));
+  return displayed.filter((d) => live.has(d.cacheKey));
 }

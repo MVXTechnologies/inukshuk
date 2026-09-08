@@ -609,3 +609,71 @@ it('invalidates a cached render on timeout and holds the queue until its native 
   await view.unmount();
   await retry;
 });
+
+it('keeps portrait sampling in the WebView within the shared three-megapixel budget', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const html = jest.mocked(writeServedText).mock.calls.at(-1)?.[1] ?? '';
+  const definition = html.match(/function cropGeometry\([\s\S]*?\n  }/)?.[0];
+  expect(definition).toBeDefined();
+  const geometry = runInNewContext(
+    `${definition}; cropGeometry(1320, 2600, 1320, {x0:0,y0:0,x1:1,y1:1})`,
+  ) as { widthPx: number; heightPx: number };
+  expect(geometry.widthPx).toBe(1263);
+  expect(geometry.heightPx).toBe(2489);
+  expect(geometry.widthPx * geometry.heightPx).toBeLessThanOrEqual(3 * 1024 * 1024);
+  await view.unmount();
+});
+
+it('retries unsupported native pages through PDF.js under the same request without overlapping queued work', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValue(
+      Object.assign(new Error('not a single JPEG'), { code: 'E_PDF_UNSUPPORTED' }),
+    );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const first = view.result.current(nativeRequest).catch((error: Error) => error);
+  const next = view.result.current(request).catch(() => undefined);
+  await handoff();
+  expect(renders()).toHaveLength(2);
+  expect(renders()[1]?.[0]).toContain('req-1');
+  expect(renders()[1]?.[0]).not.toContain('expectedPageWidthPt');
+  expect(renderNativePdfCrop).toHaveBeenCalledTimes(1);
+  const { fileUri: _drop, ...metadata } = nativeResult;
+  const png = { ...metadata, pngDataUri: 'data:image/png;base64,FALLBACK' };
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: { data: JSON.stringify({ id: 'req-1', ok: true, ...png }) },
+    });
+  });
+  await expect(first).resolves.toEqual(png);
+  expect(renders()).toHaveLength(3);
+  expect(renders()[2]?.[0]).toContain('req-2');
+  await view.unmount();
+  await next;
+});
+it('does not resurrect timed-out native work when unsupported is reported late', async () => {
+  let fail!: (error: Error) => void;
+  jest.mocked(renderNativePdfCrop).mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const first = view.result.current(nativeRequest).catch((error: Error) => error);
+  await handoff();
+  await act(async () => {
+    jest.advanceTimersByTime(45_000);
+  });
+  expect(await first).toBeInstanceOf(Error);
+  const next = view.result.current(request).catch(() => undefined);
+  await act(async () => {
+    fail(Object.assign(new Error('unsupported'), { code: 'E_PDF_UNSUPPORTED' }));
+  });
+  expect(renders()).toHaveLength(2);
+  expect(renders()[1]?.[0]).toContain('req-2');
+  await view.unmount();
+  await next;
+});

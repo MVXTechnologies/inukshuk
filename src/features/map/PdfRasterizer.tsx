@@ -243,7 +243,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     }
     var width = pageWidth * (r.x1 - r.x0);
     var height = pageHeight * (r.y1 - r.y0);
-    var edge = crop ? 2048 : 4096;
+    var edge = crop ? 3072 : 4096;
     var pixels = (crop ? 3 : 8) * 1024 * 1024;
     var scale = Math.min(targetWidth / width, edge / width, edge / height, Math.sqrt(pixels / (width * height)));
     return { widthPx: Math.max(1, Math.floor(width * scale)), heightPx: Math.max(1, Math.floor(height * scale)),
@@ -628,6 +628,22 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         pending.resolve(result);
       } catch (error) {
         if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
+        if (
+          mountedRef.current &&
+          pendingRef.current.get(id) === pending &&
+          activeRequestRef.current === id &&
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'E_PDF_UNSUPPORTED'
+        ) {
+          // This page is outside the native renderer's deliberately narrow
+          // capabilities. Retry the same request once without native handoff;
+          // queue release in finally dispatches it ahead of waiting work.
+          pending.args = { ...pending.args, nativePage: null };
+          queueRef.current.unshift({ id, args: pending.args });
+          return;
+        }
         if (pendingRef.current.get(id) === pending) {
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);

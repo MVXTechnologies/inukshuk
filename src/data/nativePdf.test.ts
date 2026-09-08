@@ -24,7 +24,7 @@ beforeEach(() => {
   Platform.OS = 'android';
   jest.mocked(requireOptionalNativeModule).mockReturnValue({ renderCrop: mockRender });
 });
-it('keeps old binaries and iOS on the existing renderer', async () => {
+it('keeps old binaries on the existing renderer', async () => {
   jest.mocked(requireOptionalNativeModule).mockReturnValue(null);
   expect(nativePdfAvailable()).toBe(false);
   await expect(renderNativePdfCrop(args)).rejects.toThrow('unavailable');
@@ -46,4 +46,11 @@ it('cleans up an abandoned native result without masking the original failure', 
   expect(() =>
     deleteNativePdfOutput('file:///cache/overlays/pdf-detail-native-b.png'),
   ).not.toThrow();
+});
+
+it('enables the native module on rebuilt iOS binaries', async () => {
+  Platform.OS = 'ios';
+  expect(nativePdfAvailable()).toBe(true);
+  mockRender.mockResolvedValue({ fileUri: 'file:///cache/overlays/pdf-detail-native-ios.png' });
+  await expect(renderNativePdfCrop(args)).resolves.toMatchObject({ fileUri: expect.any(String) });
 });

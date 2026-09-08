@@ -441,3 +441,56 @@ existing PDF.js path; adding this Android module requires a native rebuild.
 The previous audit commit passed quality, Expo Doctor, Android and iOS CI.
 Further work and testing now focus on the mobile app; the browser prototype is
 not used as a substitute for mobile validation.
+
+## iPhone zoom clarity follow-up
+
+The iPhone simulators still had older native binaries. Rebuilding exposed a
+second limitation: a single rectangular detail crop could span a large part of
+an oblique page just to preserve MapLibre's two-triangle mapping, spreading its
+pixel budget too thinly over the visible screen. Detail now uses reusable dyadic
+page tiles whose triangle boundaries preserve the original georeference. Tiles
+appear progressively, center first, with stable identities tied to their parent
+overview. Camera density uses the actual laid-out map frame, device pixels, and
+settled bearing. A 90-degree portrait regression improved from 1229 to 2458
+samples across a 2400-pixel edge within the same budget.
+
+The visible detail budget is 6 Mi pixels total, shared by at most two pages.
+Individual outputs remain limited to 3 Mi pixels, with a 3072-pixel edge ceiling
+so portrait crops can spend that budget. The cache is limited to 64 files and
+18 Mi pixels during handoff, trimmed to 12 Mi pixels after settling. Coverage,
+piecewise alignment, rotation, pan reuse, stale completions and file ownership
+have regression coverage.
+
+A new optional iOS native path recognizes a deliberately narrow single baseline
+interleaved RGB JPEG paint. It validates geometry, graphics state, content and
+private paths before using lazy ImageIO cropping and direct PNG output. EcoLL1
+qualifies; Anticosti and NORD deliberately fall back to PDF.js. General native
+PDF drawing and full-page thumbnailing were rejected after the original Eco
+benchmark exceeded 1 GB of sampled physical memory. The selected crop path
+measured about 129–130 MB peak physical footprint in a standalone simulator
+benchmark, excluding the rest of the app; this is not a physical-device guarantee.
+
+The rebuilt Pro Max displayed complete Eco tiles at zoom 15, both north-up and
+rotated 90 degrees. An instrumented north-up run rendered fifteen 672×588 native
+tiles in roughly five seconds, with individual native calls taking 287–512 ms.
+Those are file-completion timings, not presentation-frame timings. The apparent
+white seams were verified against the untouched embedded JPEG: they are original
+map grid lines. The separate iPhone 17 displayed eighteen Anticosti detail tiles
+at zoom 15 and bearing 18 degrees. The tested tile contains only 89×61 original
+source pixels enlarged to 704×481; comparison with the lossless original raster
+strips found no missing PDF.js detail. Its remaining extreme-zoom pixelation is
+therefore a source-resolution limit.
+
+A fresh development launch terminated with SIGSEGV in Hermes
+`CodeBlock::getSourceLocation` through `Debugger::runUntilValidPauseLocation` on
+the JavaScript thread. The matching report contained no native PDF renderer
+frames. This establishes a debugger-path crash, not PDF memory exhaustion; it
+does not establish that every possible app crash has been resolved. Subsequent
+native testing avoids repeated inspector attachment.
+
+Validation for this increment: `npm run check` passes 216 suites / 2675 tests,
+including typecheck, zero-warning lint, formatting and coverage gates. Native
+host checks pass 53 iOS validation/render cases with the original Eco PDF, and
+49 Android geometry/private-URI cases. Both native development builds pass and
+were installed without clearing libraries or settings. Native changes require
+new compatible binaries; this work does not publish an OTA or store release.

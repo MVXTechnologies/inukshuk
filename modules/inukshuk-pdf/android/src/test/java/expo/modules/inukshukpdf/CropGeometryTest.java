@@ -12,16 +12,32 @@ public final class CropGeometryTest {
     try { action.run(); } catch (IllegalArgumentException expected) { return; }
     throw new AssertionError("Expected invalid geometry to be rejected");
   }
+  private static void withinBudget(CropGeometry crop) {
+    checks++;
+    if (crop.widthPx > 3072 || crop.heightPx > 3072 ||
+        (long)crop.widthPx * crop.heightPx > 3L * 1024 * 1024) {
+      throw new AssertionError("Crop exceeds edge or pixel budget");
+    }
+  }
   public static void main(String[] args) {
     CropGeometry eco = CropGeometry.create(3456, 3024, .5625, .1875, .8125, .4375, 1896);
     equal(eco.widthPx, 1896); equal(eco.heightPx, 1659);
     equal(eco.scale, 1896d / 864d);
     equal(eco.offsetX, -4266); equal(eco.offsetY, -1244.25);
     CropGeometry square = CropGeometry.create(4000, 4000, 0, 0, 1, 1, 10000);
-    if ((long)square.widthPx * square.heightPx > 3L * 1024 * 1024) throw new AssertionError("Pixel budget");
+    withinBudget(square);
     equal(square.widthPx, 1773); equal(square.heightPx, 1773);
-    CropGeometry tall = CropGeometry.create(100, 10000, 0, 0, 1, 1, 10000);
-    equal(tall.widthPx, 20); equal(tall.heightPx, 2048);
+    CropGeometry tall = CropGeometry.create(100, 10240, 0, 0, 1, 1, 10000);
+    equal(tall.widthPx, 30); equal(tall.heightPx, 3072);
+    withinBudget(tall);
+    CropGeometry wide = CropGeometry.create(10240, 100, 0, 0, 1, 1, 10000);
+    equal(wide.widthPx, 3072); equal(wide.heightPx, 30);
+    withinBudget(wide);
+    // A portrait viewport uses the available pixel budget instead of being
+    // prematurely downscaled to the old 2048-pixel height cap.
+    CropGeometry portrait = CropGeometry.create(1320, 2600, 0, 0, 1, 1, 1320);
+    equal(portrait.widthPx, 1263); equal(portrait.heightPx, 2489);
+    withinBudget(portrait);
     CropGeometry fractional = CropGeometry.create(3370.39, 2383.94, .1, .2, .4, .5, 1000);
     equal(fractional.scale, 1000 / (3370.39 * (.4 - .1)));
     equal(fractional.offsetX, -.1 * 3370.39 * fractional.scale);

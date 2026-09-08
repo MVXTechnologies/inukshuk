@@ -2,6 +2,13 @@ import { act, renderHook } from '@testing-library/react-native';
 import { usePdfDetails } from './usePdfDetails';
 import type { MapDocument } from '@core/models';
 import type { PdfOverlay } from './usePdfOverlay';
+import { planPdfDetail, type PdfDetailPlan } from '@core/geo/pdfDetail';
+
+const mockPlans = jest.fn();
+jest.mock('@core/geo/pdfDetail', () => ({
+  ...jest.requireActual('@core/geo/pdfDetail'),
+  planPdfDetailTiles: (...args: unknown[]) => mockPlans(...args),
+}));
 
 const mockRasterize = jest.fn();
 const mockServerOrigin = async () => 'http://127.0.0.1:1234';
@@ -75,6 +82,10 @@ beforeEach(() => {
   jest.useFakeTimers();
   mockFiles.clear();
   mockRasterize.mockReset().mockResolvedValue(raster);
+  mockPlans.mockReset().mockImplementation((...args: Parameters<typeof planPdfDetail>) => {
+    const plan = planPdfDetail(...args);
+    return plan ? [{ ...plan, tileKey: JSON.stringify(plan.crop) }] : [];
+  });
 });
 afterEach(() => jest.useRealTimers());
 
@@ -82,6 +93,7 @@ it('refines a large PDF over the served path and retains the overview on failure
   const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
   await flush();
   expect(v.result.current[0]?.imageUri).toBeDefined();
+  expect(v.result.current[0]).toMatchObject({ parentId: overview.id });
   expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({
     source: { url: 'http://127.0.0.1:1234/maps/map.pdf' },
     crop: expect.any(Object),
@@ -144,13 +156,193 @@ it('bounds cache files while panning and keeps the visible image available', asy
       b: { ...bounds, west: bounds.west + i * 0.02, east: bounds.east + i * 0.02 },
     });
     await flush();
-    expect(mockFiles.size).toBeLessThanOrEqual(6);
+    expect(mockFiles.size).toBeLessThanOrEqual(64);
     expect(mockFiles.has(v.result.current[0]!.imageUri)).toBe(true);
   }
   await act(async () => {
     jest.advanceTimersByTime(2000);
   });
-  expect(mockFiles.size).toBeLessThanOrEqual(4);
+  expect(mockFiles.size).toBeLessThanOrEqual(64);
+  await v.unmount();
+  expect(mockFiles.size).toBe(0);
+});
+
+const tile = (tileKey: string, x: number): PdfDetailPlan & { tileKey: string } => ({
+  tileKey,
+  crop: { x0: x, y0: 0.25, x1: x + 0.125, y1: 0.375 },
+  targetWidthPx: 512,
+  coordinates: [
+    [-71 + x, 46.75],
+    [-71 + x + 0.125, 46.75],
+    [-71 + x + 0.125, 46.625],
+    [-71 + x, 46.625],
+  ],
+});
+
+it('shows the first completed tile before the rest and gives adjacent tiles distinct IDs', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25), tile('b', 0.375)]);
+  let finish!: (value: typeof raster) => void;
+  mockRasterize.mockResolvedValueOnce(raster).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        finish = r;
+      }),
+  );
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  expect(v.result.current.map((d) => d.id)).toEqual(['map:0:tile:a']);
+  await act(async () => finish(raster));
+  expect(v.result.current.map((d) => d.id)).toEqual(['map:0:tile:a', 'map:0:tile:b']);
+  expect(v.result.current[0]?.coordinates[1]).toEqual(v.result.current[1]?.coordinates[0]);
+  await v.unmount();
+});
+
+it('reuses matching tiles immediately on pan while rendering only newly visible tiles', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25), tile('b', 0.375)]);
+  const v = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  const retained = v.result.current[1]?.imageUri;
+  mockPlans.mockReturnValue([tile('b', 0.375), tile('c', 0.5)]);
+  await v.rerender({ b: { ...bounds, east: bounds.east + 0.01 } });
+  expect(v.result.current.map((d) => d.id)).toEqual(['map:0:tile:b']);
+  expect(v.result.current[0]?.imageUri).toBe(retained);
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(3);
+  expect(v.result.current.map((d) => d.id)).toEqual(['map:0:tile:b', 'map:0:tile:c']);
+  await v.unmount();
+});
+
+it('divides the six Mi-pixel visible budget by the number of eligible pages', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25)]);
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(mockPlans.mock.calls.at(-1)?.[4]).toBe(6 * 1024 * 1024);
+  await v.unmount();
+  mockPlans.mockClear();
+  const secondMap = { ...map, id: 'second' };
+  const both = await renderHook(() =>
+    usePdfDetails([map, secondMap], [overview, { ...overview, id: 'second:0' }], bounds, 1200),
+  );
+  await flush();
+  expect(mockPlans.mock.calls.slice(-2).map((c) => c[4])).toEqual([
+    3 * 1024 * 1024,
+    3 * 1024 * 1024,
+  ]);
+  expect(new Set(both.result.current.map((d) => d.id)).size).toBe(2);
+  await both.unmount();
+});
+
+it('bounds actual raster pixels during pan handoff and delayed settled cleanup', async () => {
+  const pixels = 1280 * 2048;
+  mockRasterize.mockResolvedValue({ ...raster, widthPx: 1280, heightPx: 2048 });
+  mockPlans.mockReturnValue([tile('0', 0.25)]);
+  const v = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  for (let i = 1; i <= 20; i++) {
+    mockPlans.mockReturnValue([tile(String(i), 0.25)]);
+    await v.rerender({ b: { ...bounds, east: bounds.east + i / 1000 } });
+    await flush();
+    expect(mockFiles.size * pixels).toBeLessThanOrEqual(18 * 1024 * 1024);
+    expect(mockFiles.has(v.result.current[0]!.imageUri)).toBe(true);
+  }
+  await act(async () => {
+    jest.advanceTimersByTime(2000);
+  });
+  expect(mockFiles.size * pixels).toBeLessThanOrEqual(12 * 1024 * 1024);
+  expect(mockFiles.has(v.result.current[0]!.imageUri)).toBe(true);
+  await v.unmount();
+  expect(mockFiles.size).toBe(0);
+});
+
+it('bounds tiny cached files independently of their pixel budget', async () => {
+  mockRasterize.mockResolvedValue({ ...raster, widthPx: 16, heightPx: 16 });
+  mockPlans.mockReturnValue([tile('0', 0.25)]);
+  const v = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  for (let i = 1; i <= 70; i++) {
+    mockPlans.mockReturnValue([tile(String(i), 0.25)]);
+    await v.rerender({ b: { ...bounds, east: bounds.east + i / 1000 } });
+    await flush();
+    expect(mockFiles.size).toBeLessThanOrEqual(64);
+  }
+  expect(mockFiles.size).toBe(64);
+  expect(mockFiles.has(v.result.current[0]!.imageUri)).toBe(true);
+  await v.unmount();
+  expect(mockFiles.size).toBe(0);
+});
+
+it('bounds obsolete native completions while the camera keeps moving', async () => {
+  const completions: ((value: { fileUri: string; widthPx: number; heightPx: number }) => void)[] =
+    [];
+  mockRasterize.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        completions.push(resolve);
+      }),
+  );
+  mockPlans.mockReturnValue([tile('0', 0.25)]);
+  const v = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  for (let i = 1; i <= 12; i++) {
+    mockPlans.mockReturnValue([tile(String(i), 0.25)]);
+    await v.rerender({ b: { ...bounds, east: bounds.east + i / 1000 } });
+    const uri = `file://pdf-detail-native-stale-${i}.png`;
+    mockFiles.set(uri, 'native');
+    await act(async () => {
+      completions[i - 1]!({ fileUri: uri, widthPx: 1536, heightPx: 2048 });
+    });
+    expect(v.result.current).toEqual([]);
+    expect(mockFiles.size * 3 * 1024 * 1024).toBeLessThanOrEqual(18 * 1024 * 1024);
+  }
+  await v.unmount();
+  const late = 'file://pdf-detail-native-last.png';
+  mockFiles.set(late, 'native');
+  await act(async () => {
+    completions[12]!({ fileUri: late, widthPx: 1536, heightPx: 2048 });
+  });
+  expect(mockFiles.size).toBe(0);
+});
+
+it('consumes every real planned tile and reuses them across a tiny pan', async () => {
+  const actual = jest.requireActual<typeof import('@core/geo/pdfDetail')>('@core/geo/pdfDetail');
+  mockPlans.mockImplementation(actual.planPdfDetailTiles);
+  const expected = actual.planPdfDetailTiles(
+    overview.coordinates,
+    { width: 1000, height: 1000 },
+    bounds,
+    1200,
+    6 * 1024 * 1024,
+  );
+  expect(expected.length).toBeGreaterThan(1);
+  const v = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  expect(v.result.current.map((d) => d.id)).toEqual(
+    expected.map((plan) => `map:0:tile:${plan.tileKey}`),
+  );
+  expect(mockRasterize).toHaveBeenCalledTimes(expected.length);
+  const uris = new Set(v.result.current.map((d) => d.imageUri));
+  await v.rerender({
+    b: { ...bounds, east: bounds.east + 0.000001, west: bounds.west + 0.000001 },
+  });
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(expected.length);
+  expect(new Set(v.result.current.map((d) => d.imageUri))).toEqual(uris);
   await v.unmount();
   expect(mockFiles.size).toBe(0);
 });
@@ -200,4 +392,42 @@ it('deletes a native file returned after the detail hook unmounted', async () =>
   mockFiles.set(uri, 'native');
   await act(async () => resolve({ fileUri: uri }));
   expect(mockFiles.size).toBe(0);
+});
+
+it('uses the physical map height when a portrait viewport rotates', async () => {
+  const actual = jest.requireActual<typeof import('@core/geo/pdfDetail')>('@core/geo/pdfDetail');
+  mockPlans.mockImplementation(actual.planPdfDetailTiles);
+  const lng = (x: number) => (x * 180) / Math.PI;
+  const lat = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
+  const square: PdfOverlay = {
+    ...overview,
+    coordinates: [
+      [lng(-1.2), lat(0.81)],
+      [lng(-1.19), lat(0.81)],
+      [lng(-1.19), lat(0.8)],
+      [lng(-1.2), lat(0.8)],
+    ],
+  };
+  const rotatedBounds = {
+    west: lng(-1.195 - 0.0005),
+    east: lng(-1.195 + 0.0005),
+    south: lat(0.805 - 0.00025),
+    north: lat(0.805 + 0.00025),
+  };
+  const viewport = { heightPx: 2400, bearing: 90 };
+  const expected = actual.planPdfDetailTiles(
+    square.coordinates,
+    { width: 1000, height: 1000 },
+    rotatedBounds,
+    1200,
+    6 * 1024 * 1024,
+    viewport,
+  );
+  expect(expected.length).toBeGreaterThan(0);
+  const v = await renderHook(() => usePdfDetails([map], [square], rotatedBounds, 1200, viewport));
+  await flush();
+  expect(v.result.current.map((detail) => detail.id)).toEqual(
+    expected.map((plan) => `map:0:tile:${plan.tileKey}`),
+  );
+  await v.unmount();
 });

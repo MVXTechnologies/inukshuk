@@ -26,7 +26,7 @@ interface NativePdfModule {
   renderCrop(args: NativePdfCropArgs): Promise<NativePdfCropResult>;
 }
 function nativeModule(): NativePdfModule | null {
-  return Platform.OS === 'android'
+  return Platform.OS === 'android' || Platform.OS === 'ios'
     ? requireOptionalNativeModule<NativePdfModule>('InukshukPdf')
     : null;
 }

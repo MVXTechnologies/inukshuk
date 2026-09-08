@@ -20,6 +20,8 @@ import { usePdfRasterizer, usePdfRasterizerServer, type RasterizeSource } from '
 export interface PdfOverlay {
   /** Stable id `${docId}:${pageIndex}`, also used as the MapLibre source id. */
   id: string;
+  /** Owning page overlay for a detail tile; overviews have no parent. */
+  parentId?: string;
   /** `file://` uri of the rasterized PNG (MapLibre can't take a data: URI). */
   imageUri: string;
   /** MapLibre ImageSource ordering: top-left, top-right, bottom-right, bottom-left. */

@@ -25,8 +25,8 @@ public final class CropGeometry {
     double width = pageWidth * (x1 - x0), height = pageHeight * (y1 - y0);
     double area = width * height;
     if (!Double.isFinite(area) || area <= 0) throw new IllegalArgumentException("Invalid PDF crop area");
-    double scale = Math.min(Math.min(targetWidth / width, 2048d / width),
-        Math.min(2048d / height, Math.sqrt((3d * 1024 * 1024) / area)));
+    double scale = Math.min(Math.min(targetWidth / width, 3072d / width),
+        Math.min(3072d / height, Math.sqrt((3d * 1024 * 1024) / area)));
     double offsetX = -x0 * pageWidth * scale, offsetY = -y0 * pageHeight * scale;
     if (!Float.isFinite((float)scale) || (float)scale <= 0 ||
         !Float.isFinite((float)offsetX) || !Float.isFinite((float)offsetY)) {

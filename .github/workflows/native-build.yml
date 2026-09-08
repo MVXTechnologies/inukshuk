@@ -115,6 +115,9 @@ jobs:
           key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: pods-${{ runner.os }}-
 
+      - name: Verify iOS PDF paint and JPEG guards
+        run: sh modules/inukshuk-pdf/ios/Tests/run.sh
+
       - name: Prebuild native iOS project
         run: npx expo prebuild --platform ios --no-install
 
