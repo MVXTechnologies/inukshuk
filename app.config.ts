@@ -11,12 +11,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.3.0: folders-only Library (bundles removed, waypoints join folders,
-  // folder-based map visibility, drag-and-drop), waypoint viewer with copy
-  // actions (expo-clipboard — the native change forcing this store release),
-  // trail-viewer 3D rail FAB. runtimeVersion follows appVersion — 1.3.0 opens
-  // its own OTA runtime lineage. Existing installs keep theirs.
-  version: '1.5.0',
+  // 1.5.1: audited persistence fixes and native, zoom-dependent PDF detail.
+  // A new app-version runtime keeps this native release distinct from 1.5.0.
+  version: '1.5.1',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -27,13 +24,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
-    // Must increase for every TestFlight upload of the same version (Apple
-    // rejects duplicate version+build pairs). Builds 1-4 were all uploaded on
-    // 2026-08-03 while getting the pipeline working, so 4 was already taken —
-    // and that August binary predates the parked weather/marine, the Canadian
-    // catalog and rename. 5 is the first App Store submission
-    // (see docs/APP-STORE-SUBMISSION.md).
-    buildNumber: '5',
+    // Increase for every App Store Connect upload.
+    buildNumber: '6',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -70,16 +62,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // versionCode must keep monotonically increasing on Play (it can't reset) —
-    // bump this each store build. (vc42 was 1.0.0; vc43 was 1.0.1; vc44 was
-    // 1.0.2; vc45 was 1.0.3; vc46 was 1.1.0; vc47 was 1.2.0; vc48 was 1.3.0;
-    // see version above.)
-    // vc50 was 1.5.0 on the INTERNAL track only. vc51 is the same 1.5.0 rebuilt
-    // for the first PRODUCTION release: vc50's embedded bundle predates the
-    // weather/marine parking, so a fresh install would have shown both features
-    // working until the OTA landed. The embedded bundle has to match what we
-    // intend to ship, not rely on an update arriving.
-    versionCode: 51, // vc51 is 1.5.0, first Play production release
+    // Play build 51 shipped 1.5.0; 52 contains the native PDF renderer.
+    versionCode: 52,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
