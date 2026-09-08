@@ -441,6 +441,62 @@ describe('migrateLibraryIndex', () => {
     );
     expect(index.tracks[0]?.fileUri).toBe(foreign);
   });
+
+  it('keeps a map whose corners were persisted in projected metres (#243)', () => {
+    // The CanTopo shape a build before the CRS fix wrote to disk: real
+    // georeferencing whose corners are UTM easting/northing, and no record of
+    // which projection they are in.
+    //
+    // Hydrate deliberately does NOT try to heal these. Re-deriving needs the
+    // native CRS, which was never persisted; the metres alone cannot name it.
+    // So the entry is kept verbatim — dropping it would make the card claim
+    // "No georeferencing found", which is false and hides the real cause — and
+    // `georeferenceNotice` explains the projection while the map waits to be
+    // re-imported (or re-downloaded from the Search tab).
+    const metres: GeoReference = {
+      ...geoRef(0),
+      source: 'lgidict',
+      viewport: {
+        rect: { x0: 338, y0: 214, x1: 2822, y1: 1892 },
+        corners: {
+          topLeft: [300848, 5236961],
+          topRight: [351625, 5236961],
+          bottomRight: [351625, 5202313],
+          bottomLeft: [300848, 5202313],
+        },
+      },
+      bbox: { minLng: 300848, minLat: 5202313, maxLng: 351625, maxLat: 5236961 },
+    };
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps: [
+        {
+          id: 'm1',
+          name: 'CanTopo 021G14',
+          fileUri: 'file://m1.pdf',
+          importedAt: 1,
+          pageCount: 1,
+          georeferences: [metres],
+          activePages: [0],
+        },
+      ],
+    });
+    expect(index.maps[0]?.georeferences).toEqual([metres]);
+    expect(index.maps[0]?.activePages).toEqual([0]);
+  });
+
+  it('carries a georeference sourceCrs through hydration', () => {
+    const withCrs: GeoReference = {
+      ...geoRef(0),
+      source: 'lgidict',
+      sourceEpsg: 26919,
+      sourceCrs: 'NAD83 / UTM zone 19N (EPSG:26919)',
+    };
+    const index = migrateLibraryIndex({
+      maps: [{ id: 'm1', georeferences: [withCrs], activePages: [0] }],
+    });
+    expect(index.maps[0]?.georeferences[0]?.sourceCrs).toBe('NAD83 / UTM zone 19N (EPSG:26919)');
+  });
 });
 
 describe('migrateSettings', () => {

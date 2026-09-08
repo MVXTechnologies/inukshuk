@@ -6,6 +6,7 @@ import {
   isDegenerateBBox,
 } from '@core/geo/geomath';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
+import { unsupportedProjectionNotice } from '@core/library/overlayPages';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { File } from 'expo-file-system';
@@ -53,6 +54,18 @@ const rasterCache = new Map<string, string>();
 
 function rasterCacheKey(docId: string, pageIndex: number): string {
   return `${docId}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
+}
+
+/**
+ * The CRS string a skipped page is reported under. `sourceCrs` is only present
+ * on documents parsed since #243; older ones fall back to the EPSG code, then
+ * to "unknown CRS" — which is itself the signal that the map predates the fix
+ * and must be re-imported.
+ */
+export function describeSourceCrs(geo: GeoReference): string {
+  if (geo.sourceCrs) return geo.sourceCrs;
+  if (geo.sourceEpsg !== undefined) return `EPSG:${geo.sourceEpsg}`;
+  return 'unknown CRS';
 }
 
 /**
@@ -148,8 +161,28 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               pageRect,
             );
             const bbox = bboxFromCorners(corners);
-            if (!cornersAreValid(corners) || isDegenerateBBox(bbox)) {
-              firstError ??= `Page ${geo.pageIndex + 1} has invalid georeferencing — skipped`;
+            const unprojected = !cornersAreValid(corners);
+            if (unprojected || isDegenerateBBox(bbox)) {
+              // NOT a silent skip. Every CanTopo sheet landed here — its UTM
+              // metres never became lon/lat — and nothing reached the user or a
+              // report, so 2,234 sheets were undrawable and invisible about it
+              // (#243). Name the CRS: it is what identifies the next
+              // unsupported source.
+              const crs = describeSourceCrs(geo);
+              reportError(
+                new Error(
+                  `Unplaceable georeference on page ${geo.pageIndex + 1} (${crs}): ` +
+                    `${unprojected ? 'corners are not lon/lat' : 'degenerate extent'} ` +
+                    `${JSON.stringify(corners.topLeft)}..${JSON.stringify(corners.bottomRight)}`,
+                ),
+                'pdf-overlay-georeference',
+              );
+              // Corners outside lon/lat range mean the CRS never resolved; a
+              // degenerate-but-valid extent is a different (rarer) fault, and
+              // keeps its own wording rather than blaming the projection.
+              firstError ??= unprojected
+                ? unsupportedProjectionNotice(geo.sourceCrs)
+                : `Page ${geo.pageIndex + 1} has invalid georeferencing — skipped`;
               continue;
             }
             // The raster is geo-independent (the whole page at a fixed width),
