@@ -1,4 +1,4 @@
-import { isNorthUp, normalizeBearingDeg, shouldSnapToNorth } from '@core/geo/northSnap';
+import { normalizeBearingDeg, shouldSnapToNorth } from '@core/geo/northSnap';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useRef, useState } from 'react';
 
@@ -45,7 +45,9 @@ export function useMapBearing({ snapToNorth }: { snapToNorth: () => void }) {
       const bearing = normalizeBearingDeg(bearingDeg);
       setMapBearing((prev) => (prev === bearing ? prev : bearing));
       if (headingFollow) return;
-      if (isNorthUp(bearing) || !shouldSnapToNorth(bearing)) return;
+      // `shouldSnapToNorth` is false for an already-north-up bearing, which is
+      // what keeps the snap's own settle from asking for another one.
+      if (!shouldSnapToNorth(bearing)) return;
       const now = Date.now();
       if (now - lastSnapAtRef.current < SNAP_REARM_MS) return;
       lastSnapAtRef.current = now;
