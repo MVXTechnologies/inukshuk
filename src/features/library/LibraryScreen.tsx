@@ -19,7 +19,7 @@ import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -47,6 +47,7 @@ import { countActiveFilters, filterTracks, type TrackFilter } from '@core/librar
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
+import { georeferenceNotice } from '@core/library/overlayPages';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -295,15 +296,24 @@ export function LibraryScreen() {
   // photo picked inside it shows up immediately.
   const [editWpId, setEditWpId] = useState<string | null>(null);
   const [wpDraft, setWpDraft] = useState('');
+  // #232 — the editor's Name field. Here it is a second way to the same
+  // rename the row's ⋮ → Rename does; the row menu stays, since it renames
+  // without opening the note/photo form.
+  const [wpName, setWpName] = useState('');
   const editWaypoint =
     editWpId === null ? null : (waypoints.find((w) => w.id === editWpId) ?? null);
 
   const openWaypointEditor = (w: Waypoint) => {
+    setWpName(w.label);
     setWpDraft(w.note ?? '');
     setEditWpId(w.id);
   };
   const saveWaypoint = () => {
-    if (editWpId) updateWaypoint(editWpId, { note: wpDraft.trim() });
+    if (editWpId) {
+      updateWaypoint(editWpId, { note: wpDraft.trim() });
+      // Blank is a no-op in the store — the label is never lost.
+      renameWaypoint(editWpId, wpName);
+    }
     setEditWpId(null);
   };
   const deleteWaypointFromEditor = () => {
@@ -519,6 +529,11 @@ export function LibraryScreen() {
 
   const renderMapCard = (m: (typeof maps)[number]) => {
     const hasPages = m.georeferences.length > 0;
+    // Non-null when the map can never be drawn: no georeferencing at all, or a
+    // projection we could not resolve (#243). Shown INSTEAD of the counts —
+    // "1 page(s) · 1/1 shown" over a sheet the overlay silently skips is the
+    // exact lie this replaces.
+    const notice = georeferenceNotice(m);
     const active = m.activePages.length;
     const expanded = expandedMap === m.id;
     return (
@@ -535,14 +550,17 @@ export function LibraryScreen() {
               <Text variant="titleSmall" numberOfLines={1}>
                 {m.name}
               </Text>
+              {/* A map that cannot be drawn must SAY so: the raw parser
+                  warning was jargon and was simply absent on some documents,
+                  which rendered as a blank line under the name — a map that
+                  can never be drawn and never explains why (#236, #243). */}
               <Text
                 variant="bodySmall"
-                numberOfLines={1}
+                numberOfLines={notice ? 2 : 1}
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
-                {hasPages
-                  ? `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`
-                  : m.georeferenceWarning}
+                {notice ??
+                  `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`}
               </Text>
             </View>
           </Pressable>
@@ -561,11 +579,23 @@ export function LibraryScreen() {
             <Text variant="labelMedium" style={styles.overlayLabel}>
               Show as overlay
             </Text>
+            {/* mode="android" is REQUIRED, not cosmetic. Paper's default
+                Checkbox is platform-adaptive, and its iOS variant renders the
+                checkmark at `opacity: 0` when unchecked — so on iPhone an
+                inactive page showed no control at all, only a stranded "Page
+                N" label, and a page toggled off could never be toggled back
+                on. That is #236: "imported PDFs have no checkbox". The
+                Material box draws both states on both platforms.
+                labelStyle keeps the label beside its box: `position="leading"`
+                makes Paper right-align the label, which parked it against the
+                far edge of the card. */}
             {primaryGeoreferences(m.georeferences).map((g) => (
               <Checkbox.Item
                 key={g.pageIndex}
+                mode="android"
                 label={`Page ${g.pageIndex + 1}`}
                 position="leading"
+                labelStyle={styles.checkboxLabel}
                 status={m.activePages.includes(g.pageIndex) ? 'checked' : 'unchecked'}
                 onPress={() => toggleMapPage(m.id, g.pageIndex)}
                 style={styles.checkboxItem}
@@ -804,11 +834,11 @@ export function LibraryScreen() {
         />
       }
     >
-      {/* A waypoint's label is renamed here rather than inside
-          WaypointEditorDialog: that dialog is shared with the map, where it
-          also edits *live recording* waypoints that have no library row to
-          rename — and stacking NameDialog's Portal over an open Paper Dialog
-          is the touch-swallow trap. This mirrors a trail's ⋮ → Rename. */}
+      {/* Renaming without opening the note/photo form — the same shape as a
+          trail's ⋮ → Rename. The editor dialog grew its own Name field in
+          #232 (an inline TextInput, NOT a stacked NameDialog Portal over an
+          open Paper Dialog — that is the touch-swallow trap); this row is the
+          quick path from the list. */}
       <Menu.Item
         leadingIcon="pencil-outline"
         title="Rename"
@@ -1014,6 +1044,11 @@ export function LibraryScreen() {
           onIconPress={closeSearch}
           icon="arrow-left"
           autoFocus
+          // #235 — the search key is this field's iOS exit: the list is
+          // already live-filtered, so Return only needs to free the screen.
+          returnKeyType="search"
+          blurOnSubmit
+          onSubmitEditing={() => Keyboard.dismiss()}
           style={styles.searchbar}
           accessibilityLabel="Search trails by name or folder"
         />
@@ -1026,6 +1061,8 @@ export function LibraryScreen() {
         scrollEventThrottle={32}
         onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
       >
         {maps.length === 0 && tracks.length === 0 && (
           <Banner visible icon="map-search-outline" style={styles.banner}>
@@ -1260,6 +1297,8 @@ export function LibraryScreen() {
           pins open, dispatching to the same libraryStore actions. */}
       <WaypointEditorDialog
         waypoint={editWaypoint}
+        name={wpName}
+        onChangeName={setWpName}
         draft={wpDraft}
         onChangeDraft={setWpDraft}
         onSave={saveWaypoint}
@@ -1301,6 +1340,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: '700', paddingVertical: 12 },
   overlayLabel: { marginBottom: 2, marginTop: 4 },
   checkboxItem: { paddingVertical: 0, paddingHorizontal: 0 },
+  // Paper right-aligns a leading-position label; left-align it so "Page N"
+  // reads as the label of the box next to it, not as a stray right-edge word.
+  checkboxLabel: { textAlign: 'left', marginLeft: 4 },
   trackCard: { marginHorizontal: 12, marginVertical: 6 },
   loader: { paddingVertical: 24 },
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },

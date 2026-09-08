@@ -71,6 +71,7 @@ import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 import { formatLatLng } from '@core/geo/formatCoords';
 import { destinationReadout } from '@core/geo/destination';
+import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
@@ -100,7 +101,7 @@ import { MarinePackBanner } from './marine/MarinePackBanner';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
-import { MapPointChip, MapPointLine } from './components/MapPointChip';
+import { MapPointChip, MapPointLine, runMapPointChipAction } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
@@ -216,6 +217,7 @@ export function MapScreen() {
   // Standalone waypoints (dropped from the "+" actions menu, no recording needed).
   const savedWaypoints = useLibraryStore((s) => s.waypoints);
   const addSavedWaypoint = useLibraryStore((s) => s.addWaypoint);
+  const renameSavedWaypoint = useLibraryStore((s) => s.renameWaypoint);
   const updateSavedWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeSavedWaypoint = useLibraryStore((s) => s.removeWaypoint);
   // Map-visibility modes: 'type' = the classic PDF/Trails switches; 'folders'
@@ -353,6 +355,8 @@ export function MapScreen() {
   // would re-render this whole tree per frame — see ScaleBar's own note. The
   // setter collapses no-op updates so a pan along a parallel costs nothing.
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
+  /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
   const [scaleAt, setScaleAt] = useState<{ zoom: number; latitude: number } | null>(null);
   const updateScaleAt = useCallback((zoom: number, latitude: number) => {
     setScaleAt((prev) =>
@@ -412,6 +416,18 @@ export function MapScreen() {
   // the scale bar's own settled state is deliberately coarse.
   const [goToOpen, setGoToOpen] = useState(false);
   const [goToCenter, setGoToCenter] = useState<LatLng | null>(null);
+  /**
+   * #232 — when the chip's action row last TOOK a touch. On iOS MapLibre's
+   * tap recognizer fires for a tap the row already claimed as a responder,
+   * and reports the MARKER's own anchor as the tap point — so the chip
+   * hit-test below would read it as "tapped the chip" and dismiss the chip
+   * out from under the action. Set at touch-start, i.e. before that press
+   * arrives, so the window only ever swallows the tap that caused it.
+   */
+  const chipTouchAtRef = useRef(0);
+  // #232 — the tapped point the coordinates dialog opens prefilled with; null
+  // for the "+" sheet's secondary entry, which opens on an empty box.
+  const [goToSeed, setGoToSeed] = useState<LatLng | null>(null);
   // Tap-anywhere point readout (wave A item 7, generalized by marine wave D
   // §D1/D-5): a bare tap drops/moves ONE chip here whatever the active
   // layers — coordinates on the plain map, the weather value with a weather
@@ -555,10 +571,11 @@ export function MapScreen() {
           }
         : {}),
     };
-    return buildOsmStyle(tileUrl, false, basemap, true, options);
+    return buildOsmStyle(tileUrl, false, basemap, showHillshade, options);
   }, [
     tileUrl,
     basemap,
+    showHillshade,
     offlineOnly,
     offlineRegions,
     theme.dark,
@@ -675,24 +692,33 @@ export function MapScreen() {
     () => destinationReadout(location, destination, units),
     [location, destination, units],
   );
+  // Same two numbers for the tapped point while its chip is up (#232).
+  const pointReadout = useMemo(
+    () => destinationReadout(location, pointAt, units),
+    [location, pointAt, units],
+  );
 
   // Open the coordinates dialog with an exact map centre. getViewState is
   // gated on `mapLoaded`: called before the native view is initialised it
   // NPEs on the native thread, a process crash no JS catch can intercept.
-  const openGoToCoordinates = useCallback(async () => {
-    let center: LatLng | null = null;
-    if (mapLoaded) {
-      try {
-        const vs = await mapRef.current?.getViewState();
-        if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
-      } catch {
-        // Map mid-teardown — open with the readout half empty rather than not
-        // at all; the entry half still works.
+  const openGoToCoordinates = useCallback(
+    async (seed: LatLng | null = null) => {
+      let center: LatLng | null = null;
+      if (mapLoaded) {
+        try {
+          const vs = await mapRef.current?.getViewState();
+          if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
+        } catch {
+          // Map mid-teardown — open with the readout half empty rather than not
+          // at all; the entry half still works.
+        }
       }
-    }
-    setGoToCenter(center);
-    setGoToOpen(true);
-  }, [mapLoaded]);
+      setGoToCenter(center);
+      setGoToSeed(seed);
+      setGoToOpen(true);
+    },
+    [mapLoaded],
+  );
 
   // Aim at a coordinate: plant the pin, point the camera at it, and say so.
   const aimAt = useCallback(
@@ -1022,6 +1048,21 @@ export function MapScreen() {
   // with its source store so save/delete/photo dispatch to the right one.
   const [editWp, setEditWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
   const [wpDraft, setWpDraft] = useState('');
+  // #232 — the editor's Name field, owned here like the note draft.
+  const [wpName, setWpName] = useState('');
+  /**
+   * #232 — a waypoint the editor is composing that does NOT exist yet: both
+   * "Add waypoint here" (the tapped point) and the "+" sheet's "Add waypoint"
+   * (the GPS fix) now open the form FIRST and create on Done, so the typed
+   * name is the waypoint's initial label. Creating up-front and renaming
+   * afterwards would burn an auto number on every named waypoint, and would
+   * leave a pin behind when the user backs out.
+   */
+  const [newWp, setNewWp] = useState<{
+    latitude: number;
+    longitude: number;
+    photoUri?: string;
+  } | null>(null);
   // Read-only viewer target (pin tap). Editing is an explicit step from it.
   const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
   const findWp = useCallback(
@@ -1033,18 +1074,46 @@ export function MapScreen() {
           : (savedWaypoints.find((w) => w.id === ref.id) ?? null),
     [waypoints, savedWaypoints],
   );
-  const editWaypoint = findWp(editWp);
+  // The editor's subject: an existing waypoint, or the not-yet-created one
+  // being composed (#232). Only `label`/`photoUri` are read by the dialog.
+  const editWaypoint =
+    newWp !== null
+      ? { label: wpName, ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}) }
+      : findWp(editWp);
   const viewWaypoint = findWp(viewWp);
 
   const saveWaypoint = () => {
+    if (newWp) {
+      // Create WITH the typed name (blank falls back to the auto number the
+      // field was prefilled with), then fold in whatever the form collected.
+      const id = addSavedWaypoint(newWp.latitude, newWp.longitude, wpName);
+      const note = wpDraft.trim();
+      if (note !== '' || newWp.photoUri) {
+        updateSavedWaypoint(id, {
+          ...(note !== '' ? { note } : {}),
+          ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}),
+        });
+      }
+      setNewWp(null);
+      return;
+    }
     if (editWp) {
-      const patch = { note: wpDraft.trim() };
-      if (editWp.source === 'live') updateWaypoint(editWp.id, patch);
-      else updateSavedWaypoint(editWp.id, patch);
+      const note = wpDraft.trim();
+      if (editWp.source === 'live') updateWaypoint(editWp.id, { label: wpName, note });
+      else {
+        updateSavedWaypoint(editWp.id, { note });
+        // A blank name is a no-op in both stores — the label is never lost.
+        renameSavedWaypoint(editWp.id, wpName);
+      }
     }
     setEditWp(null);
   };
   const deleteWaypoint = () => {
+    // A composed waypoint was never created, so Delete is simply "discard".
+    if (newWp) {
+      setNewWp(null);
+      return;
+    }
     if (editWp) {
       if (editWp.source === 'live') removeWaypoint(editWp.id);
       else removeSavedWaypoint(editWp.id);
@@ -1052,22 +1121,41 @@ export function MapScreen() {
     setEditWp(null);
   };
   const setWaypointPhoto = (uri: string) => {
+    if (newWp) {
+      setNewWp((w) => (w === null ? null : { ...w, ...(uri ? { photoUri: uri } : {}) }));
+      return;
+    }
     if (!editWp) return;
     if (editWp.source === 'live') updateWaypoint(editWp.id, { photoUri: uri });
     else updateSavedWaypoint(editWp.id, { photoUri: uri });
   };
 
-  // "+" actions menu → Add waypoint: drop a standalone waypoint at the current
-  // GPS position and open the editor on it right away.
+  /**
+   * Open the waypoint form on a coordinate that has no record yet (#232) —
+   * the chip's "Add waypoint here" (tapped point) and the "+" sheet's "Add
+   * waypoint" (GPS fix). The Name box is prefilled with the auto label the
+   * store would have minted, so a name left alone numbers exactly as before.
+   */
+  const composeWaypointAt = useCallback(
+    (at: LatLng) => {
+      setEditWp(null);
+      setViewWp(null);
+      setWpName(nextWaypointLabel(savedWaypoints.map((w) => w.label)));
+      setWpDraft('');
+      setNewWp({ latitude: at.latitude, longitude: at.longitude });
+    },
+    [savedWaypoints],
+  );
+
+  // "+" actions menu → Add waypoint: compose a standalone waypoint at the
+  // current GPS position (created on Done, see composeWaypointAt).
   const onAddWaypoint = useCallback(() => {
     if (!location) {
       showSnack('Waiting for a GPS fix before dropping a waypoint');
       return;
     }
-    const id = addSavedWaypoint(location.latitude, location.longitude);
-    setEditWp({ source: 'saved', id });
-    setWpDraft('');
-  }, [location, addSavedWaypoint, showSnack]);
+    composeWaypointAt(location);
+  }, [location, composeWaypointAt, showSnack]);
 
   // Every waypoint pin currently drawn on the 2D map (live pins only exist
   // while a recording session is up), tagged with its source for tap handling.
@@ -1100,6 +1188,10 @@ export function MapScreen() {
   // offset.
   const POINT_CHIP_OFFSET = 20;
   const POINT_CHIP_HIT_PX = 44;
+  // How long a touch the chip's action row claimed keeps the map's own press
+  // handler quiet (#232) — long enough to cover the recognizer that fires
+  // just after it, short enough that the next deliberate tap goes through.
+  const CHIP_ACTION_TOUCH_MS = 600;
   // Tap-routing priority (this handler, in order): waypoint pin hit → the
   // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
@@ -1122,6 +1214,9 @@ export function MapScreen() {
       const point = e.nativeEvent?.point;
       const map = mapRef.current;
       if (!point || !map) return;
+      // #232 — the chip's action row already took this touch (see
+      // chipTouchAtRef); the map must not act on it a second time.
+      if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
       const [px, py] = point;
 
       // Item 4, demoted to the LOWEST tap priority (2026-08-06 field
@@ -1235,6 +1330,24 @@ export function MapScreen() {
           if (pointAt !== null) {
             try {
               const p = await map.project([pointAt.longitude, pointAt.latitude]);
+              // #232 — the chip's action row FIRST. The row is inert Views
+              // (a Pressable in a MapLibre marker stops the whole marker from
+              // drawing on iOS — see MapPointChip), so its press handling is
+              // this hit-test, the same idiom the waypoint pins use. Checked
+              // before the dismiss circle below, which would swallow the row.
+              if (
+                p != null &&
+                runMapPointChipAction(
+                  {
+                    onNavigate: () => void openGoToCoordinates(pointAt),
+                    onAddWaypoint: () => composeWaypointAt(pointAt),
+                  },
+                  px - p[0],
+                  py - p[1],
+                )
+              ) {
+                return;
+              }
               if (
                 p != null &&
                 Math.hypot(px - p[0], py - (p[1] - POINT_CHIP_OFFSET)) < POINT_CHIP_HIT_PX
@@ -1266,6 +1379,8 @@ export function MapScreen() {
       setFollowUser,
       pointAt,
       showSnack,
+      openGoToCoordinates,
+      composeWaypointAt,
     ],
   );
 
@@ -1764,7 +1879,19 @@ export function MapScreen() {
               waypoint-pin precedent). */}
           {pointAt !== null && (
             <Marker id="map-point" lngLat={[pointAt.longitude, pointAt.latitude]} anchor="bottom">
-              <MapPointChip accessibilityLabel="Map point readout">
+              {/* #232 — the chip is the hub for the two things you can do
+                  with a point you can see. Compact, in the chip, gone with
+                  it; the row's taps arrive through onMapPress above. */}
+              <MapPointChip
+                accessibilityLabel="Map point readout"
+                actions={{
+                  onNavigate: () => void openGoToCoordinates(pointAt),
+                  onAddWaypoint: () => composeWaypointAt(pointAt),
+                  onClaimTouch: () => {
+                    chipTouchAtRef.current = Date.now();
+                  },
+                }}
+              >
                 {weatherLayer !== null && !offlineOnly && (
                   <WeatherPointLine
                     at={pointAt}
@@ -1782,6 +1909,15 @@ export function MapScreen() {
                     the map CENTRE's readout lives in the coordinates dialog
                     rather than in a second competing chip. */}
                 <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                {/* How far and which way from where you stand (#232) — the
+                    same two numbers the destination chip shows, straight off
+                    the current fix. Silently absent without one. */}
+                {pointReadout !== null && (
+                  <MapPointLine
+                    text={`${pointReadout.distance}  ·  ${pointReadout.bearing}`}
+                    muted
+                  />
+                )}
                 <MapPointLine text="Tap to copy" muted />
               </MapPointChip>
             </Marker>
@@ -1858,13 +1994,6 @@ export function MapScreen() {
           rapid heading events re-render only the badge, not this whole tree. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
         <CompassBadge onPress={resetNorth} />
-        {/* Scale bar (#97), docked under the compass: the map's two reference
-            instruments read as one stack, and the bottom-left corner stays
-            clear — it was deliberately emptied of chrome and now belongs to
-            the recording HUD. 2D only; the 3D view has no Mercator zoom. */}
-        {showScaleBar && !terrain3d && scaleAt !== null && (
-          <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
-        )}
       </View>
 
       {/* Mandatory marine notice (marine M3): whenever a marine layer is
@@ -1994,6 +2123,18 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View style={styles.bottom} pointerEvents="box-none">
+        {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
+            under the compass). It is the FIRST child of the bottom chrome
+            COLUMN rather than absolutely positioned in the corner, so it
+            stacks ABOVE the recording bar, the marine legend and the weather
+            dock instead of colliding with them; with none of those up it sits
+            just above the tab bar, in the cartographic corner. 2D only; the
+            3D view has no Mercator zoom. */}
+        {showScaleBar && !terrain3d && scaleAt !== null && (
+          <View style={styles.scaleBarSlot} pointerEvents="none">
+            <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+          </View>
+        )}
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
         {!selecting && status !== 'idle' && (
@@ -2181,7 +2322,9 @@ export function MapScreen() {
           }}
           onEdit={() => {
             if (!viewWp) return;
+            setNewWp(null);
             setEditWp(viewWp);
+            setWpName(viewWaypoint?.label ?? '');
             setWpDraft(viewWaypoint?.note ?? '');
             setViewWp(null);
           }}
@@ -2221,6 +2364,7 @@ export function MapScreen() {
       {goToOpen && (
         <GoToCoordinatesDialog
           center={goToCenter}
+          initial={goToSeed}
           onDismiss={() => setGoToOpen(false)}
           onCopy={(text) => {
             void Clipboard.setStringAsync(text);
@@ -2242,6 +2386,8 @@ export function MapScreen() {
 
       <WaypointEditorDialog
         waypoint={editWaypoint}
+        name={wpName}
+        onChangeName={setWpName}
         draft={wpDraft}
         onChangeDraft={setWpDraft}
         onSave={saveWaypoint}
@@ -2274,8 +2420,9 @@ export function MapScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  // Column: compass badge, then the scale bar under it (#97).
-  topLeft: { position: 'absolute', left: 12, gap: 8, alignItems: 'flex-start' },
+  // Top-left instrument column: the compass badge alone since the scale bar
+  // moved to the bottom-left corner — no gap left floating under it.
+  topLeft: { position: 'absolute', left: 12, alignItems: 'flex-start' },
   // Centred between the compass (left) and the controls rail (right).
   marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
   // Same free top-centre lane, used by the destination readout (#97).
@@ -2285,6 +2432,9 @@ const styles = StyleSheet.create({
   // Collapsed: center-align the pill against the (bigger) icon buttons so
   // they visibly pop out of the bar (item 3).
   recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // The scale bar keeps the column's left edge and shrinks to its own width
+  // (the column itself is full-bleed for the recording bar and the dock).
+  scaleBarSlot: { alignItems: 'flex-start' },
   // The HUD yields width before the record buttons do (see the guard's
   // comment at the call site).
   hudShrink: { flexShrink: 1 },

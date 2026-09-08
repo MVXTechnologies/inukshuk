@@ -61,3 +61,37 @@ it('removeWaypoint drops the waypoint and deletes its photo', () => {
   expect(wp(id)).toBeUndefined();
   expect(storage.deleteFileAt).toHaveBeenCalledWith('file://c.jpg');
 });
+
+// #232 — the editor's Name field creates WITH the label rather than creating
+// and renaming, so a named waypoint never briefly holds (and burns) a number.
+describe('addWaypoint with an explicit name (#232)', () => {
+  it('uses the typed name as the initial label, at the given coordinate', () => {
+    const id = useLibraryStore.getState().addWaypoint(46.5, -71.5, 'Refuge du Lac');
+    expect(wp(id)).toMatchObject({ label: 'Refuge du Lac', latitude: 46.5, longitude: -71.5 });
+  });
+
+  it('trims the typed name', () => {
+    const id = useLibraryStore.getState().addWaypoint(46, -71, '  Pont de la Chute \n');
+    expect(wp(id)?.label).toBe('Pont de la Chute');
+  });
+
+  it.each(['', '   ', '\t\n', undefined])('falls back to the auto label for %p', (blank) => {
+    const id = useLibraryStore.getState().addWaypoint(46, -71, blank);
+    expect(wp(id)?.label).toBe('Waypoint 1');
+  });
+
+  it('leaves the auto-number sequence untouched — a name takes no number', () => {
+    const store = useLibraryStore.getState();
+    store.addWaypoint(1, 1); // "Waypoint 1"
+    store.addWaypoint(2, 2, 'Camp'); // named — takes no number
+    store.addWaypoint(3, 3, 'Source'); // named — takes no number
+    const next = useLibraryStore.getState().addWaypoint(4, 4);
+    expect(wp(next)?.label).toBe('Waypoint 2');
+  });
+
+  it('accepts a name shaped like an auto label, and then counts on from it', () => {
+    useLibraryStore.getState().addWaypoint(1, 1, 'Waypoint 9');
+    const next = useLibraryStore.getState().addWaypoint(2, 2);
+    expect(wp(next)?.label).toBe('Waypoint 10');
+  });
+});

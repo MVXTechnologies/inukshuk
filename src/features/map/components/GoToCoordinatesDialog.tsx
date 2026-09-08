@@ -1,8 +1,10 @@
 import { formatLatLng, formatLatLngDdm, formatLatLngDms } from '@core/geo/formatCoords';
 import { parseLatLng } from '@core/geo/parseCoords';
 import type { LatLng } from '@core/models';
-import { useEffect, useState } from 'react';
-import { Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
+import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
+import { useState } from 'react';
+import { Keyboard, StyleSheet, View } from 'react-native';
 import {
   Button,
   Dialog,
@@ -14,7 +16,10 @@ import {
 } from 'react-native-paper';
 
 /**
- * Coordinate READOUT + ENTRY (#97), opened from the map-actions sheet.
+ * Coordinate READOUT + ENTRY (#97) — "Navigate to coordinates" since #232,
+ * opened from the tap chip's action row (seeded with the tapped point) and,
+ * as a secondary entry for typing a coordinate you have not tapped, from the
+ * map-actions sheet (empty box).
  *
  * Both halves live in one dialog because they are the same question asked in
  * two directions — "where am I looking?" and "take me there" — and because a
@@ -32,31 +37,16 @@ import {
  * bush, so the box stays red instead.
  */
 
-/**
- * Current iOS keyboard height (0 on Android, which resizes the window
- * instead). Paper's Dialog is absolutely positioned by its Modal wrapper, so
- * it must be shifted explicitly or the keyboard covers its actions — the same
- * fix WaypointEditorDialog carries.
- */
-function useIosKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    const show = Keyboard.addListener('keyboardWillShow', (e) =>
-      setHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener('keyboardWillHide', () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
-}
-
 interface Props {
   /** The map centre to read out; null before the camera has settled once. */
   center: LatLng | null;
+  /**
+   * Seed for the entry box (#232): the point the user just tapped, so the
+   * chip's "Navigate to coordinates" arrives with its subject already typed
+   * in and Go / Set destination live on the first frame. Null (the "+" sheet
+   * entry) opens on an empty box, where the map centre is the subject.
+   */
+  initial?: LatLng | null;
   onDismiss: () => void;
   /** Fly the camera to a coordinate. */
   onGo: (at: LatLng) => void;
@@ -68,17 +58,23 @@ interface Props {
 
 /**
  * Mounted only while it is open (the caller renders it conditionally), so
- * every opening starts from a blank box with no reset effect — a stale
- * coordinate from last time is the one thing worse than none.
+ * every opening starts from `initial` — the tapped point, or a blank box —
+ * with no reset effect. A stale coordinate from last time is the one thing
+ * worse than none.
  */
 export function GoToCoordinatesDialog({
   center,
+  initial = null,
   onDismiss,
   onGo,
   onSetDestination,
   onCopy,
 }: Props) {
-  const [draft, setDraft] = useState('');
+  // Seeded once at mount — the dialog is mounted only while open, so there is
+  // no reset effect and no stale coordinate from last time.
+  const [draft, setDraft] = useState(() =>
+    initial === null ? '' : formatLatLng(initial.latitude, initial.longitude),
+  );
   const keyboardHeight = useIosKeyboardHeight();
 
   const typed = draft.trim();
@@ -112,37 +108,50 @@ export function GoToCoordinatesDialog({
         onDismiss={onDismiss}
         style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
       >
-        <Dialog.Title>Coordinates</Dialog.Title>
+        <Dialog.Title>Navigate to coordinates</Dialog.Title>
         <Dialog.Content>
-          {center !== null ? (
-            <View style={styles.readout}>
-              <Text variant="labelMedium">Map centre — tap a line to copy</Text>
-              {copyRow('Decimal', formatLatLng(center.latitude, center.longitude))}
-              {copyRow('Deg / min', formatLatLngDdm(center.latitude, center.longitude))}
-              {copyRow('Deg / min / sec', formatLatLngDms(center.latitude, center.longitude))}
-            </View>
-          ) : (
-            <Text variant="bodyMedium">Waiting for the map to settle…</Text>
-          )}
-          <TextInput
-            label="Go to coordinates"
-            // Paper's floating `label` is a sibling Text, not the input's
-            // accessible name — screen readers (and tests) need it spelled out.
-            accessibilityLabel="Go to coordinates"
-            value={draft}
-            onChangeText={setDraft}
-            mode="outlined"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            error={invalid}
-            placeholder="46.8139, -71.2082"
-            style={styles.input}
-          />
-          <HelperText type={invalid ? 'error' : 'info'} visible>
-            {invalid
-              ? 'Not a coordinate we can read — try 46.8139, -71.2082 or 46°48\'50"N 71°12\'29"W'
-              : 'Decimal, degrees-minutes or degrees-minutes-seconds, N/S/E/W or signs.'}
-          </HelperText>
+          <KeyboardDismissArea>
+            {center !== null ? (
+              <View style={styles.readout}>
+                <Text variant="labelMedium">Map centre — tap a line to copy</Text>
+                {copyRow('Decimal', formatLatLng(center.latitude, center.longitude))}
+                {copyRow('Deg / min', formatLatLngDdm(center.latitude, center.longitude))}
+                {copyRow('Deg / min / sec', formatLatLngDms(center.latitude, center.longitude))}
+              </View>
+            ) : (
+              <Text variant="bodyMedium">Waiting for the map to settle…</Text>
+            )}
+            <TextInput
+              label="Coordinates"
+              // Paper's floating `label` is a sibling Text, not the input's
+              // accessible name — screen readers (and tests) need it spelled
+              // out. Kept distinct from the dialog title so the two are not
+              // two elements answering to the same string.
+              accessibilityLabel="Coordinates to navigate to"
+              value={draft}
+              onChangeText={setDraft}
+              mode="outlined"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              error={invalid}
+              placeholder="46.8139, -71.2082"
+              style={styles.input}
+              // #235 — Return is the iOS exit from a single-line field; here it
+              // does the dialog's primary action when the box parses, and
+              // otherwise just puts the keyboard away.
+              returnKeyType="go"
+              blurOnSubmit
+              onSubmitEditing={() => {
+                Keyboard.dismiss();
+                if (parsed) onGo(parsed);
+              }}
+            />
+            <HelperText type={invalid ? 'error' : 'info'} visible>
+              {invalid
+                ? 'Not a coordinate we can read — try 46.8139, -71.2082 or 46°48\'50"N 71°12\'29"W'
+                : 'Decimal, degrees-minutes or degrees-minutes-seconds, N/S/E/W or signs.'}
+            </HelperText>
+          </KeyboardDismissArea>
         </Dialog.Content>
         <Dialog.Actions style={styles.actions}>
           <Button onPress={onDismiss}>Cancel</Button>

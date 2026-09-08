@@ -217,6 +217,29 @@ describe('coordinate validation (native-crash guard)', () => {
     expect(cornersAreValid({ ...good, topRight: [NaN, 42.5] })).toBe(false);
   });
 
+  it('rejects projected metres outright — degrees are the only contract (#243)', () => {
+    // The exact corners a CanTopo sheet used to persist: NAD83 / UTM 19N
+    // easting/northing, finite and perfectly ordered, but not lon/lat. This
+    // check is the ONLY thing that stopped them reaching MapLibre — and the
+    // reason the sheet vanished without a word until the card learned to say so.
+    const metres: CornerCoordinates = {
+      topLeft: [300848, 5236961],
+      topRight: [351625, 5236961],
+      bottomRight: [351625, 5202313],
+      bottomLeft: [300848, 5202313],
+    };
+    expect(cornersAreValid(metres)).toBe(false);
+    // ...and the reprojected version of the same sheet is accepted.
+    expect(
+      cornersAreValid({
+        topLeft: [-53.54, 47.258],
+        topRight: [-52.961, 47.258],
+        bottomRight: [-52.961, 46.992],
+        bottomLeft: [-53.54, 46.992],
+      }),
+    ).toBe(true);
+  });
+
   it('isDegenerateBBox flags near-zero-area extents', () => {
     // A real map sheet (~5 km) is fine.
     expect(isDegenerateBBox({ minLat: 47.6, minLng: -71.2, maxLat: 47.8, maxLng: -71.0 })).toBe(

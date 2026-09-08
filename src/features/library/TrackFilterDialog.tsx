@@ -4,7 +4,7 @@ import { DEFAULT_SORT, SORTS, type SortKey } from '@core/library/sortTracks';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, Dialog, Icon, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 
 interface Props {
@@ -145,6 +145,14 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
           value={min}
           onChangeText={setMin}
           keyboardType="numeric"
+          returnKeyType="done"
+          blurOnSubmit
+          // #235 — the iOS numeric pad has no Return key at all. RN builds
+          // its own Done toolbar for number pads when returnKeyType is set
+          // (RCTTextInputComponentView setDefaultInputAccessoryView) — but it
+          // bails out the moment inputAccessoryViewID is present, so these
+          // fields must NOT carry one.
+          onSubmitEditing={() => Keyboard.dismiss()}
           style={styles.rangeInput}
           accessibilityLabel={`${label} minimum`}
         />
@@ -158,6 +166,14 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
           value={max}
           onChangeText={setMax}
           keyboardType="numeric"
+          returnKeyType="done"
+          blurOnSubmit
+          // #235 — the iOS numeric pad has no Return key at all. RN builds
+          // its own Done toolbar for number pads when returnKeyType is set
+          // (RCTTextInputComponentView setDefaultInputAccessoryView) — but it
+          // bails out the moment inputAccessoryViewID is present, so these
+          // fields must NOT carry one.
+          onSubmitEditing={() => Keyboard.dismiss()}
           style={styles.rangeInput}
           accessibilityLabel={`${label} maximum`}
         />
@@ -172,7 +188,14 @@ export function TrackFilterDialog({ visible, onDismiss, sortKey, onApply }: Prop
             and a title repeating it made every tap on it ambiguous in E2E. */}
         <Dialog.Title>Filter &amp; sort</Dialog.Title>
         <Dialog.ScrollArea style={styles.scrollArea}>
-          <ScrollView contentContainerStyle={styles.content}>
+          {/* #235 — dragging the sheet puts the keyboard away; taps still
+              reach the chips and buttons underneath rather than being eaten
+              by that dismiss. */}
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.section}>
               <Text variant="labelLarge">Sort by</Text>
               <View style={styles.chipWrap}>

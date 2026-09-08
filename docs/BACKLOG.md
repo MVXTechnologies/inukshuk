@@ -142,18 +142,17 @@ store Documents-relative paths, resolve on read, migrate on hydrate; OTA-able.
 Android container paths are stable; the Android auto-reports are a different
 cause. #127 (iOS pack shows 0 KB) is plausibly the same class.
 
-## Queued (owner requests, 2026-09-06)
+- **[Parked] Navigation like Google Maps** (#241, owner 2026-09-07): route by
+  road / on foot / straight line with turn guidance, plus a places search bar.
+  Anchored to #95, #231, #232 and backlog item 5; needs a routing engine
+  (Valhalla/OSRM on the NAS first, on-device graphs for true offline) — Google
+  Places/Directions are paid and their ToS forbid use on non-Google maps.
 
-1. **BUG — PDF maps cannot be hidden any more** (#233): the "PDF maps" master
-   switch vanished in the overlays drill-down (#201); `togglePdfOverlay` is
-   orphaned. Restore the row, persist it, and make the overlay list follow the
-   folder selection. Regression — fix first.
-2. **Waypoint placement by tapping the map** (#232): place a waypoint somewhere
-   other than the current position. Long-press is taken by the destination pin
-   (#224) — needs a placement mode (crosshair + confirm recommended).
-3. **Place search** (#231): type a place name, fly there. Extend the "Go to
-   coordinates" dialog from #224 with a Nominatim-backed name lookup; privacy
-   policy needs a bullet before it ships.
+- **Map store: real filters + design pass** (#250, owner 2026-09-08): the
+  current chips divide nothing (100% of items are `topo`; CanTopo has no
+  `region`). Phase 1 facets from existing data (country/source, scale, region,
+  near-me, language), phase 2 categories/activity tags as sources grow.
+  Mockup in the web playground first.
 
 ## Larger initiatives (planned 2026-08-08 — owner approved all recommendations)
 
@@ -191,7 +190,7 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
 
 ## On ice
 
-- **iOS map performance** — THAW: reproducible symptom filed 2026-09-06 as #230 (map/relief stutter on zoom-out, satellite smooth; hillshade layer suspected). Was paused 2026-08-08 (owner had no iPhone access for
+- **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
   the two diagnostic readings). Findings so far: simulator JS rates clean
   (~1 render/s while panning); Samsung error queue was a red herring; the
   iPhone TestFlight build has the dead ERROR_REPORT_TOKEN baked in, so iOS

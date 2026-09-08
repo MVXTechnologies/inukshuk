@@ -37,9 +37,15 @@ export function Trail2DView({
   onNotePress?: (noteId: string) => void;
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
+  // Same platform-defaulted switch the main map obeys (#230) — a setting the
+  // user turned off must not come back on the trail viewer's own 2D map.
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
   const mainBasemap = useMapStore((s) => s.basemap);
   const bm = basemap ?? mainBasemap;
-  const style = useMemo(() => buildOsmStyle(tileUrl, false, bm, true), [tileUrl, bm]);
+  const style = useMemo(
+    () => buildOsmStyle(tileUrl, false, bm, showHillshade),
+    [tileUrl, bm, showHillshade],
+  );
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
 

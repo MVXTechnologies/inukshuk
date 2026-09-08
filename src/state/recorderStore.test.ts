@@ -445,6 +445,53 @@ describe('lastSavedTrackId (end-of-recording signal for the Strava prompt)', () 
   });
 });
 
+// #232 — the shared waypoint editor grew a Name field, and a LIVE waypoint has
+// no library row to rename from, so the rename has to land here.
+describe('updateWaypoint({ label }) — the editor Name field on a live waypoint', () => {
+  const dropOne = () => {
+    const s = useRecorderStore.getState();
+    s.start('Named hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    useRecorderStore.getState().addWaypoint();
+    return useRecorderStore.getState().waypoints[0]!;
+  };
+
+  it('renames the live waypoint, trimmed, without touching its position', () => {
+    const wp = dropOne();
+    useRecorderStore.getState().updateWaypoint(wp.id, { label: '  Source froide \n' });
+    const after = useRecorderStore.getState().waypoints[0]!;
+    expect(after.label).toBe('Source froide');
+    expect(after.latitude).toBe(wp.latitude);
+    expect(after.longitude).toBe(wp.longitude);
+    expect(after.distanceM).toBe(wp.distanceM);
+  });
+
+  it.each(['', '   ', '\t\n'])('keeps the auto label for the blank name %p', (blank) => {
+    const wp = dropOne();
+    useRecorderStore.getState().updateWaypoint(wp.id, { label: blank });
+    expect(useRecorderStore.getState().waypoints[0]?.label).toBe(wp.label);
+  });
+
+  it('renames and edits the note in one call, and leaves siblings alone', () => {
+    const first = dropOne();
+    useRecorderStore.getState().addWaypoint();
+    const second = useRecorderStore.getState().waypoints[1]!;
+    useRecorderStore.getState().updateWaypoint(second.id, { label: 'Camp', note: 'Flat ground' });
+    expect(useRecorderStore.getState().waypoints[0]?.label).toBe(first.label);
+    expect(useRecorderStore.getState().waypoints[1]).toMatchObject({
+      label: 'Camp',
+      note: 'Flat ground',
+    });
+  });
+
+  it('does not disturb the live auto numbering (it counts drops, not labels)', () => {
+    const wp = dropOne();
+    useRecorderStore.getState().updateWaypoint(wp.id, { label: 'Camp' });
+    expect(useRecorderStore.getState().addWaypoint()).toBe(2);
+    expect(useRecorderStore.getState().waypoints[1]?.label).toBe('Waypoint 2');
+  });
+});
+
 describe('activity category threading', () => {
   it('start(name, category) carries the category through stop() into the saved track', async () => {
     const s = useRecorderStore.getState();

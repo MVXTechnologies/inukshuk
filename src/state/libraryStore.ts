@@ -9,6 +9,7 @@ import {
 } from '@core/library/migrations';
 import { removeNoteById } from '@core/library/notes';
 import { nextFolderVisibility } from '@core/library/visibility';
+import { nextWaypointLabel } from '@core/library/waypoints';
 import * as storage from '@data/storage';
 import { create } from 'zustand';
 
@@ -121,8 +122,15 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   // Standalone waypoints — dropped from the map's "+" speed-dial outside any
   // recording, persisted in the index (a live recording's waypoints live in the
   // recorder store instead and become trail notes on stop).
-  /** Drop a waypoint at a position; returns its id so the editor can open on it. */
-  addWaypoint: (latitude: number, longitude: number) => string;
+  /**
+   * Drop a waypoint at a position; returns its id so the editor can open on it.
+   *
+   * `label` is the name typed in the editor's Name field (#232). It is applied
+   * at CREATION rather than through {@link renameWaypoint} afterwards, so a
+   * named waypoint never briefly holds — and burns — an auto number. Blank or
+   * omitted falls back to the next `Waypoint N`.
+   */
+  addWaypoint: (latitude: number, longitude: number, label?: string) => string;
   /** Edit a waypoint's note text and/or photo (empty photoUri removes the photo). */
   updateWaypoint: (id: string, patch: { note?: string; photoUri?: string }) => void;
   /**
@@ -504,22 +512,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     return id;
   },
 
-  addWaypoint: (latitude, longitude) => {
+  addWaypoint: (latitude, longitude, label) => {
     const id = storage.newId();
+    const typed = label?.trim() ?? '';
     set((s) => {
       // Number past the highest existing auto label so deleting "Waypoint 1"
-      // and dropping a new one never mints a duplicate name.
-      const n =
-        1 +
-        s.waypoints.reduce((max, w) => {
-          const m = /^Waypoint (\d+)$/.exec(w.label);
-          return m ? Math.max(max, Number(m[1])) : max;
-        }, 0);
+      // and dropping a new one never mints a duplicate name. A typed name wins
+      // outright and takes no number at all (#232).
       const waypoint: Waypoint = {
         id,
         latitude,
         longitude,
-        label: `Waypoint ${n}`,
+        label: typed === '' ? nextWaypointLabel(s.waypoints.map((w) => w.label)) : typed,
         createdAt: Date.now(),
       };
       const next = { ...s, waypoints: [...s.waypoints, waypoint] };

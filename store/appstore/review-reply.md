@@ -39,6 +39,7 @@ free, open source (MIT), has no account, no ads, no analytics and no tracking.
 ## 3. Setup and access
 
 Nothing to set up. No login, no credentials, no sample files needed:
+
 - Open the **Search** tab: it lists free topographic sheets around the
   device's location (works anywhere in the US, Canada and Australia; elsewhere
   use the name search, e.g. "Denver"). Tap Download; the sheet lands in the
@@ -56,6 +57,7 @@ Nothing to set up. No login, no credentials, no sample files needed:
 
 All are called directly from the device over HTTPS; the app has no backend of
 its own and no service receives an account or identity.
+
 - **OpenStreetMap** (tile.openstreetmap.org) — 2D base map tiles.
 - **Esri / ArcGIS Online** (server.arcgisonline.com) — Satellite and Relief
   (World Topo) base maps.
@@ -73,11 +75,11 @@ its own and no service receives an account or identity.
 - **GitHub Issues** (github.com/MVXTechnologies/inukshuk) — optional automatic
   error reports (message, stack, app/OS version, device model; no location or
   content; off in Settings).
-Present in the codebase but **disabled in this release** and not reachable
-from the UI: weather layers (Environment Canada GeoMet), marine charts
-(CHS/NOAA/EMODnet), and a Strava upload (no Strava credentials are configured
-in this build, so it cannot connect). No AI services, no payment processor,
-no authentication provider.
+  Present in the codebase but **disabled in this release** and not reachable
+  from the UI: weather layers (Environment Canada GeoMet), marine charts
+  (CHS/NOAA/EMODnet), and a Strava upload (no Strava credentials are configured
+  in this build, so it cannot connect). No AI services, no payment processor,
+  no authentication provider.
 
 ## 5. Regional differences
 
