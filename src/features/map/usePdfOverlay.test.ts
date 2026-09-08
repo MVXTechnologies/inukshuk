@@ -3,7 +3,10 @@ import { activeTargets, describeSourceCrs } from './usePdfOverlay';
 
 jest.mock('expo-file-system', () => ({ File: class {} }));
 jest.mock('@data/storage', () => ({}));
-jest.mock('./PdfRasterizer', () => ({ usePdfRasterizer: () => jest.fn() }));
+jest.mock('./PdfRasterizer', () => ({
+  usePdfRasterizer: () => jest.fn(),
+  usePdfRasterizerServer: () => jest.fn(),
+}));
 
 /**
  * A US Topo / AUSTopo sheet: one page, three viewports (the map plus two

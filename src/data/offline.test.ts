@@ -5,6 +5,7 @@ import * as storage from './storage';
 
 jest.mock('./storage', () => ({
   setNetworkAllowed: jest.fn(),
+  documentDirUri: () => 'file:///doc/',
 }));
 
 jest.mock('@maplibre/maplibre-react-native', () => ({
@@ -132,13 +133,19 @@ async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
+// The app has ONE loopback server (./localServer), constructed on the first
+// download and reused after — so this is the same object in every test, and
+// the assertions below read its per-test call counts.
 function lastServer(): { start: jest.Mock; stop: jest.Mock } | undefined {
   return serverMock.__instances[serverMock.__instances.length - 1];
 }
 
 beforeEach(() => {
   fsMock.__reset();
-  serverMock.__instances.length = 0;
+  for (const s of serverMock.__instances) {
+    s.start.mockClear();
+    s.stop.mockClear();
+  }
 });
 
 afterEach(() => {
@@ -159,7 +166,7 @@ describe('createRegionPack', () => {
       maxZoom: number;
       metadata: Record<string, unknown>;
     };
-    expect(options.mapStyle).toBe('http://127.0.0.1:8080/r1.json');
+    expect(options.mapStyle).toBe('http://127.0.0.1:8080/offline-styles/r1.json');
     expect(options.bounds).toEqual([-72, 46, -71, 47]); // [west, south, east, north]
     expect(options.metadata).toMatchObject({ appId: 'r1', label: 'Home range', basemap: 'map' });
 

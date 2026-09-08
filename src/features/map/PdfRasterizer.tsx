@@ -4,12 +4,27 @@
  * A single hidden offscreen `WebView` (mounted once by `PdfRasterizerProvider`)
  * acts as the rendering engine. The WebView hosts a self-contained HTML document
  * with the pdf.js *legacy UMD* build inlined from app-bundled assets — it never
- * touches the network. React Native drives it over the WebView message bridge:
- * RN injects the base64 PDF + render request, the page renders to an offscreen
- * `<canvas>`, and posts the resulting PNG data URI back.
+ * touches the network.
+ *
+ * Two ways the PDF reaches the page (#269):
+ *
+ * - **Served (normal).** The page is written under Documents and loaded from the
+ *   app's loopback server (`@data/localServer`), where the imported PDFs live
+ *   too — same origin. RN sends `{ id, url, pageIndex, targetWidthPx }` and
+ *   pdf.js range-fetches only the bytes the page needs. Nothing scales with
+ *   file size on the bridge; a 216 MB GeoPDF costs the same as a 3 MB one.
+ * - **Inline (fallback).** If the server cannot start, the page loads as an
+ *   inline `html` string and the PDF crosses the bridge as base64 chunks, the
+ *   way every map did before #269. That path OOMs on big files (#218), so
+ *   callers only take it for small ones (`@core/library/rasterSource`).
+ *
+ * The PNG result comes back over `postMessage` in both modes.
  *
  * See `PdfRasterizer.README.md` for the bundling/offline design and limitations.
  */
+import { fnv1a32 } from '@core/encoding/fnv1a';
+import { servedFileUrl } from '@core/storage/servedPaths';
+import { acquireLocalServer, writeServedText, type LocalServerLease } from '@data/localServer';
 import { reportError } from '@lib/errorReporting';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
@@ -24,6 +39,10 @@ import React, {
 } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import type {
+  WebViewErrorEvent,
+  WebViewHttpErrorEvent,
+} from 'react-native-webview/lib/WebViewTypes';
 
 // The bundled pdf.js builds. The `.pdfjs` extension is registered as a Metro
 // asset extension (see metro.config.js) so these resolve to local file URIs at
@@ -39,18 +58,36 @@ const PDFJS_WORKER_ASSET =
 /**
  * Per-request timeout. Generous enough to cover the worker watchdog (12s) plus a
  * full main-thread fake-worker retry render of a multi-MB page.
+ *
+ * Measured on the Android emulator (Pixel 6 profile, 4 GB, software GL) with
+ * the served path: the 216 MB UTM sheet in #269 renders at 2048 px well inside
+ * this budget (see the issue for the numbers), so it stays at 45 s.
  */
 const RENDER_TIMEOUT_MS = 45_000;
 
 /** Default target raster width in CSS px when the caller does not specify one. */
 const DEFAULT_TARGET_WIDTH_PX = 2048;
 
-/** Max base64 characters injected per chunk to stay under bridge size limits. */
+/** Max base64 characters injected per chunk (inline mode) to stay under bridge size limits. */
 const BASE64_CHUNK_SIZE = 256 * 1024;
 
+/**
+ * Where the rasterizer page lives under Documents. On the server's allowlist
+ * (`SERVED_DOCUMENT_PREFIXES`); the file is rewritten on every provider mount
+ * and its URL carries a content hash, so a stale copy can never outlive the
+ * code that generated it.
+ */
+const RASTERIZER_PAGE_PATH = '.rasterizer/index.html';
+
+/** Where the PDF bytes come from. */
+export type RasterizeSource =
+  /** Same-origin URL on the loopback server; pdf.js range-fetches it. */
+  | { url: string; base64?: undefined }
+  /** PDF file contents as base64 (no data: prefix), pushed over the bridge. */
+  | { base64: string; url?: undefined };
+
 export interface RasterizeArgs {
-  /** PDF file contents as base64 (no data: prefix). */
-  base64: string;
+  source: RasterizeSource;
   /** 0-based page index to render. */
   pageIndex: number;
   /** Target render width in CSS px; height derived from page aspect. Default 2048. */
@@ -68,6 +105,9 @@ export interface RasterResult {
   pageHeightPt: number;
   /** Total pages in the document. */
   pageCount: number;
+  /** Wall-clock ms inside the WebView: document open, and page render. */
+  loadMs: number;
+  renderMs: number;
 }
 
 /** Shape of the success/error messages the WebView posts back to RN. */
@@ -80,6 +120,8 @@ interface WebViewSuccessMessage {
   pageWidthPt: number;
   pageHeightPt: number;
   pageCount: number;
+  loadMs: number;
+  renderMs: number;
 }
 interface WebViewErrorMessage {
   id: string;
@@ -106,7 +148,21 @@ interface PendingRequest {
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
 
-const PdfRasterizerContext = createContext<RasterizeFn | null>(null);
+/**
+ * Resolves to the loopback origin the engine serves PDFs from, or `null` when
+ * the engine runs in inline (bridge) mode. Waits for the mode to be decided.
+ */
+type ServerOriginFn = () => Promise<string | null>;
+
+interface RasterizerContextValue {
+  rasterize: RasterizeFn;
+  serverOrigin: ServerOriginFn;
+}
+
+const PdfRasterizerContext = createContext<RasterizerContextValue | null>(null);
+
+/** How the WebView is fed: the served page URL, or the inline document. */
+type Engine = { kind: 'served'; uri: string } | { kind: 'inline'; html: string };
 
 /**
  * Build the offscreen HTML document, inlining the pdf.js main + worker bundles.
@@ -162,7 +218,8 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
   }
 
-  // Incremental base64 assembly so multi-MB PDFs never exceed bridge limits.
+  // Incremental base64 assembly (inline mode) so multi-MB PDFs never exceed
+  // bridge limits.
   var chunks = [];
 
   window.__pdfReset = function () {
@@ -182,46 +239,81 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     return bytes;
   }
 
-  // Watchdog: if pdf.js can't even load the document within this window, the
-  // real Blob worker has most likely wedged. We then force the main-thread fake
-  // worker and retry exactly once, so a hostile WebView worker can't hang us.
+  // Watchdog: if pdf.js makes no progress opening the document within this
+  // window, the real Blob worker has most likely wedged. We then force the
+  // main-thread fake worker and retry exactly once, so a hostile WebView worker
+  // can't hang us. "Progress" counts: on the served path a 200 MB sheet can
+  // legitimately take longer than this to open (pdf.js may have to read a lot
+  // of it to find the xref), but a live worker keeps requesting ranges, and
+  // each range re-arms the watchdog. A wedged worker requests nothing.
   var LOAD_WATCHDOG_MS = 12000;
+  var RANGE_CHUNK_BYTES = 1048576;
 
-  function renderOnce(id, pageIndex, targetWidthPx, base64, attempt) {
-    var bytes;
-    try {
-      // Decode fresh each attempt: getDocument may transfer/detach the buffer.
-      bytes = base64ToBytes(base64);
-    } catch (e) {
-      post({ id: id, ok: false, error: 'base64 decode failed: ' + (e && e.message) });
-      return;
+  function renderOnce(id, pageIndex, targetWidthPx, input, attempt) {
+    var params;
+    if (input.url) {
+      // Served: let pdf.js range-fetch. disableStream cancels the full-body
+      // request as soon as the headers show Range support; disableAutoFetch
+      // stops it from pulling the rest of the file in the background. Together
+      // they mean only the chunks THIS page references ever enter memory.
+      params = {
+        url: input.url,
+        rangeChunkSize: RANGE_CHUNK_BYTES,
+        disableAutoFetch: true,
+        disableStream: true,
+        isEvalSupported: false,
+        disableFontFace: false,
+      };
+    } else {
+      var bytes;
+      try {
+        // Decode fresh each attempt: getDocument may transfer/detach the buffer.
+        bytes = base64ToBytes(input.base64);
+      } catch (e) {
+        post({ id: id, ok: false, error: 'base64 decode failed: ' + (e && e.message) });
+        return;
+      }
+      params = { data: bytes, isEvalSupported: false, disableFontFace: false };
     }
 
-    var loadingTask = window.pdfjsLib.getDocument({
-      data: bytes,
-      isEvalSupported: false,
-      disableFontFace: false,
-    });
+    var t0 = Date.now();
+    var loadingTask = window.pdfjsLib.getDocument(params);
 
-    var settled = false;
-    var watchdog = setTimeout(function () {
-      if (settled) return;
-      settled = true;
+    // Three-way state, not one flag: a stall hands the id to the retry (so this
+    // attempt must go quiet), while an error AFTER the document opened — page
+    // out of range, a render failure — must still be posted. One "settled"
+    // flag for both used to swallow the latter, and the caller saw only the
+    // 45 s timeout instead of the real reason.
+    var stalled = false;
+    var loaded = false;
+    var watchdog = null;
+    function onStall() {
+      if (stalled || loaded) return;
+      stalled = true;
       try { loadingTask.destroy(); } catch (e) {}
       if (attempt === 0) {
         // Drop to the main-thread fake worker and retry once.
         try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
-        renderOnce(id, pageIndex, targetWidthPx, base64, 1);
+        renderOnce(id, pageIndex, targetWidthPx, input, 1);
       } else {
         post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' });
       }
-    }, LOAD_WATCHDOG_MS);
+    }
+    function armWatchdog() {
+      if (watchdog !== null) clearTimeout(watchdog);
+      watchdog = setTimeout(onStall, LOAD_WATCHDOG_MS);
+    }
+    armWatchdog();
+    loadingTask.onProgress = function () {
+      if (!stalled && !loaded) armWatchdog();
+    };
 
     loadingTask.promise
       .then(function (doc) {
-        if (settled) return undefined;
-        settled = true;
+        if (stalled) return undefined;
+        loaded = true;
         clearTimeout(watchdog);
+        var loadMs = Date.now() - t0;
         var pageCount = doc.numPages;
         var pageNumber = pageIndex + 1;
         if (pageNumber < 1 || pageNumber > pageCount) {
@@ -249,11 +341,17 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, widthPx, heightPx);
 
+          var t1 = Date.now();
           return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
             var pngDataUri = canvas.toDataURL('image/png');
             // Free the canvas memory before reporting back.
             canvas.width = 1;
             canvas.height = 1;
+            var renderMs = Date.now() - t1;
+            // Release the document (and, on the served path, its chunk buffer)
+            // before the next request; the WebView is a long-lived process.
+            try { doc.cleanup(); } catch (e) {}
+            try { loadingTask.destroy(); } catch (e) {}
             post({
               id: id,
               ok: true,
@@ -263,22 +361,33 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
               pageWidthPt: pageWidthPt,
               pageHeightPt: pageHeightPt,
               pageCount: pageCount,
+              loadMs: loadMs,
+              renderMs: renderMs,
             });
           });
         });
       })
       .catch(function (err) {
-        if (settled) return;
-        settled = true;
+        // A stalled attempt was destroyed on purpose; its rejection belongs to
+        // nobody — the retry (or the final stall error) owns the id now.
+        if (stalled) return;
+        loaded = true;
         clearTimeout(watchdog);
+        try { loadingTask.destroy(); } catch (e) {}
         post({ id: id, ok: false, error: (err && err.message) ? err.message : String(err) });
       });
   }
 
-  window.__pdfRender = function (id, pageIndex, targetWidthPx) {
-    var base64 = chunks.join('');
+  // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
+  window.__pdfRender = function (id, pageIndex, targetWidthPx, url) {
+    var input;
+    if (url) {
+      input = { url: url };
+    } else {
+      input = { base64: chunks.join('') };
+    }
     chunks = [];
-    renderOnce(id, pageIndex, targetWidthPx, base64, 0);
+    renderOnce(id, pageIndex, targetWidthPx, input, 0);
   };
 
   post({ id: '__ready__', ok: true });
@@ -288,14 +397,37 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
 </html>`;
 }
 
+/** A promise plus its resolver, for "the mode has been decided" signalling. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 /**
  * Mount this ONCE near the app root. It hosts the hidden offscreen WebView used
  * as the rendering engine and exposes the rasterize function via context.
  */
 export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const webviewRef = useRef<WebView>(null);
-  const [html, setHtml] = useState<string | null>(null);
+  const [engine, setEngine] = useState<Engine | null>(null);
   const [ready, setReady] = useState(false);
+
+  // The built page, kept so a served engine can fall back to inline.
+  const htmlRef = useRef<string | null>(null);
+  // Mirror of `engine` for event handlers; written only where the state is.
+  const engineRef = useRef<Engine | null>(null);
+  const applyEngine = useCallback((next: Engine) => {
+    engineRef.current = next;
+    setEngine(next);
+  }, []);
+  // The loopback origin PDFs are served from; null in inline mode. `settled`
+  // resolves once that is known, so callers can wait for it.
+  const originRef = useRef<string | null>(null);
+  const settledRef = useRef(deferred());
+  const leaseRef = useRef<LocalServerLease | null>(null);
 
   // Pending requests keyed by id, plus a FIFO queue so only one render runs at
   // a time (the single canvas/WebView is a shared resource).
@@ -304,11 +436,13 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const busyRef = useRef(false);
   const idCounterRef = useRef(0);
 
-  // Load + inline the bundled pdf.js sources once. Reads from the local asset
-  // file only — no network access.
+  // Load + inline the bundled pdf.js sources once (from the local asset files
+  // only — no network access), then pick the engine: served if the loopback
+  // server starts, inline otherwise.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let html: string;
       try {
         const [mainAsset, workerAsset] = await Promise.all([
           Asset.fromModule(PDFJS_MAIN_ASSET).downloadAsync(),
@@ -320,22 +454,54 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           new File(mainUri).text(),
           new File(workerUri).text(),
         ]);
-        if (!cancelled) {
-          setHtml(buildHtml(mainSource, workerSource));
-        }
+        html = buildHtml(mainSource, workerSource);
       } catch (err) {
         if (!cancelled) {
-          // The WebView never mounts (html stays null), so rasterize() calls
+          // The WebView never mounts (engine stays null), so rasterize() calls
           // queue but cannot run; they reject via the per-request timeout.
           reportError(err, 'pdfjs-assets-load');
           console.error('PdfRasterizer: failed to load bundled pdf.js assets', err);
+          settledRef.current.resolve();
         }
+        return;
+      }
+      if (cancelled) return;
+      htmlRef.current = html;
+
+      try {
+        const lease = await acquireLocalServer();
+        if (cancelled) {
+          await lease.release();
+          return;
+        }
+        leaseRef.current = lease;
+        // Rewritten on every mount: the served copy can never be older than
+        // this code, and the hash in the URL defeats any WebView cache.
+        writeServedText(RASTERIZER_PAGE_PATH, html);
+        const pageUrl = servedFileUrl(lease.value, RASTERIZER_PAGE_PATH);
+        if (pageUrl === null)
+          throw new Error(`${RASTERIZER_PAGE_PATH} is not on the served allowlist`);
+        originRef.current = lease.value;
+        applyEngine({ kind: 'served', uri: `${pageUrl}?v=${fnv1a32(html)}` });
+      } catch (err) {
+        if (cancelled) return;
+        // No server: the bridge path still works for small files. Reported,
+        // because a big map will now fail with a message instead of drawing.
+        reportError(err, 'pdf-rasterizer-server');
+        console.error('PdfRasterizer: loopback server unavailable, using inline mode', err);
+        originRef.current = null;
+        applyEngine({ kind: 'inline', html });
+      } finally {
+        settledRef.current.resolve();
       }
     })();
     return () => {
       cancelled = true;
+      const lease = leaseRef.current;
+      leaseRef.current = null;
+      lease?.release().catch(() => undefined);
     };
-  }, []);
+  }, [applyEngine]);
 
   const pumpQueue = useCallback(() => {
     if (busyRef.current || !ready) {
@@ -359,17 +525,26 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
 
-    // Reset, stream the base64 in chunks, then trigger the render. Returning
-    // `true` from injected JS is required by react-native-webview.
+    // Returning `true` from injected JS is required by react-native-webview.
+    const idLiteral = JSON.stringify(id);
+    const { source } = args;
+    if (source.url !== undefined) {
+      // Served: the request is four small values; pdf.js fetches the bytes.
+      const urlLiteral = JSON.stringify(source.url);
+      wv.injectJavaScript(
+        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}); true;`,
+      );
+      return;
+    }
+    // Inline: reset, stream the base64 in chunks, then trigger the render.
     wv.injectJavaScript('window.__pdfReset && window.__pdfReset(); true;');
-    for (let offset = 0; offset < args.base64.length; offset += BASE64_CHUNK_SIZE) {
-      const chunk = args.base64.slice(offset, offset + BASE64_CHUNK_SIZE);
+    for (let offset = 0; offset < source.base64.length; offset += BASE64_CHUNK_SIZE) {
+      const chunk = source.base64.slice(offset, offset + BASE64_CHUNK_SIZE);
       const chunkLiteral = JSON.stringify(chunk);
       wv.injectJavaScript(`window.__pdfAppend && window.__pdfAppend(${chunkLiteral}); true;`);
     }
-    const idLiteral = JSON.stringify(id);
     wv.injectJavaScript(
-      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}); true;`,
+      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null); true;`,
     );
   }, [ready]);
 
@@ -416,6 +591,8 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           pageWidthPt: message.pageWidthPt,
           pageHeightPt: message.pageHeightPt,
           pageCount: message.pageCount,
+          loadMs: message.loadMs,
+          renderMs: message.renderMs,
         });
       } else {
         pending.reject(new Error(message.error));
@@ -431,6 +608,61 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     setReady(false);
   }, []);
 
+  /**
+   * The served page itself failed to load (server died, 403 from a wrong
+   * allowlist, …): drop to inline mode so small maps still draw, and fail
+   * every queued served request now rather than after its 45 s timeout —
+   * the inline page cannot fetch their URLs.
+   */
+  const fallbackToInline = useCallback(
+    (reason: string) => {
+      const html = htmlRef.current;
+      if (engineRef.current?.kind !== 'served' || html === null) return;
+      reportError(
+        new Error(`rasterizer page failed to load over loopback: ${reason}`),
+        'pdf-rasterizer-server',
+      );
+      originRef.current = null;
+      applyEngine({ kind: 'inline', html });
+      busyRef.current = false;
+      // Requests that can still run on the inline page stay queued; every other
+      // pending request — the in-flight one, and every queued URL request — is
+      // rejected now.
+      queueRef.current = queueRef.current.filter((q) => q.args.source.url === undefined);
+      for (const [id, pending] of pendingRef.current) {
+        if (queueRef.current.some((q) => q.id === id)) continue;
+        clearTimeout(pending.timeout);
+        pendingRef.current.delete(id);
+        pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
+      }
+    },
+    [applyEngine],
+  );
+
+  const handleError = useCallback(
+    (event: WebViewErrorEvent) => {
+      const { url, description } = event.nativeEvent;
+      const current = engineRef.current;
+      // Only the page's own load matters; a failed sub-request (a PDF that was
+      // deleted, say) is reported to its caller by pdf.js.
+      if (current?.kind === 'served' && (!url || current.uri.startsWith(url.split('?')[0] ?? ''))) {
+        fallbackToInline(description || 'load error');
+      }
+    },
+    [fallbackToInline],
+  );
+
+  const handleHttpError = useCallback(
+    (event: WebViewHttpErrorEvent) => {
+      const { url, statusCode } = event.nativeEvent;
+      const current = engineRef.current;
+      if (current?.kind === 'served' && url && current.uri.startsWith(url.split('?')[0] ?? '')) {
+        fallbackToInline(`HTTP ${statusCode}`);
+      }
+    },
+    [fallbackToInline],
+  );
+
   // `rasterize` is stable (empty deps) but needs the latest pumpQueue; bridge
   // them through a ref so we don't recreate the public function on every render.
   const pumpQueueRef = useRef(pumpQueue);
@@ -440,14 +672,21 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const rasterize = useCallback<RasterizeFn>((args) => {
     return new Promise<RasterResult>((resolve, reject) => {
-      if (!args.base64) {
+      const { source } = args;
+      if (source.url === undefined && !source.base64) {
         reject(new Error('PdfRasterizer: base64 is empty'));
+        return;
+      }
+      if (source.url !== undefined && originRef.current === null) {
+        // A URL can only be fetched by the served page; callers ask
+        // `serverOrigin()` first, so this is a programming error, not a hang.
+        reject(new Error('PdfRasterizer: engine is in inline mode, cannot fetch a URL'));
         return;
       }
       idCounterRef.current += 1;
       const id = `req-${idCounterRef.current}`;
       const normalized: Required<RasterizeArgs> = {
-        base64: args.base64,
+        source,
         pageIndex: args.pageIndex,
         targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
       };
@@ -470,6 +709,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, []);
 
+  const serverOrigin = useCallback<ServerOriginFn>(async () => {
+    await settledRef.current.promise;
+    return originRef.current;
+  }, []);
+
   // Reject everything still pending on unmount so callers never hang.
   useEffect(() => {
     const pending = pendingRef.current;
@@ -482,27 +726,32 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  const contextValue = useMemo(() => rasterize, [rasterize]);
+  const contextValue = useMemo<RasterizerContextValue>(
+    () => ({ rasterize, serverOrigin }),
+    [rasterize, serverOrigin],
+  );
 
   return (
     <PdfRasterizerContext.Provider value={contextValue}>
-      {html ? (
+      {engine ? (
         <View style={styles.hidden} pointerEvents="none" collapsable={false}>
           <WebView
             ref={webviewRef}
-            source={{ html }}
+            source={engine.kind === 'served' ? { uri: engine.uri } : { html: engine.html }}
             originWhitelist={['*']}
             onMessage={handleMessage}
             onLoadStart={handleLoadStart}
+            onError={handleError}
+            onHttpError={handleHttpError}
             javaScriptEnabled
-            // Offline guarantee: the document is self-contained, so no remote
-            // loads are needed or expected.
+            // Offline guarantee: the document is self-contained and only ever
+            // talks to the app's own loopback server — nothing remote.
             allowFileAccess={false}
             allowUniversalAccessFromFileURLs={false}
             androidLayerType="software"
             // Avoid scaling/zoom affecting the offscreen canvas.
             scalesPageToFit={false}
-            // Render bitmaps eagerly even while offscreen.
+            // Render bitmaps eagerly even while offscreen; never cache the page.
             cacheEnabled={false}
           />
         </View>
@@ -512,16 +761,29 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
-/**
- * Returns a function that resolves with the rendered page. Calls are serialized
- * (one render at a time) and reject on error or after a ~30s timeout.
- */
-export function usePdfRasterizer(): RasterizeFn {
+function useRasterizerContext(): RasterizerContextValue {
   const ctx = useContext(PdfRasterizerContext);
   if (!ctx) {
     throw new Error('usePdfRasterizer must be used within a <PdfRasterizerProvider>');
   }
   return ctx;
+}
+
+/**
+ * Returns a function that resolves with the rendered page. Calls are serialized
+ * (one render at a time) and reject on error or after a 45s timeout.
+ */
+export function usePdfRasterizer(): RasterizeFn {
+  return useRasterizerContext().rasterize;
+}
+
+/**
+ * Returns a function resolving to the loopback origin PDFs can be served from
+ * (`http://127.0.0.1:<port>`), or `null` when the engine had to fall back to
+ * the inline bridge. Callers build `{ url }` sources only from a non-null origin.
+ */
+export function usePdfRasterizerServer(): ServerOriginFn {
+  return useRasterizerContext().serverOrigin;
 }
 
 const styles = StyleSheet.create({

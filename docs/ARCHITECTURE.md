@@ -45,10 +45,18 @@ four stages:
      against hostile input (clamped xref counts, bounded FlateDecode output).
 
 2. **Rasterize the page** (`features/map/PdfRasterizer`). A hidden offscreen
-   WebView runs **bundled pdf.js** (no network, `isEvalSupported: false`) to
-   render the page to a PNG, and reports the page size in points. Requests are
-   queued and chunked so multi-MB PDFs cross the bridge safely, with a watchdog
-   that falls back to pdf.js's main-thread fake worker if the real one wedges.
+   WebView runs **bundled pdf.js** (`isEvalSupported: false`) to render the
+   page to a PNG, and reports the page size in points. The page and the PDF
+   are both served from the app's loopback server (`data/localServer.ts`,
+   root = the document directory) so pdf.js range-fetches only the bytes the
+   page needs — nothing crossing the bridge scales with file size, which is
+   what let 50–200 MB GeoPDFs render at all (#269). If the server cannot
+   start, PDFs under 16 MB fall back to the old base64-over-the-bridge path;
+   bigger ones fail with a message instead of hanging. Requests are queued,
+   with a watchdog that falls back to pdf.js's main-thread fake worker if the
+   real one wedges. Each page's outcome is published to `overlayStatusStore`
+   and shown on its Library card ("Rendering page N…" / "Couldn't render page
+   N: …").
 
 3. **Extrapolate full-page corners** (`core/geo/geomath`). The georeferencing
    often describes only the inner map frame, but we render the _whole_ page. We
@@ -82,7 +90,9 @@ four stages:
 - 2D basemap tiles for a user-drawn region are downloaded into MapLibre
   offline packs (`data/offline.ts` → `OfflineManager.createPack`). MapLibre's
   downloader only accepts an **http(s) style URL**, so the style JSON is served
-  from a transient loopback HTTP server for the duration of the download. A
+  from the app's shared loopback HTTP server (`data/localServer.ts`, one
+  ref-counted instance — the native library allows a single server per app —
+  also used by the PDF rasterizer) for the duration of the download. A
   stall watchdog rejects if progress stops (MapLibre can hang without erroring).
 - "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
   only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches

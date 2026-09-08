@@ -16,12 +16,23 @@ import { PdfRasterizerProvider, usePdfRasterizer } from '@features/map/PdfRaster
 
 // Anywhere below the provider:
 const rasterize = usePdfRasterizer();
-const result = await rasterize({ base64, pageIndex: 0, targetWidthPx: 2048 });
+const serverOrigin = usePdfRasterizerServer(); // () => Promise<string | null>
+const origin = await serverOrigin(); // "http://127.0.0.1:<port>", or null in inline mode
+const result = await rasterize({
+  source: origin ? { url: `${origin}/maps/<id>.pdf` } : { base64 },
+  pageIndex: 0,
+  targetWidthPx: 2048,
+});
 // result.pngDataUri -> "data:image/png;base64,..."
 // result.{widthPx,heightPx}        -> rendered raster size
 // result.{pageWidthPt,pageHeightPt} -> intrinsic page size in PDF points (1/72")
 // result.pageCount                  -> total pages in the document
+// result.{loadMs,renderMs}          -> WebView-side timings (document open, page render)
 ```
+
+`@core/library/rasterSource` is the rule callers use to pick the source: the
+URL whenever there is an origin, base64 only for files under 16 MB without
+one, and a clear refusal above that (#269).
 
 ## How it works
 
@@ -31,28 +42,60 @@ JavaScript runs without painting anything visible or affecting layout.
 
 1. On mount, the provider reads the two **bundled** pdf.js files from app assets
    and inlines them into a self-contained HTML string (`buildHtml`).
-2. The WebView loads that HTML via `source={{ html }}`. The pdf.js main bundle
-   runs inside its own `<script>` tag and exposes `window.pdfjsLib`. When ready,
-   the page posts `{ id: "__ready__", ok: true }` back to RN.
-3. To render, RN injects JavaScript over the bridge:
-   - `window.__pdfReset()` clears any buffered input,
-   - `window.__pdfAppend(chunk)` is called once per base64 chunk,
-   - `window.__pdfRender(id, pageIndex, targetWidthPx)` decodes the base64 to a
-     `Uint8Array` (via an `atob` loop), calls
-     `pdfjsLib.getDocument({ data })`, grabs `getPage(pageIndex + 1)`, computes
+2. **Served mode (normal, #269).** The provider takes a lease on the app's
+   shared loopback server (`@data/localServer` — root = the document
+   directory), writes the HTML to `Documents/.rasterizer/index.html` (rewritten
+   on every mount; the URL carries an FNV-1a hash of the content so no WebView
+   cache can serve a stale page), and loads it with
+   `source={{ uri: origin + '/.rasterizer/index.html?v=<hash>' }}`. Imported
+   PDFs live in `Documents/maps/`, so page and PDF are **same-origin**.
+   **Inline mode (fallback).** If the server cannot start — or the served page
+   fails to load — the same HTML is loaded via `source={{ html }}` and the PDF
+   crosses the bridge as base64, as it did before #269.
+3. The pdf.js main bundle runs inside its own `<script>` tag and exposes
+   `window.pdfjsLib`. When ready, the page posts `{ id: "__ready__", ok: true }`
+   back to RN.
+4. To render, RN injects JavaScript over the bridge:
+   - served: `window.__pdfRender(id, pageIndex, targetWidthPx, url)` — four
+     small values. The page calls
+     `pdfjsLib.getDocument({ url, rangeChunkSize: 1 MiB, disableAutoFetch: true, disableStream: true })`;
+     lighttpd answers `Range` requests, `disableStream` cancels the full-body
+     request as soon as the headers show range support, and `disableAutoFetch`
+     stops pdf.js pulling the rest of the file in the background — only the
+     chunks the page references are ever fetched.
+   - inline: `window.__pdfReset()`, then `window.__pdfAppend(chunk)` once per
+     256 KB base64 chunk, then `window.__pdfRender(id, pageIndex, targetWidthPx, null)`,
+     which decodes the base64 to a `Uint8Array` and calls
+     `pdfjsLib.getDocument({ data })`.
+     Either way the page grabs `getPage(pageIndex + 1)`, computes
      `scale = targetWidthPx / viewport(scale:1).width`, renders to an offscreen
      `<canvas>`, and reports `canvas.toDataURL('image/png')`.
-4. The WebView posts `{ id, ok: true, pngDataUri, widthPx, heightPx, pageWidthPt,
-pageHeightPt, pageCount }` (or `{ id, ok: false, error }`) back, which the
-   provider matches to the pending promise by `id`.
+5. The WebView posts `{ id, ok: true, pngDataUri, widthPx, heightPx, pageWidthPt,
+pageHeightPt, pageCount, loadMs, renderMs }` (or `{ id, ok: false, error }`)
+   back, which the provider matches to the pending promise by `id`.
+
+Why the split: before #269 every PDF took the inline path, and every step of it
+scaled with file size — a 216 MB GeoPDF became 289 MB of base64, ~1,100 bridge
+evaluations and an `atob` loop before pdf.js even started. Android's
+`File.base64()` OOMed at ~150 MB (#218) and iOS never finished inside the
+timeout (#264, #265). On the served path nothing that crosses the bridge grows
+with the file.
 
 ### Queueing, timeouts, resilience
 
 - Requests are **serialized** through an internal FIFO queue — only one render
   runs at a time because the WebView and its canvas are a single shared
   resource.
-- Each request has a **30s timeout**; on timeout the promise rejects and the
+- Each request has a **45s timeout**; on timeout the promise rejects and the
   engine is freed so the queue keeps draining.
+- A **12s load watchdog** inside the page guards against the Android System
+  WebView's Blob worker wedging silently: if `getDocument` makes no progress
+  for 12s the page forces pdf.js's main-thread fake worker and retries once.
+  On the served path every range request re-arms it, so a big file that takes
+  longer than 12s to open (but is progressing) is not mistaken for a stall.
+- Errors after the document opened (page out of range, render failure) are
+  posted immediately; they used to be swallowed and surface only as the
+  timeout.
 - If the WebView reloads or its content process crashes, `onLoadStart` flips the
   engine back to "not ready"; when the reloaded page re-posts `__ready__`, the
   queue resumes automatically.
@@ -92,10 +135,14 @@ asset already ships inside the app). The text is then inlined into the HTML.
 packaged into the standalone app.
 
 **Offline guarantee:** the rendered HTML document references nothing remote — no
-CDN, no `<script src="https://...">`, no `fetch`. pdf.js, its worker, the PDF
-bytes, and the canvas all live inside the WebView. The WebView is configured
-with `allowFileAccess={false}` and is fed an inline `html` string, so it cannot
-and does not load anything over the network.
+CDN, no `<script src="https://...">`. pdf.js, its worker and the canvas all live
+inside the WebView; the only thing it ever fetches is the PDF, from the app's
+own loopback server on `127.0.0.1` (served mode) or from the bridge (inline
+mode). The WebView is configured with `allowFileAccess={false}`. The server
+itself only exposes the allowlisted folders `maps/`, `offline-styles/` and
+`.rasterizer/` (`@core/storage/servedPaths`); the rest of the document
+directory — the library index, trails, photos — is denied by lighttpd's
+`mod_access`, so nothing else on the device can read it through that port.
 
 ## Worker mode
 
