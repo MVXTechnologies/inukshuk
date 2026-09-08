@@ -93,6 +93,11 @@ then `xcodebuild` or a run from Xcode) needs more than Xcode alone (#130):
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` before building;
   the CLT-only toolchain cannot build iOS apps.
 
+EAS iOS builds run `scripts/eas-pre-install.sh` before dependency installation.
+The hook installs CMake with Homebrew only when it is missing, then verifies
+that it is on the worker PATH. This supplies the same Lighttpd build dependency
+required locally; the Android hook is a no-op.
+
 ## Releasing
 
 Once the secrets above exist, a release is just a tag:
