@@ -2,6 +2,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
+import { joinDocumentPath, toDocumentRelativePath } from '@core/storage/documentPaths';
 import { singleFlight } from '@core/storage/singleFlight';
 
 /**
@@ -27,6 +28,42 @@ function tracksDir(): Directory {
 }
 function photosDir(): Directory {
   return new Directory(Paths.document, PHOTOS_DIR);
+}
+
+// ---- document-relative paths (#247) ----------------------------------------
+//
+// iOS rotates the app data-container UUID on app updates, so an absolute
+// `file:///…/Application/<UUID>/Documents/tracks/x.gpx` written by the
+// previous build points at nothing after the user updates — while the file
+// itself was carried over intact. Nothing may be *persisted* in absolute form:
+// `library.json` and the recorder checkpoint store `tracks/<id>.gpx`, and the
+// absolute uri is rebuilt here, against the CURRENT container, at read time.
+//
+// These two functions are the only bridge between the two forms. Everything in
+// this module that takes a path resolves through {@link resolveDocumentPath}
+// first, so both forms work at every call site.
+
+/** The app document directory as a `file://` uri. */
+export function documentDirUri(): string {
+  return new Directory(Paths.document).uri;
+}
+
+/**
+ * Rebuild the absolute uri for a stored path against the current document
+ * directory. Absolute input (a `content://` intent uri, a cache file, a path
+ * outside the document directory) passes through untouched — so this is safe
+ * to call unconditionally on anything that might be either form.
+ */
+export function resolveDocumentPath(pathOrUri: string): string {
+  return joinDocumentPath(documentDirUri(), pathOrUri);
+}
+
+/**
+ * The inverse: reduce a uri to its document-relative form for persistence.
+ * Idempotent, and a no-op on a path that is not under a document directory.
+ */
+export function toDocumentPath(pathOrUri: string): string {
+  return toDocumentRelativePath(pathOrUri, documentDirUri());
 }
 
 /** Create the storage directories if they do not exist. Safe to call repeatedly. */
@@ -74,7 +111,7 @@ function guardWrite<T>(fn: () => T): T {
  */
 export async function importPdf(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(mapsDir(), `${id}.pdf`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -87,7 +124,7 @@ export async function importPdf(sourceUri: string, id: string): Promise<string> 
  */
 export async function importGpx(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(tracksDir(), `${id}.gpx`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -95,7 +132,7 @@ export async function importGpx(sourceUri: string, id: string): Promise<string> 
 }
 
 export async function readFileBase64(uri: string): Promise<string> {
-  return new File(uri).base64();
+  return new File(resolveDocumentPath(uri)).base64();
 }
 
 /**
@@ -106,7 +143,7 @@ export async function readFileBase64(uri: string): Promise<string> {
 export async function importPhoto(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
   const ext = sourceUri.split('?')[0]?.match(/\.(jpe?g|png|heic|webp)$/i)?.[0] ?? '.jpg';
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(photosDir(), `${id}${ext.toLowerCase()}`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -179,7 +216,7 @@ export function writeChartPng(id: string, bytes: Uint8Array): string {
 }
 
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
-  return new File(uri).bytes();
+  return new File(resolveDocumentPath(uri)).bytes();
 }
 
 /** Thrown by {@link downloadBytes} when offline-only mode is on and the file is not cached. */
@@ -384,7 +421,7 @@ export async function downloadToCacheUri(
  *   return LegacyFS.readAsStringAsync(uri);
  */
 export async function readFileText(uri: string): Promise<string> {
-  return new File(uri).text();
+  return new File(resolveDocumentPath(uri)).text();
 }
 
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
@@ -408,12 +445,12 @@ export function writeTrackGpx(id: string, gpx: string): string {
 }
 
 export function deleteFileAt(uri: string): void {
-  const file = new File(uri);
+  const file = new File(resolveDocumentPath(uri));
   if (file.exists) file.delete();
 }
 
 export function fileExists(uri: string): boolean {
-  return new File(uri).exists;
+  return new File(resolveDocumentPath(uri)).exists;
 }
 
 /**
@@ -489,7 +526,7 @@ export async function readIndexText(): Promise<string | null> {
 /** Size in bytes of the file at `uri`, or 0 when it does not exist / cannot be read. */
 export function fileSizeAt(uri: string): number {
   try {
-    return new File(uri).size;
+    return new File(resolveDocumentPath(uri)).size;
   } catch {
     return 0;
   }
@@ -506,7 +543,7 @@ export function readFileChunks(
   chunkSize: number,
   onChunk: (chunk: Uint8Array, final: boolean) => void,
 ): void {
-  const handle = new File(uri).open(FileMode.ReadOnly);
+  const handle = new File(resolveDocumentPath(uri)).open(FileMode.ReadOnly);
   try {
     const total = handle.size ?? 0;
     if (total === 0) {

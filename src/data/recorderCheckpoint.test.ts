@@ -14,6 +14,9 @@ import {
 } from './recorderCheckpoint';
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   writeJson: jest.fn(),
   readJson: jest.fn(async () => null),
 }));
@@ -224,5 +227,59 @@ describe('background points journal', () => {
     await appendBackgroundPoints([p(1)]);
     clearCheckpoint();
     await expect(readBackgroundPoints()).resolves.toEqual([]);
+  });
+});
+
+// --- #247: the checkpoint's one stored path ---------------------------------
+//
+// A live waypoint's photo is the only file path a checkpoint carries. A
+// recording interrupted by the app update that rotates iOS's container UUID is
+// recovered on the next launch — with dead photo paths, unless the checkpoint
+// stores them document-relative and resolves them on the way back.
+
+describe('waypoint photo paths', () => {
+  const OLD_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/AAAA-1111-2222-3333/Documents';
+
+  const withPhoto = (photoUri: string): RecorderCheckpoint => ({
+    ...cp,
+    waypoints: [
+      { id: 'w1', latitude: 46.8, longitude: -71.2, distanceM: 12, label: 'Spring', photoUri },
+      { id: 'w2', latitude: 46.9, longitude: -71.3, distanceM: 40, label: 'Fork' },
+    ],
+  });
+
+  it('persists a photo path document-relative, never absolute', () => {
+    writeCheckpoint(withPhoto('file:///doc/photos/p1.jpg'));
+
+    const written = (storage.writeJson as jest.Mock).mock.calls[0]?.[1] as RecorderCheckpoint;
+    expect(written.waypoints[0]?.photoUri).toBe('photos/p1.jpg');
+    // A waypoint with no photo gains no photoUri key.
+    expect(written.waypoints[1]).not.toHaveProperty('photoUri');
+    expect(JSON.stringify(written)).not.toContain('file://');
+  });
+
+  it('resolves a stored path back to the current container on read', async () => {
+    (storage.readJson as jest.Mock).mockResolvedValueOnce(withPhoto('photos/p1.jpg'));
+    const restored = await readCheckpoint();
+    expect(restored?.waypoints[0]?.photoUri).toBe('file:///doc/photos/p1.jpg');
+  });
+
+  it('heals a checkpoint left absolute under a container iOS has rotated away', async () => {
+    (storage.readJson as jest.Mock).mockResolvedValueOnce(
+      withPhoto(`${OLD_CONTAINER}/photos/p1.jpg`),
+    );
+    const restored = await readCheckpoint();
+    expect(restored?.waypoints[0]?.photoUri).toBe('file:///doc/photos/p1.jpg');
+  });
+
+  it('round-trips a photo path unchanged', async () => {
+    const absolute = 'file:///doc/photos/p1.jpg';
+    writeCheckpoint(withPhoto(absolute));
+    const written = (storage.writeJson as jest.Mock).mock.calls[0]?.[1] as RecorderCheckpoint;
+
+    (storage.readJson as jest.Mock).mockResolvedValueOnce(written);
+    const restored = await readCheckpoint();
+    expect(restored?.waypoints[0]?.photoUri).toBe(absolute);
   });
 });

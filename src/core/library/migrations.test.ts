@@ -128,14 +128,14 @@ describe('migrateLibraryIndex', () => {
     expect(index.maps[0]?.activePages).toEqual([0, 1, 2]);
   });
 
-  it('passes a current v5 index through unchanged', () => {
-    const v5: LibraryIndex = {
-      schemaVersion: 5,
+  it('passes a current-version index through unchanged', () => {
+    const current: LibraryIndex = {
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
       maps: [
         {
           id: 'm1',
           name: 'Map',
-          fileUri: 'file://m1.pdf',
+          fileUri: 'maps/m1.pdf',
           importedAt: 5,
           pageCount: 2,
           georeferences: [geoRef(0), geoRef(1)],
@@ -145,7 +145,7 @@ describe('migrateLibraryIndex', () => {
           sourceUpdatedAt: '2019-07-24',
         },
       ],
-      tracks: [{ ...track('t1'), folderId: 'f1', category: 'cat1' }],
+      tracks: [{ ...track('t1'), fileUri: 'tracks/t1.gpx', folderId: 'f1', category: 'cat1' }],
       folders: [{ id: 'f1', name: 'F', createdAt: 8 }],
       mapVisibilityMode: 'folders',
       visibleFolderIds: ['f1'],
@@ -156,7 +156,7 @@ describe('migrateLibraryIndex', () => {
         { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
       ],
     };
-    expect(migrateLibraryIndex(v5)).toEqual(v5);
+    expect(migrateLibraryIndex(current)).toEqual(current);
   });
 
   it('v4 → v5 stamps the version; maps stay untouched (no provenance yet)', () => {
@@ -183,7 +183,7 @@ describe('migrateLibraryIndex', () => {
       waypoints: [],
     };
     const index = migrateLibraryIndex(v4);
-    expect(index.schemaVersion).toBe(5);
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(index.maps[0]).not.toHaveProperty('sourceItemId');
     expect(index.maps[0]).not.toHaveProperty('sourceUpdatedAt');
     expect(index.activeMapId).toBe('m1');
@@ -334,6 +334,112 @@ describe('migrateLibraryIndex', () => {
     expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(index.activeTrackIds).toEqual(['t1']);
     expect(index).not.toHaveProperty('fieldFromTheFuture');
+  });
+
+  // --- #247: absolute paths under a rotated iOS container -------------------
+  //
+  // iOS gives the app data container a new UUID on every app update. An index
+  // written by 1.5.0 (5) names its files under the OLD one; after the update
+  // the files are all still there, under the NEW one, and every persisted path
+  // is dead. `rotatedIndex()` is exactly the bytes that state leaves on disk.
+
+  const OLD_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/11111111-2222-3333-4444-555555555555/Documents';
+  const NEW_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/99999999-8888-7777-6666-555555555555/Documents';
+
+  const rotatedIndex = () => ({
+    schemaVersion: 5,
+    maps: [
+      {
+        id: 'm1',
+        name: 'Map',
+        fileUri: `${OLD_CONTAINER}/maps/m1.pdf`,
+        importedAt: 5,
+        pageCount: 1,
+        georeferences: [geoRef(0)],
+        activePages: [0],
+      },
+    ],
+    tracks: [
+      {
+        ...track('t1'),
+        fileUri: `${OLD_CONTAINER}/tracks/t1.gpx`,
+        notes: [
+          {
+            id: 'n1',
+            distanceM: 100,
+            text: 'Beaver dam',
+            createdAt: 20,
+            photoUri: `${OLD_CONTAINER}/photos/p1.jpg`,
+          },
+          { id: 'n2', distanceM: 200, text: 'No photo here', createdAt: 21 },
+        ],
+      },
+    ],
+    folders: [],
+    mapVisibilityMode: 'type',
+    visibleFolderIds: [],
+    activeMapId: 'm1',
+    activeTrackIds: ['t1'],
+    customCategories: [],
+    waypoints: [
+      {
+        id: 'w1',
+        latitude: 46.5,
+        longitude: -70.5,
+        label: 'Waypoint 1',
+        createdAt: 10,
+        photoUri: `${OLD_CONTAINER}/photos/p2.jpg`,
+      },
+    ],
+  });
+
+  it('relativises every path an update-rotated container stranded (#247)', () => {
+    const index = migrateLibraryIndex(rotatedIndex(), NEW_CONTAINER);
+
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.maps[0]?.fileUri).toBe('maps/m1.pdf');
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+    expect(index.tracks[0]?.notes?.[0]?.photoUri).toBe('photos/p1.jpg');
+    expect(index.waypoints[0]?.photoUri).toBe('photos/p2.jpg');
+    // A note without a photo gains no photoUri key.
+    expect(index.tracks[0]?.notes?.[1]).not.toHaveProperty('photoUri');
+  });
+
+  it('heals a stranded index with no document directory to compare against', () => {
+    // The `/Documents/` landmark carries it alone; the prefix rule is only an
+    // extra for the same-container and Android cases.
+    const index = migrateLibraryIndex(rotatedIndex());
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+    expect(index.waypoints[0]?.photoUri).toBe('photos/p2.jpg');
+  });
+
+  it('is idempotent: migrating the already-relative result changes nothing', () => {
+    const once = migrateLibraryIndex(rotatedIndex(), NEW_CONTAINER);
+    expect(migrateLibraryIndex(once, NEW_CONTAINER)).toEqual(once);
+  });
+
+  it('strips the CURRENT container prefix too (a same-container legacy index)', () => {
+    const index = migrateLibraryIndex(
+      {
+        ...rotatedIndex(),
+        tracks: [{ ...track('t1'), fileUri: `${NEW_CONTAINER}/tracks/t1.gpx` }],
+      },
+      NEW_CONTAINER,
+    );
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+  });
+
+  it('leaves an absolute path under no document directory alone', () => {
+    // Not ours to rewrite — a cache file, or a path from another app. The
+    // store logs these rather than guessing at a relative form for them.
+    const foreign = 'file:///var/mobile/Containers/Data/Application/X/Library/Caches/a.gpx';
+    const index = migrateLibraryIndex(
+      { ...rotatedIndex(), tracks: [{ ...track('t1'), fileUri: foreign }] },
+      NEW_CONTAINER,
+    );
+    expect(index.tracks[0]?.fileUri).toBe(foreign);
   });
 
   it('keeps a map whose corners were persisted in projected metres (#243)', () => {

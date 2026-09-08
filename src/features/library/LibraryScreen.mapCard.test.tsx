@@ -29,6 +29,10 @@ jest.mock('@data/storage', () => ({
   newId: () => 'id',
   deleteFileAt: jest.fn(),
   writeIndex: jest.fn(),
+  // #247 — persist relativises paths through these; identity is fine here.
+  toDocumentPath: (uri: string) => uri,
+  resolveDocumentPath: (path: string) => path,
+  documentDirUri: () => 'file:///Documents',
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
 jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));

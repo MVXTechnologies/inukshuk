@@ -10,6 +10,9 @@ import {
 } from './recorderStore';
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   newId: () => 'id_' + Math.random().toString(36).slice(2, 8),
   deleteFileAt: jest.fn(),
   writeJson: jest.fn(),

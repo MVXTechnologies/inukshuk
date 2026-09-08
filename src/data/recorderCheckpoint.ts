@@ -46,11 +46,29 @@ export interface RecorderCheckpoint {
 let pointsSinceWrite = 0;
 let lastWriteAt = 0;
 
+/**
+ * Apply `map` to the only stored file path a checkpoint carries — a live
+ * waypoint's attached photo. Relativised on the way to disk and resolved on
+ * the way back (#247): a recording interrupted by the app update that rotates
+ * iOS's container UUID would otherwise be recovered with dead photo paths.
+ */
+function mapCheckpointPaths(
+  cp: RecorderCheckpoint,
+  map: (path: string) => string,
+): RecorderCheckpoint {
+  return {
+    ...cp,
+    waypoints: cp.waypoints.map((w) =>
+      w.photoUri === undefined ? w : { ...w, photoUri: map(w.photoUri) },
+    ),
+  };
+}
+
 /** Persist a checkpoint immediately (atomic swap). Failures are swallowed —
  * checkpointing must never take down the recording it protects. */
 export function writeCheckpoint(cp: RecorderCheckpoint): void {
   try {
-    storage.writeJson(CHECKPOINT_FILE, cp);
+    storage.writeJson(CHECKPOINT_FILE, mapCheckpointPaths(cp, storage.toDocumentPath));
     pointsSinceWrite = 0;
     lastWriteAt = Date.now();
   } catch {
@@ -75,7 +93,17 @@ export function maybeWriteCheckpoint(cp: RecorderCheckpoint): void {
 /** Read the persisted checkpoint, or null if none/corrupt. */
 export async function readCheckpoint(): Promise<RecorderCheckpoint | null> {
   try {
-    return await storage.readJson<RecorderCheckpoint>(CHECKPOINT_FILE);
+    const cp = await storage.readJson<RecorderCheckpoint>(CHECKPOINT_FILE);
+    if (cp === null) return null;
+    // Rebuild photo uris against the CURRENT container (#247). Tolerates a
+    // checkpoint written by an older build in absolute form, and one whose
+    // container has rotated underneath it.
+    return mapCheckpointPaths(
+      { ...cp, waypoints: Array.isArray(cp.waypoints) ? cp.waypoints : [] },
+      // Relativise first, so an absolute path left by an older build (or by a
+      // container that has since rotated) is healed rather than passed through.
+      (path) => storage.resolveDocumentPath(storage.toDocumentPath(path)),
+    );
   } catch {
     return null;
   }

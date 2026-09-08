@@ -5,6 +5,9 @@ import * as storage from '@data/storage';
 import { useLibraryStore } from './libraryStore';
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   ensureStorage: jest.fn(),
   readIndex: jest.fn(async () => null),
   writeIndex: jest.fn(),

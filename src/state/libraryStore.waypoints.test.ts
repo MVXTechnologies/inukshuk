@@ -3,6 +3,9 @@ import * as storage from '@data/storage';
 import { useLibraryStore } from './libraryStore';
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   newId: () => 'w_' + Math.random().toString(36).slice(2, 8),
   deleteFileAt: jest.fn(),
   writeIndex: jest.fn(),
