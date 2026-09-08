@@ -52,6 +52,19 @@ describe('CompassBadge north needle', () => {
     expect(needleRotation()).toBe('10deg');
   });
 
+  it('labels the arrow tip with an N while rotated (#266)', async () => {
+    await renderBadge({ mapBearing: 45 });
+    expect(screen.getByText('N')).toBeOnTheScreen();
+  });
+
+  it('draws the north arrow after the heading needle, so it paints on top (#266)', async () => {
+    await renderBadge({ mapBearing: 45 });
+    const arrow = screen.getByTestId('compass-north-needle');
+    const box = arrow.parent;
+    const siblings = box?.children ?? [];
+    expect(siblings[siblings.length - 1]).toBe(arrow);
+  });
+
   it('hides the needle at north-up', async () => {
     await renderBadge({ mapBearing: 0 });
     expect(screen.queryByTestId('compass-north-needle')).toBeNull();
