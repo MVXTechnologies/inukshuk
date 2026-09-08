@@ -28,6 +28,7 @@ import { fnv1a32 } from '@core/encoding/fnv1a';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import { acquireLocalServer, writeServedText, type LocalServerLease } from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
+import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { reportError } from '@lib/errorReporting';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
@@ -191,10 +192,22 @@ const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
 
 interface PendingRequest {
   args: Required<RasterizeArgs>;
+  recoveryPage: { fileUri: string; pageIndex: number } | null;
+  recoveryToken: string | null;
   resolve: (result: RasterResult) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
   expire: () => void;
+}
+
+function finishRecovery(pending: PendingRequest): void {
+  if (pending.recoveryToken === null) return;
+  try {
+    finishPdfRender(pending.recoveryToken);
+  } catch (error) {
+    reportError(error, 'pdf-render-recovery-cleanup');
+  }
+  pending.recoveryToken = null;
 }
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
@@ -623,6 +636,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     nativeActiveRef.current = id;
     clearTimeout(pending.timeout);
     pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
+    let retryWithPdfJs = false;
     void (async () => {
       try {
         const result = await renderNativePdfCrop({
@@ -685,6 +699,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           // queue release in finally dispatches it ahead of waiting work.
           pending.args = { ...pending.args, nativePage: null };
           queueRef.current.unshift({ id, args: pending.args });
+          retryWithPdfJs = true;
           return;
         }
         if (pendingRef.current.get(id) === pending) {
@@ -693,6 +708,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           pending.reject(error instanceof Error ? error : new Error(String(error)));
         }
       } finally {
+        if (!retryWithPdfJs) finishRecovery(pending);
         if (nativeActiveRef.current === id) {
           nativeActiveRef.current = null;
           if (mountedRef.current) {
@@ -718,6 +734,21 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     activeRequestRef.current = id;
     const cachedKey = nativeGeometryKey(args);
     const nativePending = pendingRef.current.get(id);
+    if (nativePending?.recoveryPage && nativePending.recoveryToken === null) {
+      try {
+        // Persist only when this request actually owns the renderer, never
+        // while queued. Keep identity independent of native eligibility.
+        nativePending.recoveryToken = beginPdfRender(nativePending.recoveryPage);
+      } catch (error) {
+        clearTimeout(nativePending.timeout);
+        pendingRef.current.delete(id);
+        nativePending.reject(error instanceof Error ? error : new Error(String(error)));
+        busyRef.current = false;
+        activeRequestRef.current = null;
+        pumpQueueRef.current();
+        return;
+      }
+    }
     // Check at dispatch: an identical request may already be queued when
     // the first probe reports an unsupported encoding or decoder budget.
     const requestKey = nativeRequestKey(args);
@@ -737,6 +768,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (pending) {
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
+        finishRecovery(pending);
         pending.reject(new Error('PdfRasterizer: WebView unavailable'));
       }
       return;
@@ -823,6 +855,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (nativeActiveRef.current === message.id) return;
       clearTimeout(pending.timeout);
       pendingRef.current.delete(message.id);
+      finishRecovery(pending);
       if (message.ok) {
         pending.resolve({
           pngDataUri: message.pngDataUri,
@@ -864,6 +897,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (pending && id !== null) {
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
+        finishRecovery(pending);
         pending.reject(new Error('PdfRasterizer: rendering process terminated'));
       }
       activeRequestRef.current = null;
@@ -912,6 +946,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         if (queueRef.current.some((q) => q.id === id)) continue;
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
+        if (nativeActiveRef.current !== id) finishRecovery(pending);
         pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
       }
     },
@@ -999,6 +1034,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
               // queue ownership until its promise settles; delete late output.
               return;
             }
+            finishRecovery(stillPending);
             if (activeRequestRef.current === id) {
               // A timeout does not stop pdf.js. Destroy the old WebView/canvas
               // and wait for the replacement's ready message before proceeding.
@@ -1020,7 +1056,17 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         };
         const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
 
-        pendingRef.current.set(id, { args: normalized, resolve, reject, timeout, expire });
+        pendingRef.current.set(id, {
+          args: normalized,
+          recoveryPage: args.nativePage
+            ? { fileUri: args.nativePage.fileUri, pageIndex: args.pageIndex }
+            : null,
+          recoveryToken: null,
+          resolve,
+          reject,
+          timeout,
+          expire,
+        });
         queueRef.current.push({ id, args: normalized });
         pumpQueueRef.current();
       });
@@ -1045,8 +1091,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      pending.forEach((req) => {
+      pending.forEach((req, id) => {
         clearTimeout(req.timeout);
+        if (nativeActiveRef.current !== id) finishRecovery(req);
         req.reject(new Error('PdfRasterizer: provider unmounted'));
       });
       pending.clear();

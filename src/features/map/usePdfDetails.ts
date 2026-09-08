@@ -7,9 +7,11 @@ import {
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
 import { chooseRasterSource } from '@core/library/rasterSource';
+import { overlayDetailStatusKey } from '@core/library/overlayStatus';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { usePdfRasterizer, usePdfRasterizerServer } from './PdfRasterizer';
@@ -143,6 +145,18 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const epoch = w.epoch;
+    const statusKeys = new Set(
+      (JSON.parse(key) as Target[]).map((target) => overlayDetailStatusKey(target.parentId)),
+    );
+    const clearLoading = () => {
+      useOverlayStatusStore.setState((state) => {
+        const statuses = { ...state.statuses };
+        for (const key of statusKeys) {
+          if (statuses[key]?.phase === 'rendering') delete statuses[key];
+        }
+        return { statuses };
+      });
+    };
     w.paused = !enabled;
     if (!enabled) {
       // A mounted but hidden map must not compete with foreground PDF work.
@@ -199,6 +213,8 @@ export function usePdfDetails(
       void (async () => {
         while (w.epoch === epoch) {
           const snapshot = w.desired;
+          const attempted = new Set<string>();
+          const failed = new Set<string>();
           for (const target of snapshot) {
             if (w.desired !== snapshot || w.epoch !== epoch) break;
             try {
@@ -208,6 +224,11 @@ export function usePdfDetails(
                 detail = undefined;
               }
               if (!detail) {
+                const statusKey = overlayDetailStatusKey(target.parentId);
+                attempted.add(statusKey);
+                if (!failed.has(statusKey)) {
+                  useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendering' });
+                }
                 const origin = await serverOrigin();
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
                 const choice = chooseRasterSource({
@@ -275,17 +296,37 @@ export function usePdfDetails(
               prune(HANDOFF_PIXELS);
             } catch (error) {
               reportError(error, 'pdf-detail-render');
+              if (w.desired === snapshot && w.epoch === epoch && !w.paused) {
+                const statusKey = overlayDetailStatusKey(target.parentId);
+                if (!failed.has(statusKey)) {
+                  useOverlayStatusStore.getState().setStatus(statusKey, {
+                    phase: 'failed',
+                    reason: error instanceof Error ? error.message : 'Failed to render PDF detail',
+                  });
+                }
+                failed.add(statusKey);
+              }
               // The overview stays available if refinement fails.
             }
           }
           if (w.epoch !== epoch) return;
-          if (w.desired === snapshot) break;
+          if (w.desired === snapshot) {
+            for (const statusKey of attempted) {
+              if (!failed.has(statusKey)) {
+                useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendered' });
+              }
+            }
+            break;
+          }
         }
       })().finally(() => {
         if (w.epoch === epoch) w.busy = false;
       });
     }, 250);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearLoading();
+    };
   }, [key, rasterize, serverOrigin, enabled]);
 
   useEffect(() => {

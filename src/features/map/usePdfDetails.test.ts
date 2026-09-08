@@ -1,3 +1,5 @@
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { renderStatusLine } from '@core/library/overlayStatus';
 import { act, renderHook } from '@testing-library/react-native';
 import { usePdfDetails } from './usePdfDetails';
 import type { MapDocument } from '@core/models';
@@ -80,6 +82,7 @@ const flush = async () => {
 };
 beforeEach(() => {
   jest.useFakeTimers();
+  useOverlayStatusStore.setState({ statuses: { 'map:0': { phase: 'rendered' } } });
   mockFiles.clear();
   mockRasterize.mockReset().mockResolvedValue(raster);
   mockPlans.mockReset().mockImplementation((...args: Parameters<typeof planPdfDetail>) => {
@@ -473,4 +476,103 @@ it('uses the physical map height when a portrait viewport rotates', async () => 
     expected.map((plan) => `map:0:tile:${plan.tileKey}`),
   );
   await v.unmount();
+});
+
+it('reports detail loading and timeout in the Library without changing overview success', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toEqual({
+    kind: 'rendering',
+    text: 'Rendering page 1 detail…',
+  });
+  await act(async () => fail(new Error('render timed out after 45000ms')));
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toBe(
+    "Couldn't render page 1 detail: render timed out after 45000ms",
+  );
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({ phase: 'rendered' });
+});
+
+it('retains a sibling tile failure until all tiles succeed in a real retry', async () => {
+  const plan = planPdfDetail(overview.coordinates, { width: 1000, height: 1000 }, bounds, 1200)!;
+  mockPlans.mockReturnValue([
+    { ...plan, tileKey: 'first' },
+    { ...plan, tileKey: 'second' },
+  ]);
+  mockRasterize.mockRejectedValueOnce(new Error('first tile failed')).mockResolvedValueOnce(raster);
+  const view = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toContain(
+    'first tile failed',
+  );
+  mockPlans.mockReturnValue([
+    { ...plan, tileKey: 'retry-first' },
+    { ...plan, tileKey: 'retry-second' },
+  ]);
+  await view.rerender({ b: { ...bounds, west: bounds.west + 0.001 } });
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+});
+
+it('clears detail loading when paused and ignores a stale failure', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const view = await renderHook(
+    ({ enabled }: { enabled: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, enabled),
+    { initialProps: { enabled: true } },
+  );
+  await flush();
+  await view.rerender({ enabled: false });
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+  await act(async () => fail(new Error('stale timeout')));
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+});
+
+it('clears loading on unmount without erasing the overview error', async () => {
+  useOverlayStatusStore.setState({
+    statuses: { 'map:0': { phase: 'failed', reason: 'overview failed' } },
+  });
+  mockRasterize.mockImplementationOnce(() => new Promise(() => undefined));
+  const view = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toBe(
+    "Couldn't render page 1: overview failed",
+  );
+  await view.unmount();
+  expect(useOverlayStatusStore.getState().statuses['map:0:detail']).toBeUndefined();
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({
+    phase: 'failed',
+    reason: 'overview failed',
+  });
+});
+
+it('does not erase another page failure when detail succeeds', async () => {
+  useOverlayStatusStore.setState({
+    statuses: {
+      'map:0': { phase: 'rendered' },
+      'map:1:detail': { phase: 'failed', reason: 'page two failed' },
+    },
+  });
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(useOverlayStatusStore.getState().statuses['map:1:detail']).toEqual({
+    phase: 'failed',
+    reason: 'page two failed',
+  });
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({ phase: 'rendered' });
 });

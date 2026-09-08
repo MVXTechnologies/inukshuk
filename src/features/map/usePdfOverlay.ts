@@ -13,8 +13,7 @@ import { chooseRasterSource } from '@core/library/rasterSource';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
-import { File } from 'expo-file-system';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePdfRasterizer, usePdfRasterizerServer, type RasterizeSource } from './PdfRasterizer';
 
 export interface PdfOverlay {
@@ -123,16 +122,14 @@ export function activeTargets(maps: MapDocument[]): Target[] {
  */
 function cachedRaster(docId: string, pageIndex: number, revision: string): string | undefined {
   const key = rasterCacheKey(docId, pageIndex, revision);
-  const inMemory = rasterCache.get(key);
-  if (inMemory !== undefined) {
-    if (new File(inMemory).exists) return inMemory;
-    rasterCache.delete(key);
-  }
+  // Even an in-memory hit must validate the persisted PNG: an interrupted
+  // write from an earlier run must not become a permanently blank overlay.
   const onDisk = storage.existingOverlayPng(rasterFileName(docId, pageIndex, revision));
   if (onDisk !== null) {
     rasterCache.set(key, onDisk);
     return onDisk;
   }
+  rasterCache.delete(key);
   return undefined;
 }
 
@@ -153,7 +150,7 @@ function cachedRaster(docId: string, pageIndex: number, revision: string): strin
  * N: …" (#269) — the snackbar on the map is gone in four seconds, the card
  * line stays until the page renders or is deactivated.
  */
-export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
+export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlaysState {
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
   const setStatus = useOverlayStatusStore((s) => s.setStatus);
@@ -164,7 +161,11 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
     error: null,
   });
 
-  const targets = activeTargets(maps);
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+  const targets = enabled ? activeTargets(maps) : [];
   // A stable key over the active set; the effect re-runs only when it changes.
   const key = JSON.stringify(targets);
 
@@ -275,6 +276,7 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               if (!pending) {
                 pending = (async () => {
                   const origin = await serverOrigin();
+                  if (!enabledRef.current) throw new Error('PDF overlays are hidden');
                   const choice = chooseRasterSource({
                     origin,
                     documentPath: storage.toDocumentPath(t.fileUri),
@@ -288,6 +290,7 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
                     base64 ??= await storage.readFileBase64(t.fileUri);
                     source = { base64 };
                   }
+                  if (!enabledRef.current) throw new Error('PDF overlays are hidden');
                   const startedAt = Date.now();
                   const raster = await rasterize({
                     source,

@@ -239,7 +239,8 @@ export function MapScreen() {
     () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
     [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
   );
-  const { overlays, error: overlayError } = usePdfOverlays(shownMaps);
+  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
@@ -272,7 +273,6 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);

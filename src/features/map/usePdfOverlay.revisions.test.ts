@@ -1,3 +1,5 @@
+import { migrateLibraryIndex } from '@core/library/migrations';
+import { visibleMaps } from '@core/library/visibility';
 import type { GeoReference, MapDocument } from '@core/models';
 import { act, renderHook } from '@testing-library/react-native';
 import type { RasterResult } from './PdfRasterizer';
@@ -46,7 +48,7 @@ jest.mock('@data/storage', () => ({
   fileSizeAt: () => 10,
   readFileBase64: async (uri: string) => (uri.endsWith('new.pdf') ? 'NEW' : 'OLD'),
   existingOverlayPng: (id: string) =>
-    mockFiles.has(`file://cache/${id}.png`) ? `file://cache/${id}.png` : null,
+    mockFiles.get(`file://cache/${id}.png`) ? `file://cache/${id}.png` : null,
   writeOverlayPng: (id: string, content: string) => {
     const uri = `file://cache/${id}.png`;
     mockFiles.set(uri, content);
@@ -270,4 +272,111 @@ it('does not inherit an unresolved render from a replaced provider', async () =>
   expect(replacement).toHaveBeenCalledTimes(1);
   expect(second.result.current.overlays).toHaveLength(1);
   expect(second.result.current.loading).toBe(false);
+});
+
+it('does not schedule hidden PDF overviews and reuses completed cache when shown again', async () => {
+  const target = { ...map, id: 'visibility-gate' };
+  const view = await renderHook(
+    ({ enabled }: { enabled: boolean }) => usePdfOverlays([target], enabled),
+    { initialProps: { enabled: false } },
+  );
+  expect(mockRasterize).not.toHaveBeenCalled();
+  expect(mockServerOrigin).not.toHaveBeenCalled();
+  expect(view.result.current).toEqual({ overlays: [], loading: false, error: null });
+  await view.rerender({ enabled: true });
+  const uri = view.result.current.overlays[0]?.imageUri;
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+  await view.rerender({ enabled: false });
+  expect(view.result.current).toEqual({ overlays: [], loading: false, error: null });
+  await view.rerender({ enabled: true });
+  expect(view.result.current.overlays[0]?.imageUri).toBe(uri);
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+});
+
+it('does not enqueue a prepared source after PDFs are hidden', async () => {
+  let finish!: (origin: string | null) => void;
+  mockServerOrigin.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = await renderHook(
+    ({ enabled }: { enabled: boolean }) =>
+      usePdfOverlays([{ ...map, id: 'hide-during-startup' }], enabled),
+    { initialProps: { enabled: true } },
+  );
+  expect(view.result.current.loading).toBe(true);
+  await view.rerender({ enabled: false });
+  await act(async () => finish(null));
+  expect(mockRasterize).not.toHaveBeenCalled();
+  expect(view.result.current).toEqual({ overlays: [], loading: false, error: null });
+  await view.rerender({ enabled: true });
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+  expect(view.result.current.overlays).toHaveLength(1);
+});
+
+it('restores every active page after restart regardless of the selected map', async () => {
+  const restored = migrateLibraryIndex({
+    maps: [
+      { ...map, id: 'large-first' },
+      { ...map, id: 'selected-small' },
+    ],
+    activeMapId: 'selected-small',
+  });
+  const shown = visibleMaps(restored.mapVisibilityMode, restored.visibleFolderIds, restored.maps);
+  expect(shown.map((m) => [m.id, m.activePages])).toEqual([
+    ['large-first', [0]],
+    ['selected-small', [0]],
+  ]);
+  const view = await renderHook(() => usePdfOverlays(shown, false));
+  expect(view.result.current.overlays).toEqual([]);
+  expect(mockRasterize).not.toHaveBeenCalled();
+});
+
+it('keeps a render that finishes while hidden in cache without starting the next map', async () => {
+  let finish!: (value: RasterResult) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const targets = [
+    { ...map, id: 'hide-running' },
+    { ...map, id: 'hide-waiting' },
+  ];
+  const view = await renderHook(
+    ({ enabled }: { enabled: boolean }) => usePdfOverlays(targets, enabled),
+    { initialProps: { enabled: true } },
+  );
+  await view.rerender({ enabled: false });
+  await act(async () =>
+    finish({
+      pngDataUri: 'data:image/png;base64,DONE',
+      widthPx: 2048,
+      heightPx: 2048,
+      pageWidthPt: 100,
+      pageHeightPt: 100,
+      pageCount: 1,
+      loadMs: 1,
+      renderMs: 1,
+    }),
+  );
+  expect(view.result.current).toEqual({ overlays: [], loading: false, error: null });
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+  await view.rerender({ enabled: true });
+  expect(view.result.current.overlays).toHaveLength(2);
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+});
+
+it('rerenders a previously cached overview when its persisted file becomes empty', async () => {
+  const target = { ...map, id: 'invalid-memory-hit' };
+  const first = await renderHook(() => usePdfOverlays([target]));
+  const uri = first.result.current.overlays[0]!.imageUri;
+  await first.unmount();
+  mockFiles.set(uri, '');
+  const second = await renderHook(() => usePdfOverlays([target]));
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  expect(mockFiles.get(second.result.current.overlays[0]!.imageUri)).toBe('OLD');
 });

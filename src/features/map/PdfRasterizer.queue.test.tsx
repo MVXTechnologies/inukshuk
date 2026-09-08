@@ -7,6 +7,16 @@ import { deleteNativePdfOutput, nativePdfAvailable, renderNativePdfCrop } from '
 
 const mockInject = jest.fn();
 const mockDownloadAsset = jest.fn(async () => ({ localUri: 'file://asset' }));
+const mockBeginPdfRender = jest.fn(({ fileUri }: { fileUri: string }) => `token:${fileUri}`);
+const mockFinishPdfRender = jest.fn();
+jest.mock(
+  '@data/pdfRenderRecovery',
+  () => ({
+    beginPdfRender: (...args: unknown[]) => mockBeginPdfRender(...(args as [{ fileUri: string }])),
+    finishPdfRender: (...args: unknown[]) => mockFinishPdfRender(...args),
+  }),
+  { virtual: true },
+);
 let mockProps: {
   onContentProcessDidTerminate?: () => void;
   onRenderProcessGone?: () => void;
@@ -66,6 +76,105 @@ beforeEach(() => {
   mockDownloadAsset.mockReset().mockResolvedValue({ localUri: 'file://asset' });
 });
 afterEach(() => jest.useRealTimers());
+
+it('does not dispatch a PDF when its recovery checkpoint cannot be persisted', async () => {
+  mockBeginPdfRender.mockImplementationOnce(() => {
+    throw new Error('checkpoint write failed');
+  });
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  await expect(view.result.current(nativeRequest)).rejects.toThrow('checkpoint write failed');
+  expect(renders()).toHaveLength(0);
+  expect(renderNativePdfCrop).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
+it('does not mask a completed render when recovery cleanup fails', async () => {
+  mockFinishPdfRender.mockImplementationOnce(() => {
+    throw new Error('checkpoint cleanup failed');
+  });
+  jest.mocked(renderNativePdfCrop).mockResolvedValueOnce(nativeResult);
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result.current(nativeRequest);
+  await handoff();
+  await expect(pending).resolves.toEqual(nativeResult);
+  await view.unmount();
+});
+
+it('journals dispatched PDF.js work with original file identity even without native support', async () => {
+  jest.mocked(nativePdfAvailable).mockReturnValueOnce(false).mockReturnValueOnce(false);
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const first = view.result.current(nativeRequest).catch(() => undefined);
+  const nextRequest = {
+    ...nativeRequest,
+    nativePage: { ...nativeRequest.nativePage, fileUri: 'file:///next.pdf' },
+  };
+  const next = view.result.current(nextRequest).catch(() => undefined);
+  expect(mockBeginPdfRender).not.toHaveBeenCalled();
+  await ready();
+  expect(mockBeginPdfRender).toHaveBeenCalledTimes(1);
+  expect(mockBeginPdfRender).toHaveBeenCalledWith({
+    fileUri: nativeRequest.nativePage.fileUri,
+    pageIndex: 0,
+  });
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: {
+        data: JSON.stringify({
+          id: 'req-1',
+          ok: true,
+          ...nativeResult,
+          pngDataUri: 'data:image/png;base64,PNG',
+        }),
+      },
+    });
+  });
+  await first;
+  expect(mockFinishPdfRender).toHaveBeenCalledWith(`token:${nativeRequest.nativePage.fileUri}`);
+  expect(mockBeginPdfRender).toHaveBeenCalledTimes(2);
+  await view.unmount();
+  await next;
+});
+
+it('keeps the native unsupported fallback protected by the same journal token', async () => {
+  jest.mocked(renderNativePdfCrop).mockRejectedValueOnce({ code: 'E_PDF_UNSUPPORTED' });
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result.current(nativeRequest).catch(() => undefined);
+  await handoff();
+  expect(mockBeginPdfRender).toHaveBeenCalledTimes(1);
+  expect(mockFinishPdfRender).not.toHaveBeenCalled();
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  await pending;
+  expect(mockFinishPdfRender).toHaveBeenCalledWith(`token:${nativeRequest.nativePage.fileUri}`);
+  await view.unmount();
+});
+
+it.each(['timeout', 'unmount'] as const)(
+  'keeps the native journal after %s until actual completion',
+  async (reason) => {
+    let finish!: (result: typeof nativeResult) => void;
+    jest.mocked(renderNativePdfCrop).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    await ready();
+    const pending = view.result.current(nativeRequest).catch(() => undefined);
+    await handoff();
+    expect(mockBeginPdfRender).toHaveBeenCalledTimes(1);
+    if (reason === 'timeout') await act(async () => jest.advanceTimersByTime(45_000));
+    else await view.unmount();
+    await pending;
+    expect(mockFinishPdfRender).not.toHaveBeenCalled();
+    await act(async () => finish(nativeResult));
+    expect(mockFinishPdfRender).toHaveBeenCalledWith(`token:${nativeRequest.nativePage.fileUri}`);
+    if (reason === 'timeout') await view.unmount();
+  },
+);
 
 it('settles server readiness when unmounted before PDF.js assets finish loading', async () => {
   mockDownloadAsset.mockImplementation(() => new Promise(() => {}));

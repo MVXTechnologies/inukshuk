@@ -13,6 +13,12 @@ import { removeNoteById } from '@core/library/notes';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as storage from '@data/storage';
+import {
+  clearInterruptedPdfRender,
+  protectInterruptedPdfRender,
+  readInterruptedPdfRender,
+} from '@data/pdfRenderRecovery';
+import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
 /**
@@ -34,6 +40,8 @@ export interface ImportedTrack {
 
 interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   hydrated: boolean;
+  pdfRecoveryNotice: string | null;
+  dismissPdfRecoveryNotice: () => void;
   hydrate: () => Promise<void>;
   addMap: (doc: MapDocument) => void;
   /**
@@ -256,11 +264,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   customCategories: [],
   waypoints: [],
   hydrated: false,
+  pdfRecoveryNotice: null,
+  dismissPdfRecoveryNotice: () => set({ pdfRecoveryNotice: null }),
 
   hydrate: () => {
     if (get().hydrated) return Promise.resolve();
     hydration ??= (async () => {
       storage.ensureStorage();
+      // Snapshot before publishing any maps: restored active pages otherwise
+      // immediately retry the render interrupted by the previous process exit.
+      const interrupted = readInterruptedPdfRender();
       const raw = await storage.readIndex<unknown>();
       if (raw) {
         // Route every load through the schema-version migration ladder: legacy
@@ -270,7 +283,37 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         const { schemaVersion: _v, ...index } = resolveStoredPaths(
           migrateLibraryIndex(raw, storage.documentDirUri()),
         );
-        set({ ...index, hydrated: true });
+        let pdfRecoveryNotice: string | null = null;
+        if (interrupted) {
+          const map = index.maps.find(
+            (m) =>
+              storage.toDocumentPath(m.fileUri) === storage.toDocumentPath(interrupted.fileUri),
+          );
+          if (map?.activePages.includes(interrupted.pageIndex)) {
+            index.maps = index.maps.map((m) =>
+              m === map
+                ? { ...m, activePages: m.activePages.filter((p) => p !== interrupted.pageIndex) }
+                : m,
+            );
+            pdfRecoveryNotice = `Paused page ${interrupted.pageIndex + 1} of “${map.name}” after an interrupted render. Your maps are saved. Re-enable this page in Library to retry.`;
+            try {
+              // Save the paused page before consuming evidence. If storage is
+              // full, keep the checkpoint and still expose the safe library.
+              persist({ ...index, hydrated: true });
+              clearInterruptedPdfRender(interrupted.token);
+            } catch (error) {
+              protectInterruptedPdfRender(interrupted.token);
+              reportError(error, 'pdf-recovery-save');
+            }
+          } else {
+            try {
+              clearInterruptedPdfRender(interrupted.token);
+            } catch (error) {
+              reportError(error, 'pdf-recovery-cleanup');
+            }
+          }
+        }
+        set({ ...index, hydrated: true, pdfRecoveryNotice });
       } else {
         set({ hydrated: true });
       }
