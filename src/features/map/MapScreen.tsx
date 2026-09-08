@@ -62,6 +62,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { HeadingCone } from './components/HeadingCone';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
+import { RenderingToasts } from './components/RenderingToasts';
 import { RecordControls } from './components/RecordControls';
 import { ScaleBar } from './components/ScaleBar';
 import { StatsHud } from './components/StatsHud';
@@ -2144,6 +2145,9 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View style={styles.bottom} pointerEvents="box-none">
+        {/* Pages still in the rasterizer, one dismissible row each (#269).
+            First in the column so they stack above the scale bar. */}
+        <RenderingToasts />
         {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
             under the compass). It is the FIRST child of the bottom chrome
             COLUMN rather than absolutely positioned in the corner, so it
