@@ -38,11 +38,18 @@ export function servedFileUrl(origin: string, documentPath: string): string | nu
  * A lighttpd config fragment that denies every URL outside `prefixes`.
  *
  * `url.access-deny = ( "" )` is mod_access's "deny everything" spelling; wrapped
- * in a negated URL match it becomes an allowlist. The pattern avoids backslash
- * escapes on purpose — the `.` in `.rasterizer` goes through a character class
- * — so it survives lighttpd's own string parsing unchanged.
+ * in a negated URL match it becomes an allowlist. mod_access is compiled into
+ * the static-server build but NOT in its default module list — without the
+ * `server.modules +=` line lighttpd logs "unknown config-key: url.access-deny
+ * (ignored)" and serves everything (seen on the first device run of #269).
+ * The pattern avoids backslash escapes on purpose — the `.` in `.rasterizer`
+ * goes through a character class — so it survives lighttpd's own string
+ * parsing unchanged.
  */
 export function lighttpdAccessConfig(prefixes: readonly string[]): string {
   const alternatives = prefixes.map((p) => p.replace(/\./g, '[.]')).join('|');
-  return `$HTTP["url"] !~ "^/(${alternatives})/" {\n  url.access-deny = ( "" )\n}`;
+  return (
+    `server.modules += ( "mod_access" )\n` +
+    `$HTTP["url"] !~ "^/(${alternatives})/" {\n  url.access-deny = ( "" )\n}`
+  );
 }

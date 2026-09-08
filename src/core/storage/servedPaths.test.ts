@@ -41,7 +41,8 @@ describe('lighttpdAccessConfig', () => {
   it('denies everything outside the served prefixes, without backslashes', () => {
     const config = lighttpdAccessConfig(SERVED_DOCUMENT_PREFIXES);
     expect(config).toBe(
-      '$HTTP["url"] !~ "^/(maps|offline-styles|[.]rasterizer)/" {\n  url.access-deny = ( "" )\n}',
+      'server.modules += ( "mod_access" )\n' +
+        '$HTTP["url"] !~ "^/(maps|offline-styles|[.]rasterizer)/" {\n  url.access-deny = ( "" )\n}',
     );
     expect(config).not.toContain('\\');
   });
