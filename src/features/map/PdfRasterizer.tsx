@@ -625,16 +625,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       originRef.current = null;
       applyEngine({ kind: 'inline', html });
       busyRef.current = false;
-      const stranded = queueRef.current.filter((q) => q.args.source.url !== undefined);
+      // Requests that can still run on the inline page stay queued; every other
+      // pending request — the in-flight one, and every queued URL request — is
+      // rejected now.
       queueRef.current = queueRef.current.filter((q) => q.args.source.url === undefined);
       for (const [id, pending] of pendingRef.current) {
-        const inQueue = stranded.some((q) => q.id === id);
-        const inFlight = !queueRef.current.some((q) => q.id === id) && !inQueue;
-        if (inQueue || inFlight) {
-          clearTimeout(pending.timeout);
-          pendingRef.current.delete(id);
-          pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
-        }
+        if (queueRef.current.some((q) => q.id === id)) continue;
+        clearTimeout(pending.timeout);
+        pendingRef.current.delete(id);
+        pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
       }
     },
     [applyEngine],
