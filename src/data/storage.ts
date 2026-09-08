@@ -173,6 +173,17 @@ export function writeOverlayPng(id: string, base64Png: string): string {
 }
 
 /**
+ * The `file://` uri of a PNG {@link writeOverlayPng} wrote earlier under
+ * `id`, or `null` when it is gone (never written, or the OS reclaimed the
+ * cache). This is what makes a relaunch instant for an already-rendered map
+ * (#269): the in-memory raster cache dies with the process, the file does not.
+ */
+export function existingOverlayPng(id: string): string | null {
+  const file = new File(overlaysDir(), `${id}.png`);
+  return file.exists ? file.uri : null;
+}
+
+/**
  * Write raw PNG bytes into the cache and return a cache-busting `file://`
  * uri (marine wave D: the client-rendered depth-chart drape).
  *

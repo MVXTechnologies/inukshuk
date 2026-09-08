@@ -14,6 +14,7 @@ import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
@@ -48,6 +49,7 @@ import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { georeferenceNotice } from '@core/library/overlayPages';
+import { renderStatusLine } from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -103,6 +105,8 @@ export function LibraryScreen() {
   const renameMap = useLibraryStore((s) => s.renameMap);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
+  // Per-page render outcome from the map's overlay pipeline (#269).
+  const overlayStatuses = useOverlayStatusStore((s) => s.statuses);
   const addTrack = useLibraryStore((s) => s.addTrack);
   const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
@@ -534,6 +538,10 @@ export function LibraryScreen() {
     // "1 page(s) · 1/1 shown" over a sheet the overlay silently skips is the
     // exact lie this replaces.
     const notice = georeferenceNotice(m);
+    // "Rendering page N…" / "Couldn't render page N: <reason>" — so a page
+    // that never appears on the map always says why, here, not only in a
+    // four-second snackbar on the map screen (#269).
+    const renderStatus = renderStatusLine(m, overlayStatuses);
     const active = m.activePages.length;
     const expanded = expandedMap === m.id;
     return (
@@ -562,6 +570,20 @@ export function LibraryScreen() {
                 {notice ??
                   `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`}
               </Text>
+              {renderStatus && (
+                <Text
+                  variant="bodySmall"
+                  numberOfLines={2}
+                  style={{
+                    color:
+                      renderStatus.kind === 'failed'
+                        ? theme.colors.error
+                        : theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {renderStatus.text}
+                </Text>
+              )}
             </View>
           </Pressable>
           {hasPages && (
