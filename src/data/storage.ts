@@ -154,6 +154,21 @@ function overlaysDir(): Directory {
   return new Directory(Paths.cache, 'overlays');
 }
 
+/** Detail rasters are a bounded session cache; discard leftovers after a crash. */
+export function clearPdfDetailPngs(): void {
+  const dir = overlaysDir();
+  if (!dir.exists) return;
+  for (const entry of dir.list()) {
+    if (entry instanceof File && entry.name.startsWith('pdf-detail-')) {
+      try {
+        entry.delete();
+      } catch {
+        /* OS cache reclamation is best effort. */
+      }
+    }
+  }
+}
+
 /**
  * Write a base64-encoded PNG into the cache and return its `file://` uri.
  *

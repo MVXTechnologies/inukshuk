@@ -1,3 +1,4 @@
+import { type PdfCrop } from '@core/geo/pdfDetail';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
  *
@@ -92,6 +93,8 @@ export interface RasterizeArgs {
   pageIndex: number;
   /** Target render width in CSS px; height derived from page aspect. Default 2048. */
   targetWidthPx?: number;
+  /** Visible crop in normalized, unrotated top-left page space. */
+  crop?: PdfCrop | null;
 }
 
 export interface RasterResult {
@@ -127,6 +130,7 @@ interface WebViewErrorMessage {
   id: string;
   ok: false;
   error: string;
+  resetEngine?: boolean;
 }
 interface WebViewReadyMessage {
   id: '__ready__';
@@ -144,6 +148,7 @@ interface PendingRequest {
   resolve: (result: RasterResult) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  expire: () => void;
 }
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
@@ -193,6 +198,23 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
 (function () {
   'use strict';
   var WORKER_SOURCE = ${workerLiteral};
+  // Keep this ES-compatible function literal: Hermes cannot serialize a
+  // compiled function back to source with Function.prototype.toString().
+  function cropGeometry(pageWidth, pageHeight, targetWidth, crop) {
+    var r = crop || { x0: 0, y0: 0, x1: 1, y1: 1 };
+    if (![pageWidth, pageHeight, targetWidth, r.x0, r.y0, r.x1, r.y1].every(Number.isFinite) ||
+        pageWidth <= 0 || pageHeight <= 0 || targetWidth <= 0 ||
+        r.x0 < 0 || r.y0 < 0 || r.x1 > 1 || r.y1 > 1 || r.x1 <= r.x0 || r.y1 <= r.y0) {
+      throw new Error('Invalid PDF crop dimensions');
+    }
+    var width = pageWidth * (r.x1 - r.x0);
+    var height = pageHeight * (r.y1 - r.y0);
+    var edge = crop ? 2048 : 4096;
+    var pixels = (crop ? 3 : 8) * 1024 * 1024;
+    var scale = Math.min(targetWidth / width, edge / width, edge / height, Math.sqrt(pixels / (width * height)));
+    return { widthPx: Math.max(1, Math.floor(width * scale)), heightPx: Math.max(1, Math.floor(height * scale)),
+      scale: scale, offsetX: -r.x0 * pageWidth * scale, offsetY: -r.y0 * pageHeight * scale };
+  }
   var post = function (msg) {
     if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
       window.ReactNativeWebView.postMessage(JSON.stringify(msg));
@@ -249,7 +271,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   var LOAD_WATCHDOG_MS = 12000;
   var RANGE_CHUNK_BYTES = 1048576;
 
-  function renderOnce(id, pageIndex, targetWidthPx, input, attempt) {
+  function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop) {
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -278,6 +300,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
 
     var t0 = Date.now();
     var loadingTask = window.pdfjsLib.getDocument(params);
+    var destruction = null;
+    function releaseDocument() {
+      if (!destruction) destruction = Promise.resolve().then(function () { return loadingTask.destroy(); });
+      return destruction;
+    }
+    function releaseFailure(err) {
+      post({ id: id, ok: false, resetEngine: true, error: 'PDF resource cleanup failed: ' + String(err) });
+    }
 
     // Three-way state, not one flag: a stall hands the id to the retry (so this
     // attempt must go quiet), while an error AFTER the document opened — page
@@ -290,14 +320,15 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     function onStall() {
       if (stalled || loaded) return;
       stalled = true;
-      try { loadingTask.destroy(); } catch (e) {}
-      if (attempt === 0) {
-        // Drop to the main-thread fake worker and retry once.
-        try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
-        renderOnce(id, pageIndex, targetWidthPx, input, 1);
-      } else {
-        post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' });
-      }
+      releaseDocument().then(function () {
+        if (attempt === 0) {
+          // Drop to the main-thread fake worker and retry once.
+          try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
+          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop);
+        } else {
+          post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' });
+        }
+      }, releaseFailure);
     }
     function armWatchdog() {
       if (watchdog !== null) clearTimeout(watchdog);
@@ -329,10 +360,11 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var baseViewport = page.getViewport({ scale: 1, rotation: 0 });
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
-          var scale = targetWidthPx / pageWidthPt;
+          var geometry = cropGeometry(pageWidthPt, pageHeightPt, targetWidthPx, crop);
+          var scale = geometry.scale;
           var viewport = page.getViewport({ scale: scale, rotation: 0 });
-          var widthPx = Math.max(1, Math.round(viewport.width));
-          var heightPx = Math.max(1, Math.round(viewport.height));
+          var widthPx = geometry.widthPx;
+          var heightPx = geometry.heightPx;
 
           var canvas = document.getElementById('canvas');
           canvas.width = widthPx;
@@ -342,7 +374,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           ctx.fillRect(0, 0, widthPx, heightPx);
 
           var t1 = Date.now();
-          return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+          return page.render({ canvasContext: ctx, viewport: viewport, transform: [1, 0, 0, 1, geometry.offsetX, geometry.offsetY] }).promise.then(function () {
             var pngDataUri = canvas.toDataURL('image/png');
             // Free the canvas memory before reporting back.
             canvas.width = 1;
@@ -350,19 +382,19 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
             var renderMs = Date.now() - t1;
             // Release the document (and, on the served path, its chunk buffer)
             // before the next request; the WebView is a long-lived process.
-            try { doc.cleanup(); } catch (e) {}
-            try { loadingTask.destroy(); } catch (e) {}
-            post({
-              id: id,
-              ok: true,
-              pngDataUri: pngDataUri,
-              widthPx: widthPx,
-              heightPx: heightPx,
-              pageWidthPt: pageWidthPt,
-              pageHeightPt: pageHeightPt,
-              pageCount: pageCount,
-              loadMs: loadMs,
-              renderMs: renderMs,
+            return releaseDocument().then(function () {
+              post({
+                id: id,
+                ok: true,
+                pngDataUri: pngDataUri,
+                widthPx: widthPx,
+                heightPx: heightPx,
+                pageWidthPt: pageWidthPt,
+                pageHeightPt: pageHeightPt,
+                pageCount: pageCount,
+                loadMs: loadMs,
+                renderMs: renderMs,
+              });
             });
           });
         });
@@ -373,13 +405,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (stalled) return;
         loaded = true;
         clearTimeout(watchdog);
-        try { loadingTask.destroy(); } catch (e) {}
-        post({ id: id, ok: false, error: (err && err.message) ? err.message : String(err) });
+        return releaseDocument().then(function () {
+          post({ id: id, ok: false, error: (err && err.message) ? err.message : String(err) });
+        }, releaseFailure);
       });
   }
 
   // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
-  window.__pdfRender = function (id, pageIndex, targetWidthPx, url) {
+  window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop) {
     var input;
     if (url) {
       input = { url: url };
@@ -387,7 +420,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       input = { base64: chunks.join('') };
     }
     chunks = [];
-    renderOnce(id, pageIndex, targetWidthPx, input, 0);
+    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop);
   };
 
   post({ id: '__ready__', ok: true });
@@ -531,13 +564,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     // Returning `true` from injected JS is required by react-native-webview.
+    const pending = pendingRef.current.get(id);
+    if (pending) {
+      // Queue/startup waiting is bounded separately from actual rendering.
+      clearTimeout(pending.timeout);
+      pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
+    }
     const idLiteral = JSON.stringify(id);
     const { source } = args;
     if (source.url !== undefined) {
       // Served: the request is four small values; pdf.js fetches the bytes.
       const urlLiteral = JSON.stringify(source.url);
       wv.injectJavaScript(
-        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}); true;`,
+        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}, ${JSON.stringify(args.crop)}); true;`,
       );
       return;
     }
@@ -549,7 +588,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       wv.injectJavaScript(`window.__pdfAppend && window.__pdfAppend(${chunkLiteral}); true;`);
     }
     wv.injectJavaScript(
-      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null); true;`,
+      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}); true;`,
     );
   }, []);
 
@@ -603,6 +642,14 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         });
       } else {
         pending.reject(new Error(message.error));
+        if (message.resetEngine) {
+          activeRequestRef.current = null;
+          busyRef.current = false;
+          readyRef.current = false;
+          setReady(false);
+          setEngineGeneration((generation) => generation + 1);
+          return;
+        }
       }
       finishCurrent();
     },
@@ -700,8 +747,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         source,
         pageIndex: args.pageIndex,
         targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
+        crop: args.crop ?? null,
       };
-      const timeout = setTimeout(() => {
+      const expire = () => {
         const stillPending = pendingRef.current.get(id);
         if (stillPending) {
           pendingRef.current.delete(id);
@@ -722,9 +770,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             pumpQueueRef.current();
           }
         }
-      }, RENDER_TIMEOUT_MS);
+      };
+      const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
 
-      pendingRef.current.set(id, { resolve, reject, timeout });
+      pendingRef.current.set(id, { resolve, reject, timeout, expire });
       queueRef.current.push({ id, args: normalized });
       pumpQueueRef.current();
     });
@@ -793,7 +842,7 @@ function useRasterizerContext(): RasterizerContextValue {
 
 /**
  * Returns a function that resolves with the rendered page. Calls are serialized
- * (one render at a time) and reject on error or after a 45s timeout.
+ * (one render at a time), with separate 45s queue/startup and active budgets.
  */
 export function usePdfRasterizer(): RasterizeFn {
   return useRasterizerContext().rasterize;

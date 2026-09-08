@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm';
+import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import { PdfRasterizerProvider, usePdfRasterizer } from './PdfRasterizer';
@@ -116,4 +118,147 @@ it('replaces a timed-out engine before starting another render', async () => {
   });
   expect(await next).toEqual(result);
   await view.unmount();
+});
+
+it.each([{ base64: 'PDF' }, { url: 'http://127.0.0.1:8080/maps/test.pdf' }])(
+  'forwards a requested crop to the engine with source %j',
+  async (source) => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    await ready();
+    const crop = { x0: 0.25, y0: 0.5, x1: 0.5, y1: 0.75 };
+    const pending = view.result.current({ ...request, source, crop }).catch(() => undefined);
+    expect(renders()[0]?.[0]).toContain(JSON.stringify(crop));
+    await view.unmount();
+    await pending;
+  },
+);
+
+it('gives a dispatched request a full render budget after engine startup', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const rejected = jest.fn();
+  const pending = view.result.current(request).catch(rejected);
+  await act(async () => {
+    jest.advanceTimersByTime(30_000);
+  });
+  await ready();
+  await act(async () => {
+    jest.advanceTimersByTime(16_000);
+  });
+  expect(rejected).not.toHaveBeenCalled();
+  expect(mockMounts).toBe(1);
+  await act(async () => {
+    jest.advanceTimersByTime(29_000);
+  });
+  expect(rejected).toHaveBeenCalledTimes(1);
+  await view.unmount();
+  await pending;
+});
+
+it.each([false, true])(
+  'waits for crop document destruction (cleanup failure: %s)',
+  async (fail) => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    const html = jest.mocked(writeServedText).mock.calls.at(-1)?.[1] ?? '';
+    const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
+    expect(script).toBeDefined();
+    const posted: Record<string, unknown>[] = [];
+    const draws: Record<string, unknown>[] = [];
+    const ctx = { fillStyle: '', fillRect: jest.fn() };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ctx,
+      toDataURL: () => 'data:image/png;base64,PNG',
+    };
+    const page = {
+      getViewport: ({ scale, rotation }: { scale: number; rotation: number }) => {
+        expect(rotation).toBe(0);
+        return { width: 1000 * scale, height: 800 * scale };
+      },
+      render: (args: Record<string, unknown>) => {
+        draws.push({ ...args, width: canvas.width, height: canvas.height });
+        return { promise: Promise.resolve() };
+      },
+    };
+    const doc = { numPages: 1, getPage: async () => page, cleanup: jest.fn() };
+    let finishDestroy!: () => void;
+    const destroyed = new Promise<void>((resolve, reject) => {
+      finishDestroy = () => (fail ? reject(new Error('cleanup failed')) : resolve());
+    });
+    const window = {
+      pdfjsLib: {
+        GlobalWorkerOptions: { workerSrc: '' },
+        getDocument: () => ({ promise: Promise.resolve(doc), destroy: () => destroyed }),
+      },
+      ReactNativeWebView: { postMessage: (message: string) => posted.push(JSON.parse(message)) },
+      __pdfRender: undefined as
+        undefined | ((id: string, page: number, width: number, url: string, crop: object) => void),
+    };
+    runInNewContext(script!, {
+      window,
+      document: { getElementById: () => canvas },
+      setTimeout,
+      clearTimeout,
+    });
+    await act(async () => {
+      window.__pdfRender!('crop', 0, 1000, 'http://localhost/maps/a.pdf', {
+        x0: 0.25,
+        y0: 0.5,
+        x1: 0.5,
+        y1: 0.75,
+      });
+    });
+    expect(draws[0]).toMatchObject({
+      width: 1000,
+      height: 800,
+      transform: [1, 0, 0, 1, -1000, -1600],
+    });
+    expect(posted.some((message) => message.id === 'crop')).toBe(false);
+    await act(async () => {
+      finishDestroy();
+    });
+    expect(posted.at(-1)).toMatchObject(
+      fail
+        ? {
+            id: 'crop',
+            ok: false,
+            resetEngine: true,
+          }
+        : {
+            id: 'crop',
+            ok: true,
+            pageWidthPt: 1000,
+            pageHeightPt: 800,
+            widthPx: 1000,
+            heightPx: 800,
+          },
+    );
+    expect(canvas.width).toBe(1);
+    await view.unmount();
+  },
+);
+
+it('replaces the engine after cleanup failure before dispatching waiting work', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const first = view.result.current(request).catch(() => undefined);
+  const next = view.result.current(request).catch(() => undefined);
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: {
+        data: JSON.stringify({
+          id: 'req-1',
+          ok: false,
+          error: 'cleanup failed',
+          resetEngine: true,
+        }),
+      },
+    });
+  });
+  expect(mockMounts).toBe(2);
+  expect(renders()).toHaveLength(1);
+  await ready();
+  expect(renders()).toHaveLength(2);
+  await view.unmount();
+  await Promise.all([first, next]);
 });
