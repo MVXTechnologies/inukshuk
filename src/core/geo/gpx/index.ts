@@ -152,7 +152,9 @@ const extractHeartRate = (raw: AnyRecord): number | undefined => {
 const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
-  if (lat === undefined || lon === undefined) return undefined;
+  if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return undefined;
+  }
   const altitude = toNum(textOf(raw['ele']));
   const time = isoToEpochMs(textOf(raw['time']));
   const speed = extractSpeed(raw);
@@ -173,7 +175,9 @@ const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
 const parseWaypoint = (raw: AnyRecord): GpxWaypoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
-  if (lat === undefined || lon === undefined) return undefined;
+  if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return undefined;
+  }
   const wpt: GpxWaypoint = { latitude: lat, longitude: lon };
   const name = textOf(raw['name']);
   if (name !== undefined) wpt.name = name;

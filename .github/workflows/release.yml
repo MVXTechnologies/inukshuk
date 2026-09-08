@@ -1,7 +1,7 @@
 name: Release (Build & Submit to Stores)
 
 # Builds production binaries on EAS and submits them to the App Store
-# (TestFlight) and Google Play (internal track). Triggered by pushing a version
+# (TestFlight) and Google Play (production track). Triggered by pushing a version
 # tag like `v1.0.0`, or manually. No-ops until the required secrets are set —
 # see docs/DEPLOYMENT.md for the full account/secret checklist.
 on:
@@ -48,17 +48,25 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - run: npm ci
+      - name: Verify SDK-pinned dependency versions
+        run: npx expo install --check
+      - name: Verify release candidate
+        run: npm run check
 
       # Materialize store credentials from secrets into the files referenced by
       # eas.json's submit profile. Missing secrets simply produce empty files;
       # eas submit will then report the specific missing credential.
       - name: Write Google Play service account key
         if: env.HAS_GSA == 'true'
-        run: printf '%s' '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > google-service-account.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > google-service-account.json
 
       - name: Write App Store Connect API key
         if: env.HAS_ASC == 'true'
-        run: printf '%s' '${{ secrets.ASC_API_KEY_P8 }}' > asc-api-key.p8
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: printf '%s' "$ASC_API_KEY_P8" > asc-api-key.p8
 
       - name: Build and submit
         run: |

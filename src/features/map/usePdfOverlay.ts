@@ -1,3 +1,4 @@
+import { fnv1a32 } from '@core/encoding/fnv1a';
 import type { BoundingBox, GeoReference, LngLat, MapDocument } from '@core/models';
 import {
   bboxFromCorners,
@@ -35,6 +36,7 @@ export interface PdfOverlaysState {
 interface Target {
   docId: string;
   fileUri: string;
+  revision: string;
   geo: GeoReference;
 }
 
@@ -45,7 +47,7 @@ interface Target {
 const OVERLAY_TARGET_WIDTH_PX = 2048;
 
 /**
- * Cache of already-rasterized overlay PNGs: `${docId}:${pageIndex}:${widthPx}`
+ * Cache of already-rasterized overlay PNGs: `${docId}:${revision}:${pageIndex}:${widthPx}`
  * → the written `file://` uri. Rasterizing costs a WebView render of the page
  * (and, on the bridge fallback, a full base64 read of the PDF), so entries
  * live at module level to survive page activation toggles and screen
@@ -59,13 +61,13 @@ const OVERLAY_TARGET_WIDTH_PX = 2048;
  */
 const rasterCache = new Map<string, string>();
 
-function rasterCacheKey(docId: string, pageIndex: number): string {
-  return `${docId}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
+function rasterCacheKey(docId: string, pageIndex: number, revision: string): string {
+  return `${docId}:${revision}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
 }
 
 /** The on-disk name of a page's raster (without extension). */
-function rasterFileName(docId: string, pageIndex: number): string {
-  return `${docId}_${pageIndex}_${OVERLAY_TARGET_WIDTH_PX}`;
+function rasterFileName(docId: string, pageIndex: number, revision: string): string {
+  return `${docId}_${revision}_${pageIndex}_${OVERLAY_TARGET_WIDTH_PX}`;
 }
 
 /**
@@ -93,12 +95,15 @@ export function activeTargets(maps: MapDocument[]): Target[] {
   const targets: Target[] = [];
   for (const m of maps) {
     if (!m.fileUri) continue;
+    // Imported PDFs have unique filenames. Ignore the container prefix, which
+    // can rotate on iOS without changing the actual document.
+    const revision = `${m.importedAt}_${fnv1a32(m.fileUri.slice(m.fileUri.lastIndexOf('/') + 1))}`;
     for (const pageIndex of new Set(m.activePages)) {
       // The PRIMARY viewport, not the first one listed: AUSTopo sheets put a
       // whole-of-Australia locator inset ahead of the map, and taking the
       // first georeference draws the sheet stretched across the continent.
       const geo = primaryGeoreferenceForPage(m.georeferences, pageIndex);
-      if (geo) targets.push({ docId: m.id, fileUri: m.fileUri, geo });
+      if (geo) targets.push({ docId: m.id, fileUri: m.fileUri, revision, geo });
     }
   }
   return targets;
@@ -108,14 +113,14 @@ export function activeTargets(maps: MapDocument[]): Target[] {
  * A page's raster, from the in-memory cache, then from disk, or `undefined`
  * when it has to be rendered. Both are verified against the filesystem.
  */
-function cachedRaster(docId: string, pageIndex: number): string | undefined {
-  const key = rasterCacheKey(docId, pageIndex);
+function cachedRaster(docId: string, pageIndex: number, revision: string): string | undefined {
+  const key = rasterCacheKey(docId, pageIndex, revision);
   const inMemory = rasterCache.get(key);
   if (inMemory !== undefined) {
     if (new File(inMemory).exists) return inMemory;
     rasterCache.delete(key);
   }
-  const onDisk = storage.existingOverlayPng(rasterFileName(docId, pageIndex));
+  const onDisk = storage.existingOverlayPng(rasterFileName(docId, pageIndex, revision));
   if (onDisk !== null) {
     rasterCache.set(key, onDisk);
     return onDisk;
@@ -153,7 +158,7 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
 
   const targets = activeTargets(maps);
   // A stable key over the active set; the effect re-runs only when it changes.
-  const key = targets.map((t) => `${t.docId}:${t.geo.pageIndex}`).join('|');
+  const key = JSON.stringify(targets);
 
   // Drop cache entries whose map left the library. Keyed on `maps` (not `key`):
   // removing an already-deactivated map never changes the active-set key.
@@ -234,7 +239,7 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
             // The raster is geo-independent (the whole page at a fixed width),
             // so a cached PNG stays valid even if the georeference changes;
             // only the corners above are recomputed.
-            let imageUri = cachedRaster(t.docId, geo.pageIndex);
+            let imageUri = cachedRaster(t.docId, geo.pageIndex, t.revision);
             if (!imageUri) {
               if (!cancelled) setStatus(statusKey, { phase: 'rendering' });
               // Served over loopback when the engine has a server; the bridge
@@ -272,8 +277,11 @@ export function usePdfOverlays(maps: MapDocument[]): PdfOverlaysState {
               // valid, and the next run finds it in the cache instead of
               // paying for the render twice.
               const pngBase64 = raster.pngDataUri.replace(/^data:image\/png;base64,/, '');
-              imageUri = storage.writeOverlayPng(rasterFileName(t.docId, geo.pageIndex), pngBase64);
-              rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex), imageUri);
+              imageUri = storage.writeOverlayPng(
+                rasterFileName(t.docId, geo.pageIndex, t.revision),
+                pngBase64,
+              );
+              rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), imageUri);
               if (cancelled) return;
             }
             setStatus(statusKey, { phase: 'rendered' });

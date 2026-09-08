@@ -35,7 +35,7 @@ export interface RasterSourceArgs {
   origin: string | null;
   /** Document-relative path of the PDF (`maps/<id>.pdf`), or an absolute uri. */
   documentPath: string;
-  /** File size in bytes; 0 when unknown (the inline path is then attempted). */
+  /** File size in bytes; 0 when unknown (only the streaming path is safe). */
   sizeBytes: number;
 }
 
@@ -47,6 +47,12 @@ export function chooseRasterSource({
   if (origin !== null) {
     const url = servedFileUrl(origin, documentPath);
     if (url !== null) return { kind: 'url', url };
+  }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return {
+      kind: 'unrenderable',
+      reason: 'Cannot verify the PDF size; the in-app file server is required to load it safely',
+    };
   }
   if (sizeBytes <= MAX_INLINE_PDF_BYTES) return { kind: 'inline' };
   const mb = Math.round(sizeBytes / (1024 * 1024));

@@ -15,9 +15,6 @@ describe('chooseRasterSource', () => {
     expect(
       chooseRasterSource({ origin: null, documentPath: 'maps/a.pdf', sizeBytes: 3_600_000 }),
     ).toEqual({ kind: 'inline' });
-    expect(chooseRasterSource({ origin: null, documentPath: 'maps/a.pdf', sizeBytes: 0 })).toEqual({
-      kind: 'inline',
-    });
     expect(
       chooseRasterSource({
         origin: null,
@@ -26,6 +23,20 @@ describe('chooseRasterSource', () => {
       }),
     ).toEqual({ kind: 'inline' });
   });
+
+  it.each([0, -1, NaN, Infinity])(
+    'does not base64-read a PDF whose size is unknown (%s)',
+    (sizeBytes) => {
+      expect(
+        chooseRasterSource({ origin: null, documentPath: 'maps/big.pdf', sizeBytes }).kind,
+      ).toBe('unrenderable');
+      // Unknown size does not block the streaming path when the server works.
+      expect(chooseRasterSource({ origin, documentPath: 'maps/big.pdf', sizeBytes })).toEqual({
+        kind: 'url',
+        url: `${origin}/maps/big.pdf`,
+      });
+    },
+  );
 
   // A file the server cannot address (not under Documents) is treated like
   // "no server": inline if small, refused if not.

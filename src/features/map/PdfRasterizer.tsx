@@ -414,6 +414,8 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const webviewRef = useRef<WebView>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
+  const [engineGeneration, setEngineGeneration] = useState(0);
 
   // The built page, kept so a served engine can fall back to inline.
   const htmlRef = useRef<string | null>(null);
@@ -434,6 +436,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const pendingRef = useRef<Map<string, PendingRequest>>(new Map());
   const queueRef = useRef<{ id: string; args: Required<RasterizeArgs> }[]>([]);
   const busyRef = useRef(false);
+  const activeRequestRef = useRef<string | null>(null);
   const idCounterRef = useRef(0);
 
   // Load + inline the bundled pdf.js sources once (from the local asset files
@@ -504,7 +507,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [applyEngine]);
 
   const pumpQueue = useCallback(() => {
-    if (busyRef.current || !ready) {
+    if (busyRef.current || !readyRef.current) {
       return;
     }
     const next = queueRef.current.shift();
@@ -513,9 +516,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     busyRef.current = true;
     const { id, args } = next;
+    activeRequestRef.current = id;
     const wv = webviewRef.current;
     if (!wv) {
       busyRef.current = false;
+      activeRequestRef.current = null;
       const pending = pendingRef.current.get(id);
       if (pending) {
         clearTimeout(pending.timeout);
@@ -546,7 +551,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     wv.injectJavaScript(
       `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null); true;`,
     );
-  }, [ready]);
+  }, []);
 
   // Whenever the engine becomes ready (initial load or after a reload), drain
   // any queued requests.
@@ -558,6 +563,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const finishCurrent = useCallback(() => {
     busyRef.current = false;
+    activeRequestRef.current = null;
     pumpQueue();
   }, [pumpQueue]);
 
@@ -572,13 +578,14 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (!isResultMessage(message)) {
         if (message.ok) {
+          readyRef.current = true;
           setReady(true);
         }
         return;
       }
 
       const pending = pendingRef.current.get(message.id);
-      if (!pending) {
+      if (!pending || activeRequestRef.current !== message.id) {
         return;
       }
       clearTimeout(pending.timeout);
@@ -605,6 +612,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   // If the WebView process reloads/crashes, the engine is no longer ready and
   // must re-announce itself before we resume the queue.
   const handleLoadStart = useCallback(() => {
+    readyRef.current = false;
     setReady(false);
   }, []);
 
@@ -623,8 +631,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         'pdf-rasterizer-server',
       );
       originRef.current = null;
+      readyRef.current = false;
+      setReady(false);
       applyEngine({ kind: 'inline', html });
       busyRef.current = false;
+      activeRequestRef.current = null;
       // Requests that can still run on the inline page stay queued; every other
       // pending request — the in-flight one, and every queued URL request — is
       // rejected now.
@@ -697,9 +708,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           stillPending.reject(
             new Error(`PdfRasterizer: render timed out after ${RENDER_TIMEOUT_MS}ms`),
           );
-          // The timed-out request was the in-flight one; free the engine.
-          busyRef.current = false;
-          pumpQueueRef.current();
+          queueRef.current = queueRef.current.filter((queued) => queued.id !== id);
+          if (activeRequestRef.current === id) {
+            // A timeout does not stop pdf.js. Destroy the old WebView/canvas
+            // and wait for the replacement's ready message before proceeding.
+            activeRequestRef.current = null;
+            busyRef.current = false;
+            readyRef.current = false;
+            setReady(false);
+            setEngineGeneration((generation) => generation + 1);
+          } else {
+            // Expiring a queued request must never release an active render.
+            pumpQueueRef.current();
+          }
         }
       }, RENDER_TIMEOUT_MS);
 
@@ -736,6 +757,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       {engine ? (
         <View style={styles.hidden} pointerEvents="none" collapsable={false}>
           <WebView
+            key={engineGeneration}
             ref={webviewRef}
             source={engine.kind === 'served' ? { uri: engine.uri } : { html: engine.html }}
             originWhitelist={['*']}
