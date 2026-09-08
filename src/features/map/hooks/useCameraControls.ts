@@ -9,6 +9,11 @@ import { toLngLatBounds } from '../geojson';
 /** Locate view target: ~2.5 km of terrain across the screen. */
 const LOCATE_VIEW_WIDTH_M = 2500;
 
+/** Compass tap → back to north: long enough to see which way the map turned. */
+const RESET_NORTH_MS = 300;
+/** Snap-back detent → back to north: short, because nobody asked for the drift. */
+const SNAP_NORTH_MS = 250;
+
 /**
  * Camera-level controls for the 2D map: the one-shot "fit these bounds"
  * request from the Library, the fit-to-active-overlays action, the locate
@@ -84,10 +89,25 @@ export function useCameraControls({
     });
   };
 
+  /** Rotate the camera back to north in place — centre and zoom untouched. */
+  const rotateToNorth = (durationMs: number) => {
+    cameraRef.current?.setStop({ bearing: 0, duration: durationMs });
+  };
+
   // Tapping the compass snaps the map back to north (bearing 0), keeping the
   // current center and zoom.
   const resetNorth = () => {
-    cameraRef.current?.setStop({ bearing: 0, duration: 300 });
+    rotateToNorth(RESET_NORTH_MS);
+  };
+
+  /**
+   * The snap-back detent (#248): the same move, run a touch quicker, for the
+   * rotation the user did NOT ask for. A deliberate tap deserves a beat you can
+   * follow; undoing pinch drift should feel like the map simply refusing to
+   * stay crooked.
+   */
+  const snapToNorth = () => {
+    rotateToNorth(SNAP_NORTH_MS);
   };
 
   /**
@@ -112,5 +132,5 @@ export function useCameraControls({
     }
   };
 
-  return { fitOverlayBounds, flyToPoint, resetNorth, zoomToLocateLevel };
+  return { fitOverlayBounds, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel };
 }
