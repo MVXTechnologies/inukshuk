@@ -99,6 +99,7 @@ export function MapControlsRail(props: Props) {
             variant="surface"
             onPress={onFit}
             style={styles.controlFab}
+            accessibilityLabel="Fit map"
           />
         )}
         {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
