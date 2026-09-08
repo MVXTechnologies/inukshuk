@@ -1324,8 +1324,9 @@ export function MapScreen() {
         restoreCameraOnDeselect();
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
-        // drops/moves the readout chip at the tapped spot; a tap ON the chip
-        // (or its anchor dot) dismisses it — same screen-projection hit-test
+        // drops the readout chip at the tapped spot; a tap ON the chip (or
+        // its anchor dot) dismisses it and copies; a bare tap anywhere else
+        // while a chip is open just closes it (#258) — same screen-projection hit-test
         // idiom as the waypoint pins. On the plain map (no weather, no
         // marine) the chip shows the coordinates and dismissing it copies
         // them, which is the only affordance a pointerEvents-none chip can
@@ -1368,7 +1369,16 @@ export function MapScreen() {
               // projection unavailable mid-teardown — treat as a fresh drop
             }
           }
-          setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+          // #258 — a chip is open and the tap landed on neither its action row
+          // nor its dismiss circle: close it and do nothing else. Re-dropping
+          // the chip at the new spot (the pre-#258 behaviour) made it follow
+          // the finger around the map with no obvious way to be rid of it.
+          // The NEXT tap, on a clean map, drops a fresh chip as before.
+          if (pointAt !== null) {
+            setPointAt(null);
+          } else {
+            setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+          }
         }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
