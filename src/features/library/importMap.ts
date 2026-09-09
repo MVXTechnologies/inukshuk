@@ -22,8 +22,10 @@ export async function mapDocumentFromStoredPdf(
 ): Promise<MapDocument> {
   let parsed: ReturnType<typeof parseGeoPdf>;
   try {
-    const bytes = await storage.readFileBytes(fileUri);
-    parsed = parseGeoPdf(bytes);
+    // Random access, not `readFileBytes`: a 200 MB GeoPDF read whole into
+    // memory OOMs a 192 MB heap, while the parser only needs its tail, xref
+    // and a handful of objects (#328).
+    parsed = storage.withFileByteSource(fileUri, (source) => parseGeoPdf(source));
   } catch (err) {
     // The copy landed in permanent storage before it could be read/parsed;
     // delete it or a failed import orphans the file there forever.

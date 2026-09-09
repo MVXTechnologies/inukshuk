@@ -13,6 +13,7 @@
  *   unreadable file can be neither drawn nor opened. Such a file is not added,
  *   its copy is deleted rather than orphaned, and the reason reaches the user.
  */
+import { type ByteSource, memoryByteSource } from '@core/geo/geopdf';
 import { buildClassicPdf } from '@core/geo/geopdf/testUtils';
 import * as storage from '@data/storage';
 import * as DocumentPicker from 'expo-document-picker';
@@ -21,7 +22,7 @@ import { mapDocumentFromStoredPdf, pickAndImportMaps } from './importMap';
 jest.mock('@data/storage', () => ({
   newId: jest.fn(() => 'new-id'),
   importPdf: jest.fn(),
-  readFileBytes: jest.fn(),
+  withFileByteSource: jest.fn(),
   deleteFileAt: jest.fn(),
 }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
@@ -53,6 +54,18 @@ const PLAIN_PDF = buildClassicPdf(
   1,
 );
 
+/**
+ * `withFileByteSource` hands the parser random access to the stored file
+ * (#328); in tests the "file" is an in-memory PDF.
+ */
+const serving =
+  (bytes: Uint8Array) =>
+  <T>(_uri: string, fn: (source: ByteSource) => T): T =>
+    fn(memoryByteSource(bytes));
+const unreadable = (message: string) => (): never => {
+  throw new Error(message);
+};
+
 const pickAssets = (...names: string[]) => {
   picker.getDocumentAsync.mockResolvedValue({
     canceled: false,
@@ -74,7 +87,7 @@ beforeEach(() => {
 
 describe('mapDocumentFromStoredPdf', () => {
   it('activates every georeferenced page of a GeoPDF', async () => {
-    mocked.readFileBytes.mockResolvedValue(GEO_PDF);
+    mocked.withFileByteSource.mockImplementation(serving(GEO_PDF));
     const doc = await mapDocumentFromStoredPdf('m1', 'file:///maps/m1.pdf', 'Sheet');
     expect(doc.georeferences.length).toBeGreaterThan(0);
     expect(doc.activePages).toEqual([0]);
@@ -82,7 +95,7 @@ describe('mapDocumentFromStoredPdf', () => {
   });
 
   it('imports an ungeoreferenced PDF, flagged and with no active page', async () => {
-    mocked.readFileBytes.mockResolvedValue(PLAIN_PDF);
+    mocked.withFileByteSource.mockImplementation(serving(PLAIN_PDF));
     const doc = await mapDocumentFromStoredPdf('m2', 'file:///maps/m2.pdf', 'Leaflet');
     expect(doc.georeferences).toEqual([]);
     expect(doc.activePages).toEqual([]);
@@ -90,7 +103,7 @@ describe('mapDocumentFromStoredPdf', () => {
   });
 
   it('deletes the stored copy when the bytes cannot be read', async () => {
-    mocked.readFileBytes.mockRejectedValue(new Error('file not found'));
+    mocked.withFileByteSource.mockImplementation(unreadable('file not found'));
     await expect(mapDocumentFromStoredPdf('m3', 'file:///maps/m3.pdf', 'Broken')).rejects.toThrow(
       'file not found',
     );
@@ -101,7 +114,7 @@ describe('mapDocumentFromStoredPdf', () => {
 describe('pickAndImportMaps', () => {
   it('surfaces the reason and adds nothing when the only PDF fails', async () => {
     pickAssets('broken.pdf');
-    mocked.readFileBytes.mockRejectedValue(new Error('file not found'));
+    mocked.withFileByteSource.mockImplementation(unreadable('file not found'));
 
     const result = await pickAndImportMaps();
 
@@ -113,9 +126,9 @@ describe('pickAndImportMaps', () => {
 
   it('keeps the PDFs that worked and counts the ones that did not', async () => {
     pickAssets('good.pdf', 'broken.pdf');
-    mocked.readFileBytes
-      .mockResolvedValueOnce(GEO_PDF)
-      .mockRejectedValueOnce(new Error('file not found'));
+    mocked.withFileByteSource
+      .mockImplementationOnce(serving(GEO_PDF))
+      .mockImplementationOnce(unreadable('file not found'));
 
     const result = await pickAndImportMaps();
 

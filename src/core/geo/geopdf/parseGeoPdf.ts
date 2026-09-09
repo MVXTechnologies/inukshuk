@@ -2,7 +2,7 @@ import type { GeoReference } from '@core/models';
 import { extractAdobeGeo } from './adobeGeo';
 import { extractLgiDict } from './lgidict';
 import { collectPages, type PageInfo } from './pageTree';
-import { PdfDocument } from './pdfReader';
+import { type ByteSource, PdfDocument } from './pdfReader';
 
 /** Result of parsing embedded georeferencing from a PDF. */
 export interface GeoPdfParseResult {
@@ -13,21 +13,23 @@ export interface GeoPdfParseResult {
 }
 
 /**
- * Parse embedded georeferencing from raw PDF bytes. Never throws: any parse
- * failure becomes a warning and an empty/partial result.
+ * Parse embedded georeferencing from a PDF — either raw bytes in memory or a
+ * random-access {@link ByteSource} (the import path: a 200 MB sheet is read a
+ * few hundred KB at a time, #328). Never throws: any parse failure becomes a
+ * warning and an empty/partial result.
  *
  * For each page we try Adobe ISO-32000 (/VP + /Measure /GEO) first, then OGC
  * LGIDict (/LGIDict). A page may yield multiple georeferences (e.g. several
  * viewports); all are returned.
  */
-export function parseGeoPdf(bytes: Uint8Array): GeoPdfParseResult {
+export function parseGeoPdf(input: Uint8Array | ByteSource): GeoPdfParseResult {
   const warnings: string[] = [];
   let pageCount = 0;
   const georeferences: GeoReference[] = [];
 
   let doc: PdfDocument;
   try {
-    doc = PdfDocument.parse(bytes);
+    doc = PdfDocument.parse(input);
   } catch (e) {
     return {
       pageCount: 0,

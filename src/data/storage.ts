@@ -1,6 +1,7 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
+import type { ByteSource } from '@core/geo/geopdf';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { joinDocumentPath, toDocumentRelativePath } from '@core/storage/documentPaths';
 import { singleFlight } from '@core/storage/singleFlight';
@@ -299,8 +300,53 @@ export function writeChartPng(id: string, bytes: Uint8Array): string {
   return file.uri;
 }
 
+/**
+ * Read a whole file into memory. Only for files known to be small: a 200 MB
+ * imported map read this way is a guaranteed OutOfMemoryError on a 192 MB
+ * heap (#328) — parsers use {@link withFileByteSource} instead.
+ */
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
   return readableFile(uri).bytes();
+}
+
+/**
+ * Largest single read a {@link withFileByteSource} source will serve. The
+ * GeoPDF reader asks for 64 KB chunks, 256 KB scan windows and stream
+ * payloads it caps at 8 MB itself; anything bigger is a caller bug, and
+ * failing loudly beats silently allocating the whole file again.
+ */
+export const MAX_BYTE_SOURCE_READ = 8 * 1024 * 1024;
+
+/**
+ * Give `fn` random access to a stored file through ONE open `FileHandle`,
+ * closed when `fn` returns (or throws). Reads position the handle and pull
+ * exactly the requested slice, so a parser that needs a few KB out of a
+ * 200 MB map never has more than that resident (#328). `fn` must be
+ * synchronous — the handle is closed as soon as it returns.
+ */
+export function withFileByteSource<T>(uri: string, fn: (source: ByteSource) => T): T {
+  const handle = readableFile(uri).open(FileMode.ReadOnly);
+  try {
+    const size = handle.size ?? 0;
+    const source: ByteSource = {
+      size,
+      read(offset, length) {
+        if (length > MAX_BYTE_SOURCE_READ) {
+          throw new Error(
+            `byte source read of ${length} bytes exceeds the ${MAX_BYTE_SOURCE_READ} cap`,
+          );
+        }
+        const from = Math.max(0, Math.floor(offset));
+        const want = Math.min(Math.floor(length), size - from);
+        if (want <= 0) return new Uint8Array(0);
+        handle.offset = from;
+        return handle.readBytes(want);
+      },
+    };
+    return fn(source);
+  } finally {
+    handle.close();
+  }
 }
 
 /** Thrown by {@link downloadBytes} when offline-only mode is on and the file is not cached. */
