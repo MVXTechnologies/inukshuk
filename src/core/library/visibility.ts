@@ -4,10 +4,12 @@ import type { MapVisibilityMode } from './migrations';
 
 /**
  * Pure selectors for the map's visibility modes. 'type' mode is the classic
- * behavior (the PDF/Trails master switches decide; trails additionally follow
- * `activeTrackIds`). 'folders' mode shows exactly the checked folders' items —
- * maps, trails AND waypoints — with {@link UNGROUPED_FOLDER_ID} standing in
- * for items that belong to no folder.
+ * behavior (every map and waypoint; trails follow `activeTrackIds`). 'folders'
+ * mode shows exactly the checked folders' items — maps, trails AND waypoints —
+ * with {@link UNGROUPED_FOLDER_ID} standing in for items that belong to no
+ * folder. Over both modes sits the "PDF maps" master switch, applied by
+ * {@link pdfOverlayMaps} (the Trails master switch was retired with the
+ * folder picker; the PDF one is the way to clear the map of sheets).
  */
 
 /** Pseudo folder id selecting items without a folder in 'folders' mode. */
@@ -26,6 +28,23 @@ export function visibleMaps(
   if (mode === 'type') return [...maps];
   const selected = new Set(visibleFolderIds);
   return maps.filter((m) => inSelection(m.folderId, selected));
+}
+
+/**
+ * The maps whose PDF pages the overlay pipeline targets: the folder rule of
+ * {@link visibleMaps} behind the "PDF maps" master switch (#233). Off means
+ * NOTHING is targeted — no raster is scheduled, no render status reaches the
+ * Library card — so hiding the sheets costs nothing and shows nothing. On,
+ * maps follow the same folder selection trails and waypoints do.
+ */
+export function pdfOverlayMaps(
+  showPdfMaps: boolean,
+  mode: MapVisibilityMode,
+  visibleFolderIds: readonly string[],
+  maps: readonly MapDocument[],
+): MapDocument[] {
+  if (!showPdfMaps) return [];
+  return visibleMaps(mode, visibleFolderIds, maps);
 }
 
 /**

@@ -8,14 +8,13 @@ export type MapBasemap = Basemap;
 
 /**
  * Transient map view state that isn't persisted: whether the camera follows the
- * user, overlay visibility toggles, basemap and 3D flags. Which overlays are
+ * user, the trails visibility toggle, basemap and 3D flags. Which overlays are
  * *active* (PDF pages and trail ids) is persisted state and lives in the
- * library store.
+ * library store; the "PDF maps" master switch is persisted too and lives in
+ * the settings store (`showPdfOverlay`, #233).
  */
 interface MapState {
   followUser: boolean;
-  /** Whether PDF map overlays are drawn (visibility toggle, independent of which pages are active). */
-  showPdfOverlay: boolean;
   /** Whether trail overlays are drawn. */
   showTrackOverlays: boolean;
   /** Whether the map shows a 3D relief (DEM hillshade + terrain + pitch). */
@@ -46,7 +45,6 @@ interface MapState {
    */
   focusWaypoint: { latitude: number; longitude: number } | null;
   setFollowUser: (follow: boolean) => void;
-  togglePdfOverlay: () => void;
   toggleTrackOverlays: () => void;
   toggleTerrain3d: () => void;
   setBasemap: (b: MapBasemap) => void;
@@ -58,7 +56,6 @@ interface MapState {
 
 export const useMapStore = create<MapState>((set) => ({
   followUser: true,
-  showPdfOverlay: true,
   showTrackOverlays: true,
   terrain3d: false,
   basemap: 'map',
@@ -69,7 +66,6 @@ export const useMapStore = create<MapState>((set) => ({
   setFocusBounds: (b) => set({ focusBounds: b }),
   setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),
-  togglePdfOverlay: () => set((s) => ({ showPdfOverlay: !s.showPdfOverlay })),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
   setBasemap: (b) => set({ basemap: b }),

@@ -40,7 +40,7 @@ import { TrailNetworksDialog } from './TrailNetworksDialog';
  * Group rows carry the labels the flows key on — 'Topology',
  * 'Weather'/'Weather: <layer>', 'Marine' — and the sub-menus keep the row
  * labels the old dialogs had ('Rain radar', 'Temperature', …, 'None',
- * 'Content: …', 'Slope', 'Contours', 'Marked trails', 'Heatmap'). Sub-menu
+ * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Marked trails', 'Heatmap'). Sub-menu
  * titles render inside the back button (label 'Back to overlays'), so they
  * never echo group-row matchers. There is no 'Done' — closing is back/
  * outside tap.
@@ -182,7 +182,8 @@ function ItemRow({
 
 /**
  * Topology sub-menu: the terrain-analysis and content rows re-homed from the
- * old flat menu — Content picker, Slope (+ range), Contours (+ interval),
+ * old flat menu — Content picker, PDF maps (the master switch the #201
+ * rework dropped, restored for #233), Slope (+ range), Contours (+ interval),
  * Elevation tint (3D only), Marked trails, Heatmap. Sliders render always
  * (dimmed while off) and sit inline on the right, as before.
  */
@@ -210,13 +211,24 @@ function TopologySubmenu({
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
+  const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
   const set = useSettingsStore((s) => s.set);
 
   const contentTitle = typeMode
     ? 'Content: everything'
     : `Content: ${visibleFolderIds.length} folder${visibleFolderIds.length === 1 ? '' : 's'}`;
 
-  const checkRow = (label: string, on: boolean, onToggle: () => void, control?: ReactNode) => (
+  const checkRow = (
+    label: string,
+    on: boolean,
+    onToggle: () => void,
+    opts: {
+      /** Inline selector on the right (slider), rendered always. */
+      control?: ReactNode;
+      /** One-line state explainer under the label. */
+      hint?: string;
+    } = {},
+  ) => (
     <View style={styles.layerRow}>
       <TouchableRipple
         onPress={onToggle}
@@ -233,10 +245,17 @@ function TopologySubmenu({
               color={on ? wc.accent : wc.inkMuted}
             />
           </View>
-          <Text style={styles.itemLabel}>{label}</Text>
+          <View style={styles.layerText}>
+            <Text style={styles.layerLabel}>{label}</Text>
+            {opts.hint !== undefined && (
+              <Text style={styles.groupState} numberOfLines={1}>
+                {opts.hint}
+              </Text>
+            )}
+          </View>
         </View>
       </TouchableRipple>
-      {control !== undefined && <View style={styles.rightCol}>{control}</View>}
+      {opts.control !== undefined && <View style={styles.rightCol}>{opts.control}</View>}
     </View>
   );
 
@@ -265,6 +284,13 @@ function TopologySubmenu({
         onPress={onOpenFolders}
         chevron
       />
+      {/* The "PDF maps" master switch (#233): the one way to clear the map of
+          imported/made sheets whatever the Content picker says. Off, the
+          overlay pipeline targets nothing (see `pdfOverlayMaps`), so the row
+          says where the maps went — the Library still lists them as active. */}
+      {checkRow('PDF maps', showPdfMaps, () => set('showPdfOverlay', !showPdfMaps), {
+        hint: showPdfMaps ? undefined : 'Hidden on the map',
+      })}
       {checkRow(
         'Slope',
         slope,
@@ -273,36 +299,39 @@ function TopologySubmenu({
           set('terrainSlope', next);
           if (next) onSlopeEnabled();
         },
-        <RangeSlider
-          min={0}
-          max={90}
-          width={100}
-          lo={slopeMinDeg}
-          hi={slopeMaxDeg}
-          disabled={!slope}
-          accessibilityLabel="Slope"
-          onChange={(newLo, newHi) => {
-            set('terrainSlopeMinDeg', newLo);
-            set('terrainSlopeMaxDeg', newHi);
-          }}
-          {...SLIDER_PALETTE}
-        />,
+        {
+          control: (
+            <RangeSlider
+              min={0}
+              max={90}
+              width={100}
+              lo={slopeMinDeg}
+              hi={slopeMaxDeg}
+              disabled={!slope}
+              accessibilityLabel="Slope"
+              onChange={(newLo, newHi) => {
+                set('terrainSlopeMinDeg', newLo);
+                set('terrainSlopeMaxDeg', newHi);
+              }}
+              {...SLIDER_PALETTE}
+            />
+          ),
+        },
       )}
-      {checkRow(
-        'Contours',
-        contours,
-        () => set('terrainContours', !contours),
-        <View style={!contours && styles.dimmed}>
-          <DetentSlider
-            detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-            selected={intervalM}
-            onSelect={(m) => set('terrainContourIntervalM', m)}
-            disabled={!contours}
-            width={100}
-            {...SLIDER_PALETTE}
-          />
-        </View>,
-      )}
+      {checkRow('Contours', contours, () => set('terrainContours', !contours), {
+        control: (
+          <View style={!contours && styles.dimmed}>
+            <DetentSlider
+              detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
+              selected={intervalM}
+              onSelect={(m) => set('terrainContourIntervalM', m)}
+              disabled={!contours}
+              width={100}
+              {...SLIDER_PALETTE}
+            />
+          </View>
+        ),
+      })}
       {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
       <ItemRow
         icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
@@ -727,6 +756,10 @@ const styles = StyleSheet.create({
     paddingRight: 6,
   },
   layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Same flex:1 story as itemLabel — the column must take the row's width or
+  // the label collapses to nothing beside the icon.
+  layerText: { flex: 1 },
+  layerLabel: { fontSize: 15, lineHeight: 20, color: wc.ink },
   rightCol: { width: 170, alignItems: 'flex-end' },
   // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
   weatherRow: { borderRadius: 12, paddingVertical: WEATHER_ROW_PAD_V, paddingHorizontal: 6 },

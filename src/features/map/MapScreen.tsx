@@ -2,7 +2,7 @@ import { fnv1a32 } from '@core/encoding/fnv1a';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
-import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
+import { pdfOverlayMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
 import { resolveInitialCenter } from '@core/geo/lastKnownPosition';
 import {
   MARINE_PACK_SNOOZE_MS,
@@ -225,21 +225,25 @@ export function MapScreen() {
   const renameSavedWaypoint = useLibraryStore((s) => s.renameWaypoint);
   const updateSavedWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeSavedWaypoint = useLibraryStore((s) => s.removeWaypoint);
-  // Map-visibility modes: 'type' = the classic PDF/Trails switches; 'folders'
-  // = exactly the checked folders' maps, trails and waypoints (pure selectors
-  // in @core/library/visibility).
+  // Map-visibility modes: 'type' = everything (trails per activeTrackIds);
+  // 'folders' = exactly the checked folders' maps, trails and waypoints (pure
+  // selectors in @core/library/visibility). The persisted "PDF maps" master
+  // switch sits over both for maps (#233): off, the overlay pipeline gets no
+  // targets at all — nothing drawn, nothing rasterized, nothing on the cards.
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
+  const showPdfOverlay = useSettingsStore((s) => s.showPdfOverlay);
   const shownMaps = useMemo(
-    () => visibleMaps(mapVisibilityMode, visibleFolderIds, maps),
-    [mapVisibilityMode, visibleFolderIds, maps],
+    () => pdfOverlayMaps(showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps),
+    [showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps],
   );
   const shownTrackIds = useMemo(
     () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
     [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
   );
-  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
+  // `enabled` is passed as well as the (already empty) target list so a page
+  // mid-render when the switch flips off is abandoned, not drawn late.
   const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
