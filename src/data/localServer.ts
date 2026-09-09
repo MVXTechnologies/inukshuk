@@ -1,8 +1,9 @@
-import StaticServer from '@dr.pogodin/react-native-static-server';
+import StaticServer, { ERROR_LOG_FILE } from '@dr.pogodin/react-native-static-server';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { refCounted, type RefCountedLease } from '@core/storage/refCounted';
 import { SERVED_DOCUMENT_PREFIXES, lighttpdAccessConfig } from '@core/storage/servedPaths';
+import { describeServerStartFailure, logTail } from '@core/storage/serverStartFailure';
 
 import { documentDirUri } from './storage';
 
@@ -26,16 +27,27 @@ import { documentDirUri } from './storage';
  * one guessed URL away from any process on the device. Loopback cleartext is
  * allowed by the withLocalhostCleartext plugin (Android) and
  * NSAllowsLocalNetworking (iOS).
+ *
+ * ## Start failures (#290)
+ *
+ * On one Android 11 phone lighttpd exited with status -1 twice in a row
+ * (#276, #277) and the library's error carries nothing else. So a failed
+ * start is retried once on a FRESH instance (the library forbids restarting
+ * a crashed one), and if that fails too the thrown error carries the tail of
+ * lighttpd's own error log — the only place the real reason is written.
  */
+
+/** Starts attempted before giving up: the first, plus one on a fresh instance. */
+export const START_ATTEMPTS = 2;
 
 // The native server wants a plain filesystem path; expo-file-system gives file:// URIs.
 function fsPath(uri: string): string {
   return uri.replace(/^file:\/\//, '');
 }
 
-// The single instance. Created lazily and NEVER replaced: the lib's start() is
-// idempotent while ACTIVE and permitted again from INACTIVE or CRASHED, so one
-// object serves every lease for the life of the JS runtime.
+// The single instance. Created lazily and kept while it works: the lib's
+// start() is idempotent while ACTIVE and permitted again from INACTIVE, so one
+// object serves every lease. A crashed instance is dropped (see startServer).
 let server: StaticServer | null = null;
 
 function sharedServer(): StaticServer {
@@ -48,12 +60,39 @@ function sharedServer(): StaticServer {
   return server;
 }
 
-const pool = refCounted<string>(
-  () => sharedServer().start(),
-  () =>
-    sharedServer()
-      .stop()
-      .catch(() => undefined),
+/** The tail of lighttpd's error log, or null when it cannot be read. */
+async function readErrorLogTail(): Promise<string | null> {
+  try {
+    const file = new File(ERROR_LOG_FILE);
+    if (!file.exists) return null;
+    return logTail(await file.text());
+  } catch {
+    return null;
+  }
+}
+
+async function startServer(): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+    try {
+      return await sharedServer().start();
+    } catch (err) {
+      lastError = err;
+      // Never reuse an instance that crashed: the library's own contract, and
+      // the second failure on #276/#277 was exactly such a reuse.
+      server = null;
+    }
+  }
+  throw new Error(describeServerStartFailure(lastError, await readErrorLogTail(), START_ATTEMPTS));
+}
+
+const pool = refCounted<string>(startServer, () =>
+  server === null
+    ? Promise.resolve()
+    : server.stop().then(
+        () => undefined,
+        () => undefined,
+      ),
 );
 
 /** A held reference to the running server; `value` is its origin (`http://127.0.0.1:<port>`). */
