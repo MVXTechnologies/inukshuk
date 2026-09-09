@@ -16,6 +16,8 @@ const mockGithub = {
   addIssueComment: jest.fn<Promise<void>, [string, string, number, string]>(),
 };
 const mockEndpoint = { postReportToEndpoint: jest.fn<Promise<void>, [string, ErrorReport]>() };
+/** The queue's disk read — swappable so a test can hold it open (#305). */
+const mockRead = jest.fn<Promise<ErrorQueueDoc>, []>();
 
 jest.mock('expo-constants', () => ({
   __esModule: true,
@@ -23,7 +25,7 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('@data/errorQueue', () => ({
-  readErrorQueueDoc: () => Promise.resolve(mockDoc.value),
+  readErrorQueueDoc: () => mockRead(),
   writeErrorQueueDoc: (doc: ErrorQueueDoc) => {
     mockDoc.value = doc;
   },
@@ -57,9 +59,16 @@ function report(fingerprint = 'aabbccdd'): ErrorReport {
   };
 }
 
+/** The settings store from the SAME registry as the reporter under test. */
+function settings(): typeof import('@state/settingsStore').useSettingsStore {
+  return jest.requireActual<typeof import('@state/settingsStore')>('@state/settingsStore')
+    .useSettingsStore;
+}
+
 /**
  * Fresh module instance (the queue + backoff state live at module scope, so
- * every case needs its own registry).
+ * every case needs its own registry). Consent is hydrated and granted unless
+ * a test says otherwise — delivery requires both (#305).
  */
 function loadReporter(
   extra: Record<string, unknown>,
@@ -70,11 +79,14 @@ function loadReporter(
   Object.assign(mockExtra, extra);
   mockDoc.value = { ...emptyQueueDoc(), queue, sentHistory };
   jest.resetModules();
-  return jest.requireActual<typeof import('./index')>('./index');
+  const reporter = jest.requireActual<typeof import('./index')>('./index');
+  settings().setState({ hydrated: true, errorReporting: true });
+  return reporter;
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRead.mockImplementation(() => Promise.resolve(mockDoc.value));
   mockGithub.findOpenIssueByMarker.mockResolvedValue(null);
   mockGithub.createIssue.mockResolvedValue(1);
   mockGithub.addIssueComment.mockResolvedValue(undefined);
@@ -179,15 +191,109 @@ describe('flushErrorQueue', () => {
 
   it('does nothing when the user has opted out', async () => {
     const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [report()]);
-    const { useSettingsStore } =
-      jest.requireActual<typeof import('@state/settingsStore')>('@state/settingsStore');
-    useSettingsStore.setState({ errorReporting: false });
+    settings().setState({ errorReporting: false });
+    expect(await flushErrorQueue()).toMatchObject({ status: 'disabled' });
+    expect(mockGithub.createIssue).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Opt-out must stop NEW outbound requests at every await boundary, not just
+ * at the top of the flush (#305, audit A24). Reports stay queued so a later
+ * opt-in can still deliver them.
+ */
+describe('flushErrorQueue consent', () => {
+  it('does not deliver before the persisted consent has hydrated', async () => {
+    const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [report()]);
+    // Launch state: DEFAULTS say enabled, but the user's real choice is still on disk.
+    settings().setState({ hydrated: false, errorReporting: true });
+    expect(await flushErrorQueue()).toMatchObject({ status: 'disabled', delivered: 0 });
+    expect(mockGithub.createIssue).not.toHaveBeenCalled();
+    expect(mockDoc.value.queue).toHaveLength(1);
+  });
+
+  it('runs the deferred launch flush once consent hydrates, not before', async () => {
+    jest.useFakeTimers();
     try {
-      expect(await flushErrorQueue()).toMatchObject({ status: 'disabled' });
+      const { installErrorReporting } = loadReporter({ errorReportToken: 't' }, [report()]);
+      settings().setState({ hydrated: false, errorReporting: true });
+      installErrorReporting();
+
+      // The 8 s launch timer fires while settings.json is still being read.
+      await jest.advanceTimersByTimeAsync(8000);
       expect(mockGithub.createIssue).not.toHaveBeenCalled();
+
+      // Hydration lands: the user's real choice is "enabled" → flush now.
+      settings().setState({ hydrated: true, errorReporting: true });
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockGithub.createIssue).toHaveBeenCalledTimes(1);
+      expect(mockDoc.value.queue).toHaveLength(0);
     } finally {
-      useSettingsStore.setState({ errorReporting: true });
+      jest.useRealTimers();
     }
+  });
+
+  it('sends nothing when reporting is disabled while the queue is still loading', async () => {
+    let release: (() => void) | undefined;
+    mockRead.mockImplementationOnce(
+      () =>
+        new Promise<ErrorQueueDoc>((resolve) => {
+          release = () => resolve(mockDoc.value);
+        }),
+    );
+    const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [
+      report('deadbeef'),
+      report('cafebabe'),
+    ]);
+
+    const pending = flushErrorQueue();
+    settings().setState({ errorReporting: false });
+    expect(release).toBeDefined();
+    release?.();
+
+    expect(await pending).toMatchObject({ status: 'disabled', delivered: 0, queued: 2 });
+    expect(mockGithub.findOpenIssueByMarker).not.toHaveBeenCalled();
+    expect(mockGithub.createIssue).not.toHaveBeenCalled();
+    expect(mockDoc.value.queue).toHaveLength(2);
+  });
+
+  it('stops between reports when reporting is disabled mid-flush', async () => {
+    const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [
+      report('deadbeef'),
+      report('cafebabe'),
+    ]);
+    // The user flips the toggle while the first issue is being filed.
+    mockGithub.createIssue.mockImplementationOnce(() => {
+      settings().setState({ errorReporting: false });
+      return Promise.resolve(1);
+    });
+
+    const result = await flushErrorQueue();
+    // The first request was already in flight — it counts as delivered and is
+    // dequeued (re-sending it later would duplicate the issue) — but no second
+    // request starts.
+    expect(result).toMatchObject({ status: 'disabled', delivered: 1, queued: 1 });
+    expect(mockGithub.createIssue).toHaveBeenCalledTimes(1);
+    expect(mockDoc.value.queue.map((r) => r.fingerprint)).toEqual(['cafebabe']);
+  });
+
+  it('does not write to GitHub when opt-out lands between the issue lookup and the write', async () => {
+    const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [report()]);
+    mockGithub.findOpenIssueByMarker.mockImplementationOnce(() => {
+      settings().setState({ errorReporting: false });
+      return Promise.resolve(null);
+    });
+
+    expect(await flushErrorQueue()).toMatchObject({ status: 'disabled', delivered: 0, queued: 1 });
+    expect(mockGithub.createIssue).not.toHaveBeenCalled();
+    expect(mockGithub.addIssueComment).not.toHaveBeenCalled();
+    expect(mockDoc.value.queue).toHaveLength(1);
+
+    // Opting back in delivers the retained report at once — the consent stop
+    // is not a failure, so it must not have armed the backoff.
+    settings().setState({ errorReporting: true });
+    expect(await flushErrorQueue()).toMatchObject({ status: 'delivered', delivered: 1 });
+    expect(mockGithub.createIssue).toHaveBeenCalledTimes(1);
   });
 });
 

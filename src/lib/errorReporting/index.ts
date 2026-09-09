@@ -77,8 +77,41 @@ declare const global: {
 
 // --- configuration -----------------------------------------------------------
 
+/** The user's current toggle value (DEFAULTS say `true` before hydration). */
 function reportingEnabled(): boolean {
   return useSettingsStore.getState().errorReporting;
+}
+
+/**
+ * May a NEW outbound request start right now? Requires the persisted consent
+ * to have hydrated — the in-memory default is "enabled", so trusting it before
+ * settings.json is read would ship reports for a user who opted out (#305).
+ * Capture never needs this: queuing to disk sends nothing.
+ */
+function deliveryConsented(): boolean {
+  const s = useSettingsStore.getState();
+  return s.hydrated && s.errorReporting;
+}
+
+/** Run `fn` once consent has hydrated (immediately if it already has). */
+function whenConsentHydrated(fn: () => void): void {
+  if (useSettingsStore.getState().hydrated) {
+    fn();
+    return;
+  }
+  const unsubscribe = useSettingsStore.subscribe((s) => {
+    if (!s.hydrated) return;
+    unsubscribe();
+    fn();
+  });
+}
+
+/** Thrown inside a delivery when the user opts out between two await points. */
+class ConsentWithdrawn extends Error {
+  constructor() {
+    super('error reporting disabled during delivery');
+    this.name = 'ConsentWithdrawn';
+  }
 }
 
 function extraString(key: 'errorReportToken' | 'errorReportEndpoint'): string | undefined {
@@ -233,7 +266,7 @@ let lastFailure: string | null = null;
 export type FlushStatus =
   | 'empty' // nothing queued
   | 'delivered' // at least one report filed
-  | 'disabled' // user opted out
+  | 'disabled' // user opted out (or their persisted choice has not hydrated yet)
   | 'no-channel' // no token/endpoint in this build: stay queued, silently
   | 'rate-limited' // client-side cap reached for the rolling day
   | 'backoff' // a recent failure; waiting out the backoff
@@ -249,7 +282,11 @@ export interface FlushResult {
   queued: number;
 }
 
-/** One report → one issue (or one "seen again" comment). Throws on failure. */
+/**
+ * One report → one issue (or one "seen again" comment). Throws on failure,
+ * and `ConsentWithdrawn` if the user opts out between the GitHub lookup and
+ * the write (the lookup is read-only; the write is the report leaving).
+ */
 async function deliverReport(channel: DeliveryChannel, report: ErrorReport): Promise<void> {
   if (channel.kind === 'endpoint') {
     await postReportToEndpoint(channel.endpoint, report);
@@ -259,6 +296,7 @@ async function deliverReport(channel: DeliveryChannel, report: ErrorReport): Pro
     const { token } = channel;
     const marker = errorMarker(report.fingerprint);
     const existing = await findOpenIssueByMarker(token, ERROR_REPORT_REPO, marker);
+    if (!deliveryConsented()) throw new ConsentWithdrawn();
     if (existing !== null) {
       await addIssueComment(token, ERROR_REPORT_REPO, existing, buildSeenAgainComment(report));
     } else {
@@ -317,10 +355,16 @@ export async function flushErrorQueue(options?: { force?: boolean }): Promise<Fl
   let delivered = 0;
   let dropped = 0;
   try {
-    if (!reportingEnabled()) {
+    if (!deliveryConsented()) {
       return { status: 'disabled', delivered, dropped, queued: doc?.queue.length ?? 0 };
     }
     const current = await loadDoc();
+    // Consent is re-read after EVERY await: the toggle may have flipped while
+    // the disk read (or a previous report's request) was in flight. Stopping
+    // keeps the queue intact for a later opt-in; nothing is dropped.
+    if (!deliveryConsented()) {
+      return { status: 'disabled', delivered, dropped, queued: current.queue.length };
+    }
     if (current.queue.length === 0) return { status: 'empty', delivered, dropped, queued: 0 };
 
     const channel = deliveryChannel();
@@ -336,8 +380,13 @@ export async function flushErrorQueue(options?: { force?: boolean }): Promise<Fl
 
     let rateLimited = false;
     let failed = false;
+    let withdrawn = false;
 
     for (const report of [...current.queue]) {
+      if (!deliveryConsented()) {
+        withdrawn = true;
+        break;
+      }
       const now = Date.now();
       if (!canSendReport(current.sentHistory, now)) {
         rateLimited = true;
@@ -353,6 +402,11 @@ export async function flushErrorQueue(options?: { force?: boolean }): Promise<Fl
         nextAttemptAt = 0;
         lastFailure = null;
       } catch (error) {
+        if (error instanceof ConsentWithdrawn) {
+          // Not a failure: no backoff, no diagnostics entry, report retained.
+          withdrawn = true;
+          break;
+        }
         if (isUndeliverable(channel, error)) {
           // The payload itself is unacceptable — dropping it unblocks the queue.
           dequeue(current, report.fingerprint);
@@ -375,6 +429,10 @@ export async function flushErrorQueue(options?: { force?: boolean }): Promise<Fl
     }
 
     const queued = current.queue.length;
+    // Opt-out wins over "delivered": the Settings row must say reporting is
+    // off, even if a request already in flight completed (and was dequeued —
+    // re-sending it later would only duplicate the issue).
+    if (withdrawn) return { status: 'disabled', delivered, dropped, queued };
     if (delivered > 0) return { status: 'delivered', delivered, dropped, queued };
     if (failed) return { status: 'failed', delivered, dropped, queued };
     if (rateLimited) return { status: 'rate-limited', delivered, dropped, queued };
@@ -452,6 +510,8 @@ export function installErrorReporting(): void {
   // Deferred launch flush: the queue read + delivery attempt can wait until
   // well after first interaction — doing it during startup competes with the
   // initial render/navigation on slow devices (it tipped cold CI emulators
-  // into dropping the first tab tap, the 2026-07-14 e2e flake).
-  setTimeout(() => void flushErrorQueue().catch(() => undefined), 8000);
+  // into dropping the first tab tap, the 2026-07-14 e2e flake). It also waits
+  // for the persisted consent: a flush before settings hydrate is a no-op
+  // (#305), and a slow disk must not cost the launch flush entirely.
+  setTimeout(() => whenConsentHydrated(() => void flushErrorQueue().catch(() => undefined)), 8000);
 }
