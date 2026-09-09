@@ -13,6 +13,12 @@ import { chooseRasterSource } from '@core/library/rasterSource';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { useLibraryStore } from '@state/libraryStore';
+import {
+  isPdfRenderCancellation,
+  PdfRenderFailure,
+  PdfRenderNotStartedError,
+} from './pdfRenderFailure';
 import { useEffect, useRef, useState } from 'react';
 import { usePdfRasterizer, usePdfRasterizerServer, type RasterizeSource } from './PdfRasterizer';
 
@@ -38,6 +44,7 @@ interface Target {
   docId: string;
   fileUri: string;
   revision: string;
+  importedAt: number;
   geo: GeoReference;
 }
 
@@ -110,7 +117,8 @@ export function activeTargets(maps: MapDocument[]): Target[] {
       // whole-of-Australia locator inset ahead of the map, and taking the
       // first georeference draws the sheet stretched across the continent.
       const geo = primaryGeoreferenceForPage(m.georeferences, pageIndex);
-      if (geo) targets.push({ docId: m.id, fileUri: m.fileUri, revision, geo });
+      if (geo)
+        targets.push({ docId: m.id, fileUri: m.fileUri, revision, importedAt: m.importedAt, geo });
     }
   }
   return targets;
@@ -302,6 +310,10 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                       expectedPageWidthPt: geo.pageWidthPt,
                       expectedPageHeightPt: geo.pageHeightPt,
                     },
+                  }).catch((error: unknown) => {
+                    if (isPdfRenderCancellation(error) || error instanceof PdfRenderNotStartedError)
+                      throw error;
+                    throw new PdfRenderFailure(error);
                   });
                   console.log(
                     `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
@@ -350,6 +362,14 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
             if (cancelled) return;
             reportError(err, 'pdf-overlay-render');
             const reason = err instanceof Error ? err.message : 'Failed to render a PDF page';
+            if (enabledRef.current && err instanceof PdfRenderFailure) {
+              useLibraryStore
+                .getState()
+                .pauseMapPageAfterRenderFailure(t.docId, geo.pageIndex, reason, {
+                  fileUri: t.fileUri,
+                  importedAt: t.importedAt,
+                });
+            }
             firstError ??= reason;
             setStatus(statusKey, { phase: 'failed', reason });
           }

@@ -1,3 +1,4 @@
+import { PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
@@ -191,6 +192,7 @@ function nativeRequestKey(args: Required<RasterizeArgs>): string | null {
 const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
 
 interface PendingRequest {
+  backendDispatched: boolean;
   args: Required<RasterizeArgs>;
   recoveryPage: { fileUri: string; pageIndex: number } | null;
   recoveryToken: string | null;
@@ -639,6 +641,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     let retryWithPdfJs = false;
     void (async () => {
       try {
+        pending.backendDispatched = true;
         const result = await renderNativePdfCrop({
           fileUri: nativePage.fileUri,
           pageIndex,
@@ -705,7 +708,18 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         if (pendingRef.current.get(id) === pending) {
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);
-          pending.reject(error instanceof Error ? error : new Error(String(error)));
+          const admissionFailed =
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            (error.code === 'E_PDF_BUSY' || error.code === 'E_PDF_CONTEXT');
+          pending.reject(
+            admissionFailed
+              ? new PdfRenderNotStartedError(error)
+              : error instanceof Error
+                ? error
+                : new Error(String(error)),
+          );
         }
       } finally {
         if (!retryWithPdfJs) finishRecovery(pending);
@@ -769,7 +783,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
         finishRecovery(pending);
-        pending.reject(new Error('PdfRasterizer: WebView unavailable'));
+        pending.reject(new PdfRenderNotStartedError('PdfRasterizer: WebView unavailable'));
       }
       return;
     }
@@ -777,6 +791,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     // Returning `true` from injected JS is required by react-native-webview.
     const pending = pendingRef.current.get(id);
     if (pending) {
+      pending.backendDispatched = true;
       // Queue/startup waiting is bounded separately from actual rendering.
       clearTimeout(pending.timeout);
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
@@ -1001,13 +1016,17 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         const { source } = args;
         if (source.url === undefined && !source.base64) {
-          reject(new Error('PdfRasterizer: base64 is empty'));
+          reject(new PdfRenderNotStartedError('PdfRasterizer: base64 is empty'));
           return;
         }
         if (source.url !== undefined && originRef.current === null) {
           // A URL can only be fetched by the served page; callers ask
           // `serverOrigin()` first, so this is a programming error, not a hang.
-          reject(new Error('PdfRasterizer: engine is in inline mode, cannot fetch a URL'));
+          reject(
+            new PdfRenderNotStartedError(
+              'PdfRasterizer: engine is in inline mode, cannot fetch a URL',
+            ),
+          );
           return;
         }
         idCounterRef.current += 1;
@@ -1056,17 +1075,20 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         };
         const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
 
-        pendingRef.current.set(id, {
+        const pendingRequest: PendingRequest = {
+          backendDispatched: false,
           args: normalized,
           recoveryPage: args.nativePage
             ? { fileUri: args.nativePage.fileUri, pageIndex: args.pageIndex }
             : null,
           recoveryToken: null,
           resolve,
-          reject,
+          reject: (error) =>
+            reject(pendingRequest.backendDispatched ? error : new PdfRenderNotStartedError(error)),
           timeout,
           expire,
-        });
+        };
+        pendingRef.current.set(id, pendingRequest);
         queueRef.current.push({ id, args: normalized });
         pumpQueueRef.current();
       });

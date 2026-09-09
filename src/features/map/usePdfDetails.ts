@@ -12,6 +12,8 @@ import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { useLibraryStore } from '@state/libraryStore';
+import { isPdfRenderCancellation, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
 import { usePdfRasterizer, usePdfRasterizerServer } from './PdfRasterizer';
@@ -71,7 +73,7 @@ export function usePdfDetails(
       const map = maps.find((m) => o.id.startsWith(`${m.id}:`));
       const pageIndex = map ? Number(o.id.slice(map.id.length + 1)) : -1;
       const geo = map?.georeferences.find((g) => g.pageIndex === pageIndex);
-      if (!map || !geo) continue;
+      if (!map || !geo || !map.activePages.includes(pageIndex)) continue;
       const plans = planPdfDetailTiles(
         o.coordinates,
         { width: geo.pageWidthPt, height: geo.pageHeightPt },
@@ -217,6 +219,7 @@ export function usePdfDetails(
           const failed = new Set<string>();
           for (const target of snapshot) {
             if (w.desired !== snapshot || w.epoch !== epoch) break;
+            let dispatched = false;
             try {
               let detail = w.cache.get(target.key);
               if (detail && !new File(detail.imageUri).exists) {
@@ -242,6 +245,7 @@ export function usePdfDetails(
                     ? { url: choice.url }
                     : { base64: await storage.readFileBase64(target.fileUri) };
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
+                dispatched = true;
                 const result = await rasterize({
                   source,
                   pageIndex: target.pageIndex,
@@ -254,6 +258,7 @@ export function usePdfDetails(
                     expectedPageHeightPt: target.pageHeightPt,
                   },
                 });
+                dispatched = false;
                 if (w.epoch !== epoch) {
                   if (result.fileUri !== undefined) storage.deleteFileAt(result.fileUri);
                   return;
@@ -306,7 +311,31 @@ export function usePdfDetails(
                 }
                 failed.add(statusKey);
               }
-              // The overview stays available if refinement fails.
+              if (
+                dispatched &&
+                !(error instanceof PdfRenderNotStartedError) &&
+                !isPdfRenderCancellation(error) &&
+                w.epoch === epoch &&
+                !w.paused
+              ) {
+                // A pan supersedes a tile, not the identity of its still-active
+                // page. Quarantine that page before another tile can dispatch.
+                w.desired = w.desired.filter(
+                  (next) =>
+                    next.parentId !== target.parentId ||
+                    next.fileUri !== target.fileUri ||
+                    next.revision !== target.revision,
+                );
+                useLibraryStore
+                  .getState()
+                  .pauseMapPageAfterRenderFailure(
+                    target.parentId.slice(0, -(String(target.pageIndex).length + 1)),
+                    target.pageIndex,
+                    error instanceof Error ? error.message : String(error),
+                    { fileUri: target.fileUri, importedAt: Number(target.revision) },
+                  );
+              }
+              // Preparation failures remain transient; dispatched failures pause only their page.
             }
           }
           if (w.epoch !== epoch) return;

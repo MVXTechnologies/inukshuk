@@ -322,24 +322,46 @@ export function planPdfDetailTiles(
     );
   if (!Number.isFinite(density) || density < 2048 * 1.4) return [];
   let divisions = 2 ** Math.min(20, Math.max(0, Math.ceil(Math.log2(density / 768))));
+  // Bound the inverse viewport span using both affine triangles' derivatives.
+  // Unlike the clipped visible range, this depends only on zoom/frame and page
+  // geometry: a pan across a cell edge must not resize every cached tile.
+  const viewWidth = view[1]![0] - view[0]![0];
+  const viewHeight = view[0]![1] - view[3]![1];
+  const spanU =
+    viewWidth * Math.max(Math.abs(by / det), Math.abs((by + ry) / det2)) +
+    viewHeight * Math.max(Math.abs(bx / det), Math.abs((bx + rx) / det2));
+  const spanV =
+    viewWidth * Math.max(Math.abs(ay / det), Math.abs((ay + ry) / det2)) +
+    viewHeight * Math.max(Math.abs(ax / det), Math.abs((ax + rx) / det2));
+  // Mercator round-trips can turn an exact integer span into k +/- a few
+  // trillionths of a cell. Snap only that numerical neighborhood, both when
+  // reserving capacity and selecting endpoints, to avoid an extra row changing
+  // every tile's resolution (or exceeding its reserved pixel budget).
+  const snapCell = (value: number) => {
+    const nearest = Math.round(value);
+    return Math.abs(value - nearest) <= 1e-9 ? nearest : value;
+  };
+  // A span of k cells can touch ceil(k)+1 cells at its least favorable
+  // alignment. Include that extra cell on each axis before allocating pixels.
+  const capacity = (n: number) =>
+    Math.min(n, Math.ceil(snapCell(spanU * n)) + 1) *
+    Math.min(n, Math.ceil(snapCell(spanV * n)) + 1);
   const cells = (n: number) => ({
-    x0: Math.floor(left * n),
-    x1: Math.min(n - 1, Math.ceil(right * n) - 1),
-    y0: Math.floor(top * n),
-    y1: Math.min(n - 1, Math.ceil(bottom * n) - 1),
+    x0: Math.floor(snapCell(left * n)),
+    x1: Math.min(n - 1, Math.ceil(snapCell(right * n)) - 1),
+    y0: Math.floor(snapCell(top * n)),
+    y1: Math.min(n - 1, Math.ceil(snapCell(bottom * n)) - 1),
   });
-  let range = cells(divisions);
-  const count = () => (range.x1 - range.x0 + 1) * (range.y1 - range.y0 + 1);
-  while (count() > 24 && divisions > 1) {
+  while (capacity(divisions) > 24 && divisions > 1) {
     divisions /= 2;
-    range = cells(divisions);
   }
+  const range = cells(divisions);
   const aspect = page.height / page.width;
   const maximumWidth = Math.min(
     3072,
     3072 / aspect,
     Math.sqrt((3 * 1024 * 1024) / aspect),
-    Math.sqrt(pixelBudget / count() / aspect),
+    Math.sqrt(pixelBudget / capacity(divisions) / aspect),
   );
   const desiredWidth = Math.ceil(density / divisions / 32) * 32;
   const budgetWidth = Math.floor(maximumWidth / 32) * 32;

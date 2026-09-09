@@ -620,3 +620,48 @@ describe('malformed nested library records', () => {
     expect(index.waypoints[0]).not.toHaveProperty('photoUri');
   });
 });
+
+it('retains known interrupted-page errors and keeps their pages off during normalization', () => {
+  const index = migrateLibraryIndex({
+    maps: [
+      {
+        id: 'm',
+        name: 'Map',
+        fileUri: 'maps/m.pdf',
+        pageCount: 3,
+        activePages: [0, 1, 2],
+        renderRecoveryErrors: [
+          { pageIndex: 1, reason: 'interrupted' },
+          { pageIndex: 1, reason: 'interrupted' },
+          { pageIndex: -1, reason: 'interrupted' },
+          { pageIndex: 4, reason: 'interrupted' },
+          { pageIndex: 2, reason: 'unknown' },
+          { pageIndex: '0', reason: 'interrupted' },
+          null,
+        ],
+      },
+    ],
+  });
+  expect(index.maps[0]?.renderRecoveryErrors).toEqual([{ pageIndex: 1, reason: 'interrupted' }]);
+  expect(index.maps[0]?.activePages).toEqual([0, 2]);
+  expect(migrateLibraryIndex(index)).toEqual(index);
+});
+
+it('bounds persisted render-failed messages and keeps their pages paused', () => {
+  const index = migrateLibraryIndex({
+    maps: [
+      {
+        id: 'm',
+        name: 'Map',
+        fileUri: 'maps/m.pdf',
+        pageCount: 1,
+        activePages: [0],
+        renderRecoveryErrors: [{ pageIndex: 0, reason: 'render-failed', message: 'x'.repeat(900) }],
+      },
+    ],
+  });
+  expect(index.maps[0]?.activePages).toEqual([]);
+  expect(index.maps[0]?.renderRecoveryErrors).toEqual([
+    { pageIndex: 0, reason: 'render-failed', message: 'x'.repeat(400) },
+  ]);
+});

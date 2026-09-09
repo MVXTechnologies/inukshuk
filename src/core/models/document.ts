@@ -12,6 +12,11 @@ export interface MapDocument {
   georeferences: GeoReference[];
   /** Page indexes currently rendered as map overlays (a subset of georeferences). */
   activePages: number[];
+  /** Interrupted renders stay paused with an actionable Library notice until explicit retry. */
+  renderRecoveryErrors?: (
+    | { pageIndex: number; reason: 'interrupted' }
+    | { pageIndex: number; reason: 'render-failed'; message: string }
+  )[];
   /** Human-readable note when georeferencing failed or is partial. */
   georeferenceWarning?: string;
   /** Id of the {@link Folder} this map is organized under; undefined = Ungrouped. */

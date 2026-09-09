@@ -1,3 +1,4 @@
+import { PdfRenderNotStartedError } from './pdfRenderFailure';
 import { runInNewContext } from 'node:vm';
 import { writeServedText } from '@data/localServer';
 import React from 'react';
@@ -1131,4 +1132,50 @@ it('keeps an overview on the original PDF.js budget when native is unavailable',
   expect(renderNativePdfCrop).not.toHaveBeenCalled();
   await view.unmount();
   await pending;
+});
+
+it('classifies checkpoint admission failure as not-started', async () => {
+  mockBeginPdfRender.mockImplementationOnce(() => {
+    throw new Error('checkpoint blocked');
+  });
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  await expect(view.result.current(nativeRequest)).rejects.toBeInstanceOf(PdfRenderNotStartedError);
+  await view.unmount();
+});
+it('classifies queue startup expiry as not-started but backend timeout as render failure', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  const waiting = view.result.current(request).catch((error: Error) => error);
+  await act(async () => {
+    jest.advanceTimersByTime(45_000);
+  });
+  expect(await waiting).toBeInstanceOf(PdfRenderNotStartedError);
+  await ready();
+  const active = view.result.current(request).catch((error: Error) => error);
+  await act(async () => {
+    jest.advanceTimersByTime(45_000);
+  });
+  expect(await active).toBeInstanceOf(Error);
+  expect(await active).not.toBeInstanceOf(PdfRenderNotStartedError);
+  await view.unmount();
+});
+it('keeps dispatched renderer process death classified as a page render failure', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const active = view.result.current(request).catch((error: Error) => error);
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  expect(await active).not.toBeInstanceOf(PdfRenderNotStartedError);
+  await view.unmount();
+});
+
+it('classifies native busy admission as not-started', async () => {
+  jest
+    .mocked(renderNativePdfCrop)
+    .mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'E_PDF_BUSY' }));
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const pending = view.result.current(nativeRequest).catch((error: Error) => error);
+  await handoff();
+  expect(await pending).toBeInstanceOf(PdfRenderNotStartedError);
+  await view.unmount();
 });

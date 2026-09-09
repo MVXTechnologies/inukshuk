@@ -65,6 +65,13 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   setActiveMap: (id: string | null) => void;
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
   toggleMapPage: (id: string, pageIndex: number) => void;
+  retryMapPage: (id: string, pageIndex: number) => void;
+  pauseMapPageAfterRenderFailure: (
+    id: string,
+    pageIndex: number,
+    message: string,
+    expected?: { fileUri: string; importedAt: number },
+  ) => void;
   /**
    * Add a trail with all of its seeded notes in ONE index write — the recorder's
    * save path relies on this: a per-note `addTrackNote` loop cost one full
@@ -253,6 +260,24 @@ function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
 // cold-start "Open with" intent) await the same read instead of racing it.
 let hydration: Promise<void> | null = null;
 
+function clearMapRecoveryError(map: MapDocument, pageIndex: number): MapDocument {
+  const { renderRecoveryErrors, ...rest } = map;
+  const remaining = renderRecoveryErrors?.filter((error) => error.pageIndex !== pageIndex);
+  return remaining?.length ? { ...rest, renderRecoveryErrors: remaining } : rest;
+}
+
+/** A protected checkpoint is acknowledged only after the user's retry is saved. */
+function persistMapRetry(state: LibraryState, map: MapDocument, pageIndex: number): void {
+  const interrupted = readInterruptedPdfRender();
+  persist(state);
+  if (
+    interrupted?.pageIndex === pageIndex &&
+    storage.toDocumentPath(interrupted.fileUri) === storage.toDocumentPath(map.fileUri)
+  ) {
+    clearInterruptedPdfRender(interrupted.token);
+  }
+}
+
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   maps: [],
   tracks: [],
@@ -289,13 +314,22 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             (m) =>
               storage.toDocumentPath(m.fileUri) === storage.toDocumentPath(interrupted.fileUri),
           );
-          if (map?.activePages.includes(interrupted.pageIndex)) {
+          if (map && interrupted.pageIndex < map.pageCount) {
             index.maps = index.maps.map((m) =>
               m === map
-                ? { ...m, activePages: m.activePages.filter((p) => p !== interrupted.pageIndex) }
+                ? {
+                    ...m,
+                    activePages: m.activePages.filter((p) => p !== interrupted.pageIndex),
+                    renderRecoveryErrors: [
+                      ...(m.renderRecoveryErrors ?? []).filter(
+                        (error) => error.pageIndex !== interrupted.pageIndex,
+                      ),
+                      { pageIndex: interrupted.pageIndex, reason: 'interrupted' as const },
+                    ],
+                  }
                 : m,
             );
-            pdfRecoveryNotice = `Paused page ${interrupted.pageIndex + 1} of “${map.name}” after an interrupted render. Your maps are saved. Re-enable this page in Library to retry.`;
+            pdfRecoveryNotice = `Paused page ${interrupted.pageIndex + 1} of “${map.name}” after an interrupted render. Your maps are saved. Use Retry in Library to try this page again.`;
             try {
               // Save the paused page before consuming evidence. If storage is
               // full, keep the checkpoint and still expose the safe library.
@@ -377,20 +411,67 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   toggleMapPage: (id, pageIndex) =>
     set((s) => {
+      const retrying = s.maps.find(
+        (m) =>
+          m.id === id &&
+          !m.activePages.includes(pageIndex) &&
+          m.renderRecoveryErrors?.some((error) => error.pageIndex === pageIndex),
+      );
       const next = {
         ...s,
         maps: s.maps.map((m) => {
           if (m.id !== id) return m;
           const on = m.activePages.includes(pageIndex);
           return {
-            ...m,
+            ...(on ? m : clearMapRecoveryError(m, pageIndex)),
             activePages: on
               ? m.activePages.filter((p) => p !== pageIndex)
               : [...m.activePages, pageIndex].sort((a, b) => a - b),
           };
         }),
       };
-      persist(next);
+      if (retrying) persistMapRetry(next, retrying, pageIndex);
+      else persist(next);
+      return next;
+    }),
+
+  pauseMapPageAfterRenderFailure: (id, pageIndex, message, expected) =>
+    set((s) => {
+      const map = s.maps.find((m) => m.id === id);
+      if (!map?.activePages.includes(pageIndex)) return s;
+      if (
+        expected &&
+        (map.importedAt !== expected.importedAt ||
+          storage.toDocumentPath(map.fileUri) !== storage.toDocumentPath(expected.fileUri))
+      )
+        return s;
+      const paused: MapDocument = {
+        ...map,
+        activePages: map.activePages.filter((page) => page !== pageIndex),
+        renderRecoveryErrors: [
+          ...(map.renderRecoveryErrors ?? []).filter((error) => error.pageIndex !== pageIndex),
+          { pageIndex, reason: 'render-failed', message: message.slice(0, 400) },
+        ],
+      };
+      const next = { ...s, maps: s.maps.map((m) => (m === map ? paused : m)) };
+      try {
+        persist(next);
+      } catch (error) {
+        reportError(error, 'pdf-render-failure-save');
+      }
+      return next;
+    }),
+
+  retryMapPage: (id, pageIndex) =>
+    set((s) => {
+      const map = s.maps.find((m) => m.id === id);
+      if (!map?.renderRecoveryErrors?.some((error) => error.pageIndex === pageIndex)) return s;
+      const retried = {
+        ...clearMapRecoveryError(map, pageIndex),
+        activePages: [...new Set([...map.activePages, pageIndex])].sort((a, b) => a - b),
+      };
+      const next = { ...s, maps: s.maps.map((m) => (m === map ? retried : m)) };
+      persistMapRetry(next, map, pageIndex);
       return next;
     }),
 

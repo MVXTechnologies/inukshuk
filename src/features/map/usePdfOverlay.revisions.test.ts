@@ -1,3 +1,4 @@
+import { PdfRenderNotStartedError } from './pdfRenderFailure';
 import { migrateLibraryIndex } from '@core/library/migrations';
 import { visibleMaps } from '@core/library/visibility';
 import type { GeoReference, MapDocument } from '@core/models';
@@ -379,4 +380,33 @@ it('rerenders a previously cached overview when its persisted file becomes empty
   const second = await renderHook(() => usePdfOverlays([target]));
   expect(mockRasterize).toHaveBeenCalledTimes(2);
   expect(mockFiles.get(second.result.current.overlays[0]!.imageUri)).toBe('OLD');
+});
+
+const mockPauseFailedOverview = jest.fn();
+jest.mock('@state/libraryStore', () => ({
+  useLibraryStore: {
+    getState: () => ({ pauseMapPageAfterRenderFailure: mockPauseFailedOverview }),
+  },
+}));
+beforeEach(() => mockPauseFailedOverview.mockClear());
+it('pauses only an overview whose dispatched render failed', async () => {
+  mockRasterize.mockRejectedValueOnce(new Error('PdfRasterizer: rendering process terminated'));
+  await renderHook(() => usePdfOverlays([{ ...map, id: 'caught-overview' }]));
+  expect(mockPauseFailedOverview).toHaveBeenCalledWith(
+    'caught-overview',
+    0,
+    'PdfRasterizer: rendering process terminated',
+    { fileUri: map.fileUri, importedAt: map.importedAt },
+  );
+});
+it('does not pause an overview for a failure before raster dispatch', async () => {
+  mockServerOrigin.mockRejectedValueOnce(new Error('server unavailable'));
+  await renderHook(() => usePdfOverlays([{ ...map, id: 'before-dispatch' }]));
+  expect(mockPauseFailedOverview).not.toHaveBeenCalled();
+});
+
+it('does not pause the PDF page for a typed pre-dispatch failure', async () => {
+  mockRasterize.mockRejectedValueOnce(new PdfRenderNotStartedError('checkpoint unavailable'));
+  await renderHook(() => usePdfOverlays([{ ...map, id: 'admission-failure' }]));
+  expect(mockPauseFailedOverview).not.toHaveBeenCalled();
 });
