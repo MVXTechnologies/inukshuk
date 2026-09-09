@@ -82,7 +82,7 @@ import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
-import { useOfflineDownload } from './hooks/useOfflineDownload';
+import { regionBoundsFailureMessage, useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import {
@@ -2024,11 +2024,11 @@ export function MapScreen() {
           tileUrl={tileUrl}
           onCancel={() => setMakeMapState(null)}
           onConfirm={(rect) => {
-            void resolveRegionRect(rect).then((bbox) => {
-              if (bbox) setMakeMapState({ phase: 'options', bbox });
+            void resolveRegionRect(rect).then((resolved) => {
+              if (resolved.ok) setMakeMapState({ phase: 'options', bbox: resolved.bounds });
               else {
                 setMakeMapState(null);
-                showSnack('Could not read the map area — try again');
+                showSnack(regionBoundsFailureMessage(resolved.reason));
               }
             });
           }}

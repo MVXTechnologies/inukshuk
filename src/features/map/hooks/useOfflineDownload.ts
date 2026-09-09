@@ -1,5 +1,11 @@
 import { dedupeLabel } from '@core/geo/regionName';
-import { screenPointToLngLat, screenRectToBounds, type ScreenRect } from '@core/geo/screenBounds';
+import {
+  screenPointToLngLat,
+  screenRectToBounds,
+  type RegionBoundsFailure,
+  type RegionBoundsResult,
+  type ScreenRect,
+} from '@core/geo/screenBounds';
 import {
   estimateRegionDownload,
   overviewZoomFor,
@@ -7,7 +13,6 @@ import {
   type Basemap,
 } from '@core/geo/tiles';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
-import type { BoundingBox } from '@core/models';
 import { setOfflineOnly } from '@data/offline';
 import * as storage from '@data/storage';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
@@ -28,6 +33,18 @@ import { resolveRegionName } from '../regionNaming';
 const FLAT_EPSILON = 0.5;
 /** How long to wait for a camera flatten to settle before re-reading bounds. */
 const FLATTEN_MS = 350;
+
+/** User-facing reason a drawn box could not become a region. */
+export function regionBoundsFailureMessage(reason: RegionBoundsFailure): string {
+  switch (reason) {
+    case 'antimeridian':
+      // Offline packs and the tile planner take one non-wrapping bbox; a box
+      // across ±180° used to be reinterpreted as the opposite 359° of the globe.
+      return 'The box crosses the ±180° line — move it to one side and try again';
+    case 'no-viewport':
+      return 'Could not read the map area — try again';
+  }
+}
 
 const isFlat = (bearing: number, pitch: number): boolean => {
   const off = Math.abs(((((bearing + 180) % 360) + 360) % 360) - 180); // → [0, 180]
@@ -153,9 +170,10 @@ export function useOfflineDownload({
   };
 
   /** Resolve a drawn screen rect against freshly-read flat bounds. */
-  const resolveRegionRect = async (rect: ScreenRect): Promise<BoundingBox | null> => {
+  const resolveRegionRect = async (rect: ScreenRect): Promise<RegionBoundsResult> => {
     const visible = await flatBounds();
-    return (visible && screenRectToBounds(rect, mapSize, visible)) || null;
+    if (!visible) return { ok: false, reason: 'no-viewport' };
+    return screenRectToBounds(rect, mapSize, visible);
   };
 
   const beginRegionSelect = () => {
@@ -182,11 +200,12 @@ export function useOfflineDownload({
     setSelecting(false);
 
     void (async () => {
-      const bounds = await resolveRegionRect(rect);
-      if (!bounds) {
-        showSnack('Could not read the map area — try again');
+      const resolved = await resolveRegionRect(rect);
+      if (!resolved.ok) {
+        showSnack(regionBoundsFailureMessage(resolved.reason));
         return;
       }
+      const { bounds } = resolved;
 
       const baseId = storage.newId();
       const minZoom = overviewZoomFor(bounds);
