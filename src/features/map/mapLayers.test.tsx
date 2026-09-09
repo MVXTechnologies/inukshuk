@@ -7,8 +7,12 @@ import {
   HEATMAP_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
+  SLOPE_LAYER,
   TRACKS_LINES_LAYER,
+  pdfDetailLayer,
+  pdfOverviewLayer,
 } from './mapLayers';
+import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
 // modules are looked up with TurboModuleRegistry.getEnforcing at import time,
@@ -105,5 +109,39 @@ describe('hoisted map layers', () => {
     expect(LIVE_TRAIL_LAYERS).toBe(LIVE_TRAIL_LAYERS);
     expect(CONTOUR_LAYERS.plain.minor).toBe(CONTOUR_LAYERS.plain.minor);
     expect(CONTOUR_LAYERS.satellite.major).toBe(CONTOUR_LAYERS.satellite.major);
+  });
+});
+
+// #332 — every layer the map adds after first paint must name the anchor it
+// sits under; without `beforeId`, MapLibre appends it above the position
+// puck. Reads the prop off the rendered native node, i.e. what MapLibre got.
+async function injectedBeforeIds(children: ReactNode): Promise<[string, unknown][]> {
+  const view = await render(
+    <GeoJSONSource id="test-source" data={EMPTY as never}>
+      {children}
+    </GeoJSONSource>,
+  );
+  return view
+    .getAllByTestId(/^mlrn-.+-layer$/)
+    .map((node) => [String(node.props.id), node.props.beforeId] as [string, unknown]);
+}
+
+describe('overlay layers sit below the position puck (#332)', () => {
+  it.each([
+    ['HEATMAP_LAYERS', HEATMAP_LAYERS, TRAILS_ANCHOR],
+    ['TRACKS_LINES_LAYER.shown', TRACKS_LINES_LAYER.shown, TRAILS_ANCHOR],
+    ['TRACKS_LINES_LAYER.hidden', TRACKS_LINES_LAYER.hidden, TRAILS_ANCHOR],
+    ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, TRAILS_ANCHOR],
+    ['INSPECT_MARKER_LAYER', INSPECT_MARKER_LAYER, TRAILS_ANCHOR],
+    ['LIVE_TRAIL_LAYERS', LIVE_TRAIL_LAYERS, TRAILS_ANCHOR],
+    ['CONTOUR_LAYERS.plain.minor', CONTOUR_LAYERS.plain.minor, TERRAIN_OVERLAY_ANCHOR],
+    ['CONTOUR_LAYERS.satellite.major', CONTOUR_LAYERS.satellite.major, TERRAIN_OVERLAY_ANCHOR],
+    ['SLOPE_LAYER', SLOPE_LAYER, TERRAIN_OVERLAY_ANCHOR],
+    ['pdfOverviewLayer', pdfOverviewLayer('doc:0'), PDF_MAPS_ANCHOR],
+    ['pdfDetailLayer', pdfDetailLayer('doc:0-detail-abc'), PDF_MAPS_ANCHOR],
+  ])('%s inserts under %s', async (_name, children, anchor) => {
+    const injected = await injectedBeforeIds(children as ReactNode);
+    expect(injected.length).toBeGreaterThan(0);
+    for (const [, beforeId] of injected) expect(beforeId).toBe(anchor);
   });
 });
