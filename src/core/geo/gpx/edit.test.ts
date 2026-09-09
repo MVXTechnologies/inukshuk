@@ -90,6 +90,33 @@ describe('mergeTracks', () => {
     expect(merged.name).toBe('Merged trail');
   });
 
+  it('re-anchors source notes by merged distance, in merge order (#304)', () => {
+    // Each source is a ~111 m north-south leg; B starts ~111 m north of A's
+    // end, so the hop between them counts too (as it does in the stats).
+    const a = {
+      name: 'A',
+      points: [pt(45, -73, T0), pt(45.001, -73, T0 + MIN)],
+      notes: [note('a1', 40, 'cairn'), note('a2', 500, 'past the end')],
+    };
+    const b = {
+      name: 'B',
+      points: [pt(45.002, -73, T0 + 60 * MIN), pt(45.003, -73, T0 + 61 * MIN)],
+      notes: [{ ...note('b1', 10, 'spring'), photoUri: 'file:///photos/b1.jpg' }],
+    };
+    // User picked B first; chronology puts A first, and the notes follow.
+    const merged = mergeTracks([b, a]);
+    const legM = merged.stats.distanceM / 3;
+    expect(merged.notes.map((n) => n.id)).toEqual(['a1', 'a2', 'b1']);
+    expect(merged.notes[0]?.distanceM).toBeCloseTo(40, 6);
+    // Clamped to A's own length, not spilled into B.
+    expect(merged.notes[1]?.distanceM).toBeCloseTo(legM, 3);
+    expect(merged.notes[2]?.distanceM).toBeCloseTo(2 * legM + 10, 3);
+    // Everything else about a note (text, photo, id) rides along verbatim.
+    expect(merged.notes[2]).toMatchObject({ text: 'spring', photoUri: 'file:///photos/b1.jpg' });
+    // Sources without notes still merge to an empty (not missing) list.
+    expect(mergeTracks([{ name: 'X', points: [pt(1, 1)] }]).notes).toEqual([]);
+  });
+
   it('keeps per-point timestamps verbatim', () => {
     const a = { name: 'A', points: [pt(1, 1, T0), pt(1.1, 1.1, T0 + MIN)] };
     const merged = mergeTracks([a]);

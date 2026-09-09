@@ -410,8 +410,8 @@ export function LibraryScreen() {
     if (chosen.length < 2) return;
     setMerging(true);
     try {
-      const { track, fileUri } = await mergeLibraryTracks(chosen);
-      addTrack(track, fileUri);
+      const { track, fileUri, notes } = await mergeLibraryTracks(chosen);
+      addTrack(track, fileUri, notes);
       setSelectedTrackIds([]);
       showSnack(`Merged ${chosen.length} trails into "${track.name}"`);
     } catch (err) {
