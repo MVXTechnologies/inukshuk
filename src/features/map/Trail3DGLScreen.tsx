@@ -94,12 +94,11 @@ import { TrimRangeSlider } from './components/TrimRangeSlider';
 import { Trail2DView } from './Trail2DView';
 import { overwriteWithTrim, saveTrimmedCopy, type TrimRange } from './trimTrack';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+import { useTrailNoteEditor } from './hooks/useTrailNoteEditor';
 
 interface Props {
   trackId: string;
 }
-
-type Editing = { mode: 'add'; distanceM: number } | { mode: 'edit'; noteId: string };
 
 // 3D note-pin geometry: 24dp badge + 14dp stem, tip anchored on the trail.
 const NOTE_BADGE_HALF_W = 12;
@@ -156,9 +155,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Measured summary-card height so the control rail sits just below it.
   const [summaryH, setSummaryH] = useState(64);
   const [scrub, setScrub] = useState<TrackPointAt | null>(null);
-  const [editing, setEditing] = useState<Editing | null>(null);
-  const [draft, setDraft] = useState('');
-  const [draftPhoto, setDraftPhoto] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   // Note badge tapped on the trail (2D pin or 3D projected circle): shows the
   // note text + photo in place, without hunting for its row in the list below.
@@ -175,6 +171,25 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
   const [overlaysAvailable, setOverlaysAvailable] = useState(true);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(2500);
+  // Note dialog state + single-flight save (#307): a failed save keeps the
+  // draft and the dialog; a slow photo copy can't be submitted twice.
+  const {
+    editing,
+    setEditing,
+    draft,
+    setDraft,
+    draftPhoto,
+    setDraftPhoto,
+    saving: noteSaving,
+    commit,
+    close: closeNoteDialog,
+  } = useTrailNoteEditor({
+    trackId,
+    existingPhotoOf: (noteId) => track?.notes?.find((n) => n.id === noteId)?.photoUri,
+    addTrackNote,
+    updateTrackNote,
+    onError: () => showSnack('Could not save the note — your text is still here, try again'),
+  });
 
   // Trim tool (ported from the map's inspect panel — #polish item 5): a kept
   // [start, end] point window over the docked profile, live-previewed by the
@@ -334,7 +349,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
     () => ordered.map((n, i) => ({ distanceM: n.distanceM, label: String(i + 1) })),
     [ordered],
   );
-  const noteById = (id: string) => ordered.find((n) => n.id === id);
 
   const fileUri = track?.fileUri;
   const bbox = track?.stats.bbox;
@@ -786,40 +800,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   const closeNoteEditor = () => {
     Keyboard.dismiss();
-    setEditing(null);
+    closeNoteDialog();
   };
 
   const commitNote = () => {
     Keyboard.dismiss();
     void commit();
-  };
-
-  const commit = async () => {
-    const text = draft.trim();
-    if (!editing || !text) {
-      setEditing(null);
-      return;
-    }
-    try {
-      if (editing.mode === 'add') {
-        const photo = draftPhoto
-          ? await storage.importPhoto(draftPhoto, storage.newId())
-          : undefined;
-        addTrackNote(trackId, editing.distanceM, text, photo);
-      } else {
-        const existing = noteById(editing.noteId)?.photoUri;
-        let photo: string | null | undefined;
-        if (draftPhoto === existing) photo = undefined;
-        else if (!draftPhoto) photo = null;
-        else photo = await storage.importPhoto(draftPhoto, storage.newId());
-        updateTrackNote(trackId, editing.noteId, text, photo);
-      }
-    } catch {
-      showSnack('Could not save the photo');
-    }
-    setEditing(null);
-    setDraft('');
-    setDraftPhoto(null);
   };
 
   const onExportPdf = async () => {
@@ -1235,8 +1221,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
             <KeyboardDoneBar />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={closeNoteEditor}>Cancel</Button>
-            <Button onPress={commitNote} disabled={!draft.trim()}>
+            <Button onPress={closeNoteEditor} disabled={noteSaving}>
+              Cancel
+            </Button>
+            <Button
+              onPress={commitNote}
+              disabled={!draft.trim() || noteSaving}
+              loading={noteSaving}
+            >
               Save
             </Button>
           </Dialog.Actions>
