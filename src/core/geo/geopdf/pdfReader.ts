@@ -312,6 +312,22 @@ class Lexer {
  */
 const MAX_DECODED_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Widest xref-stream field (/W entry) accepted, in bytes. Real files use 1–8
+ * (offsets fit in 8); anything wider is malformed and would read past rows.
+ */
+const MAX_XREF_FIELD_BYTES = 8;
+
+/** A usable xref-stream field width: an integer in [0, MAX_XREF_FIELD_BYTES]. */
+function isXrefFieldWidth(v: number): boolean {
+  return Number.isSafeInteger(v) && v >= 0 && v <= MAX_XREF_FIELD_BYTES;
+}
+
+/** A usable object number / entry count: a nonnegative safe integer. */
+function isXrefCount(v: number): boolean {
+  return Number.isSafeInteger(v) && v >= 0;
+}
+
 /** Streaming inflate with a hard output cap; throws once the cap is exceeded. */
 function inflateBounded(raw: Uint8Array, zlibWrapped: boolean): Uint8Array {
   const chunks: Uint8Array[] = [];
@@ -365,6 +381,11 @@ interface XrefEntry {
  */
 export class PdfDocument {
   private xref = new Map<number, XrefEntry>();
+
+  /** Number of cross-reference entries collected (diagnostics/tests). */
+  get xrefEntryCount(): number {
+    return this.xref.size;
+  }
   private cache = new Map<number, PdfValue>();
   private objStmCache = new Map<number, Map<number, PdfValue>>();
   readonly warnings: string[] = [];
@@ -508,16 +529,47 @@ export class PdfDocument {
     const dict = stream.dict;
     if (!this.trailer) this.trailer = dict; // xref-stream dict IS the trailer
     const wVal = dict.entries.get('W');
-    const sizeVal = dict.entries.get('Size');
     if (!isArray(wVal)) return -1;
-    const w = (wVal as PdfArray).map((x) => Number(x)) as number[];
-    const [w0, w1, w2] = [w[0] ?? 0, w[1] ?? 0, w[2] ?? 0];
-    const rowLen = w0 + w1 + w2;
-    // /W [0 0 0] (rowLen 0) would make the row loop below advance by 0 bytes
-    // forever — a malformed/crafted file must not freeze the JS thread.
-    if (rowLen <= 0 || w0 < 0 || w1 < 0 || w2 < 0) {
+    const w = (wVal as PdfArray).map((x) => Number(x));
+    const w0 = w[0];
+    const w1 = w[1];
+    const w2 = w[2];
+    // Exactly three nonnegative integer byte widths with a positive row length.
+    // /W [0 0 0] would advance the row cursor by 0 bytes forever; a fractional
+    // width (/W [0 0.0001 0]) advanced it by a fraction and minted thousands of
+    // entries from a single decoded byte; NaN/negative/oversized widths index
+    // outside the buffer. None of these may drive the row loop.
+    if (
+      w.length !== 3 ||
+      w0 === undefined ||
+      w1 === undefined ||
+      w2 === undefined ||
+      !isXrefFieldWidth(w0) ||
+      !isXrefFieldWidth(w1) ||
+      !isXrefFieldWidth(w2) ||
+      w0 + w1 + w2 <= 0
+    ) {
       this.warnings.push(`xref stream has invalid /W [${w.join(' ')}]`);
       return -1;
+    }
+    const rowLen = w0 + w1 + w2;
+
+    // /Size and /Index (object-number ranges) must be nonnegative integers;
+    // /Index must hold [start count] pairs.
+    const sizeVal = dict.entries.get('Size');
+    if (sizeVal !== undefined && !isXrefCount(Number(sizeVal))) {
+      this.warnings.push(`xref stream has invalid /Size ${String(sizeVal)}`);
+      return -1;
+    }
+    const indexVal = dict.entries.get('Index');
+    let index: number[] | undefined;
+    if (indexVal !== undefined) {
+      const raw = isArray(indexVal) ? (indexVal as PdfArray).map((x) => Number(x)) : [];
+      if (raw.length === 0 || raw.length % 2 !== 0 || !raw.every(isXrefCount)) {
+        this.warnings.push(`xref stream has invalid /Index [${raw.join(' ')}]`);
+        return -1;
+      }
+      index = raw;
     }
 
     let data: Uint8Array;
@@ -528,13 +580,9 @@ export class PdfDocument {
       return -1;
     }
 
-    // Index pairs default to [0, Size].
-    let index: number[];
-    const indexVal = dict.entries.get('Index');
-    if (isArray(indexVal)) {
-      index = (indexVal as PdfArray).map((x) => Number(x));
-    } else {
-      index = [0, typeof sizeVal === 'number' ? sizeVal : data.length / rowLen];
+    // Index pairs default to [0, Size] (or to what the data can hold).
+    if (index === undefined) {
+      index = [0, sizeVal === undefined ? Math.floor(data.length / rowLen) : Number(sizeVal)];
     }
 
     const readField = (buf: Uint8Array, p: number, len: number): number => {
@@ -543,11 +591,14 @@ export class PdfDocument {
       return v;
     };
 
+    // The total work is bounded by the decoded bytes, whatever /Index and
+    // /Size claim: each entry consumes one complete row.
+    let budget = Math.floor(data.length / rowLen);
     let p = 0;
-    for (let s = 0; s + 1 < index.length; s += 2) {
+    for (let s = 0; s + 1 < index.length && budget > 0; s += 2) {
       const startObj = index[s]!;
       const count = index[s + 1]!;
-      for (let i = 0; i < count && p + rowLen <= data.length; i++) {
+      for (let i = 0; i < count && budget > 0; i++, budget--) {
         const f1 = w0 === 0 ? 1 : readField(data, p, w0);
         const f2 = readField(data, p + w0, w1);
         const f3 = readField(data, p + w0 + w1, w2);

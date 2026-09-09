@@ -321,3 +321,74 @@ describe('pdfReader — bounded stream work', () => {
     expect(doc.getObject(2)).toBeUndefined();
   });
 });
+
+describe('pdfReader — xref stream metadata validation (audit A14)', () => {
+  /**
+   * A two-object file: a Catalog at byte 9 (so a one-byte offset field of
+   * `\t` = 9 resolves it) and an xref stream carrying `dictExtras` over `data`.
+   * With a resolvable /Root the linear-scan fallback stays out of the count;
+   * when the stream is rejected the scan registers at most the 2 real objects.
+   */
+  function xrefStreamPdf(dictExtras: string, data = '\t'): Uint8Array {
+    const head = '%PDF-1.7\n';
+    const catalog = '1 0 obj\n<< /Type /Catalog >>\nendobj\n';
+    const xrefOffset = head.length + catalog.length;
+    const obj =
+      `2 0 obj\n<< /Type /XRef /Root 1 0 R ${dictExtras} /Length ${data.length} >>\n` +
+      `stream\n${data}\nendstream\nendobj\n`;
+    return latin1Bytes(head + catalog + obj + `startxref\n${xrefOffset}\n%%EOF`);
+  }
+  const REAL_OBJECTS = 2;
+
+  it('integer-width control: one stream byte yields exactly one entry', () => {
+    const doc = PdfDocument.parse(xrefStreamPdf('/W [0 1 0] /Index [1 10000] /Size 10000'));
+    expect(doc.xrefEntryCount).toBe(1);
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it('rejects fractional /W widths instead of minting thousands of entries from one byte', () => {
+    // rowLen 0.0001 advanced the row cursor by a fraction: 10,000 entries from
+    // a single decoded byte, with no warning.
+    const doc = PdfDocument.parse(xrefStreamPdf('/W [0 0.0001 0] /Index [1 10000] /Size 10000'));
+    expect(doc.xrefEntryCount).toBeLessThanOrEqual(REAL_OBJECTS);
+    expect(doc.warnings.join('\n')).toContain('invalid /W');
+  });
+
+  it.each([
+    ['nonfinite', '/W [1 /Nope 1]'],
+    ['oversized', '/W [1 64 1]'],
+    ['negative', '/W [1 -1 1]'],
+    ['too few widths', '/W [1 2]'],
+    ['too many widths', '/W [1 2 1 1]'],
+  ])('rejects %s /W metadata', (_label, w) => {
+    const doc = PdfDocument.parse(xrefStreamPdf(`${w} /Size 4`, 'AAAAAAAA'));
+    expect(doc.xrefEntryCount).toBeLessThanOrEqual(REAL_OBJECTS);
+    expect(doc.warnings.join('\n')).toContain('invalid /W');
+  });
+
+  it.each([
+    ['fractional /Index', '/Index [0.5 3]'],
+    ['negative /Index', '/Index [0 -3]'],
+    ['odd-length /Index', '/Index [0 1 2]'],
+    ['nonfinite /Index', '/Index [0 /Nope]'],
+    ['non-array /Index', '/Index 3'],
+    ['fractional /Size', '/Size 1.5'],
+    ['negative /Size', '/Size -1'],
+  ])('rejects %s', (_label, extra) => {
+    const doc = PdfDocument.parse(xrefStreamPdf(`/W [0 1 0] ${extra}`, '\t\t\t\t'));
+    expect(doc.xrefEntryCount).toBeLessThanOrEqual(REAL_OBJECTS);
+    expect(doc.warnings.join('\n')).toMatch(/invalid \/(Index|Size)/);
+  });
+
+  it('bounds the entry count by the decoded bytes, whatever /Index and /Size claim', () => {
+    // Two 2-byte rows exist; the metadata asks for 2e9 entries across two ranges.
+    const doc = PdfDocument.parse(
+      xrefStreamPdf(
+        '/W [0 1 1] /Index [1 1000000000 5000 1000000000] /Size 2000000000',
+        '\t\x00AB',
+      ),
+    );
+    expect(doc.xrefEntryCount).toBe(2);
+    expect(doc.warnings).toEqual([]);
+  });
+});
