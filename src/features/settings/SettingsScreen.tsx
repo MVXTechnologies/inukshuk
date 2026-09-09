@@ -1,4 +1,4 @@
-import { planDataArchive } from '@core/export/archivePlan';
+import { describeDataArchive, planDataArchive } from '@core/export/archivePlan';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import { setOfflineOnly } from '@data/offline';
@@ -119,6 +119,8 @@ export function SettingsScreen() {
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
   const folders = useLibraryStore((s) => s.folders);
+  const waypoints = useLibraryStore((s) => s.waypoints);
+  const customCategories = useLibraryStore((s) => s.customCategories);
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const activeMapId = useLibraryStore((s) => s.activeMapId);
@@ -156,8 +158,8 @@ export function SettingsScreen() {
   };
 
   const exportPlan = useMemo(
-    () => planDataArchive({ folders, maps, tracks }),
-    [folders, maps, tracks],
+    () => planDataArchive({ folders, maps, tracks, waypoints }),
+    [folders, maps, tracks, waypoints],
   );
   // Uncompressed total of every planned file — a good upper-bound estimate for
   // the zip (maps/photos are stored, only the small GPX/JSON parts deflate).
@@ -166,13 +168,10 @@ export function SettingsScreen() {
     [exportPlan],
   );
 
-  const exportSubtitle = useMemo(() => {
-    if (exportPlan.entries.length === 0) return 'Your library is empty';
-    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-    const parts = [plural(exportPlan.trackCount, 'trail'), plural(exportPlan.mapCount, 'map')];
-    if (exportPlan.photoCount > 0) parts.push(plural(exportPlan.photoCount, 'photo'));
-    return `${parts.join(', ')} · ~${formatBytes(exportSizeBytes)} zip`;
-  }, [exportPlan, exportSizeBytes]);
+  const exportSubtitle = useMemo(
+    () => describeDataArchive(exportPlan, exportSizeBytes),
+    [exportPlan, exportSizeBytes],
+  );
 
   const onDownloadData = async () => {
     if (exporting) return;
@@ -189,6 +188,8 @@ export function SettingsScreen() {
         visibleFolderIds,
         activeMapId,
         activeTrackIds,
+        customCategories,
+        waypoints,
       },
       {
         onProgress: (done, total) => setExportProgress({ done, total }),
@@ -452,11 +453,14 @@ export function SettingsScreen() {
                   title="Download your data"
                   description={
                     exporting
-                      ? `Building archive… ${Math.min(exportProgress.done + 1, exportProgress.total)}/${exportProgress.total} files`
+                      ? exportProgress.total === 0
+                        ? 'Building archive…'
+                        : `Building archive… ${Math.min(exportProgress.done + 1, exportProgress.total)}/${exportProgress.total} files`
                       : exportSubtitle
                   }
                   onPress={onDownloadData}
-                  disabled={exporting || exportPlan.entries.length === 0}
+                  // Always exportable (#288): an index-only archive is a valid backup.
+                  disabled={exporting}
                   right={(p) =>
                     exporting ? (
                       <ActivityIndicator style={p.style} size={20} />
@@ -467,8 +471,9 @@ export function SettingsScreen() {
                 />
                 <View style={styles.note}>
                   <Text variant="bodySmall">
-                    Bundles every map, trail and note photo into a zip that mirrors your Library
-                    folders, then opens the share sheet.
+                    Bundles your Library index (trails, maps, waypoints, folders) with every map,
+                    trail and photo into a zip that mirrors your Library folders, then opens the
+                    share sheet.
                   </Text>
                 </View>
               </List.Section>
