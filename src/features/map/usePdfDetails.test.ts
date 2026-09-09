@@ -1,3 +1,6 @@
+import { PdfRenderNotStartedError } from './pdfRenderFailure';
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { renderStatusLine } from '@core/library/overlayStatus';
 import { act, renderHook } from '@testing-library/react-native';
 import { usePdfDetails } from './usePdfDetails';
 import type { MapDocument } from '@core/models';
@@ -80,6 +83,7 @@ const flush = async () => {
 };
 beforeEach(() => {
   jest.useFakeTimers();
+  useOverlayStatusStore.setState({ statuses: { 'map:0': { phase: 'rendered' } } });
   mockFiles.clear();
   mockRasterize.mockReset().mockResolvedValue(raster);
   mockPlans.mockReset().mockImplementation((...args: Parameters<typeof planPdfDetail>) => {
@@ -216,6 +220,78 @@ it('reuses matching tiles immediately on pan while rendering only newly visible 
   await v.unmount();
 });
 
+it('retains real planner tiles across a small pan through a grid alignment boundary', async () => {
+  const actual = jest.requireActual<typeof import('@core/geo/pdfDetail')>('@core/geo/pdfDetail');
+  mockPlans.mockImplementation(actual.planPdfDetailTiles);
+  const before = { west: -70.632, east: -70.532, south: 46.4, north: 46.55 };
+  const after = { ...before, west: -70.631, east: -70.531 };
+  const view = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: before } },
+  );
+  await flush();
+  const original = new Map(view.result.current.map((d) => [d.id, d.imageUri]));
+  const initialRequests = mockRasterize.mock.calls.length;
+  expect(original.size).toBeGreaterThan(1);
+  await view.rerender({ b: after });
+  // The real planner used to change its entire grid at this boundary. The
+  // existing mocked-planner test could not catch that cache invalidation.
+  expect(view.result.current.length).toBeGreaterThan(0);
+  for (const detail of view.result.current) {
+    expect(detail.imageUri).toBe(original.get(detail.id));
+  }
+  const retained = view.result.current.length;
+  await flush();
+  expect(mockRasterize.mock.calls.length - initialRequests).toBe(
+    view.result.current.length - retained,
+  );
+  expect(mockRasterize.mock.calls.length - initialRequests).toBeLessThan(initialRequests);
+  await view.unmount();
+});
+
+it('stops scheduling on blur and reuses completed tiles when focus returns', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25), tile('b', 0.375), tile('c', 0.5)]);
+  let finish!: (value: typeof raster) => void;
+  mockRasterize.mockResolvedValueOnce(raster).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = await renderHook(
+    ({ focused }: { focused: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, focused),
+    { initialProps: { focused: true } },
+  );
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  const cachedUri = view.result.current[0]?.imageUri;
+  await view.rerender({ focused: false });
+  await act(async () => finish(raster));
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(2);
+  expect(view.result.current[0]?.imageUri).toBe(cachedUri);
+  await view.rerender({ focused: true });
+  expect(view.result.current.map((d) => d.id)).toEqual(['map:0:tile:a', 'map:0:tile:b']);
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(3);
+  expect(view.result.current).toHaveLength(3);
+  await view.unmount();
+});
+
+it('cancels debounced refinement when focus leaves before dispatch', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25)]);
+  const view = await renderHook(
+    ({ focused }: { focused: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, focused),
+    { initialProps: { focused: true } },
+  );
+  await view.rerender({ focused: false });
+  await flush();
+  expect(mockRasterize).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
 it('divides the six Mi-pixel visible budget by the number of eligible pages', async () => {
   mockPlans.mockReturnValue([tile('a', 0.25)]);
   const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
@@ -316,7 +392,7 @@ it('bounds obsolete native completions while the camera keeps moving', async () 
   expect(mockFiles.size).toBe(0);
 });
 
-it('consumes every real planned tile and reuses them across a tiny pan', async () => {
+it('consumes real planned tiles and reuses overlapping files when a tiny pan enters a new column', async () => {
   const actual = jest.requireActual<typeof import('@core/geo/pdfDetail')>('@core/geo/pdfDetail');
   mockPlans.mockImplementation(actual.planPdfDetailTiles);
   const expected = actual.planPdfDetailTiles(
@@ -336,13 +412,28 @@ it('consumes every real planned tile and reuses them across a tiny pan', async (
     expected.map((plan) => `map:0:tile:${plan.tileKey}`),
   );
   expect(mockRasterize).toHaveBeenCalledTimes(expected.length);
-  const uris = new Set(v.result.current.map((d) => d.imageUri));
-  await v.rerender({
-    b: { ...bounds, east: bounds.east + 0.000001, west: bounds.west + 0.000001 },
-  });
+  const uris = new Map(v.result.current.map((d) => [d.id, d.imageUri]));
+  // The original eastern edge lies exactly on page-grid x=.5. Moving east
+  // crosses that edge and legitimately needs a new column, while every old
+  // visible tile remains reusable with exactly the same file URI.
+  const nextBounds = { ...bounds, east: bounds.east + 0.000001, west: bounds.west + 0.000001 };
+  const nextPlans = actual.planPdfDetailTiles(
+    overview.coordinates,
+    { width: 1000, height: 1000 },
+    nextBounds,
+    1200,
+    6 * 1024 * 1024,
+  );
+  const added = nextPlans.filter((p) => !uris.has(`map:0:tile:${p.tileKey}`));
+  expect(added).toHaveLength(2);
+  await v.rerender({ b: nextBounds });
   await flush();
-  expect(mockRasterize).toHaveBeenCalledTimes(expected.length);
-  expect(new Set(v.result.current.map((d) => d.imageUri))).toEqual(uris);
+  expect(mockRasterize).toHaveBeenCalledTimes(expected.length + added.length);
+  expect(v.result.current.map((d) => d.id)).toEqual(
+    nextPlans.map((p) => `map:0:tile:${p.tileKey}`),
+  );
+  for (const [id, uri] of uris)
+    expect(v.result.current.find((d) => d.id === id)?.imageUri).toBe(uri);
   await v.unmount();
   expect(mockFiles.size).toBe(0);
 });
@@ -430,4 +521,195 @@ it('uses the physical map height when a portrait viewport rotates', async () => 
     expected.map((plan) => `map:0:tile:${plan.tileKey}`),
   );
   await v.unmount();
+});
+
+it('reports detail loading and timeout in the Library without changing overview success', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toEqual({
+    kind: 'rendering',
+    text: 'Rendering page 1 detail…',
+  });
+  await act(async () => fail(new Error('render timed out after 45000ms')));
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toBe(
+    "Couldn't render page 1 detail: render timed out after 45000ms",
+  );
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({ phase: 'rendered' });
+});
+
+it('retains a sibling tile failure until all tiles succeed in a real retry', async () => {
+  const plan = planPdfDetail(overview.coordinates, { width: 1000, height: 1000 }, bounds, 1200)!;
+  mockPlans.mockReturnValue([
+    { ...plan, tileKey: 'first' },
+    { ...plan, tileKey: 'second' },
+  ]);
+  mockRasterize.mockRejectedValueOnce(new Error('first tile failed')).mockResolvedValueOnce(raster);
+  const view = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toContain(
+    'first tile failed',
+  );
+  mockPlans.mockReturnValue([
+    { ...plan, tileKey: 'retry-first' },
+    { ...plan, tileKey: 'retry-second' },
+  ]);
+  await view.rerender({ b: { ...bounds, west: bounds.west + 0.001 } });
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+});
+
+it('clears detail loading when paused and ignores a stale failure', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const view = await renderHook(
+    ({ enabled }: { enabled: boolean }) =>
+      usePdfDetails([map], [overview], bounds, 1200, undefined, enabled),
+    { initialProps: { enabled: true } },
+  );
+  await flush();
+  await view.rerender({ enabled: false });
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+  await act(async () => fail(new Error('stale timeout')));
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)).toBeNull();
+});
+
+it('clears loading on unmount without erasing the overview error', async () => {
+  useOverlayStatusStore.setState({
+    statuses: { 'map:0': { phase: 'failed', reason: 'overview failed' } },
+  });
+  mockRasterize.mockImplementationOnce(() => new Promise(() => undefined));
+  const view = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text).toBe(
+    "Couldn't render page 1: overview failed",
+  );
+  await view.unmount();
+  expect(useOverlayStatusStore.getState().statuses['map:0:detail']).toBeUndefined();
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({
+    phase: 'failed',
+    reason: 'overview failed',
+  });
+});
+
+it('does not erase another page failure when detail succeeds', async () => {
+  useOverlayStatusStore.setState({
+    statuses: {
+      'map:0': { phase: 'rendered' },
+      'map:1:detail': { phase: 'failed', reason: 'page two failed' },
+    },
+  });
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(useOverlayStatusStore.getState().statuses['map:1:detail']).toEqual({
+    phase: 'failed',
+    reason: 'page two failed',
+  });
+  expect(useOverlayStatusStore.getState().statuses['map:0']).toEqual({ phase: 'rendered' });
+});
+
+const mockPauseFailedPage = jest.fn();
+jest.mock('@state/libraryStore', () => ({
+  useLibraryStore: { getState: () => ({ pauseMapPageAfterRenderFailure: mockPauseFailedPage }) },
+}));
+beforeEach(() => mockPauseFailedPage.mockClear());
+it('pauses a failed detail page before a sibling tile dispatches while other maps continue', async () => {
+  const plan = planPdfDetail(overview.coordinates, { width: 1000, height: 1000 }, bounds, 1200)!;
+  mockPlans.mockReturnValue([
+    { ...plan, tileKey: 'one' },
+    { ...plan, tileKey: 'two' },
+  ]);
+  mockRasterize.mockRejectedValueOnce(new Error('render timed out after 45000ms'));
+  const other = { ...map, id: 'other', fileUri: 'maps/other.pdf' };
+  await renderHook(() =>
+    usePdfDetails([map, other], [{ ...overview, id: 'other:0' }, overview], bounds, 1200),
+  );
+  await flush();
+  expect(mockPauseFailedPage).toHaveBeenCalledWith('map', 0, 'render timed out after 45000ms', {
+    fileUri: map.fileUri,
+    importedAt: map.importedAt,
+  });
+  expect(mockRasterize).toHaveBeenCalledTimes(3);
+  expect(
+    mockRasterize.mock.calls
+      .slice(1)
+      .every((call) => call[0].source.url.endsWith('/maps/other.pdf')),
+  ).toBe(true);
+});
+it('does not persist a paused-page failure for provider cancellation', async () => {
+  mockRasterize.mockRejectedValueOnce(new Error('PdfRasterizer: provider unmounted'));
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(mockPauseFailedPage).not.toHaveBeenCalled();
+});
+
+it('pauses the still-current page when a panned-away tile later times out', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const view = await renderHook(
+    ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds } },
+  );
+  await flush();
+  await view.rerender({ b: { ...bounds, west: bounds.west + 0.002 } });
+  await act(async () => fail(new Error('timeout after pan')));
+  await flush();
+  expect(mockPauseFailedPage).toHaveBeenCalledWith('map', 0, 'timeout after pan', {
+    fileUri: map.fileUri,
+    importedAt: map.importedAt,
+  });
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+});
+
+it('pauses an active page even if zooming out removed its desired detail tiles', async () => {
+  let fail!: (error: Error) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const view = await renderHook(
+    ({ b }: { b: typeof bounds | null }) => usePdfDetails([map], [overview], b, 1200),
+    { initialProps: { b: bounds as typeof bounds | null } },
+  );
+  await flush();
+  await view.rerender({ b: null });
+  await act(async () => fail(new Error('timeout after zoom out')));
+  expect(mockPauseFailedPage).toHaveBeenCalledWith('map', 0, 'timeout after zoom out', {
+    fileUri: map.fileUri,
+    importedAt: map.importedAt,
+  });
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+});
+it('does not schedule a paused page even if its old overview is still displayed', async () => {
+  await renderHook(() => usePdfDetails([{ ...map, activePages: [] }], [overview], bounds, 1200));
+  await flush();
+  expect(mockRasterize).not.toHaveBeenCalled();
+});
+
+it('does not pause the PDF page for a typed pre-dispatch failure', async () => {
+  mockRasterize.mockRejectedValueOnce(new PdfRenderNotStartedError('checkpoint unavailable'));
+  await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  await flush();
+  expect(mockPauseFailedPage).not.toHaveBeenCalled();
 });

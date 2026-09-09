@@ -207,10 +207,17 @@ it('tiles the genuinely diagonal-crossing Eco view within one bounded pixel budg
       tile.crop,
     );
     pixels += geometry.widthPx * geometry.heightPx;
-    // Exact inverse-projected viewport width: previously389pixels on1320screen.
-    expect(
-      (tile.targetWidthPx / (tile.crop.x1 - tile.crop.x0)) * 0.1026404969831079,
-    ).toBeGreaterThan(1150);
+    // This viewport can touch 3 columns by 5 rows at another pan alignment.
+    // Choose the sharpest 32px bucket that fits all 15 equally sized tiles,
+    // rather than spending that reserve on the current smaller visible set.
+    expect(geometry.widthPx * geometry.heightPx * 15).toBeLessThanOrEqual(6 * 1024 * 1024);
+    const larger = rasterCropGeometry(
+      ecoPage.width,
+      ecoPage.height,
+      tile.targetWidthPx + 32,
+      tile.crop,
+    );
+    expect(larger.widthPx * larger.heightPx * 15).toBeGreaterThan(6 * 1024 * 1024);
     expect(tile.tileKey).toBeDefined();
   }
   expect(pixels).toBeLessThanOrEqual(6 * 1024 * 1024);
@@ -297,6 +304,66 @@ it('keeps stable tile keys and geometry across a small pan and orders the neares
   for (const tile of first)
     expect(distance(tile)).toBeGreaterThanOrEqual(distance(first[0]!) - 1e-12);
 });
+
+it('retains overlapping tile identities when panning across a grid edge changes visible count', () => {
+  const at = (west: number) =>
+    planPdfDetailTiles(
+      corners,
+      page,
+      { west, east: west + 0.1, south: 46.4, north: 46.6 },
+      1200,
+      3 * 1024 * 1024,
+    );
+  const before = at(-70.626);
+  const after = at(-70.625);
+  expect(before.length).not.toBe(after.length);
+  const overlap = after.filter((tile) =>
+    before.some((old) => JSON.stringify(old.crop) === JSON.stringify(tile.crop)),
+  );
+  expect(overlap.length).toBeGreaterThan(0);
+  for (const tile of overlap) expect(before).toContainEqual(tile);
+});
+it('retains the grid when a same-zoom pan would cross the former 24-cell limit', () => {
+  const at = (west: number) =>
+    planPdfDetailTiles(corners, page, { west, east: west + 0.1, south: 46.4, north: 46.55 }, 1200);
+  const before = at(-70.632);
+  const after = at(-70.631);
+  expect(after[0]!.crop.x1 - after[0]!.crop.x0).toBe(before[0]!.crop.x1 - before[0]!.crop.x0);
+  const overlap = after.filter((tile) =>
+    before.some((old) => JSON.stringify(old.crop) === JSON.stringify(tile.crop)),
+  );
+  expect(overlap.length).toBeGreaterThan(0);
+  for (const tile of overlap) expect(before).toContainEqual(tile);
+});
+
+it.each([3, 6])(
+  'keeps pan-independent resolution through page-edge clipping within %s MiP',
+  (mip) => {
+    const plans = Array.from({ length: 101 }, (_, i) => {
+      const west = -71.09 + i * 0.01;
+      return planPdfDetailTiles(
+        corners,
+        page,
+        { west, east: west + 0.1, south: 46.4, north: 46.6 },
+        1200,
+        mip * 1024 * 1024,
+      );
+    });
+    const first = plans[0]![0]!;
+    for (const tiles of plans) {
+      expect(tiles.length).toBeGreaterThan(0);
+      expect(tiles.length).toBeLessThanOrEqual(24);
+      let pixels = 0;
+      for (const tile of tiles) {
+        expect(tile.targetWidthPx).toBe(first.targetWidthPx);
+        expect(tile.crop.x1 - tile.crop.x0).toBe(first.crop.x1 - first.crop.x0);
+        const geometry = rasterCropGeometry(page.width, page.height, tile.targetWidthPx, tile.crop);
+        pixels += geometry.widthPx * geometry.heightPx;
+      }
+      expect(pixels).toBeLessThanOrEqual(mip * 1024 * 1024);
+    }
+  },
+);
 it('skips invalid, distant, and overview-only tile requests', () => {
   expect(planPdfDetailTiles(corners, page, { west: 0, east: 1, south: 0, north: 1 }, 1320)).toEqual(
     [],
@@ -307,6 +374,63 @@ it('skips invalid, distant, and overview-only tile requests', () => {
   expect(planPdfDetailTiles(corners, page, view, 1320, 0)).toEqual([]);
   expect(planPdfDetailTiles(corners, page, { ...view, east: NaN }, 1320)).toEqual([]);
 });
+
+it.each([
+  [0.000625, 0.00125],
+  [0.000625, 0.001875],
+  [0.000625, 0.0025],
+  [0.0009375, 0.00125],
+  [0.0009375, 0.001875],
+  [0.0009375, 0.0025],
+  [0.00125, 0.00125],
+  [0.00125, 0.001875],
+  [0.00125, 0.0025],
+])(
+  'retains grid and width on fixed-Mercator N/S pans with integer cell spans (%s, %s)',
+  (width, height) => {
+    const lng = (x: number) => (x * 180) / Math.PI;
+    const lat = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
+    const square: typeof corners = [
+      [lng(-1.2), lat(0.81)],
+      [lng(-1.19), lat(0.81)],
+      [lng(-1.19), lat(0.8)],
+      [lng(-1.2), lat(0.8)],
+    ];
+    let previous: PdfDetailPlan[] | undefined;
+    for (let i = 0; i < 100; i++) {
+      const cy = 0.804 + i * 0.00001;
+      const tiles = planPdfDetailTiles(
+        square,
+        page,
+        {
+          west: lng(-1.195 - width / 2),
+          east: lng(-1.195 + width / 2),
+          south: lat(cy - height / 2),
+          north: lat(cy + height / 2),
+        },
+        1200,
+      );
+      expect(tiles.length).toBeGreaterThan(0);
+      expect(tiles.length).toBeLessThanOrEqual(24);
+      const pixels = tiles.reduce((sum, tile) => {
+        const g = rasterCropGeometry(page.width, page.height, tile.targetWidthPx, tile.crop);
+        return sum + g.widthPx * g.heightPx;
+      }, 0);
+      expect(pixels).toBeLessThanOrEqual(6 * 1024 * 1024);
+      if (previous) {
+        expect(tiles[0]!.targetWidthPx).toBe(previous[0]!.targetWidthPx);
+        expect(tiles[0]!.crop.x1 - tiles[0]!.crop.x0).toBe(
+          previous[0]!.crop.x1 - previous[0]!.crop.x0,
+        );
+        for (const tile of tiles) {
+          const old = previous.find((p) => JSON.stringify(p.crop) === JSON.stringify(tile.crop));
+          if (old) expect(tile).toEqual(old);
+        }
+      }
+      previous = tiles;
+    }
+  },
+);
 
 it.each([90, -90, 270])(
   'preserves portrait physical sampling at a %s degree bearing',
@@ -334,8 +458,12 @@ it.each([90, -90, 270])(
     });
     const density = (tiles: PdfDetailPlan[]) =>
       tiles[0]!.targetWidthPx / (tiles[0]!.crop.x1 - tiles[0]!.crop.x0);
-    // Before the fix, a rotated frame had only 1229 samples over its 2400 px edge.
-    expect(density(rotated) * 0.1).toBeGreaterThanOrEqual(2400);
+    // At this zoom the viewport spans 1.6 by 3.2 grid cells, so an arbitrary
+    // pan touches at most 3 by 5. Full physical sampling would exceed 6MiP;
+    // require the highest uniform 32px bucket fitting that worst alignment.
+    const tileWidth = rotated[0]!.targetWidthPx;
+    expect(tileWidth ** 2 * 15).toBeLessThanOrEqual(6 * 1024 * 1024);
+    expect((tileWidth + 32) ** 2 * 15).toBeGreaterThan(6 * 1024 * 1024);
     expect(density(rotated)).toBe(density(normal));
     const pixels = rotated.reduce((total, tile) => {
       const raster = rasterCropGeometry(page.width, page.height, tile.targetWidthPx, tile.crop);

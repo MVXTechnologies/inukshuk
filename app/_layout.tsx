@@ -6,6 +6,7 @@ import { cleanupBackgroundLocationAtLaunch } from '@lib/backgroundLocation';
 
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
+import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
@@ -68,6 +69,7 @@ export default function RootLayout() {
                 <Stack.Screen name="trail3d/[id]" />
               </Stack>
               <ImportFeedbackSnackbar />
+              <PdfRecoverySnackbar />
               <StravaPushPrompt />
             </PdfRasterizerProvider>
           </ErrorBoundary>

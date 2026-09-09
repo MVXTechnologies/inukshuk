@@ -21,6 +21,11 @@ export function overlayStatusKey(docId: string, pageIndex: number): string {
   return `${docId}:${pageIndex}`;
 }
 
+/** Refinement owns a separate outcome so it cannot overwrite the overview. */
+export function overlayDetailStatusKey(pageKey: string): string {
+  return `${pageKey}:detail`;
+}
+
 export interface RenderStatusLine {
   kind: 'rendering' | 'failed';
   text: string;
@@ -44,8 +49,19 @@ export function renderStatusLine(
     }
   }
   for (const page of pages) {
+    const detail = statuses[overlayDetailStatusKey(overlayStatusKey(map.id, page))];
+    if (detail?.phase === 'failed') {
+      return { kind: 'failed', text: `Couldn't render page ${page + 1} detail: ${detail.reason}` };
+    }
+  }
+  for (const page of pages) {
     if (statuses[overlayStatusKey(map.id, page)]?.phase === 'rendering') {
       return { kind: 'rendering', text: `Rendering page ${page + 1}…` };
+    }
+  }
+  for (const page of pages) {
+    if (statuses[overlayDetailStatusKey(overlayStatusKey(map.id, page))]?.phase === 'rendering') {
+      return { kind: 'rendering', text: `Rendering page ${page + 1} detail…` };
     }
   }
   return null;
@@ -60,6 +76,7 @@ export function retainStatuses(
   live: Iterable<string>,
 ): OverlayStatusMap {
   const keep = new Set(live);
+  for (const key of [...keep]) keep.add(overlayDetailStatusKey(key));
   const next: Record<string, OverlayRenderStatus> = {};
   let changed = false;
   for (const [key, status] of Object.entries(statuses)) {

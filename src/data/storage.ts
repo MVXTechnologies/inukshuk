@@ -181,10 +181,39 @@ export function writeOverlayPng(id: string, base64Png: string): string {
   const dir = overlaysDir();
   if (!dir.exists) dir.create({ intermediates: true });
   const file = new File(dir, `${id}.png`);
-  if (file.exists) file.delete();
-  file.create();
-  guardWrite(() => file.write(base64Png, { encoding: 'base64' }));
+  const stagedUri = new File(dir, `${id}.png.tmp`).uri;
+  try {
+    guardWrite(() => {
+      const staged = new File(stagedUri);
+      if (staged.exists) staged.delete();
+      staged.create();
+      staged.write(base64Png, { encoding: 'base64' });
+      staged.moveSync(file, { overwrite: true });
+    });
+  } finally {
+    discardFile(new File(stagedUri));
+  }
   return file.uri;
+}
+
+/** Take ownership of a native PNG without bringing its bytes across the JS bridge. */
+export function adoptOverlayPng(id: string, sourceUri: string): string {
+  const source = new File(sourceUri);
+  try {
+    return guardWrite(() => {
+      const dir = overlaysDir();
+      if (!dir.exists) dir.create({ intermediates: true });
+      const destination = new File(dir, `${id}.png`);
+      if (source.uri === destination.uri) return destination.uri;
+      // A revision names immutable pixels. Keep an existing completed overview.
+      if (!destination.exists) source.moveSync(destination);
+      return destination.uri;
+    });
+  } finally {
+    // moveSync changes source.uri; only the original temporary path is unowned.
+    const original = new File(sourceUri);
+    if (original.uri !== new File(overlaysDir(), `${id}.png`).uri) discardFile(original);
+  }
 }
 
 /**
@@ -195,7 +224,36 @@ export function writeOverlayPng(id: string, base64Png: string): string {
  */
 export function existingOverlayPng(id: string): string | null {
   const file = new File(overlaysDir(), `${id}.png`);
-  return file.exists ? file.uri : null;
+  if (!file.exists) return null;
+  if (hasCompletePngEnvelope(file)) return file.uri;
+  discardFile(file);
+  return null;
+}
+
+/** Detect interrupted/empty cache writes without reading image pixels into JS. */
+function hasCompletePngEnvelope(file: File): boolean {
+  try {
+    const size = file.size;
+    if (size < 57) return false;
+    const handle = file.open(FileMode.ReadOnly);
+    try {
+      const header = handle.readBytes(33);
+      const signature = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82];
+      if (header.length !== 33 || !signature.every((value, i) => header[i] === value)) {
+        return false;
+      }
+      const dimensions = new DataView(header.buffer, header.byteOffset, header.byteLength);
+      if (dimensions.getUint32(16) === 0 || dimensions.getUint32(20) === 0) return false;
+      handle.offset = size - 12;
+      const end = handle.readBytes(12);
+      const iend = [0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
+      return end.length === 12 && iend.every((value, i) => end[i] === value);
+    } finally {
+      handle.close();
+    }
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -62,3 +62,31 @@ describe('overlayStatusKey', () => {
     expect(overlayStatusKey('abc', 2)).toBe('abc:2');
   });
 });
+
+it('shows detail failure after overview success and preserves overview failure priority', () => {
+  expect(
+    renderStatusLine(map, {
+      'm1:0': { phase: 'rendered' },
+      'm1:0:detail': { phase: 'failed', reason: 'timeout' },
+    }),
+  ).toEqual({ kind: 'failed', text: "Couldn't render page 1 detail: timeout" });
+  expect(
+    renderStatusLine(map, {
+      'm1:0': { phase: 'failed', reason: 'overview' },
+      'm1:0:detail': { phase: 'failed', reason: 'detail' },
+    })?.text,
+  ).toBe("Couldn't render page 1: overview");
+});
+it('shows refinement loading while retaining the completed overview status', () => {
+  expect(
+    renderStatusLine(map, { 'm1:0': { phase: 'rendered' }, 'm1:0:detail': { phase: 'rendering' } }),
+  ).toEqual({ kind: 'rendering', text: 'Rendering page 1 detail…' });
+});
+it('retains detail statuses with their active page and drops inactive detail statuses', () => {
+  expect(
+    retainStatuses(
+      { 'm1:0:detail': { phase: 'failed', reason: 'x' }, 'm1:1:detail': { phase: 'rendering' } },
+      ['m1:0'],
+    ),
+  ).toEqual({ 'm1:0:detail': { phase: 'failed', reason: 'x' } });
+});

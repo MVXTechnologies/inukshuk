@@ -45,7 +45,7 @@ import { useMapStore } from '@state/mapStore';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
@@ -188,6 +188,7 @@ function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineStr
 }
 
 export function MapScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
@@ -238,7 +239,8 @@ export function MapScreen() {
     () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
     [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
   );
-  const { overlays, error: overlayError } = usePdfOverlays(shownMaps);
+  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
@@ -271,7 +273,6 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
@@ -703,6 +704,7 @@ export function MapScreen() {
     showPdfOverlay ? settledBounds : null,
     windLayout.width * pdfPixelRatio,
     { heightPx: windLayout.height * pdfPixelRatio, bearing: mapBearing },
+    isFocused,
   );
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig

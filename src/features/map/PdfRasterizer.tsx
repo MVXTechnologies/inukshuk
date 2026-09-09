@@ -1,3 +1,4 @@
+import { PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
@@ -28,6 +29,7 @@ import { fnv1a32 } from '@core/encoding/fnv1a';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import { acquireLocalServer, writeServedText, type LocalServerLease } from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
+import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { reportError } from '@lib/errorReporting';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
@@ -164,7 +166,7 @@ function isResultMessage(message: WebViewMessage): message is WebViewResultMessa
 /** Geometry belongs to one immutable document revision, page, and served source. */
 function nativeGeometryKey(args: Required<RasterizeArgs>): string | null {
   const page = args.nativePage;
-  return page && args.crop
+  return page
     ? JSON.stringify([
         page.fileUri,
         page.revision,
@@ -175,14 +177,39 @@ function nativeGeometryKey(args: Required<RasterizeArgs>): string | null {
       ])
     : null;
 }
+/** Native unsupported errors can depend on decoder area/aspect budgets. */
+function nativeRequestKey(args: Required<RasterizeArgs>): string | null {
+  const pageKey = nativeGeometryKey(args);
+  const crop = args.crop;
+  return pageKey !== null
+    ? JSON.stringify([
+        pageKey,
+        crop ? [crop.x0, crop.y0, crop.x1, crop.y1] : null,
+        args.targetWidthPx,
+      ])
+    : null;
+}
 const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
 
 interface PendingRequest {
+  backendDispatched: boolean;
   args: Required<RasterizeArgs>;
+  recoveryPage: { fileUri: string; pageIndex: number } | null;
+  recoveryToken: string | null;
   resolve: (result: RasterResult) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
   expire: () => void;
+}
+
+function finishRecovery(pending: PendingRequest): void {
+  if (pending.recoveryToken === null) return;
+  try {
+    finishPdfRender(pending.recoveryToken);
+  } catch (error) {
+    reportError(error, 'pdf-render-recovery-cleanup');
+  }
+  pending.recoveryToken = null;
 }
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
@@ -394,7 +421,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var baseViewport = page.getViewport({ scale: 1, rotation: 0 });
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
-          if (nativePage && crop && page.rotate === 0 && page.userUnit === 1 &&
+          if (nativePage && page.rotate === 0 && page.userUnit === 1 &&
               Array.isArray(page.view) && page.view.length === 4 &&
               page.view[0] === 0 && page.view[1] === 0 &&
               page.view[2] === nativePage.expectedPageWidthPt &&
@@ -492,7 +519,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const [engine, setEngine] = useState<Engine | null>(null);
   const [ready, setReady] = useState(false);
   const readyRef = useRef(false);
+  const servedLoadRetryRef = useRef(false);
   const [engineGeneration, setEngineGeneration] = useState(0);
+  const engineGenerationRef = useRef(0);
+  const replaceEngine = useCallback(() => {
+    // Invalidate native callbacks immediately, before React commits the new
+    // WebView. A late ready ping must not dispatch into its unready successor.
+    engineGenerationRef.current += 1;
+    setEngineGeneration(engineGenerationRef.current);
+  }, []);
 
   // The built page, kept so a served engine can fall back to inline.
   const htmlRef = useRef<string | null>(null);
@@ -515,6 +550,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const busyRef = useRef(false);
   const nativeActiveRef = useRef<string | null>(null);
   const verifiedGeometryRef = useRef(new Set<string>());
+  const unsupportedRequestsRef = useRef(new Set<string>());
   const pumpQueueRef = useRef<() => void>(() => {});
   const mountedRef = useRef(true);
   const activeRequestRef = useRef<string | null>(null);
@@ -525,6 +561,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   // server starts, inline otherwise.
   useEffect(() => {
     let cancelled = false;
+    const settled = settledRef.current;
     (async () => {
       let html: string;
       try {
@@ -545,7 +582,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           // queue but cannot run; they reject via the per-request timeout.
           reportError(err, 'pdfjs-assets-load');
           console.error('PdfRasterizer: failed to load bundled pdf.js assets', err);
-          settledRef.current.resolve();
+          settled.resolve();
         }
         return;
       }
@@ -576,11 +613,16 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         originRef.current = null;
         applyEngine({ kind: 'inline', html });
       } finally {
-        settledRef.current.resolve();
+        settled.resolve();
       }
     })();
     return () => {
       cancelled = true;
+      originRef.current = null;
+      settled.resolve();
+      // StrictMode may restart setup on these refs. Its next startup needs a
+      // fresh readiness promise, independent of this cancelled asset load.
+      settledRef.current = deferred();
       const lease = leaseRef.current;
       leaseRef.current = null;
       lease?.release().catch(() => undefined);
@@ -590,19 +632,24 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const startNative = useCallback((id: string, pending: PendingRequest) => {
     if (nativeActiveRef.current !== null) return;
     const { nativePage, crop, pageIndex, targetWidthPx } = pending.args;
-    if (!nativePage || !crop) return;
+    if (!nativePage) return;
     const cacheKey = nativeGeometryKey(pending.args);
+    const requestKey = nativeRequestKey(pending.args);
     nativeActiveRef.current = id;
     clearTimeout(pending.timeout);
     pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
+    let retryWithPdfJs = false;
     void (async () => {
       try {
+        pending.backendDispatched = true;
         const result = await renderNativePdfCrop({
           fileUri: nativePage.fileUri,
           pageIndex,
           pageWidthPt: nativePage.expectedPageWidthPt,
           pageHeightPt: nativePage.expectedPageHeightPt,
-          crop,
+          // Keep the public crop null for PDF.js's larger overview budget;
+          // only the native API needs an explicit full-page rectangle.
+          crop: crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 },
           targetWidthPx,
         });
         if (
@@ -637,19 +684,45 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           'code' in error &&
           error.code === 'E_PDF_UNSUPPORTED'
         ) {
+          // Unsupported can describe either the page encoding or this crop's
+          // decoder budget. Cache only the exact crop and output width, never
+          // disable valid small crops after a full-page request is refused.
+          if (requestKey !== null) {
+            const unsupported = unsupportedRequestsRef.current;
+            unsupported.delete(requestKey);
+            unsupported.add(requestKey);
+            while (unsupported.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+              const oldest = unsupported.values().next().value;
+              if (oldest === undefined) break;
+              unsupported.delete(oldest);
+            }
+          }
           // This page is outside the native renderer's deliberately narrow
           // capabilities. Retry the same request once without native handoff;
           // queue release in finally dispatches it ahead of waiting work.
           pending.args = { ...pending.args, nativePage: null };
           queueRef.current.unshift({ id, args: pending.args });
+          retryWithPdfJs = true;
           return;
         }
         if (pendingRef.current.get(id) === pending) {
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);
-          pending.reject(error instanceof Error ? error : new Error(String(error)));
+          const admissionFailed =
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            (error.code === 'E_PDF_BUSY' || error.code === 'E_PDF_CONTEXT');
+          pending.reject(
+            admissionFailed
+              ? new PdfRenderNotStartedError(error)
+              : error instanceof Error
+                ? error
+                : new Error(String(error)),
+          );
         }
       } finally {
+        if (!retryWithPdfJs) finishRecovery(pending);
         if (nativeActiveRef.current === id) {
           nativeActiveRef.current = null;
           if (mountedRef.current) {
@@ -675,7 +748,29 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     activeRequestRef.current = id;
     const cachedKey = nativeGeometryKey(args);
     const nativePending = pendingRef.current.get(id);
-    if (cachedKey !== null && verifiedGeometryRef.current.has(cachedKey) && nativePending) {
+    if (nativePending?.recoveryPage && nativePending.recoveryToken === null) {
+      try {
+        // Persist only when this request actually owns the renderer, never
+        // while queued. Keep identity independent of native eligibility.
+        nativePending.recoveryToken = beginPdfRender(nativePending.recoveryPage);
+      } catch (error) {
+        clearTimeout(nativePending.timeout);
+        pendingRef.current.delete(id);
+        nativePending.reject(error instanceof Error ? error : new Error(String(error)));
+        busyRef.current = false;
+        activeRequestRef.current = null;
+        pumpQueueRef.current();
+        return;
+      }
+    }
+    // Check at dispatch: an identical request may already be queued when
+    // the first probe reports an unsupported encoding or decoder budget.
+    const requestKey = nativeRequestKey(args);
+    if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) {
+      unsupportedRequestsRef.current.delete(requestKey);
+      unsupportedRequestsRef.current.add(requestKey);
+      args.nativePage = null;
+    } else if (cachedKey !== null && verifiedGeometryRef.current.has(cachedKey) && nativePending) {
       startNative(id, nativePending);
       return;
     }
@@ -687,7 +782,8 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (pending) {
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
-        pending.reject(new Error('PdfRasterizer: WebView unavailable'));
+        finishRecovery(pending);
+        pending.reject(new PdfRenderNotStartedError('PdfRasterizer: WebView unavailable'));
       }
       return;
     }
@@ -695,6 +791,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     // Returning `true` from injected JS is required by react-native-webview.
     const pending = pendingRef.current.get(id);
     if (pending) {
+      pending.backendDispatched = true;
       // Queue/startup waiting is bounded separately from actual rendering.
       clearTimeout(pending.timeout);
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
@@ -746,6 +843,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (!isResultMessage(message)) {
         if (message.ok) {
+          servedLoadRetryRef.current = false;
           readyRef.current = true;
           setReady(true);
         }
@@ -758,10 +856,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (message.ok && message.kind === 'native-geometry') {
         if (nativeActiveRef.current !== null) return;
-        const { nativePage, crop } = pending.args;
+        const { nativePage } = pending.args;
         if (
           !nativePage ||
-          !crop ||
           message.pageWidthPt !== nativePage.expectedPageWidthPt ||
           message.pageHeightPt !== nativePage.expectedPageHeightPt
         )
@@ -773,6 +870,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       if (nativeActiveRef.current === message.id) return;
       clearTimeout(pending.timeout);
       pendingRef.current.delete(message.id);
+      finishRecovery(pending);
       if (message.ok) {
         pending.resolve({
           pngDataUri: message.pngDataUri,
@@ -791,14 +889,37 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           busyRef.current = false;
           readyRef.current = false;
           setReady(false);
-          setEngineGeneration((generation) => generation + 1);
+          replaceEngine();
           return;
         }
       }
       finishCurrent();
     },
-    [finishCurrent, startNative],
+    [finishCurrent, startNative, replaceEngine],
   );
+
+  // WKWebView/Android renderer death has its own event and need not emit a
+  // page-load error. Replacing the native WebView revives an idle dead engine
+  // too; waiting for an active request timeout leaves every queued map blocked.
+  const handleProcessGone = useCallback(() => {
+    readyRef.current = false;
+    setReady(false);
+    // A native crop does not belong to the WebView process. It must retain
+    // the queue until its promise settles, even while the page is replaced.
+    if (nativeActiveRef.current === null) {
+      const id = activeRequestRef.current;
+      const pending = id === null ? undefined : pendingRef.current.get(id);
+      if (pending && id !== null) {
+        clearTimeout(pending.timeout);
+        pendingRef.current.delete(id);
+        finishRecovery(pending);
+        pending.reject(new Error('PdfRasterizer: rendering process terminated'));
+      }
+      activeRequestRef.current = null;
+      busyRef.current = false;
+    }
+    replaceEngine();
+  }, [replaceEngine]);
 
   // If the WebView process reloads/crashes, the engine is no longer ready and
   // must re-announce itself before we resume the queue.
@@ -825,6 +946,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       readyRef.current = false;
       setReady(false);
       applyEngine({ kind: 'inline', html });
+      replaceEngine();
       // Replacing the WebView cannot stop PdfRenderer. Its completion still
       // owns queue release even when its caller is rejected below.
       if (nativeActiveRef.current === null) {
@@ -839,10 +961,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         if (queueRef.current.some((q) => q.id === id)) continue;
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
+        if (nativeActiveRef.current !== id) finishRecovery(pending);
         pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
       }
     },
-    [applyEngine],
+    [applyEngine, replaceEngine],
   );
 
   const handleError = useCallback(
@@ -852,10 +975,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       // Only the page's own load matters; a failed sub-request (a PDF that was
       // deleted, say) is reported to its caller by pdf.js.
       if (current?.kind === 'served' && (!url || current.uri.startsWith(url.split('?')[0] ?? ''))) {
+        // A transient navigation failure does not prove the shared server died.
+        // Retry this page once before losing URL access for the provider lifetime.
+        // Successful readiness rearms the retry; repeated failures still fall
+        // back to inline so small maps remain usable without a reload loop.
+        if (!servedLoadRetryRef.current) {
+          servedLoadRetryRef.current = true;
+          handleProcessGone();
+          return;
+        }
         fallbackToInline(description || 'load error');
       }
     },
-    [fallbackToInline],
+    [fallbackToInline, handleProcessGone],
   );
 
   const handleHttpError = useCallback(
@@ -875,83 +1007,120 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     pumpQueueRef.current = pumpQueue;
   }, [pumpQueue]);
 
-  const rasterize = useCallback<RasterizeFn>((args) => {
-    return new Promise<RasterResult>((resolve, reject) => {
-      const { source } = args;
-      if (source.url === undefined && !source.base64) {
-        reject(new Error('PdfRasterizer: base64 is empty'));
-        return;
-      }
-      if (source.url !== undefined && originRef.current === null) {
-        // A URL can only be fetched by the served page; callers ask
-        // `serverOrigin()` first, so this is a programming error, not a hang.
-        reject(new Error('PdfRasterizer: engine is in inline mode, cannot fetch a URL'));
-        return;
-      }
-      idCounterRef.current += 1;
-      const id = `req-${idCounterRef.current}`;
-      const normalized: Required<RasterizeArgs> = {
-        source,
-        pageIndex: args.pageIndex,
-        targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
-        crop: args.crop ?? null,
-        nativePage: args.crop && nativePdfAvailable() ? (args.nativePage ?? null) : null,
-      };
-      const expire = () => {
-        const stillPending = pendingRef.current.get(id);
-        if (stillPending) {
-          pendingRef.current.delete(id);
-          stillPending.reject(
-            new Error(`PdfRasterizer: render timed out after ${RENDER_TIMEOUT_MS}ms`),
-          );
-          queueRef.current = queueRef.current.filter((queued) => queued.id !== id);
-          if (nativeActiveRef.current === id) {
-            const key = nativeGeometryKey(normalized);
-            if (key !== null) verifiedGeometryRef.current.delete(key);
-            // PdfRenderer cannot be interrupted by replacing a WebView. Keep
-            // queue ownership until its promise settles; delete late output.
-            return;
-          }
-          if (activeRequestRef.current === id) {
-            // A timeout does not stop pdf.js. Destroy the old WebView/canvas
-            // and wait for the replacement's ready message before proceeding.
-            activeRequestRef.current = null;
-            busyRef.current = false;
-            readyRef.current = false;
-            setReady(false);
-            setEngineGeneration((generation) => generation + 1);
-          } else {
-            // Expiring a queued request must never release an active render.
-            pumpQueueRef.current();
-          }
+  const rasterize = useCallback<RasterizeFn>(
+    (args) => {
+      return new Promise<RasterResult>((resolve, reject) => {
+        if (!mountedRef.current) {
+          reject(new Error('PdfRasterizer: provider unmounted'));
+          return;
         }
-      };
-      const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
+        const { source } = args;
+        if (source.url === undefined && !source.base64) {
+          reject(new PdfRenderNotStartedError('PdfRasterizer: base64 is empty'));
+          return;
+        }
+        if (source.url !== undefined && originRef.current === null) {
+          // A URL can only be fetched by the served page; callers ask
+          // `serverOrigin()` first, so this is a programming error, not a hang.
+          reject(
+            new PdfRenderNotStartedError(
+              'PdfRasterizer: engine is in inline mode, cannot fetch a URL',
+            ),
+          );
+          return;
+        }
+        idCounterRef.current += 1;
+        const id = `req-${idCounterRef.current}`;
+        const normalized: Required<RasterizeArgs> = {
+          source,
+          pageIndex: args.pageIndex,
+          targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
+          crop: args.crop ?? null,
+          nativePage: nativePdfAvailable() ? (args.nativePage ?? null) : null,
+        };
+        const expire = () => {
+          const stillPending = pendingRef.current.get(id);
+          if (stillPending) {
+            pendingRef.current.delete(id);
+            stillPending.reject(
+              new Error(`PdfRasterizer: render timed out after ${RENDER_TIMEOUT_MS}ms`),
+            );
+            queueRef.current = queueRef.current.filter((queued) => queued.id !== id);
+            if (nativeActiveRef.current === id) {
+              const key = nativeGeometryKey(normalized);
+              if (key !== null) verifiedGeometryRef.current.delete(key);
+              // PdfRenderer cannot be interrupted by replacing a WebView. Keep
+              // queue ownership until its promise settles; delete late output.
+              return;
+            }
+            finishRecovery(stillPending);
+            if (activeRequestRef.current === id) {
+              // A timeout does not stop pdf.js. Destroy the old WebView/canvas
+              // and wait for the replacement's ready message before proceeding.
+              activeRequestRef.current = null;
+              busyRef.current = false;
+              readyRef.current = false;
+              setReady(false);
+              replaceEngine();
+            } else if (!busyRef.current && !readyRef.current && engineRef.current !== null) {
+              // Startup/reload can fail before any request owns the canvas. A
+              // queued timeout must replace that non-ready engine too, otherwise
+              // every future map waits against the same dead page forever.
+              replaceEngine();
+            } else {
+              // Expiring a queued request must never release an active render.
+              pumpQueueRef.current();
+            }
+          }
+        };
+        const timeout = setTimeout(expire, RENDER_TIMEOUT_MS);
 
-      pendingRef.current.set(id, { args: normalized, resolve, reject, timeout, expire });
-      queueRef.current.push({ id, args: normalized });
-      pumpQueueRef.current();
-    });
-  }, []);
+        const pendingRequest: PendingRequest = {
+          backendDispatched: false,
+          args: normalized,
+          recoveryPage: args.nativePage
+            ? { fileUri: args.nativePage.fileUri, pageIndex: args.pageIndex }
+            : null,
+          recoveryToken: null,
+          resolve,
+          reject: (error) =>
+            reject(pendingRequest.backendDispatched ? error : new PdfRenderNotStartedError(error)),
+          timeout,
+          expire,
+        };
+        pendingRef.current.set(id, pendingRequest);
+        queueRef.current.push({ id, args: normalized });
+        pumpQueueRef.current();
+      });
+    },
+    [replaceEngine],
+  );
 
   const serverOrigin = useCallback<ServerOriginFn>(async () => {
-    await settledRef.current.promise;
-    return originRef.current;
+    while (mountedRef.current) {
+      const settled = settledRef.current;
+      await settled.promise;
+      if (settled === settledRef.current) return originRef.current;
+    }
+    return null;
   }, []);
 
   // Reject everything still pending on unmount so callers never hang.
   useEffect(() => {
     const pending = pendingRef.current;
     const verifiedGeometry = verifiedGeometryRef.current;
+    const unsupportedRequests = unsupportedRequestsRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      pending.forEach((req) => {
+      pending.forEach((req, id) => {
         clearTimeout(req.timeout);
+        if (nativeActiveRef.current !== id) finishRecovery(req);
         req.reject(new Error('PdfRasterizer: provider unmounted'));
       });
       pending.clear();
       verifiedGeometry.clear();
+      unsupportedRequests.clear();
       // StrictMode can replay setup on these same refs. Discard abandoned JS
       // queue entries, but never release an unfinished native operation.
       queueRef.current = [];
@@ -977,10 +1146,24 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             ref={webviewRef}
             source={engine.kind === 'served' ? { uri: engine.uri } : { html: engine.html }}
             originWhitelist={['*']}
-            onMessage={handleMessage}
-            onLoadStart={handleLoadStart}
-            onError={handleError}
-            onHttpError={handleHttpError}
+            onMessage={(event) => {
+              if (engineGeneration === engineGenerationRef.current) handleMessage(event);
+            }}
+            onLoadStart={() => {
+              if (engineGeneration === engineGenerationRef.current) handleLoadStart();
+            }}
+            onContentProcessDidTerminate={() => {
+              if (engineGeneration === engineGenerationRef.current) handleProcessGone();
+            }}
+            onRenderProcessGone={() => {
+              if (engineGeneration === engineGenerationRef.current) handleProcessGone();
+            }}
+            onError={(event) => {
+              if (engineGeneration === engineGenerationRef.current) handleError(event);
+            }}
+            onHttpError={(event) => {
+              if (engineGeneration === engineGenerationRef.current) handleHttpError(event);
+            }}
             javaScriptEnabled
             // Offline guarantee: the document is self-contained and only ever
             // talks to the app's own loopback server — nothing remote.

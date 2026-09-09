@@ -22,7 +22,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 6;
+export const LIBRARY_SCHEMA_VERSION = 7;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -186,14 +186,39 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
   const activePages = dedupePageIndices(
     Array.isArray(legacy.activePages) ? legacy.activePages : georeferences.map((g) => g.pageIndex),
   );
+  const pageCount = typeof legacy.pageCount === 'number' ? legacy.pageCount : georeferences.length;
+  const recoveryErrors: NonNullable<MapDocument['renderRecoveryErrors']> = [];
+  for (const entry of asArray(raw.renderRecoveryErrors).filter(isRecord)) {
+    const pageIndex = entry.pageIndex;
+    if (
+      typeof pageIndex !== 'number' ||
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 0 ||
+      pageIndex >= pageCount ||
+      recoveryErrors.some((error) => error.pageIndex === pageIndex)
+    )
+      continue;
+    if (entry.reason === 'interrupted') recoveryErrors.push({ pageIndex, reason: 'interrupted' });
+    else if (entry.reason === 'render-failed' && typeof entry.message === 'string') {
+      recoveryErrors.push({
+        pageIndex,
+        reason: 'render-failed',
+        message: entry.message.slice(0, 400),
+      });
+    }
+  }
+  recoveryErrors.sort((a, b) => a.pageIndex - b.pageIndex);
   return {
     id: String(legacy.id ?? ''),
     name: String(legacy.name ?? ''),
     fileUri: String(legacy.fileUri ?? ''),
     importedAt: typeof legacy.importedAt === 'number' ? legacy.importedAt : 0,
-    pageCount: typeof legacy.pageCount === 'number' ? legacy.pageCount : georeferences.length,
+    pageCount,
     georeferences,
-    activePages,
+    activePages: activePages.filter(
+      (page) => !recoveryErrors.some((error) => error.pageIndex === page),
+    ),
+    ...(recoveryErrors.length ? { renderRecoveryErrors: recoveryErrors } : {}),
     ...(typeof legacy.georeferenceWarning === 'string'
       ? { georeferenceWarning: legacy.georeferenceWarning }
       : {}),
@@ -241,6 +266,8 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // rewrite itself runs in the sanitize pass below, which is idempotent and so
   // also heals a v6 index written with a stray absolute path.
   5: (doc) => ({ ...doc, schemaVersion: 6 }),
+  // v6 → v7: interrupted-page notices persist with their disabled page selection.
+  6: (doc) => ({ ...doc, schemaVersion: 7 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */

@@ -47,7 +47,11 @@ import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { georeferenceNotice } from '@core/library/overlayPages';
-import { renderStatusLine } from '@core/library/overlayStatus';
+import {
+  overlayDetailStatusKey,
+  overlayStatusKey,
+  renderStatusLine,
+} from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -104,6 +108,7 @@ export function LibraryScreen() {
   const renameMap = useLibraryStore((s) => s.renameMap);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
+  const retryMapPage = useLibraryStore((s) => s.retryMapPage);
   // Per-page render outcome from the map's overlay pipeline (#269).
   const overlayStatuses = useOverlayStatusStore((s) => s.statuses);
   const addTrack = useLibraryStore((s) => s.addTrack);
@@ -537,6 +542,13 @@ export function LibraryScreen() {
     // that never appears on the map always says why, here, not only in a
     // four-second snackbar on the map screen (#269).
     const renderStatus = renderStatusLine(m, overlayStatuses);
+    const rendering = m.activePages.some((page) => {
+      const key = overlayStatusKey(m.id, page);
+      return (
+        overlayStatuses[key]?.phase === 'rendering' ||
+        overlayStatuses[overlayDetailStatusKey(key)]?.phase === 'rendering'
+      );
+    });
     const active = m.activePages.length;
     const expanded = expandedMap === m.id;
     return (
@@ -548,7 +560,15 @@ export function LibraryScreen() {
             onPress={() => openMap(m.id)}
             accessibilityLabel={`${m.name} — view on map`}
           >
-            <Icon source="map" size={22} color={theme.colors.onSurfaceVariant} />
+            {rendering ? (
+              <ActivityIndicator
+                size={22}
+                color={theme.colors.primary}
+                accessibilityLabel={`Rendering ${m.name}`}
+              />
+            ) : (
+              <Icon source="map" size={22} color={theme.colors.onSurfaceVariant} />
+            )}
             <View style={styles.mapTitleCol}>
               <Text variant="titleSmall" numberOfLines={1}>
                 {m.name}
@@ -591,6 +611,28 @@ export function LibraryScreen() {
           )}
           {itemMenu('map', m.id, m.name, m.folderId)}
         </View>
+        {m.renderRecoveryErrors?.map((error) => (
+          <Card.Content key={`recovery-${error.pageIndex}`}>
+            <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+              {error.reason === 'interrupted'
+                ? `Page ${error.pageIndex + 1}: Rendering was interrupted. This page was turned off to keep other maps available.`
+                : `Page ${error.pageIndex + 1}: ${error.message} This page was turned off to keep other maps available.`}
+            </Text>
+            <Button
+              accessibilityLabel={`Retry page ${error.pageIndex + 1} of ${m.name}`}
+              onPress={() => {
+                try {
+                  retryMapPage(m.id, error.pageIndex);
+                } catch (failure) {
+                  reportError(failure, 'pdf-page-retry');
+                  showSnack('Could not save the retry. The page remains turned off.');
+                }
+              }}
+            >
+              Retry
+            </Button>
+          </Card.Content>
+        ))}
         {hasPages && expanded && (
           <Card.Content>
             <Text variant="labelMedium" style={styles.overlayLabel}>

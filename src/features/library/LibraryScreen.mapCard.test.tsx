@@ -17,6 +17,7 @@ import type { GeoReference, MapDocument } from '@core/models';
 import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { LibraryScreen } from '@features/library/LibraryScreen';
 import { useLibraryStore } from '@state/libraryStore';
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -202,3 +203,71 @@ it('toggling a page updates activePages', async () => {
   await press(view, 'Page 2');
   expect(activePagesOf('m1')).toEqual([0, 1]);
 });
+
+it('keeps the interrupted-page explanation visible while unticked and retries only on request', async () => {
+  const view = await show(
+    mapDoc({
+      pageCount: 2,
+      georeferences: [geo(0), geo(1)],
+      activePages: [0],
+      renderRecoveryErrors: [{ pageIndex: 1, reason: 'interrupted' }],
+    }),
+  );
+  expect(
+    view.getByText(
+      'Page 2: Rendering was interrupted. This page was turned off to keep other maps available.',
+    ),
+  ).toBeOnTheScreen();
+  expect(activePagesOf('m1')).toEqual([0]);
+  await expandOverlayPages(view);
+  expect(view.getByLabelText('Page 2')).not.toBeChecked();
+  await press(view, 'Retry page 2 of Sheet');
+  expect(activePagesOf('m1')).toEqual([0, 1]);
+  expect(
+    view.queryByText(
+      'Page 2: Rendering was interrupted. This page was turned off to keep other maps available.',
+    ),
+  ).toBeNull();
+});
+
+it('keeps a caught render failure visible under its unchecked page with Retry', async () => {
+  const view = await show(
+    mapDoc({
+      georeferences: [geo(0)],
+      activePages: [],
+      renderRecoveryErrors: [
+        { pageIndex: 0, reason: 'render-failed', message: 'render timed out after 45000ms' },
+      ],
+    }),
+  );
+  expect(
+    view.getByText(
+      'Page 1: render timed out after 45000ms This page was turned off to keep other maps available.',
+    ),
+  ).toBeOnTheScreen();
+  expect(view.getByLabelText('Retry page 1 of Sheet')).toBeOnTheScreen();
+  expect(activePagesOf('m1')).toEqual([]);
+});
+
+it.each(['m1:0', 'm1:0:detail'])(
+  'replaces only the loading map icon and stops on failure (%s)',
+  async (key) => {
+    useOverlayStatusStore.setState({ statuses: { [key]: { phase: 'rendering' } } });
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    expect(view.getByLabelText('Rendering Sheet')).toBeTruthy();
+    await act(async () => {
+      useOverlayStatusStore
+        .getState()
+        .setStatus(key, { phase: 'failed', reason: 'Render timed out' });
+    });
+    expect(view.queryByLabelText('Rendering Sheet')).toBeNull();
+    expect(view.getByText(/Render timed out/)).toBeTruthy();
+    await act(async () => {
+      useOverlayStatusStore.setState({
+        statuses: { 'other:0': { phase: 'rendering' }, [key]: { phase: 'rendered' } },
+      });
+    });
+    expect(view.queryByLabelText('Rendering Sheet')).toBeNull();
+    await act(async () => useOverlayStatusStore.setState({ statuses: {} }));
+  },
+);

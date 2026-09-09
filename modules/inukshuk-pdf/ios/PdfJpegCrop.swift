@@ -19,6 +19,11 @@ enum PdfJpegCrop {
   private static func unsupported(_ reason: String) -> PdfUnsupported { PdfUnsupported(reason: reason) }
 
   static func render(_ request: PdfCropRequest, documents: URL, caches: URL) throws -> [String: Any] {
+    do { return try renderJPEG(request, documents: documents, caches: caches) }
+    catch is PdfUnsupported { return try PdfMosaicCrop.render(request, documents: documents, caches: caches) }
+  }
+
+  private static func renderJPEG(_ request: PdfCropRequest, documents: URL, caches: URL) throws -> [String: Any] {
     // No CGPDF page drawing: it expands the 181 MP Eco image to >1 GiB.
     // ImageIO's baseline-JPEG cropped image remains lazy until the bounded draw.
     let started = ProcessInfo.processInfo.systemUptime

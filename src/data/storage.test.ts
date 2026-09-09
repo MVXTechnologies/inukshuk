@@ -1,6 +1,9 @@
 import { File } from 'expo-file-system';
 
 import {
+  adoptOverlayPng,
+  existingOverlayPng,
+  clearPdfDetailPngs,
   deleteFileAt,
   documentDirUri,
   downloadBytes,
@@ -13,6 +16,7 @@ import {
   setNetworkAllowed,
   toDocumentPath,
   writeJson,
+  writeOverlayPng,
   writeTrackGpx,
   type CacheEntry,
 } from './storage';
@@ -55,8 +59,28 @@ jest.mock('expo-file-system', () => {
     delete(): void {
       if (!files.delete(this.path)) throw new Error(`delete: ${this.path} does not exist`);
     }
-    write(data: string | Uint8Array): void {
-      files.set(this.path, { data, mtime: clock++ });
+    write(data: string | Uint8Array, options?: { encoding?: string }): void {
+      files.set(this.path, {
+        data:
+          options?.encoding === 'base64' && typeof data === 'string'
+            ? new Uint8Array(Buffer.from(data, 'base64'))
+            : data,
+        mtime: clock++,
+      });
+    }
+    open() {
+      const data = files.get(this.path)?.data;
+      const bytes = typeof data === 'string' ? new Uint8Array(Buffer.from(data)) : data;
+      if (!bytes) throw new Error('Missing file');
+      return {
+        offset: 0,
+        readBytes(length: number) {
+          const result = bytes.slice(this.offset, this.offset + length);
+          this.offset += result.length;
+          return result;
+        },
+        close() {},
+      };
     }
     async text(): Promise<string> {
       return this.textSync();
@@ -118,6 +142,7 @@ jest.mock('expo-file-system', () => {
     File,
     Directory,
     Paths: { document: '/doc', cache: '/cache' },
+    FileMode: { ReadOnly: 'r' },
     __reset: (): void => {
       files.clear();
       dirs.clear();
@@ -549,4 +574,81 @@ it('finds an interrupted GPX backup and removes its recovery files on deletion',
   deleteFileAt('tracks/recovered.gpx');
   expect(fileExists('tracks/recovered.gpx')).toBe(false);
   expect(fsMock.__has('/doc/tracks/recovered.gpx.tmp')).toBe(false);
+});
+
+const validPngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=';
+const validPng = new Uint8Array(Buffer.from(validPngBase64, 'base64'));
+
+describe('native overview ownership', () => {
+  it('moves the native PNG into the persistent overview name without reading its bytes', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-one.png', validPng);
+    const uri = adoptOverlayPng(
+      'sheet_revision_0_2048',
+      'file:///cache/overlays/pdf-detail-native-one.png',
+    );
+    expect(uri).toBe('file:///cache/overlays/sheet_revision_0_2048.png');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-one.png')).toBe(false);
+    expect(fsMock.__read('/cache/overlays/sheet_revision_0_2048.png')).toEqual(validPng);
+    clearPdfDetailPngs();
+    expect(existingOverlayPng('sheet_revision_0_2048')).toBe(uri);
+  });
+
+  it('keeps the completed immutable overview and discards a redundant native output', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    fsMock.__seed('/cache/overlays/pdf-detail-native-duplicate.png', 'DUPLICATE');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/pdf-detail-native-duplicate.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-duplicate.png')).toBe(false);
+  });
+
+  it('does not delete an output already stored at its final name', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/same.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+  });
+
+  it('cleans the unowned native PNG when promotion fails', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-failed.png', 'PNG');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() =>
+      adoptOverlayPng('failed', 'file:///cache/overlays/pdf-detail-native-failed.png'),
+    ).toThrow('Not enough free space');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-failed.png')).toBe(false);
+    expect(existingOverlayPng('failed')).toBeNull();
+  });
+});
+
+describe('overview cache interrupted writes', () => {
+  it.each(['create', 'write'] as const)('keeps completed PNG when staging %s fails', (method) => {
+    fsMock.__seed('/cache/overlays/atomic.png', validPng);
+    jest.spyOn(File.prototype, method).mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() => writeOverlayPng('atomic', validPngBase64)).toThrow();
+    expect(fsMock.__read('/cache/overlays/atomic.png')).toEqual(validPng);
+    expect(fsMock.__has('/cache/overlays/atomic.png.tmp')).toBe(false);
+  });
+  it('publishes a complete PNG only after staging succeeds', () => {
+    const uri = writeOverlayPng('new-complete', validPngBase64);
+    expect(existingOverlayPng('new-complete')).toBe(uri);
+    expect(fsMock.__read('/cache/overlays/new-complete.png')).toEqual(validPng);
+    expect(fsMock.__has('/cache/overlays/new-complete.png.tmp')).toBe(false);
+  });
+  it.each([
+    new Uint8Array(),
+    validPng.slice(0, 33),
+    validPng.slice(0, -1),
+    new Uint8Array(validPng.length),
+  ])('evicts incomplete PNG cache entries', (bytes) => {
+    fsMock.__seed('/cache/overlays/broken.png', bytes);
+    expect(existingOverlayPng('broken')).toBeNull();
+    expect(fsMock.__has('/cache/overlays/broken.png')).toBe(false);
+  });
 });

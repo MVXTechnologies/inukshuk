@@ -11,9 +11,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.5.1: audited persistence fixes and native, zoom-dependent PDF detail.
-  // A new app-version runtime keeps this native release distinct from 1.5.0.
-  version: '1.5.1',
+  // 1.5.2: large PDF rendering, stable pan tiles, and durable page recovery.
+  // A new app-version runtime keeps this native release distinct from 1.5.1.
+  version: '1.5.2',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -25,7 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '6',
+    buildNumber: '7',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -62,8 +62,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // Play build 51 shipped 1.5.0; 52 contains the native PDF renderer.
-    versionCode: 52,
+    // Play build 53 ships the large-map rendering and recovery fixes.
+    versionCode: 53,
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
       // Cream paper from the logo; the full-bleed foreground covers it, this only
