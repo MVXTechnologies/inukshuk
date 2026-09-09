@@ -20,6 +20,9 @@ GEO_PID=$!
 # the host and map the device's loopback :8787 onto it. The e2e APK is built
 # with CATALOG_MANIFEST_URL=http://127.0.0.1:8787/index.json (e2e.yml), so
 # the Search tab reads this fixture and CI never touches NRCan.
+# The large single-JPEG GeoPDF (pdf-overlays.yaml, #331) is generated, not
+# checked in: build the fixture set before serving it.
+npx tsx scripts/catalog/make-fixture.ts || echo "fixture generation failed" >&2
 python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catalog \
   >/dev/null 2>&1 &
 CATALOG_PID=$!
@@ -34,11 +37,13 @@ RC=0
 # deterministically for the heat-tap assertion. record.yaml runs last because
 # its save-vs-discard outcome is indeterminate. map-overlays needs no
 # fixtures but runs after trail-view since both drive the shared
-# terrain-overlay settings.
+# terrain-overlay settings. pdf-overlays downloads from the same fixture
+# catalog as store.yaml and leaves the GPS parked in Newfoundland, so it runs
+# right after store and before the flows that re-set their own location.
 for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.yaml \
   .maestro/heatmap.yaml .maestro/library-filter.yaml .maestro/trail-view.yaml .maestro/dashboard.yaml \
-  .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/store.yaml .maestro/folders.yaml \
-  .maestro/settings.yaml .maestro/record.yaml; do
+  .maestro/map-overlays.yaml .maestro/make-map.yaml .maestro/store.yaml .maestro/pdf-overlays.yaml \
+  .maestro/folders.yaml .maestro/settings.yaml .maestro/record.yaml; do
   adb logcat -c || true
   if maestro test "$flow"; then
     echo "=== $flow PASS ==="
@@ -57,4 +62,11 @@ for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.
     fi
   fi
 done
+# pdf-overlays.yaml proves the overlay drew through its map screenshot (#331);
+# the flow passing without the pixels is not a pass.
+if [ -f pdf-overlays-map.png ]; then
+  node scripts/e2e/check-overlay-screenshot.mjs pdf-overlays-map.png || RC=1
+else
+  echo "=== pdf-overlays screenshot missing ==="; RC=1
+fi
 exit $RC

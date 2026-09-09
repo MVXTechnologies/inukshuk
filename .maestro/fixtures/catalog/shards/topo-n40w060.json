@@ -1,0 +1,23 @@
+{
+  "id": "topo-n40w060",
+  "items": [
+    {
+      "id": "fixture-jpeg-eco-class",
+      "sourceId": "inukshuk-fixtures",
+      "title": "Placentia Bay — JPEG fixture (Eco class)",
+      "category": "topo",
+      "bbox": [
+        -54.1,
+        47.2,
+        -53.6,
+        47.6
+      ],
+      "format": "geopdf",
+      "packaging": "zip",
+      "sizeBytes": 6600006,
+      "url": "http://127.0.0.1:8787/jpeg_eco_class_geopdf.zip",
+      "updatedAt": "2026-01-01",
+      "lang": "bilingual"
+    }
+  ]
+}
