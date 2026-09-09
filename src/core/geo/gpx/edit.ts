@@ -14,6 +14,12 @@ export interface MergeSource {
   points: readonly TrackPoint[];
   /** Standalone <wpt> markers from the source GPX, carried into the merge. */
   waypoints?: readonly GpxWaypoint[];
+  /**
+   * The source's library notes (recorded waypoints, imported-GPX markers),
+   * anchored by distance from ITS OWN start. Re-anchored onto the merged
+   * trail by {@link mergeTracks}.
+   */
+  notes?: readonly TrackNote[];
 }
 
 export interface MergeResult {
@@ -23,6 +29,12 @@ export interface MergeResult {
   points: TrackPoint[];
   /** All source waypoints concatenated in merge order. */
   waypoints: GpxWaypoint[];
+  /**
+   * All source notes in merge order, `distanceM` re-anchored from the merged
+   * start. Ids and `photoUri`s are the sources' own — a caller that persists
+   * the merge must give it its own copies (see `mergeLibraryTracks`).
+   */
+  notes: TrackNote[];
   /** Stats recomputed over the merged point list. */
   stats: TrackStats;
 }
@@ -48,6 +60,12 @@ function startTime(points: readonly TrackPoint[]): number | undefined {
  * Waypoints are preserved (concatenated in the same order as their tracks);
  * stats are recomputed over the merged point list. Empty sources contribute
  * nothing but keep their name out of the merged name too.
+ *
+ * Notes are re-anchored: a note `d` metres into its source lands `d` metres
+ * past that source's first point on the merged trail, where the merged
+ * distance also counts the hop from the previous source's last point (the
+ * same cumulative haversine the stats and elevation profile use). An anchor
+ * past its source's own length is clamped to it.
  */
 export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
   const nonEmpty = sources.filter((s) => s.points.length > 0);
@@ -64,7 +82,20 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
 
   const points: TrackPoint[] = [];
   const waypoints: GpxWaypoint[] = [];
+  const notes: TrackNote[] = [];
+  // Distance from the merged start to the last point pushed so far.
+  let mergedM = 0;
   for (const s of ordered) {
+    const first = s.points[0];
+    const last = points[points.length - 1];
+    if (first && last) mergedM += haversineMeters(last, first);
+    const offsetM = mergedM;
+    const lengthM = distanceToIndex(s.points, s.points.length - 1);
+    for (const n of s.notes ?? []) {
+      const localM = Math.min(Math.max(0, n.distanceM), lengthM);
+      notes.push({ ...n, distanceM: offsetM + localM });
+    }
+    mergedM += lengthM;
     points.push(...s.points);
     if (s.waypoints) waypoints.push(...s.waypoints);
   }
@@ -72,7 +103,7 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
   const names = ordered.map((s) => s.name.trim()).filter((n) => n.length > 0);
   const name = names.length > 0 ? `Merged: ${names.join(' + ')}` : 'Merged trail';
 
-  return { name, points, waypoints, stats: computeTrackStats(points) };
+  return { name, points, waypoints, notes, stats: computeTrackStats(points) };
 }
 
 export interface SliceResult {
