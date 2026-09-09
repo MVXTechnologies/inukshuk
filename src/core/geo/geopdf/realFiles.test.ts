@@ -1,0 +1,119 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import type { CornerCoordinates, PointRect } from '@core/models';
+import { renderedPageCorners } from './pageBox';
+import { parseGeoPdf } from './parseGeoPdf';
+import { primaryGeoreferenceForPage } from './primary';
+
+/**
+ * Placement regression against three real GeoPDFs (#287). The files are not
+ * in git (3.6 MB / 52 MB / 216 MB); point `INUKSHUK_GEOPDF_DIR` at a directory
+ * holding them and the suite runs, otherwise it is skipped.
+ *
+ * Every value below was captured from the parser BEFORE the rendered-page-box
+ * change. All three sheets have a zero-origin MediaBox and either no CropBox or
+ * one equal to it, so the fix must leave their placement bit-for-bit
+ * identical: the primary viewport's frame and corners, the page size, and the
+ * full-page corners the overlay hands to MapLibre.
+ */
+const dir = process.env.INUKSHUK_GEOPDF_DIR;
+
+interface Expected {
+  file: string;
+  label: string;
+  georeferences: number;
+  pageWidthPt: number;
+  pageHeightPt: number;
+  rect: PointRect;
+  corners: CornerCoordinates;
+  /** Full-page corners as placed by `usePdfOverlays` before #287. */
+  page: CornerCoordinates;
+}
+
+const EXPECTED: Expected[] = [
+  {
+    file: 'ANT_Cerf_Secteur_la-loutre-1.pdf',
+    label: 'Anticosti (Sépaq, 3.6 MB, MediaBox only, four equal viewports)',
+    georeferences: 4,
+    pageWidthPt: 1368,
+    pageHeightPt: 936,
+    rect: { x0: 36, y0: 36, x1: 1062, y1: 900 },
+    corners: {
+      topLeft: [-63.805927499999996, 49.64912],
+      topRight: [-63.5305925, 49.65071],
+      bottomRight: [-63.5285375, 49.49993],
+      bottomLeft: [-63.8038725, 49.498340000000006],
+    },
+    page: {
+      topLeft: [-63.81567400219304, 49.65534671052632],
+      topRight: [-63.448560668859656, 49.657466710526315],
+      bottomRight: [-63.446334418859635, 49.49412171052631],
+      bottomLeft: [-63.81344775219302, 49.49200171052631],
+    },
+  },
+  {
+    file: 'EcoLL1.pdf',
+    label: 'EcoLL1 (52 MB, MediaBox only)',
+    georeferences: 1,
+    pageWidthPt: 3456,
+    pageHeightPt: 3024,
+    rect: { x0: 0, y0: 0, x1: 3456, y1: 3024 },
+    corners: {
+      topLeft: [-63.80551499883427, 49.665938252884004],
+      topRight: [-63.475779930834975, 49.65138168291479],
+      bottomRight: [-63.495360933724356, 49.46373648897131],
+      bottomLeft: [-63.82509600172365, 49.47829305894052],
+    },
+    page: {
+      topLeft: [-63.80551499883422, 49.66593825288401],
+      topRight: [-63.47577993083495, 49.6513816829148],
+      bottomRight: [-63.49536093372437, 49.46373648897133],
+      bottomLeft: [-63.82509600172364, 49.47829305894054],
+    },
+  },
+  {
+    file: 'NORD_UTM50000_2024-02-02.pdf',
+    label: 'NORD UTM 50k (216 MB, CropBox == MediaBox)',
+    georeferences: 1,
+    pageWidthPt: 3370.39,
+    pageHeightPt: 2383.94,
+    rect: { x0: 38.06491587363, y0: 0, x1: 3332.328784914, y1: 2383.937007874 },
+    corners: {
+      topLeft: [-63.6490009045825, 50.80578515344002],
+      topRight: [-62.34576286190128, 50.80575603114],
+      bottomRight: [-62.34579590248253, 50.20434381059001],
+      bottomLeft: [-63.64903394516375, 50.20437293289003],
+    },
+    page: {
+      topLeft: [-63.66405970020219, 50.80578624478972],
+      topRight: [-62.33070553026078, 50.80575644951144],
+      bottomRight: [-62.33073857088353, 50.20434347411722],
+      bottomLeft: [-63.66409274082494, 50.204373269395504],
+    },
+  },
+];
+
+const available = dir !== undefined && EXPECTED.every((e) => fs.existsSync(path.join(dir, e.file)));
+
+(available ? describe : describe.skip)('real GeoPDF placement is unchanged by #287', () => {
+  for (const expected of EXPECTED) {
+    it(expected.label, () => {
+      const bytes = new Uint8Array(fs.readFileSync(path.join(dir!, expected.file)));
+      const res = parseGeoPdf(bytes);
+      expect(res.warnings).toEqual([]);
+      expect(res.georeferences).toHaveLength(expected.georeferences);
+      const geo = primaryGeoreferenceForPage(res.georeferences, 0)!;
+      expect(geo.pageWidthPt).toBe(expected.pageWidthPt);
+      expect(geo.pageHeightPt).toBe(expected.pageHeightPt);
+      expect(geo.pageBox).toEqual({
+        x0: 0,
+        y0: 0,
+        x1: expected.pageWidthPt,
+        y1: expected.pageHeightPt,
+      });
+      expect(geo.viewport.rect).toEqual(expected.rect);
+      expect(geo.viewport.corners).toEqual(expected.corners);
+      expect(renderedPageCorners(geo)).toEqual(expected.page);
+    });
+  }
+});

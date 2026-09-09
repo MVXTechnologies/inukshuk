@@ -22,7 +22,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 7;
+export const LIBRARY_SCHEMA_VERSION = 8;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -141,6 +141,23 @@ function isGeoReference(raw: unknown): raw is GeoReference {
   );
 }
 
+/**
+ * Keep a georeference's optional rendered page box only when it is a real
+ * rectangle; a junk box is dropped so the page falls back to the pre-#287
+ * placement (and is flagged for re-import) instead of dividing by zero.
+ */
+function normalizePageBox(geo: GeoReference): GeoReference {
+  const { pageBox, ...rest } = geo;
+  if (
+    pageBox !== undefined &&
+    finiteFields(pageBox, ['x0', 'y0', 'x1', 'y1']) &&
+    pageBox.x1 > pageBox.x0 &&
+    pageBox.y1 > pageBox.y0
+  )
+    return geo;
+  return rest;
+}
+
 /** Invalid optional photos must not reach the document-path mapper. */
 function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
   const { photoUri, ...rest } = raw;
@@ -173,9 +190,9 @@ function normalizeNotes(raw: unknown): TrackNote[] {
  */
 function normalizeMapDoc(raw: RawDoc): MapDocument {
   const legacy = raw as Partial<MapDocument> & { georeference?: GeoReference | null };
-  const georeferences = (
-    Array.isArray(raw.georeferences) ? raw.georeferences : [raw.georeference]
-  ).filter(isGeoReference);
+  const georeferences = (Array.isArray(raw.georeferences) ? raw.georeferences : [raw.georeference])
+    .filter(isGeoReference)
+    .map(normalizePageBox);
   // Page indices are a SET: one entry per page, never one per viewport.
   // Builds before the primary-viewport fix wrote `georeferences.map(pageIndex)`
   // straight through, so a three-viewport sheet (US Topo, AUSTopo) persisted
@@ -268,6 +285,14 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   5: (doc) => ({ ...doc, schemaVersion: 6 }),
   // v6 → v7: interrupted-page notices persist with their disabled page selection.
   6: (doc) => ({ ...doc, schemaVersion: 7 }),
+  // v7 → v8: georeferences gained the optional rendered page box (`pageBox`,
+  // CropBox ∩ MediaBox with its origin — #287). Deliberately NOT synthesized
+  // here: a pre-v8 georeference has no way of knowing whether its page was
+  // cropped, and an invented `[0, 0, w, h]` would look authoritative. Absent
+  // means "placed the old way; re-import to reprocess" (see
+  // `needsPageBoxReprocessing`), and the sanitize pass validates the field
+  // wherever it is present.
+  7: (doc) => ({ ...doc, schemaVersion: 8 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */

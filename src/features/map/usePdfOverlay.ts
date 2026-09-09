@@ -1,11 +1,11 @@
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import type { BoundingBox, GeoReference, LngLat, MapDocument } from '@core/models';
+import { bboxFromCorners, cornersAreValid, isDegenerateBBox } from '@core/geo/geomath';
 import {
-  bboxFromCorners,
-  cornersAreValid,
-  extrapolatePageCorners,
-  isDegenerateBBox,
-} from '@core/geo/geomath';
+  nativePageGeometry,
+  needsPageBoxReprocessing,
+  renderedPageCorners,
+} from '@core/geo/geopdf/pageBox';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import { unsupportedProjectionNotice } from '@core/library/overlayPages';
 import { overlayStatusKey } from '@core/library/overlayStatus';
@@ -143,11 +143,12 @@ function cachedRaster(docId: string, pageIndex: number, revision: string): strin
 
 /**
  * Rasterize every active georeferenced page across all maps and compute each
- * page's full-page geographic corners (the rasterizer renders the whole page;
- * georeferencing may only describe the inner map frame — we extrapolate affinely
- * from the viewport corners). Pages whose corners are non-finite, out of range,
- * or degenerate are skipped (never handed to MapLibre) so a bad georeference can
- * never crash the native layer.
+ * page's full-page geographic corners (the rasterizer renders the whole
+ * *rendered page box* — CropBox ∩ MediaBox; georeferencing may only describe
+ * the inner map frame — we extrapolate affinely from the viewport corners onto
+ * that box, see `@core/geo/geopdf/pageBox`). Pages whose corners are
+ * non-finite, out of range, or degenerate are skipped (never handed to
+ * MapLibre) so a bad georeference can never crash the native layer.
  *
  * Rasterization is cached (see `rasterCache`): when the active set changes,
  * only pages that have never been rendered (or whose PNG was purged) go
@@ -237,12 +238,17 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
           const { geo } = t;
           const statusKey = overlayStatusKey(t.docId, geo.pageIndex);
           try {
-            const pageRect = { x0: 0, y0: 0, x1: geo.pageWidthPt, y1: geo.pageHeightPt };
-            const corners = extrapolatePageCorners(
-              geo.viewport.rect,
-              geo.viewport.corners,
-              pageRect,
-            );
+            if (needsPageBoxReprocessing(geo)) {
+              // Imported before #287: placed as a zero-origin MediaBox, which
+              // is only wrong for cropped/offset pages. Re-import records the
+              // rendered box; until then, say so where a wrong placement would
+              // be investigated.
+              console.log(
+                `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} has no rendered page box ` +
+                  '(imported before #287) — placed from its MediaBox size; re-import to reprocess',
+              );
+            }
+            const corners = renderedPageCorners(geo);
             const bbox = bboxFromCorners(corners);
             const unprojected = !cornersAreValid(corners);
             if (unprojected || isDegenerateBBox(bbox)) {
@@ -300,15 +306,17 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                   }
                   if (!enabledRef.current) throw new Error('PDF overlays are hidden');
                   const startedAt = Date.now();
+                  // Native renderers only take a zero-origin page whose CropBox
+                  // is its MediaBox; any other rendered box stays on pdf.js.
+                  const nativeGeometry = nativePageGeometry(geo);
                   const raster = await rasterize({
                     source,
                     pageIndex: geo.pageIndex,
                     targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
-                    nativePage: {
+                    nativePage: nativeGeometry && {
                       fileUri: storage.resolveDocumentPath(t.fileUri),
                       revision: t.revision,
-                      expectedPageWidthPt: geo.pageWidthPt,
-                      expectedPageHeightPt: geo.pageHeightPt,
+                      ...nativeGeometry,
                     },
                   }).catch((error: unknown) => {
                     if (isPdfRenderCancellation(error) || error instanceof PdfRenderNotStartedError)
