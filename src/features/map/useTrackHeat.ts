@@ -8,8 +8,9 @@ import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { useLibraryStore } from '@state/libraryStore';
 import { mapColors } from '@ui/theme';
-import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
+import type { Feature, FeatureCollection, LineString, MultiLineString, Point } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { splitSegments } from '@core/geo/track/segments';
 
 /** Properties carried by each rendered trail line (data-driven styling). */
 export interface HeatLineProperties {
@@ -18,10 +19,13 @@ export interface HeatLineProperties {
   color: string;
 }
 
+/** A trail's line: one part per `<trkseg>`, so pauses are never drawn across. */
+export type HeatLineFeature = Feature<LineString | MultiLineString, HeatLineProperties>;
+
 export interface TrackHeat {
-  /** One thin LineString per shown trail, category-coloured — no run
-   * splitting, no hot/cold distinction (that lives in the heatmap layer now). */
-  lines: FeatureCollection<LineString, HeatLineProperties> | null;
+  /** One thin line per shown trail, category-coloured — no run splitting, no
+   * hot/cold distinction (that lives in the heatmap layer now). */
+  lines: FeatureCollection<LineString | MultiLineString, HeatLineProperties> | null;
   /** Sampled points from every qualifying trail in the library (see
    * `qualifiesForHeat`) — global, independent of visibility mode/folder
    * filters/activeTrackIds — feeding the native `heatmap` layer's density
@@ -37,12 +41,28 @@ export interface TrackHeat {
    * loaded regardless of shown/qualifying membership — lets the map draw a
    * focused-trail highlight even when its trace is hidden. Null until that
    * trail's GPX is loaded, or if the id is unknown. */
-  lineFor: (trackId: string) => Feature<LineString, HeatLineProperties> | null;
+  lineFor: (trackId: string) => HeatLineFeature | null;
 }
 
 interface CacheEntry {
   points: TrackPoint[];
+  /** Pause boundaries (extra `<trkseg>`s) in `points`. */
+  segmentStarts: number[];
   trace: CellTrace;
+}
+
+/** Line geometry for a trail, split at its pauses. */
+function lineGeometry(
+  points: readonly TrackPoint[],
+  segmentStarts: readonly number[],
+): LineString | MultiLineString {
+  const parts = splitSegments(points, segmentStarts).map((segment) =>
+    segment.map((p) => [p.longitude, p.latitude]),
+  );
+  const [only] = parts;
+  return parts.length === 1 && only
+    ? { type: 'LineString', coordinates: only }
+    : { type: 'MultiLineString', coordinates: parts };
 }
 
 // Cache key: mirrors useTrackOverlays' cacheKey — a trim "overwrite" rewrites
@@ -108,10 +128,10 @@ export function useTrackHeat(
         if (cache[ck] !== undefined) continue;
         try {
           const gpx = await storage.readFileText(t.fileUri);
-          const { points } = parseGpx(gpx);
+          const { points, segmentStarts } = parseGpx(gpx);
           if (cancelled || reqId !== reqIdRef.current) return;
           const trace = traceCells(points);
-          setCache((c) => ({ ...c, [ck]: { points, trace } }));
+          setCache((c) => ({ ...c, [ck]: { points, segmentStarts, trace } }));
         } catch {
           if (cancelled || reqId !== reqIdRef.current) return;
           setCache((c) => ({ ...c, [ck]: null }));
@@ -140,8 +160,13 @@ export function useTrackHeat(
     // obeying the existing visibility rules (mode/folder filters/
     // activeTrackIds) unchanged.
     const tapInputs: HeatTrackInput[] = [];
-    const shownBuilt: { id: string; categoryId: string; points: TrackPoint[]; color: string }[] =
-      [];
+    const shownBuilt: {
+      id: string;
+      categoryId: string;
+      points: TrackPoint[];
+      segmentStarts: number[];
+      color: string;
+    }[] = [];
     for (const id of shownTrackIds) {
       const t = tracks.find((x) => x.id === id);
       if (!t) continue;
@@ -150,7 +175,13 @@ export function useTrackHeat(
 
       const categoryId = t.category ?? 'uncategorized';
       const color = categoryColor(t.category, customCategories) ?? mapColors.trackOverlay;
-      shownBuilt.push({ id, categoryId, points: entry.points, color });
+      shownBuilt.push({
+        id,
+        categoryId,
+        points: entry.points,
+        segmentStarts: entry.segmentStarts,
+        color,
+      });
       // The tap index covers every rendered trail — navigation included —
       // so any visible trail is inspectable, not just qualifying ones.
       tapInputs.push({ id, categoryId, dilated: entry.trace.dilated });
@@ -177,18 +208,17 @@ export function useTrackHeat(
     const tapIdx = buildHeatIndex(tapInputs);
     const heatIdx = buildHeatIndex(heatInputs);
 
-    // Lines: one whole-trail LineString per shown trail, no run splitting.
-    let linesColl: FeatureCollection<LineString, HeatLineProperties> | null = null;
+    // Lines: one whole-trail line per shown trail (split only at its pauses),
+    // no run splitting.
+    let linesColl: FeatureCollection<LineString | MultiLineString, HeatLineProperties> | null =
+      null;
     if (shownBuilt.length > 0) {
-      const features: Feature<LineString, HeatLineProperties>[] = [];
+      const features: HeatLineFeature[] = [];
       for (const b of shownBuilt) {
         if (b.points.length < 2) continue;
         features.push({
           type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: b.points.map((p) => [p.longitude, p.latitude]),
-          },
+          geometry: lineGeometry(b.points, b.segmentStarts),
           properties: { trackId: b.id, categoryId: b.categoryId, color: b.color },
         });
       }
@@ -223,7 +253,7 @@ export function useTrackHeat(
     // qualifying trail outside shownTrackIds). Returns null until that
     // trail's GPX is loaded (see the load effect above) or if it's genuinely
     // unknown.
-    const lineFor = (trackId: string): Feature<LineString, HeatLineProperties> | null => {
+    const lineFor = (trackId: string): HeatLineFeature | null => {
       const t = tracks.find((x) => x.id === trackId);
       if (!t) return null;
       const entry = cache[cacheKey(t)];
@@ -232,10 +262,7 @@ export function useTrackHeat(
       const color = categoryColor(t.category, customCategories) ?? mapColors.trackOverlay;
       return {
         type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: entry.points.map((p) => [p.longitude, p.latitude]),
-        },
+        geometry: lineGeometry(entry.points, entry.segmentStarts),
         properties: { trackId: t.id, categoryId, color },
       };
     };

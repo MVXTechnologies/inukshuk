@@ -1,12 +1,18 @@
 import type { Track, TrackPoint, TrackStats } from '@core/models';
 import { buildGpx } from '@core/geo/gpx';
 import {
-  accumulateElevationGainLoss,
-  computeTrackStats,
+  accumulateSegmentedElevation,
+  beginElevationSegment,
+  computeSegmentedTrackStats,
+  dropPointsDuringPauses,
   EMPTY_ELEVATION_ACC,
   reduceStatsWith,
+  segmentStartsFromPauses,
+  startsNewSegment,
   stepElevationGainLoss,
+  totalPausedMs,
   type ElevationAccumulator,
+  type PauseInterval,
 } from '@core/geo/track';
 import { shouldAcceptFix } from '@core/geo/track/gpsFilter';
 import { mergeTrackPoints } from '@core/geo/track/mergePoints';
@@ -50,10 +56,22 @@ interface RecorderState {
   /** Activity category id chosen at record start (see `@core/library/categories`). */
   category: string | null;
   startedAt: number | null;
-  /** Wall time spent paused so far (completed pauses only). */
+  /**
+   * Wall time excluded from the elapsed clock so far: completed pauses, plus
+   * — after a crash recovery — the time the process was dead. Elapsed =
+   * now − startedAt − pausedMs.
+   */
   pausedMs: number;
   /** When the current pause began, while status === 'paused'. */
   pausedAt: number | null;
+  /**
+   * Completed pauses this session, oldest first. A resume opens a new
+   * recording segment; nothing (distance, moving time, D±, the map line, the
+   * GPX) bridges a pause — see `@core/geo/track/segments`.
+   */
+  pauses: PauseInterval[];
+  /** Indices into `points` at which a new segment begins (derived from `pauses`). */
+  segmentStarts: number[];
   points: TrackPoint[];
   stats: TrackStats;
   /**
@@ -167,8 +185,9 @@ async function upgradeAutoName(
 
 /**
  * Snapshot the live recording for the crash journal, or null when idle.
- * An in-flight pause is folded into pausedMs at write time so a recording
- * recovered after a crash-while-paused keeps its frozen elapsed time.
+ * An in-flight pause is written as its start time (not folded into pausedMs),
+ * so a recording recovered after a crash-while-paused resumes THAT pause and
+ * the dead time in between stays excluded from the elapsed clock.
  */
 function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
   if (s.status === 'idle' || s.startedAt === null) return null;
@@ -177,11 +196,62 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
     name: s.name,
     ...(s.category !== null ? { category: s.category } : {}),
     startedAt: s.startedAt,
-    pausedMs: s.pausedMs + (s.pausedAt !== null ? Date.now() - s.pausedAt : 0),
+    pausedMs: s.pausedMs,
+    pauses: s.pauses,
+    ...(s.pausedAt !== null ? { pausedAt: s.pausedAt } : {}),
+    savedAt: Date.now(),
     points: s.points,
     waypoints: s.waypoints,
   };
 }
+
+/**
+ * Fold journaled fixes into the session's point list: fixes stamped inside a
+ * pause (completed, or the in-flight one up to `now`) are dropped — the
+ * recorder accepts nothing while paused — and the GPS gate treats the first
+ * fix after a pause as a segment start (no teleport check against the last
+ * pre-pause fix: the user may well have driven away while paused).
+ */
+function mergeIntoSession(
+  points: TrackPoint[],
+  incoming: readonly TrackPoint[],
+  pauses: readonly PauseInterval[],
+  pausedAt: number | null,
+  now: number,
+): TrackPoint[] {
+  const allPauses = pausedAt !== null ? [...pauses, { from: pausedAt, to: now }] : pauses;
+  const kept = dropPointsDuringPauses(incoming, allPauses);
+  return mergeTrackPoints(points, [...kept], {
+    accept: (prev, next) =>
+      shouldAcceptFix(startsNewSegment(prev, next, pauses) ? undefined : prev, next),
+  });
+}
+
+/** Everything the store derives from a (re)built point list and its pauses. */
+function segmentedState(points: TrackPoint[], pauses: readonly PauseInterval[]) {
+  const segmentStarts = segmentStartsFromPauses(points, pauses);
+  const elevationAcc = accumulateSegmentedElevation(points, segmentStarts);
+  return {
+    points,
+    segmentStarts,
+    stats: {
+      ...computeSegmentedTrackStats(points, segmentStarts),
+      ascentM: elevationAcc.ascentM,
+      descentM: elevationAcc.descentM,
+    },
+    elevationAcc,
+  };
+}
+
+const isPauseInterval = (p: unknown): p is PauseInterval =>
+  typeof p === 'object' &&
+  p !== null &&
+  Number.isFinite((p as PauseInterval).from) &&
+  Number.isFinite((p as PauseInterval).to) &&
+  (p as PauseInterval).to >= (p as PauseInterval).from;
+
+const finiteOr = (n: unknown, fallback: number): number =>
+  typeof n === 'number' && Number.isFinite(n) ? n : fallback;
 
 /** Edits are accepted only when their recovery metadata is safely on disk. */
 function checkpointWaypointEdit(s: RecorderState, waypoints: PendingWaypoint[]): RecorderState {
@@ -214,6 +284,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   startedAt: null,
   pausedMs: 0,
   pausedAt: null,
+  pauses: [],
+  segmentStarts: [],
   points: [],
   stats: EMPTY_STATS,
   elevationAcc: EMPTY_ELEVATION_ACC,
@@ -234,6 +306,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       startedAt: now,
       pausedMs: 0,
       pausedAt: null,
+      pauses: [],
+      segmentStarts: [],
       points: [],
       stats: EMPTY_STATS,
       elevationAcc: EMPTY_ELEVATION_ACC,
@@ -244,9 +318,15 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   addPoint: (point) => {
-    const { status, points, stats, elevationAcc } = get();
+    const { status, points, stats, elevationAcc, pauses, segmentStarts } = get();
     if (status !== 'recording') return;
-    const prev = points[points.length - 1];
+    const last = points[points.length - 1];
+    // The first fix after a pause opens a new segment: it has no predecessor
+    // to measure from, so the pause bridges nothing — not distance, moving
+    // time or D±, and not the teleport gate either (the user may have driven
+    // 1 km while paused; that is a new leg, not an outlier).
+    const newSegment = startsNewSegment(last, point, pauses);
+    const prev = newSegment ? undefined : last;
     // Gate raw fixes: bad-accuracy and teleport outliers inflate distance/D±,
     // and near-duplicate timestamps guard against double-feeding when both the
     // background task and the foreground watch deliver the same fix.
@@ -256,10 +336,14 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     // incrementally) and overwrite reduceStatsWith's own per-step
     // ascentM/descentM approximation with it — see reduceStatsWith's doc
     // comment and ElevationAccumulator.
-    const nextElevationAcc = stepElevationGainLoss(elevationAcc, point.altitude);
+    const nextElevationAcc = stepElevationGainLoss(
+      newSegment ? beginElevationSegment(elevationAcc) : elevationAcc,
+      point.altitude,
+    );
     const foldedStats = reduceStatsWith(stats, prev, point);
     set({
       points: [...points, point],
+      segmentStarts: newSegment ? [...segmentStarts, points.length] : segmentStarts,
       // Live HUD uses the cheap incremental fold for everything else; final
       // stats are recomputed exactly on stop().
       stats: {
@@ -278,9 +362,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   mergeBackgroundPoints: (incoming) => {
-    const { status, points } = get();
+    const { status, points, pauses, pausedAt } = get();
     if (status === 'idle') return false;
-    const merged = mergeTrackPoints(points, incoming, { accept: shouldAcceptFix });
+    const merged = mergeIntoSession(points, incoming, pauses, pausedAt, Date.now());
     if (merged === points) {
       // A previous merge may have updated memory but failed to save. Retry
       // durability even when this snapshot contains no new points.
@@ -288,18 +372,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       return cp !== null && checkpoint.writeCheckpoint(cp);
     }
     const newest = merged[merged.length - 1];
-    // Out-of-order inserts invalidate both the incremental stats fold AND the
-    // elevation accumulator's running reference — resynchronize both from the
-    // full merged point list, exactly like computeTrackStats does for stats.
-    const elevationAcc = accumulateElevationGainLoss(merged.map((p) => p.altitude));
+    // Out-of-order inserts invalidate the incremental stats fold, the segment
+    // boundaries AND the elevation accumulator's running reference —
+    // resynchronize all three from the full merged point list, segment by
+    // segment, exactly like computeSegmentedTrackStats does for stats.
     set({
-      points: merged,
-      stats: {
-        ...computeTrackStats(merged),
-        ascentM: elevationAcc.ascentM,
-        descentM: elevationAcc.descentM,
-      },
-      elevationAcc,
+      ...segmentedState(merged, pauses),
       // Fold in the newest merged fix's freshness for the HUD's GPS indicator.
       ...(newest ? { lastFixAt: newest.time, lastAccuracyM: newest.accuracy ?? null } : {}),
     });
@@ -371,22 +449,30 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   pause: () => {
-    if (get().status !== 'recording') return;
-    set({ status: 'paused', pausedAt: Date.now() });
+    const { status, lastFixAt } = get();
+    if (status !== 'recording') return;
+    // The pause start is the segment boundary (a fix belongs to the leg after
+    // every pause that began before it). A fix stamped ahead of the wall
+    // clock — GPS time vs a drifting device clock — must still count as
+    // pre-pause, so the boundary never sits before the last accepted fix.
+    set({ status: 'paused', pausedAt: Math.max(Date.now(), (lastFixAt ?? -Infinity) + 1) });
     const cp = checkpointOf(get());
     if (cp) checkpoint.writeCheckpoint(cp);
   },
 
   resume: () => {
-    const { status, pausedMs, pausedAt } = get();
+    const { status, pausedMs, pausedAt, pauses } = get();
     if (status !== 'paused') return;
     // Fold the completed pause into pausedMs so the elapsed timer (now -
     // startedAt - pausedMs) resumes where it froze instead of jumping forward
-    // by the pause duration.
+    // by the pause duration — and record it: the next accepted fix opens a
+    // new recording segment (see addPoint).
+    const pause = pausedAt !== null ? { from: pausedAt, to: Date.now() } : null;
     set({
       status: 'recording',
-      pausedMs: pausedMs + (pausedAt !== null ? Date.now() - pausedAt : 0),
+      pausedMs: pausedMs + (pause ? pause.to - pause.from : 0),
       pausedAt: null,
+      pauses: pause ? [...pauses, pause] : pauses,
     });
     const cp = checkpointOf(get());
     if (cp) checkpoint.writeCheckpoint(cp);
@@ -398,7 +484,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     const journaled = await checkpoint.readBackgroundPoints();
     if (generation !== sessionGeneration) return null;
     if (journaled.length > 0) get().mergeBackgroundPoints(journaled);
-    const { points, name, category, startedAt, status, waypoints } = get();
+    const { points, segmentStarts, name, category, startedAt, status, waypoints } = get();
     if (status === 'idle' || startedAt === null) return null;
 
     // Last checkpoint before finalizing: a crash during the GPX write below
@@ -407,7 +493,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     if (preStop) checkpoint.writeCheckpoint(preStop);
 
     const endedAt = Date.now();
-    const finalStats = computeTrackStats(points);
+    const finalStats = computeSegmentedTrackStats(points, segmentStarts);
     const track: Track = {
       id: storage.newId(),
       name,
@@ -423,6 +509,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     if (points.length > 0) {
       const gpx = buildGpx({
         points,
+        segmentStarts, // one <trkseg> per leg — a pause is a segment boundary
         metadata: { name, time: startedAt, creator: 'Inukshuk' },
       });
       const fileUri = storage.writeTrackGpx(track.id, gpx);
@@ -461,6 +548,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       startedAt: null,
       pausedMs: 0,
       pausedAt: null,
+      pauses: [],
+      segmentStarts: [],
       points: [],
       stats: EMPTY_STATS,
       elevationAcc: EMPTY_ELEVATION_ACC,
@@ -484,6 +573,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       startedAt: null,
       pausedMs: 0,
       pausedAt: null,
+      pauses: [],
+      segmentStarts: [],
       points: [],
       stats: EMPTY_STATS,
       elevationAcc: EMPTY_ELEVATION_ACC,
@@ -552,8 +643,36 @@ export async function initRecorderRecovery(): Promise<boolean> {
 
     const journaled = await checkpoint.readBackgroundPoints();
     if (!ownsRecovery()) return false;
-    const points = mergeTrackPoints(cp.points, journaled, { accept: shouldAcceptFix });
+    const now = Date.now();
+    // Old checkpoints carry no pauses: a single-segment recording, as before.
+    const pauses = Array.isArray(cp.pauses) ? cp.pauses.filter(isPauseInterval) : [];
+    // The recovered session is paused. Which pause?
+    // - Killed while PAUSED: the very pause the user started (`pausedAt`), so
+    //   the whole dead time — pause, crash, relaunch, and the wait until the
+    //   user resumes — is one pause: excluded from the clock, and one segment
+    //   boundary. A legacy checkpoint (no `pausedAt`) had that pause folded
+    //   into pausedMs at write time; the best it can do is pause at relaunch.
+    // - Killed while RECORDING: a pause that starts now (relaunch). Fixes the
+    //   OS task journaled while the process was dead predate it and stay in
+    //   the recording leg; anything after it is dropped as paused.
+    const pausedAt =
+      cp.status === 'paused' && typeof cp.pausedAt === 'number' && Number.isFinite(cp.pausedAt)
+        ? Math.min(cp.pausedAt, now)
+        : now;
+    const points = mergeIntoSession(cp.points, journaled, pauses, pausedAt, now);
     if (points.length === 0) return false;
+
+    let pausedMs = finiteOr(cp.pausedMs, totalPausedMs(pauses));
+    if (cp.status === 'recording') {
+      // Active time can only be vouched for up to the last evidence the
+      // recording was alive: the checkpoint write, or the newest fix
+      // (background fixes journaled while the JS process was dead extend
+      // it — that IS legitimate recording time). The rest, until relaunch,
+      // is dead time: excluded like a pause.
+      const newestFixAt = points[points.length - 1]?.time ?? cp.startedAt;
+      const activeUntil = Math.min(now, Math.max(finiteOr(cp.savedAt, cp.startedAt), newestFixAt));
+      pausedMs += Math.max(0, now - activeUntil);
+    }
 
     useRecorderStore.setState({
       status: 'paused',
@@ -561,16 +680,14 @@ export async function initRecorderRecovery(): Promise<boolean> {
       // Old checkpoints (pre-categories) simply restore as uncategorized.
       category: typeof cp.category === 'string' ? cp.category : null,
       startedAt: cp.startedAt,
-      pausedMs: cp.pausedMs,
-      // Restored paused-at-now: the dead time between crash and relaunch never
-      // counts as elapsed, and resume() folds the wait correctly.
-      pausedAt: Date.now(),
-      points,
-      stats: computeTrackStats(points),
-      // Resynchronize the live hysteresis accumulator's running reference from
-      // the recovered points, so addPoint's live D+/D- keeps matching the
-      // batch computation after a resume — same reasoning as mergeBackgroundPoints.
-      elevationAcc: accumulateElevationGainLoss(points.map((p) => p.altitude)),
+      pausedMs,
+      pausedAt,
+      pauses,
+      // Stats, segment boundaries and the live hysteresis accumulator's
+      // running reference are all resynchronized from the recovered points,
+      // so addPoint's live D+/D- keeps matching the batch computation after a
+      // resume — same reasoning as mergeBackgroundPoints.
+      ...segmentedState(points, pauses),
       waypoints: cp.waypoints ?? [],
       lastFixAt: points[points.length - 1]?.time ?? null,
       lastAccuracyM: points[points.length - 1]?.accuracy ?? null,

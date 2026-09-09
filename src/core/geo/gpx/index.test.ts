@@ -94,6 +94,58 @@ describe('buildGpx / parseGpx round trip', () => {
   });
 });
 
+describe('recording segments (<trkseg> per pause)', () => {
+  const points: TrackPoint[] = [
+    pt(45.1, -73.1, Date.parse('2024-01-01T10:00:00Z')),
+    pt(45.1001, -73.1, Date.parse('2024-01-01T10:00:10Z')),
+    // Paused, drove 1 km, resumed.
+    pt(45.109, -73.1, Date.parse('2024-01-01T10:20:00Z')),
+    pt(45.1091, -73.1, Date.parse('2024-01-01T10:20:10Z')),
+  ];
+
+  it('writes one <trkseg> per segment and reads the boundaries back', () => {
+    const xml = buildGpx({ points, segmentStarts: [2] });
+    expect(xml.match(/<trkseg>/g)).toHaveLength(2);
+    expect(xml.match(/<trk>/g)).toHaveLength(1);
+    const doc = parseGpx(xml);
+    expect(doc.points).toHaveLength(4);
+    expect(doc.segmentStarts).toEqual([2]);
+  });
+
+  it('writes a single <trkseg> when there are no boundaries — byte-identical to before', () => {
+    expect(buildGpx({ points })).toBe(buildGpx({ points, segmentStarts: [] }));
+    expect(buildGpx({ points }).match(/<trkseg>/g)).toHaveLength(1);
+    expect(parseGpx(buildGpx({ points })).segmentStarts).toEqual([]);
+  });
+
+  it('ignores junk boundaries (0, past the end, duplicates)', () => {
+    const xml = buildGpx({ points, segmentStarts: [0, 2, 2, 9] });
+    expect(xml.match(/<trkseg>/g)).toHaveLength(2);
+    expect(parseGpx(xml).segmentStarts).toEqual([2]);
+  });
+
+  it('reads boundaries across <trk>s and skips empty <trkseg>s', () => {
+    const xml = `<?xml version="1.0"?><gpx version="1.1" creator="t">
+  <trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="1.1" lon="1"/></trkseg>
+       <trkseg></trkseg>
+       <trkseg><trkpt lat="2" lon="2"/></trkseg></trk>
+  <trk><trkseg><trkpt lat="3" lon="3"/></trkseg></trk></gpx>`;
+    const doc = parseGpx(xml);
+    expect(doc.points).toHaveLength(4);
+    expect(doc.segmentStarts).toEqual([2, 3]);
+  });
+
+  it('reports no boundaries for the route and waypoint fallbacks', () => {
+    expect(
+      parseGpx('<gpx><rte><rtept lat="1" lon="1"/><rtept lat="2" lon="2"/></rte></gpx>')
+        .segmentStarts,
+    ).toEqual([]);
+    expect(
+      parseGpx('<gpx><wpt lat="1" lon="1"/><wpt lat="2" lon="2"/></gpx>').segmentStarts,
+    ).toEqual([]);
+  });
+});
+
 describe('parseGpx hand-written input', () => {
   it('flattens multiple <trk> and <trkseg> segments in order', () => {
     const xml = `<?xml version="1.0"?>

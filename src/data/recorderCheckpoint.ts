@@ -1,3 +1,4 @@
+import type { PauseInterval } from '@core/geo/track/segments';
 import type { TrackPoint } from '@core/models';
 import { File, Paths } from 'expo-file-system';
 import * as storage from './storage';
@@ -29,8 +30,27 @@ export interface RecorderCheckpoint {
   /** Activity category id chosen at record start; absent on old checkpoints. */
   category?: string;
   startedAt: number;
-  /** Wall time spent paused, with any in-flight pause folded in at write time. */
+  /**
+   * Wall time spent in COMPLETED pauses. Checkpoints written before `pausedAt`
+   * existed folded the in-flight pause in at write time instead (and carry no
+   * `pausedAt`/`pauses`/`savedAt`) — recovery treats those as single-segment
+   * recordings paused at relaunch, exactly as it always did.
+   */
   pausedMs: number;
+  /** The completed pauses, oldest first — the recording's segment boundaries. */
+  pauses?: PauseInterval[];
+  /**
+   * When the in-flight pause began, while `status === 'paused'`. Recovery
+   * resumes the pause from here, so a phone killed while paused and reopened
+   * an hour later does not report that hour as active time (audit A05, #275).
+   */
+  pausedAt?: number;
+  /**
+   * When this snapshot was written. For a checkpoint that died while
+   * `recording`, the last evidence the recording was alive (together with the
+   * newest fix): active time stops there, not at relaunch.
+   */
+  savedAt?: number;
   points: TrackPoint[];
   waypoints: {
     id: string;

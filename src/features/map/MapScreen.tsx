@@ -26,7 +26,6 @@ import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
 import { GESTURE_SETTLE_MS } from '@core/weather/windPerf';
 import type { WindBbox } from '@core/weather/windCoverage';
 import type { WindViewState } from '@core/weather/windProjection';
-import type { Feature, LineString } from 'geojson';
 import {
   Camera,
   type CameraRef,
@@ -77,7 +76,7 @@ import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { Terrain3DLiveView } from './Terrain3DLiveView';
-import { toLineFeature, toLngLatBounds } from './geojson';
+import { lineStringsOf, toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
@@ -150,13 +149,20 @@ const INSPECT_PANEL_H_ESTIMATE = 300;
 const INSPECT_PANEL_PAD = 24;
 
 /**
- * Throttled `toLineFeature(points)`. Between rebuilds the previous feature
- * object is returned unchanged, so the GeoJSON source keeps a stable reference.
- * A trailing timer commits the newest points shortly after fixes stop arriving,
- * so the drawn line never visibly lags the GPS.
+ * Throttled `toLineFeature(points, segmentStarts)`. Between rebuilds the
+ * previous feature object is returned unchanged, so the GeoJSON source keeps a
+ * stable reference. A trailing timer commits the newest points shortly after
+ * fixes stop arriving, so the drawn line never visibly lags the GPS. Segment
+ * starts only ever change together with the points (a resume adds its
+ * boundary with the first post-pause fix), so `points` alone drives rebuilds.
  */
-function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineString> | null {
-  const [feature, setFeature] = useState<Feature<LineString> | null>(() => toLineFeature(points));
+function useThrottledLineFeature(
+  points: readonly TrackPoint[],
+  segmentStarts: readonly number[],
+): TrailLineFeature | null {
+  const [feature, setFeature] = useState<TrailLineFeature | null>(() =>
+    toLineFeature(points, segmentStarts),
+  );
   const builtAtRef = useRef(0);
   const builtCountRef = useRef(points.length);
 
@@ -164,7 +170,7 @@ function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineStr
     const build = () => {
       builtAtRef.current = Date.now();
       builtCountRef.current = points.length;
-      setFeature(toLineFeature(points));
+      setFeature(toLineFeature(points, segmentStarts));
     };
     if (points.length < builtCountRef.current) {
       // Track reset (recording stopped or restarted) — reflect it immediately.
@@ -182,7 +188,7 @@ function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineStr
     // timer commits the pending points once the throttle window elapses.
     const timer = setTimeout(build, TRAIL_REBUILD_MS - sinceLast);
     return () => clearTimeout(timer);
-  }, [points]);
+  }, [points, segmentStarts]);
 
   return feature;
 }
@@ -623,6 +629,7 @@ export function MapScreen() {
     name,
     stats,
     points,
+    segmentStarts,
     waypoints,
     elapsedS,
     gpsQuality,
@@ -1387,7 +1394,7 @@ export function MapScreen() {
     ],
   );
 
-  const trailFeature = useThrottledLineFeature(points);
+  const trailFeature = useThrottledLineFeature(points, segmentStarts);
 
   // Camera seed: live fix → persisted last known position → MapLibre default.
   // `location` covers the 3D→2D remount (the live fix is already in hand);
@@ -1397,8 +1404,7 @@ export function MapScreen() {
 
   // Active saved-trail polylines (lng/lat) to drape on the 3D terrain.
   const trail3dLines = useMemo<readonly LngLat[][]>(
-    () =>
-      showTrackOverlays ? trackOverlays.map((t) => t.feature.geometry.coordinates as LngLat[]) : [],
+    () => (showTrackOverlays ? trackOverlays.flatMap((t) => lineStringsOf(t.feature)) : []),
     [showTrackOverlays, trackOverlays],
   );
 
@@ -1524,6 +1530,7 @@ export function MapScreen() {
           permission={permission}
           trails={trail3dLines}
           recordPoints={points}
+          recordSegmentStarts={segmentStarts}
           waypoints={waypoints}
         />
       ) : !settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)

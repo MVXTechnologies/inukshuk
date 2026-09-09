@@ -1,13 +1,13 @@
 import type { TrackSummary } from '@core/models';
 import { parseGpx } from '@core/geo/gpx';
 import * as storage from '@data/storage';
-import type { Feature, LineString } from 'geojson';
 import { useEffect, useMemo, useState } from 'react';
-import { toLineFeature } from './geojson';
+import { toLineFeature, type TrailLineFeature } from './geojson';
 
 export interface TrackOverlay {
   id: string;
-  feature: Feature<LineString>;
+  /** One part per `<trkseg>` — a recording's pauses are never drawn across. */
+  feature: TrailLineFeature;
 }
 
 // Cache key: the id alone is not enough — a trim "overwrite" rewrites the GPX
@@ -26,7 +26,7 @@ export function useTrackOverlays(
   /** Which trails to draw — the caller resolves the visibility mode. */
   activeTrackIds: readonly string[],
 ): TrackOverlay[] {
-  const [cache, setCache] = useState<Record<string, Feature<LineString> | null>>({});
+  const [cache, setCache] = useState<Record<string, TrailLineFeature | null>>({});
 
   const key = activeTrackIds.join('|');
 
@@ -40,9 +40,9 @@ export function useTrackOverlays(
         if (cache[ck] !== undefined) continue;
         try {
           const gpx = await storage.readFileText(t.fileUri);
-          const { points } = parseGpx(gpx);
+          const { points, segmentStarts } = parseGpx(gpx);
           if (cancelled) return;
-          setCache((c) => ({ ...c, [ck]: toLineFeature(points) }));
+          setCache((c) => ({ ...c, [ck]: toLineFeature(points, segmentStarts) }));
         } catch {
           if (cancelled) return;
           setCache((c) => ({ ...c, [ck]: null }));

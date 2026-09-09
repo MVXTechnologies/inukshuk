@@ -1,6 +1,6 @@
 import { parseGpx } from '@core/geo/gpx';
 import {
-  computeTrackStats,
+  computeSegmentedTrackStats,
   haversineMeters,
   interpolateTrackAtDistance,
   withDemElevations,
@@ -108,12 +108,14 @@ const NOTE_BADGE_COL_H = 24 + 14;
 async function buildGroupFor(
   hm: Heightmap,
   pts: readonly TrackPoint[],
+  segmentStarts: readonly number[],
   bm: MapBasemap,
   maxAnisotropy = 1,
   injectOverlays = true,
 ): Promise<TerrainBuild> {
   return buildTerrain(hm, pts, await fetchDrapeTexture(hm.range, bm), maxAnisotropy, {
     injectOverlays,
+    segmentStarts,
   });
 }
 
@@ -142,6 +144,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const trailViewMode = useSettingsStore((s) => s.trailViewMode);
 
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
+  // Pause boundaries in `points` (one per extra <trkseg>): the 2D/3D traces
+  // are drawn per segment and the summary stats never bridge a pause.
+  const [segmentStarts, setSegmentStarts] = useState<readonly number[]>([]);
   // Same points but with each altitude replaced by the terrain (DEM) height the
   // 3D view drapes the trail on, so the elevation profile always matches the 3D.
   const [demPoints, setDemPoints] = useState<TrackPoint[] | null>(null);
@@ -264,6 +269,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   useTerrainOverlaySync(overlayRef);
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
   const ptsRef = useRef<readonly TrackPoint[]>([]);
+  const segmentStartsRef = useRef<readonly number[]>([]);
   const basemapRef = useRef<MapBasemap>(basemap);
 
   const pan = useMemo(() => {
@@ -361,8 +367,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
     (async () => {
       try {
         const gpx = await storage.readFileText(fileUri);
-        const pts = parseGpx(gpx).points;
-        if (!cancelled) setPoints(pts);
+        const doc = parseGpx(gpx);
+        if (!cancelled) {
+          setPoints(doc.points);
+          setSegmentStarts(doc.segmentStarts);
+        }
       } catch {
         /* the 3D path surfaces load errors via status; 2D simply shows no line */
       }
@@ -394,7 +403,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
     if (!uri) return;
     try {
       const gpx = await storage.readFileText(uri);
-      setPoints(parseGpx(gpx).points);
+      const doc = parseGpx(gpx);
+      setPoints(doc.points);
+      setSegmentStarts(doc.segmentStarts);
     } catch {
       /* the trail stays on its pre-reload points; the trim itself already saved */
     }
@@ -486,8 +497,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // the elevation chart and ↑/↓ totals match the 3D drape and the displayed view.
   const profilePoints = demPoints ?? points ?? [];
   const profileStats = useMemo(
-    () => (demPoints ? computeTrackStats(demPoints) : null),
-    [demPoints],
+    () => (demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts) : null),
+    [demPoints, segmentStarts],
   );
 
   // Cumulative distance at each point for the trim tool's "keeping X of Y"
@@ -510,9 +521,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const onContextCreate = async (gl: ExpoWebGLRenderingContext, lifetime: GlLifetime) => {
     try {
       const gpx = fileUri ? await storage.readFileText(fileUri) : '';
-      const pts = gpx ? parseGpx(gpx).points : [];
+      const doc = gpx ? parseGpx(gpx) : null;
+      const pts = doc?.points ?? [];
       if (!lifetime.isCurrent()) return; // superseded while loading
       setPoints(pts);
+      setSegmentStarts(doc?.segmentStarts ?? []);
+      segmentStartsRef.current = doc?.segmentStarts ?? [];
       if (!bbox) {
         setStatus('error');
         return;
@@ -541,6 +555,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
       let build = await buildGroupFor(
         hm,
         pts,
+        segmentStartsRef.current,
         basemapRef.current,
         maxAnisoRef.current,
         injectOkRef.current,
@@ -588,7 +603,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
         setOverlaysAvailable(false);
         scene.remove(build.group);
         disposeGroup(build.group);
-        build = await buildGroupFor(hm, pts, basemapRef.current, maxAnisoRef.current, false);
+        build = await buildGroupFor(
+          hm,
+          pts,
+          segmentStartsRef.current,
+          basemapRef.current,
+          maxAnisoRef.current,
+          false,
+        );
         if (!lifetime.isCurrent()) {
           disposeGroup(build.group);
           return;
@@ -724,6 +746,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
       let built = await buildGroupFor(
         hm,
         ptsRef.current,
+        segmentStartsRef.current,
         bm,
         maxAnisoRef.current,
         injectOkRef.current,
@@ -748,7 +771,14 @@ export function Trail3DGLScreen({ trackId }: Props) {
         setOverlaysAvailable(false);
         scene.remove(built.group);
         disposeGroup(built.group);
-        built = await buildGroupFor(hm, ptsRef.current, bm, maxAnisoRef.current, false);
+        built = await buildGroupFor(
+          hm,
+          ptsRef.current,
+          segmentStartsRef.current,
+          bm,
+          maxAnisoRef.current,
+          false,
+        );
         if (sceneRef.current !== scene) {
           disposeGroup(built.group);
           return;
@@ -869,6 +899,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
             // 2D/3D toggle forced a remount.
             <Trail2DView
               points={points}
+              segmentStarts={segmentStarts}
               notes={notes}
               scrubAt={scrub}
               basemap={basemap}

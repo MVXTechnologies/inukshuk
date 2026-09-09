@@ -1,6 +1,7 @@
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
 import type { TrackPoint } from '@core/models';
+import { splitSegments } from '@core/geo/track/segments';
 
 /**
  * GPX 1.1 read/write — pure TypeScript, no platform dependencies. Tolerant
@@ -29,6 +30,12 @@ export interface GpxDocument {
   metadata: GpxMetadata;
   /** All track/route/waypoint points, flattened in document order. */
   points: TrackPoint[];
+  /**
+   * Indices into `points` where a new `<trkseg>` (or `<trk>`) began — the
+   * pauses of a recording (see `@core/geo/track/segments`). Empty for a
+   * single-segment file, and for the route/waypoint fallbacks.
+   */
+  segmentStarts: number[];
   /** Standalone <wpt> markers, preserved with their labels. */
   waypoints: GpxWaypoint[];
   /** True when `points` came from <trk>/<rte> (not the <wpt> fallback). */
@@ -238,13 +245,18 @@ export function parseGpx(xml: string): GpxDocument {
   }
 
   const points: TrackPoint[] = [];
+  const segmentStarts: number[] = [];
 
   for (const trk of asArray<AnyRecord>(gpx['trk'])) {
     for (const seg of asArray<AnyRecord>(trk['trkseg'])) {
+      const before = points.length;
       for (const pt of asArray<AnyRecord>(seg['trkpt'])) {
         const parsedPt = parsePoint(pt);
         if (parsedPt) points.push(parsedPt);
       }
+      // A segment boundary only where a non-empty segment follows points:
+      // empty <trkseg>s (and the first one) describe no pause.
+      if (before > 0 && points.length > before) segmentStarts.push(before);
     }
   }
   // Routes are a fallback when there are no track points — but the check must
@@ -275,11 +287,13 @@ export function parseGpx(xml: string): GpxDocument {
     }
   }
 
-  return { metadata, points, waypoints, hasTrackOrRoutePoints };
+  return { metadata, points, segmentStarts, waypoints, hasTrackOrRoutePoints };
 }
 
 /**
- * Serialize points to a valid GPX 1.1 string with a single <trk>/<trkseg>.
+ * Serialize points to a valid GPX 1.1 string with a single <trk>, cut into
+ * one <trkseg> per recording segment (`segmentStarts`, see
+ * `@core/geo/track/segments`; none = a single segment, as before).
  * Coordinates are rounded to 7 decimals, elevation to 2. `<ele>`/`<time>` are
  * emitted only when defined on the source point. Standalone `<wpt>` markers
  * (with their labels) are emitted before the track, per the GPX 1.1 order.
@@ -288,10 +302,11 @@ export function buildGpx(args: {
   points: TrackPoint[];
   metadata?: GpxMetadata;
   waypoints?: readonly GpxWaypoint[];
+  segmentStarts?: readonly number[];
 }): string {
-  const { points, metadata, waypoints } = args;
+  const { points, metadata, waypoints, segmentStarts } = args;
 
-  const trkpts = points.map((p) => {
+  const toTrkpt = (p: TrackPoint) => {
     const node: AnyRecord = {
       [`${ATTR_PREFIX}lat`]: round(p.latitude, 7),
       [`${ATTR_PREFIX}lon`]: round(p.longitude, 7),
@@ -311,7 +326,7 @@ export function buildGpx(args: {
       };
     }
     return node;
-  });
+  };
 
   const metaNode: AnyRecord = {};
   if (metadata?.name !== undefined) metaNode['name'] = metadata.name;
@@ -343,9 +358,17 @@ export function buildGpx(args: {
       return node;
     });
   }
+  // One <trkseg> per recording segment; a pause is a segment boundary and
+  // readers (Strava, Garmin, this app) never draw or measure across it.
+  const segments = splitSegments(points, segmentStarts ?? []);
+  const trksegs =
+    segments.length === 0
+      ? [{ trkpt: [] as AnyRecord[] }]
+      : segments.map((segment) => ({ trkpt: segment.map(toTrkpt) }));
+  const [onlySegment] = trksegs;
   gpx['trk'] = {
     ...(metadata?.name !== undefined ? { name: metadata.name } : {}),
-    trkseg: { trkpt: trkpts },
+    trkseg: trksegs.length === 1 && onlySegment ? onlySegment : trksegs,
   };
 
   const doc = builder.build({ gpx });

@@ -307,6 +307,21 @@ describe('reduceStatsWith', () => {
     },
   );
 
+  it('opens a new segment when there is no predecessor but the track has points', () => {
+    const before = computeTrackStats([pt(45, -73, 0, 100), pt(45.001, -73, 60_000, 110)]);
+    // 1 km away, 10 minutes later, 300 m lower — a resume after a pause.
+    const after = reduceStatsWith(before, undefined, pt(45.01, -73, 660_000, -200));
+    expect(after.distanceM).toBe(before.distanceM);
+    expect(after.durationS).toBe(before.durationS);
+    expect(after.movingTimeS).toBe(before.movingTimeS);
+    expect(after.maxSpeedMps).toBe(before.maxSpeedMps);
+    expect(after.ascentM).toBe(before.ascentM);
+    expect(after.descentM).toBe(before.descentM);
+    expect(after.pointCount).toBe(3);
+    expect(after.minAltitudeM).toBe(-200);
+    expect(after.bbox).toEqual({ minLat: 45, minLng: -73, maxLat: 45.01, maxLng: -73 });
+  });
+
   it('initializes bbox and altitude from the first point', () => {
     const s = reduceStatsWith(
       {

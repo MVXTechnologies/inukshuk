@@ -5,6 +5,7 @@ import {
   multidirHillshade,
   slopeDegrees,
 } from '@core/geo/terrainAnalysis';
+import { splitSegments } from '@core/geo/track/segments';
 import type { TrackPoint } from '@core/models';
 import * as THREE from 'three';
 import type { Heightmap } from './dem';
@@ -304,6 +305,11 @@ export interface BuildTerrainOptions {
    * without derivative support or after a shader compile failure.
    */
   injectOverlays?: boolean;
+  /**
+   * Recording segment boundaries (pauses) in `points` — the trace is draped
+   * one ribbon per segment, never across a pause.
+   */
+  segmentStarts?: readonly number[];
 }
 
 /**
@@ -467,12 +473,15 @@ export function buildTerrain(
     const surface = points.map((p) => project(p.longitude, p.latitude));
     // The route is a flat red line draped on the terrain — a thin ribbon hugging
     // the surface, unlit so it reads like a 2D line painted on the map rather
-    // than a 3D tube floating above it.
-    const line = drapeLine(
-      surface.map((v) => ({ x: v.x, z: v.z })),
-      { color: 0xe01b1b, halfWidth: 0.0045 },
-    );
-    if (line) group.add(line);
+    // than a 3D tube floating above it. One ribbon per recording segment.
+    for (const segment of splitSegments(surface, opts.segmentStarts ?? [])) {
+      if (segment.length < 2) continue;
+      const line = drapeLine(
+        segment.map((v) => ({ x: v.x, z: v.z })),
+        { color: 0xe01b1b, halfWidth: 0.0045 },
+      );
+      if (line) group.add(line);
+    }
     // Half-extent of the trace on the ground plane, for camera framing.
     let r = 0;
     for (const p of surface) r = Math.max(r, Math.hypot(p.x, p.z));

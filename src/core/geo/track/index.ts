@@ -20,6 +20,17 @@ export { interpolateTrackAtDistance } from './interpolate';
 export type { TrackPointAt } from './interpolate';
 export { scrubProfileAtRatio } from './scrub';
 export type { ProfileScrub } from './scrub';
+export {
+  accumulateSegmentedElevation,
+  computeSegmentedTrackStats,
+  dropPointsDuringPauses,
+  normalizeSegmentStarts,
+  segmentStartsFromPauses,
+  splitSegments,
+  startsNewSegment,
+  totalPausedMs,
+} from './segments';
+export type { PauseInterval, SegmentStarts } from './segments';
 
 const DEFAULT_ELEVATION_THRESHOLD_M = 3;
 const DEFAULT_MOVING_SPEED_THRESHOLD_MPS = 0.5;
@@ -95,6 +106,18 @@ export function accumulateElevationGainLoss(
   let acc = EMPTY_ELEVATION_ACC;
   for (const ele of elevations) acc = stepElevationGainLoss(acc, ele, opts);
   return acc;
+}
+
+/**
+ * Open a new recording segment on a live accumulator: the ascent/descent
+ * totals carry over, the running reference is dropped so the first fix after
+ * a pause re-seeds it instead of being measured against the last pre-pause
+ * elevation (a pause on a summit followed by a resume in the valley is not
+ * 500 m of descent). Equals {@link accumulateSegmentedElevation} run
+ * incrementally.
+ */
+export function beginElevationSegment(acc: ElevationAccumulator): ElevationAccumulator {
+  return { reference: undefined, ascentM: acc.ascentM, descentM: acc.descentM };
 }
 
 /**
@@ -257,6 +280,11 @@ interface ReduceOpts {
  * should do the same rather than trust the fields below.
  *
  * For distance / duration / moving time / max speed this folding is exact.
+ *
+ * `prevPoint` is the previous point OF THE SAME SEGMENT. Passing `undefined`
+ * on a track that already has points opens a new segment (a resume after a
+ * pause): the point extends the bbox, altitude range and count, and nothing
+ * else — no distance, time or speed bridges the pause.
  */
 export function reduceStatsWith(
   prev: TrackStats,
@@ -269,7 +297,7 @@ export function reduceStatsWith(
     opts?.movingSpeedThresholdMps ?? DEFAULT_MOVING_SPEED_THRESHOLD_MPS;
 
   // First point of a track.
-  if (prevPoint === undefined || prev.pointCount === 0) {
+  if (prev.pointCount === 0) {
     const alt =
       next.altitude !== undefined && !Number.isNaN(next.altitude) ? next.altitude : undefined;
     return {
@@ -289,6 +317,15 @@ export function reduceStatsWith(
         maxLng: next.longitude,
       },
       pointCount: 1,
+    };
+  }
+
+  // First point of a new segment: extend the extents only.
+  if (prevPoint === undefined) {
+    return {
+      ...prev,
+      ...extentsWith(prev, next),
+      pointCount: prev.pointCount + 1,
     };
   }
 
@@ -324,6 +361,28 @@ export function reduceStatsWith(
     else if (-delta >= elevationThresholdM) descentM += -delta;
   }
 
+  // durationS grows from the recorded duration plus this step's wall time.
+  const durationS = Math.max(0, prev.durationS + (next.time - prevPoint.time) / 1000);
+  const avgSpeedMps = movingTimeS > 0 ? movingDistanceM / movingTimeS : 0;
+
+  return {
+    distanceM,
+    ascentM,
+    descentM,
+    durationS,
+    movingTimeS,
+    avgSpeedMps,
+    maxSpeedMps,
+    ...extentsWith(prev, next),
+    pointCount: prev.pointCount + 1,
+  };
+}
+
+/** The altitude range and bbox of `prev` extended by one more point. */
+function extentsWith(
+  prev: TrackStats,
+  next: TrackPoint,
+): Pick<TrackStats, 'minAltitudeM' | 'maxAltitudeM' | 'bbox'> {
   let minAltitudeM = prev.minAltitudeM;
   let maxAltitudeM = prev.maxAltitudeM;
   if (next.altitude !== undefined && !Number.isNaN(next.altitude)) {
@@ -345,22 +404,5 @@ export function reduceStatsWith(
         maxLat: next.latitude,
         maxLng: next.longitude,
       };
-
-  // durationS grows from the recorded duration plus this step's wall time.
-  const durationS = Math.max(0, prev.durationS + (next.time - prevPoint.time) / 1000);
-  const avgSpeedMps = movingTimeS > 0 ? movingDistanceM / movingTimeS : 0;
-
-  return {
-    distanceM,
-    ascentM,
-    descentM,
-    durationS,
-    movingTimeS,
-    avgSpeedMps,
-    maxSpeedMps,
-    minAltitudeM,
-    maxAltitudeM,
-    bbox,
-    pointCount: prev.pointCount + 1,
-  };
+  return { minAltitudeM, maxAltitudeM, bbox };
 }
