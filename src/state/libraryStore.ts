@@ -124,7 +124,10 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   renameFolder: (id: string, name: string) => void;
   /** Delete a folder; its maps/trails fall back to Ungrouped (folderId cleared). */
   removeFolder: (id: string) => void;
-  /** Move an item into a folder, or out of any folder when `folderId` is null. */
+  /**
+   * Move an item into a folder, or out of any folder when `folderId` is null.
+   * An unknown folder id is ignored (no-op) rather than committed as dangling.
+   */
   setItemFolder: (
     kind: 'map' | 'track' | 'waypoint',
     itemId: string,
@@ -654,6 +657,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   setItemFolder: (kind, itemId, folderId) =>
     set((s) => {
+      // A destination that no longer exists (deleted folder, stale drag
+      // target — #303) must not be committed: the item would render under
+      // Ungrouped while the UI reports "Moved to …".
+      if (folderId !== null && !s.folders.some((f) => f.id === folderId)) return s;
       const folder = folderId ?? undefined;
       const next =
         kind === 'map'

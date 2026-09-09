@@ -64,12 +64,22 @@ export function useDragToFolder({
   const windowHRef = useRef(0);
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /** Attach to a folder (or Ungrouped) header View via `ref`. */
+  /**
+   * Attach to a folder (or Ungrouped) header View via `ref`. Unregistering
+   * (folder deleted, header unmounted) also drops the cached rect: a stale
+   * rect would otherwise win the hit-test over whichever surviving header
+   * now occupies that position, and the drop would resolve to a folder that
+   * no longer exists (#303).
+   */
   const registerTarget = useCallback((target: DropTargetKey) => {
     const key = keyOf(target);
     return (view: View | null) => {
-      if (view) targetsRef.current.set(key, view);
-      else targetsRef.current.delete(key);
+      if (view) {
+        targetsRef.current.set(key, view);
+      } else {
+        targetsRef.current.delete(key);
+        rectsRef.current.delete(key);
+      }
     };
   }, []);
 
@@ -82,6 +92,10 @@ export function useDragToFolder({
       const statusBar = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0;
       for (const [key, view] of targetsRef.current) {
         view.measureInWindow((x, y, w, h) => {
+          // measureInWindow answers asynchronously on the native side; a
+          // header unmounted (or remounted) in the meantime must not
+          // resurrect its rect.
+          if (targetsRef.current.get(key) !== view) return;
           rectsRef.current.set(key, { x, y: y + statusBar, w, h });
         });
       }
@@ -89,6 +103,8 @@ export function useDragToFolder({
 
     const hitTest = (pageX: number, pageY: number): DropTargetKey | 'none' => {
       for (const [key, r] of rectsRef.current) {
+        // Only a currently registered header is a valid destination.
+        if (!targetsRef.current.has(key)) continue;
         if (pageX >= r.x && pageX <= r.x + r.w && pageY >= r.y && pageY <= r.y + r.h) {
           return fromKey(key);
         }
