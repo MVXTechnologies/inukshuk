@@ -39,9 +39,12 @@ four stages:
    - a sidecar world file / GDAL `.aux.xml`.
      The source CRS is reprojected to WGS84 with **proj4**. The result is one
      `GeoReference` per georeferenced page: the map-frame rectangle in PDF
-     points (`viewport.rect`) and its geographic corners (`viewport.corners`).
-     A `MapDocument` stores `georeferences[]` plus `activePages[]` (which pages
-     are currently shown as overlays). The hand-written PDF reader is hardened
+     points (`viewport.rect`), its geographic corners (`viewport.corners`),
+     and the page's **rendered box** (`pageBox` — CropBox ∩ MediaBox, with its
+     origin, in the same user space; `core/geo/geopdf/pageBox.ts`). That last
+     one is what every renderer actually draws, and it is not always a
+     zero-origin MediaBox (#287). A `MapDocument` stores `georeferences[]`
+     plus `activePages[]` (which pages are currently shown as overlays). The hand-written PDF reader is hardened
      against hostile input (clamped xref counts, bounded FlateDecode output).
 
 2. **Rasterize the page** (`features/map/PdfRasterizer`). A hidden offscreen
@@ -58,11 +61,19 @@ four stages:
    and shown on its Library card ("Rendering page N…" / "Couldn't render page
    N: …").
 
-3. **Extrapolate full-page corners** (`core/geo/geomath`). The georeferencing
-   often describes only the inner map frame, but we render the _whole_ page. We
-   fit a 2D affine transform from the viewport's four (page-point → geographic)
-   corner correspondences and evaluate it at the full page rectangle. This
-   yields the geographic corners of the rendered image even with rotation/skew.
+3. **Extrapolate full-page corners** (`core/geo/geopdf/pageBox` over
+   `core/geo/geomath`). The georeferencing often describes only the inner map
+   frame, but we render the _whole_ rendered page box. We fit a 2D affine
+   transform from the viewport's four (page-point → geographic) corner
+   correspondences and evaluate it at that box (`renderedPageCorners`). This
+   yields the geographic corners of the rendered image even with
+   rotation/skew, and — because the box carries its origin — for cropped or
+   shifted pages too. Detail tiles subdivide the same image, and the native
+   crop renderers (Android `PdfRenderer`, iOS JPEG/mosaic) are only offered a
+   page whose rendered box is a zero-origin MediaBox (`nativePageGeometry`);
+   everything else stays on pdf.js. Maps imported before the box was recorded
+   keep the old zero-origin placement and are flagged by
+   `needsPageBoxReprocessing` until re-imported.
 
 4. **Overlay** (`MapScreen`). The PNG is written to a cache **file** (Android's
    MapLibre `ImageSource` cannot consume a `data:` URI — it crashes) and the

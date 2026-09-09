@@ -1,8 +1,9 @@
 import type { CornerCoordinates, GeoReference, LngLat, PointRect } from '@core/models';
 import { applyAffine, bboxFromCorners, fitAffine } from '@core/geo/geomath';
 import { type Reprojector, epsgFromText, makeReprojector } from './crs';
+import { pointRectFromPdfRect } from './pageBox';
 import type { PdfDocument } from './pdfReader';
-import { readRect } from './pageTree';
+import { type PageInfo, readRect } from './pageTree';
 import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } from './types';
 
 /**
@@ -24,6 +25,11 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  *       - `/BOUNDS` — optional clip polygon in the same unit square. NOT the
  *         pairing key for GPTS (it was mistaken for one until #269).
  *       - `/GCS` — coordinate system dict (/EPSG, /WKT, or /Type /PROJCS|GEOGCS)
+ *
+ * `/BBox` is in page user space. The georeference records, in that same
+ * space, the page's *rendered* box (`page.pageBox` — CropBox ∩ MediaBox), so
+ * the overlay can map the viewport onto the pixels a renderer actually
+ * produces rather than onto a zero-origin MediaBox (#287).
  */
 
 function numArray(doc: PdfDocument, v: PdfValue | undefined): number[] | undefined {
@@ -134,16 +140,16 @@ function affineFromUnit(
 /** Extract all Adobe-geo georeferences from a single page. */
 export function extractAdobeGeo(
   doc: PdfDocument,
-  page: { index: number; dict: PdfDict; mediaBox: [number, number, number, number] },
+  page: PageInfo,
   warnings: string[],
 ): GeoReference[] {
   const out: GeoReference[] = [];
   const vp = doc.resolve(page.dict.entries.get('VP'));
   if (!isArray(vp)) return out;
 
-  const [mx0, my0, mx1, my1] = page.mediaBox;
-  const pageWidthPt = Math.abs(mx1 - mx0);
-  const pageHeightPt = Math.abs(my1 - my0);
+  const pageBox = pointRectFromPdfRect(page.pageBox);
+  const pageWidthPt = pageBox.x1 - pageBox.x0;
+  const pageHeightPt = pageBox.y1 - pageBox.y0;
 
   for (const vpEntry of vp as PdfArray) {
     const vd = doc.resolve(vpEntry);
@@ -153,7 +159,9 @@ export function extractAdobeGeo(
     const subtype = (measure as PdfDict).entries.get('Subtype');
     if (!(subtype && isName(subtype) && subtype.name === 'GEO')) continue;
 
-    const bbox = readRect(doc, (vd as PdfDict).entries.get('BBox')) ?? page.mediaBox;
+    // A viewport without a /BBox (it is required, but producers slip) frames
+    // the whole rendered page, not the MediaBox.
+    const bbox = readRect(doc, (vd as PdfDict).entries.get('BBox')) ?? page.pageBox;
     const result = cornersFromMeasure(doc, bbox, measure as PdfDict);
     if (!result) {
       warnings.push(`page ${page.index}: VP/Measure GEO present but GPTS unusable`);
@@ -172,6 +180,7 @@ export function extractAdobeGeo(
       sourceEpsg: result.epsg,
       pageWidthPt,
       pageHeightPt,
+      pageBox,
       viewport: { rect, corners: result.corners },
       bbox: bboxFromCorners(result.corners),
     };

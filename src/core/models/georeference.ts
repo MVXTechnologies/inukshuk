@@ -51,9 +51,27 @@ export interface GeoReference {
    * documents imported before that fix.
    */
   sourceCrs?: string;
-  /** Page MediaBox size in PDF points (1/72 inch). */
+  /**
+   * Size of the page's *rendered* box in PDF points (1/72 inch) — the
+   * CropBox ∩ MediaBox that pdf.js and the native renderers draw, which is
+   * what the overlay raster's pixels span (see {@link pageBox}). Documents
+   * imported before #287 recorded the MediaBox size here instead.
+   */
   pageWidthPt: number;
   pageHeightPt: number;
+  /**
+   * The rendered page box in PDF user space, origin included: CropBox ∩
+   * MediaBox, or the MediaBox when there is no usable CropBox. `viewport.rect`
+   * is expressed in the same user space, so placing the raster means mapping
+   * the viewport's corners onto *this* rectangle — not onto
+   * `[0, 0, pageWidthPt, pageHeightPt]`, which silently assumed a zero-origin
+   * MediaBox and drew cropped or offset pages at twice their extent (#287).
+   *
+   * Absent on documents imported before #287: those keep the old
+   * zero-origin-MediaBox placement (right for the vast majority of sheets)
+   * and are flagged for re-import by `needsPageBoxReprocessing`.
+   */
+  pageBox?: PointRect;
   viewport: {
     /** Map-frame rectangle in PDF points (origin bottom-left). */
     rect: PointRect;

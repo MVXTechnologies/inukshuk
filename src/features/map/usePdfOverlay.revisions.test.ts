@@ -260,6 +260,69 @@ it('requests native geometry without changing the full-page fallback and caches 
   expect(mockRasterize).toHaveBeenCalledTimes(1);
 });
 
+it('places a cropped page on its rendered box and keeps it off the native path (#287)', async () => {
+  // /MediaBox [0 0 200 100] /CropBox [50 25 150 75], the map frame being the
+  // whole crop: the overlay must span exactly the frame's corners (pdf.js
+  // renders the 100×50 pt crop), and native rendering — which only takes a
+  // zero-origin page — must not be offered at all.
+  const cropped: MapDocument = {
+    ...map,
+    id: 'cropped-page',
+    georeferences: [
+      {
+        ...geo,
+        pageWidthPt: 100,
+        pageHeightPt: 50,
+        pageBox: { x0: 50, y0: 25, x1: 150, y1: 75 },
+        viewport: { ...geo.viewport, rect: { x0: 50, y0: 25, x1: 150, y1: 75 } },
+      },
+    ],
+  };
+  const view = await renderHook(() => usePdfOverlays([cropped]));
+  expect(mockRasterize).toHaveBeenCalledWith(expect.objectContaining({ nativePage: null }));
+  expect(view.result.current.overlays[0]?.coordinates).toEqual([
+    [-71, 47],
+    [-70, 47],
+    [-70, 46],
+    [-71, 46],
+  ]);
+  await view.unmount();
+});
+
+it('keeps the pre-#287 zero-origin placement for a document with no page box', async () => {
+  // The same cropped frame as persisted by an older build: MediaBox size and
+  // no box. It draws where it always did (the audit's doubled extent) and is
+  // flagged in the log; only a re-import can correct it.
+  const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  const legacy: MapDocument = {
+    ...map,
+    id: 'legacy-page',
+    georeferences: [
+      {
+        ...geo,
+        pageWidthPt: 200,
+        pageHeightPt: 100,
+        viewport: { ...geo.viewport, rect: { x0: 50, y0: 25, x1: 150, y1: 75 } },
+      },
+    ],
+  };
+  const view = await renderHook(() => usePdfOverlays([legacy]));
+  expect(view.result.current.overlays[0]?.coordinates).toEqual([
+    [-71.5, 47.5],
+    [-69.5, 47.5],
+    [-69.5, 45.5],
+    [-71.5, 45.5],
+  ]);
+  expect(mockRasterize).toHaveBeenCalledWith(
+    expect.objectContaining({
+      nativePage: expect.objectContaining({ expectedPageWidthPt: 200, expectedPageHeightPt: 100 }),
+    }),
+  );
+  expect(log).toHaveBeenCalledWith(expect.stringContaining('re-import to reprocess'));
+  log.mockRestore();
+  await view.unmount();
+});
+
 it('does not inherit an unresolved render from a replaced provider', async () => {
   const pendingMap = { ...map, id: 'replaced-provider' };
   mockServerOrigin.mockImplementationOnce(() => new Promise(() => undefined));
