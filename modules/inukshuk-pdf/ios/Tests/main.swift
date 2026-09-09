@@ -44,7 +44,7 @@ let caches = temp.appendingPathComponent("Caches")
 try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
 try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: temp) }
-func fixture(_ content: String = "q 100 0 0 100 0 0 cm /Im1 Do Q", pageExtra: String = "", imageExtra: String = "", resourcesExtra: String = "", jpeg: Data = tinyJPEG) throws -> URL {
+func fixture(_ content: String = "q 100 0 0 100 0 0 cm /Im1 Do Q", pageExtra: String = "", imageExtra: String = "", resourcesExtra: String = "", jpeg: Data = tinyJPEG, width: Int = 8, height: Int = 8) throws -> URL {
   var pdf = Data("%PDF-1.4\n".utf8)
   var offsets = [0]
   let objects: [Data] = [
@@ -52,7 +52,7 @@ func fixture(_ content: String = "q 100 0 0 100 0 0 cm /Im1 Do Q", pageExtra: St
     Data("<< /Type /Pages /Kids [3 0 R] /Count 1 >>".utf8),
     Data("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im1 5 0 R >> \(resourcesExtra) >> /Contents 4 0 R \(pageExtra) >>".utf8),
     Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream".utf8),
-    Data("<< /Type /XObject /Subtype /Image /Width 8 /Height 8 /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /DCTDecode /Length \(jpeg.count) \(imageExtra) >>\nstream\n".utf8) + jpeg + Data("\nendstream".utf8)
+    Data("<< /Type /XObject /Subtype /Image /Width \(width) /Height \(height) /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /DCTDecode /Length \(jpeg.count) \(imageExtra) >>\nstream\n".utf8) + jpeg + Data("\nendstream".utf8)
   ]
   for (index, object) in objects.enumerated() {
     offsets.append(pdf.count)
@@ -134,6 +134,92 @@ let symlink = documents.appendingPathComponent("escape.pdf")
 try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: outside)
 rejectRender(request(symlink))
 expect(!PdfJpegCrop.within(temp.appendingPathComponent("Documents-other/a.pdf"), documents), "Private path sibling is rejected")
+
+// --- #331: a single JPEG larger than the decode budget (the Eco class) ---
+// ImageIO's encoder adds APP1/APP2 segments the crop grammar rejects on
+// purpose (only what the measured Eco export writes is accepted); strip them
+// so the fixture is the plain baseline JFIF a map exporter writes.
+func stripAppSegments(_ jpeg: Data) -> Data {
+  var out = Data(jpeg.prefix(2)), offset = 2
+  let bytes = [UInt8](jpeg)
+  while offset + 4 <= bytes.count, bytes[offset] == 255 {
+    let marker = bytes[offset + 1]
+    if marker == 0xDA { out.append(jpeg.suffix(from: offset)); return out }
+    let length = Int(bytes[offset + 2]) * 256 + Int(bytes[offset + 3])
+    if !(0xE1...0xEF).contains(marker) && marker != 0xFE { out.append(jpeg.subdata(in: offset..<(offset + 2 + length))) }
+    offset += 2 + length
+  }
+  return out
+}
+/// Quadrants: top-left red, top-right green, bottom-left blue, bottom-right yellow.
+func quadrantJPEG(width: Int, height: Int) -> Data {
+  let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+  let half = CGSize(width: Double(width) / 2, height: Double(height) / 2)
+  for (color, origin) in [(CGColor(red: 1, green: 0, blue: 0, alpha: 1), CGPoint(x: 0, y: half.height)),
+    (CGColor(red: 0, green: 1, blue: 0, alpha: 1), CGPoint(x: half.width, y: half.height)),
+    (CGColor(red: 0, green: 0, blue: 1, alpha: 1), CGPoint(x: 0, y: 0)),
+    (CGColor(red: 1, green: 1, blue: 0, alpha: 1), CGPoint(x: half.width, y: 0))] {
+    context.setFillColor(color)
+    context.fill(CGRect(origin: origin, size: half))
+  }
+  let data = NSMutableData()
+  let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil)!
+  CGImageDestinationAddImage(destination, context.makeImage()!, [kCGImageDestinationLossyCompressionQuality: 0.6] as CFDictionary)
+  CGImageDestinationFinalize(destination)
+  return stripAppSegments(data as Data)
+}
+func footprintMB() -> Int {
+  var info = task_vm_info_data_t()
+  var count = mach_msg_type_number_t(MemoryLayout<task_vm_info>.size) / 4
+  let result = withUnsafeMutablePointer(to: &info) {
+    $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+  }
+  return result == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1
+}
+var peakFootprint = footprintMB()
+let footprintSampler = Thread { while true { peakFootprint = max(peakFootprint, footprintMB()); usleep(1000) } }
+footprintSampler.start()
+func peakFootprintMB() -> Int { peakFootprint }
+/// RGB at an output pixel (PNG origin top-left).
+func pixel(_ output: [String: Any], x: Int, y: Int) -> [Int] {
+  let url = URL(string: output["fileUri"] as! String)!
+  let image = CGImageSourceCreateImageAtIndex(CGImageSourceCreateWithURL(url as CFURL, nil)!, 0, nil)!
+  let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+  context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+  let bytes = context.data!.assumingMemoryBound(to: UInt8.self)
+  let index = (y * image.width + x) * 4
+  return [Int(bytes[index]), Int(bytes[index + 1]), Int(bytes[index + 2])]
+}
+// JPEG chroma subsampling bleeds ~40 levels at a saturated edge; the quadrant colors differ by 255.
+func near(_ rgb: [Int], _ expected: [Int]) -> Bool { zip(rgb, expected).allSatisfy { abs($0 - $1) <= 80 } }
+let red = [255, 0, 0], green = [0, 255, 0], blue = [0, 0, 255], yellow = [255, 255, 0]
+// Pure reduction rule, with the Eco page's own numbers (14399×12600).
+let ecoFrame = CGRect(x: 0, y: 0, width: 14399, height: 12600)
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 14399, sourceHeight: 12600, crop: CGRect(x: 0, y: 0, width: 4000, height: 4000), outputScale: 0.5) == 1, "Crops inside the budget keep the lazy full-resolution decode")
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 14399, sourceHeight: 12600, crop: ecoFrame, outputScale: 1896.0 / 14399) == 4, "Eco overview decodes at 1/4: 1/2 exceeds the budget, 1/8 lacks resolution")
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 14399, sourceHeight: 12600, crop: ecoFrame, outputScale: 0.1) == 8, "Coarser output takes the coarser reduction")
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 14399, sourceHeight: 12600, crop: ecoFrame, outputScale: 0.6) == 4, "When no fitting reduction carries the resolution, the finest fitting one is used")
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 5000, sourceHeight: 4000, crop: CGRect(x: 0, y: 0, width: 5000, height: 4000), outputScale: 0.3) == 2, "A 20 MP page needs only 1/2")
+expect(PdfJpegCrop.decodeReduction(sourceWidth: 20000, sourceHeight: 20000, crop: CGRect(x: 0, y: 0, width: 20000, height: 20000), outputScale: 1) == 8, "The edge cap keeps every source decodable: 1/8 of a 20,000 px edge fits")
+// End to end: a 5000×4000 (20 MP) single-JPEG page. Before #331 the full page
+// was "Source crop exceeds decode budget" and fell back to PDF.js.
+let bigJPEG = quadrantJPEG(width: 5000, height: 4000)
+expect(PdfJpegCrop.baselineJPEG(bigJPEG as CFData, width: 5000, height: 4000), "Generated large JPEG is baseline")
+let bigPage = try fixture(jpeg: bigJPEG, width: 5000, height: 4000)
+func bigRequest(x0: Double, y0: Double, x1: Double, y1: Double, target: Double) -> PdfCropRequest {
+  PdfCropRequest(fileUri: bigPage.absoluteString, pageIndex: 0, pageWidthPt: 100, pageHeightPt: 100, x0: x0, y0: y0, x1: x1, y1: y1, targetWidthPx: target)
+}
+let overview = try render(bigRequest(x0: 0, y0: 0, x1: 1, y1: 1, target: 1000))
+expect(overview["widthPx"] as? Int == 1000 && overview["heightPx"] as? Int == 1000, "Full page above the decode budget renders")
+expect(near(pixel(overview, x: 250, y: 250), red) && near(pixel(overview, x: 750, y: 250), green)
+  && near(pixel(overview, x: 250, y: 750), blue) && near(pixel(overview, x: 750, y: 750), yellow), "Reduced decode keeps orientation and placement")
+let wide = try render(bigRequest(x0: 0.1, y0: 0.1, x1: 0.95, y1: 0.95, target: 2000))
+expect(wide["widthPx"] as? Int == 1773 && wide["heightPx"] as? Int == 1773, "A partial crop above the budget renders reduced within the output budget")
+expect(near(pixel(wide, x: 200, y: 200), red) && near(pixel(wide, x: 1600, y: 1600), yellow), "Partial reduced crop is placed like the full-resolution path")
+let quarter = try render(bigRequest(x0: 0.5, y0: 0, x1: 1, y1: 0.5, target: 500))
+expect(quarter["widthPx"] as? Int == 500 && near(pixel(quarter, x: 250, y: 250), green), "Crops inside the budget still decode at full resolution")
 try runMosaicTests(documents: documents, caches: caches)
 if CommandLine.arguments.count > 1 {
   let original = URL(fileURLWithPath: CommandLine.arguments[1])
@@ -141,8 +227,16 @@ if CommandLine.arguments.count > 1 {
   try FileManager.default.copyItem(at: original, to: local)
   let ecoRequest = PdfCropRequest(fileUri: local.absoluteString, pageIndex: 0, pageWidthPt: 3456, pageHeightPt: 3024,
     x0: 0.5625, y0: 0.1875, x1: 0.8125, y1: 0.4375, targetWidthPx: 1896)
-  rejectRender(PdfCropRequest(fileUri: local.absoluteString, pageIndex: 0, pageWidthPt: 3456, pageHeightPt: 3024,
-    x0: 0, y0: 0, x1: 1, y1: 1, targetWidthPx: 1000))
+  // #331: the whole 181 MP page (the map's overview) decodes at a JPEG DCT
+  // reduction instead of being refused into PDF.js, which cannot survive it.
+  let ecoOverviewStart = ProcessInfo.processInfo.systemUptime
+  let ecoOverview = try render(PdfCropRequest(fileUri: local.absoluteString, pageIndex: 0, pageWidthPt: 3456, pageHeightPt: 3024,
+    x0: 0, y0: 0, x1: 1, y1: 1, targetWidthPx: 2048))
+  expect(ecoOverview["widthPx"] as? Int == 1896 && ecoOverview["heightPx"] as? Int == 1659, "Original Eco overview size")
+  print("Eco overview: \(Int((ProcessInfo.processInfo.systemUptime - ecoOverviewStart) * 1000)) ms, footprint \(footprintMB()) MB (peak \(peakFootprintMB()) MB)")
+  let ecoHalf = try render(PdfCropRequest(fileUri: local.absoluteString, pageIndex: 0, pageWidthPt: 3456, pageHeightPt: 3024,
+    x0: 0, y0: 0, x1: 0.5, y1: 0.5, targetWidthPx: 3072))
+  expect(ecoHalf["widthPx"] as? Int == 1896, "Original Eco quarter-page crop above the decode budget renders reduced")
   let ecoOutput = try render(ecoRequest)
   expect(ecoOutput["widthPx"] as? Int == 1896 && ecoOutput["heightPx"] as? Int == 1659, "Original Eco output size")
   print("Eco integration: \(ecoOutput)")

@@ -27,6 +27,17 @@ on the same app version; native changes require a new store build. See
 
 ### Fixed
 
+- **iOS: single-large-JPEG GeoPDFs (EcoLL1) render instead of always failing
+  with "Load failed" and being turned off (#331).** The 52 MB EcoLL1 sheet is
+  one 181-megapixel JPEG. Its overview exceeded the native crop path's 16 Mi
+  source-pixel decode budget, so iOS refused it into pdf.js, which must fetch
+  all 52 MB and decode the full frame in JavaScript — 2.9 GB in the WebView
+  process on the simulator, a memory kill on a phone, surfacing as WebKit's
+  bare `Load failed` (#279, #280). The iOS renderer now decodes such crops at
+  the JPEG DCT reduction (1/2, 1/4, 1/8) that fits the budget, so the whole
+  page renders natively in under a second at ~200 MB. Needs a new native
+  binary. Rasterizer errors also name the failing served request (`GET
+/maps/….pdf bytes=…`, status, bytes read) instead of only "Load failed".
 - **Map gestures in the trail view no longer fight the page scroll.** The trail
   view is one ScrollView, which intercepted vertical drags before they reached
   the native MapLibre view, so panning the 2D map stuttered or scrolled the

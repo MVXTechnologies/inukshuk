@@ -18,14 +18,35 @@ struct PdfCropRequest {
 enum PdfJpegCrop {
   private static func unsupported(_ reason: String) -> PdfUnsupported { PdfUnsupported(reason: reason) }
 
+  /// Most source pixels one decode may touch: the lazy full-resolution crop
+  /// stays under it; larger crops are decoded at a JPEG DCT reduction instead.
+  static let decodeBudgetPixels = 16 * 1024 * 1024
+
   static func render(_ request: PdfCropRequest, documents: URL, caches: URL) throws -> [String: Any] {
     do { return try renderJPEG(request, documents: documents, caches: caches) }
     catch is PdfUnsupported { return try PdfMosaicCrop.render(request, documents: documents, caches: caches) }
   }
 
+  /// The JPEG DCT reduction (1, 2, 4 or 8) a source crop is decoded at.
+  ///
+  /// A crop inside the decode budget keeps the measured lazy full-resolution
+  /// path (1). A larger crop — the whole 181 MP Eco page at overview zoom
+  /// (#331) — is decoded by ImageIO at 1/2, 1/4 or 1/8, where memory follows
+  /// the reduced frame, never the full one: the reductions that fit the budget
+  /// are candidates, and among them the coarsest that still carries at least
+  /// `outputScale` output pixels per source pixel wins; when none carries
+  /// enough, the finest fitting one does — a resampled output, never a refusal.
+  /// The 20,000-pixel edge cap guarantees that 1/8 always fits.
+  static func decodeReduction(sourceWidth: Int, sourceHeight: Int, crop: CGRect, outputScale: Double) -> Int {
+    if crop.width * crop.height <= Double(decodeBudgetPixels) { return 1 }
+    let fitting = [2, 4, 8].filter { (sourceWidth / $0) * (sourceHeight / $0) <= decodeBudgetPixels }
+    return fitting.last { 1 / Double($0) >= outputScale } ?? fitting.first ?? 8
+  }
+
   private static func renderJPEG(_ request: PdfCropRequest, documents: URL, caches: URL) throws -> [String: Any] {
     // No CGPDF page drawing: it expands the 181 MP Eco image to >1 GiB.
-    // ImageIO's baseline-JPEG cropped image remains lazy until the bounded draw.
+    // ImageIO's baseline-JPEG cropped image remains lazy until the bounded
+    // draw, and a crop larger than the decode budget is decoded reduced.
     let started = ProcessInfo.processInfo.systemUptime
     let values = [request.pageIndex, request.pageWidthPt, request.pageHeightPt, request.x0, request.y0, request.x1, request.y1, request.targetWidthPx]
     guard values.allSatisfy(\.isFinite), request.pageIndex >= 0, request.pageIndex <= 100_000,
@@ -87,17 +108,39 @@ enum PdfJpegCrop {
       width: pointWidth / paint.rect.width * Double(sourceWidth),
       height: pointHeight / paint.rect.height * Double(sourceHeight))
     let sourceBounds = CGRect(x: 0, y: 0, width: sourceWidth, height: sourceHeight)
-    let integral = exact.integral.intersection(sourceBounds)
-    guard !integral.isNull, integral.width > 0, integral.height > 0,
-      integral.width * integral.height <= 16 * 1024 * 1024 else { throw unsupported("Source crop exceeds decode budget") }
+    let sourceCrop = exact.integral.intersection(sourceBounds)
+    guard !sourceCrop.isNull, sourceCrop.width > 0, sourceCrop.height > 0 else { throw unsupported("Source crop is empty") }
+    let reduction = decodeReduction(sourceWidth: sourceWidth, sourceHeight: sourceHeight, crop: sourceCrop,
+      outputScale: Double(width) / exact.width)
     var jpegFormat = CGPDFDataFormat.raw
     guard let jpeg = CGPDFStreamCopyData(jpegStream, &jpegFormat), jpegFormat == .jpegEncoded,
       CFDataGetLength(jpeg) <= 64 * 1024 * 1024,
       baselineJPEG(jpeg, width: sourceWidth, height: sourceHeight) else { throw unsupported("Only baseline RGB JPEG is supported") }
     let options = [kCGImageSourceShouldCache: false, kCGImageSourceShouldCacheImmediately: false] as CFDictionary
-    guard let source = CGImageSourceCreateWithData(jpeg, options), CGImageSourceGetCount(source) == 1,
-      let image = CGImageSourceCreateImageAtIndex(source, 0, options), image.width == sourceWidth, image.height == sourceHeight,
-      let cropped = image.cropping(to: integral),
+    guard let source = CGImageSourceCreateWithData(jpeg, options), CGImageSourceGetCount(source) == 1 else { throw unsupported("Cannot read JPEG") }
+    let image: CGImage
+    if reduction == 1 {
+      guard let full = CGImageSourceCreateImageAtIndex(source, 0, options), full.width == sourceWidth, full.height == sourceHeight else { throw unsupported("Cannot decode JPEG") }
+      image = full
+    } else {
+      // The largest edge divided by the reduction is exactly the size ImageIO
+      // produces at that DCT scale, so nothing is resampled here and the
+      // decoded frame is the reduced one (measured: 1/4 of the Eco page peaks
+      // near 140 MB above baseline; the full frame exceeded 1 GiB).
+      let thumbnail = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: false, kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: max(sourceWidth, sourceHeight) / reduction] as CFDictionary
+      guard let reduced = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnail),
+        abs(reduced.width - sourceWidth / reduction) <= 1, abs(reduced.height - sourceHeight / reduction) <= 1,
+        reduced.width * reduced.height <= decodeBudgetPixels else { throw unsupported("Cannot decode reduced JPEG") }
+      image = reduced
+    }
+    // Crop in decoded pixels: identical to the source rectangle at full
+    // resolution, scaled per axis when the frame was decoded reduced.
+    let ratioX = Double(image.width) / Double(sourceWidth), ratioY = Double(image.height) / Double(sourceHeight)
+    let decodedExact = CGRect(x: exact.minX * ratioX, y: exact.minY * ratioY, width: exact.width * ratioX, height: exact.height * ratioY)
+    let integral = decodedExact.integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    guard !integral.isNull, integral.width > 0, integral.height > 0, let cropped = image.cropping(to: integral),
       let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
       let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
         space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { throw unsupported("Cannot decode cropped JPEG") }
@@ -105,9 +148,9 @@ enum PdfJpegCrop {
     context.setFillColor(CGColor(gray: 1, alpha: 1))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     context.interpolationQuality = .high
-    let scaleX = Double(width) / exact.width, scaleY = Double(height) / exact.height
-    context.draw(cropped, in: CGRect(x: (integral.minX - exact.minX) * scaleX,
-      y: (exact.maxY - integral.maxY) * scaleY, width: integral.width * scaleX, height: integral.height * scaleY))
+    let scaleX = Double(width) / decodedExact.width, scaleY = Double(height) / decodedExact.height
+    context.draw(cropped, in: CGRect(x: (integral.minX - decodedExact.minX) * scaleX,
+      y: (decodedExact.maxY - integral.maxY) * scaleY, width: integral.width * scaleX, height: integral.height * scaleY))
     let outputDir = caches.appendingPathComponent("overlays", isDirectory: true).resolvingSymlinksInPath()
     guard within(outputDir, caches) else { throw unsupported("Invalid output directory") }
     try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
