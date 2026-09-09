@@ -22,6 +22,11 @@ import {
  * Track geometries live in GPX files (the store holds summaries), so they're
  * loaded here; geometry outside the page is clipped by the composer, so the
  * only cost of loading a track that misses the region is the parse.
+ *
+ * Cancellation (#309): `handle.aborted` is re-checked after every await and
+ * once more right before the durable `addMap`, so a Cancel that lands while
+ * the composer/parse is still running rejects with 'aborted' instead of
+ * saving a map nobody asked for; a PDF already written by then is deleted.
  */
 export async function makeMap(
   bbox: BoundingBox,
@@ -30,10 +35,12 @@ export async function makeMap(
   handle: ComposeHandle,
 ): Promise<MapDocument> {
   const lib = useLibraryStore.getState();
+  const aborted = () => new Error('aborted');
 
   const tracks: ComposeInput['tracks'] = [];
   if (options.includeUserData) {
     for (const summary of lib.tracks) {
+      if (handle.aborted) throw aborted();
       try {
         const { points } = parseGpx(await storage.readFileText(summary.fileUri));
         tracks.push({
@@ -78,11 +85,14 @@ export async function makeMap(
     }
   }
 
+  if (handle.aborted) throw aborted();
+
   const bytes = await composeMapPdf(
     { bbox, options: { ...options, declinationDeg }, tracks, waypoints },
     onProgress,
     handle,
   );
+  if (handle.aborted) throw aborted();
   const id = storage.newId();
   const fileUri = storage.writeMapPdfBytes(id, bytes);
   let doc: MapDocument;
@@ -94,6 +104,11 @@ export async function makeMap(
     // recipe so it can be reproduced.
     reportError(err, `made-map-import ${JSON.stringify(options)}`);
     throw err;
+  }
+  if (handle.aborted) {
+    // Cancelled during the re-parse: the file is on disk but was never added.
+    storage.deleteFileAt(fileUri);
+    throw aborted();
   }
   if (doc.georeferences.length === 0) {
     reportError(

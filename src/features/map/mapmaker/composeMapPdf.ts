@@ -442,6 +442,9 @@ export async function composeMapPdf(
   attachGeoViewport(doc, page, mapRect, corners);
 
   const bytes = await doc.save();
+  // Serialization is the longest single await of the compose; a Cancel that
+  // lands during it must not hand finished bytes back to be saved (#309).
+  if (handle.aborted) throw new Error('aborted');
   onProgress('compose', 1);
   return bytes;
 }

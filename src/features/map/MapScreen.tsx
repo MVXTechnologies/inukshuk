@@ -51,9 +51,8 @@ import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
-import { MakeMapSheet, type MakeMapProgress } from './mapmaker/MakeMapSheet';
-import { makeMap } from './mapmaker/makeMap';
-import type { ComposeHandle, MakeMapOptions } from './mapmaker/composeMapPdf';
+import { MakeMapSheet } from './mapmaker/MakeMapSheet';
+import { useMakeMapSession } from './mapmaker/useMakeMapSession';
 import { discardDraftPhoto, withDraftPhoto, type WaypointDraft } from './waypointDraft';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
@@ -1018,12 +1017,10 @@ export function MapScreen() {
   const [pickingCategory, setPickingCategory] = useState(false);
 
   // --- Map maker (1.4.0): region box → options sheet → compose → Library ---
-  const [makeMapState, setMakeMapState] = useState<
-    | null
-    | { phase: 'select' }
-    | { phase: 'options'; bbox: BoundingBox }
-    | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress }
-  >(null);
+  // One session at a time; a cancelled/superseded run can't reset the UI (#309).
+  const { makeMapState, setMakeMapState, startMakeMap, cancelMakeMap } = useMakeMapSession({
+    showSnack,
+  });
 
   // Whether the legend+scrubber dock owns the bottom edge right now.
   const weatherDockVisible =
@@ -1034,37 +1031,6 @@ export function MapScreen() {
     // covering its lower rows ("Contour lines") when weather stayed on.
     makeMapState === null &&
     weatherTl.timeline !== null;
-  const makeMapHandleRef = useRef<ComposeHandle>({ aborted: false });
-  const startMakeMap = useCallback(
-    (bbox: BoundingBox, options: MakeMapOptions) => {
-      const handle: ComposeHandle = { aborted: false };
-      makeMapHandleRef.current = handle;
-      setMakeMapState({ phase: 'generating', bbox, progress: { phase: 'tiles', frac: 0 } });
-      void makeMap(
-        bbox,
-        options,
-        (phase, frac) => {
-          if (!handle.aborted)
-            setMakeMapState((s) =>
-              s?.phase === 'generating' ? { ...s, progress: { phase, frac } } : s,
-            );
-        },
-        handle,
-      )
-        .then((doc) => {
-          setMakeMapState(null);
-          showSnack(`"${doc.name}" saved to the library`);
-        })
-        .catch((err: unknown) => {
-          if (handle.aborted) return;
-          setMakeMapState({ phase: 'options', bbox });
-          const message = err instanceof Error ? err.message : 'unknown error';
-          showSnack(`Couldn't make the map: ${message}`);
-        });
-    },
-    [showSnack],
-  );
-
   // Tapping a live waypoint marker opens an editor for its note + photo.
   // Tapping a waypoint marker — a live recording pin or a saved standalone pin
   // — opens the shared editor for its note + photo. The edit target is tagged
@@ -2040,10 +2006,7 @@ export function MapScreen() {
           bbox={makeMapState.bbox}
           progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
           onCreate={(options) => startMakeMap(makeMapState.bbox, options)}
-          onCancel={() => {
-            makeMapHandleRef.current.aborted = true;
-            setMakeMapState(null);
-          }}
+          onCancel={cancelMakeMap}
         />
       )}
 
