@@ -175,7 +175,7 @@ const DEFAULTS: Settings = {
   rotateMapWithHeading: false,
   minDisplacementM: 5,
   elevationProfileStyle: 'gradient',
-  trailViewMode: '3d',
+  trailViewMode: '2d',
   offlineOnly: false,
   units: 'metric',
   themeMode: 'system',

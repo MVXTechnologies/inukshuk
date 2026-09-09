@@ -1,3 +1,4 @@
+import { TERRAIN_3D_ENABLED, resolveTrailViewMode } from '@core/features/flags';
 import type { MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
@@ -59,24 +60,28 @@ export function TrailViewerRail({
   overlaysAvailable,
   overlaysDisabled,
 }: Props) {
-  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
+  const trailViewMode = useSettingsStore((s) => resolveTrailViewMode(s.trailViewMode));
   const set = useSettingsStore((s) => s.set);
   return (
     <View style={[styles.rail, { top }]} pointerEvents="box-none">
       {/* 2D↔3D toggle — a rail FAB like the main map's, replacing the wide
           segmented bar that used to sit under the viewport. */}
-      <FAB
-        icon="video-3d"
-        size="small"
-        variant={trailViewMode === '3d' ? 'primary' : 'surface'}
-        onPress={() => set('trailViewMode', trailViewMode === '3d' ? '2d' : '3d')}
-        style={styles.controlFab}
-        // State-dependent label: screen readers (and the e2e flows) need to
-        // know which way the toggle will flip before pressing it.
-        accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
-      />
+      {TERRAIN_3D_ENABLED && (
+        <FAB
+          icon="video-3d"
+          size="small"
+          variant={trailViewMode === '3d' ? 'primary' : 'surface'}
+          onPress={() => set('trailViewMode', trailViewMode === '3d' ? '2d' : '3d')}
+          style={styles.controlFab}
+          // State-dependent label: screen readers (and the e2e flows) need to
+          // know which way the toggle will flip before pressing it.
+          accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
+        />
+      )}
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
-      {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
+      {trailViewMode === '3d' && overlaysAvailable && (
+        <TrailOverlaysMenu disabled={overlaysDisabled} />
+      )}
     </View>
   );
 }

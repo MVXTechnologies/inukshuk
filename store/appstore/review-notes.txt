@@ -1,8 +1,8 @@
 NO ACCOUNT, NO LOGIN, NO UGC, NO PAID CONTENT. Every feature works on a fresh install; no demo credentials or sample files are needed.
 
-PURPOSE: offline trail navigation for hikers, skiers, snowshoers, paddlers and hunters. Renders official georeferenced PDF topo maps (imported, or downloaded free in-app from USGS / Natural Resources Canada / Geoscience Australia) with the GPS position drawn on top, fully offline; records outings as GPX with elevation profile, notes and 3D terrain. Free, open source (MIT), no ads, no analytics, no tracking.
+PURPOSE: offline trail navigation for hikers, skiers, snowshoers, paddlers and hunters. Renders official georeferenced PDF topo maps (imported, or downloaded free in-app from USGS / Natural Resources Canada / Geoscience Australia) with the GPS position drawn on top, fully offline; records outings as GPX with elevation profile, notes and photos. Free, open source (MIT), no ads, no analytics, no tracking.
 
-HOW TO SEE IT: Search tab -> "Around you" lists free topo sheets near the device (US/Canada/Australia; elsewhere search a name, e.g. "Denver") -> Download -> it renders on the Map. Record: Map -> "+" -> Record track -> pick activity -> Start; Stop saves to the Library. Library -> tap a trail -> 2D/3D view, elevation profile, notes. Offline: Map -> "+" -> Download map area.
+HOW TO SEE IT: Search tab -> "Around you" lists free topo sheets near the device (US/Canada/Australia; elsewhere search a name, e.g. "Denver") -> Download -> it renders on the Map. Record: Map -> "+" -> Record track -> pick activity -> Start; Stop saves to the Library. Library -> tap a trail -> map view, elevation profile, notes. Offline: Map -> "+" -> Download map area.
 
 BACKGROUND LOCATION (UIBackgroundModes: location): used only to keep a recording the user explicitly started running when the screen locks or the app is backgrounded. Starts on "Start recording", stops on Stop. Works with "While Using" permission too.
 

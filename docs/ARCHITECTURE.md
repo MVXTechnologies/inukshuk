@@ -108,7 +108,7 @@ four stages:
   available" placeholder tiles past its data, so without the cap MapLibre
   renders grey placeholders instead of overscaling real tiles.
 
-## 3D terrain
+## 3D terrain (parked)
 
 - Elevation comes from free Terrarium DEM tiles; drape textures from Esri tile
   services (`features/map/dem.ts`, tile math in `core/geo/terrain.ts` — tile
@@ -116,8 +116,11 @@ four stages:
   in `features/map/terrainScene.ts` (three r162 — expo-gl is WebGL 1; never
   bump three past r162).
 - Two GL screens share that plumbing: `Trail3DGLScreen` (per-trail view,
-  reachable from the Library) and `Terrain3DLiveView` (live main-map 3D,
-  currently gated off behind the `terrain3d` flag). Render loops carry a GL
+  whose 2D map/profile remains reachable from the Library) and `Terrain3DLiveView`
+  (live main-map 3D). Both GL paths are gated off by `TERRAIN_3D_ENABLED`
+  while [#284](https://github.com/MVXTechnologies/inukshuk/issues/284) is open.
+  Saved 3D preferences resolve to 2D; the viewer uses recorded GPX elevations
+  without fetching a 3D heightmap. Render loops carry a GL
   "generation" and dispose their scene when the GLView remounts.
 
 ## Error reporting ("no silent fails")
