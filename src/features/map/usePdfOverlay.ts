@@ -1,5 +1,11 @@
 import { fnv1a32 } from '@core/encoding/fnv1a';
-import type { BoundingBox, GeoReference, LngLat, MapDocument } from '@core/models';
+import type {
+  BoundingBox,
+  CornerCoordinates,
+  GeoReference,
+  LngLat,
+  MapDocument,
+} from '@core/models';
 import { bboxFromCorners, cornersAreValid, isDegenerateBBox } from '@core/geo/geomath';
 import {
   nativePageGeometry,
@@ -154,6 +160,11 @@ function cachedRaster(docId: string, pageIndex: number, revision: string): strin
  * only pages that have never been rendered (or whose PNG was purged) go
  * through the rasterizer; everything else reuses its existing PNG file.
  *
+ * The result is published progressively (#318): each run starts from the
+ * current active set — so a deactivated or re-imported page disappears at
+ * once — and adds pages as their rasters resolve; `loading` reports pending
+ * work without withholding finished pages.
+ *
  * Every page's outcome is also written to the overlay status store, which is
  * what the Library card shows as "Rendering page N…" / "Couldn't render page
  * N: …" (#269) — the snackbar on the map is gone in four seconds, the card
@@ -198,174 +209,197 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
     // A page that left the active set stops reporting on its card at once.
     retainStatuses(targets.map((t) => overlayStatusKey(t.docId, t.geo.pageIndex)));
 
+    // Every publication is a full snapshot of THIS run, never a patch over the
+    // previous one: a page that is no longer targeted, or whose revision
+    // changed, is gone from the first snapshot — published synchronously below,
+    // before any replacement has rendered (#318: a hidden map used to stay
+    // drawn for as long as the map replacing it took to rasterize). Pages then
+    // join the snapshot one by one as their rasters resolve; `loading` only
+    // says whether any page is still outstanding.
+    const overlays: PdfOverlay[] = [];
+    let firstError: string | null = null;
+    let remaining = targets.length;
+    const stackingOrder = new Map(
+      targets.map((t, index) => [`${t.docId}:${t.geo.pageIndex}`, index]),
+    );
+    const publish = () => {
+      if (cancelled) return;
+      // Preserve the library stacking order however the pages resolve.
+      overlays.sort((a, b) => (stackingOrder.get(a.id) ?? 0) - (stackingOrder.get(b.id) ?? 0));
+      setState({ overlays: [...overlays], loading: remaining > 0, error: firstError });
+    };
+    const settled = (
+      t: Target,
+      corners: CornerCoordinates,
+      bbox: BoundingBox,
+      imageUri: string,
+    ) => {
+      setStatus(overlayStatusKey(t.docId, t.geo.pageIndex), { phase: 'rendered' });
+      overlays.push({
+        id: `${t.docId}:${t.geo.pageIndex}`,
+        imageUri,
+        coordinates: [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft],
+        bbox,
+      });
+      remaining -= 1;
+    };
+
+    // Place every page and publish the ones whose raster is already on disk,
+    // synchronously — a cached map never waits on a cold one.
+    interface ColdPage {
+      target: Target;
+      corners: CornerCoordinates;
+      bbox: BoundingBox;
+    }
+    const cold: ColdPage[] = [];
+    for (const t of targets) {
+      const { geo } = t;
+      const statusKey = overlayStatusKey(t.docId, geo.pageIndex);
+      try {
+        if (needsPageBoxReprocessing(geo)) {
+          // Imported before #287: placed as a zero-origin MediaBox, which
+          // is only wrong for cropped/offset pages. Re-import records the
+          // rendered box; until then, say so where a wrong placement would
+          // be investigated.
+          console.log(
+            `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} has no rendered page box ` +
+              '(imported before #287) — placed from its MediaBox size; re-import to reprocess',
+          );
+        }
+        const corners = renderedPageCorners(geo);
+        const bbox = bboxFromCorners(corners);
+        const unprojected = !cornersAreValid(corners);
+        if (unprojected || isDegenerateBBox(bbox)) {
+          // NOT a silent skip. Every CanTopo sheet landed here — its UTM
+          // metres never became lon/lat — and nothing reached the user or a
+          // report, so 2,234 sheets were undrawable and invisible about it
+          // (#243). Name the CRS: it is what identifies the next
+          // unsupported source.
+          const crs = describeSourceCrs(geo);
+          reportError(
+            new Error(
+              `Unplaceable georeference on page ${geo.pageIndex + 1} (${crs}): ` +
+                `${unprojected ? 'corners are not lon/lat' : 'degenerate extent'} ` +
+                `${JSON.stringify(corners.topLeft)}..${JSON.stringify(corners.bottomRight)}`,
+            ),
+            'pdf-overlay-georeference',
+          );
+          // Corners outside lon/lat range mean the CRS never resolved; a
+          // degenerate-but-valid extent is a different (rarer) fault, and
+          // keeps its own wording rather than blaming the projection.
+          const reason = unprojected
+            ? unsupportedProjectionNotice(geo.sourceCrs)
+            : `Page ${geo.pageIndex + 1} has invalid georeferencing — skipped`;
+          firstError ??= reason;
+          setStatus(statusKey, { phase: 'failed', reason });
+          remaining -= 1;
+          continue;
+        }
+        // The raster is geo-independent (the whole page at a fixed width),
+        // so a cached PNG stays valid even if the georeference changes;
+        // only the corners above are recomputed.
+        const imageUri = cachedRaster(t.docId, geo.pageIndex, t.revision);
+        if (imageUri) settled(t, corners, bbox, imageUri);
+        else cold.push({ target: t, corners, bbox });
+      } catch (err) {
+        reportError(err, 'pdf-overlay-render');
+        const reason = err instanceof Error ? err.message : 'Failed to place a PDF page';
+        firstError ??= reason;
+        setStatus(statusKey, { phase: 'failed', reason });
+        remaining -= 1;
+      }
+    }
+    publish();
+
     (async () => {
-      if (targets.length === 0) {
-        if (!cancelled) setState({ overlays: [], loading: false, error: null });
-        return;
-      }
-      setState((s) => ({ ...s, loading: true, error: null }));
-
-      const overlays: PdfOverlay[] = [];
-      let firstError: string | null = null;
-
       // Group by document so, on the bridge fallback, a multi-MB PDF is
-      // base64-read at most once per batch — and not at all when every one of
-      // its pages hits the cache. (The served path reads nothing here.)
-      const byDoc = new Map<string, Target[]>();
-      const cached = new Set(
-        targets.filter((t) => cachedRaster(t.docId, t.geo.pageIndex, t.revision) !== undefined),
-      );
-      // Publish disk hits before waiting on any cold PDF, but preserve the
-      // library stacking order when publishing the resulting overlays.
-      for (const t of [
-        ...targets.filter((t) => cached.has(t)),
-        ...targets.filter((t) => !cached.has(t)),
-      ]) {
-        const group = `${cached.has(t) ? 'cached' : 'cold'}:${t.docId}`;
-        const list = byDoc.get(group);
-        if (list) list.push(t);
-        else byDoc.set(group, [t]);
+      // base64-read at most once per batch. (The served path reads nothing
+      // here.) Pages render one at a time, in library order: the rasterizer
+      // runs a single render anyway, and a page never reaches it once the
+      // overlays are hidden or the active set has moved on.
+      const byDoc = new Map<string, ColdPage[]>();
+      for (const page of cold) {
+        const list = byDoc.get(page.target.docId);
+        if (list) list.push(page);
+        else byDoc.set(page.target.docId, [page]);
       }
-      const stackingOrder = new Map(
-        targets.map((t, index) => [`${t.docId}:${t.geo.pageIndex}`, index]),
-      );
 
-      for (const docTargets of byDoc.values()) {
-        // Read lazily, only when some page of this document misses the cache
-        // AND has to take the bridge.
+      for (const docPages of byDoc.values()) {
+        // Read lazily, only when some page of this document has to take the
+        // bridge.
         let base64: string | null = null;
-        for (const t of docTargets) {
+        for (const { target: t, corners, bbox } of docPages) {
           const { geo } = t;
           const statusKey = overlayStatusKey(t.docId, geo.pageIndex);
           try {
-            if (needsPageBoxReprocessing(geo)) {
-              // Imported before #287: placed as a zero-origin MediaBox, which
-              // is only wrong for cropped/offset pages. Re-import records the
-              // rendered box; until then, say so where a wrong placement would
-              // be investigated.
-              console.log(
-                `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} has no rendered page box ` +
-                  '(imported before #287) — placed from its MediaBox size; re-import to reprocess',
-              );
+            setStatus(statusKey, { phase: 'rendering' });
+            // Served over loopback when the engine has a server; the bridge
+            // only for small files without one; a clear refusal otherwise —
+            // never a 45 s hang on a file that was always going to OOM.
+            const cacheKey = rasterCacheKey(t.docId, geo.pageIndex, t.revision);
+            let pending = pendingRasters.get(cacheKey);
+            if (!pending) {
+              pending = (async () => {
+                const origin = await serverOrigin();
+                if (!enabledRef.current) throw new Error('PDF overlays are hidden');
+                const choice = chooseRasterSource({
+                  origin,
+                  documentPath: storage.toDocumentPath(t.fileUri),
+                  sizeBytes: storage.fileSizeAt(t.fileUri),
+                });
+                if (choice.kind === 'unrenderable') throw new Error(choice.reason);
+                let source: RasterizeSource;
+                if (choice.kind === 'url') {
+                  source = { url: choice.url };
+                } else {
+                  base64 ??= await storage.readFileBase64(t.fileUri);
+                  source = { base64 };
+                }
+                if (!enabledRef.current) throw new Error('PDF overlays are hidden');
+                const startedAt = Date.now();
+                // Native renderers only take a zero-origin page whose CropBox
+                // is its MediaBox; any other rendered box stays on pdf.js.
+                const nativeGeometry = nativePageGeometry(geo);
+                const raster = await rasterize({
+                  source,
+                  pageIndex: geo.pageIndex,
+                  targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
+                  nativePage: nativeGeometry && {
+                    fileUri: storage.resolveDocumentPath(t.fileUri),
+                    revision: t.revision,
+                    ...nativeGeometry,
+                  },
+                }).catch((error: unknown) => {
+                  if (isPdfRenderCancellation(error) || error instanceof PdfRenderNotStartedError)
+                    throw error;
+                  throw new PdfRenderFailure(error);
+                });
+                console.log(
+                  `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
+                    `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
+                    `${raster.widthPx}x${raster.heightPx})`,
+                );
+                // MapLibre's ImageSource needs a file:// url, not a data: URI — write
+                // the rasterized PNG to the cache and reference it by file path.
+                // Done even if this run was superseded: the raster is still
+                // valid, and the next run finds it in the cache instead of
+                // paying for the render twice.
+                const name = rasterFileName(t.docId, geo.pageIndex, t.revision);
+                const renderedUri =
+                  raster.fileUri !== undefined
+                    ? storage.adoptOverlayPng(name, raster.fileUri)
+                    : storage.writeOverlayPng(
+                        name,
+                        raster.pngDataUri.replace(/^data:image\/png;base64,/, ''),
+                      );
+                rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), renderedUri);
+                return renderedUri;
+              })().finally(() => pendingRasters.delete(cacheKey));
+              pendingRasters.set(cacheKey, pending);
             }
-            const corners = renderedPageCorners(geo);
-            const bbox = bboxFromCorners(corners);
-            const unprojected = !cornersAreValid(corners);
-            if (unprojected || isDegenerateBBox(bbox)) {
-              // NOT a silent skip. Every CanTopo sheet landed here — its UTM
-              // metres never became lon/lat — and nothing reached the user or a
-              // report, so 2,234 sheets were undrawable and invisible about it
-              // (#243). Name the CRS: it is what identifies the next
-              // unsupported source.
-              const crs = describeSourceCrs(geo);
-              reportError(
-                new Error(
-                  `Unplaceable georeference on page ${geo.pageIndex + 1} (${crs}): ` +
-                    `${unprojected ? 'corners are not lon/lat' : 'degenerate extent'} ` +
-                    `${JSON.stringify(corners.topLeft)}..${JSON.stringify(corners.bottomRight)}`,
-                ),
-                'pdf-overlay-georeference',
-              );
-              // Corners outside lon/lat range mean the CRS never resolved; a
-              // degenerate-but-valid extent is a different (rarer) fault, and
-              // keeps its own wording rather than blaming the projection.
-              const reason = unprojected
-                ? unsupportedProjectionNotice(geo.sourceCrs)
-                : `Page ${geo.pageIndex + 1} has invalid georeferencing — skipped`;
-              firstError ??= reason;
-              if (!cancelled) setStatus(statusKey, { phase: 'failed', reason });
-              continue;
-            }
-            // The raster is geo-independent (the whole page at a fixed width),
-            // so a cached PNG stays valid even if the georeference changes;
-            // only the corners above are recomputed.
-            let imageUri = cachedRaster(t.docId, geo.pageIndex, t.revision);
-            if (!imageUri) {
-              if (!cancelled) setStatus(statusKey, { phase: 'rendering' });
-              // Served over loopback when the engine has a server; the bridge
-              // only for small files without one; a clear refusal otherwise —
-              // never a 45 s hang on a file that was always going to OOM.
-              const cacheKey = rasterCacheKey(t.docId, geo.pageIndex, t.revision);
-              let pending = pendingRasters.get(cacheKey);
-              if (!pending) {
-                pending = (async () => {
-                  const origin = await serverOrigin();
-                  if (!enabledRef.current) throw new Error('PDF overlays are hidden');
-                  const choice = chooseRasterSource({
-                    origin,
-                    documentPath: storage.toDocumentPath(t.fileUri),
-                    sizeBytes: storage.fileSizeAt(t.fileUri),
-                  });
-                  if (choice.kind === 'unrenderable') throw new Error(choice.reason);
-                  let source: RasterizeSource;
-                  if (choice.kind === 'url') {
-                    source = { url: choice.url };
-                  } else {
-                    base64 ??= await storage.readFileBase64(t.fileUri);
-                    source = { base64 };
-                  }
-                  if (!enabledRef.current) throw new Error('PDF overlays are hidden');
-                  const startedAt = Date.now();
-                  // Native renderers only take a zero-origin page whose CropBox
-                  // is its MediaBox; any other rendered box stays on pdf.js.
-                  const nativeGeometry = nativePageGeometry(geo);
-                  const raster = await rasterize({
-                    source,
-                    pageIndex: geo.pageIndex,
-                    targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
-                    nativePage: nativeGeometry && {
-                      fileUri: storage.resolveDocumentPath(t.fileUri),
-                      revision: t.revision,
-                      ...nativeGeometry,
-                    },
-                  }).catch((error: unknown) => {
-                    if (isPdfRenderCancellation(error) || error instanceof PdfRenderNotStartedError)
-                      throw error;
-                    throw new PdfRenderFailure(error);
-                  });
-                  console.log(
-                    `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
-                      `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
-                      `${raster.widthPx}x${raster.heightPx})`,
-                  );
-                  // MapLibre's ImageSource needs a file:// url, not a data: URI — write
-                  // the rasterized PNG to the cache and reference it by file path.
-                  // Done even if this run was superseded: the raster is still
-                  // valid, and the next run finds it in the cache instead of
-                  // paying for the render twice.
-                  const name = rasterFileName(t.docId, geo.pageIndex, t.revision);
-                  const renderedUri =
-                    raster.fileUri !== undefined
-                      ? storage.adoptOverlayPng(name, raster.fileUri)
-                      : storage.writeOverlayPng(
-                          name,
-                          raster.pngDataUri.replace(/^data:image\/png;base64,/, ''),
-                        );
-                  rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), renderedUri);
-                  return renderedUri;
-                })().finally(() => pendingRasters.delete(cacheKey));
-                pendingRasters.set(cacheKey, pending);
-              }
-              imageUri = await pending;
-              if (cancelled) return;
-            }
-            setStatus(statusKey, { phase: 'rendered' });
-            overlays.push({
-              id: `${t.docId}:${geo.pageIndex}`,
-              imageUri,
-              coordinates: [
-                corners.topLeft,
-                corners.topRight,
-                corners.bottomRight,
-                corners.bottomLeft,
-              ],
-              bbox,
-            });
-            overlays.sort(
-              (a, b) => (stackingOrder.get(a.id) ?? 0) - (stackingOrder.get(b.id) ?? 0),
-            );
-            // Do not hold ready maps behind another document's slow render.
-            if (!cancelled) setState({ overlays: [...overlays], loading: true, error: firstError });
+            const imageUri = await pending;
+            if (cancelled) return;
+            settled(t, corners, bbox, imageUri);
           } catch (err) {
             if (cancelled) return;
             reportError(err, 'pdf-overlay-render');
@@ -380,11 +414,13 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
             }
             firstError ??= reason;
             setStatus(statusKey, { phase: 'failed', reason });
+            remaining -= 1;
           }
+          // Do not hold ready pages behind another page's slow render — or
+          // behind one that failed.
+          publish();
         }
       }
-
-      if (!cancelled) setState({ overlays, loading: false, error: firstError });
     })();
 
     return () => {
