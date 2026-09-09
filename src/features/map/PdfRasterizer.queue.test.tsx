@@ -1179,3 +1179,35 @@ it('classifies native busy admission as not-started', async () => {
   expect(await pending).toBeInstanceOf(PdfRenderNotStartedError);
   await view.unmount();
 });
+
+// The import-time pre-render (#272 step 2) must never delay what the map is
+// waiting for: interactive work goes ahead of every queued background request,
+// but the render in progress is never preempted.
+it('queues background work behind every waiting interactive request', async () => {
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const active = view.result.current(request).catch(() => undefined);
+  const background = view.result
+    .current({ ...request, priority: 'background' })
+    .catch(() => undefined);
+  const interactive = view.result.current(request).catch(() => undefined);
+  const later = view.result.current({ ...request, priority: 'background' }).catch(() => undefined);
+  expect(renders()).toHaveLength(1);
+  expect(renders()[0]?.[0]).toContain('req-1');
+  const finish = async (id: string) => {
+    await act(async () => {
+      mockProps.onMessage({
+        nativeEvent: { data: JSON.stringify({ id, ok: false, error: 'done' }) },
+      });
+    });
+  };
+  await finish('req-1');
+  expect(renders()).toHaveLength(2);
+  expect(renders()[1]?.[0]).toContain('req-3');
+  await finish('req-3');
+  expect(renders()[2]?.[0]).toContain('req-2');
+  await finish('req-2');
+  expect(renders()[3]?.[0]).toContain('req-4');
+  await view.unmount();
+  await Promise.all([active, background, interactive, later]);
+});

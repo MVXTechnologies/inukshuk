@@ -39,3 +39,10 @@ describe('renderingToasts', () => {
     expect(renderingToasts(maps, { 'a:0': { phase: 'rendering' } }, hidden)).toHaveLength(1);
   });
 });
+
+// The toasts are for the map the user is looking at. A background pre-render
+// (#272 step 2) is nothing the map waits for, so it never toasts — the
+// Library card carries "Preparing page N…" instead.
+it('never toasts a page that is only being pre-rendered', () => {
+  expect(renderingToasts(maps, { 'a:0': { phase: 'preparing' } }, new Map())).toEqual([]);
+});

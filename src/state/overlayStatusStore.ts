@@ -15,6 +15,11 @@ import { create } from 'zustand';
 interface OverlayStatusState {
   statuses: OverlayStatusMap;
   setStatus: (key: string, status: OverlayRenderStatus) => void;
+  /**
+   * Drop one key, but only while it is still in `phase` — a background
+   * pre-render that gives up must not erase a status the map wrote meanwhile.
+   */
+  clearStatus: (key: string, phase: OverlayRenderStatus['phase']) => void;
   /** Keep only the given keys — the active set changed. */
   retain: (live: Iterable<string>) => void;
 }
@@ -22,6 +27,12 @@ interface OverlayStatusState {
 export const useOverlayStatusStore = create<OverlayStatusState>((set) => ({
   statuses: {},
   setStatus: (key, status) => set((s) => ({ statuses: { ...s.statuses, [key]: status } })),
+  clearStatus: (key, phase) =>
+    set((s) => {
+      if (s.statuses[key]?.phase !== phase) return s;
+      const { [key]: _dropped, ...rest } = s.statuses;
+      return { statuses: rest };
+    }),
   retain: (live) =>
     set((s) => {
       const next = retainStatuses(s.statuses, live);

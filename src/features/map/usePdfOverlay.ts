@@ -1,4 +1,3 @@
-import { fnv1a32 } from '@core/encoding/fnv1a';
 import type {
   BoundingBox,
   CornerCoordinates,
@@ -14,6 +13,12 @@ import {
 } from '@core/geo/geopdf/pageBox';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import { unsupportedProjectionNotice } from '@core/library/overlayPages';
+import {
+  OVERLAY_TARGET_WIDTH_PX,
+  documentRevision,
+  rasterCacheKey,
+  rasterFileName,
+} from '@core/library/overlayRaster';
 import { overlayStatusKey } from '@core/library/overlayStatus';
 import { chooseRasterSource } from '@core/library/rasterSource';
 import * as storage from '@data/storage';
@@ -55,23 +60,20 @@ interface Target {
 }
 
 /**
- * Target raster width in CSS px. Matches the rasterizer's own default; passed
- * explicitly so the cache key below always names the width it was rendered at.
- */
-const OVERLAY_TARGET_WIDTH_PX = 2048;
-
-/**
  * Cache of already-rasterized overlay PNGs: `${docId}:${revision}:${pageIndex}:${widthPx}`
- * → the written `file://` uri. Rasterizing costs a WebView render of the page
- * (and, on the bridge fallback, a full base64 read of the PDF), so entries
- * live at module level to survive page activation toggles and screen
- * remounts. Entries are pruned when their map is removed from the library.
+ * (`@core/library/overlayRaster`) → the written `file://` uri. Rasterizing
+ * costs a WebView render of the page (and, on the bridge fallback, a full
+ * base64 read of the PDF), so entries live at module level to survive page
+ * activation toggles and screen remounts. Entries are pruned when their map
+ * is removed from the library.
  *
  * The PNG files themselves sit in the OS-managed cache directory (see
  * storage.writeOverlayPng) under a name that carries the same three parts, so
  * a relaunch — where this map starts empty — finds them again without
  * rendering (#269: a 200 MB sheet must not cost a render per launch). The OS
- * may reclaim that directory at any time; both lookups verify the file.
+ * may reclaim that directory at any time; both lookups verify the file. The
+ * import-time pre-render (#272 step 2) writes the same files, so a page it
+ * finished is found here without this hook ever rendering it.
  */
 const rasterCache = new Map<string, string>();
 // Active-set changes share work, but a replacement provider must not inherit
@@ -81,13 +83,20 @@ const pendingRastersByProvider = new WeakMap<
   Map<string, Promise<string>>
 >();
 
-function rasterCacheKey(docId: string, pageIndex: number, revision: string): string {
-  return `${docId}:${revision}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
-}
-
-/** The on-disk name of a page's raster (without extension). */
-function rasterFileName(docId: string, pageIndex: number, revision: string): string {
-  return `${docId}_${revision}_${pageIndex}_${OVERLAY_TARGET_WIDTH_PX}`;
+/**
+ * In-flight overview renders for one rasterizer provider, keyed by
+ * `rasterCacheKey`. Shared with the pre-render worker so the two never render
+ * the same page twice: whichever asks second joins the first's promise.
+ */
+export function pendingRastersFor(
+  rasterize: ReturnType<typeof usePdfRasterizer>,
+): Map<string, Promise<string>> {
+  let pending = pendingRastersByProvider.get(rasterize);
+  if (!pending) {
+    pending = new Map<string, Promise<string>>();
+    pendingRastersByProvider.set(rasterize, pending);
+  }
+  return pending;
 }
 
 /**
@@ -115,9 +124,7 @@ export function activeTargets(maps: MapDocument[]): Target[] {
   const targets: Target[] = [];
   for (const m of maps) {
     if (!m.fileUri) continue;
-    // Imported PDFs have unique filenames. Ignore the container prefix, which
-    // can rotate on iOS without changing the actual document.
-    const revision = `${m.importedAt}_${fnv1a32(m.fileUri.slice(m.fileUri.lastIndexOf('/') + 1))}`;
+    const revision = documentRevision(m);
     for (const pageIndex of new Set(m.activePages)) {
       // The PRIMARY viewport, not the first one listed: AUSTopo sheets put a
       // whole-of-Australia locator inset ahead of the map, and taking the
@@ -201,11 +208,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
 
   useEffect(() => {
     let cancelled = false;
-    let pendingRasters = pendingRastersByProvider.get(rasterize);
-    if (!pendingRasters) {
-      pendingRasters = new Map<string, Promise<string>>();
-      pendingRastersByProvider.set(rasterize, pendingRasters);
-    }
+    const pendingRasters = pendingRastersFor(rasterize);
     // A page that left the active set stops reporting on its card at once.
     retainStatuses(targets.map((t) => overlayStatusKey(t.docId, t.geo.pageIndex)));
 
