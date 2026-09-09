@@ -7,6 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -14,6 +17,7 @@ concurrency:
 jobs:
   quality:
     name: Typecheck · Lint · Format · Test
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,6 +48,9 @@ jobs:
       - name: Unit tests + coverage
         run: npm run test:ci
 
+      - name: CI release policy regression tests
+        run: node --test scripts/ci/*.test.mjs
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7
@@ -53,7 +60,8 @@ jobs:
           retention-days: 7
 
   doctor:
-    name: Expo Doctor (advisory)
+    name: Expo runtime health
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -62,7 +70,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Surfaces dependency / config drift. Advisory on PRs so a new SDK warning
-      # never blocks merges; the nightly job treats it as blocking.
-      - run: npx expo-doctor
-        continue-on-error: true
+      # Runtime/dependency health is a separate check from code correctness.
+      # A known native regression must remain visible on PRs as well as nightly.
+      - run: npx --yes expo-doctor@1.20.4
+
+  workflows:
+    name: Workflow validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate Actions syntax, expressions, and shell scripts
+        uses: docker://rhysd/actionlint:1.7.12

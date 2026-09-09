@@ -1,8 +1,7 @@
 name: OTA Update
 
-# Self-correction in the field: every merge to main that changes JS/assets is
-# published as an over-the-air EAS Update, so shipped apps pick up fixes without
-# a new store submission. No-ops until EXPO_TOKEN is configured.
+# Publish JS only when the current runtime's finished binaries have matching
+# native inputs. Never rewrite the app version to target an older runtime.
 on:
   push:
     branches: [main]
@@ -13,70 +12,66 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'app.config.ts'
+      - 'modules/**'
+      - 'plugins/**'
       - 'babel.config.js'
       - 'metro.config.js'
+      - 'scripts/ci/**'
       - '.github/workflows/ota-update.yml'
   workflow_dispatch:
-    inputs:
-      app_version_override:
-        description: >
-          Publish this update for an OLDER runtime by overriding the app
-          version (e.g. "1.4.0"). Needed after a version bump: pushes to main
-          publish only for the NEW runtime, and installs still on the previous
-          store build stop receiving fixes unless their runtime is re-published
-          too (the runtime-lineage trap). Leave empty for the current version.
-        required: false
-        default: ''
+
+permissions:
+  contents: read
+
+# Finish an already-started publish before a newer one can become latest.
+concurrency:
+  group: ota-production
+  cancel-in-progress: false
 
 jobs:
-  guard:
-    runs-on: ubuntu-latest
-    outputs:
-      enabled: ${{ steps.c.outputs.enabled }}
-    steps:
-      - id: c
-        run: echo "enabled=${{ secrets.EXPO_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
-
   update:
-    needs: guard
-    if: needs.guard.outputs.enabled == 'true'
+    name: Verify compatibility and publish OTA
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require main and configured Expo credentials
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main || { echo 'Production OTA must run on main.' >&2; exit 1; }
+          test -n "$EXPO_TOKEN" || { echo 'EXPO_TOKEN is required; no update was published.' >&2; exit 1; }
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - uses: expo/expo-github-action@v9
         with:
-          eas-version: latest
+          eas-version: 23.2.0
           token: ${{ secrets.EXPO_TOKEN }}
       - run: npm ci
-      # Check this exact checkout before it can reach installed apps. The CI
-      # workflow runs independently and cannot gate this job by itself.
-      - name: Verify SDK-pinned dependency versions
-        run: npx expo install --check
-      - name: Verify release candidate
-        run: npm run check
-      - name: Apply app version override (legacy-runtime publish)
-        if: github.event.inputs.app_version_override != ''
-        env:
-          APP_VERSION_OVERRIDE: ${{ github.event.inputs.app_version_override }}
+      - run: npx expo install --check
+      - run: npm run check
+      - run: node --test scripts/ci/*.test.mjs
+      - name: Compare native inputs with this runtime's store builds
+        id: compatibility
         run: |
-          v="$APP_VERSION_OVERRIDE"
-          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo 'App version override must be a numeric major.minor.patch version.' >&2
-            exit 1
-          fi
-          sed -i "s/^  version: '.*',$/  version: '$v',/" app.config.ts
-          grep -n "version: '$v'" app.config.ts
-      - name: Publish OTA update to the production channel
-        # ERROR_REPORT_TOKEN must be present when app.config.ts is evaluated
-        # here: clients read `extra` from the LATEST update's manifest, not the
-        # store build, so an OTA published without it silently disables
-        # automatic error reports for every updated install. (Empty/missing is
-        # harmless — the app treats '' as no channel and just queues.)
+          npx expo config --json > "$RUNNER_TEMP/config.json"
+          version=$(node -p 'require(process.env.RUNNER_TEMP+"/config.json").version')
+          node scripts/ci/release-policy.mjs history "$RUNNER_TEMP/builds.json" all "$version"
+          node scripts/ci/release-policy.mjs ota-compatible "$RUNNER_TEMP/builds.json" "$RUNNER_TEMP/config.json"
+      - name: Check native runtime health before publishing
+        if: steps.compatibility.outputs.compatible == 'true'
+        run: npx --yes expo-doctor@1.20.4
+      - name: Publish OTA to production
+        if: steps.compatibility.outputs.compatible == 'true'
         env:
           ERROR_REPORT_TOKEN: ${{ secrets.ERROR_REPORT_TOKEN }}
           ERROR_REPORT_ENDPOINT: ${{ vars.ERROR_REPORT_ENDPOINT }}
-        run: eas update --auto --branch production --non-interactive
+        run: |
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || { echo 'Superseded by a newer main commit; no update published.' >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          eas update --channel production --environment production --message "Commit $GITHUB_SHA" --non-interactive
+          echo "Published production OTA for $GITHUB_SHA." >> "$GITHUB_STEP_SUMMARY"
