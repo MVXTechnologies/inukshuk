@@ -291,6 +291,86 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     }
   };
 
+  // Served-fetch trace (#331). WebKit reports every network failure inside
+  // the page as a bare TypeError "Load failed" — no URL, no status, no byte
+  // count — and that is all the auto-reports carried. Every fetch pdf.js makes
+  // is recorded (path, Range, status, bytes read, failure) so a render error
+  // can name the request that failed and how far the transfer got.
+  var FETCH_TRACE_LIMIT = 4;
+  var fetchTrace = [];
+  var fetchCount = 0;
+  var fetchFailures = 0;
+  function resetFetchTrace() {
+    fetchTrace = [];
+    fetchCount = 0;
+    fetchFailures = 0;
+  }
+  function headerValue(headers, name) {
+    if (!headers) return null;
+    if (typeof headers.get === 'function') return headers.get(name);
+    var keys = Object.keys(headers);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i].toLowerCase() === name.toLowerCase()) return String(headers[keys[i]]);
+    }
+    return null;
+  }
+  function pathOf(url) {
+    try { return new URL(String(url), window.location.href).pathname; } catch (e) { return String(url); }
+  }
+  function describeFetch(entry) {
+    return 'GET ' + entry.path + (entry.range ? ' ' + entry.range : '') +
+      (entry.status ? ' -> ' + entry.status : '') + ' (' + entry.bytes + ' B read)' +
+      (entry.error ? ' failed: ' + entry.error : '');
+  }
+  // Appended to render errors once any fetch failed: which request, how far.
+  function fetchSummary() {
+    if (fetchFailures === 0) return '';
+    var failed = null;
+    for (var i = fetchTrace.length - 1; i >= 0 && !failed; i--) if (fetchTrace[i].error) failed = fetchTrace[i];
+    return ' [served fetch: ' + fetchCount + ' requests, ' + fetchFailures + ' failed' +
+      (failed ? '; ' + describeFetch(failed) : '') + ']';
+  }
+  function tracedFetch(nativeFetch) {
+    return function (input, init) {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var entry = {
+        path: pathOf(url),
+        range: headerValue(init && init.headers, 'Range') || (input && input.headers ? headerValue(input.headers, 'Range') : null),
+        status: 0, bytes: 0, error: null,
+      };
+      fetchCount += 1;
+      fetchTrace.push(entry);
+      if (fetchTrace.length > FETCH_TRACE_LIMIT) fetchTrace.shift();
+      function fail(err) {
+        entry.error = (err && err.message) ? err.message : String(err);
+        fetchFailures += 1;
+        throw err;
+      }
+      return nativeFetch.call(window, input, init).then(function (response) {
+        entry.status = response.status;
+        var body = response.body;
+        if (body && typeof body.getReader === 'function') {
+          try {
+            var getReader = body.getReader.bind(body);
+            body.getReader = function () {
+              var reader = getReader();
+              var read = reader.read.bind(reader);
+              reader.read = function () {
+                return read().then(function (result) {
+                  if (result && result.value && result.value.byteLength) entry.bytes += result.value.byteLength;
+                  return result;
+                }, fail);
+              };
+              return reader;
+            };
+          } catch (e) {}
+        }
+        return response;
+      }, fail);
+    };
+  }
+  if (typeof window.fetch === 'function') window.fetch = tracedFetch(window.fetch);
+
   if (!window.pdfjsLib || typeof window.pdfjsLib.getDocument !== 'function') {
     post({ id: '__ready__', ok: false, error: 'pdfjsLib failed to load' });
     return;
@@ -396,7 +476,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
           renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage);
         } else {
-          post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' });
+          post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' + fetchSummary() });
         }
       }, releaseFailure);
     }
@@ -486,13 +566,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         loaded = true;
         clearTimeout(watchdog);
         return releaseDocument().then(function () {
-          post({ id: id, ok: false, error: (err && err.message) ? err.message : String(err) });
+          post({ id: id, ok: false, error: ((err && err.message) ? err.message : String(err)) + fetchSummary() });
         }, releaseFailure);
       });
   }
 
   // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
   window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop, nativePage) {
+    resetFetchTrace();
     var input;
     if (url) {
       input = { url: url };
