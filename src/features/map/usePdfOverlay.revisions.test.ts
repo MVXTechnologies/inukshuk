@@ -473,3 +473,126 @@ it('does not pause the PDF page for a typed pre-dispatch failure', async () => {
   await renderHook(() => usePdfOverlays([{ ...map, id: 'admission-failure' }]));
   expect(mockPauseFailedOverview).not.toHaveBeenCalled();
 });
+
+// #318 (audit A07): the hook publishes a snapshot of the CURRENT targets from
+// the first render of a new active set, and grows it page by page. A map that
+// was hidden must not stay drawn for as long as its replacement takes to
+// rasterize, and a page that is done must not wait for the rest of its batch.
+describe('progressive publication (#318)', () => {
+  const held = () => {
+    let finish!: (value: RasterResult) => void;
+    const promise = new Promise<RasterResult>((resolve) => {
+      finish = resolve;
+    });
+    return { promise, finish: (content: string) => finish(rasterOf(content)) };
+  };
+  const rasterOf = (content: string): RasterResult => ({
+    pngDataUri: `data:image/png;base64,${content}`,
+    widthPx: 2048,
+    heightPx: 2048,
+    pageWidthPt: 100,
+    pageHeightPt: 100,
+    pageCount: 1,
+    loadMs: 1,
+    renderMs: 1,
+  });
+
+  it('drops a hidden map at once while the map replacing it is still rendering', async () => {
+    const shown = { ...map, id: 'a07-hidden' };
+    const replacement = { ...map, id: 'a07-replacement' };
+    const view = await renderHook(({ maps }: { maps: MapDocument[] }) => usePdfOverlays(maps), {
+      initialProps: { maps: [shown] },
+    });
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual(['a07-hidden:0']);
+    const slow = held();
+    mockRasterize.mockImplementationOnce(() => slow.promise);
+    await view.rerender({ maps: [replacement] });
+    expect(view.result.current).toEqual({ overlays: [], loading: true, error: null });
+    await act(async () => slow.finish('B'));
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual(['a07-replacement:0']);
+    expect(view.result.current.loading).toBe(false);
+  });
+
+  it('keeps the still-targeted map while a newly added one renders', async () => {
+    const kept = { ...map, id: 'a07-kept' };
+    const added = { ...map, id: 'a07-added' };
+    const view = await renderHook(({ maps }: { maps: MapDocument[] }) => usePdfOverlays(maps), {
+      initialProps: { maps: [kept] },
+    });
+    const keptUri = view.result.current.overlays[0]?.imageUri;
+    const slow = held();
+    mockRasterize.mockImplementationOnce(() => slow.promise);
+    await view.rerender({ maps: [added, kept] });
+    expect(view.result.current.overlays.map((o) => [o.id, o.imageUri])).toEqual([
+      ['a07-kept:0', keptUri],
+    ]);
+    expect(view.result.current.loading).toBe(true);
+    await act(async () => slow.finish('ADDED'));
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual(['a07-added:0', 'a07-kept:0']);
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
+  });
+
+  it('publishes a fast page of a document before its slow page resolves', async () => {
+    const twoPages: MapDocument = {
+      ...map,
+      id: 'a07-two-pages',
+      pageCount: 2,
+      activePages: [0, 1],
+      georeferences: [geo, { ...geo, pageIndex: 1 }],
+    };
+    const slow = held();
+    mockRasterize
+      .mockResolvedValueOnce(rasterOf('FAST'))
+      .mockImplementationOnce(() => slow.promise);
+    const view = await renderHook(() => usePdfOverlays([twoPages]));
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual(['a07-two-pages:0']);
+    expect(view.result.current.loading).toBe(true);
+    await act(async () => slow.finish('SLOW'));
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual([
+      'a07-two-pages:0',
+      'a07-two-pages:1',
+    ]);
+    expect(view.result.current.loading).toBe(false);
+  });
+
+  it('removes the stale raster the moment a map changes revision, before the new one renders', async () => {
+    const view = await renderHook(({ maps }: { maps: MapDocument[] }) => usePdfOverlays(maps), {
+      initialProps: { maps: [{ ...map, id: 'a07-revision' }] },
+    });
+    const firstUri = view.result.current.overlays[0]?.imageUri;
+    expect(mockFiles.get(firstUri ?? '')).toBe('OLD');
+    const slow = held();
+    mockRasterize.mockImplementationOnce(() => slow.promise);
+    await view.rerender({
+      maps: [
+        { ...map, id: 'a07-revision', fileUri: 'file://documents/maps/new.pdf', importedAt: 2 },
+      ],
+    });
+    expect(view.result.current).toEqual({ overlays: [], loading: true, error: null });
+    await act(async () => slow.finish('NEW'));
+    const nextUri = view.result.current.overlays[0]?.imageUri;
+    expect(nextUri).toBeDefined();
+    expect(nextUri).not.toBe(firstUri);
+    expect(mockFiles.get(nextUri ?? '')).toBe('NEW');
+    expect(view.result.current.loading).toBe(false);
+  });
+
+  it('still publishes the pages that render after another page fails', async () => {
+    const failing = { ...map, id: 'a07-failing' };
+    const fine = { ...map, id: 'a07-fine' };
+    const slow = held();
+    mockRasterize
+      .mockRejectedValueOnce(new PdfRenderNotStartedError('checkpoint unavailable'))
+      .mockImplementationOnce(() => slow.promise);
+    const view = await renderHook(() => usePdfOverlays([failing, fine]));
+    expect(view.result.current).toEqual({
+      overlays: [],
+      loading: true,
+      error: 'checkpoint unavailable',
+    });
+    await act(async () => slow.finish('FINE'));
+    expect(view.result.current.overlays.map((o) => o.id)).toEqual(['a07-fine:0']);
+    expect(view.result.current.loading).toBe(false);
+    expect(view.result.current.error).toBe('checkpoint unavailable');
+  });
+});
