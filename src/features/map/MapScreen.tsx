@@ -1,5 +1,5 @@
 import { fnv1a32 } from '@core/encoding/fnv1a';
-import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import { MARINE_ENABLED, TERRAIN_3D_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { visibleMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
@@ -274,7 +274,7 @@ export function MapScreen() {
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
-  const terrain3d = useMapStore((s) => s.terrain3d);
+  const terrain3d = useMapStore((s) => TERRAIN_3D_ENABLED && s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
   // Stable per basemap so the contour sources' memo can hold (see the hoisted
   // layer constants above).

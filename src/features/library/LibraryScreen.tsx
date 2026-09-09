@@ -799,7 +799,7 @@ export function LibraryScreen() {
           <Pressable
             style={styles.trackMain}
             // Long-press enters trail selection (for merging); while selecting,
-            // taps toggle membership instead of opening the 3D view.
+            // taps toggle membership instead of opening the trail view.
             onPress={() =>
               selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
             }
@@ -807,7 +807,7 @@ export function LibraryScreen() {
             accessibilityLabel={
               selectionMode
                 ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
-                : `${t.name} — open 3D view, long-press to select`
+                : `${t.name} — open trail view, long-press to select`
             }
           >
             {selectionMode && (

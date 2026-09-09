@@ -71,6 +71,20 @@ export const WEATHER_ENABLED: boolean = false;
 export const MARINE_ENABLED: boolean = false;
 
 /**
+ * PARKED — owner call, 2026-09-09: remove 3D until rendering is reliable (#284).
+ * Unlike Weather/Marine, hide its entry controls completely. The renderer,
+ * dependencies and saved preferences stay available for later work.
+ * To un-park: validate #284's device/rendering checklist before enabling this
+ * flag, restoring 3D e2e coverage and publishing any 3D marketing again.
+ */
+export const TERRAIN_3D_ENABLED: boolean = false;
+
+/** Old saved 3D preferences must never mount a parked GL renderer. */
+export function resolveTrailViewMode(preference: unknown): '2d' | '3d' {
+  return TERRAIN_3D_ENABLED && preference === '3d' ? '3d' : '2d';
+}
+
+/**
  * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
  * constant so the menu copy and the e2e matchers can never drift apart.
  */

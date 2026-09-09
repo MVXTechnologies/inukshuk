@@ -17,9 +17,9 @@ WORKS WITH NO SIGNAL
 
 Everything runs on your device. When you wander past the edge of your imported map, an OpenStreetMap base layer fills in so you're never looking at a blank screen. No data plan needed on the trail.
 
-REAL 3D TERRAIN
+EXPLORE THE ROUTE
 
-See the landscape around you in true 3D relief, with your saved trails and live recording draped over the mountains — a genuinely useful way to read the terrain ahead, not just a gimmick.
+Switch between maps, satellite imagery and topographic relief. Open a saved trail to follow its route and elevation profile, add notes, trim the recording or export it as a PDF.
 
 RECORD AND SHARE YOUR ROUTES
 

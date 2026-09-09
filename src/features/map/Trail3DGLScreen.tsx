@@ -1,3 +1,4 @@
+import { TERRAIN_3D_ENABLED, resolveTrailViewMode } from '@core/features/flags';
 import { parseGpx } from '@core/geo/gpx';
 import {
   computeTrackStats,
@@ -140,7 +141,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
 
-  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
+  const trailViewMode = useSettingsStore((s) => resolveTrailViewMode(s.trailViewMode));
 
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
   // Same points but with each altitude replaced by the terrain (DEM) height the
@@ -452,7 +453,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // surface the 3D view drapes the trail on. Reuses the heightmap the GL context
   // loads when available; in 2D mode it fetches it here.
   useEffect(() => {
-    if (!points || points.length === 0 || !bbox) return;
+    if (!TERRAIN_3D_ENABLED || !points || points.length === 0 || !bbox) return;
     let cancelled = false;
     (async () => {
       try {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from './flags';
+import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED, resolveTrailViewMode } from './flags';
 
 /**
  * The flags themselves have no logic, so what is worth testing is the
@@ -33,5 +33,11 @@ describe('feature flags', () => {
 
   it('exposes one shared label for the parked rows', () => {
     expect(PARKED_LABEL).toBe('Coming soon');
+  });
+});
+
+describe('parked 3D terrain', () => {
+  it.each(['2d', '3d', 'invalid', undefined])('opens %s preferences in 2D', (preference) => {
+    expect(resolveTrailViewMode(preference)).toBe('2d');
   });
 });
