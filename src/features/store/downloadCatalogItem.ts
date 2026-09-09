@@ -33,6 +33,14 @@ export function cancelCatalogDownload(itemId: string): void {
   cancels.get(itemId)?.();
 }
 
+function deleteOrphan(uri: string): void {
+  try {
+    storage.deleteFileAt(uri);
+  } catch {
+    // Cleanup cannot roll back a committed map or mask the original save error.
+  }
+}
+
 export async function downloadCatalogItemToLibrary(
   item: CatalogItem,
   folderId: string | null,
@@ -49,8 +57,11 @@ export async function downloadCatalogItemToLibrary(
   );
   cancels.set(item.id, handle.cancel);
 
+  let uncommittedFileUri: string | null = null;
+  let commitAttempted = false;
   try {
     const fileUri = await handle.promise;
+    uncommittedFileUri = fileUri;
     let doc: MapDocument;
     try {
       // Parses the stored PDF; on failure it deletes the file so nothing orphans.
@@ -74,10 +85,17 @@ export async function downloadCatalogItemToLibrary(
     };
 
     const library = useLibraryStore.getState();
+    // The store intentionally skips writes before hydration. Do not treat an
+    // in-memory-only update as a durable commit and remove the last good file.
+    if (!library.hydrated) throw new Error('The library is still loading. Please try again.');
     if (existing !== undefined) {
-      // Replace the file under the existing library entry; drop the old bytes.
-      storage.deleteFileAt(existing.fileUri);
-      library.updateMap(existing.id, {
+      const current = library.maps.find((m) => m.id === existing.id);
+      // Downloading/parsing yields to deletion and other replacements. Never
+      // resurrect an installation or overwrite a newer file when it completes.
+      if (!current || current.fileUri !== existing.fileUri || current.sourceItemId !== item.id) {
+        throw new CatalogDownloadCanceled();
+      }
+      const patch = {
         fileUri: doc.fileUri,
         importedAt: doc.importedAt,
         pageCount: doc.pageCount,
@@ -85,9 +103,12 @@ export async function downloadCatalogItemToLibrary(
         activePages: doc.activePages,
         georeferenceWarning: doc.georeferenceWarning,
         ...provenance,
-      });
-      const updated = useLibraryStore.getState().maps.find((m) => m.id === existing.id);
-      return updated ?? { ...existing, ...doc, id: existing.id };
+      };
+      commitAttempted = true;
+      library.updateMap(existing.id, patch);
+      uncommittedFileUri = null;
+      deleteOrphan(current.fileUri);
+      return { ...current, ...patch };
     }
 
     const stored: MapDocument = {
@@ -95,9 +116,16 @@ export async function downloadCatalogItemToLibrary(
       ...provenance,
       ...(folderId !== null ? { folderId } : {}),
     };
+    commitAttempted = true;
     library.addMap(stored);
+    uncommittedFileUri = null;
     useCatalogStore.getState().setLastFolderId(folderId);
     return stored;
+  } catch (err) {
+    // A failed promotion can leave the replacement index readable in .tmp.
+    // Keep both files once a commit was attempted: either index may recover.
+    if (!commitAttempted && uncommittedFileUri !== null) deleteOrphan(uncommittedFileUri);
+    throw err;
   } finally {
     cancels.delete(item.id);
     useCatalogStore.getState().clearDownload(item.id);

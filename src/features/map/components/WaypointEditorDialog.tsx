@@ -1,10 +1,11 @@
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
+import { useState } from 'react';
 import { Image, Keyboard, StyleSheet, View } from 'react-native';
 import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
-import { Button, Dialog, Portal, TextInput, useTheme } from 'react-native-paper';
+import { Button, Dialog, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live
@@ -37,7 +38,12 @@ interface Props {
 }
 
 /** Editor dialog for a waypoint's note + photo (camera or library). */
-export function WaypointEditorDialog({
+export function WaypointEditorDialog(props: Props) {
+  // Unmount closed editors so failure/retry state belongs to one editing session.
+  return props.waypoint ? <WaypointEditorContent {...props} /> : null;
+}
+
+function WaypointEditorContent({
   waypoint,
   name,
   onChangeName,
@@ -48,6 +54,33 @@ export function WaypointEditorDialog({
   onSetPhoto,
 }: Props) {
   const theme = useTheme();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+
+  const showError = (err: unknown) =>
+    setError(err instanceof Error ? err.message : 'Could not save the waypoint. Please try again.');
+
+  const perform = (action: () => void) => {
+    try {
+      action();
+      setError(null);
+    } catch (err) {
+      // The caller closes only after its store commit succeeds. Keep its
+      // controlled name/note drafts and the dialog available for another try.
+      showError(err);
+    }
+  };
+
+  const retryPhoto = () => {
+    if (!pendingPhoto) return;
+    onSetPhoto(pendingPhoto);
+    setPendingPhoto(null);
+  };
+
+  const save = () => {
+    retryPhoto();
+    onSave();
+  };
 
   /**
    * #235 — put the keyboard away BEFORE the dialog unmounts. Closing on top of
@@ -59,22 +92,35 @@ export function WaypointEditorDialog({
    */
   const close = (then: () => void) => () => {
     Keyboard.dismiss();
-    then();
+    perform(then);
   };
 
   const pickPhoto = async (fromCamera: boolean) => {
     if (!waypoint) return;
-    if (fromCamera) {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) return;
+    let uncommittedPhoto: string | null = null;
+    try {
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) return;
+      }
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      const picked = res.canceled ? null : res.assets[0]?.uri;
+      if (!picked) return;
+      uncommittedPhoto = await storage.importPhoto(picked, storage.newId());
+      onSetPhoto(uncommittedPhoto);
+      uncommittedPhoto = null;
+      setPendingPhoto(null);
+      setError(null);
+    } catch (err) {
+      // A thrown commit can still leave the new photo referenced by recoverable
+      // staged metadata. Retain both assets and retry this same imported copy.
+      if (uncommittedPhoto) {
+        setPendingPhoto(uncommittedPhoto);
+      }
+      showError(err);
     }
-    const res = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-    const picked = res.canceled ? null : res.assets[0]?.uri;
-    if (!picked) return;
-    const stored = await storage.importPhoto(picked, storage.newId());
-    onSetPhoto(stored);
   };
 
   const keyboardHeight = useIosKeyboardHeight();
@@ -86,7 +132,7 @@ export function WaypointEditorDialog({
           unreachable; the margin re-centers the dialog in the space above it. */}
       <Dialog
         visible={waypoint !== null}
-        onDismiss={close(onSave)}
+        onDismiss={close(save)}
         style={keyboardHeight > 0 ? { marginBottom: keyboardHeight } : null}
       >
         {/* Static title since #232: the name is now an editable field right
@@ -129,7 +175,16 @@ export function WaypointEditorDialog({
             {waypoint?.photoUri ? (
               <View style={styles.wpPhotoWrap}>
                 <Image source={{ uri: waypoint.photoUri }} style={styles.wpPhoto} />
-                <Button compact icon="image-remove" onPress={() => onSetPhoto('')}>
+                <Button
+                  compact
+                  icon="image-remove"
+                  onPress={() =>
+                    perform(() => {
+                      onSetPhoto('');
+                      setPendingPhoto(null);
+                    })
+                  }
+                >
                   Remove photo
                 </Button>
               </View>
@@ -143,6 +198,16 @@ export function WaypointEditorDialog({
                 </Button>
               </View>
             )}
+            {error ? (
+              <Text accessibilityRole="alert" style={{ color: theme.colors.error }}>
+                {error}
+              </Text>
+            ) : null}
+            {pendingPhoto ? (
+              <Button icon="reload" onPress={() => perform(retryPhoto)}>
+                Retry photo
+              </Button>
+            ) : null}
           </KeyboardDismissArea>
           {/* Mounted HERE, not at the app root: on the New Architecture
               RCTInputAccessoryComponentView binds to its text input once, in
@@ -156,7 +221,7 @@ export function WaypointEditorDialog({
             Delete
           </Button>
           <View style={styles.fill} />
-          <Button onPress={close(onSave)}>Done</Button>
+          <Button onPress={close(save)}>Done</Button>
         </Dialog.Actions>
       </Dialog>
     </Portal>
