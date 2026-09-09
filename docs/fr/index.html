@@ -560,9 +560,189 @@
           color: #1a230b;
         }
       }
+      /* ---- Trail scene (#262) ----
+         A fixed pastel landscape behind the page, in the icon's palette. Layers
+         drift at different rates on scroll and a small inukshuk walks the trail
+         as you read down the page. Low contrast on purpose: it sits under text. */
+      :root {
+        --sc-sky-top: #f6f1e6;
+        --sc-sky-bottom: #e6ecec;
+        --sc-sun: #f4d7a3;
+        --sc-cloud: #fbf9f4;
+        --sc-far: #cdd7dc;
+        --sc-cap: #f9f7f2;
+        --sc-mid: #c9d3aa;
+        --sc-near: #aebc8f;
+        --sc-pine: #8fa26e;
+        --sc-river: #a9cde2;
+        --sc-river-2: #8fc0da;
+        --sc-trail: rgba(45, 55, 64, 0.38);
+        --sc-figure: #2d3740;
+        --sc-opacity: 0.9;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --sc-sky-top: #10140f;
+          --sc-sky-bottom: #141a18;
+          --sc-sun: #3a3b2c;
+          --sc-cloud: #1c231f;
+          --sc-far: #1f2a2c;
+          --sc-cap: #2b3a3c;
+          --sc-mid: #22301f;
+          --sc-near: #2a3b26;
+          --sc-pine: #34482e;
+          --sc-river: #274554;
+          --sc-river-2: #2f5566;
+          --sc-trail: rgba(233, 236, 228, 0.3);
+          --sc-figure: #e9ece4;
+          --sc-opacity: 0.85;
+        }
+      }
+      body {
+        position: relative;
+        background-image: none;
+      }
+      .scene {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        opacity: var(--sc-opacity);
+        overflow: hidden;
+      }
+      .scene svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .scene .layer {
+        will-change: transform;
+      }
+      .scene .cloud {
+        animation: sc-drift 90s linear infinite;
+      }
+      .scene .cloud.c2 {
+        animation-duration: 130s;
+        animation-delay: -40s;
+      }
+      .scene .cloud.c3 {
+        animation-duration: 160s;
+        animation-delay: -90s;
+      }
+      @keyframes sc-drift {
+        from {
+          transform: translateX(-320px);
+        }
+        to {
+          transform: translateX(1700px);
+        }
+      }
+      .scene .trail {
+        fill: none;
+        stroke: var(--sc-trail);
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-dasharray: 2 14;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .scene .cloud {
+          animation: none;
+        }
+      }
+      nav {
+        background: color-mix(in srgb, var(--cream) 86%, transparent);
+      }
     </style>
   </head>
   <body>
+    <div class="scene" aria-hidden="true">
+      <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" focusable="false">
+        <defs>
+          <linearGradient id="sc-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="var(--sc-sky-top)" />
+            <stop offset="1" stop-color="var(--sc-sky-bottom)" />
+          </linearGradient>
+          <linearGradient id="sc-water" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="var(--sc-river)" />
+            <stop offset="1" stop-color="var(--sc-river-2)" />
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="900" fill="url(#sc-sky)" />
+        <g class="layer sky" data-rate="-0.01">
+          <circle cx="1210" cy="180" r="74" fill="var(--sc-sun)" />
+          <g class="cloud c1" fill="var(--sc-cloud)">
+            <ellipse cx="120" cy="150" rx="70" ry="26" />
+            <ellipse cx="160" cy="132" rx="46" ry="30" />
+            <ellipse cx="90" cy="138" rx="40" ry="24" />
+          </g>
+          <g class="cloud c2" fill="var(--sc-cloud)">
+            <ellipse cx="80" cy="260" rx="56" ry="20" />
+            <ellipse cx="112" cy="246" rx="36" ry="24" />
+          </g>
+          <g class="cloud c3" fill="var(--sc-cloud)">
+            <ellipse cx="60" cy="90" rx="44" ry="16" />
+            <ellipse cx="86" cy="80" rx="28" ry="18" />
+          </g>
+        </g>
+        <g class="layer far" data-rate="-0.04">
+          <path
+            fill="var(--sc-far)"
+            d="M-40 640 L120 520 L230 590 L360 430 L470 520 L560 470 L680 560 L800 400 L910 500 L1010 450 L1130 540 L1260 380 L1370 470 L1470 420 L1640 560 L1640 1500 L-40 1500 Z"
+          />
+          <path fill="var(--sc-cap)" d="M360 430 L332 468 L352 462 L372 480 L392 458 L408 470 Z" />
+          <path fill="var(--sc-cap)" d="M800 400 L770 442 L792 434 L812 452 L834 428 L850 440 Z" />
+          <path
+            fill="var(--sc-cap)"
+            d="M1260 380 L1228 424 L1252 416 L1272 436 L1294 410 L1312 422 Z"
+          />
+        </g>
+        <g class="layer mid" data-rate="-0.08">
+          <path
+            fill="var(--sc-mid)"
+            d="M-40 720 C120 640 260 660 400 700 C520 730 600 620 760 640 C900 660 960 720 1100 690 C1240 660 1320 600 1460 640 C1540 660 1600 700 1640 720 L1640 1500 L-40 1500 Z"
+          />
+          <g fill="var(--sc-pine)">
+            <path d="M300 690 l-16 30 h32 z M300 705 l-20 34 h40 z" />
+            <path d="M330 700 l-14 26 h28 z M330 714 l-18 30 h36 z" />
+            <path d="M1180 668 l-16 30 h32 z M1180 683 l-20 34 h40 z" />
+            <path d="M1215 676 l-13 24 h26 z M1215 689 l-17 28 h34 z" />
+            <path d="M1400 640 l-15 28 h30 z M1400 654 l-19 32 h38 z" />
+          </g>
+        </g>
+        <g class="layer near" data-rate="-0.14">
+          <path
+            fill="var(--sc-near)"
+            d="M-40 800 C160 760 300 780 440 810 C600 840 700 760 860 770 C1020 780 1100 840 1260 810 C1400 780 1520 800 1640 830 L1640 1500 L-40 1500 Z"
+          />
+          <path
+            fill="url(#sc-water)"
+            opacity="0.9"
+            d="M-40 900 C120 860 200 870 300 850 C420 826 470 838 560 820 C640 804 700 806 760 790 L790 800 C720 822 660 826 590 842 C500 862 440 850 320 874 C220 892 140 890 -40 900 L-40 1500 L60 1500 Z"
+          />
+          <g fill="var(--sc-pine)">
+            <path d="M120 790 l-18 34 h36 z M120 808 l-22 38 h44 z" />
+            <path d="M160 802 l-15 28 h30 z M160 816 l-19 32 h38 z" />
+            <path d="M1480 812 l-18 34 h36 z M1480 830 l-22 38 h44 z" />
+            <path d="M1520 822 l-15 28 h30 z M1520 836 l-19 32 h38 z" />
+          </g>
+        </g>
+        <g class="layer route" data-rate="-0.04">
+          <path
+            id="sc-trail"
+            class="trail"
+            d="M70 826 C160 800 220 770 320 740 C420 710 470 690 560 690 C660 690 720 640 800 600 C880 560 960 570 1040 540 C1120 510 1160 470 1230 430 C1290 396 1330 384 1372 372"
+          />
+          <g id="sc-hiker" fill="var(--sc-figure)">
+            <rect x="-9" y="-8" width="6" height="9" rx="1.5" />
+            <rect x="3" y="-8" width="6" height="9" rx="1.5" />
+            <rect x="-10" y="-14" width="20" height="5" rx="1.5" />
+            <rect x="-17" y="-20" width="34" height="5" rx="2" />
+            <rect x="-5" y="-27" width="10" height="6" rx="1.5" />
+            <rect x="-4" y="-34" width="8" height="6" rx="2" />
+          </g>
+        </g>
+      </svg>
+    </div>
     <nav>
       <div class="wrap">
         <img src="../icon.png" alt="Icône d'Inukshuk" />
@@ -972,6 +1152,46 @@
         window.addEventListener('load', layout);
         go(0, false);
         restart();
+      })();
+    </script>
+    <script>
+      (function () {
+        var scene = document.querySelector('.scene');
+        if (!scene) return;
+        var layers = Array.prototype.slice.call(scene.querySelectorAll('.layer'));
+        var trail = document.getElementById('sc-trail');
+        var hiker = document.getElementById('sc-hiker');
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var length = trail.getTotalLength();
+        var ticking = false;
+        function place(progress) {
+          var p = trail.getPointAtLength(progress * length);
+          hiker.setAttribute('transform', 'translate(' + p.x + ' ' + p.y + ')');
+        }
+        function render() {
+          ticking = false;
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - window.innerHeight;
+          var y = window.scrollY || doc.scrollTop || 0;
+          var progress = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
+          layers.forEach(function (g) {
+            var rate = parseFloat(g.getAttribute('data-rate')) || 0;
+            g.style.transform = 'translateY(' + y * rate + 'px)';
+          });
+          place(progress);
+        }
+        function onScroll() {
+          if (ticking) return;
+          ticking = true;
+          window.requestAnimationFrame(render);
+        }
+        if (reduce) {
+          place(0);
+          return;
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        render();
       })();
     </script>
   </body>
