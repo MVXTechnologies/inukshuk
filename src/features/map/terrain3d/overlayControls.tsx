@@ -138,7 +138,7 @@ export function TerrainOverlayMenuRows({
             lo={slopeMinDeg}
             hi={slopeMaxDeg}
             disabled={!slope}
-            accessibilityLabel={`Slope range ${slopeMinDeg} to ${slopeMaxDeg} degrees`}
+            accessibilityLabel="Slope"
             onChange={(newLo, newHi) => {
               set('terrainSlopeMinDeg', newLo);
               set('terrainSlopeMaxDeg', newHi);
