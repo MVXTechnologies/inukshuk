@@ -34,6 +34,9 @@ const NEEDLE_ANIM_MS = 200;
  */
 const NORTH_ANIM_MS = 250;
 
+/** Side of the square both needles rotate inside, in pt. */
+const NEEDLE_BOX = 40;
+
 /**
  * A small floating compass that rotates its needle to the device heading.
  * Tapping it resets the map to north (when `onPress` is provided).
@@ -53,14 +56,18 @@ const NORTH_ANIM_MS = 250;
  * angle (349° → 361°, not → 1°), so crossing north eases through the boundary
  * instead of spinning 350° the wrong way.
  *
- * ## The red north needle (#248)
+ * ## The red north arrow (#248, #266)
  *
- * While the map is rotated, a red tick on the badge's rim points at **true
- * north on screen** — it is the only thing that says "the map is turned, and
- * tapping here straightens it". It is drawn rotated by `−mapBearing` (the map
- * turned clockwise puts north counter-clockwise of the screen's up), eased the
- * same unwrapped way so a bearing crossing 0° never spins the long way round.
- * At north-up it is hidden: nothing to point out.
+ * While the map is rotated, a red arrow — shaft from the centre, head, and an
+ * **N** at its tip — points at **true north on screen**. It is layered OVER
+ * the heading needle so the needle can never hide it, and it is the only thing
+ * that says "the map is turned, and tapping here straightens it". It is drawn
+ * rotated by `−mapBearing` (the map turned clockwise puts north
+ * counter-clockwise of the screen's up), eased the same unwrapped way so a
+ * bearing crossing 0° never spins the long way round. At north-up it is
+ * hidden: nothing to point out. (#257 shipped this as a bare rim tick; the
+ * owner could not tell it from the needle in the field — hence the arrow and
+ * the letter.)
  *
  * With "rotate map with heading" on, the map bearing tracks the device, so the
  * red needle shows constantly. That is correct — under heading-follow it is the
@@ -156,9 +163,11 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
             <Animated.View style={[styles.needleWrap, { transform: [{ rotate }] }]}>
               <MaterialCommunityIcons name="navigation" size={26} color={theme.colors.tertiary} />
             </Animated.View>
-            {/* Rim tick, not a second arrow: it rides the edge of the same
-                28-pt box the heading needle fills, so the badge keeps its
-                footprint and the two never read as one ambiguous pointer. */}
+            {/* Rendered AFTER the heading needle so it paints on top (#266):
+                a red arrow from the box centre to the rim, N at the tip. The
+                stack is laid out from the top of the box downward — letter,
+                head, shaft — so the shaft's foot lands just past the centre
+                and the whole thing pivots about the badge's middle. */}
             {rotated && (
               <Animated.View
                 testID="compass-north-needle"
@@ -169,7 +178,14 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
                   { transform: [{ rotate: northRotate }] },
                 ]}
               >
-                <View style={[styles.northTick, { backgroundColor: theme.colors.error }]} />
+                <Text
+                  style={[styles.northLetter, { color: theme.colors.error }]}
+                  allowFontScaling={false}
+                >
+                  N
+                </Text>
+                <View style={[styles.northHead, { borderBottomColor: theme.colors.error }]} />
+                <View style={[styles.northShaft, { backgroundColor: theme.colors.error }]} />
               </Animated.View>
             )}
           </View>
@@ -195,13 +211,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   },
+  // 40-pt square: the 26-pt heading needle sits centred, and the north arrow
+  // (letter 11 + head 7 + shaft 6 = 24 pt from the top edge) reaches 4 pt past
+  // the centre, so it reads as an arrow FROM the middle, not a floating tick.
   needleBox: {
-    width: 28,
-    height: 28,
+    width: NEEDLE_BOX,
+    height: NEEDLE_BOX,
   },
   needleWrap: {
-    width: 28,
-    height: 28,
+    width: NEEDLE_BOX,
+    height: NEEDLE_BOX,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -209,14 +228,35 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    // Top-aligned inside the same 28-pt square the heading needle fills, so
-    // the tick rides the rim while still rotating about the badge's centre.
+    // Top-aligned inside the same square the heading needle fills, so the
+    // arrow runs centre→rim while still rotating about the badge's centre.
     justifyContent: 'flex-start',
+    // Android paints siblings in order, but be explicit: nothing in the
+    // heading needle may cover the north arrow.
+    zIndex: 1,
+    elevation: 1,
   },
-  northTick: {
+  northLetter: {
+    fontSize: 10,
+    lineHeight: 11,
+    fontWeight: '800',
+    includeFontPadding: false,
+    textAlign: 'center',
+  },
+  northHead: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 4.5,
+    borderRightWidth: 4.5,
+    borderBottomWidth: 7,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  northShaft: {
     width: 3,
-    height: 9,
-    borderRadius: 1.5,
+    height: 6,
+    borderBottomLeftRadius: 1.5,
+    borderBottomRightRadius: 1.5,
   },
   label: {
     fontVariant: ['tabular-nums'],

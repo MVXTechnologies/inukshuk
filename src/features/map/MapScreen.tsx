@@ -1,3 +1,4 @@
+import { fnv1a32 } from '@core/encoding/fnv1a';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
@@ -44,9 +45,9 @@ import { useMapStore } from '@state/mapStore';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
@@ -62,6 +63,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { HeadingCone } from './components/HeadingCone';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
+import { RenderingToasts } from './components/RenderingToasts';
 import { RecordControls } from './components/RecordControls';
 import { ScaleBar } from './components/ScaleBar';
 import { StatsHud } from './components/StatsHud';
@@ -94,6 +96,7 @@ import {
 import { buildOsmStyle } from './mapStyle';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
+import { usePdfDetails } from './usePdfDetails';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
 import { useTrackOverlays } from './useTrackOverlays';
@@ -185,6 +188,7 @@ function useThrottledLineFeature(points: readonly TrackPoint[]): Feature<LineStr
 }
 
 export function MapScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
@@ -235,7 +239,8 @@ export function MapScreen() {
     () => visibleTrackIds(mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds),
     [mapVisibilityMode, visibleFolderIds, tracks, activeTrackIds],
   );
-  const { overlays, error: overlayError } = usePdfOverlays(shownMaps);
+  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
@@ -268,7 +273,6 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const showPdfOverlay = useMapStore((s) => s.showPdfOverlay);
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
@@ -350,6 +354,7 @@ export function MapScreen() {
   // field's own settled bounds it is NOT gated on the wind overlay — and so
   // does the weather drape, which is why both live this high up.
   const [settledBounds, setSettledBounds] = useState<WindBbox | null>(null);
+  const pdfWindow = useWindowDimensions();
   // Settled camera zoom + centre latitude, the two inputs the scale bar needs
   // (a Web-Mercator pixel is ~8× less ground at 83°N than at the equator).
   // SETTLE-driven on purpose: `onRegionIsChanging` fires at gesture rate and
@@ -690,6 +695,17 @@ export function MapScreen() {
   // Settled map bearing → the compass badge's red north needle, plus the
   // snap-back detent that undoes the rotation a zoom pinch leaks in (#248).
   const { mapBearing, onSettleBearing } = useMapBearing({ snapToNorth });
+  // Use the laid-out map frame, not the window (which may include navigation
+  // chrome), and its settled bearing to size rotated PDF detail in pixels.
+  const pdfPixelRatio = Math.min(pdfWindow.scale, 3);
+  const pdfDetails = usePdfDetails(
+    shownMaps,
+    overlays,
+    showPdfOverlay ? settledBounds : null,
+    windLayout.width * pdfPixelRatio,
+    { heightPx: windLayout.height * pdfPixelRatio, bearing: mapBearing },
+    isFocused,
+  );
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig
   // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
@@ -867,6 +883,7 @@ export function MapScreen() {
         if (vs === undefined || cancelled) return;
         setMapCenter({ latitude: vs.center[1], longitude: vs.center[0] });
         setSettledBounds(windBoundsOf(vs));
+        onSettleBearing(vs.bearing);
       } catch {
         // map mid-teardown — the first region settle seeds instead.
       }
@@ -874,7 +891,7 @@ export function MapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mapLoaded, mapCenter, settledBounds, setMapCenter]);
+  }, [mapLoaded, mapCenter, settledBounds, setMapCenter, onSettleBearing]);
   useEffect(() => {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
@@ -1324,8 +1341,9 @@ export function MapScreen() {
         restoreCameraOnDeselect();
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
-        // drops/moves the readout chip at the tapped spot; a tap ON the chip
-        // (or its anchor dot) dismisses it — same screen-projection hit-test
+        // drops the readout chip at the tapped spot; a tap ON the chip (or
+        // its anchor dot) dismisses it and copies; a bare tap anywhere else
+        // while a chip is open just closes it (#258) — same screen-projection hit-test
         // idiom as the waypoint pins. On the plain map (no weather, no
         // marine) the chip shows the coordinates and dismissing it copies
         // them, which is the only affordance a pointerEvents-none chip can
@@ -1368,7 +1386,16 @@ export function MapScreen() {
               // projection unavailable mid-teardown — treat as a fresh drop
             }
           }
-          setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+          // #258 — a chip is open and the tap landed on neither its action row
+          // nor its dismiss circle: close it and do nothing else. Re-dropping
+          // the chip at the new spot (the pre-#258 behaviour) made it follow
+          // the finger around the map with no obvious way to be rid of it.
+          // The NEXT tap, on a clean map, drops a fresh chip as before.
+          if (pointAt !== null) {
+            setPointAt(null);
+          } else {
+            setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
+          }
         }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
@@ -1710,9 +1737,27 @@ export function MapScreen() {
 
           {showPdfOverlay &&
             overlays.map((o) => (
-              <ImageSource key={o.id} id={o.id} url={o.imageUri} coordinates={o.coordinates}>
-                <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
-              </ImageSource>
+              <Fragment key={o.id}>
+                <ImageSource id={o.id} url={o.imageUri} coordinates={o.coordinates}>
+                  <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
+                </ImageSource>
+                {pdfDetails
+                  .filter((d) => (d.parentId ?? d.id) === o.id)
+                  .map((d) => (
+                    <ImageSource
+                      key={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                      id={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                      url={d.imageUri}
+                      coordinates={d.coordinates}
+                    >
+                      <Layer
+                        id={`${d.id}-detail-${fnv1a32(d.imageUri)}-layer`}
+                        type="raster"
+                        paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
+                      />
+                    </ImageSource>
+                  ))}
+              </Fragment>
             ))}
 
           {/* Terrain overlays sit above the (near-opaque) PDF maps — they're
@@ -2134,6 +2179,9 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View style={styles.bottom} pointerEvents="box-none">
+        {/* Pages still in the rasterizer, one dismissible row each (#269).
+            First in the column so they stack above the scale bar. */}
+        <RenderingToasts />
         {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
             under the compass). It is the FIRST child of the bottom chrome
             COLUMN rather than absolutely positioned in the corner, so it

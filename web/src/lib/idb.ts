@@ -1,5 +1,5 @@
 /**
- * A ~40-line IndexedDB key-value store.
+ * A small IndexedDB key-value store.
  *
  * localStorage was the obvious first choice and is the wrong one: a single
  * realistic Québec run is tens of thousands of points, and a handful of them
@@ -39,23 +39,65 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 function run<T>(
-  store: string,
+  store: string | string[],
   mode: IDBTransactionMode,
-  body: (s: IDBObjectStore) => IDBRequest<T>,
+  body: (s: IDBObjectStore, tx: IDBTransaction) => IDBRequest<T>,
 ): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(store, mode);
-        const req = body(tx.objectStore(store));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error ?? new Error('indexedDB request failed'));
-        tx.oncomplete = () => db.close();
+        let tx: IDBTransaction | undefined;
+        let settled = false;
+        const fail = (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          db.close();
+          reject(error);
+        };
+        try {
+          tx = db.transaction(store, mode);
+          tx.onerror = () => fail(tx?.error ?? new Error('indexedDB transaction failed'));
+          tx.onabort = () => fail(tx?.error ?? new Error('indexedDB transaction aborted'));
+          const req = body(tx.objectStore(typeof store === 'string' ? store : store[0]!), tx);
+          req.onerror = () => fail(req.error ?? new Error('indexedDB request failed'));
+          // Request success is provisional: quota/storage failure can still
+          // abort the transaction. Only completion confirms the write committed.
+          tx.oncomplete = () => {
+            if (settled) return;
+            settled = true;
+            db.close();
+            resolve(req.result);
+          };
+        } catch (error) {
+          // Missing stores and uncloneable values throw before request events.
+          // Abort any transaction already opened, and always close its database.
+          try {
+            tx?.abort();
+          } catch {
+            // An already-finished transaction cannot be aborted.
+          }
+          fail(error);
+        }
       }),
   );
 }
 
 export const idb = {
+  /** Publish GPX changes and their index together, including replacement/deletion. */
+  commitLibrary: (
+    index: unknown,
+    files: ReadonlyMap<string, string | null>,
+    replace: boolean,
+  ): Promise<void> =>
+    run(['library', 'gpx'], 'readwrite', (library, tx) => {
+      const gpx = tx.objectStore('gpx');
+      if (replace) gpx.clear();
+      for (const [id, xml] of files) {
+        if (xml === null) gpx.delete(id);
+        else gpx.put(xml, id);
+      }
+      return library.put(index, 'index');
+    }).then(() => undefined),
   get: <T>(store: string, key: string): Promise<T | undefined> =>
     run<T | undefined>(store, 'readonly', (s) => s.get(key) as IDBRequest<T | undefined>),
   getAll: <T>(store: string): Promise<T[]> =>

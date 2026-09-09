@@ -11,7 +11,11 @@ on:
       - 'app/**'
       - 'assets/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'app.config.ts'
+      - 'babel.config.js'
+      - 'metro.config.js'
+      - '.github/workflows/ota-update.yml'
   workflow_dispatch:
     inputs:
       app_version_override:
@@ -48,10 +52,22 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
       - run: npm ci
+      # Check this exact checkout before it can reach installed apps. The CI
+      # workflow runs independently and cannot gate this job by itself.
+      - name: Verify SDK-pinned dependency versions
+        run: npx expo install --check
+      - name: Verify release candidate
+        run: npm run check
       - name: Apply app version override (legacy-runtime publish)
         if: github.event.inputs.app_version_override != ''
+        env:
+          APP_VERSION_OVERRIDE: ${{ github.event.inputs.app_version_override }}
         run: |
-          v="${{ github.event.inputs.app_version_override }}"
+          v="$APP_VERSION_OVERRIDE"
+          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'App version override must be a numeric major.minor.patch version.' >&2
+            exit 1
+          fi
           sed -i "s/^  version: '.*',$/  version: '$v',/" app.config.ts
           grep -n "version: '$v'" app.config.ts
       - name: Publish OTA update to the production channel
@@ -62,4 +78,5 @@ jobs:
         # harmless — the app treats '' as no channel and just queues.)
         env:
           ERROR_REPORT_TOKEN: ${{ secrets.ERROR_REPORT_TOKEN }}
+          ERROR_REPORT_ENDPOINT: ${{ vars.ERROR_REPORT_ENDPOINT }}
         run: eas update --auto --branch production --non-interactive

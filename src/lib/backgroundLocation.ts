@@ -2,7 +2,7 @@ import { isBackgroundFeedFresh } from '@core/geo/track/backgroundFeed';
 import { backgroundTaskSupported } from '@core/geo/track/backgroundSupport';
 import type { TrackPoint } from '@core/models';
 import * as checkpoint from '@data/recorderCheckpoint';
-import { useRecorderStore } from '@state/recorderStore';
+import { getRecorderSessionGeneration, useRecorderStore } from '@state/recorderStore';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
@@ -62,6 +62,19 @@ let lastDeliveryAt: number | null = null;
 /** Headless-context decision cache: is there an interrupted recording on disk
  * worth journaling for, or is this task a stale leftover to shut down? */
 let headlessDecision: 'journal' | 'stop' | null = null;
+let headlessGeneration = -1;
+let lifecycleGeneration = 0;
+let lifecycleQueue = Promise.resolve();
+
+/** Serialize native side effects; a stale stop must finish before a new start. */
+function scheduleLifecycle<T>(operation: () => Promise<T>): Promise<T> {
+  const pending = lifecycleQueue.then(operation);
+  lifecycleQueue = pending.then(
+    () => undefined,
+    () => undefined,
+  );
+  return pending;
+}
 
 /**
  * True while the OS task is CONFIRMED to be feeding the recorder (it started
@@ -85,6 +98,9 @@ export function resetBackgroundLocationForTests(): void {
   taskStarted = false;
   lastDeliveryAt = null;
   headlessDecision = null;
+  headlessGeneration = -1;
+  lifecycleGeneration += 1;
+  lifecycleQueue = Promise.resolve();
   rationaleDeclinedThisSession = false;
 }
 
@@ -116,13 +132,34 @@ try {
 
     // status === 'idle': the JS process restarted underneath a live OS task
     // (headless relaunch, or app reopened before crash recovery ran).
+    const generation = getRecorderSessionGeneration();
+    const ownsIdleSession = () =>
+      generation === getRecorderSessionGeneration() &&
+      useRecorderStore.getState().status === 'idle';
+    if (headlessGeneration !== generation) headlessDecision = null;
     if (headlessDecision === null) {
       const cp = await checkpoint.readCheckpoint();
+      if (generation !== getRecorderSessionGeneration()) return;
+      const recovered = useRecorderStore.getState();
+      if (recovered.status !== 'idle') {
+        // Recovery can restore this interrupted session while its headless
+        // checkpoint read is pending. These fixes predate the restored pause;
+        // preserve them without accepting an old batch into a different hike.
+        if (cp?.status === 'recording' && cp.startedAt === recovered.startedAt) {
+          const points = locations.map(toTrackPoint);
+          if (!recovered.mergeBackgroundPoints(points)) {
+            await checkpoint.appendBackgroundPoints(points);
+          }
+        }
+        return;
+      }
+      headlessGeneration = generation;
       if (cp?.status === 'recording') {
         headlessDecision = 'journal';
       } else {
         // No interrupted recording to feed — the task outlived its session.
-        await stopBackgroundLocationUpdates();
+        await stopBackgroundLocationUpdates(generation);
+        if (!ownsIdleSession()) return;
         headlessDecision = 'stop';
       }
     }
@@ -161,6 +198,7 @@ export function canUseBackgroundTask(): boolean {
  * persisted task registration is what restarts the service on every launch.
  */
 export async function cleanupBackgroundLocationAtLaunch(): Promise<void> {
+  const generation = getRecorderSessionGeneration();
   try {
     if (!(await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK))) return;
     if (!canUseBackgroundTask()) {
@@ -170,8 +208,18 @@ export async function cleanupBackgroundLocationAtLaunch(): Promise<void> {
     }
     // Healthy binary: only clear a task with no interrupted recording behind
     // it (a stale leftover); a live checkpoint's task keeps journaling.
+    if (
+      generation !== getRecorderSessionGeneration() ||
+      useRecorderStore.getState().status !== 'idle'
+    )
+      return;
     const cp = await checkpoint.readCheckpoint();
-    if (cp?.status !== 'recording') await stopBackgroundLocationUpdates();
+    if (
+      generation !== getRecorderSessionGeneration() ||
+      useRecorderStore.getState().status !== 'idle'
+    )
+      return;
+    if (cp?.status !== 'recording') await stopBackgroundLocationUpdates(generation);
   } catch {
     /* best effort — never let cleanup interfere with launch */
   }
@@ -182,48 +230,65 @@ export async function startBackgroundLocationUpdates(minDisplacementM: number): 
   // backgrounded fix — never start the task there. The foreground watch stays
   // the feeder (screen-on recording still works; #120 made that fail-safe).
   if (!canUseBackgroundTask()) return false;
+  const operation = ++lifecycleGeneration;
+  const generation = getRecorderSessionGeneration();
   headlessDecision = null; // a fresh session invalidates any cached decision
   lastDeliveryAt = null; // confirmation must come from THIS session's deliveries
-  try {
-    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-      // Mirror the foreground watch so the track quality does not change when
-      // the feeder switches.
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 1000,
-      distanceInterval: Math.max(1, minDisplacementM),
-      foregroundService: {
-        notificationTitle: 'Inukshuk is recording your track',
-        notificationBody: 'Recording continues while the screen is off.',
-        // Keep the service if Android destroys the activity: the headless task
-        // journals fixes and the checkpoint recovers the session on relaunch.
-        killServiceOnDestroy: false,
-      },
-      // iOS: hiking is a fitness activity; never let the OS pause updates on a
-      // slow climb, and show the standard background-location status pill.
-      activityType: Location.LocationActivityType.Fitness,
-      pausesUpdatesAutomatically: false,
-      showsBackgroundLocationIndicator: true,
-    });
-    taskStarted = true;
-    return true;
-  } catch {
-    taskStarted = false;
-    return false;
-  }
+  return scheduleLifecycle(async () => {
+    if (operation !== lifecycleGeneration || generation !== getRecorderSessionGeneration())
+      return false;
+    try {
+      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+        // Mirror the foreground watch so the track quality does not change when
+        // the feeder switches.
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 1000,
+        distanceInterval: Math.max(1, minDisplacementM),
+        foregroundService: {
+          notificationTitle: 'Inukshuk is recording your track',
+          notificationBody: 'Recording continues while the screen is off.',
+          // Keep the service if Android destroys the activity: the headless task
+          // journals fixes and the checkpoint recovers the session on relaunch.
+          killServiceOnDestroy: false,
+        },
+        // iOS: hiking is a fitness activity; never let the OS pause updates on a
+        // slow climb, and show the standard background-location status pill.
+        activityType: Location.LocationActivityType.Fitness,
+        pausesUpdatesAutomatically: false,
+        showsBackgroundLocationIndicator: true,
+      });
+      const current =
+        operation === lifecycleGeneration && generation === getRecorderSessionGeneration();
+      if (current) taskStarted = true;
+      return current;
+    } catch {
+      if (operation === lifecycleGeneration) taskStarted = false;
+      return false;
+    }
+  });
 }
 
 /** Stop the recording task (recording stopped/paused, or a stale task). */
-export async function stopBackgroundLocationUpdates(): Promise<void> {
+export async function stopBackgroundLocationUpdates(
+  expectedSession = getRecorderSessionGeneration(),
+): Promise<void> {
+  if (expectedSession !== getRecorderSessionGeneration()) return;
+  const operation = ++lifecycleGeneration;
   taskStarted = false;
   lastDeliveryAt = null;
   headlessDecision = null;
-  try {
-    if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) {
-      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+  return scheduleLifecycle(async () => {
+    const current = () =>
+      operation === lifecycleGeneration && expectedSession === getRecorderSessionGeneration();
+    if (!current()) return;
+    try {
+      if ((await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) && current()) {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      }
+    } catch {
+      /* best effort */
     }
-  } catch {
-    /* best effort */
-  }
+  });
 }
 
 export type BackgroundPermissionOutcome = 'granted' | 'denied' | 'skipped';
@@ -277,8 +342,10 @@ export async function ensureBackgroundLocationPermission(
 export async function mergeJournaledBackgroundPoints(): Promise<void> {
   const recorder = useRecorderStore.getState();
   if (recorder.status === 'idle') return;
+  const generation = getRecorderSessionGeneration();
   const journaled = await checkpoint.readBackgroundPoints();
-  if (journaled.length === 0) return;
-  recorder.mergeBackgroundPoints(journaled);
-  checkpoint.clearBackgroundPoints();
+  if (journaled.length === 0 || generation !== getRecorderSessionGeneration()) return;
+  if (useRecorderStore.getState().mergeBackgroundPoints(journaled)) {
+    checkpoint.acknowledgeBackgroundPoints(journaled);
+  }
 }

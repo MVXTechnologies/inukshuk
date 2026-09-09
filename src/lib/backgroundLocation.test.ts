@@ -1,9 +1,17 @@
 import { BACKGROUND_FEED_FRESH_MS } from '@core/geo/track/backgroundFeed';
-import { useRecorderStore } from '@state/recorderStore';
+import * as checkpoint from '@data/recorderCheckpoint';
+import { useLibraryStore } from '@state/libraryStore';
+import {
+  initRecorderRecovery,
+  resetRecorderRecoveryForTests,
+  useRecorderStore,
+} from '@state/recorderStore';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import {
   isBackgroundFeedConfirmed,
+  cleanupBackgroundLocationAtLaunch,
+  mergeJournaledBackgroundPoints,
   resetBackgroundLocationForTests,
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
@@ -37,6 +45,7 @@ jest.mock('@data/recorderCheckpoint', () => {
   return {
     writeCheckpoint: jest.fn((cp: unknown) => {
       stored = cp;
+      return true;
     }),
     maybeWriteCheckpoint: jest.fn((cp: unknown) => {
       stored = cp;
@@ -53,7 +62,188 @@ jest.mock('@data/recorderCheckpoint', () => {
     clearBackgroundPoints: jest.fn(() => {
       bgStored = [];
     }),
+    acknowledgeBackgroundPoints: jest.fn((points: unknown[]) => {
+      const acknowledged = new Set(points);
+      bgStored = bgStored.filter((point) => !acknowledged.has(point));
+    }),
   };
+});
+
+describe('foreground journal durability', () => {
+  const point = (time: number) => ({ latitude: 46.8, longitude: -71.2, time });
+
+  it('retains fixes on checkpoint failure and retries without needing new fixes', async () => {
+    useRecorderStore.getState().discard();
+    useRecorderStore.getState().start('Current');
+    useRecorderStore.getState().addPoint(point(1000));
+    await checkpoint.appendBackgroundPoints([point(2000)]);
+    jest.mocked(checkpoint.writeCheckpoint).mockReturnValueOnce(false);
+    await mergeJournaledBackgroundPoints();
+    await expect(checkpoint.readBackgroundPoints()).resolves.toEqual([point(2000)]);
+    await mergeJournaledBackgroundPoints();
+    await expect(checkpoint.readBackgroundPoints()).resolves.toEqual([]);
+    expect((await checkpoint.readCheckpoint())?.points).toEqual([point(1000), point(2000)]);
+  });
+
+  it('does not merge an old journal into a newly started session', async () => {
+    useRecorderStore.getState().discard();
+    useRecorderStore.getState().start('Old');
+    let finish!: (points: ReturnType<typeof point>[]) => void;
+    jest.mocked(checkpoint.readBackgroundPoints).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const merging = mergeJournaledBackgroundPoints();
+    useRecorderStore.getState().start('New');
+    const expected = useRecorderStore.getState();
+    finish([point(1000)]);
+    await merging;
+    expect(useRecorderStore.getState()).toBe(expected);
+  });
+});
+
+describe('background task ownership', () => {
+  it.each([true, false])(
+    'preserves a batch delivered during matching recovery (checkpoint durable: %s)',
+    async (durable) => {
+      const saved: checkpoint.RecorderCheckpoint = {
+        status: 'recording',
+        name: 'Recovered',
+        startedAt: 1000,
+        pausedMs: 0,
+        points: [{ latitude: 46.8, longitude: -71.2, time: 1000 }],
+        waypoints: [],
+      };
+      checkpoint.writeCheckpoint(saved);
+      let finish!: (cp: checkpoint.RecorderCheckpoint) => void;
+      jest.mocked(checkpoint.readCheckpoint).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = deliver([2000]);
+      useLibraryStore.setState({ hydrated: true, tracks: [] });
+      await expect(initRecorderRecovery()).resolves.toBe(true);
+      if (durable) {
+        finish(saved);
+        await pending;
+      } else {
+        await jest.mocked(checkpoint.writeCheckpoint).withImplementation(
+          () => false,
+          async () => {
+            finish(saved);
+            await pending;
+          },
+        );
+      }
+      expect(useRecorderStore.getState().status).toBe('paused');
+      expect(useRecorderStore.getState().points.map((point) => point.time)).toEqual([1000, 2000]);
+      if (durable) {
+        expect((await checkpoint.readCheckpoint())?.points.map((point) => point.time)).toEqual([
+          1000, 2000,
+        ]);
+      } else {
+        expect((await checkpoint.readBackgroundPoints()).map((point) => point.time)).toContain(
+          2000,
+        );
+      }
+    },
+  );
+
+  it.each(['different recovery', 'new session'])(
+    'rejects a pending headless batch belonging to a %s',
+    async (mode) => {
+      const saved: checkpoint.RecorderCheckpoint = {
+        status: 'recording',
+        name: 'Old',
+        startedAt: 1000,
+        pausedMs: 0,
+        points: [{ latitude: 46.8, longitude: -71.2, time: 1000 }],
+        waypoints: [],
+      };
+      checkpoint.writeCheckpoint({ ...saved, startedAt: 500 });
+      let finish!: (cp: checkpoint.RecorderCheckpoint) => void;
+      jest.mocked(checkpoint.readCheckpoint).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = deliver([2000]);
+      if (mode === 'new session') {
+        // Even a coincident start timestamp must not defeat generation ownership.
+        jest.spyOn(Date, 'now').mockReturnValue(saved.startedAt);
+        useRecorderStore.getState().start('New');
+      } else {
+        useLibraryStore.setState({ hydrated: true, tracks: [] });
+        await expect(initRecorderRecovery()).resolves.toBe(true);
+      }
+      const expected = useRecorderStore.getState();
+      finish(saved);
+      await pending;
+      expect(useRecorderStore.getState()).toBe(expected);
+      await expect(checkpoint.readBackgroundPoints()).resolves.toEqual([]);
+    },
+  );
+
+  it.each(['headless', 'launch'])(
+    'ignores stale %s checkpoint decisions after recording starts',
+    async (mode) => {
+      jest.mocked(Location.hasStartedLocationUpdatesAsync).mockResolvedValue(true);
+      let finish!: (cp: null) => void;
+      jest.mocked(checkpoint.readCheckpoint).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = mode === 'headless' ? deliver([1000]) : cleanupBackgroundLocationAtLaunch();
+      await Promise.resolve();
+      useRecorderStore.getState().start('New');
+      finish(null);
+      await pending;
+      expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not let a delayed native stop cancel a newer start', async () => {
+    let finish!: (started: boolean) => void;
+    jest.mocked(Location.hasStartedLocationUpdatesAsync).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const stopping = stopBackgroundLocationUpdates();
+    await Promise.resolve();
+    const starting = startBackgroundLocationUpdates(5);
+    finish(true);
+    await Promise.all([stopping, starting]);
+    expect(Location.stopLocationUpdatesAsync).not.toHaveBeenCalled();
+    expect(Location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes native lifecycle calls so an old stop completes before a new start', async () => {
+    jest.mocked(Location.hasStartedLocationUpdatesAsync).mockResolvedValue(true);
+    let finish!: () => void;
+    jest.mocked(Location.stopLocationUpdatesAsync).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const stopping = stopBackgroundLocationUpdates();
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    const starting = startBackgroundLocationUpdates(5);
+    await Promise.resolve();
+    expect(Location.startLocationUpdatesAsync).not.toHaveBeenCalled();
+    finish();
+    await Promise.all([stopping, starting]);
+    expect(Location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
 });
 
 // The task handler is registered once, at module import — capture it before
@@ -81,6 +271,7 @@ const deliver = (times: number[]) =>
 
 beforeEach(() => {
   resetBackgroundLocationForTests();
+  resetRecorderRecoveryForTests();
   useRecorderStore.getState().discard();
   (Location.startLocationUpdatesAsync as jest.Mock).mockResolvedValue(undefined);
   (Location.hasStartedLocationUpdatesAsync as jest.Mock).mockResolvedValue(false);

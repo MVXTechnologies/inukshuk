@@ -12,10 +12,17 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  *   - `/BBox` — rectangle in page points bounding the georeferenced frame
  *   - `/Measure` dict with `/Subtype /GEO`:
  *       - `/GPTS` — flat array of lat,lon pairs (GEOGRAPHIC, lat-first!) giving
- *         the geo positions of /BOUNDS points in the unit square of the bbox
- *       - `/BOUNDS` — optional flat array of x,y in [0,1] (per ISO 32000 it
+ *         the geo positions of the /LPTS points
+ *       - `/LPTS` — optional flat array of x,y in the unit square of the bbox,
+ *         one point per GPTS pair, in the SAME order (per ISO 32000-2 it
  *         defaults to 0,0 0,1 1,1 1,0 — the bbox corners lower-left,
- *         upper-left, upper-right, lower-right)
+ *         upper-left, upper-right, lower-right). Producers do not agree on the
+ *         order: Sépaq/Avenza-style sheets start at the upper-left, a UTM
+ *         sheet from another tool went lower-left, lower-RIGHT, upper-right,
+ *         upper-left with a 10 % inset. Pairing GPTS with the default order
+ *         instead of the file's LPTS drew those flipped and transposed.
+ *       - `/BOUNDS` — optional clip polygon in the same unit square. NOT the
+ *         pairing key for GPTS (it was mistaken for one until #269).
  *       - `/GCS` — coordinate system dict (/EPSG, /WKT, or /Type /PROJCS|GEOGCS)
  */
 
@@ -53,12 +60,13 @@ function cornersFromMeasure(
   const gpts = numArray(doc, measure.entries.get('GPTS'));
   if (!gpts || gpts.length < 6 || gpts.length % 2 !== 0) return undefined;
 
-  // BOUNDS are (x,y) pairs in the unit square; default to the four bbox corners.
-  let bounds = numArray(doc, measure.entries.get('BOUNDS'));
-  if (!bounds || bounds.length !== gpts.length) {
-    // ISO 32000 default: pairs 0,0 0,1 1,1 1,0 — bbox corners lower-left,
-    // upper-left, upper-right, lower-right. Trim to match the GPTS pair count.
-    bounds = [0, 0, 0, 1, 1, 1, 1, 0].slice(0, gpts.length);
+  // LPTS are the (x,y) unit-square points each GPTS pair belongs to, in the
+  // file's own order. Only when the file omits them does the ISO default
+  // apply: pairs 0,0 0,1 1,1 1,0 — bbox corners lower-left, upper-left,
+  // upper-right, lower-right (trimmed to the GPTS pair count).
+  let lpts = numArray(doc, measure.entries.get('LPTS'));
+  if (!lpts || lpts.length !== gpts.length) {
+    lpts = [0, 0, 0, 1, 1, 1, 1, 0].slice(0, gpts.length);
   }
 
   const reproj = reprojectorFromGcs(doc, measure.entries.get('GCS'));
@@ -73,8 +81,8 @@ function cornersFromMeasure(
   for (let i = 0; i + 1 < gpts.length; i += 2) {
     const lat = gpts[i]!;
     const lon = gpts[i + 1]!;
-    const ux = bounds[i] ?? 0;
-    const uy = bounds[i + 1] ?? 0;
+    const ux = lpts[i] ?? 0;
+    const uy = lpts[i + 1] ?? 0;
     src.push([ux, uy]);
     // Per ISO 32000-2, GPTS are ALWAYS geographic lat/lon degrees, even when the
     // /GCS dict names a projected EPSG (e.g. a UTM zone). They are NOT in the

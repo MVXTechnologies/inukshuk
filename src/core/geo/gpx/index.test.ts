@@ -2,6 +2,34 @@ import type { TrackPoint } from '@core/models';
 
 import { buildGpx, parseGpx } from './index';
 
+describe('GPX coordinate bounds', () => {
+  it.each(['trkpt', 'rtept', 'wpt'])('drops out-of-range %s coordinates before mapping', (tag) => {
+    const points =
+      `<${tag} lat="91" lon="0"/><${tag} lat="-91" lon="0"/>` +
+      `<${tag} lat="0" lon="181"/><${tag} lat="0" lon="-181"/>` +
+      `<${tag} lat="45" lon="-73"/>`;
+    const body =
+      tag === 'trkpt'
+        ? `<trk><trkseg>${points}</trkseg></trk>`
+        : tag === 'rtept'
+          ? `<rte>${points}</rte>`
+          : points;
+    const doc = parseGpx(`<gpx version="1.1">${body}</gpx>`);
+    expect(doc.points.map((p) => [p.latitude, p.longitude])).toEqual([[45, -73]]);
+    if (tag === 'wpt') {
+      expect(doc.waypoints.map((p) => [p.latitude, p.longitude])).toEqual([[45, -73]]);
+    }
+  });
+
+  it('keeps boundary coordinates at the poles and antimeridian', () => {
+    const doc = parseGpx('<gpx><wpt lat="90" lon="180"/><wpt lat="-90" lon="-180"/></gpx>');
+    expect(doc.points.map((p) => [p.latitude, p.longitude])).toEqual([
+      [90, 180],
+      [-90, -180],
+    ]);
+  });
+});
+
 const pt = (latitude: number, longitude: number, time: number, altitude?: number): TrackPoint => ({
   latitude,
   longitude,

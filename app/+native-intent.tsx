@@ -1,3 +1,4 @@
+import { findDuplicateTrack } from '@features/share/findDuplicateTrack';
 import { importGpxFromUri } from '@features/library/importGpx';
 import * as storage from '@data/storage';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
@@ -39,19 +40,12 @@ export async function redirectSystemPath({
       // adding a track before the on-disk index is loaded would persist an
       // index built from the empty initial state and wipe the library.
       await useLibraryStore.getState().hydrate();
-      const { track, fileUri, notes } = await importGpxFromUri(path, 'Imported trail');
-      // Dedupe: re-opening a file that's already in the library must not
-      // clone it — match on name + point count + distance (a re-export of
-      // the same recording), drop the fresh copy, and open the EXISTING one.
-      const existing = useLibraryStore
-        .getState()
-        .tracks.find(
-          (t) =>
-            t.name === track.name &&
-            t.stats.pointCount === track.stats.pointCount &&
-            Math.abs(t.stats.distanceM - track.stats.distanceM) < 1,
-        );
-      if (existing) {
+      const incoming = await importGpxFromUri(path, 'Imported trail');
+      const { track, fileUri, notes } = incoming;
+      const existing = await findDuplicateTrack(incoming, useLibraryStore.getState().tracks);
+      // Async comparison can outlive a deletion, trim, or note edit. Only the
+      // exact surviving summary still owns the content we just compared.
+      if (existing && useLibraryStore.getState().tracks.includes(existing)) {
         storage.deleteFileAt(fileUri);
         useImportFeedbackStore.getState().show(`${existing.name} is already in your library`);
         return `/trail3d/${existing.id}`;

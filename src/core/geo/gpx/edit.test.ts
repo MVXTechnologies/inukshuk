@@ -192,3 +192,13 @@ describe('retargetNotesAfterTrim', () => {
     expect(retargetNotesAfterTrim([], points, 0, 4)).toEqual({ kept: [], dropped: [] });
   });
 });
+
+it('orders an explicitly timed Unix-epoch GPX before later recordings', () => {
+  const epoch = { ...pt(45, -73, 0), hasTime: true };
+  const later = pt(46, -73, 60000);
+  const merged = mergeTracks([
+    { name: 'later', points: [later] },
+    { name: 'epoch', points: [epoch] },
+  ]);
+  expect(merged.points).toEqual([epoch, later]);
+});

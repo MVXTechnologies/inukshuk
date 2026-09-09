@@ -44,3 +44,59 @@ describe('heat grid', () => {
     expect(HEAT_CELL_M).toBe(25);
   });
 });
+
+describe('heat grid at geographic edges', () => {
+  it.each([-90, -75, 0, 75, 90])(
+    'canonicalizes equivalent dateline coordinates at latitude %s',
+    (lat) => {
+      expect(cellAt(180, lat)).toEqual(cellAt(-180, lat));
+    },
+  );
+
+  it.each([1, 25, 250])('wraps neighboring cells across the seam with %s metre cells', (size) => {
+    for (const lat of [-89.9, -75, 0, 75, 89.9]) {
+      const west = cellAt(-179.999999, lat, size);
+      const east = cellAt(179.999999, lat, size);
+      expect(ringKeys(west, size)).toContain(cellKey(east));
+      expect(ringKeys(east, size)).toContain(cellKey(west));
+    }
+  });
+
+  it.each([-90, 90])('keeps polar rings finite, unique and geographically valid at %s', (lat) => {
+    for (const size of [1, 25, 250]) {
+      const cell = cellAt(179, lat, size);
+      const ring = ringKeys(cell, size);
+      expect(ring).toContain(cellKey(cell));
+      expect(ring.length).toBeLessThanOrEqual(9);
+      expect(new Set(ring).size).toBe(ring.length);
+      const minRow = cellAt(0, -90, size).row;
+      const maxRow = cellAt(0, 90, size).row;
+      for (const key of ring) {
+        const [row, col] = key.split(',').map(Number);
+        expect(Number.isSafeInteger(col)).toBe(true);
+        expect(row).toBeGreaterThanOrEqual(minRow);
+        expect(row).toBeLessThanOrEqual(maxRow);
+      }
+    }
+  });
+
+  it.each([0, Number.MIN_VALUE, Infinity])('rejects unsafe grid size %s', (size) => {
+    expect(() => cellAt(0, 0, size)).toThrow(RangeError);
+    expect(() => ringKeys({ row: 0, col: 0 }, size)).toThrow(RangeError);
+  });
+});
+
+it('maps seam neighbors into the adjacent latitude row', () => {
+  const cell = cellAt(179.99999, 75);
+  const neighbor = cellAt(-179.99999, 75 + HEAT_CELL_M / 111320);
+  expect(ringKeys(cell)).toContain(cellKey(neighbor));
+});
+
+it('keeps the exact dateline cell inside its ring despite floating-point rounding', () => {
+  for (const lat of [-89.5, -89.4, 89.4, 89.5]) {
+    for (const size of [1, 25, 250]) {
+      const cell = cellAt(-180, lat, size);
+      expect(ringKeys(cell, size)).toContain(cellKey(cell));
+    }
+  }
+});

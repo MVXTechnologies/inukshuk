@@ -1,4 +1,5 @@
 import type { TrackPoint } from '@core/models';
+import { shouldAcceptFix } from './gpsFilter';
 
 import {
   accumulateElevationGainLoss,
@@ -277,6 +278,34 @@ describe('reduceStatsWith', () => {
     // Each step is +10 m (>= 3 threshold) so per-step matches the full filter here.
     expect(stats.ascentM).toBeCloseTo(full.ascentM, 6);
   });
+
+  it.each(['incremental', 'batch checkpoint'])(
+    'matches moving-speed averages across accepted slow fixes from %s stats',
+    (seed) => {
+      const points = [
+        pt(45, -73, 100000),
+        pt(45.0001, -73, 110000),
+        pt(45.00014, -73, 130000),
+        pt(45.00024, -73, 140000),
+      ];
+      let stats = computeTrackStats([]);
+      for (let i = 0; i < points.length; i++) {
+        const next = points[i];
+        if (!next) throw new Error('Missing test point');
+        expect(shouldAcceptFix(points[i - 1], next)).toBe(true);
+        if (seed === 'batch checkpoint' && i === 2) {
+          stats = computeTrackStats(points.slice(0, i));
+        }
+        stats = reduceStatsWith(stats, points[i - 1], next);
+        const batch = computeTrackStats(points.slice(0, i + 1));
+        expect(stats.avgSpeedMps).toBeCloseTo(batch.avgSpeedMps, 10);
+        expect(stats.movingTimeS).toBe(batch.movingTimeS);
+      }
+      expect(stats.movingTimeS).toBe(20);
+      expect(stats.avgSpeedMps).toBeCloseTo(1.11195, 5);
+      expect(stats.distanceM).toBeCloseTo(26.68682, 5);
+    },
+  );
 
   it('initializes bbox and altitude from the first point', () => {
     const s = reduceStatsWith(

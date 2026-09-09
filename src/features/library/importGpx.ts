@@ -36,7 +36,10 @@ function buildFromGpxText(
   });
   // A GPX without timestamps is a route to follow, not a recorded activity —
   // classify it as a Navigation trail so it never reads as a zero-minute run.
-  if (track.category === undefined && !points.some((pt) => pt.time !== undefined)) {
+  if (
+    track.category === undefined &&
+    !points.some((pt) => pt.hasTime !== false && Number.isFinite(pt.time))
+  ) {
     track.category = 'navigation';
   }
   const notes = hasTrackOrRoutePoints ? snapWaypointsToNotes(points, waypoints) : [];

@@ -66,3 +66,29 @@ describe('layoutMadeMap', () => {
     );
   });
 });
+
+it.each(['a4', 'letter'] as const)(
+  'keeps selected regional extents, printed scale and scale bar consistent beyond 1:1M on %s',
+  (format) => {
+    // Reachable by zooming out before opening the map-maker selector: unlike
+    // offline downloads its confirmation has no geographic area/scale limit.
+    const region = { minLng: -75, maxLng: -69, minLat: 44, maxLat: 48 };
+    const layout = layoutMadeMap(region, format);
+    expect(layout.drawBbox.minLng).toBeLessThanOrEqual(region.minLng);
+    expect(layout.drawBbox.maxLng).toBeGreaterThanOrEqual(region.maxLng);
+    expect(layout.drawBbox.minLat).toBeLessThanOrEqual(region.minLat);
+    expect(layout.drawBbox.maxLat).toBeGreaterThanOrEqual(region.maxLat);
+    expect(layout.scaleDenom).toBeGreaterThan(1000000);
+    const drawnW = groundWidthM(layout.drawBbox);
+    const drawnH = (layout.drawBbox.maxLat - layout.drawBbox.minLat) * 111320;
+    expect(drawnW / layout.mapRect.w).toBeCloseTo(layout.metersPerPt, 6);
+    expect(drawnH / layout.mapRect.h).toBeCloseTo(layout.metersPerPt, 6);
+    expect(layout.scaleBar.widthPt * (drawnW / layout.mapRect.w)).toBeCloseTo(
+      layout.scaleBar.meters,
+      6,
+    );
+    const cosLat = Math.cos((46 * Math.PI) / 180);
+    const pixels = Math.max(drawnW, drawnH) / ((156543.03392 * cosLat) / 2 ** layout.rasterZoom);
+    expect(pixels).toBeLessThanOrEqual(4096);
+  },
+);

@@ -4,13 +4,21 @@ import { toggleId } from '@core/library/toggleId';
 import type { CustomCategory } from '@core/library/categories';
 import {
   LIBRARY_SCHEMA_VERSION,
+  mapLibraryIndexPaths,
   migrateLibraryIndex,
   type LibraryIndex,
 } from '@core/library/migrations';
+import { isAbsolutePath } from '@core/storage/documentPaths';
 import { removeNoteById } from '@core/library/notes';
 import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as storage from '@data/storage';
+import {
+  clearInterruptedPdfRender,
+  protectInterruptedPdfRender,
+  readInterruptedPdfRender,
+} from '@data/pdfRenderRecovery';
+import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
 
 /**
@@ -32,6 +40,8 @@ export interface ImportedTrack {
 
 interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   hydrated: boolean;
+  pdfRecoveryNotice: string | null;
+  dismissPdfRecoveryNotice: () => void;
   hydrate: () => Promise<void>;
   addMap: (doc: MapDocument) => void;
   /**
@@ -55,6 +65,13 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   setActiveMap: (id: string | null) => void;
   /** Toggle whether a georeferenced page of a map is shown as an overlay. */
   toggleMapPage: (id: string, pageIndex: number) => void;
+  retryMapPage: (id: string, pageIndex: number) => void;
+  pauseMapPageAfterRenderFailure: (
+    id: string,
+    pageIndex: number,
+    message: string,
+    expected?: { fileUri: string; importedAt: number },
+  ) => void;
   /**
    * Add a trail with all of its seeded notes in ONE index write — the recorder's
    * save path relies on this: a per-note `addTrackNote` loop cost one full
@@ -63,8 +80,8 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   addTrack: (track: Track, fileUri: string, notes?: readonly SeedNote[]) => void;
   /** Add several imported trails in `items` order, in ONE index write. */
   addTracks: (items: readonly ImportedTrack[]) => void;
-  /** Patch a saved trail's summary (e.g. after a trim overwrote its GPX file). */
-  updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id' | 'fileUri'>>) => void;
+  /** Patch a saved trail, including switching its file URI to a committed revision. */
+  updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id'>>) => void;
   /**
    * Rename a saved trail (the user-facing title of an activity). A blank or
    * whitespace-only name is rejected — the trail keeps its current one, the
@@ -153,7 +170,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
   // initial state and wipe the on-disk library. Callers that can run that early
   // must `await hydrate()` first; this guard is the backstop.
   if (!state.hydrated) return;
-  storage.writeIndex({
+  const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps: state.maps,
     tracks: state.tracks,
@@ -164,7 +181,55 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     activeTrackIds: state.activeTrackIds,
     customCategories: state.customCategories,
     waypoints: state.waypoints,
-  } satisfies LibraryIndex);
+  };
+  // #247 — the store holds ABSOLUTE uris (every consumer, from <Image> to
+  // Sharing to the GPX reader, wants one), but the index on disk must hold
+  // document-RELATIVE paths: iOS rotates the container UUID on app updates and
+  // an absolute path written by the previous build points at nothing.
+  // Relativising here, and resolving in `hydrate`, keeps that translation in
+  // exactly one place per direction.
+  storage.writeIndex(mapLibraryIndexPaths(index, storage.toDocumentPath));
+}
+
+/** Commit metadata before best-effort cleanup of files it no longer references. */
+function persistAndDelete(
+  state: LibraryState,
+  orphanedUris: readonly (string | undefined)[],
+): void {
+  persist(state);
+  if (!state.hydrated) return;
+  for (const uri of orphanedUris) {
+    if (!uri) continue;
+    try {
+      storage.deleteFileAt(uri);
+    } catch {
+      // Metadata is committed: keep memory consistent even if an orphan remains.
+    }
+  }
+}
+
+/**
+ * Turn a just-migrated index's document-relative paths back into absolute uris
+ * against the CURRENT container (#247) — the form every consumer expects.
+ *
+ * A path that is still absolute here is one the migration deliberately left
+ * alone: it lives under no document directory, so we have no basis to rewrite
+ * it. Warn rather than mangle it — that is the shape a genuinely foreign path
+ * (or a future bug) would take, and it should be visible in the logs.
+ */
+function resolveStoredPaths(index: LibraryIndex): LibraryIndex {
+  const foreign: string[] = [];
+  const resolved = mapLibraryIndexPaths(index, (path) => {
+    if (path !== '' && isAbsolutePath(path)) foreign.push(path);
+    return storage.resolveDocumentPath(path);
+  });
+  if (foreign.length > 0) {
+    console.warn(
+      `[library] ${foreign.length} stored path(s) outside the document directory, left as-is:`,
+      foreign.slice(0, 3),
+    );
+  }
+  return resolved;
 }
 
 /** The persisted summary for a freshly imported/recorded trail. */
@@ -195,6 +260,24 @@ function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
 // cold-start "Open with" intent) await the same read instead of racing it.
 let hydration: Promise<void> | null = null;
 
+function clearMapRecoveryError(map: MapDocument, pageIndex: number): MapDocument {
+  const { renderRecoveryErrors, ...rest } = map;
+  const remaining = renderRecoveryErrors?.filter((error) => error.pageIndex !== pageIndex);
+  return remaining?.length ? { ...rest, renderRecoveryErrors: remaining } : rest;
+}
+
+/** A protected checkpoint is acknowledged only after the user's retry is saved. */
+function persistMapRetry(state: LibraryState, map: MapDocument, pageIndex: number): void {
+  const interrupted = readInterruptedPdfRender();
+  persist(state);
+  if (
+    interrupted?.pageIndex === pageIndex &&
+    storage.toDocumentPath(interrupted.fileUri) === storage.toDocumentPath(map.fileUri)
+  ) {
+    clearInterruptedPdfRender(interrupted.token);
+  }
+}
+
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   maps: [],
   tracks: [],
@@ -206,21 +289,71 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   customCategories: [],
   waypoints: [],
   hydrated: false,
+  pdfRecoveryNotice: null,
+  dismissPdfRecoveryNotice: () => set({ pdfRecoveryNotice: null }),
 
   hydrate: () => {
     if (get().hydrated) return Promise.resolve();
     hydration ??= (async () => {
       storage.ensureStorage();
+      // Snapshot before publishing any maps: restored active pages otherwise
+      // immediately retry the render interrupted by the previous process exit.
+      const interrupted = readInterruptedPdfRender();
       const raw = await storage.readIndex<unknown>();
       if (raw) {
         // Route every load through the schema-version migration ladder: legacy
         // unversioned indexes are normalized, junk is dropped, never throws.
-        const { schemaVersion: _v, ...index } = migrateLibraryIndex(raw);
-        set({ ...index, hydrated: true });
+        // The ladder also relativises stored paths (#247), healing an index
+        // written under a container UUID iOS has since rotated away.
+        const { schemaVersion: _v, ...index } = resolveStoredPaths(
+          migrateLibraryIndex(raw, storage.documentDirUri()),
+        );
+        let pdfRecoveryNotice: string | null = null;
+        if (interrupted) {
+          const map = index.maps.find(
+            (m) =>
+              storage.toDocumentPath(m.fileUri) === storage.toDocumentPath(interrupted.fileUri),
+          );
+          if (map && interrupted.pageIndex < map.pageCount) {
+            index.maps = index.maps.map((m) =>
+              m === map
+                ? {
+                    ...m,
+                    activePages: m.activePages.filter((p) => p !== interrupted.pageIndex),
+                    renderRecoveryErrors: [
+                      ...(m.renderRecoveryErrors ?? []).filter(
+                        (error) => error.pageIndex !== interrupted.pageIndex,
+                      ),
+                      { pageIndex: interrupted.pageIndex, reason: 'interrupted' as const },
+                    ],
+                  }
+                : m,
+            );
+            pdfRecoveryNotice = `Paused page ${interrupted.pageIndex + 1} of “${map.name}” after an interrupted render. Your maps are saved. Use Retry in Library to try this page again.`;
+            try {
+              // Save the paused page before consuming evidence. If storage is
+              // full, keep the checkpoint and still expose the safe library.
+              persist({ ...index, hydrated: true });
+              clearInterruptedPdfRender(interrupted.token);
+            } catch (error) {
+              protectInterruptedPdfRender(interrupted.token);
+              reportError(error, 'pdf-recovery-save');
+            }
+          } else {
+            try {
+              clearInterruptedPdfRender(interrupted.token);
+            } catch (error) {
+              reportError(error, 'pdf-recovery-cleanup');
+            }
+          }
+        }
+        set({ ...index, hydrated: true, pdfRecoveryNotice });
       } else {
         set({ hydrated: true });
       }
-    })();
+    })().finally(() => {
+      hydration = null;
+    });
     return hydration;
   },
 
@@ -260,13 +393,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeMap: (id) =>
     set((s) => {
       const doc = s.maps.find((m) => m.id === id);
-      if (doc) storage.deleteFileAt(doc.fileUri);
       const next = {
         ...s,
         maps: s.maps.filter((m) => m.id !== id),
         activeMapId: s.activeMapId === id ? null : s.activeMapId,
       };
-      persist(next);
+      persistAndDelete(next, [doc?.fileUri]);
       return next;
     }),
 
@@ -279,20 +411,67 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   toggleMapPage: (id, pageIndex) =>
     set((s) => {
+      const retrying = s.maps.find(
+        (m) =>
+          m.id === id &&
+          !m.activePages.includes(pageIndex) &&
+          m.renderRecoveryErrors?.some((error) => error.pageIndex === pageIndex),
+      );
       const next = {
         ...s,
         maps: s.maps.map((m) => {
           if (m.id !== id) return m;
           const on = m.activePages.includes(pageIndex);
           return {
-            ...m,
+            ...(on ? m : clearMapRecoveryError(m, pageIndex)),
             activePages: on
               ? m.activePages.filter((p) => p !== pageIndex)
               : [...m.activePages, pageIndex].sort((a, b) => a - b),
           };
         }),
       };
-      persist(next);
+      if (retrying) persistMapRetry(next, retrying, pageIndex);
+      else persist(next);
+      return next;
+    }),
+
+  pauseMapPageAfterRenderFailure: (id, pageIndex, message, expected) =>
+    set((s) => {
+      const map = s.maps.find((m) => m.id === id);
+      if (!map?.activePages.includes(pageIndex)) return s;
+      if (
+        expected &&
+        (map.importedAt !== expected.importedAt ||
+          storage.toDocumentPath(map.fileUri) !== storage.toDocumentPath(expected.fileUri))
+      )
+        return s;
+      const paused: MapDocument = {
+        ...map,
+        activePages: map.activePages.filter((page) => page !== pageIndex),
+        renderRecoveryErrors: [
+          ...(map.renderRecoveryErrors ?? []).filter((error) => error.pageIndex !== pageIndex),
+          { pageIndex, reason: 'render-failed', message: message.slice(0, 400) },
+        ],
+      };
+      const next = { ...s, maps: s.maps.map((m) => (m === map ? paused : m)) };
+      try {
+        persist(next);
+      } catch (error) {
+        reportError(error, 'pdf-render-failure-save');
+      }
+      return next;
+    }),
+
+  retryMapPage: (id, pageIndex) =>
+    set((s) => {
+      const map = s.maps.find((m) => m.id === id);
+      if (!map?.renderRecoveryErrors?.some((error) => error.pageIndex === pageIndex)) return s;
+      const retried = {
+        ...clearMapRecoveryError(map, pageIndex),
+        activePages: [...new Set([...map.activePages, pageIndex])].sort((a, b) => a - b),
+      };
+      const next = { ...s, maps: s.maps.map((m) => (m === map ? retried : m)) };
+      persistMapRetry(next, map, pageIndex);
       return next;
     }),
 
@@ -331,17 +510,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeTrack: (id) =>
     set((s) => {
       const t = s.tracks.find((x) => x.id === id);
-      if (t) {
-        storage.deleteFileAt(t.fileUri);
-        t.notes?.forEach((n) => n.photoUri && storage.deleteFileAt(n.photoUri));
-      }
       const next = {
         ...s,
         tracks: s.tracks.filter((x) => x.id !== id),
         // A deleted trail must not linger as (or come back as) a map overlay.
         activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
-      persist(next);
+      persistAndDelete(next, [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])]);
       return next;
     }),
 
@@ -384,10 +559,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateTrackNote: (trackId, noteId, text, photoUri) =>
     set((s) => {
       const old = s.tracks.find((t) => t.id === trackId)?.notes?.find((n) => n.id === noteId);
-      // Replacing or clearing the photo: delete the now-orphaned file.
-      if (old?.photoUri && photoUri !== undefined && photoUri !== old.photoUri) {
-        storage.deleteFileAt(old.photoUri);
-      }
       const next = {
         ...s,
         tracks: s.tracks.map((t) =>
@@ -407,21 +578,22 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             : t,
         ),
       };
-      persist(next);
+      persistAndDelete(next, [
+        photoUri !== undefined && photoUri !== old?.photoUri ? old?.photoUri : undefined,
+      ]);
       return next;
     }),
 
   removeTrackNote: (trackId, noteId) =>
     set((s) => {
       const old = s.tracks.find((t) => t.id === trackId)?.notes?.find((n) => n.id === noteId);
-      if (old?.photoUri) storage.deleteFileAt(old.photoUri);
       const next = {
         ...s,
         tracks: s.tracks.map((t) =>
           t.id === trackId ? { ...t, notes: removeNoteById(t.notes ?? [], noteId) } : t,
         ),
       };
-      persist(next);
+      persistAndDelete(next, [old?.photoUri]);
       return next;
     }),
 
@@ -548,10 +720,6 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   updateWaypoint: (id, patch) =>
     set((s) => {
       const old = s.waypoints.find((w) => w.id === id);
-      // Replacing or clearing a photo: delete the now-orphaned file.
-      if (old?.photoUri && patch.photoUri !== undefined && patch.photoUri !== old.photoUri) {
-        storage.deleteFileAt(old.photoUri);
-      }
       const next = {
         ...s,
         waypoints: s.waypoints.map((w) => {
@@ -565,7 +733,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           return updated;
         }),
       };
-      persist(next);
+      persistAndDelete(next, [
+        patch.photoUri !== undefined && patch.photoUri !== old?.photoUri
+          ? old?.photoUri
+          : undefined,
+      ]);
       return next;
     }),
 
@@ -584,9 +756,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeWaypoint: (id) =>
     set((s) => {
       const w = s.waypoints.find((x) => x.id === id);
-      if (w?.photoUri) storage.deleteFileAt(w.photoUri);
       const next = { ...s, waypoints: s.waypoints.filter((x) => x.id !== id) };
-      persist(next);
+      persistAndDelete(next, [w?.photoUri]);
       return next;
     }),
 

@@ -128,14 +128,14 @@ describe('migrateLibraryIndex', () => {
     expect(index.maps[0]?.activePages).toEqual([0, 1, 2]);
   });
 
-  it('passes a current v5 index through unchanged', () => {
-    const v5: LibraryIndex = {
-      schemaVersion: 5,
+  it('passes a current-version index through unchanged', () => {
+    const current: LibraryIndex = {
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
       maps: [
         {
           id: 'm1',
           name: 'Map',
-          fileUri: 'file://m1.pdf',
+          fileUri: 'maps/m1.pdf',
           importedAt: 5,
           pageCount: 2,
           georeferences: [geoRef(0), geoRef(1)],
@@ -145,7 +145,7 @@ describe('migrateLibraryIndex', () => {
           sourceUpdatedAt: '2019-07-24',
         },
       ],
-      tracks: [{ ...track('t1'), folderId: 'f1', category: 'cat1' }],
+      tracks: [{ ...track('t1'), fileUri: 'tracks/t1.gpx', folderId: 'f1', category: 'cat1' }],
       folders: [{ id: 'f1', name: 'F', createdAt: 8 }],
       mapVisibilityMode: 'folders',
       visibleFolderIds: ['f1'],
@@ -156,7 +156,7 @@ describe('migrateLibraryIndex', () => {
         { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
       ],
     };
-    expect(migrateLibraryIndex(v5)).toEqual(v5);
+    expect(migrateLibraryIndex(current)).toEqual(current);
   });
 
   it('v4 → v5 stamps the version; maps stay untouched (no provenance yet)', () => {
@@ -183,7 +183,7 @@ describe('migrateLibraryIndex', () => {
       waypoints: [],
     };
     const index = migrateLibraryIndex(v4);
-    expect(index.schemaVersion).toBe(5);
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(index.maps[0]).not.toHaveProperty('sourceItemId');
     expect(index.maps[0]).not.toHaveProperty('sourceUpdatedAt');
     expect(index.activeMapId).toBe('m1');
@@ -195,6 +195,7 @@ describe('migrateLibraryIndex', () => {
       maps: [
         {
           id: 'm1',
+          fileUri: 'maps/m1.pdf',
           georeferences: [geoRef(0)],
           sourceItemId: 42,
           sourceUpdatedAt: { when: 'yesterday' },
@@ -224,7 +225,7 @@ describe('migrateLibraryIndex', () => {
   it('drops junk fields and entries without throwing', () => {
     const index = migrateLibraryIndex({
       schemaVersion: 2,
-      maps: [null, 42, { id: 'm1', georeferences: [geoRef(0)] }],
+      maps: [null, 42, { id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)] }],
       tracks: [track('t1'), 'not a track', { name: 'no id' }],
       bundles: 'nope',
       folders: [{ id: 'f1', name: 'F', createdAt: 1 }],
@@ -336,6 +337,112 @@ describe('migrateLibraryIndex', () => {
     expect(index).not.toHaveProperty('fieldFromTheFuture');
   });
 
+  // --- #247: absolute paths under a rotated iOS container -------------------
+  //
+  // iOS gives the app data container a new UUID on every app update. An index
+  // written by 1.5.0 (5) names its files under the OLD one; after the update
+  // the files are all still there, under the NEW one, and every persisted path
+  // is dead. `rotatedIndex()` is exactly the bytes that state leaves on disk.
+
+  const OLD_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/11111111-2222-3333-4444-555555555555/Documents';
+  const NEW_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/99999999-8888-7777-6666-555555555555/Documents';
+
+  const rotatedIndex = () => ({
+    schemaVersion: 5,
+    maps: [
+      {
+        id: 'm1',
+        name: 'Map',
+        fileUri: `${OLD_CONTAINER}/maps/m1.pdf`,
+        importedAt: 5,
+        pageCount: 1,
+        georeferences: [geoRef(0)],
+        activePages: [0],
+      },
+    ],
+    tracks: [
+      {
+        ...track('t1'),
+        fileUri: `${OLD_CONTAINER}/tracks/t1.gpx`,
+        notes: [
+          {
+            id: 'n1',
+            distanceM: 100,
+            text: 'Beaver dam',
+            createdAt: 20,
+            photoUri: `${OLD_CONTAINER}/photos/p1.jpg`,
+          },
+          { id: 'n2', distanceM: 200, text: 'No photo here', createdAt: 21 },
+        ],
+      },
+    ],
+    folders: [],
+    mapVisibilityMode: 'type',
+    visibleFolderIds: [],
+    activeMapId: 'm1',
+    activeTrackIds: ['t1'],
+    customCategories: [],
+    waypoints: [
+      {
+        id: 'w1',
+        latitude: 46.5,
+        longitude: -70.5,
+        label: 'Waypoint 1',
+        createdAt: 10,
+        photoUri: `${OLD_CONTAINER}/photos/p2.jpg`,
+      },
+    ],
+  });
+
+  it('relativises every path an update-rotated container stranded (#247)', () => {
+    const index = migrateLibraryIndex(rotatedIndex(), NEW_CONTAINER);
+
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.maps[0]?.fileUri).toBe('maps/m1.pdf');
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+    expect(index.tracks[0]?.notes?.[0]?.photoUri).toBe('photos/p1.jpg');
+    expect(index.waypoints[0]?.photoUri).toBe('photos/p2.jpg');
+    // A note without a photo gains no photoUri key.
+    expect(index.tracks[0]?.notes?.[1]).not.toHaveProperty('photoUri');
+  });
+
+  it('heals a stranded index with no document directory to compare against', () => {
+    // The `/Documents/` landmark carries it alone; the prefix rule is only an
+    // extra for the same-container and Android cases.
+    const index = migrateLibraryIndex(rotatedIndex());
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+    expect(index.waypoints[0]?.photoUri).toBe('photos/p2.jpg');
+  });
+
+  it('is idempotent: migrating the already-relative result changes nothing', () => {
+    const once = migrateLibraryIndex(rotatedIndex(), NEW_CONTAINER);
+    expect(migrateLibraryIndex(once, NEW_CONTAINER)).toEqual(once);
+  });
+
+  it('strips the CURRENT container prefix too (a same-container legacy index)', () => {
+    const index = migrateLibraryIndex(
+      {
+        ...rotatedIndex(),
+        tracks: [{ ...track('t1'), fileUri: `${NEW_CONTAINER}/tracks/t1.gpx` }],
+      },
+      NEW_CONTAINER,
+    );
+    expect(index.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+  });
+
+  it('leaves an absolute path under no document directory alone', () => {
+    // Not ours to rewrite — a cache file, or a path from another app. The
+    // store logs these rather than guessing at a relative form for them.
+    const foreign = 'file:///var/mobile/Containers/Data/Application/X/Library/Caches/a.gpx';
+    const index = migrateLibraryIndex(
+      { ...rotatedIndex(), tracks: [{ ...track('t1'), fileUri: foreign }] },
+      NEW_CONTAINER,
+    );
+    expect(index.tracks[0]?.fileUri).toBe(foreign);
+  });
+
   it('keeps a map whose corners were persisted in projected metres (#243)', () => {
     // The CanTopo shape a build before the CRS fix wrote to disk: real
     // georeferencing whose corners are UTM easting/northing, and no record of
@@ -387,7 +494,7 @@ describe('migrateLibraryIndex', () => {
       sourceCrs: 'NAD83 / UTM zone 19N (EPSG:26919)',
     };
     const index = migrateLibraryIndex({
-      maps: [{ id: 'm1', georeferences: [withCrs], activePages: [0] }],
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [withCrs], activePages: [0] }],
     });
     expect(index.maps[0]?.georeferences[0]?.sourceCrs).toBe('NAD83 / UTM zone 19N (EPSG:26919)');
   });
@@ -431,4 +538,130 @@ describe('migrateSettings', () => {
       expect(migrateSettings(junk, defaults)).toEqual(defaults);
     }
   });
+});
+
+describe('malformed nested library records', () => {
+  it('drops invalid georeferences while preserving valid map siblings', () => {
+    const index = migrateLibraryIndex({
+      maps: [
+        { id: 'mixed', fileUri: 'maps/mixed.pdf', georeferences: [null, {}, geoRef(0)] },
+        { id: 'legacy', fileUri: 'maps/legacy.pdf', georeference: null },
+      ],
+    });
+    expect(index.maps.map((m) => m.id)).toEqual(['mixed', 'legacy']);
+    expect(index.maps[0]?.georeferences).toEqual([geoRef(0)]);
+    expect(index.maps[1]?.georeferences).toEqual([]);
+  });
+
+  it.each([
+    { ...geoRef(0), pageIndex: -1 },
+    { ...geoRef(0), pageWidthPt: null },
+    { ...geoRef(0), viewport: null },
+    { ...geoRef(0), viewport: { ...geoRef(0).viewport, rect: null } },
+    { ...geoRef(0), viewport: { ...geoRef(0).viewport, corners: null } },
+    {
+      ...geoRef(0),
+      viewport: {
+        ...geoRef(0).viewport,
+        corners: { ...geoRef(0).viewport.corners, topLeft: null },
+      },
+    },
+    { ...geoRef(0), bbox: null },
+  ])('drops incomplete nested geometry while retaining a usable map', (bad) => {
+    const index = migrateLibraryIndex({
+      maps: [{ id: 'map', fileUri: 'maps/map.pdf', georeferences: [bad, geoRef(1)] }],
+    });
+    expect(index.maps[0]?.georeferences).toEqual([geoRef(1)]);
+    expect(index.maps[0]?.activePages).toEqual([1]);
+  });
+
+  it('drops records without usable file paths and prunes their active ids', () => {
+    const index = migrateLibraryIndex({
+      maps: [{ id: 'bad-map' }, { id: 'map', fileUri: 'maps/map.pdf' }],
+      tracks: [
+        { ...track('missing'), fileUri: undefined },
+        { ...track('bad'), fileUri: 42 },
+        track('good'),
+      ],
+      activeMapId: 'bad-map',
+      activeTrackIds: ['missing', 'bad', 'good'],
+    });
+    expect(index.maps.map((m) => m.id)).toEqual(['map']);
+    expect(index.tracks.map((t) => t.id)).toEqual(['good']);
+    expect(index.activeMapId).toBeNull();
+    expect(index.activeTrackIds).toEqual(['good']);
+  });
+
+  it('sanitizes non-array notes and invalid nested photo paths without losing trails', () => {
+    const note = { id: 'note', distanceM: 5, text: 'Saved', createdAt: 1 };
+    const index = migrateLibraryIndex({
+      tracks: [
+        { ...track('non-array'), notes: {} },
+        {
+          ...track('mixed'),
+          notes: [
+            null,
+            {},
+            { ...note, photoUri: 42 },
+            { ...note, id: 'photo', photoUri: 'photos/photo.jpg' },
+          ],
+        },
+      ],
+      waypoints: [
+        { id: 'w', latitude: 46, longitude: -71, label: 'W', createdAt: 1, photoUri: {} },
+      ],
+    });
+    expect(index.tracks.map((t) => t.id)).toEqual(['non-array', 'mixed']);
+    expect(index.tracks[0]?.notes).toEqual([]);
+    expect(index.tracks[1]?.notes).toEqual([
+      note,
+      { ...note, id: 'photo', photoUri: 'photos/photo.jpg' },
+    ]);
+    expect(index.waypoints[0]).not.toHaveProperty('photoUri');
+  });
+});
+
+it('retains known interrupted-page errors and keeps their pages off during normalization', () => {
+  const index = migrateLibraryIndex({
+    maps: [
+      {
+        id: 'm',
+        name: 'Map',
+        fileUri: 'maps/m.pdf',
+        pageCount: 3,
+        activePages: [0, 1, 2],
+        renderRecoveryErrors: [
+          { pageIndex: 1, reason: 'interrupted' },
+          { pageIndex: 1, reason: 'interrupted' },
+          { pageIndex: -1, reason: 'interrupted' },
+          { pageIndex: 4, reason: 'interrupted' },
+          { pageIndex: 2, reason: 'unknown' },
+          { pageIndex: '0', reason: 'interrupted' },
+          null,
+        ],
+      },
+    ],
+  });
+  expect(index.maps[0]?.renderRecoveryErrors).toEqual([{ pageIndex: 1, reason: 'interrupted' }]);
+  expect(index.maps[0]?.activePages).toEqual([0, 2]);
+  expect(migrateLibraryIndex(index)).toEqual(index);
+});
+
+it('bounds persisted render-failed messages and keeps their pages paused', () => {
+  const index = migrateLibraryIndex({
+    maps: [
+      {
+        id: 'm',
+        name: 'Map',
+        fileUri: 'maps/m.pdf',
+        pageCount: 1,
+        activePages: [0],
+        renderRecoveryErrors: [{ pageIndex: 0, reason: 'render-failed', message: 'x'.repeat(900) }],
+      },
+    ],
+  });
+  expect(index.maps[0]?.activePages).toEqual([]);
+  expect(index.maps[0]?.renderRecoveryErrors).toEqual([
+    { pageIndex: 0, reason: 'render-failed', message: 'x'.repeat(400) },
+  ]);
 });

@@ -1,10 +1,23 @@
+import { File } from 'expo-file-system';
+
 import {
+  adoptOverlayPng,
+  existingOverlayPng,
+  clearPdfDetailPngs,
+  deleteFileAt,
+  documentDirUri,
   downloadBytes,
+  fileExists,
   OfflineOnlyError,
   pickEvictions,
+  readFileText,
   readJson,
+  resolveDocumentPath,
   setNetworkAllowed,
+  toDocumentPath,
   writeJson,
+  writeOverlayPng,
+  writeTrackGpx,
   type CacheEntry,
 } from './storage';
 
@@ -20,7 +33,7 @@ jest.mock('expo-file-system', () => {
     parts.map((p) => (typeof p === 'string' ? p.replace(/^file:\/\//, '') : p.path)).join('/');
 
   class File {
-    readonly path: string;
+    path: string;
     static downloadFileAsync = jest.fn();
     constructor(...parts: MockPathLike[]) {
       this.path = joinPath(parts);
@@ -46,10 +59,33 @@ jest.mock('expo-file-system', () => {
     delete(): void {
       if (!files.delete(this.path)) throw new Error(`delete: ${this.path} does not exist`);
     }
-    write(data: string | Uint8Array): void {
-      files.set(this.path, { data, mtime: clock++ });
+    write(data: string | Uint8Array, options?: { encoding?: string }): void {
+      files.set(this.path, {
+        data:
+          options?.encoding === 'base64' && typeof data === 'string'
+            ? new Uint8Array(Buffer.from(data, 'base64'))
+            : data,
+        mtime: clock++,
+      });
+    }
+    open() {
+      const data = files.get(this.path)?.data;
+      const bytes = typeof data === 'string' ? new Uint8Array(Buffer.from(data)) : data;
+      if (!bytes) throw new Error('Missing file');
+      return {
+        offset: 0,
+        readBytes(length: number) {
+          const result = bytes.slice(this.offset, this.offset + length);
+          this.offset += result.length;
+          return result;
+        },
+        close() {},
+      };
     }
     async text(): Promise<string> {
+      return this.textSync();
+    }
+    textSync(): string {
       const entry = files.get(this.path);
       if (!entry || typeof entry.data !== 'string') throw new Error(`text: ${this.path}`);
       return entry.data;
@@ -59,14 +95,23 @@ jest.mock('expo-file-system', () => {
       if (!entry) throw new Error(`bytes: ${this.path} does not exist`);
       return typeof entry.data === 'string' ? new TextEncoder().encode(entry.data) : entry.data;
     }
-    copy(dest: File): void {
+    async copy(dest: File): Promise<void> {
+      await Promise.resolve();
+      this.copySync(dest);
+    }
+    copySync(dest: File): void {
       const entry = files.get(this.path);
       if (!entry) throw new Error(`copy: ${this.path} does not exist`);
       files.set(dest.path, { data: entry.data, mtime: clock++ });
     }
-    move(dest: File): void {
-      this.copy(dest);
+    async move(dest: File): Promise<void> {
+      await Promise.resolve();
+      this.moveSync(dest);
+    }
+    moveSync(dest: File): void {
+      this.copySync(dest);
       files.delete(this.path);
+      this.path = dest.path;
     }
   }
 
@@ -97,6 +142,7 @@ jest.mock('expo-file-system', () => {
     File,
     Directory,
     Paths: { document: '/doc', cache: '/cache' },
+    FileMode: { ReadOnly: 'r' },
     __reset: (): void => {
       files.clear();
       dirs.clear();
@@ -129,6 +175,7 @@ function serveDownload(bytes: number[]): void {
 }
 
 beforeEach(() => {
+  jest.restoreAllMocks();
   fsMock.__reset();
   setNetworkAllowed(true);
 });
@@ -144,6 +191,82 @@ describe('writeJson / readJson atomicity', () => {
     writeJson('library.json', { maps: ['a', 'b'] });
     expect(fsMock.__has('/doc/library.json.tmp')).toBe(false);
     await expect(readJson('library.json')).resolves.toEqual({ maps: ['a', 'b'] });
+  });
+
+  it('surfaces a promotion failure synchronously and retains the recoverable stage', async () => {
+    fsMock.__seed('/doc/library.json', '{"v":"old"}');
+    jest.spyOn(File.prototype, 'move').mockImplementation(() => new Promise(() => {}));
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('Move denied');
+    });
+    expect(() => writeJson('library.json', { v: 'new' })).toThrow('Move denied');
+    expect(fsMock.__has('/doc/library.json')).toBe(false);
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'new' });
+  });
+
+  it.each(['create', 'write'] as const)(
+    'preserves the sole staged index when a retry fails during %s after promotion failure',
+    async (operation) => {
+      fsMock.__seed('/doc/library.json', '{"v":"old"}');
+      jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+        throw new Error('Move denied');
+      });
+      expect(() => writeJson('library.json', { v: 'saved' })).toThrow('Move denied');
+      await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+      jest.spyOn(File.prototype, operation).mockImplementationOnce(() => {
+        throw new Error('ENOSPC');
+      });
+      expect(() => writeJson('library.json', { v: 'retry' })).toThrow();
+      await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+    },
+  );
+
+  it('preserves a valid stage behind a corrupt target when the next write fails', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"saved"}');
+    jest.spyOn(File.prototype, 'write').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() => writeJson('library.json', { v: 'retry' })).toThrow();
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+  });
+
+  it('retains the sole staged index if recovery promotion itself fails', async () => {
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"saved"}');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('Move denied');
+    });
+    expect(() => writeJson('library.json', { v: 'retry' })).toThrow('Move denied');
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'saved' });
+  });
+
+  it('waits for the forensic copy before completing corrupt-file recovery', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"recovered"}');
+    let finishCopy: () => void = () => {};
+    const copy = new Promise<void>((resolve) => {
+      finishCopy = resolve;
+    });
+    jest.spyOn(File.prototype, 'copy').mockReturnValueOnce(copy);
+    let completed = false;
+    const result = readJson('library.json').then((value) => {
+      completed = true;
+      return value;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    finishCopy();
+    await expect(result).resolves.toEqual({ v: 'recovered' });
+  });
+
+  it('recovers staged JSON when the asynchronous forensic copy fails', async () => {
+    fsMock.__seed('/doc/library.json', 'broken');
+    fsMock.__seed('/doc/library.json.tmp', '{"v":"recovered"}');
+    jest.spyOn(File.prototype, 'copy').mockRejectedValueOnce(new Error('Copy denied'));
+    await expect(readJson('library.json')).resolves.toEqual({ v: 'recovered' });
+    expect(fsMock.__read('/doc/library.json')).toBe('broken');
   });
 
   it('readJson recovers the staged .tmp when a crash interrupted the swap', async () => {
@@ -316,5 +439,216 @@ describe('downloadBytes', () => {
     serveDownload([9]);
     const bytes = await downloadBytes('https://tiles/6.bin', 'tile-6.bin');
     expect(Array.from(bytes)).toEqual([9]);
+  });
+});
+
+// --- #247: document-relative paths -----------------------------------------
+//
+// The mock's document directory is `/doc`, so `documentDirUri()` is
+// `file:///doc` — the stand-in for the container UUID iOS rotates on updates.
+
+describe('document-relative paths', () => {
+  const OLD_CONTAINER =
+    'file:///var/mobile/Containers/Data/Application/DEAD-BEEF-0000-1111/Documents';
+
+  it('documentDirUri reports the current document directory', () => {
+    expect(documentDirUri()).toBe('file:///doc');
+  });
+
+  it('resolveDocumentPath builds an absolute uri against the current directory', () => {
+    expect(resolveDocumentPath('tracks/a.gpx')).toBe('file:///doc/tracks/a.gpx');
+  });
+
+  it('resolveDocumentPath passes absolute input through untouched', () => {
+    // content:// intent uris, cache files and foreign paths must survive: read
+    // helpers resolve unconditionally, so this is the escape hatch.
+    expect(resolveDocumentPath('content://downloads/7')).toBe('content://downloads/7');
+    expect(resolveDocumentPath('file:///cache/overlays/x.png')).toBe(
+      'file:///cache/overlays/x.png',
+    );
+  });
+
+  it('toDocumentPath strips the current directory, and a rotated container', () => {
+    expect(toDocumentPath('file:///doc/tracks/a.gpx')).toBe('tracks/a.gpx');
+    expect(toDocumentPath(`${OLD_CONTAINER}/tracks/a.gpx`)).toBe('tracks/a.gpx');
+  });
+
+  it('toDocumentPath is idempotent and leaves foreign absolutes alone', () => {
+    expect(toDocumentPath('tracks/a.gpx')).toBe('tracks/a.gpx');
+    expect(toDocumentPath('file:///cache/overlays/x.png')).toBe('file:///cache/overlays/x.png');
+  });
+
+  it('round-trips: resolve(toDocumentPath(uri)) is the uri again', () => {
+    const uri = 'file:///doc/photos/p1.jpg';
+    expect(resolveDocumentPath(toDocumentPath(uri))).toBe(uri);
+  });
+
+  it('rehomes a path stranded by a rotated container onto the current one', () => {
+    // The whole point of #247: what 1.5.0 wrote, read back after the update.
+    expect(resolveDocumentPath(toDocumentPath(`${OLD_CONTAINER}/tracks/a.gpx`))).toBe(
+      'file:///doc/tracks/a.gpx',
+    );
+  });
+
+  it('readers and stats accept a relative path as readily as an absolute one', async () => {
+    const uri = writeTrackGpx('t1', '<gpx/>');
+    expect(uri).toBe('file:///doc/tracks/t1.gpx');
+
+    // Both forms name the same file — that is what lets every existing call
+    // site keep passing whatever it holds.
+    expect(fileExists('tracks/t1.gpx')).toBe(true);
+    expect(fileExists(uri)).toBe(true);
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx/>');
+    await expect(readFileText(uri)).resolves.toBe('<gpx/>');
+
+    deleteFileAt('tracks/t1.gpx');
+    expect(fileExists(uri)).toBe(false);
+  });
+
+  it('a reader given a path stranded under an old container still finds the file', async () => {
+    writeTrackGpx('t2', '<gpx>2</gpx>');
+    // deleteFileAt/readFileText do NOT relativise (they only resolve), so a
+    // stale absolute path is still a miss here — healing is the migration's
+    // job, on hydrate. Assert that boundary rather than pretend otherwise.
+    expect(fileExists(`${OLD_CONTAINER}/tracks/t2.gpx`)).toBe(false);
+    expect(fileExists(toDocumentPath(`${OLD_CONTAINER}/tracks/t2.gpx`))).toBe(true);
+  });
+});
+
+describe('GPX replacement durability', () => {
+  it.each(['create', 'write'] as const)(
+    'preserves the saved GPX when staging %s fails',
+    async (operation) => {
+      writeTrackGpx('t1', '<gpx>original</gpx>');
+      jest.spyOn(File.prototype, operation).mockImplementationOnce(() => {
+        throw new Error('ENOSPC');
+      });
+      expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow();
+      expect(fsMock.__read('/doc/tracks/t1.gpx')).toBe('<gpx>original</gpx>');
+      await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+    },
+  );
+
+  it('restores the saved GPX when promotion fails', async () => {
+    writeTrackGpx('t1', '<gpx>original</gpx>');
+    const move = File.prototype.moveSync;
+    jest.spyOn(File.prototype, 'moveSync').mockImplementation(function (
+      this: File,
+      destination,
+      options,
+    ) {
+      if (this.uri.endsWith('.tmp')) throw new Error('Move denied');
+      move.call(this, destination, options);
+    });
+    expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow('Move denied');
+    expect(fsMock.__read('/doc/tracks/t1.gpx')).toBe('<gpx>original</gpx>');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+  });
+
+  it('keeps the GPX readable if rollback fails and recovers it before retrying', async () => {
+    writeTrackGpx('t1', '<gpx>original</gpx>');
+    const move = File.prototype.moveSync;
+    jest.spyOn(File.prototype, 'moveSync').mockImplementation(function (
+      this: File,
+      destination,
+      options,
+    ) {
+      if (this.uri.endsWith('.tmp') || this.uri.endsWith('.bak')) throw new Error('Move denied');
+      move.call(this, destination, options);
+    });
+    expect(() => writeTrackGpx('t1', '<gpx>replacement</gpx>')).toThrow('Move denied');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>original</gpx>');
+    jest.restoreAllMocks();
+    expect(writeTrackGpx('t1', '<gpx>retry</gpx>')).toBe('file:///doc/tracks/t1.gpx');
+    await expect(readFileText('tracks/t1.gpx')).resolves.toBe('<gpx>retry</gpx>');
+    expect(fsMock.__has('/doc/tracks/t1.gpx.bak')).toBe(false);
+    expect(fsMock.__has('/doc/tracks/t1.gpx.tmp')).toBe(false);
+  });
+});
+
+it('finds an interrupted GPX backup and removes its recovery files on deletion', async () => {
+  fsMock.__seed('/doc/tracks/recovered.gpx.bak', '<gpx>saved</gpx>');
+  fsMock.__seed('/doc/tracks/recovered.gpx.tmp', '<partial');
+  expect(fileExists('tracks/recovered.gpx')).toBe(true);
+  await expect(readFileText('tracks/recovered.gpx')).resolves.toBe('<gpx>saved</gpx>');
+  deleteFileAt('tracks/recovered.gpx');
+  expect(fileExists('tracks/recovered.gpx')).toBe(false);
+  expect(fsMock.__has('/doc/tracks/recovered.gpx.tmp')).toBe(false);
+});
+
+const validPngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=';
+const validPng = new Uint8Array(Buffer.from(validPngBase64, 'base64'));
+
+describe('native overview ownership', () => {
+  it('moves the native PNG into the persistent overview name without reading its bytes', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-one.png', validPng);
+    const uri = adoptOverlayPng(
+      'sheet_revision_0_2048',
+      'file:///cache/overlays/pdf-detail-native-one.png',
+    );
+    expect(uri).toBe('file:///cache/overlays/sheet_revision_0_2048.png');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-one.png')).toBe(false);
+    expect(fsMock.__read('/cache/overlays/sheet_revision_0_2048.png')).toEqual(validPng);
+    clearPdfDetailPngs();
+    expect(existingOverlayPng('sheet_revision_0_2048')).toBe(uri);
+  });
+
+  it('keeps the completed immutable overview and discards a redundant native output', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    fsMock.__seed('/cache/overlays/pdf-detail-native-duplicate.png', 'DUPLICATE');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/pdf-detail-native-duplicate.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-duplicate.png')).toBe(false);
+  });
+
+  it('does not delete an output already stored at its final name', () => {
+    fsMock.__seed('/cache/overlays/same.png', 'SAVED');
+    expect(adoptOverlayPng('same', 'file:///cache/overlays/same.png')).toBe(
+      'file:///cache/overlays/same.png',
+    );
+    expect(fsMock.__read('/cache/overlays/same.png')).toBe('SAVED');
+  });
+
+  it('cleans the unowned native PNG when promotion fails', () => {
+    fsMock.__seed('/cache/overlays/pdf-detail-native-failed.png', 'PNG');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() =>
+      adoptOverlayPng('failed', 'file:///cache/overlays/pdf-detail-native-failed.png'),
+    ).toThrow('Not enough free space');
+    expect(fsMock.__has('/cache/overlays/pdf-detail-native-failed.png')).toBe(false);
+    expect(existingOverlayPng('failed')).toBeNull();
+  });
+});
+
+describe('overview cache interrupted writes', () => {
+  it.each(['create', 'write'] as const)('keeps completed PNG when staging %s fails', (method) => {
+    fsMock.__seed('/cache/overlays/atomic.png', validPng);
+    jest.spyOn(File.prototype, method).mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() => writeOverlayPng('atomic', validPngBase64)).toThrow();
+    expect(fsMock.__read('/cache/overlays/atomic.png')).toEqual(validPng);
+    expect(fsMock.__has('/cache/overlays/atomic.png.tmp')).toBe(false);
+  });
+  it('publishes a complete PNG only after staging succeeds', () => {
+    const uri = writeOverlayPng('new-complete', validPngBase64);
+    expect(existingOverlayPng('new-complete')).toBe(uri);
+    expect(fsMock.__read('/cache/overlays/new-complete.png')).toEqual(validPng);
+    expect(fsMock.__has('/cache/overlays/new-complete.png.tmp')).toBe(false);
+  });
+  it.each([
+    new Uint8Array(),
+    validPng.slice(0, 33),
+    validPng.slice(0, -1),
+    new Uint8Array(validPng.length),
+  ])('evicts incomplete PNG cache entries', (bytes) => {
+    fsMock.__seed('/cache/overlays/broken.png', bytes);
+    expect(existingOverlayPng('broken')).toBeNull();
+    expect(fsMock.__has('/cache/overlays/broken.png')).toBe(false);
   });
 });

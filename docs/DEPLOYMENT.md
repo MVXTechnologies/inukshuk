@@ -66,7 +66,7 @@ ready-made listing copy in `store/appstore/` and the screenshot sets in
 4. Add the JSON contents as the GitHub secret **`GOOGLE_SERVICE_ACCOUNT_JSON`**.
 5. The first upload to a new Play app must be done manually once (Google
    requires the initial APK/AAB through the console); subsequent submissions go
-   through `eas submit` to the `internal` track (configured in `eas.json`).
+   through `eas submit` to the `production` track (configured in `eas.json`).
 
 EAS manages the Android upload keystore for you.
 
@@ -93,6 +93,11 @@ then `xcodebuild` or a run from Xcode) needs more than Xcode alone (#130):
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` before building;
   the CLT-only toolchain cannot build iOS apps.
 
+EAS iOS builds run `scripts/eas-pre-install.sh` before dependency installation.
+The hook installs CMake with Homebrew only when it is missing, then verifies
+that it is on the worker PATH. This supplies the same Lighttpd build dependency
+required locally; the Android hook is a no-op.
+
 ## Releasing
 
 Once the secrets above exist, a release is just a tag:
@@ -106,7 +111,8 @@ git push --follow-tags
 
 1. builds production binaries on EAS for both platforms, and
 2. auto-submits them — iOS to TestFlight/App Store review, Android to the
-   Play `internal` track (as a `draft` you promote in the console).
+   Play `production` track with `releaseStatus: completed`. This is a public
+   release, subject to Google Play review; it is not an internal draft.
 
 You can also trigger it manually from the Actions tab (choose `ios`, `android`,
 or `all`).

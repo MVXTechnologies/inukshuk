@@ -1,4 +1,5 @@
 import type { ArchivePlan } from '@core/export/archivePlan';
+import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import * as storage from '@data/storage';
 import * as Sharing from 'expo-sharing';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -10,6 +11,9 @@ jest.mock('expo-sharing', () => ({
 }));
 
 jest.mock('@data/storage', () => ({
+  ...jest
+    .requireActual<typeof import('@data/storageTestMock')>('@data/storageTestMock')
+    .documentPathMocks(),
   createCacheFileWriter: jest.fn(),
   readIndexText: jest.fn(),
   fileExists: jest.fn(),
@@ -118,13 +122,40 @@ describe('exportAllData', () => {
     mocked.fileExists.mockImplementation((uri: string) => uri.endsWith('.gpx'));
 
     const ready = jest.fn();
-    const result = await exportAllData(plan, { schemaVersion: 2 }, { onReady: ready });
+    // The in-memory snapshot holds ABSOLUTE uris; the archived index must not
+    // (#247) — a backup naming a container UUID that no longer exists restores
+    // to nothing. The fallback goes through the same migration as a persist.
+    const snapshot = {
+      schemaVersion: 5,
+      maps: [],
+      tracks: [
+        {
+          id: 't1',
+          name: 'Hike',
+          startedAt: 1,
+          stats: { pointCount: 1 },
+          fileUri: 'file:///doc/tracks/t1.gpx',
+        },
+      ],
+      folders: [],
+      waypoints: [],
+      customCategories: [],
+      activeMapId: null,
+      activeTrackIds: [],
+    };
+    const result = await exportAllData(plan, snapshot, { onReady: ready });
 
     expect(result).toEqual({ kind: 'shared' });
     expect(ready).toHaveBeenCalledWith(2, 2048); // library.json + the surviving gpx
     const unzipped = unzipSync(bytesOf(chunks));
     expect(Object.keys(unzipped).sort()).toEqual(['Alps/hike.gpx', 'library.json']);
-    expect(strFromU8(unzipped['library.json']!)).toBe('{"schemaVersion":2}');
+
+    const archived = JSON.parse(strFromU8(unzipped['library.json']!)) as {
+      schemaVersion: number;
+      tracks: { fileUri: string }[];
+    };
+    expect(archived.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(archived.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
   });
 
   it('reports unavailable sharing without staging an archive', async () => {

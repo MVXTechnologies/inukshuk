@@ -14,6 +14,7 @@ import { Badge, Icon, IconButton, Text, useTheme } from 'react-native-paper';
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function MonthCalendar({
+  todayMs,
   year,
   month,
   entries,
@@ -24,6 +25,7 @@ export function MonthCalendar({
   canNext,
   onDayPress,
 }: {
+  todayMs: number;
   year: number;
   /** 0-based month. */
   month: number;
@@ -38,7 +40,7 @@ export function MonthCalendar({
   const theme = useTheme();
   const byDay = useMemo(() => new Map(entries.map((e) => [e.day, e])), [entries]);
 
-  const today = new Date();
+  const today = new Date(todayMs);
   const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   // Monday-first column of the 1st: getDay() 0=Sun → column 6.

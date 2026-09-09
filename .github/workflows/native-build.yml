@@ -13,6 +13,7 @@ on:
       - 'src/**'
       - 'app/**'
       - 'assets/**'
+      - 'plugins/**'
       - '.github/workflows/native-build.yml'
   workflow_dispatch:
   schedule:
@@ -45,10 +46,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
+
+      - name: Verify native PDF geometry and private paths
+        run: sh modules/inukshuk-pdf/scripts/test-geometry.sh
 
       - uses: android-actions/setup-android@v4
 
@@ -110,6 +114,9 @@ jobs:
           path: ~/Library/Caches/CocoaPods
           key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: pods-${{ runner.os }}-
+
+      - name: Verify iOS PDF paint and JPEG guards
+        run: sh modules/inukshuk-pdf/ios/Tests/run.sh
 
       - name: Prebuild native iOS project
         run: npx expo prebuild --platform ios --no-install

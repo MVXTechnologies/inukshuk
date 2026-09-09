@@ -8,6 +8,9 @@ export interface TrackPoint {
   altitude?: number;
   /** Epoch milliseconds of the fix. */
   time: number;
+  /** GPX timestamp presence; false marks missing/invalid time despite its 0 placeholder.
+   * Absent on native/synthetic fixes, whose finite time (including 0) is valid. */
+  hasTime?: boolean;
   /** Horizontal accuracy radius in metres, if available. */
   accuracy?: number;
   /** Vertical accuracy in metres, if available. */
@@ -26,11 +29,11 @@ export interface TrackStats {
   ascentM: number;
   /** Cumulative elevation loss, "D-", in metres (positive number). */
   descentM: number;
-  /** Wall-clock duration from first to last point, in seconds. */
+  /** Wall-clock duration between first and last timed fixes, in seconds. */
   durationS: number;
   /** Duration excluding stationary periods, in seconds. */
   movingTimeS: number;
-  /** Average moving speed (distance / movingTime) in m/s. */
+  /** Average speed over timed moving segments, in m/s. */
   avgSpeedMps: number;
   /** Peak smoothed speed in m/s. */
   maxSpeedMps: number;

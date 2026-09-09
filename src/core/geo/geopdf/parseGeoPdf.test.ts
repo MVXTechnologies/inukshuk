@@ -115,6 +115,67 @@ describe('parseGeoPdf — Adobe VP/Measure GEO', () => {
     expect(g.viewport.corners.bottomRight[1]).toBeCloseTo(45, 6);
   });
 
+  // Real files list their points in whatever order the producer chose, and
+  // the parser used to ignore /LPTS and assume the ISO default order — so a
+  // Sépaq/Avenza sheet whose LPTS starts at the upper-left drew vertically
+  // flipped, and a UTM sheet going lower-left, lower-RIGHT, upper-right,
+  // upper-left (with a 10 % inset) drew transposed. Same terrain, three
+  // different rotations on the map (#269). Both orders must come out north-up.
+  it("pairs GPTS with the file's own /LPTS order (upper-left first)", () => {
+    // LPTS: UL, LL, LR, UR — the order the 52 MB EcoLL1.pdf sheet uses.
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /VP [ ' +
+      '<< /Type /Viewport /BBox [0 0 200 100] ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/LPTS [0 1 0 0 1 0 1 1] ' +
+      '/GPTS [46 -75 45 -75 45 -74 46 -74] ' +
+      '/GCS << /Type /GEOGCS /EPSG 4326 >> ' +
+      '>> >> ] >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.viewport.corners.topLeft[0]).toBeCloseTo(-75, 6);
+    expect(g.viewport.corners.topLeft[1]).toBeCloseTo(46, 6);
+    expect(g.viewport.corners.topRight[1]).toBeCloseTo(46, 6);
+    expect(g.viewport.corners.bottomRight[0]).toBeCloseTo(-74, 6);
+    expect(g.viewport.corners.bottomRight[1]).toBeCloseTo(45, 6);
+    expect(g.viewport.corners.bottomLeft[1]).toBeCloseTo(45, 6);
+  });
+
+  it('pairs GPTS with an inset, clockwise-from-lower-left /LPTS', () => {
+    // LPTS: LL, LR, UR, UL at 0.1..0.9 — the 216 MB NORD UTM sheet's order.
+    // The corners of the FULL unit square are extrapolated from the inset
+    // points, so the sheet spans lon -75..-74 and lat 45..46 exactly.
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /VP [ ' +
+      '<< /Type /Viewport /BBox [0 0 200 100] ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/LPTS [0.1 0.1 0.9 0.1 0.9 0.9 0.1 0.9] ' +
+      '/GPTS [45.1 -74.9 45.1 -74.1 45.9 -74.1 45.9 -74.9] ' +
+      '/GCS << /Type /GEOGCS /EPSG 4326 >> ' +
+      '>> >> ] >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.viewport.corners.topLeft[0]).toBeCloseTo(-75, 6);
+    expect(g.viewport.corners.topLeft[1]).toBeCloseTo(46, 6);
+    expect(g.viewport.corners.topRight[0]).toBeCloseTo(-74, 6);
+    expect(g.viewport.corners.topRight[1]).toBeCloseTo(46, 6);
+    expect(g.viewport.corners.bottomRight[1]).toBeCloseTo(45, 6);
+    expect(g.viewport.corners.bottomLeft[0]).toBeCloseTo(-75, 6);
+  });
+
+  it('ignores /BOUNDS for pairing: it is a clip polygon, not the LPTS', () => {
+    // A BOUNDS in a different order than the (default) LPTS must not flip the map.
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /VP [ ' +
+      '<< /Type /Viewport /BBox [0 0 200 100] ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/BOUNDS [0 1 0 0 1 0 1 1] ' +
+      '/GPTS [45 -75 46 -75 46 -74 45 -74] ' +
+      '/GCS << /Type /GEOGCS /EPSG 4326 >> ' +
+      '>> >> ] >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.viewport.corners.topLeft[1]).toBeCloseTo(46, 6);
+    expect(g.viewport.corners.bottomLeft[1]).toBeCloseTo(45, 6);
+  });
+
   it('treats GPTS as geographic even when /GCS names a projected EPSG (regression)', () => {
     // Real GeoPDFs (e.g. Canadian topo sheets) declare a projected /GCS such as
     // UTM 19N (EPSG:32619) but per ISO 32000-2 the GPTS values are STILL

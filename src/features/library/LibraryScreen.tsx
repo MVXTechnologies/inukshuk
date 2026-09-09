@@ -1,8 +1,6 @@
-import { parseGpx } from '@core/geo/gpx';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import type { TrackPoint, TrackSummary, Waypoint } from '@core/models';
+import type { TrackSummary, Waypoint } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
-import * as storage from '@data/storage';
 import {
   formatDistance,
   formatDuration,
@@ -14,11 +12,12 @@ import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
@@ -48,6 +47,11 @@ import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { georeferenceNotice } from '@core/library/overlayPages';
+import {
+  overlayDetailStatusKey,
+  overlayStatusKey,
+  renderStatusLine,
+} from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -61,6 +65,7 @@ import { DragGhost } from './DragGhost';
 import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
+import { useTrackElevationPreview } from './useTrackElevationPreview';
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
@@ -103,6 +108,9 @@ export function LibraryScreen() {
   const renameMap = useLibraryStore((s) => s.renameMap);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
+  const retryMapPage = useLibraryStore((s) => s.retryMapPage);
+  // Per-page render outcome from the map's overlay pipeline (#269).
+  const overlayStatuses = useOverlayStatusStore((s) => s.statuses);
   const addTrack = useLibraryStore((s) => s.addTrack);
   const addTracks = useLibraryStore((s) => s.addTracks);
   const removeTrack = useLibraryStore((s) => s.removeTrack);
@@ -126,7 +134,18 @@ export function LibraryScreen() {
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
   const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
   const [expandedMap, setExpandedMap] = useState<string | null>(null);
-  const [trackPoints, setTrackPoints] = useState<Record<string, TrackPoint[]>>({});
+  const onElevationError = useCallback(
+    (error: Error) => {
+      reportError(error, 'track-elevation-load');
+      showSnack('Could not load elevation');
+      setExpandedTrack(null);
+    },
+    [showSnack],
+  );
+  const elevationPreview = useTrackElevationPreview(
+    tracks.find((track) => track.id === expandedTrack),
+    onElevationError,
+  );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
@@ -369,23 +388,8 @@ export function LibraryScreen() {
     else removeFolder(id);
   };
 
-  const toggleElevation = async (id: string, fileUri: string) => {
-    if (expandedTrack === id) {
-      setExpandedTrack(null);
-      return;
-    }
-    setExpandedTrack(id);
-    if (!trackPoints[id]) {
-      try {
-        const gpx = await storage.readFileText(fileUri);
-        const { points } = parseGpx(gpx);
-        setTrackPoints((cache) => ({ ...cache, [id]: points }));
-      } catch (err) {
-        reportError(err, 'track-elevation-load');
-        showSnack('Could not load elevation');
-        setExpandedTrack(null);
-      }
-    }
+  const toggleElevation = (id: string) => {
+    setExpandedTrack((current) => (current === id ? null : id));
   };
 
   const toggleTrackSelected = (id: string) => {
@@ -534,6 +538,17 @@ export function LibraryScreen() {
     // "1 page(s) · 1/1 shown" over a sheet the overlay silently skips is the
     // exact lie this replaces.
     const notice = georeferenceNotice(m);
+    // "Rendering page N…" / "Couldn't render page N: <reason>" — so a page
+    // that never appears on the map always says why, here, not only in a
+    // four-second snackbar on the map screen (#269).
+    const renderStatus = renderStatusLine(m, overlayStatuses);
+    const rendering = m.activePages.some((page) => {
+      const key = overlayStatusKey(m.id, page);
+      return (
+        overlayStatuses[key]?.phase === 'rendering' ||
+        overlayStatuses[overlayDetailStatusKey(key)]?.phase === 'rendering'
+      );
+    });
     const active = m.activePages.length;
     const expanded = expandedMap === m.id;
     return (
@@ -545,7 +560,15 @@ export function LibraryScreen() {
             onPress={() => openMap(m.id)}
             accessibilityLabel={`${m.name} — view on map`}
           >
-            <Icon source="map" size={22} color={theme.colors.onSurfaceVariant} />
+            {rendering ? (
+              <ActivityIndicator
+                size={22}
+                color={theme.colors.primary}
+                accessibilityLabel={`Rendering ${m.name}`}
+              />
+            ) : (
+              <Icon source="map" size={22} color={theme.colors.onSurfaceVariant} />
+            )}
             <View style={styles.mapTitleCol}>
               <Text variant="titleSmall" numberOfLines={1}>
                 {m.name}
@@ -562,6 +585,20 @@ export function LibraryScreen() {
                 {notice ??
                   `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`}
               </Text>
+              {renderStatus && (
+                <Text
+                  variant="bodySmall"
+                  numberOfLines={2}
+                  style={{
+                    color:
+                      renderStatus.kind === 'failed'
+                        ? theme.colors.error
+                        : theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {renderStatus.text}
+                </Text>
+              )}
             </View>
           </Pressable>
           {hasPages && (
@@ -574,6 +611,28 @@ export function LibraryScreen() {
           )}
           {itemMenu('map', m.id, m.name, m.folderId)}
         </View>
+        {m.renderRecoveryErrors?.map((error) => (
+          <Card.Content key={`recovery-${error.pageIndex}`}>
+            <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+              {error.reason === 'interrupted'
+                ? `Page ${error.pageIndex + 1}: Rendering was interrupted. This page was turned off to keep other maps available.`
+                : `Page ${error.pageIndex + 1}: ${error.message} This page was turned off to keep other maps available.`}
+            </Text>
+            <Button
+              accessibilityLabel={`Retry page ${error.pageIndex + 1} of ${m.name}`}
+              onPress={() => {
+                try {
+                  retryMapPage(m.id, error.pageIndex);
+                } catch (failure) {
+                  reportError(failure, 'pdf-page-retry');
+                  showSnack('Could not save the retry. The page remains turned off.');
+                }
+              }}
+            >
+              Retry
+            </Button>
+          </Card.Content>
+        ))}
         {hasPages && expanded && (
           <Card.Content>
             <Text variant="labelMedium" style={styles.overlayLabel}>
@@ -796,15 +855,15 @@ export function LibraryScreen() {
             icon={expandedTrack === t.id ? 'chevron-up' : 'chart-areaspline'}
             size={22}
             style={styles.trackAction}
-            onPress={() => toggleElevation(t.id, t.fileUri)}
+            onPress={() => toggleElevation(t.id)}
             accessibilityLabel="Elevation profile"
           />
           {trackMenu(t)}
         </View>
         {expandedTrack === t.id &&
-          (trackPoints[t.id] ? (
+          (elevationPreview?.points ? (
             <ElevationProfile
-              points={trackPoints[t.id]!}
+              points={elevationPreview.points}
               ascentM={t.stats.ascentM}
               descentM={t.stats.descentM}
             />

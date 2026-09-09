@@ -152,16 +152,19 @@ const extractHeartRate = (raw: AnyRecord): number | undefined => {
 const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
-  if (lat === undefined || lon === undefined) return undefined;
+  if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return undefined;
+  }
   const altitude = toNum(textOf(raw['ele']));
   const time = isoToEpochMs(textOf(raw['time']));
   const speed = extractSpeed(raw);
   const point: TrackPoint = {
     latitude: lat,
     longitude: lon,
-    // GPX has no time on every fix; default to 0 so downstream ordering is
-    // stable but callers can detect "no time" via metadata if needed.
+    // Keep the numeric field compatible with recorded fixes while explicitly
+    // distinguishing missing GPX time from a valid Unix epoch timestamp.
     time: time ?? 0,
+    hasTime: time !== undefined,
   };
   if (altitude !== undefined) point.altitude = altitude;
   if (speed !== undefined && speed >= 0) point.speed = speed;
@@ -173,7 +176,9 @@ const parsePoint = (raw: AnyRecord): TrackPoint | undefined => {
 const parseWaypoint = (raw: AnyRecord): GpxWaypoint | undefined => {
   const lat = toNum(raw[`${ATTR_PREFIX}lat`]);
   const lon = toNum(raw[`${ATTR_PREFIX}lon`]);
-  if (lat === undefined || lon === undefined) return undefined;
+  if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return undefined;
+  }
   const wpt: GpxWaypoint = { latitude: lat, longitude: lon };
   const name = textOf(raw['name']);
   if (name !== undefined) wpt.name = name;
@@ -294,7 +299,7 @@ export function buildGpx(args: {
     if (p.altitude !== undefined && Number.isFinite(p.altitude)) {
       node['ele'] = round(p.altitude, 2);
     }
-    if (p.time !== undefined && Number.isFinite(p.time) && p.time > 0) {
+    if (p.hasTime !== false && Number.isFinite(p.time) && (p.time > 0 || p.hasTime === true)) {
       node['time'] = epochMsToIso(p.time);
     }
     if (p.speed !== undefined && Number.isFinite(p.speed) && p.speed >= 0) {

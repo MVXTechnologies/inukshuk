@@ -1,3 +1,5 @@
+import { cellAt } from './grid';
+import { traceCells } from './trace';
 import { buildHeatIndex, hotCountAt, trailsNear } from './heatIndex';
 
 const input = (id: string, categoryId: string, keys: string[]) => ({
@@ -42,4 +44,16 @@ describe('heat index', () => {
     const index = buildHeatIndex([input('a', 'run', ['1,1', '1,2'])]);
     expect(trailsNear(index, { row: 1, col: 1 }).hot).toBe(false);
   });
+});
+
+it('finds same-category trails a few metres apart across the dateline', () => {
+  const index = buildHeatIndex(
+    [179.99999, -179.99999].map((longitude, i) => ({
+      id: String(i),
+      categoryId: 'run',
+      dilated: traceCells([{ longitude, latitude: 0 }]).dilated,
+    })),
+  );
+  expect(trailsNear(index, cellAt(179.99999, 0))).toEqual({ trackIds: ['0', '1'], hot: true });
+  expect(trailsNear(index, cellAt(-179.99999, 0))).toEqual({ trackIds: ['0', '1'], hot: true });
 });

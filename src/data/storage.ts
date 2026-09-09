@@ -2,6 +2,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
 
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
+import { joinDocumentPath, toDocumentRelativePath } from '@core/storage/documentPaths';
 import { singleFlight } from '@core/storage/singleFlight';
 
 /**
@@ -27,6 +28,42 @@ function tracksDir(): Directory {
 }
 function photosDir(): Directory {
   return new Directory(Paths.document, PHOTOS_DIR);
+}
+
+// ---- document-relative paths (#247) ----------------------------------------
+//
+// iOS rotates the app data-container UUID on app updates, so an absolute
+// `file:///…/Application/<UUID>/Documents/tracks/x.gpx` written by the
+// previous build points at nothing after the user updates — while the file
+// itself was carried over intact. Nothing may be *persisted* in absolute form:
+// `library.json` and the recorder checkpoint store `tracks/<id>.gpx`, and the
+// absolute uri is rebuilt here, against the CURRENT container, at read time.
+//
+// These two functions are the only bridge between the two forms. Everything in
+// this module that takes a path resolves through {@link resolveDocumentPath}
+// first, so both forms work at every call site.
+
+/** The app document directory as a `file://` uri. */
+export function documentDirUri(): string {
+  return new Directory(Paths.document).uri;
+}
+
+/**
+ * Rebuild the absolute uri for a stored path against the current document
+ * directory. Absolute input (a `content://` intent uri, a cache file, a path
+ * outside the document directory) passes through untouched — so this is safe
+ * to call unconditionally on anything that might be either form.
+ */
+export function resolveDocumentPath(pathOrUri: string): string {
+  return joinDocumentPath(documentDirUri(), pathOrUri);
+}
+
+/**
+ * The inverse: reduce a uri to its document-relative form for persistence.
+ * Idempotent, and a no-op on a path that is not under a document directory.
+ */
+export function toDocumentPath(pathOrUri: string): string {
+  return toDocumentRelativePath(pathOrUri, documentDirUri());
 }
 
 /** Create the storage directories if they do not exist. Safe to call repeatedly. */
@@ -74,7 +111,7 @@ function guardWrite<T>(fn: () => T): T {
  */
 export async function importPdf(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(mapsDir(), `${id}.pdf`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -87,7 +124,7 @@ export async function importPdf(sourceUri: string, id: string): Promise<string> 
  */
 export async function importGpx(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(tracksDir(), `${id}.gpx`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -95,7 +132,7 @@ export async function importGpx(sourceUri: string, id: string): Promise<string> 
 }
 
 export async function readFileBase64(uri: string): Promise<string> {
-  return new File(uri).base64();
+  return new File(resolveDocumentPath(uri)).base64();
 }
 
 /**
@@ -106,7 +143,7 @@ export async function readFileBase64(uri: string): Promise<string> {
 export async function importPhoto(sourceUri: string, id: string): Promise<string> {
   ensureStorage();
   const ext = sourceUri.split('?')[0]?.match(/\.(jpe?g|png|heic|webp)$/i)?.[0] ?? '.jpg';
-  const source = new File(sourceUri);
+  const source = new File(resolveDocumentPath(sourceUri));
   const dest = new File(photosDir(), `${id}${ext.toLowerCase()}`);
   if (dest.exists) dest.delete();
   await source.copy(dest);
@@ -115,6 +152,21 @@ export async function importPhoto(sourceUri: string, id: string): Promise<string
 
 function overlaysDir(): Directory {
   return new Directory(Paths.cache, 'overlays');
+}
+
+/** Detail rasters are a bounded session cache; discard leftovers after a crash. */
+export function clearPdfDetailPngs(): void {
+  const dir = overlaysDir();
+  if (!dir.exists) return;
+  for (const entry of dir.list()) {
+    if (entry instanceof File && entry.name.startsWith('pdf-detail-')) {
+      try {
+        entry.delete();
+      } catch {
+        /* OS cache reclamation is best effort. */
+      }
+    }
+  }
 }
 
 /**
@@ -129,10 +181,79 @@ export function writeOverlayPng(id: string, base64Png: string): string {
   const dir = overlaysDir();
   if (!dir.exists) dir.create({ intermediates: true });
   const file = new File(dir, `${id}.png`);
-  if (file.exists) file.delete();
-  file.create();
-  guardWrite(() => file.write(base64Png, { encoding: 'base64' }));
+  const stagedUri = new File(dir, `${id}.png.tmp`).uri;
+  try {
+    guardWrite(() => {
+      const staged = new File(stagedUri);
+      if (staged.exists) staged.delete();
+      staged.create();
+      staged.write(base64Png, { encoding: 'base64' });
+      staged.moveSync(file, { overwrite: true });
+    });
+  } finally {
+    discardFile(new File(stagedUri));
+  }
   return file.uri;
+}
+
+/** Take ownership of a native PNG without bringing its bytes across the JS bridge. */
+export function adoptOverlayPng(id: string, sourceUri: string): string {
+  const source = new File(sourceUri);
+  try {
+    return guardWrite(() => {
+      const dir = overlaysDir();
+      if (!dir.exists) dir.create({ intermediates: true });
+      const destination = new File(dir, `${id}.png`);
+      if (source.uri === destination.uri) return destination.uri;
+      // A revision names immutable pixels. Keep an existing completed overview.
+      if (!destination.exists) source.moveSync(destination);
+      return destination.uri;
+    });
+  } finally {
+    // moveSync changes source.uri; only the original temporary path is unowned.
+    const original = new File(sourceUri);
+    if (original.uri !== new File(overlaysDir(), `${id}.png`).uri) discardFile(original);
+  }
+}
+
+/**
+ * The `file://` uri of a PNG {@link writeOverlayPng} wrote earlier under
+ * `id`, or `null` when it is gone (never written, or the OS reclaimed the
+ * cache). This is what makes a relaunch instant for an already-rendered map
+ * (#269): the in-memory raster cache dies with the process, the file does not.
+ */
+export function existingOverlayPng(id: string): string | null {
+  const file = new File(overlaysDir(), `${id}.png`);
+  if (!file.exists) return null;
+  if (hasCompletePngEnvelope(file)) return file.uri;
+  discardFile(file);
+  return null;
+}
+
+/** Detect interrupted/empty cache writes without reading image pixels into JS. */
+function hasCompletePngEnvelope(file: File): boolean {
+  try {
+    const size = file.size;
+    if (size < 57) return false;
+    const handle = file.open(FileMode.ReadOnly);
+    try {
+      const header = handle.readBytes(33);
+      const signature = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82];
+      if (header.length !== 33 || !signature.every((value, i) => header[i] === value)) {
+        return false;
+      }
+      const dimensions = new DataView(header.buffer, header.byteOffset, header.byteLength);
+      if (dimensions.getUint32(16) === 0 || dimensions.getUint32(20) === 0) return false;
+      handle.offset = size - 12;
+      const end = handle.readBytes(12);
+      const iend = [0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
+      return end.length === 12 && iend.every((value, i) => end[i] === value);
+    } finally {
+      handle.close();
+    }
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -179,7 +300,7 @@ export function writeChartPng(id: string, bytes: Uint8Array): string {
 }
 
 export async function readFileBytes(uri: string): Promise<Uint8Array> {
-  return new File(uri).bytes();
+  return readableFile(uri).bytes();
 }
 
 /** Thrown by {@link downloadBytes} when offline-only mode is on and the file is not cached. */
@@ -384,7 +505,7 @@ export async function downloadToCacheUri(
  *   return LegacyFS.readAsStringAsync(uri);
  */
 export async function readFileText(uri: string): Promise<string> {
-  return new File(uri).text();
+  return readableFile(uri).text();
 }
 
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
@@ -397,23 +518,72 @@ export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
   return file.uri;
 }
 
-/** Write a GPX (or any text) document and return its uri. */
+/** Best-effort cleanup after a replacement has committed or failed. */
+function discardFile(file: File): void {
+  try {
+    if (file.exists) file.delete();
+  } catch {
+    // Keep the complete data; a leftover staging/backup file is recoverable.
+  }
+}
+
+/** Write a GPX without discarding the saved version before promotion succeeds. */
 export function writeTrackGpx(id: string, gpx: string): string {
-  ensureStorage();
   const file = new File(tracksDir(), `${id}.gpx`);
-  if (file.exists) file.delete();
-  file.create();
-  guardWrite(() => file.write(gpx));
-  return file.uri;
+  const staged = new File(tracksDir(), `${id}.gpx.tmp`);
+  const backupUri = `${file.uri}.bak`;
+  const targetUri = file.uri;
+  guardWrite(() => {
+    try {
+      ensureStorage();
+      const backup = new File(backupUri);
+      if (!file.exists && backup.exists) backup.moveSync(file);
+      if (staged.exists) staged.delete();
+      staged.create();
+      staged.write(gpx);
+      const saved = new File(backupUri);
+      if (saved.exists) saved.delete();
+      if (file.exists) file.moveSync(saved);
+      staged.moveSync(new File(targetUri));
+    } catch (error) {
+      try {
+        const target = new File(targetUri);
+        const saved = new File(backupUri);
+        if (!target.exists && saved.exists) saved.moveSync(target);
+      } catch {
+        // Readers can use the saved GPX if rollback itself fails.
+      }
+      throw error;
+    } finally {
+      // Native moveSync updates its source URI, so use a fresh stage reference.
+      discardFile(new File(`${targetUri}.tmp`));
+    }
+  });
+  discardFile(new File(backupUri));
+  return targetUri;
+}
+
+/** Recover interrupted GPX replacements without changing their persisted path. */
+function readableFile(uri: string): File {
+  const file = new File(resolveDocumentPath(uri));
+  if (!file.exists && file.uri.endsWith('.gpx')) {
+    const backup = new File(`${file.uri}.bak`);
+    if (backup.exists) return backup;
+  }
+  return file;
 }
 
 export function deleteFileAt(uri: string): void {
-  const file = new File(uri);
+  const file = new File(resolveDocumentPath(uri));
   if (file.exists) file.delete();
+  if (file.uri.endsWith('.gpx')) {
+    discardFile(new File(`${file.uri}.bak`));
+    discardFile(new File(`${file.uri}.tmp`));
+  }
 }
 
 export function fileExists(uri: string): boolean {
-  return new File(uri).exists;
+  return readableFile(uri).exists;
 }
 
 /**
@@ -433,7 +603,7 @@ export async function readJson<T>(name: string): Promise<T | null> {
       try {
         const evidence = new File(Paths.document, `${name}.corrupt`);
         if (evidence.exists) evidence.delete();
-        file.copy(evidence);
+        await file.copy(evidence);
       } catch {
         /* best-effort forensics only */
       }
@@ -450,21 +620,38 @@ export async function readJson<T>(name: string): Promise<T | null> {
   return null;
 }
 
+/** Whether an interrupted JSON write contains a complete, readable payload. */
+function hasReadableJson(file: File): boolean {
+  if (!file.exists) return false;
+  try {
+    JSON.parse(file.textSync());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Write a JSON document atomically: stage the full payload in `<name>.tmp`,
- * then swap it into place. A kill mid-write can no longer truncate the target
- * (the previous version survives, or the completed staging file is recovered
- * by {@link readJson}) — this index is rewritten on every library mutation, so
- * torn writes were a real data-loss path.
+ * Stage a complete JSON payload, then synchronously promote it to the target.
+ * A failed promotion leaves the completed stage available to {@link readJson}.
+ * Recover that sole valid stage before reusing its name on a later write, so
+ * a second failure cannot destroy the only remaining readable index.
+ * This is recoverable staging, not a filesystem transaction.
  */
 export function writeJson(name: string, value: unknown): void {
-  const staged = new File(Paths.document, `${name}.tmp`);
+  const file = new File(Paths.document, name);
+  let staged = new File(Paths.document, `${name}.tmp`);
+  if (staged.exists && !hasReadableJson(file) && hasReadableJson(staged)) {
+    if (file.exists) file.delete();
+    staged.moveSync(file);
+    // Native moveSync updates its source instance's URI.
+    staged = new File(Paths.document, `${name}.tmp`);
+  }
   if (staged.exists) staged.delete();
   staged.create();
   guardWrite(() => staged.write(JSON.stringify(value)));
-  const file = new File(Paths.document, name);
   if (file.exists) file.delete();
-  staged.move(file);
+  staged.moveSync(file);
 }
 
 /** Read the persisted library index, or null if it has never been written. */
@@ -489,7 +676,7 @@ export async function readIndexText(): Promise<string | null> {
 /** Size in bytes of the file at `uri`, or 0 when it does not exist / cannot be read. */
 export function fileSizeAt(uri: string): number {
   try {
-    return new File(uri).size;
+    return new File(resolveDocumentPath(uri)).size;
   } catch {
     return 0;
   }
@@ -506,7 +693,7 @@ export function readFileChunks(
   chunkSize: number,
   onChunk: (chunk: Uint8Array, final: boolean) => void,
 ): void {
-  const handle = new File(uri).open(FileMode.ReadOnly);
+  const handle = new File(resolveDocumentPath(uri)).open(FileMode.ReadOnly);
   try {
     const total = handle.size ?? 0;
     if (total === 0) {

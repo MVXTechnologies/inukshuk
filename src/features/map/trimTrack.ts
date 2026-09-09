@@ -63,39 +63,33 @@ export async function saveTrimmedCopy(
 
 /** The library-summary patch produced by an overwrite trim. */
 export interface TrimOverwriteResult {
-  patch: Pick<TrackSummary, 'startedAt' | 'endedAt' | 'stats' | 'notes'>;
+  patch: Pick<TrackSummary, 'fileUri' | 'startedAt' | 'endedAt' | 'stats' | 'notes'>;
 }
 
 /**
- * Overwrite the trail's GPX file with the kept segment and return the summary
- * patch for the library index. Distance-anchored notes are shifted by the cut
- * head distance; notes falling outside the kept segment are dropped and their
- * photos deleted (they would otherwise be orphaned files).
+ * Save a new GPX revision, commit its library pointer, then retire old assets.
+ * If metadata fails, retain both revisions: a recoverable staged index might
+ * reference the new one while the current index still references the original.
  */
 export async function overwriteWithTrim(
   summary: TrackSummary,
   points: readonly TrackPoint[],
   startIdx: number,
   endIdx: number,
+  commit: (patch: TrimOverwriteResult['patch']) => void | Promise<void>,
 ): Promise<TrimOverwriteResult> {
   const { points: kept, stats } = sliceTrack(points, startIdx, endIdx);
   if (kept.length < 2) throw new Error('Trim leaves fewer than 2 points');
-  const waypoints = await readSourceWaypoints(summary.fileUri);
+  // An unreadable source must not silently discard its standalone waypoints.
+  const waypoints = parseGpx(await storage.readFileText(summary.fileUri)).waypoints;
   const xml = buildGpx({ points: kept, metadata: { name: summary.name }, waypoints });
-  // Every trail GPX lives at tracks/<id>.gpx (recorder + import + merge all
-  // write through writeTrackGpx), so writing under the same id replaces it.
-  storage.writeTrackGpx(summary.id, xml);
-
+  const fileUri = storage.writeTrackGpx(storage.newId(), xml);
   const { kept: notes, dropped } = retargetNotesAfterTrim(
     summary.notes ?? [],
     points,
     startIdx,
     endIdx,
   );
-  for (const n of dropped) {
-    if (n.photoUri) storage.deleteFileAt(n.photoUri);
-  }
-
   const rebuilt = buildImportedTrack({
     id: summary.id,
     points: kept,
@@ -103,12 +97,21 @@ export async function overwriteWithTrim(
     fallbackName: summary.name,
     fallbackTime: summary.startedAt,
   });
-  return {
-    patch: {
-      startedAt: rebuilt.startedAt,
-      endedAt: rebuilt.endedAt,
-      stats,
-      notes,
-    },
+  const patch: TrimOverwriteResult['patch'] = {
+    fileUri,
+    startedAt: rebuilt.startedAt,
+    endedAt: rebuilt.endedAt,
+    stats,
+    notes,
   };
+  await commit(patch);
+  for (const uri of [summary.fileUri, ...dropped.map((note) => note.photoUri)]) {
+    if (!uri) continue;
+    try {
+      storage.deleteFileAt(uri);
+    } catch {
+      // The new revision is committed; an orphan must not turn success into failure.
+    }
+  }
+  return { patch };
 }

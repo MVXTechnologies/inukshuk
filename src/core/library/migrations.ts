@@ -1,4 +1,12 @@
-import type { Folder, GeoReference, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type {
+  Folder,
+  GeoReference,
+  MapDocument,
+  TrackSummary,
+  TrackNote,
+  Waypoint,
+} from '@core/models';
+import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 
 /**
@@ -14,7 +22,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 5;
+export const LIBRARY_SCHEMA_VERSION = 7;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -91,6 +99,71 @@ function dedupePageIndices(value: readonly unknown[]): number[] {
   return [...pages].sort((a, b) => a - b);
 }
 
+function hasFilePath(raw: RawDoc): boolean {
+  return (
+    typeof raw.id === 'string' &&
+    raw.id !== '' &&
+    typeof raw.fileUri === 'string' &&
+    raw.fileUri.trim() !== ''
+  );
+}
+
+function finiteFields(raw: unknown, fields: readonly string[]): boolean {
+  return (
+    isRecord(raw) &&
+    fields.every((key) => typeof raw[key] === 'number' && Number.isFinite(raw[key]))
+  );
+}
+
+/** Reject incomplete geometry before consumers dereference viewport corners. */
+function isGeoReference(raw: unknown): raw is GeoReference {
+  if (
+    !isRecord(raw) ||
+    !Number.isInteger(raw.pageIndex) ||
+    Number(raw.pageIndex) < 0 ||
+    !finiteFields(raw, ['pageWidthPt', 'pageHeightPt']) ||
+    !isRecord(raw.viewport)
+  )
+    return false;
+  const corners = raw.viewport.corners;
+  return (
+    finiteFields(raw.viewport.rect, ['x0', 'y0', 'x1', 'y1']) &&
+    finiteFields(raw.bbox, ['minLat', 'maxLat', 'minLng', 'maxLng']) &&
+    isRecord(corners) &&
+    ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].every((key) => {
+      const point = corners[key];
+      return (
+        Array.isArray(point) &&
+        point.length === 2 &&
+        point.every((value) => typeof value === 'number' && Number.isFinite(value))
+      );
+    })
+  );
+}
+
+/** Invalid optional photos must not reach the document-path mapper. */
+function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
+  const { photoUri, ...rest } = raw;
+  return { ...rest, ...(typeof photoUri === 'string' && photoUri !== '' ? { photoUri } : {}) };
+}
+
+function normalizeNotes(raw: unknown): TrackNote[] {
+  return asArray(raw)
+    .filter(isRecord)
+    .filter((note) => typeof note.id === 'string')
+    .map((note) => ({
+      id: String(note.id),
+      distanceM:
+        typeof note.distanceM === 'number' && Number.isFinite(note.distanceM) ? note.distanceM : 0,
+      text: typeof note.text === 'string' ? note.text : '',
+      createdAt:
+        typeof note.createdAt === 'number' && Number.isFinite(note.createdAt) ? note.createdAt : 0,
+      ...(typeof note.photoUri === 'string' && note.photoUri !== ''
+        ? { photoUri: note.photoUri }
+        : {}),
+    }));
+}
+
 /**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
@@ -100,11 +173,9 @@ function dedupePageIndices(value: readonly unknown[]): number[] {
  */
 function normalizeMapDoc(raw: RawDoc): MapDocument {
   const legacy = raw as Partial<MapDocument> & { georeference?: GeoReference | null };
-  const georeferences = Array.isArray(legacy.georeferences)
-    ? legacy.georeferences
-    : legacy.georeference
-      ? [legacy.georeference]
-      : [];
+  const georeferences = (
+    Array.isArray(raw.georeferences) ? raw.georeferences : [raw.georeference]
+  ).filter(isGeoReference);
   // Page indices are a SET: one entry per page, never one per viewport.
   // Builds before the primary-viewport fix wrote `georeferences.map(pageIndex)`
   // straight through, so a three-viewport sheet (US Topo, AUSTopo) persisted
@@ -115,14 +186,39 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
   const activePages = dedupePageIndices(
     Array.isArray(legacy.activePages) ? legacy.activePages : georeferences.map((g) => g.pageIndex),
   );
+  const pageCount = typeof legacy.pageCount === 'number' ? legacy.pageCount : georeferences.length;
+  const recoveryErrors: NonNullable<MapDocument['renderRecoveryErrors']> = [];
+  for (const entry of asArray(raw.renderRecoveryErrors).filter(isRecord)) {
+    const pageIndex = entry.pageIndex;
+    if (
+      typeof pageIndex !== 'number' ||
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 0 ||
+      pageIndex >= pageCount ||
+      recoveryErrors.some((error) => error.pageIndex === pageIndex)
+    )
+      continue;
+    if (entry.reason === 'interrupted') recoveryErrors.push({ pageIndex, reason: 'interrupted' });
+    else if (entry.reason === 'render-failed' && typeof entry.message === 'string') {
+      recoveryErrors.push({
+        pageIndex,
+        reason: 'render-failed',
+        message: entry.message.slice(0, 400),
+      });
+    }
+  }
+  recoveryErrors.sort((a, b) => a.pageIndex - b.pageIndex);
   return {
     id: String(legacy.id ?? ''),
     name: String(legacy.name ?? ''),
     fileUri: String(legacy.fileUri ?? ''),
     importedAt: typeof legacy.importedAt === 'number' ? legacy.importedAt : 0,
-    pageCount: typeof legacy.pageCount === 'number' ? legacy.pageCount : georeferences.length,
+    pageCount,
     georeferences,
-    activePages,
+    activePages: activePages.filter(
+      (page) => !recoveryErrors.some((error) => error.pageIndex === page),
+    ),
+    ...(recoveryErrors.length ? { renderRecoveryErrors: recoveryErrors } : {}),
     ...(typeof legacy.georeferenceWarning === 'string'
       ? { georeferenceWarning: legacy.georeferenceWarning }
       : {}),
@@ -162,6 +258,16 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // pre-v5 map by definition (the store didn't exist), so this is a pure
   // version-stamp bump; the fields ride through normalizeMapDoc when present.
   4: (doc) => ({ ...doc, schemaVersion: 5 }),
+  // v5 → v6: stored file paths (`fileUri`, `photoUri`) became **document
+  // relative** — `tracks/<id>.gpx` instead of an absolute
+  // `file:///…/Application/<UUID>/Documents/tracks/<id>.gpx` (#247). iOS
+  // rotates that UUID on every app update, so absolute paths went stale and
+  // every trail, map and photo looked lost. A pure version stamp here: the
+  // rewrite itself runs in the sanitize pass below, which is idempotent and so
+  // also heals a v6 index written with a stray absolute path.
+  5: (doc) => ({ ...doc, schemaVersion: 6 }),
+  // v6 → v7: interrupted-page notices persist with their disabled page selection.
+  6: (doc) => ({ ...doc, schemaVersion: 7 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -170,16 +276,61 @@ function recordsWithId<T extends { id: string }>(value: unknown): T[] {
 }
 
 /**
+ * Apply `map` to every stored file path in an index — the maps' `fileUri`, the
+ * trails' `fileUri`, their notes' `photoUri`, and standalone waypoints'
+ * `photoUri`. **This is the complete list of persisted paths in
+ * `library.json`**; anything new that stores a path must be added here, or it
+ * will go stale on the next iOS container rotation (#247).
+ *
+ * Used in both directions: relativised on the way to disk, resolved against
+ * the current document directory on the way back.
+ */
+export function mapLibraryIndexPaths(
+  index: LibraryIndex,
+  map: (path: string) => string,
+): LibraryIndex {
+  return {
+    ...index,
+    maps: index.maps.map((m) => ({ ...m, fileUri: map(m.fileUri) })),
+    tracks: index.tracks.map((t) => ({
+      ...t,
+      fileUri: map(t.fileUri),
+      ...(t.notes
+        ? {
+            notes: t.notes.map((n) =>
+              n.photoUri === undefined ? n : { ...n, photoUri: map(n.photoUri) },
+            ),
+          }
+        : {}),
+    })),
+    waypoints: index.waypoints.map((w) =>
+      w.photoUri === undefined ? w : { ...w, photoUri: map(w.photoUri) },
+    ),
+  };
+}
+
+/**
  * Migrate a raw parsed `library.json` (any version, or junk) to the current
  * {@link LibraryIndex}. Never throws; dangling `activeTrackIds` / `activeMapId`
  * references are pruned so deleted items can't leak back in as overlays.
+ *
+ * `documentDir` (the app document directory as a `file://` uri) lets the path
+ * pass strip the *current* container's prefix as well as a rotated one; it is
+ * optional so the migration stays pure and callable from tests. Paths that are
+ * absolute but under no document directory are left exactly as they are —
+ * they are not ours to rewrite (the caller logs them).
  */
-export function migrateLibraryIndex(raw: unknown): LibraryIndex {
+export function migrateLibraryIndex(raw: unknown, documentDir?: string): LibraryIndex {
   const doc = runLadder(asRecord(raw), LIBRARY_UPGRADERS, LIBRARY_SCHEMA_VERSION);
-  const maps = asArray(doc.maps).filter(isRecord).map(normalizeMapDoc);
-  const tracks = recordsWithId<TrackSummary>(doc.tracks);
+  const maps = asArray(doc.maps).filter(isRecord).filter(hasFilePath).map(normalizeMapDoc);
+  const tracks = recordsWithId<TrackSummary>(doc.tracks)
+    .filter((track) => typeof track.fileUri === 'string' && track.fileUri.trim() !== '')
+    .map((track) => ({
+      ...track,
+      ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
+    }));
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
-  return {
+  const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps,
     tracks,
@@ -194,15 +345,19 @@ export function migrateLibraryIndex(raw: unknown): LibraryIndex {
     ),
     // A waypoint without a finite coordinate can never be drawn or edited —
     // drop such junk rather than let it reach the map's marker projection.
-    waypoints: recordsWithId<Waypoint>(doc.waypoints).filter(
-      (w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude),
-    ),
+    waypoints: recordsWithId<Waypoint>(doc.waypoints)
+      .filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude))
+      .map(normalizePhoto),
     // Keep only well-formed custom categories: junk entries would render as
     // broken chips, and a missing color would defeat the theme-safety gate.
     customCategories: recordsWithId<CustomCategory>(doc.customCategories).filter(
       (c) => typeof c.name === 'string' && c.name.trim() !== '' && typeof c.color === 'string',
     ),
   };
+  // #247 — runs on EVERY load, not just the v5→v6 step: the population that
+  // needs healing is already at v5/v6 with absolute paths burned in, and the
+  // rewrite is idempotent so a second pass costs nothing.
+  return mapLibraryIndexPaths(index, (path) => toDocumentRelativePath(path, documentDir));
 }
 
 // --- settings.json -----------------------------------------------------------
