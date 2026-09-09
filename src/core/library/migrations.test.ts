@@ -486,6 +486,60 @@ describe('migrateLibraryIndex', () => {
     expect(index.maps[0]?.activePages).toEqual([0]);
   });
 
+  it('v7 → v8 stamps the version and leaves georeferences without a page box alone (#287)', () => {
+    // A pre-v8 georeference never recorded its rendered page box. It must NOT
+    // be invented here: absent means "placed the old way, re-import to
+    // reprocess", and only the parser can know whether the page was cropped.
+    const v7 = {
+      schemaVersion: 7,
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], activePages: [0] }],
+    };
+    const index = migrateLibraryIndex(v7);
+    expect(index.schemaVersion).toBe(8);
+    expect(index.maps[0]?.georeferences[0]).toEqual(geoRef(0));
+    expect('pageBox' in (index.maps[0]?.georeferences[0] ?? {})).toBe(false);
+  });
+
+  it('carries a valid rendered page box through hydration (#287)', () => {
+    const cropped: GeoReference = {
+      ...geoRef(0),
+      pageWidthPt: 100,
+      pageHeightPt: 50,
+      pageBox: { x0: 50, y0: 25, x1: 150, y1: 75 },
+      viewport: { ...geoRef(0).viewport, rect: { x0: 50, y0: 25, x1: 150, y1: 75 } },
+    };
+    const index = migrateLibraryIndex({
+      schemaVersion: 8,
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [cropped], activePages: [0] }],
+    });
+    expect(index.maps[0]?.georeferences[0]).toEqual(cropped);
+  });
+
+  it('drops a junk rendered page box rather than dividing by its zero extent (#287)', () => {
+    const junk = [
+      { x0: 50, y0: 25, x1: 50, y1: 75 },
+      { x0: 0, y0: 0, x1: Number.NaN, y1: 75 },
+      { x0: '0', y0: 0, x1: 100, y1: 75 },
+      'nope',
+      null,
+    ];
+    for (const pageBox of junk) {
+      const index = migrateLibraryIndex({
+        schemaVersion: 8,
+        maps: [
+          {
+            id: 'm1',
+            fileUri: 'maps/m1.pdf',
+            georeferences: [{ ...geoRef(0), pageBox }],
+            activePages: [0],
+          },
+        ],
+      });
+      expect(index.maps[0]?.georeferences).toHaveLength(1);
+      expect('pageBox' in (index.maps[0]?.georeferences[0] ?? {})).toBe(false);
+    }
+  });
+
   it('carries a georeference sourceCrs through hydration', () => {
     const withCrs: GeoReference = {
       ...geoRef(0),

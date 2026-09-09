@@ -217,6 +217,60 @@ describe('parseGeoPdf — Adobe VP/Measure GEO', () => {
   });
 });
 
+describe('parseGeoPdf — rendered page box (#287)', () => {
+  it('LGIDict without a Neatline frames the CropBox, not the MediaBox', () => {
+    // Registration is in page user space; with no Neatline the frame is the
+    // whole RENDERED page — the 100×50 pt CropBox at (50, 25).
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /CropBox [50 25 150 75] /LGIDict ' +
+      '<< /Type /LGIDict /Version 2 ' +
+      '/Projection << /ProjectionType /GEOGRAPHIC /Datum /WE >> ' +
+      '/Registration [ ' +
+      '[ (50) (25) (-71) (45) ] ' +
+      '[ (150) (25) (-70) (45) ] ' +
+      '[ (150) (75) (-70) (46) ] ' +
+      '[ (50) (75) (-71) (46) ] ' +
+      '] >> >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.source).toBe('lgidict');
+    expect(g.pageWidthPt).toBe(100);
+    expect(g.pageHeightPt).toBe(50);
+    expect(g.pageBox).toEqual({ x0: 50, y0: 25, x1: 150, y1: 75 });
+    expect(g.viewport.rect).toEqual({ x0: 50, y0: 25, x1: 150, y1: 75 });
+    expect(g.viewport.corners.topLeft[0]).toBeCloseTo(-71, 9);
+    expect(g.viewport.corners.topLeft[1]).toBeCloseTo(46, 9);
+    expect(g.viewport.corners.bottomRight[0]).toBeCloseTo(-70, 9);
+    expect(g.viewport.corners.bottomRight[1]).toBeCloseTo(45, 9);
+  });
+
+  it('a viewport with no /BBox frames the rendered page box', () => {
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /CropBox [50 25 150 75] /VP [ ' +
+      '<< /Type /Viewport ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/GPTS [45 -71 46 -71 46 -70 45 -70] ' +
+      '/GCS << /Type /GEOGCS /EPSG 4326 >> ' +
+      '>> >> ] >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.viewport.rect).toEqual({ x0: 50, y0: 25, x1: 150, y1: 75 });
+    expect(g.pageBox).toEqual({ x0: 50, y0: 25, x1: 150, y1: 75 });
+  });
+
+  it('a CropBox that misses the MediaBox is ignored, as pdf.js does', () => {
+    const page =
+      '<< /Type /Page /MediaBox [0 0 200 100] /CropBox [300 300 400 400] /VP [ ' +
+      '<< /Type /Viewport /BBox [0 0 200 100] ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/GPTS [45 -71 46 -71 46 -70 45 -70] ' +
+      '/GCS << /Type /GEOGCS /EPSG 4326 >> ' +
+      '>> >> ] >>';
+    const g = parseGeoPdf(pdfWithPage(page)).georeferences[0]!;
+    expect(g.pageWidthPt).toBe(200);
+    expect(g.pageHeightPt).toBe(100);
+    expect(g.pageBox).toEqual({ x0: 0, y0: 0, x1: 200, y1: 100 });
+  });
+});
+
 describe('parseGeoPdf — robustness', () => {
   it('returns empty georeferences with a warning for a garbage PDF', () => {
     const garbage = latin1Bytes('%PDF-1.7\nthis is not a real pdf at all\n%%EOF');

@@ -3,6 +3,7 @@ import {
   PanResponder,
   StyleSheet,
   View,
+  type AccessibilityActionEvent,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -11,6 +12,9 @@ import { useTheme } from 'react-native-paper';
 const THUMB = 22;
 const RAIL = 4;
 const HEIGHT = 44;
+/** Screen-reader increment/decrement moves a thumb by ~1% of the track (≥ 1 point). */
+const A11Y_STEP_FRACTION = 0.01;
+const A11Y_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }];
 
 interface Props {
   /** Total number of track points; thumbs address indices 0..count-1. */
@@ -32,6 +36,11 @@ interface Props {
  * render, so reading the controlled `start`/`end` props (and the active-thumb
  * state) from the closure is safe, and a parent ScrollView can't steal the
  * gesture mid-drag.
+ *
+ * Accessibility (#308): the rail itself is not an element — each thumb is its
+ * own "adjustable" control ("Trim start" / "Trim end") carrying its value and
+ * bounds, and VoiceOver/TalkBack's standard increment/decrement actions move
+ * it, clamped against the other thumb exactly as a drag would be.
  */
 export function TrimRangeSlider({ count, start, end, onChange }: Props) {
   const theme = useTheme();
@@ -84,18 +93,46 @@ export function TrimRangeSlider({ count, start, end, onChange }: Props) {
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
+  const a11yStep = Math.max(1, Math.round(last * A11Y_STEP_FRACTION));
+  const a11yAdjust = (which: 'start' | 'end', e: AccessibilityActionEvent) => {
+    const action = e.nativeEvent.actionName;
+    if (action !== 'increment' && action !== 'decrement') return;
+    const delta = action === 'increment' ? a11yStep : -a11yStep;
+    if (which === 'start') {
+      const next = Math.max(0, Math.min(end - 1, start + delta));
+      if (next !== start) onChange(next, end);
+    } else {
+      const next = Math.min(last, Math.max(start + 1, end + delta));
+      if (next !== end) onChange(start, next);
+    }
+  };
+  const pointText = (idx: number) => `Point ${idx + 1} of ${count}`;
+
   const usable = Math.max(0, width - THUMB);
   const xFor = (idx: number) => (idx / last) * usable;
   const startX = xFor(start);
   const endX = xFor(end);
+  const thumbs = [
+    {
+      which: 'start' as const,
+      x: startX,
+      label: 'Trim start',
+      value: { min: 0, max: end - 1, now: start, text: pointText(start) },
+    },
+    {
+      which: 'end' as const,
+      x: endX,
+      label: 'Trim end',
+      value: { min: start + 1, max: last, now: end, text: pointText(end) },
+    },
+  ];
 
   return (
     <View
       style={styles.container}
       onLayout={onLayout}
       {...pan.panHandlers}
-      accessibilityRole="adjustable"
-      accessibilityLabel={`Trim range, keeping points ${start + 1} to ${end + 1} of ${count}`}
+      testID="trim-range-slider"
     >
       {width > 0 && (
         <View pointerEvents="none" style={styles.fill}>
@@ -112,18 +149,24 @@ export function TrimRangeSlider({ count, start, end, onChange }: Props) {
               },
             ]}
           />
-          {/* Thumbs */}
-          {[startX, endX].map((x, i) => (
+          {/* Thumbs — the screen-reader elements (touch goes to the rail). */}
+          {thumbs.map((t) => (
             <View
-              key={i}
+              key={t.which}
               style={[
                 styles.thumb,
                 {
-                  left: x,
+                  left: t.x,
                   backgroundColor: theme.colors.primary,
                   borderColor: theme.colors.onPrimary,
                 },
               ]}
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel={t.label}
+              accessibilityValue={t.value}
+              accessibilityActions={A11Y_ACTIONS}
+              onAccessibilityAction={(e) => a11yAdjust(t.which, e)}
             />
           ))}
         </View>

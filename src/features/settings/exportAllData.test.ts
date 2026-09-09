@@ -1,4 +1,5 @@
-import type { ArchivePlan } from '@core/export/archivePlan';
+import { planDataArchive, type ArchivePlan } from '@core/export/archivePlan';
+import type { TrackSummary, Waypoint } from '@core/models';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import * as storage from '@data/storage';
 import * as Sharing from 'expo-sharing';
@@ -55,8 +56,47 @@ const plan: ArchivePlan = {
   ],
   mapCount: 1,
   trackCount: 1,
+  waypointCount: 0,
   photoCount: 0,
 };
+
+function waypoint(id: string, photoUri?: string, folderId?: string): Waypoint {
+  return { id, label: id, latitude: 0, longitude: 0, createdAt: 0, photoUri, folderId };
+}
+
+function track(id: string, photoUris: string[]): TrackSummary {
+  return {
+    id,
+    name: id,
+    startedAt: 0,
+    fileUri: `file:///doc/tracks/${id}.gpx`,
+    stats: {
+      distanceM: 0,
+      ascentM: 0,
+      descentM: 0,
+      durationS: 0,
+      movingTimeS: 0,
+      avgSpeedMps: 0,
+      maxSpeedMps: 0,
+      pointCount: 0,
+    },
+    notes: photoUris.map((photoUri, i) => ({
+      id: `${id}-n${i}`,
+      distanceM: i,
+      text: '',
+      createdAt: 0,
+      photoUri,
+    })),
+  };
+}
+
+/** Names of the members of the zip that `exportAllData` streamed, sorted. */
+async function exportedMembers(input: Parameters<typeof planDataArchive>[0]): Promise<string[]> {
+  const chunks = stubWriter();
+  const result = await exportAllData(planDataArchive(input), {});
+  expect(result).toEqual({ kind: 'shared' });
+  return Object.keys(unzipSync(bytesOf(chunks))).sort();
+}
 
 beforeEach(() => {
   sharing.isAvailableAsync.mockResolvedValue(true);
@@ -156,6 +196,69 @@ describe('exportAllData', () => {
     };
     expect(archived.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(archived.tracks[0]?.fileUri).toBe('tracks/t1.gpx');
+  });
+
+  it('packs an index-only archive for an empty or waypoint-only library (#288)', async () => {
+    const chunks = stubWriter();
+    const ready = jest.fn();
+    const result = await exportAllData(
+      planDataArchive({ folders: [], maps: [], tracks: [], waypoints: [waypoint('w1')] }),
+      {},
+      { onReady: ready },
+    );
+    expect(result).toEqual({ kind: 'shared' });
+    expect(ready).toHaveBeenCalledWith(1, 2048);
+    expect(Object.keys(unzipSync(bytesOf(chunks)))).toEqual(['library.json']);
+  });
+
+  it('packs standalone waypoint photos for a waypoint-only library (#288)', async () => {
+    const members = await exportedMembers({
+      folders: [{ id: 'f1', name: 'Trips', createdAt: 0 }],
+      maps: [],
+      tracks: [],
+      waypoints: [
+        waypoint('w1', 'file:///doc/photos/w1.jpg', 'f1'),
+        waypoint('w2', 'file:///doc/photos/w2.jpg'),
+        waypoint('w3'),
+      ],
+    });
+    expect(members).toEqual(['Trips/photos/w1.jpg', 'library.json', 'photos/w2.jpg']);
+  });
+
+  it('packs waypoint photos alongside trails and note photos in a mixed library (#288)', async () => {
+    const members = await exportedMembers({
+      folders: [{ id: 'f1', name: 'Alps', createdAt: 0 }],
+      maps: [],
+      tracks: [
+        { ...track('hike', ['file:///doc/photos/n1.jpg']), folderId: 'f1' },
+        track('stroll', []),
+      ],
+      waypoints: [
+        waypoint('w-alp', 'file:///doc/photos/w-alp.jpg', 'f1'),
+        waypoint('w-root', 'file:///doc/photos/w-root.jpg'),
+      ],
+    });
+    expect(members).toEqual([
+      'Alps/hike.gpx',
+      'Alps/photos/n1.jpg',
+      'Alps/photos/w-alp.jpg',
+      'library.json',
+      'photos/w-root.jpg',
+      'stroll.gpx',
+    ]);
+  });
+
+  it('writes a photo referenced by several waypoints and notes only once (#288)', async () => {
+    const shared = 'file:///doc/photos/shared.jpg';
+    const members = await exportedMembers({
+      folders: [],
+      maps: [],
+      tracks: [track('hike', [shared, shared])],
+      waypoints: [waypoint('w1', shared), waypoint('w2', shared)],
+    });
+    expect(members).toEqual(['hike.gpx', 'library.json', 'photos/shared.jpg']);
+    // Each source file is read exactly once — no duplicate member, no wasted I/O.
+    expect(mocked.readFileChunks.mock.calls.filter(([uri]) => uri === shared)).toHaveLength(1);
   });
 
   it('reports unavailable sharing without staging an archive', async () => {

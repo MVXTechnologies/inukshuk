@@ -61,3 +61,50 @@ it('does not fabricate timestamps while scrubbing untimed imported fixes', () =>
   expect(interpolateTrackAtDistance([points[0]!], 0)?.time).toBeUndefined();
   expect(interpolateTrackAtDistance([...points].reverse(), 1e9)?.time).toBeUndefined();
 });
+
+describe('interpolateTrackAtDistance — antimeridian (audit A17)', () => {
+  // A ~222 m segment straddling ±180°. The raw longitude lerp walked the long
+  // way round and put the scrub cursor at Greenwich (longitude 0).
+  const eastbound = [pt(0, 179.999), pt(0, -179.999)];
+  const westbound = [pt(0, -179.999), pt(0, 179.999)];
+
+  it('keeps the cursor on the seam at the midpoint of an eastbound crossing', () => {
+    const full = interpolateTrackAtDistance(eastbound, 1e9)!;
+    expect(full.distanceM).toBeGreaterThan(200);
+    expect(full.distanceM).toBeLessThan(250);
+    const mid = interpolateTrackAtDistance(eastbound, full.distanceM / 2)!;
+    expect(Math.abs(mid.longitude)).toBeCloseTo(180, 6);
+    const quarter = interpolateTrackAtDistance(eastbound, full.distanceM / 4)!;
+    expect(quarter.longitude).toBeCloseTo(179.9995, 6);
+  });
+
+  it('keeps the cursor on the seam for a westbound crossing', () => {
+    const full = interpolateTrackAtDistance(westbound, 1e9)!;
+    const mid = interpolateTrackAtDistance(westbound, full.distanceM / 2)!;
+    expect(Math.abs(mid.longitude)).toBeCloseTo(180, 6);
+    const quarter = interpolateTrackAtDistance(westbound, full.distanceM / 4)!;
+    expect(quarter.longitude).toBeCloseTo(-179.9995, 6);
+    const threeQuarter = interpolateTrackAtDistance(westbound, (3 * full.distanceM) / 4)!;
+    expect(threeQuarter.longitude).toBeCloseTo(179.9995, 6);
+  });
+
+  it('returns the endpoints verbatim and always a longitude in [-180, 180]', () => {
+    for (const pts of [eastbound, westbound]) {
+      const full = interpolateTrackAtDistance(pts, 1e9)!;
+      expect(interpolateTrackAtDistance(pts, 0)!.longitude).toBe(pts[0]!.longitude);
+      expect(full.longitude).toBe(pts[1]!.longitude);
+      for (let f = 0; f <= 1; f += 0.05) {
+        const { longitude } = interpolateTrackAtDistance(pts, full.distanceM * f)!;
+        expect(longitude).toBeGreaterThanOrEqual(-180);
+        expect(longitude).toBeLessThanOrEqual(180);
+      }
+    }
+  });
+
+  it('leaves ordinary segments unchanged', () => {
+    const pts = [pt(45, -73, { altitude: 0 }), pt(45, -72.998, { altitude: 100 })];
+    const full = interpolateTrackAtDistance(pts, 1e9)!;
+    const mid = interpolateTrackAtDistance(pts, full.distanceM / 2)!;
+    expect(mid.longitude).toBeCloseTo(-72.999, 6);
+  });
+});

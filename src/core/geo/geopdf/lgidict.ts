@@ -8,6 +8,8 @@ import {
   makeReprojector,
   resolveLgiProjection,
 } from './crs';
+import { pointRectFromPdfRect } from './pageBox';
+import type { PageInfo } from './pageTree';
 import type { PdfDocument } from './pdfReader';
 import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } from './types';
 
@@ -22,6 +24,10 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  *     frame. Its bbox becomes viewport.rect.
  *   - `/Projection` — {/ProjectionType, /Datum, /Zone, /Hemisphere, /EPSG ...}.
  *   - `/CTM` — page->geo transform (6 numbers); used if Registration is absent.
+ *
+ * All of these are in page user space; the georeference records the page's
+ * rendered box (`page.pageBox`) in that same space so placement maps the frame
+ * onto the pixels a renderer produces (#287).
  */
 
 function asNum(v: PdfValue | undefined): number {
@@ -148,7 +154,7 @@ function bboxOfPoints(pts: [number, number][]): PointRect | undefined {
 function fromOneLgiDict(
   doc: PdfDocument,
   lgi: PdfDict,
-  page: { index: number; mediaBox: [number, number, number, number] },
+  page: Pick<PageInfo, 'index' | 'pageBox'>,
   warnings: string[],
 ): GeoReference | undefined {
   const { reproj, crs } = crsFromProjection(doc, lgi.entries.get('Projection'));
@@ -159,18 +165,13 @@ function fromOneLgiDict(
     warnings.push(`page ${page.index}: unsupported map projection (${crs.label})`);
   }
 
-  const [mx0, my0, mx1, my1] = page.mediaBox;
-  const pageWidthPt = Math.abs(mx1 - mx0);
-  const pageHeightPt = Math.abs(my1 - my0);
+  const pageBox = pointRectFromPdfRect(page.pageBox);
+  const pageWidthPt = pageBox.x1 - pageBox.x0;
+  const pageHeightPt = pageBox.y1 - pageBox.y0;
 
-  // Viewport rect: neatline bbox or whole MediaBox.
+  // Viewport rect: neatline bbox or the whole rendered page.
   const neatPts = readNeatline(doc, lgi.entries.get('Neatline'));
-  const rect: PointRect = bboxOfPoints(neatPts) ?? {
-    x0: Math.min(mx0, mx1),
-    y0: Math.min(my0, my1),
-    x1: Math.max(mx0, mx1),
-    y1: Math.max(my0, my1),
-  };
+  const rect: PointRect = bboxOfPoints(neatPts) ?? { ...pageBox };
 
   // page->geo affine: prefer /Registration, else /CTM.
   let pageToGeo: ((x: number, y: number) => [number, number]) | undefined;
@@ -217,6 +218,7 @@ function fromOneLgiDict(
     sourceCrs: crs.label,
     pageWidthPt,
     pageHeightPt,
+    pageBox,
     viewport: { rect, corners },
     bbox: bboxFromCorners(corners),
   };
@@ -225,7 +227,7 @@ function fromOneLgiDict(
 /** Extract all LGIDict georeferences from a single page. */
 export function extractLgiDict(
   doc: PdfDocument,
-  page: { index: number; dict: PdfDict; mediaBox: [number, number, number, number] },
+  page: PageInfo,
   warnings: string[],
 ): GeoReference[] {
   const lgiVal = doc.resolve(page.dict.entries.get('LGIDict'));

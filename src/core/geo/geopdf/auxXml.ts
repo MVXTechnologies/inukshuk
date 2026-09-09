@@ -66,6 +66,8 @@ export function parseAuxXml(args: {
     bottomLeft: toWgs(...pixelToGeo(0, rasterHeightPx)),
   };
 
+  // A sidecar georeferences the rendered raster as a whole, so the frame and
+  // the rendered page box are the same zero-origin rectangle.
   const rect: PointRect = { x0: 0, y0: 0, x1: pageWidthPt, y1: pageHeightPt };
 
   return {
@@ -74,6 +76,7 @@ export function parseAuxXml(args: {
     sourceEpsg: epsg,
     pageWidthPt,
     pageHeightPt,
+    pageBox: { ...rect },
     viewport: { rect, corners },
     bbox: bboxFromCorners(corners),
   };

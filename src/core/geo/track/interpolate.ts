@@ -17,6 +17,22 @@ export interface TrackPointAt {
   heartRateBpm?: number;
 }
 
+/**
+ * Lerp a longitude the short way round. A segment from 179.999° to −179.999°
+ * is 222 m across the antimeridian, not 40,000 km back through Greenwich —
+ * the raw lerp put the profile-scrub cursor at longitude 0. Endpoints are
+ * returned verbatim; in-between values stay within [-180, 180].
+ */
+function lerpLng(a: number, b: number, t: number): number {
+  let delta = b - a;
+  if (delta > 180) delta -= 360;
+  else if (delta < -180) delta += 360;
+  const lng = a + delta * t;
+  if (lng > 180) return lng - 360;
+  if (lng < -180) return lng + 360;
+  return lng;
+}
+
 /** Linear interpolation of two optional numbers (undefined-safe). */
 function lerpOpt(a: number | undefined, b: number | undefined, t: number): number | undefined {
   if (a === undefined) return b;
@@ -58,7 +74,7 @@ export function interpolateTrackAtDistance(
       const t = seg > 0 ? Math.min(1, Math.max(0, (target - cum) / seg)) : 0;
       return {
         latitude: a.latitude + (b.latitude - a.latitude) * t,
-        longitude: a.longitude + (b.longitude - a.longitude) * t,
+        longitude: lerpLng(a.longitude, b.longitude, t),
         distanceM: cum + seg * t,
         elevation: lerpOpt(a.altitude, b.altitude, t),
         speed: lerpOpt(a.speed, b.speed, t),

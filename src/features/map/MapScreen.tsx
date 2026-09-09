@@ -53,6 +53,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
 import { MakeMapSheet } from './mapmaker/MakeMapSheet';
 import { useMakeMapSession } from './mapmaker/useMakeMapSession';
+import { discardDraftPhoto, withDraftPhoto, type WaypointDraft } from './waypointDraft';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
 import { CompassBadge } from './components/CompassBadge';
@@ -81,7 +82,7 @@ import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
-import { useOfflineDownload } from './hooks/useOfflineDownload';
+import { regionBoundsFailureMessage, useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import {
@@ -1046,11 +1047,7 @@ export function MapScreen() {
    * afterwards would burn an auto number on every named waypoint, and would
    * leave a pin behind when the user backs out.
    */
-  const [newWp, setNewWp] = useState<{
-    latitude: number;
-    longitude: number;
-    photoUri?: string;
-  } | null>(null);
+  const [newWp, setNewWp] = useState<WaypointDraft | null>(null);
   // Read-only viewer target (pin tap). Editing is an explicit step from it.
   const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
   const findWp = useCallback(
@@ -1097,8 +1094,10 @@ export function MapScreen() {
     setEditWp(null);
   };
   const deleteWaypoint = () => {
-    // A composed waypoint was never created, so Delete is simply "discard".
+    // A composed waypoint was never created, so Delete is simply "discard" —
+    // of the draft AND the photo copy only it owned (#306).
     if (newWp) {
+      discardDraftPhoto(newWp);
       setNewWp(null);
       return;
     }
@@ -1110,7 +1109,9 @@ export function MapScreen() {
   };
   const setWaypointPhoto = (uri: string) => {
     if (newWp) {
-      setNewWp((w) => (w === null ? null : { ...w, ...(uri ? { photoUri: uri } : {}) }));
+      // '' removes: drop the field (#306 — spreading kept it for Done to save)
+      // and unlink the replaced/removed copy the draft owned.
+      setNewWp(withDraftPhoto(newWp, uri));
       return;
     }
     if (!editWp) return;
@@ -1990,11 +1991,11 @@ export function MapScreen() {
           tileUrl={tileUrl}
           onCancel={() => setMakeMapState(null)}
           onConfirm={(rect) => {
-            void resolveRegionRect(rect).then((bbox) => {
-              if (bbox) setMakeMapState({ phase: 'options', bbox });
+            void resolveRegionRect(rect).then((resolved) => {
+              if (resolved.ok) setMakeMapState({ phase: 'options', bbox: resolved.bounds });
               else {
                 setMakeMapState(null);
-                showSnack('Could not read the map area — try again');
+                showSnack(regionBoundsFailureMessage(resolved.reason));
               }
             });
           }}
@@ -2344,6 +2345,7 @@ export function MapScreen() {
           }}
           onEdit={() => {
             if (!viewWp) return;
+            discardDraftPhoto(newWp);
             setNewWp(null);
             setEditWp(viewWp);
             setWpName(viewWaypoint?.label ?? '');

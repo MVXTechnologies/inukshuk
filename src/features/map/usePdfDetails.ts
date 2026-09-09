@@ -6,6 +6,7 @@ import {
   type PdfDetailPlan,
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
+import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
 import { chooseRasterSource } from '@core/library/rasterSource';
 import { overlayDetailStatusKey } from '@core/library/overlayStatus';
 import type { MapDocument } from '@core/models';
@@ -31,8 +32,11 @@ interface Target {
   parentId: string;
   fileUri: string;
   pageIndex: number;
+  /** Size of the rendered page box the overview (and so every tile) spans. */
   pageWidthPt: number;
   pageHeightPt: number;
+  /** Null when the page's rendered box disqualifies it from native rendering. */
+  nativeGeometry: { expectedPageWidthPt: number; expectedPageHeightPt: number } | null;
   revision: string;
   plan: PdfDetailPlan;
   bbox: PdfOverlay['bbox'];
@@ -74,6 +78,9 @@ export function usePdfDetails(
       const pageIndex = map ? Number(o.id.slice(map.id.length + 1)) : -1;
       const geo = map?.georeferences.find((g) => g.pageIndex === pageIndex);
       if (!map || !geo || !map.activePages.includes(pageIndex)) continue;
+      // `o.coordinates` are the corners of the rendered page box and
+      // `pageWidthPt`/`pageHeightPt` its size, so the planner's fractional
+      // crops and the renderer's crop of that same box line up (#287).
       const plans = planPdfDetailTiles(
         o.coordinates,
         { width: geo.pageWidthPt, height: geo.pageHeightPt },
@@ -122,6 +129,7 @@ export function usePdfDetails(
           pageIndex,
           pageWidthPt: geo.pageWidthPt,
           pageHeightPt: geo.pageHeightPt,
+          nativeGeometry: nativePageGeometry(geo),
           revision: String(map.importedAt),
           plan,
           bbox: o.bbox,
@@ -251,11 +259,10 @@ export function usePdfDetails(
                   pageIndex: target.pageIndex,
                   targetWidthPx: target.plan.targetWidthPx,
                   crop: target.plan.crop,
-                  nativePage: {
+                  nativePage: target.nativeGeometry && {
                     fileUri: storage.resolveDocumentPath(target.fileUri),
                     revision: target.revision,
-                    expectedPageWidthPt: target.pageWidthPt,
-                    expectedPageHeightPt: target.pageHeightPt,
+                    ...target.nativeGeometry,
                   },
                 });
                 dispatched = false;

@@ -468,6 +468,29 @@ it('uses a native PNG directly and includes verified page dimensions in the requ
   expect(mockFiles.size).toBe(0);
 });
 
+it('never offers native rendering for a page whose rendered box has a nonzero origin (#287)', async () => {
+  // Android PdfRenderer and the iOS crops only accept a zero-origin page whose
+  // CropBox is its MediaBox; a /CropBox [50 25 150 75] page must stay on
+  // pdf.js, which renders (and crops) the CropBox itself.
+  const cropped: MapDocument = {
+    ...map,
+    georeferences: [
+      {
+        ...map.georeferences[0]!,
+        pageWidthPt: 100,
+        pageHeightPt: 50,
+        pageBox: { x0: 50, y0: 25, x1: 150, y1: 75 },
+      },
+    ],
+  };
+  const v = await renderHook(() => usePdfDetails([cropped], [overview], bounds, 1200));
+  await flush();
+  expect(mockRasterize).toHaveBeenCalledTimes(1);
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ nativePage: null });
+  expect(mockPlans.mock.calls[0]?.[1]).toEqual({ width: 100, height: 50 });
+  await v.unmount();
+});
+
 it('deletes a native file returned after the detail hook unmounted', async () => {
   let resolve!: (value: { fileUri: string }) => void;
   mockRasterize.mockImplementationOnce(
