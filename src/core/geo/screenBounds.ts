@@ -88,6 +88,45 @@ export function screenPointToLngLat(
 }
 
 /**
+ * The bounds of a box given its top-left and bottom-right `[lng, lat]` corners
+ * (as {@link screenPointToLngLat} returns them). The box runs EASTWARD from the
+ * left corner to the right one — sorting the two longitudes instead turned a
+ * 1° strip drawn across ±180° into the opposite 359° of the globe.
+ *
+ * Returns `null` when the box straddles the antimeridian: the tile planner and
+ * MapLibre's offline packs take a single non-wrapping bbox, so such a
+ * selection is unsupported rather than silently reinterpreted. A box whose
+ * east edge lands exactly on 180° is fine.
+ */
+export function cornersToBounds(
+  topLeft: readonly [number, number],
+  bottomRight: readonly [number, number],
+): BoundingBox | null {
+  const [lng0, lat0] = topLeft;
+  const [lng1, lat1] = bottomRight;
+  // Both corners are normalized to [-180, 180); an east corner "behind" the
+  // west one means the box wrapped through the seam.
+  const east = lng1 < lng0 ? lng1 + 360 : lng1;
+  if (east > 180) return null;
+  return {
+    minLat: Math.min(lat0, lat1),
+    maxLat: Math.max(lat0, lat1),
+    minLng: lng0,
+    maxLng: east,
+  };
+}
+
+/** Why a drawn rectangle could not be turned into download bounds. */
+export type RegionBoundsFailure =
+  /** The viewport has no size yet — keep whatever estimate was there. */
+  | 'no-viewport'
+  /** The box crosses ±180°; unsupported by the planner / offline packs. */
+  | 'antimeridian';
+
+export type RegionBoundsResult =
+  { ok: true; bounds: BoundingBox } | { ok: false; reason: RegionBoundsFailure };
+
+/**
  * Convert a rectangle drawn in the map view's pixel space to the geographic
  * bounds it covers — i.e. exactly the area the user framed, no more.
  */
@@ -95,21 +134,14 @@ export function screenRectToBounds(
   rect: ScreenRect,
   viewport: ViewportSize,
   visible: VisibleBounds,
-): BoundingBox | null {
+): RegionBoundsResult {
   const topLeft = screenPointToLngLat({ x: rect.x, y: rect.y }, viewport, visible);
   const bottomRight = screenPointToLngLat(
     { x: rect.x + rect.w, y: rect.y + rect.h },
     viewport,
     visible,
   );
-  if (topLeft === null || bottomRight === null) return null;
-
-  const [lng0, lat0] = topLeft;
-  const [lng1, lat1] = bottomRight;
-  return {
-    minLat: Math.min(lat0, lat1),
-    maxLat: Math.max(lat0, lat1),
-    minLng: Math.min(lng0, lng1),
-    maxLng: Math.max(lng0, lng1),
-  };
+  if (topLeft === null || bottomRight === null) return { ok: false, reason: 'no-viewport' };
+  const bounds = cornersToBounds(topLeft, bottomRight);
+  return bounds === null ? { ok: false, reason: 'antimeridian' } : { ok: true, bounds };
 }

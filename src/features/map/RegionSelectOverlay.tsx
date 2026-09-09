@@ -8,7 +8,7 @@
  * conversion is injected via the `toGeo` prop.
  */
 
-import type { ScreenRect } from '@core/geo/screenBounds';
+import { cornersToBounds, type ScreenRect } from '@core/geo/screenBounds';
 import {
   overviewZoomFor,
   estimateRegionDownload,
@@ -69,9 +69,13 @@ type Box = ScreenRect;
 
 /** The region geometry derived (async) from the box; quality/layers are applied on top. */
 interface Geo {
-  bbox: BoundingBox;
+  /** `null` when the box straddles ±180° — unsupported, so nothing to estimate. */
+  bbox: BoundingBox | null;
   minZoom: number;
 }
+
+/** Shown in place of the estimate when the box crosses the antimeridian. */
+export const ANTIMERIDIAN_MESSAGE = 'Box crosses the ±180° line — move it to one side';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -162,15 +166,11 @@ export function RegionSelectOverlay({
       const br = toGeo({ x: b.x + b.w, y: b.y + b.h });
       // Bounds/layout not ready — keep the previous geometry.
       if (tl === null || br === null) return;
-      const [lng0, lat0] = tl;
-      const [lng1, lat1] = br;
-      const bbox: BoundingBox = {
-        minLat: Math.min(lat0, lat1),
-        maxLat: Math.max(lat0, lat1),
-        minLng: Math.min(lng0, lng1),
-        maxLng: Math.max(lng0, lng1),
-      };
-      setGeo({ bbox, minZoom: overviewZoomFor(bbox) });
+      // Same corner→bounds rule as the download path (screenRectToBounds), so
+      // the estimate and the downloaded extent agree — including the refusal
+      // of a box that straddles ±180°.
+      const bbox = cornersToBounds(tl, br);
+      setGeo({ bbox, minZoom: bbox === null ? 0 : overviewZoomFor(bbox) });
     },
     [toGeo],
   );
@@ -208,8 +208,13 @@ export function RegionSelectOverlay({
   );
   // Every basemap's tile source tops out at its own zoom, so each is estimated
   // over the range it will really store (relief stops at z15).
-  const estimate = geo
-    ? estimateRegionDownload(geo.bbox, geo.minZoom, maxZoom, selectedBasemaps)
+  // The usable region: null while geometry is pending OR when the box crosses
+  // the antimeridian (`crossesSeam`), which the planner can't represent.
+  const region = geo?.bbox ?? null;
+  const regionMinZoom = geo?.minZoom ?? 0;
+  const crossesSeam = geo !== null && geo.bbox === null;
+  const estimate = region
+    ? estimateRegionDownload(region, regionMinZoom, maxZoom, selectedBasemaps)
     : { tiles: 0, bytes: 0 };
   const totalTiles = estimate.tiles;
   const totalBytes = estimate.bytes;
@@ -220,18 +225,18 @@ export function RegionSelectOverlay({
   ).map((l) => l.label);
   const noneSelected = selectedBasemaps.length === 0;
   const tooLarge = totalTiles > MAX_TILES;
-  const canDownload = geo !== null && !noneSelected && !tooLarge;
+  const canDownload = region !== null && !noneSelected && !tooLarge;
   // When the box is too large at this quality, offer the highest quality that
   // fits as a one-tap fix — "Too large" alone made people shrink the box when
   // one notch coarser usually covers the same area (4× fewer tiles per notch).
   const fittingQuality =
-    tooLarge && geo && !noneSelected
+    tooLarge && region && !noneSelected
       ? QUALITY_BUTTONS.map((b) => b.value)
           .filter((q) => QUALITY_ZOOM[q] < maxZoom)
           .reverse()
           .find(
             (q) =>
-              estimateRegionDownload(geo.bbox, geo.minZoom, QUALITY_ZOOM[q], selectedBasemaps)
+              estimateRegionDownload(region, regionMinZoom, QUALITY_ZOOM[q], selectedBasemaps)
                 .tiles <= MAX_TILES,
           )
       : undefined;
@@ -376,20 +381,20 @@ export function RegionSelectOverlay({
   // standard denominators, so this is always a whole ratio) — shown live
   // while dragging so the user can chase a target like 1:25,000. A4 is the
   // sheet's default format; Letter shifts it at most one step.
-  const makeMapScaleDenom = makeMapMode && geo ? layoutMadeMap(geo.bbox, 'a4').scaleDenom : null;
+  const makeMapScaleDenom = makeMapMode && region ? layoutMadeMap(region, 'a4').scaleDenom : null;
 
   const handleConfirm = useCallback(() => {
     // makeMap mode confirms the box alone — layers/quality/cap are the
     // download sheet's concerns.
     if (makeMapMode) {
-      if (geo) onConfirm({ ...boxRef.current }, [], 0);
+      if (region) onConfirm({ ...boxRef.current }, [], 0);
       return;
     }
-    if (!geo || noneSelected || tooLarge) return;
+    if (!region || noneSelected || tooLarge) return;
     // Hand back the SCREEN rect: the owner converts it against freshly-read map
     // bounds so the downloaded area is exactly the drawn one.
     onConfirm({ ...boxRef.current }, selectedBasemaps, maxZoom);
-  }, [geo, noneSelected, tooLarge, onConfirm, selectedBasemaps, maxZoom, makeMapMode]);
+  }, [region, noneSelected, tooLarge, onConfirm, selectedBasemaps, maxZoom, makeMapMode]);
 
   // ---------------------------------------------------------------------------
   // Render.
@@ -397,13 +402,15 @@ export function RegionSelectOverlay({
 
   const summary = noneSelected
     ? 'Select at least one layer'
-    : tooLarge
-      ? fittingQuality
-        ? `Too large at ${QUALITY_BUTTONS.find((b) => b.value === quality)?.label} quality`
-        : 'Too large — shrink the box'
-      : geo === null
-        ? 'Calculating…'
-        : `≈ ${totalTiles.toLocaleString()} tiles · ${formatBytes(totalBytes)}`;
+    : crossesSeam
+      ? ANTIMERIDIAN_MESSAGE
+      : tooLarge
+        ? fittingQuality
+          ? `Too large at ${QUALITY_BUTTONS.find((b) => b.value === quality)?.label} quality`
+          : 'Too large — shrink the box'
+        : geo === null
+          ? 'Calculating…'
+          : `≈ ${totalTiles.toLocaleString()} tiles · ${formatBytes(totalBytes)}`;
 
   // e.g. "Relief tops out at z15" — the layer downloads, just not that deep.
   const capNote =
@@ -556,7 +563,9 @@ export function RegionSelectOverlay({
           <Text variant="bodyMedium" style={styles.summary}>
             {makeMapScaleDenom !== null
               ? `Prints at 1:${makeMapScaleDenom.toLocaleString('en-US')}`
-              : 'Calculating…'}
+              : crossesSeam
+                ? ANTIMERIDIAN_MESSAGE
+                : 'Calculating…'}
           </Text>
         ) : (
           <Text variant="bodyMedium" style={styles.summary}>
@@ -588,7 +597,7 @@ export function RegionSelectOverlay({
           <Button
             mode="contained"
             onPress={handleConfirm}
-            disabled={makeMapMode ? geo === null : !canDownload}
+            disabled={makeMapMode ? region === null : !canDownload}
             style={styles.actionBtn}
           >
             {makeMapMode ? 'Next' : 'Download'}
