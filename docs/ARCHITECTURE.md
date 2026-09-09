@@ -76,6 +76,17 @@ four stages:
 - Live HUD stats use a cheap incremental fold (`reduceStatsWith`); the
   authoritative stats saved to GPX are recomputed over the full point list
   (`computeTrackStats`). Elapsed time excludes paused wall time (`pausedMs`).
+- **A pause is a segment boundary** (`core/geo/track/segments.ts`). The
+  recorder keeps its completed pauses; a resume opens a new segment, and
+  nothing bridges a pause — not distance, moving time, D±, the map trace
+  (one `MultiLineString` part per segment) nor the GPX (one `<trkseg>` per
+  segment). Background-journaled fixes stamped inside a pause are dropped.
+  The crash checkpoint stores the pauses and the in-flight pause's start
+  (`pausedAt`), so a phone killed while paused and reopened an hour later
+  resumes _that_ pause instead of counting the hour as active time; a
+  checkpoint that died while recording stops the clock at its last evidence
+  of life (checkpoint write or newest fix, including fixes the OS task kept
+  journaling).
 - **D+ / D-** uses hysteresis (default 3 m threshold) so GPS altitude noise on
   flat ground doesn't inflate elevation gain — the number hikers actually expect.
 - Tracks persist as standard GPX 1.1 in the document directory; the library

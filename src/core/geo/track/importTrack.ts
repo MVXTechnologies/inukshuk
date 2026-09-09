@@ -1,5 +1,5 @@
 import type { Track, TrackPoint } from '@core/models';
-import { computeTrackStats } from './index';
+import { computeSegmentedTrackStats } from './segments';
 
 /**
  * Assemble a finished {@link Track} from points parsed out of an imported GPX
@@ -17,8 +17,10 @@ export function buildImportedTrack(args: {
   fallbackName: string;
   /** Used for startedAt when the GPX carries no timestamps. */
   fallbackTime: number;
+  /** `<trkseg>` boundaries (see `@core/geo/track/segments`); stats never bridge them. */
+  segmentStarts?: readonly number[];
 }): Track {
-  const { id, points, name, fallbackName, fallbackTime } = args;
+  const { id, points, name, fallbackName, fallbackTime, segmentStarts = [] } = args;
 
   let minT = Infinity;
   let maxT = -Infinity;
@@ -36,6 +38,6 @@ export function buildImportedTrack(args: {
     endedAt: maxT === -Infinity ? undefined : maxT,
     status: 'finished',
     points: [...points],
-    stats: computeTrackStats(points),
+    stats: computeSegmentedTrackStats(points, segmentStarts),
   };
 }

@@ -22,7 +22,7 @@ function buildFromGpxText(
   fileUri: string,
   fallbackName: string,
 ): ImportedTrack {
-  const { metadata, points, waypoints, hasTrackOrRoutePoints } = parseGpx(text);
+  const { metadata, points, segmentStarts, waypoints, hasTrackOrRoutePoints } = parseGpx(text);
   if (points.length === 0) {
     storage.deleteFileAt(fileUri);
     throw new Error('No track points');
@@ -30,6 +30,8 @@ function buildFromGpxText(
   const track = buildImportedTrack({
     id,
     points,
+    // A multi-<trkseg> export (Garmin/Strava pauses) is measured per segment.
+    segmentStarts,
     name: metadata.name,
     fallbackName,
     fallbackTime: Date.now(),

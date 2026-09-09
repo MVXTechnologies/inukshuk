@@ -1,4 +1,5 @@
 import { padBbox } from '@core/geo/terrain';
+import { splitSegments } from '@core/geo/track/segments';
 import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import type { MapBasemap } from '@state/mapStore';
@@ -59,6 +60,8 @@ interface Props {
   trails: readonly (readonly LngLat[])[];
   /** Live recording trace points (empty when not recording). */
   recordPoints: readonly TrackPoint[];
+  /** Pause boundaries in `recordPoints` — the trace is draped per segment. */
+  recordSegmentStarts: readonly number[];
   /** Live dropped waypoints to pin on the terrain. */
   waypoints: readonly { latitude: number; longitude: number }[];
 }
@@ -185,6 +188,7 @@ export function Terrain3DLiveView({
   permission,
   trails,
   recordPoints,
+  recordSegmentStarts,
   waypoints,
 }: Props) {
   const theme = useTheme();
@@ -244,6 +248,7 @@ export function Terrain3DLiveView({
   const overlaysRef = useRef<THREE.Group | null>(null);
   const trailsRef = useRef(trails);
   const recordPointsRef = useRef(recordPoints);
+  const recordSegmentStartsRef = useRef(recordSegmentStarts);
   const waypointsRef = useRef(waypoints);
 
   // Rebuild the draped overlays (saved trails, live trace, waypoint pins) against
@@ -264,11 +269,12 @@ export function Terrain3DLiveView({
     const g = new THREE.Group();
     for (const coords of trailsRef.current)
       addPolyline(g, coords, project, drapeLine, bbox, TRAIL_COLOR, 0.0042);
-    const rec = recordPointsRef.current;
-    if (rec.length >= 2) {
+    // One ribbon per recording segment — never across a pause.
+    for (const segment of splitSegments(recordPointsRef.current, recordSegmentStartsRef.current)) {
+      if (segment.length < 2) continue;
       addPolyline(
         g,
-        rec.map((p) => [p.longitude, p.latitude] as LngLat),
+        segment.map((p) => [p.longitude, p.latitude] as LngLat),
         project,
         drapeLine,
         bbox,
@@ -351,9 +357,10 @@ export function Terrain3DLiveView({
   useEffect(() => {
     trailsRef.current = trails;
     recordPointsRef.current = recordPoints;
+    recordSegmentStartsRef.current = recordSegmentStarts;
     waypointsRef.current = waypoints;
     rebuildOverlays(); // reads refs; a no-op until the scene exists
-  }, [trails, recordPoints, waypoints]);
+  }, [trails, recordPoints, recordSegmentStarts, waypoints]);
 
   const pan = useMemo(() => {
     // The ground point under a view-local screen position (tap / pinch

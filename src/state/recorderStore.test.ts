@@ -1,5 +1,5 @@
 import type { TrackPoint } from '@core/models';
-import { computeTrackStats } from '@core/geo/track';
+import { computeSegmentedTrackStats, computeTrackStats } from '@core/geo/track';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
 import { useLibraryStore } from './libraryStore';
@@ -72,6 +72,8 @@ function simulateCrash() {
     startedAt: null,
     pausedMs: 0,
     pausedAt: null,
+    pauses: [],
+    segmentStarts: [],
     points: [],
     stats: {
       distanceM: 0,
@@ -355,6 +357,306 @@ describe('pause / resume feed gating', () => {
     useRecorderStore.getState().resume();
     expect(useRecorderStore.getState().status).toBe('recording');
     expect(useRecorderStore.getState().pausedAt).toBeNull();
+  });
+});
+
+// Audit A04/A05 (#275, #289): a pause is a segment boundary, and time the
+// process was dead while paused is not active time.
+describe('pause semantics: segments (A04) and recovered active time (A05)', () => {
+  const T0 = Date.parse('2026-09-01T12:00:00Z');
+  const elapsedS = () => {
+    const { startedAt, pausedMs } = useRecorderStore.getState();
+    return Math.floor((Date.now() - (startedAt ?? 0) - pausedMs) / 1000);
+  };
+  const lastGpx = () =>
+    (jest.mocked(storage.writeTrackGpx).mock.calls.at(-1)?.[1] as string | undefined) ?? '';
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(T0);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** The A04 reproduction: one fix, pause 600 s, relocate ~1 km, resume, one fix. */
+  const recordA04 = () => {
+    useRecorderStore.getState().start('Relocated');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 1_000);
+    useRecorderStore.getState().pause();
+    jest.setSystemTime(T0 + 601_000);
+    useRecorderStore.getState().resume();
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 601_000, latitude: 46.809 }));
+  };
+
+  it('A04: the first resumed fix does not connect to the last pre-pause fix', async () => {
+    recordA04();
+    const { points, stats, segmentStarts } = useRecorderStore.getState();
+    expect(points).toHaveLength(2);
+    // What the flat computation — the old behaviour — reports for these fixes.
+    const bridged = computeTrackStats(points);
+    expect(bridged.distanceM).toBeCloseTo(1000.76, 1);
+    expect(bridged.movingTimeS).toBe(601);
+    // The pause is a segment boundary: nothing bridges it.
+    expect(segmentStarts).toEqual([1]);
+    expect(stats.distanceM).toBe(0);
+    expect(stats.movingTimeS).toBe(0);
+    expect(stats.durationS).toBe(0);
+    expect(stats.pointCount).toBe(2);
+    expect(elapsedS()).toBe(1);
+
+    const track = await useRecorderStore.getState().stop();
+    expect(track?.stats.distanceM).toBe(0);
+    expect(track?.stats.movingTimeS).toBe(0);
+    expect(lastGpx().match(/<trkseg>/g)).toHaveLength(2);
+  });
+
+  it('A04: a leg recorded after the resume accrues normally, and only from its own first fix', () => {
+    recordA04();
+    // ~28 m, 2 s later — well inside the GPS gates.
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 603_000, latitude: 46.80925 }));
+    const { stats, points, segmentStarts } = useRecorderStore.getState();
+    expect(segmentStarts).toEqual([1]);
+    expect(stats.distanceM).toBeCloseTo(27.8, 0);
+    expect(stats.movingTimeS).toBe(2);
+    // Live fold == batch recompute over the same segments.
+    const batch = computeSegmentedTrackStats(points, segmentStarts);
+    expect(stats.distanceM).toBeCloseTo(batch.distanceM, 6);
+    expect(stats.movingTimeS).toBe(batch.movingTimeS);
+    expect(stats.avgSpeedMps).toBeCloseTo(batch.avgSpeedMps, 6);
+  });
+
+  it('A04: D± restarts at the boundary — pausing on the summit and resuming in the valley is not a descent', () => {
+    useRecorderStore.getState().start('Summit lunch');
+    useRecorderStore.getState().addPoint(pt({ time: T0, altitude: 900 }));
+    useRecorderStore
+      .getState()
+      .addPoint(pt({ time: T0 + 2_000, latitude: 46.80025, altitude: 905 }));
+    jest.setSystemTime(T0 + 2_000);
+    useRecorderStore.getState().pause();
+    jest.setSystemTime(T0 + 3_600_000);
+    useRecorderStore.getState().resume();
+    useRecorderStore
+      .getState()
+      .addPoint(pt({ time: T0 + 3_600_000, latitude: 46.85, altitude: 300 }));
+    useRecorderStore
+      .getState()
+      .addPoint(pt({ time: T0 + 3_602_000, latitude: 46.85025, altitude: 304 }));
+    const { stats, points, segmentStarts } = useRecorderStore.getState();
+    expect(stats.descentM).toBe(0);
+    expect(stats.ascentM).toBe(9);
+    expect(stats.ascentM).toBe(computeSegmentedTrackStats(points, segmentStarts).ascentM);
+  });
+
+  it('A04: a fix stamped ahead of the wall clock still belongs to the leg before the pause', () => {
+    // GPS time vs a device clock running slow: the last accepted fix is
+    // "later" than the pause tap. The boundary must not sit before it.
+    useRecorderStore.getState().start('Skewed clock');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 5_000, latitude: 46.80005 }));
+    jest.setSystemTime(T0 + 3_000);
+    useRecorderStore.getState().pause();
+    expect(useRecorderStore.getState().pausedAt).toBe(T0 + 5_001);
+    jest.setSystemTime(T0 + 600_000);
+    useRecorderStore.getState().resume();
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 600_000, latitude: 46.809 }));
+    expect(useRecorderStore.getState().segmentStarts).toEqual([2]);
+    expect(useRecorderStore.getState().stats.distanceM).toBeCloseTo(5.56, 1);
+  });
+
+  it('A04: the pre-pause fix is not a teleport reference for the first resumed fix', () => {
+    // 1 km in 1 s of *fix time* would trip the 40 m/s teleport gate if the
+    // gate still measured from the last pre-pause fix.
+    useRecorderStore.getState().start('Fast relocation');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 500);
+    useRecorderStore.getState().pause();
+    jest.setSystemTime(T0 + 900);
+    useRecorderStore.getState().resume();
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 1_000, latitude: 46.809 }));
+    expect(useRecorderStore.getState().points).toHaveLength(2);
+    expect(useRecorderStore.getState().segmentStarts).toEqual([1]);
+  });
+
+  it('A04: segments survive checkpoint → crash → recovery, and the recovered stats match', async () => {
+    recordA04();
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 603_000, latitude: 46.80925 }));
+    const live = useRecorderStore.getState();
+    simulateCrash();
+    jest.setSystemTime(T0 + 700_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    const after = useRecorderStore.getState();
+    expect(after.segmentStarts).toEqual([1]);
+    expect(after.pauses).toEqual([{ from: T0 + 1_000, to: T0 + 601_000 }]);
+    expect(after.stats.distanceM).toBeCloseTo(live.stats.distanceM, 6);
+    expect(after.stats.movingTimeS).toBe(live.stats.movingTimeS);
+    expect(after.stats.pointCount).toBe(3);
+    // Resuming opens yet another segment; the GPX gets three <trkseg>s.
+    jest.setSystemTime(T0 + 800_000);
+    useRecorderStore.getState().resume();
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 800_000, latitude: 46.82 }));
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 802_000, latitude: 46.82025 }));
+    expect(useRecorderStore.getState().segmentStarts).toEqual([1, 3]);
+    await useRecorderStore.getState().stop();
+    expect(lastGpx().match(/<trkseg>/g)).toHaveLength(3);
+  });
+
+  it('A04: background merges respect the pauses — fixes during a pause are dropped, later ones open the new leg', () => {
+    useRecorderStore.getState().start('Backgrounded pause');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 10_000);
+    useRecorderStore.getState().pause();
+    jest.setSystemTime(T0 + 610_000);
+    useRecorderStore.getState().resume();
+    expect(
+      useRecorderStore.getState().mergeBackgroundPoints([
+        pt({ time: T0 + 300_000, latitude: 46.805 }), // stamped mid-pause: never recorded
+        pt({ time: T0 + 5_000, latitude: 46.80005 }), // pre-pause, late delivery: leg 1
+        pt({ time: T0 + 611_000, latitude: 46.809 }), // after the resume: leg 2, 1 km away
+        pt({ time: T0 + 613_000, latitude: 46.80925 }),
+      ]),
+    ).toBe(true);
+    const { points, segmentStarts, stats } = useRecorderStore.getState();
+    expect(points.map((p) => p.time)).toEqual([T0, T0 + 5_000, T0 + 611_000, T0 + 613_000]);
+    expect(segmentStarts).toEqual([2]);
+    expect(stats.distanceM).toBeLessThan(40);
+    expect(stats.distanceM).toBeCloseTo(
+      computeSegmentedTrackStats(points, segmentStarts).distanceM,
+      6,
+    );
+  });
+
+  it('A04: a legacy checkpoint (no pauses) restores as a single segment', async () => {
+    checkpoint.writeCheckpoint({
+      status: 'recording',
+      name: 'Legacy',
+      startedAt: T0,
+      pausedMs: 0,
+      points: [pt({ time: T0 }), pt({ time: T0 + 2_000, latitude: 46.800025 })],
+      waypoints: [],
+    });
+    resetRecorderRecoveryForTests();
+    expect(await initRecorderRecovery()).toBe(true);
+    const s = useRecorderStore.getState();
+    expect(s.pauses).toEqual([]);
+    expect(s.segmentStarts).toEqual([]);
+    expect(s.stats).toEqual(computeTrackStats(s.points));
+  });
+
+  /** The A05 reproduction: record 60 s, pause, die, reopen an hour later, resume. */
+  const recordA05 = () => {
+    useRecorderStore.getState().start('Killed while paused');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 60_000);
+    useRecorderStore.getState().pause();
+  };
+
+  it('A05: pause() checkpoints immediately, with the pause start and completed pauses only', () => {
+    recordA05();
+    const cp = jest.mocked(checkpoint.writeCheckpoint).mock.calls.at(-1)?.[0];
+    expect(cp?.status).toBe('paused');
+    expect(cp?.pausedAt).toBe(T0 + 60_000);
+    expect(cp?.pausedMs).toBe(0);
+    expect(cp?.pauses).toEqual([]);
+    expect(cp?.savedAt).toBe(T0 + 60_000);
+  });
+
+  it('A05: an hour dead while paused is not active time', async () => {
+    recordA05();
+    simulateCrash();
+    jest.setSystemTime(T0 + 3_660_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    const recovered = useRecorderStore.getState();
+    expect(recovered.status).toBe('paused');
+    // The pause the user started is the pause being resumed.
+    expect(recovered.pausedAt).toBe(T0 + 60_000);
+    expect(recovered.pausedMs).toBe(0);
+
+    useRecorderStore.getState().resume();
+    expect(useRecorderStore.getState().pausedMs).toBe(3_600_000);
+    expect(elapsedS()).toBe(60); // was 3660
+    expect(useRecorderStore.getState().pauses).toEqual([{ from: T0 + 60_000, to: T0 + 3_660_000 }]);
+  });
+
+  it('A05: repeated recoveries keep the original pause start', async () => {
+    recordA05();
+    simulateCrash();
+    jest.setSystemTime(T0 + 3_660_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    // Recovery re-checkpoints; a second crash + relaunch must not restart the
+    // pause at the first relaunch.
+    simulateCrash();
+    jest.setSystemTime(T0 + 7_260_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().pausedAt).toBe(T0 + 60_000);
+    jest.setSystemTime(T0 + 7_320_000);
+    useRecorderStore.getState().resume();
+    expect(elapsedS()).toBe(60);
+  });
+
+  it('A05: a delayed resume after relaunch counts the wait as paused too', async () => {
+    recordA05();
+    simulateCrash();
+    jest.setSystemTime(T0 + 3_660_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    jest.setSystemTime(T0 + 3_960_000); // user looks at the recovered session for 5 min
+    useRecorderStore.getState().resume();
+    expect(elapsedS()).toBe(60);
+    jest.setSystemTime(T0 + 3_990_000);
+    expect(elapsedS()).toBe(90);
+  });
+
+  it('A05: killed while RECORDING, active time stops at the last evidence of life, not at relaunch', async () => {
+    useRecorderStore.getState().start('Killed while recording');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 60_000);
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 60_000, latitude: 46.80025 }));
+    simulateCrash(); // the throttled checkpoint captured savedAt = T0 + 60 s
+    jest.setSystemTime(T0 + 3_660_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().pausedAt).toBe(T0 + 3_660_000);
+    expect(useRecorderStore.getState().pausedMs).toBe(3_600_000);
+    useRecorderStore.getState().resume();
+    expect(elapsedS()).toBe(60);
+  });
+
+  it('A05: fixes journaled by the OS task while the process was dead ARE active time', async () => {
+    useRecorderStore.getState().start('Screen-off, process killed');
+    useRecorderStore.getState().addPoint(pt({ time: T0 }));
+    jest.setSystemTime(T0 + 60_000);
+    useRecorderStore.getState().addPoint(pt({ time: T0 + 60_000, latitude: 46.80025 }));
+    simulateCrash();
+    // The foreground service kept recording for another 9 minutes.
+    await checkpoint.appendBackgroundPoints([
+      pt({ time: T0 + 300_000, latitude: 46.8005 }),
+      pt({ time: T0 + 600_000, latitude: 46.80075 }),
+    ]);
+    jest.setSystemTime(T0 + 3_660_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    const s = useRecorderStore.getState();
+    expect(s.points).toHaveLength(4);
+    expect(s.segmentStarts).toEqual([]); // one leg: the journaled fixes predate the relaunch pause
+    expect(s.pausedMs).toBe(3_660_000 - 600_000);
+    useRecorderStore.getState().resume();
+    expect(elapsedS()).toBe(600);
+  });
+
+  it('A05: a legacy paused checkpoint (pause folded into pausedMs, no pausedAt) pauses at relaunch', async () => {
+    checkpoint.writeCheckpoint({
+      status: 'paused',
+      name: 'Legacy paused',
+      startedAt: T0,
+      pausedMs: 30_000, // the old writer folded the in-flight pause in
+      points: [pt({ time: T0 })],
+      waypoints: [],
+    });
+    resetRecorderRecoveryForTests();
+    jest.setSystemTime(T0 + 3_600_000);
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().pausedAt).toBe(T0 + 3_600_000);
+    expect(useRecorderStore.getState().pausedMs).toBe(30_000);
   });
 });
 

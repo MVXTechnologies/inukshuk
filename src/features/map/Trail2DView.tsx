@@ -1,5 +1,6 @@
 import type { TrackNote, TrackPoint } from '@core/models';
 import type { TrackPointAt } from '@core/geo/track';
+import { splitSegments } from '@core/geo/track/segments';
 import { numberNotesOnTrack } from '@core/library/notes';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import { useSettingsStore } from '@state/settingsStore';
@@ -22,12 +23,15 @@ import { NoteNumberBadge } from './components/NoteNumberBadge';
 
 export function Trail2DView({
   points,
+  segmentStarts,
   notes,
   scrubAt,
   basemap,
   onNotePress,
 }: {
   points: readonly TrackPoint[];
+  /** Recording segment boundaries (pauses) — the trace is not drawn across them. */
+  segmentStarts?: readonly number[];
   notes?: readonly TrackNote[];
   /** Elevation-profile scrub position: draws a marker riding the 2D trace. */
   scrubAt?: TrackPointAt | null;
@@ -54,14 +58,19 @@ export function Trail2DView({
     [points],
   );
 
-  const lineFeature = useMemo(
-    () => ({
+  // One part per recording segment: a pause (drive to the next trailhead,
+  // lunch off-trail) must not be drawn as a straight line across the map.
+  const lineFeature = useMemo(() => {
+    const parts = splitSegments(lngLats, segmentStarts ?? []);
+    return {
       type: 'Feature' as const,
-      geometry: { type: 'LineString' as const, coordinates: lngLats },
+      geometry:
+        parts.length > 1
+          ? { type: 'MultiLineString' as const, coordinates: parts }
+          : { type: 'LineString' as const, coordinates: lngLats },
       properties: {},
-    }),
-    [lngLats],
-  );
+    };
+  }, [lngLats, segmentStarts]);
 
   // Notes numbered 1..N in trail order — the SAME numbering the notes list and
   // the elevation-profile pins use (both go through orderNotes), so a pin on

@@ -22,6 +22,7 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
   const name = useRecorderStore((s) => s.name);
   const stats = useRecorderStore((s) => s.stats);
   const points = useRecorderStore((s) => s.points);
+  const segmentStarts = useRecorderStore((s) => s.segmentStarts);
   const startedAt = useRecorderStore((s) => s.startedAt);
   const pausedMs = useRecorderStore((s) => s.pausedMs);
   const lastFixAt = useRecorderStore((s) => s.lastFixAt);
@@ -149,6 +150,8 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     name,
     stats,
     points,
+    /** Pause boundaries in `points` — the live trace is drawn per segment. */
+    segmentStarts,
     waypoints,
     elapsedS,
     gpsQuality,
