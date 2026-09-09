@@ -64,9 +64,12 @@ export function mergeTracks(sources: readonly MergeSource[]): MergeResult {
 
   const points: TrackPoint[] = [];
   const waypoints: GpxWaypoint[] = [];
+  // Plain loops, not `push(...s.points)`: spreading a whole point series into
+  // one call overflows the engine's argument limit — a valid 150k-point GPX
+  // threw RangeError before anything was written (Hermes caps vary).
   for (const s of ordered) {
-    points.push(...s.points);
-    if (s.waypoints) waypoints.push(...s.waypoints);
+    for (const p of s.points) points.push(p);
+    if (s.waypoints) for (const w of s.waypoints) waypoints.push(w);
   }
 
   const names = ordered.map((s) => s.name.trim()).filter((n) => n.length > 0);
