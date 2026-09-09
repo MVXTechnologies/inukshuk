@@ -89,7 +89,9 @@ function simulateCrash() {
 }
 
 beforeEach(() => {
+  jest.mocked(storage.deleteFileAt).mockReset();
   useRecorderStore.getState().discard(); // resets state AND clears the mock journal
+  jest.mocked(storage.deleteFileAt).mockClear();
   resetRecorderRecoveryForTests();
   // Tracks saved by earlier tests carry real Date.now() startedAt stamps; a
   // recovery test whose session starts in the same millisecond then trips the
@@ -97,6 +99,102 @@ beforeEach(() => {
   // in production — one recording at a time — but the shared store must not
   // leak that collision across tests.
   useLibraryStore.setState({ tracks: [], hydrated: false });
+});
+
+describe('recording waypoint photo durability (audit A06)', () => {
+  const oldUri = 'file://photos/old.jpg';
+  const newUri = 'file://photos/new.jpg';
+
+  function preparePhoto() {
+    const recorder = useRecorderStore.getState();
+    recorder.start('Photo hike');
+    recorder.addPoint(pt());
+    recorder.addWaypoint();
+    const waypoint = useRecorderStore.getState().waypoints[0]!;
+    recorder.updateWaypoint(waypoint.id, { photoUri: oldUri });
+    return waypoint.id;
+  }
+
+  it.each(['replace', 'clear', 'delete'])(
+    'retains the last saved photo and waypoint after failed %s and recovery',
+    async (operation) => {
+      const id = preparePhoto();
+      const before = useRecorderStore.getState().waypoints;
+      jest.mocked(checkpoint.writeCheckpoint).mockReturnValueOnce(false);
+      const edit = () =>
+        operation === 'delete'
+          ? useRecorderStore.getState().removeWaypoint(id)
+          : useRecorderStore.getState().updateWaypoint(id, {
+              photoUri: operation === 'replace' ? newUri : '',
+            });
+
+      expect(edit).toThrow(/save.*waypoint/i);
+      expect(useRecorderStore.getState().waypoints).toBe(before);
+      expect(storage.deleteFileAt).not.toHaveBeenCalled();
+
+      simulateCrash();
+      expect(await initRecorderRecovery()).toBe(true);
+      expect(useRecorderStore.getState().waypoints).toEqual(before);
+      expect(useRecorderStore.getState().waypoints[0]?.photoUri).toBe(oldUri);
+
+      // Retry against recovered state. Metadata must no longer reference the
+      // old photo before cleanup can run, including when cleanup itself fails.
+      let checkpointAtDeletion: checkpoint.RecorderCheckpoint | undefined;
+      jest.mocked(storage.deleteFileAt).mockImplementation(() => {
+        checkpointAtDeletion = jest.mocked(checkpoint.writeCheckpoint).mock.calls.at(-1)?.[0];
+        throw new Error('cannot delete');
+      });
+      expect(edit).not.toThrow();
+      expect(storage.deleteFileAt).toHaveBeenCalledTimes(1);
+      expect(storage.deleteFileAt).toHaveBeenCalledWith(oldUri);
+      expect(checkpointAtDeletion).toBeDefined();
+      expect(checkpointAtDeletion?.waypoints.some((w) => w.photoUri === oldUri)).toBe(false);
+      simulateCrash();
+      expect(await initRecorderRecovery()).toBe(true);
+      expect(useRecorderStore.getState().waypoints).toHaveLength(operation === 'delete' ? 0 : 1);
+      expect(useRecorderStore.getState().waypoints[0]?.photoUri).toBe(
+        operation === 'replace' ? newUri : undefined,
+      );
+    },
+  );
+
+  it('retains a failed name/note edit for retry without mutating the saved waypoint', () => {
+    const id = preparePhoto();
+    const before = useRecorderStore.getState().waypoints;
+    jest.mocked(checkpoint.writeCheckpoint).mockReturnValueOnce(false);
+    expect(() =>
+      useRecorderStore.getState().updateWaypoint(id, {
+        label: 'Spring',
+        note: 'Fresh water',
+      }),
+    ).toThrow(/save.*waypoint/i);
+    expect(useRecorderStore.getState().waypoints).toBe(before);
+  });
+
+  it('preserves both photo files when a failed promotion leaves the candidate checkpoint recoverable', async () => {
+    const id = preparePhoto();
+    const write = jest.mocked(checkpoint.writeCheckpoint).getMockImplementation()!;
+    jest.mocked(checkpoint.writeCheckpoint).mockImplementationOnce((cp) => {
+      write(cp); // completed stage is recoverable even though promotion failed
+      return false;
+    });
+    expect(() => useRecorderStore.getState().updateWaypoint(id, { photoUri: newUri })).toThrow();
+    expect(useRecorderStore.getState().waypoints[0]?.photoUri).toBe(oldUri);
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+    simulateCrash();
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().waypoints[0]?.photoUri).toBe(newUri);
+  });
+
+  it('does not delete a photo still referenced by another live waypoint', () => {
+    const id = preparePhoto();
+    useRecorderStore.getState().addWaypoint();
+    const second = useRecorderStore.getState().waypoints[1]!;
+    useRecorderStore.getState().updateWaypoint(second.id, { photoUri: oldUri });
+    useRecorderStore.getState().removeWaypoint(id);
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+    expect(useRecorderStore.getState().waypoints[0]?.photoUri).toBe(oldUri);
+  });
 });
 
 describe('GPS fix gating in addPoint', () => {

@@ -1,10 +1,11 @@
 import { shouldPersistPosition } from '@core/geo/lastKnownPosition';
 import type { LatLng, TrackPoint } from '@core/models';
 import { isBackgroundFeedConfirmed, toTrackPoint } from '@lib/backgroundLocation';
+import { reportError } from '@lib/errorReporting';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Location from 'expo-location';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 export type LocationPermission = 'undetermined' | 'granted' | 'denied';
@@ -17,19 +18,28 @@ export const WATCH_RETRY_MS = 5000;
 
 /**
  * Persist `pos` as the settings store's last known map position (the cold-start
- * camera seed — see `@core/geo/lastKnownPosition`). Returns whether the update
- * was accepted: before hydration it must be refused, because `set()` snapshots
+ * camera seed — see `@core/geo/lastKnownPosition`). Before hydration the write
+ * must be deferred, because `set()` snapshots
  * the whole settings state and a pre-hydration write would clobber
  * settings.json with DEFAULTS. An unchanged position is "accepted" without a
- * disk write. Callers throttle how often this runs — never call it per-fix.
+ * disk write. Failures count toward the caller's throttle too, so a full disk
+ * cannot cause a write and an error report on every GPS fix.
  */
-function persistLastKnownPosition(pos: LatLng): boolean {
+function persistLastKnownPosition(pos: LatLng): 'deferred' | 'saved' | 'failed' {
   const settings = useSettingsStore.getState();
-  if (!settings.hydrated) return false;
+  if (!settings.hydrated) return 'deferred';
   const prev = settings.lastKnownPosition;
-  if (prev && prev.latitude === pos.latitude && prev.longitude === pos.longitude) return true;
-  settings.set('lastKnownPosition', pos);
-  return true;
+  if (prev && prev.latitude === pos.latitude && prev.longitude === pos.longitude) return 'saved';
+  try {
+    settings.set('lastKnownPosition', pos);
+  } catch (err) {
+    // Settings publishes memory before writing. Roll back this camera seed so
+    // an unchanged fix can retry after backoff instead of looking already saved.
+    useSettingsStore.setState({ lastKnownPosition: prev });
+    reportError(err, 'last-known-position');
+    return 'failed';
+  }
+  return 'saved';
 }
 
 export interface LocationTracking {
@@ -70,10 +80,22 @@ export function useLocationTracking(): LocationTracking {
   // (or device-off) transition the map can surface and the recorder can pause.
   const [recheck, setRecheck] = useState(0);
   // Last-known-position write throttle (cold-start camera seed). The ref holds
-  // when we last wrote so the foreground path writes at most once per interval;
+  // when we last attempted a write so failures also back off for one interval;
   // backgrounding flushes the freshest fix unconditionally (one write).
-  const lastPositionWriteAtRef = useRef<number | null>(null);
+  const lastPositionAttemptAtRef = useRef<number | null>(null);
+  const lastPositionFailureAtRef = useRef<number | null>(null);
   const locationRef = useRef<LatLng | null>(null);
+
+  const persistPosition = useCallback((pos: LatLng) => {
+    const now = Date.now();
+    // A normal background flush bypasses the periodic write throttle, but a
+    // failed write must also back off across iOS's inactive → background pair.
+    if (!shouldPersistPosition(lastPositionFailureAtRef.current, now)) return;
+    const outcome = persistLastKnownPosition(pos);
+    if (outcome === 'deferred') return;
+    lastPositionAttemptAtRef.current = now;
+    lastPositionFailureAtRef.current = outcome === 'failed' ? now : null;
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -81,13 +103,11 @@ export function useLocationTracking(): LocationTracking {
       // Going to background/inactive: flush the latest fix so the next cold
       // start opens the map where the user last was (not null island).
       if ((state === 'background' || state === 'inactive') && locationRef.current) {
-        if (persistLastKnownPosition(locationRef.current)) {
-          lastPositionWriteAtRef.current = Date.now();
-        }
+        persistPosition(locationRef.current);
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [persistPosition]);
 
   useEffect(() => {
     let sub: Location.LocationSubscription | undefined;
@@ -139,21 +159,18 @@ export function useLocationTracking(): LocationTracking {
           locationRef.current = pos;
           setLocation(pos);
           setLastFix(fix);
-          // Foreground last-position persistence, throttled: the first fix
-          // of the session writes immediately (survives a later crash/kill),
-          // then at most one write per interval while fixes keep flowing.
-          const now = Date.now();
-          if (
-            shouldPersistPosition(lastPositionWriteAtRef.current, now) &&
-            persistLastKnownPosition(pos)
-          ) {
-            lastPositionWriteAtRef.current = now;
-          }
           // Recorder filters by status internally. Only while the background
           // task is CONFIRMED delivering does the watch stand down to just
           // driving the marker — a started-but-silent task must never mute
           // the only working feeder (the v1.0.2 no-points regression).
           if (!isBackgroundFeedConfirmed()) useRecorderStore.getState().addPoint(fix);
+          // Foreground last-position persistence, throttled: the first fix
+          // of the session writes immediately (survives a later crash/kill),
+          // then at most one write per interval while fixes keep flowing.
+          const now = Date.now();
+          if (shouldPersistPosition(lastPositionAttemptAtRef.current, now)) {
+            persistPosition(pos);
+          }
         };
         try {
           sub = await watch(Location.Accuracy.BestForNavigation);
@@ -190,7 +207,7 @@ export function useLocationTracking(): LocationTracking {
       if (retryTimer) clearTimeout(retryTimer);
       sub?.remove();
     };
-  }, [minDisplacement, recheck]);
+  }, [minDisplacement, recheck, persistPosition]);
 
   return { location, lastFix, permission, unavailableReason };
 }

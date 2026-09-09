@@ -183,6 +183,25 @@ function checkpointOf(s: RecorderState): checkpoint.RecorderCheckpoint | null {
   };
 }
 
+/** Edits are accepted only when their recovery metadata is safely on disk. */
+function checkpointWaypointEdit(s: RecorderState, waypoints: PendingWaypoint[]): RecorderState {
+  const next = { ...s, waypoints };
+  const cp = checkpointOf(next);
+  if (cp === null || !checkpoint.writeCheckpoint(cp)) {
+    throw new Error('Could not save the waypoint. Free some storage and try again.');
+  }
+  return next;
+}
+
+function deleteUnusedWaypointPhoto(uri: string | undefined, waypoints: PendingWaypoint[]): void {
+  if (!uri || waypoints.some((w) => w.photoUri === uri)) return;
+  try {
+    storage.deleteFileAt(uri);
+  } catch {
+    // Metadata is already committed; an orphan must not turn success into an error.
+  }
+}
+
 let sessionGeneration = 0;
 
 /** Ownership token for asynchronous recovery and background-journal reads. */
@@ -313,14 +332,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   },
 
   updateWaypoint: (id, patch) => {
+    const oldPhoto = get().waypoints.find((w) => w.id === id)?.photoUri;
     set((s) => {
-      const old = s.waypoints.find((w) => w.id === id);
-      // Replacing or clearing a photo: delete the now-orphaned file.
-      if (old?.photoUri && patch.photoUri !== undefined && patch.photoUri !== old.photoUri) {
-        storage.deleteFileAt(old.photoUri);
-      }
-      return {
-        waypoints: s.waypoints.map((w) => {
+      if (!s.waypoints.some((w) => w.id === id)) return s;
+      return checkpointWaypointEdit(
+        s,
+        s.waypoints.map((w) => {
           if (w.id !== id) return w;
           const next: PendingWaypoint = { ...w };
           // Blank is "leave it alone", exactly as libraryStore.renameWaypoint:
@@ -336,20 +353,21 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
           }
           return next;
         }),
-      };
+      );
     });
-    const cp = checkpointOf(get());
-    if (cp) checkpoint.writeCheckpoint(cp);
+    deleteUnusedWaypointPhoto(oldPhoto, get().waypoints);
   },
 
   removeWaypoint: (id) => {
+    const oldPhoto = get().waypoints.find((w) => w.id === id)?.photoUri;
     set((s) => {
-      const w = s.waypoints.find((x) => x.id === id);
-      if (w?.photoUri) storage.deleteFileAt(w.photoUri);
-      return { waypoints: s.waypoints.filter((x) => x.id !== id) };
+      if (!s.waypoints.some((w) => w.id === id)) return s;
+      return checkpointWaypointEdit(
+        s,
+        s.waypoints.filter((w) => w.id !== id),
+      );
     });
-    const cp = checkpointOf(get());
-    if (cp) checkpoint.writeCheckpoint(cp);
+    deleteUnusedWaypointPhoto(oldPhoto, get().waypoints);
   },
 
   pause: () => {

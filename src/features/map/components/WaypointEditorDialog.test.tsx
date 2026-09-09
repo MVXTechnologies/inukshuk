@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import * as storage from '@data/storage';
+import * as ImagePicker from 'expo-image-picker';
 import { Keyboard } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { WaypointEditorDialog } from './WaypointEditorDialog';
@@ -8,7 +10,11 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
   launchImageLibraryAsync: jest.fn(),
 }));
-jest.mock('@data/storage', () => ({ newId: () => 'id', importPhoto: jest.fn() }));
+jest.mock('@data/storage', () => ({
+  newId: () => 'id',
+  importPhoto: jest.fn(),
+  deleteFileAt: jest.fn(),
+}));
 
 /**
  * #232 — the form grew a Name field at the top, pre-filled with the auto
@@ -16,7 +22,7 @@ jest.mock('@data/storage', () => ({ newId: () => 'id', importPhoto: jest.fn() })
  * itself is a controlled form: the caller owns both drafts, and the store
  * decides what a blank name means.
  */
-async function setup(name = 'Waypoint 7') {
+async function setup(name = 'Waypoint 7', photoUri?: string) {
   const handlers = {
     onChangeName: jest.fn(),
     onChangeDraft: jest.fn(),
@@ -26,7 +32,12 @@ async function setup(name = 'Waypoint 7') {
   };
   await render(
     <PaperProvider>
-      <WaypointEditorDialog waypoint={{ label: name }} name={name} draft="" {...handlers} />
+      <WaypointEditorDialog
+        waypoint={{ label: name, photoUri }}
+        name={name}
+        draft="Keep this note"
+        {...handlers}
+      />
     </PaperProvider>,
   );
   return handlers;
@@ -84,5 +95,84 @@ describe('WaypointEditorDialog Name field (#232)', () => {
     await setup('Camp du ruisseau');
     const field = await screen.findByLabelText('Waypoint name');
     expect(field.props.value).toBe('Camp du ruisseau');
+  });
+});
+
+describe('waypoint persistence failure feedback', () => {
+  it.each(['Done', 'Delete'])(
+    'keeps drafts available and permits retry after %s fails',
+    async (action) => {
+      const handlers = await setup('Spring');
+      const handler = action === 'Done' ? handlers.onSave : handlers.onDelete;
+      handler.mockImplementationOnce(() => {
+        throw new Error('Storage is full. Try again.');
+      });
+      const buttons = await screen.findAllByText(action);
+      await act(async () => {
+        fireEvent.press(buttons[buttons.length - 1]!);
+      });
+
+      expect(await screen.findByText('Storage is full. Try again.')).toBeOnTheScreen();
+      expect(screen.getByLabelText('Waypoint name').props.value).toBe('Spring');
+      expect(screen.getByPlaceholderText("What's here?").props.value).toBe('Keep this note');
+      await act(async () => {
+        fireEvent.press(buttons[buttons.length - 1]!);
+      });
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('Storage is full. Try again.')).toBeNull();
+    },
+  );
+
+  it('shows a failed photo removal and leaves the original photo available', async () => {
+    const handlers = await setup('Spring', 'file://photos/old.jpg');
+    handlers.onSetPhoto.mockImplementationOnce(() => {
+      throw new Error('Photo was not saved.');
+    });
+    await act(async () => {
+      fireEvent.press(await screen.findByText('Remove photo'));
+    });
+    expect(await screen.findByText('Photo was not saved.')).toBeOnTheScreen();
+    expect(screen.getByText('Remove photo')).toBeOnTheScreen();
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+  });
+
+  it('retains and retries the same imported photo after an uncertain checkpoint commit', async () => {
+    const handlers = await setup('Spring');
+    jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file://picker/photo.jpg', width: 10, height: 10 }],
+    });
+    jest.mocked(storage.importPhoto).mockResolvedValue('file://photos/new.jpg');
+    handlers.onSetPhoto.mockImplementationOnce(() => {
+      throw new Error('Photo was not saved.');
+    });
+
+    await act(async () => {
+      fireEvent.press(await screen.findByText('Photo'));
+    });
+    expect(await screen.findByText('Photo was not saved.')).toBeOnTheScreen();
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+    expect(handlers.onSetPhoto).toHaveBeenCalledWith('file://photos/new.jpg');
+    expect(handlers.onSave).not.toHaveBeenCalled();
+    handlers.onSetPhoto.mockImplementationOnce(() => {
+      throw new Error('Still unable to save.');
+    });
+    const dones = screen.getAllByText('Done');
+    await act(async () => {
+      fireEvent.press(dones[dones.length - 1]!);
+    });
+    expect(handlers.onSave).not.toHaveBeenCalled();
+    expect(await screen.findByText('Still unable to save.')).toBeOnTheScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByText('Retry photo'));
+    });
+    expect(handlers.onSetPhoto).toHaveBeenLastCalledWith('file://photos/new.jpg');
+    expect(handlers.onSetPhoto).toHaveBeenCalledTimes(3);
+    expect(storage.importPhoto).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Retry photo')).toBeNull();
+    await act(async () => {
+      fireEvent.press(dones[dones.length - 1]!);
+    });
+    expect(handlers.onSave).toHaveBeenCalledTimes(1);
   });
 });

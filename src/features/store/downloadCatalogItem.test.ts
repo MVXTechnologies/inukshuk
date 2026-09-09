@@ -84,6 +84,8 @@ const parsedDoc = (id: string): MapDocument => ({
 });
 
 beforeEach(() => {
+  jest.mocked(storage.writeIndex).mockReset();
+  jest.mocked(storage.deleteFileAt).mockReset();
   useLibraryStore.setState({
     maps: [],
     folders: [{ id: 'folder-9', name: 'Parcs', createdAt: 1 }],
@@ -218,10 +220,131 @@ describe('downloadCatalogItemToLibrary', () => {
   });
 
   it('rejects a second download of an item already in flight', async () => {
-    downloadMock.mockReturnValue({ promise: new Promise<string>(() => {}), cancel: jest.fn() });
+    let rejectDownload!: (error: Error) => void;
+    downloadMock.mockReturnValue({
+      promise: new Promise<string>((_resolve, reject) => {
+        rejectDownload = reject;
+      }),
+      cancel: () => rejectDownload(new CatalogDownloadCanceled()),
+    });
     const first = downloadCatalogItemToLibrary(item, null);
     await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('already downloading');
     cancelCatalogDownload('cantopo-021l14');
-    first.catch(() => undefined); // left pending by the stub; silence the leak
+    await expect(first).rejects.toBeInstanceOf(CatalogDownloadCanceled);
   });
+});
+
+describe('catalog replacement durability (audit A01)', () => {
+  const old = { ...parsedDoc('old-id'), sourceItemId: item.id };
+  const replacement = parsedDoc('replacement-file');
+
+  beforeEach(() => {
+    useLibraryStore.setState({ maps: [old] });
+    downloadMock.mockReturnValue({
+      promise: Promise.resolve(replacement.fileUri),
+      cancel: jest.fn(),
+    });
+    parseMock.mockResolvedValue(replacement);
+  });
+
+  it('keeps the durable map and its bytes when the replacement index write fails', async () => {
+    const files = new Set([old.fileUri, replacement.fileUri]);
+    let durableMaps = [old];
+    jest.mocked(storage.deleteFileAt).mockImplementation((uri) => {
+      files.delete(uri);
+    });
+    jest.mocked(storage.writeIndex).mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+
+    await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('ENOSPC');
+
+    expect(useLibraryStore.getState().maps).toEqual(durableMaps);
+    expect(files.has(old.fileUri)).toBe(true);
+    expect(files.has(replacement.fileUri)).toBe(true);
+    // A cold launch uses this last successful index, whose file is still present.
+    expect(files.has(durableMaps[0]!.fileUri)).toBe(true);
+
+    jest.mocked(storage.writeIndex).mockImplementation((index) => {
+      durableMaps = (index as { maps: typeof durableMaps }).maps;
+    });
+    files.add(replacement.fileUri);
+    await downloadCatalogItemToLibrary(item, null);
+    expect(durableMaps[0]?.fileUri).toBe(replacement.fileUri);
+    expect(files.has(old.fileUri)).toBe(false);
+  });
+
+  it('commits replacement metadata before deleting old bytes, tolerating cleanup failure', async () => {
+    const operations: string[] = [];
+    jest.mocked(storage.writeIndex).mockImplementation(() => {
+      operations.push('commit');
+    });
+    jest.mocked(storage.deleteFileAt).mockImplementation(() => {
+      operations.push('delete');
+      throw new Error('cannot delete');
+    });
+    await expect(downloadCatalogItemToLibrary(item, null)).resolves.toMatchObject({
+      id: old.id,
+      fileUri: replacement.fileUri,
+    });
+    expect(operations).toEqual(['commit', 'delete']);
+    expect(storage.deleteFileAt).toHaveBeenCalledWith(old.fileUri);
+    expect(useLibraryStore.getState().maps[0]?.fileUri).toBe(replacement.fileUri);
+  });
+
+  it('retains a fresh download when the failed commit may have staged its metadata', async () => {
+    useLibraryStore.setState({ maps: [] });
+    jest.mocked(storage.writeIndex).mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('ENOSPC');
+    expect(useLibraryStore.getState().maps).toEqual([]);
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+  });
+
+  it('retains replacement bytes when a failed promotion leaves a recoverable replacement index', async () => {
+    let recoverableMaps: MapDocument[] = [old];
+    jest.mocked(storage.writeIndex).mockImplementationOnce((index) => {
+      // writeJson can fail after deleting the old index; readJson then recovers
+      // this completed .tmp payload on the next launch.
+      recoverableMaps = (index as { maps: MapDocument[] }).maps;
+      throw new Error('promotion failed');
+    });
+    await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('promotion failed');
+    expect(recoverableMaps[0]?.fileUri).toBe(replacement.fileUri);
+    expect(useLibraryStore.getState().maps).toEqual([old]);
+    expect(storage.deleteFileAt).not.toHaveBeenCalled();
+  });
+
+  it('retains the installed map when hydration cannot guarantee a durable commit', async () => {
+    useLibraryStore.setState({ hydrated: false });
+    await expect(downloadCatalogItemToLibrary(item, null)).rejects.toThrow('still loading');
+    expect(useLibraryStore.getState().maps).toEqual([old]);
+    expect(storage.deleteFileAt).toHaveBeenCalledTimes(1);
+    expect(storage.deleteFileAt).toHaveBeenCalledWith(replacement.fileUri);
+  });
+
+  it.each(['deleted', 'replaced'])(
+    'abandons an update whose installation was %s during parsing',
+    async (change) => {
+      let finish!: (doc: MapDocument) => void;
+      parseMock.mockImplementation(
+        () =>
+          new Promise<MapDocument>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = downloadCatalogItemToLibrary(item, null);
+      await Promise.resolve();
+      const maps = change === 'deleted' ? [] : [{ ...old, fileUri: 'file://maps/newer.pdf' }];
+      useLibraryStore.setState({ maps });
+      finish(replacement);
+
+      await expect(pending).rejects.toBeInstanceOf(CatalogDownloadCanceled);
+      expect(useLibraryStore.getState().maps).toEqual(maps);
+      expect(storage.writeIndex).not.toHaveBeenCalled();
+      expect(storage.deleteFileAt).toHaveBeenCalledTimes(1);
+      expect(storage.deleteFileAt).toHaveBeenCalledWith(replacement.fileUri);
+    },
+  );
 });
