@@ -118,6 +118,17 @@ export interface Settings {
   /** Native MapLibre heatmap density layer under the trail lines. */
   showHeatmap: boolean;
   /**
+   * The "PDF maps" master switch (overlays menu → Topology): whether the
+   * imported/made PDF maps are drawn at all. Off targets nothing — no page
+   * is rasterized and the Library card reports nothing — whatever the
+   * folder picker says (`@core/library/visibility` → `pdfOverlayMaps`).
+   * Persisted, unlike the map's transient view flags: a hidden-maps choice
+   * has to survive a restart (#233 — the row was lost in the #201 menu
+   * rework and the flag sat unreachable, always on, in the in-memory map
+   * store).
+   */
+  showPdfOverlay: boolean;
+  /**
    * Latitude-aware scale bar under the compass badge. On by default — a map
    * you navigate by needs a distance reference — but switchable, because map
    * chrome has been pruned here before for clutter.
@@ -188,6 +199,7 @@ const DEFAULTS: Settings = {
   marinePackAutoUpdate: true,
   marinePackSnoozes: [],
   showHeatmap: true,
+  showPdfOverlay: true,
   showScaleBar: true,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   errorReporting: true,
@@ -235,6 +247,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackAutoUpdate,
     marinePackSnoozes,
     showHeatmap,
+    showPdfOverlay,
     showScaleBar,
     showHillshade,
     errorReporting,
@@ -268,6 +281,7 @@ function snapshot(s: SettingsState): Settings {
     marinePackAutoUpdate,
     marinePackSnoozes,
     showHeatmap,
+    showPdfOverlay,
     showScaleBar,
     showHillshade,
     errorReporting,

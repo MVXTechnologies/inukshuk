@@ -2,6 +2,7 @@ import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
 import {
   UNGROUPED_FOLDER_ID,
   nextFolderVisibility,
+  pdfOverlayMaps,
   visibleMaps,
   visibleTrackIds,
   visibleWaypoints,
@@ -45,6 +46,35 @@ describe('folders mode', () => {
     expect(visibleMaps('folders', [], maps)).toEqual([]);
     expect(visibleTrackIds('folders', [], tracks, ['t1'])).toEqual([]);
     expect(visibleWaypoints('folders', [], wps)).toEqual([]);
+  });
+});
+
+describe('pdfOverlayMaps (the "PDF maps" master switch, #233)', () => {
+  it('type mode targets every map while the switch is on', () => {
+    expect(pdfOverlayMaps(true, 'type', [], maps).map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    // A stale folder selection is irrelevant in type mode, as for trails.
+    expect(pdfOverlayMaps(true, 'type', ['f1'], maps)).toHaveLength(3);
+  });
+
+  it('folder mode targets exactly the checked folders’ maps', () => {
+    expect(pdfOverlayMaps(true, 'folders', ['f1'], maps).map((m) => m.id)).toEqual(['m1']);
+    expect(pdfOverlayMaps(true, 'folders', ['f1', 'f2'], maps).map((m) => m.id)).toEqual([
+      'm1',
+      'm3',
+    ]);
+  });
+
+  it('"Ungrouped" targets only folderless maps — a map in a folder is not drawn', () => {
+    // The owner's report: with the picker on Ungrouped, sheets in the "Maps"
+    // folder must NOT be targets.
+    expect(pdfOverlayMaps(true, 'folders', [UNGROUPED_FOLDER_ID], maps).map((m) => m.id)).toEqual([
+      'm2',
+    ]);
+  });
+
+  it('the master switch off targets nothing in either mode', () => {
+    expect(pdfOverlayMaps(false, 'type', [], maps)).toEqual([]);
+    expect(pdfOverlayMaps(false, 'folders', ['f1', 'f2', UNGROUPED_FOLDER_ID], maps)).toEqual([]);
   });
 });
 

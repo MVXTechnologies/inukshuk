@@ -91,6 +91,23 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Slope range 27 to 90 degrees'
     timeout: 10000
+# --- 'PDF maps' master switch (#233): the row the D-6 rework dropped. It is
+# a checkbox row (a11y label 'PDF maps', trailing .* for iOS merged strings)
+# whose OFF state is explained by a 'Hidden on the map' line under the label.
+# The switch is PERSISTED, so it starts at whatever a previous run left it at:
+# tap once, and if the hint now shows the switch went OFF — prove it, then tap
+# again so the run ends with the maps ON (a later flow must never inherit a
+# map with its sheets hidden). If the hint does not show, the switch was OFF
+# and the tap turned it on — also the state to leave behind.
+- assertVisible: 'PDF maps.*'
+- tapOn: 'PDF maps.*'
+- runFlow:
+    when:
+      visible: 'Hidden on the map.*'
+    commands:
+      - tapOn: 'PDF maps.*'
+- assertNotVisible: 'Hidden on the map.*'
+- assertVisible: 'PDF maps.*'
 # Close the menu via the backdrop; the map beneath must still be responsive
 # while the overlay computes (DEM fetch + raster/contour build are async).
 - tapOn:
