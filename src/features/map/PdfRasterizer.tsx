@@ -105,7 +105,16 @@ export interface RasterizeArgs {
     expectedPageWidthPt: number;
     expectedPageHeightPt: number;
   } | null;
+  /**
+   * Queue placement. `interactive` (default) is something the map is waiting
+   * for and goes ahead of every queued `background` request; `background` is
+   * the import-time pre-render (#272 step 2) and only runs once nothing
+   * interactive is waiting. A render already in progress is never preempted.
+   */
+  priority?: RasterizePriority;
 }
+
+export type RasterizePriority = 'interactive' | 'background';
 
 export type RasterResult = (
   { pngDataUri: string; fileUri?: undefined } | { fileUri: string; pngDataUri?: undefined }
@@ -1037,6 +1046,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
           crop: args.crop ?? null,
           nativePage: nativePdfAvailable() ? (args.nativePage ?? null) : null,
+          priority: args.priority ?? 'interactive',
         };
         const expire = () => {
           const stillPending = pendingRef.current.get(id);
@@ -1089,7 +1099,16 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           expire,
         };
         pendingRef.current.set(id, pendingRequest);
-        queueRef.current.push({ id, args: normalized });
+        // Interactive work queues ahead of every waiting background pre-render
+        // (but never ahead of other interactive work, and never displaces the
+        // render in progress); background work always joins at the back.
+        const queue = queueRef.current;
+        const firstBackground =
+          normalized.priority === 'background'
+            ? -1
+            : queue.findIndex((queued) => queued.args.priority === 'background');
+        if (firstBackground === -1) queue.push({ id, args: normalized });
+        else queue.splice(firstBackground, 0, { id, args: normalized });
         pumpQueueRef.current();
       });
     },
@@ -1193,6 +1212,7 @@ function useRasterizerContext(): RasterizerContextValue {
 /**
  * Returns a function that resolves with the rendered page. Calls are serialized
  * (one render at a time), with separate 45s queue/startup and active budgets.
+ * `priority: 'background'` requests wait behind every interactive one.
  */
 export function usePdfRasterizer(): RasterizeFn {
   return useRasterizerContext().rasterize;

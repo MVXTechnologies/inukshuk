@@ -90,3 +90,27 @@ it('retains detail statuses with their active page and drops inactive detail sta
     ),
   ).toEqual({ 'm1:0:detail': { phase: 'failed', reason: 'x' } });
 });
+
+// The import-time pre-render (#272 step 2) is progress the card can show,
+// but a page the map is waiting for (rendering) or a failure outranks it.
+describe('preparing (background pre-render)', () => {
+  it('says "Preparing page N…" while a page is pre-rendering', () => {
+    expect(renderStatusLine(map, { 'm1:1': { phase: 'preparing' } })).toEqual({
+      kind: 'rendering',
+      text: 'Preparing page 2…',
+    });
+  });
+
+  it('yields to a page the map is rendering now, and to a failure', () => {
+    expect(
+      renderStatusLine(map, { 'm1:0': { phase: 'preparing' }, 'm1:1': { phase: 'rendering' } })
+        ?.text,
+    ).toBe('Rendering page 2…');
+    expect(
+      renderStatusLine(map, {
+        'm1:0': { phase: 'preparing' },
+        'm1:1': { phase: 'failed', reason: 'x' },
+      })?.kind,
+    ).toBe('failed');
+  });
+});

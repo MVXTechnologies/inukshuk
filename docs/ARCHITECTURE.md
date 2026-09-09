@@ -59,7 +59,12 @@ four stages:
    with a watchdog that falls back to pdf.js's main-thread fake worker if the
    real one wedges. Each page's outcome is published to `overlayStatusStore`
    and shown on its Library card ("Rendering page N…" / "Couldn't render page
-   N: …").
+   N: …"). Right after an import (picker, store, map maker) every active
+   georeferenced page is also pre-rendered in the background at the lowest
+   queue priority (`features/map/usePrerenderOnImport` over
+   `core/library/prerenderQueue`, #272 step 2) into the same cache file, so
+   the map tab usually finds the raster already on disk; the card says
+   "Preparing page N…" meanwhile.
 
 3. **Extrapolate full-page corners** (`core/geo/geopdf/pageBox` over
    `core/geo/geomath`). The georeferencing often describes only the inner map

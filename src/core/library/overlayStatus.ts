@@ -10,9 +10,17 @@ import type { MapDocument } from '@core/models';
  * status line is the durable answer — pending while a page is in the
  * rasterizer, and the failure reason after, for as long as the page stays
  * active.
+ *
+ * `preparing` is the import-time pre-render (#272 step 2): the page is in the
+ * rasterizer at background priority so the map opens with it ready. The card
+ * says so; the map's rendering toasts do not — they are for the map the user
+ * is looking at, and nothing on it is waiting for this page.
  */
 export type OverlayRenderStatus =
-  { phase: 'rendering' } | { phase: 'rendered' } | { phase: 'failed'; reason: string };
+  | { phase: 'preparing' }
+  | { phase: 'rendering' }
+  | { phase: 'rendered' }
+  | { phase: 'failed'; reason: string };
 
 export type OverlayStatusMap = Readonly<Record<string, OverlayRenderStatus>>;
 
@@ -62,6 +70,13 @@ export function renderStatusLine(
   for (const page of pages) {
     if (statuses[overlayDetailStatusKey(overlayStatusKey(map.id, page))]?.phase === 'rendering') {
       return { kind: 'rendering', text: `Rendering page ${page + 1} detail…` };
+    }
+  }
+  // A page the map is actually waiting for (above) outranks a background
+  // pre-render; both are "in progress" to the card.
+  for (const page of pages) {
+    if (statuses[overlayStatusKey(map.id, page)]?.phase === 'preparing') {
+      return { kind: 'rendering', text: `Preparing page ${page + 1}…` };
     }
   }
   return null;

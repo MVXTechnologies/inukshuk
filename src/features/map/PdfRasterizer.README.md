@@ -144,7 +144,9 @@ with the file.
 
 - Requests are **serialized** through an internal FIFO queue — only one render
   runs at a time because the WebView and its canvas are a single shared
-  resource.
+  resource. `priority: 'background'` requests (the import-time pre-render,
+  #272 step 2, `usePrerenderOnImport`) wait behind every queued interactive
+  request; a render already in progress is never preempted.
 - Each request has a **45s timeout**; on timeout the promise rejects and the
   PDF.js WebView is replaced before the queue resumes. Native rendering cannot
   be hard-cancelled by either native backend: a timeout rejects the caller but
