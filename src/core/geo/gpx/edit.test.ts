@@ -229,3 +229,23 @@ it('orders an explicitly timed Unix-epoch GPX before later recordings', () => {
   ]);
   expect(merged.points).toEqual([epoch, later]);
 });
+
+describe('mergeTracks — large sources (audit A16)', () => {
+  it('merges a 150,000-point source without hitting the argument limit', () => {
+    // `points.push(...s.points)` spread every source into one call; a valid
+    // 150k-point GPX overflowed the engine's argument limit with a RangeError.
+    const big: TrackPoint[] = [];
+    for (let i = 0; i < 150_000; i++) big.push(pt(45 + i * 1e-5, -73, T0 + i * 1000));
+    const bigWaypoints = big.slice(0, 3).map((p, i) => ({ ...p, name: `w${i}` }));
+    const small = { name: 'Small', points: [pt(47, -73, T0 - MIN)] };
+
+    const merged = mergeTracks([{ name: 'Big', points: big, waypoints: bigWaypoints }, small]);
+
+    expect(merged.points).toHaveLength(150_001);
+    expect(merged.points[0]).toBe(small.points[0]); // earlier start → first
+    expect(merged.points[1]).toBe(big[0]);
+    expect(merged.points[150_000]).toBe(big[149_999]);
+    expect(merged.waypoints.map((w) => w.name)).toEqual(['w0', 'w1', 'w2']);
+    expect(merged.stats.pointCount).toBe(150_001);
+  });
+});

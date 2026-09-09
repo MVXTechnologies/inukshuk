@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, View } from 'react-native';
+import { PanResponder, StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
+
+const A11Y_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }];
 
 interface Props {
   /** Slider bounds (inclusive), stepped to whole units. */
@@ -14,6 +16,10 @@ interface Props {
   width?: number;
   unit?: string;
   disabled?: boolean;
+  /**
+   * What the window is a range OF ("Slope"); each thumb announces as
+   * "<label> minimum" / "<label> maximum". Defaults to plain Minimum/Maximum.
+   */
   accessibilityLabel?: string;
   /** Fill/thumb/value colour override (defaults to the theme primary) — for
    * hosts with fixed dark chrome, e.g. the overlays drill-down panel. */
@@ -27,6 +33,10 @@ interface Props {
  * pan with claim-at-touch-down responders (same ScrollView-beating recipe as
  * the Library drag); values render live from local state and commit to the
  * caller on release, so the settings store isn't persisted per-move.
+ *
+ * Accessibility (#308): each thumb is its own "adjustable" element with a
+ * value and bounds; VoiceOver/TalkBack increment/decrement moves it one unit
+ * (clamped to the other thumb and the range) and commits at once.
  */
 export function RangeSlider({
   min,
@@ -105,14 +115,28 @@ export function RangeSlider({
     return { lo: makeThumb('lo').panHandlers, hi: makeThumb('hi').panHandlers };
   });
 
+  const a11yAdjust = (which: 'lo' | 'hi', e: AccessibilityActionEvent) => {
+    const action = e.nativeEvent.actionName;
+    if (disabled || (action !== 'increment' && action !== 'decrement')) return;
+    const delta = action === 'increment' ? 1 : -1;
+    if (which === 'lo') {
+      const next = Math.max(min, Math.min(shownHi - 1, shownLo + delta));
+      if (next !== shownLo) onChange(next, shownHi);
+    } else {
+      const next = Math.min(max, Math.max(shownLo + 1, shownHi + delta));
+      if (next !== shownHi) onChange(shownLo, next);
+    }
+  };
+  const thumbLabel = (end: 'minimum' | 'maximum') =>
+    accessibilityLabel === undefined
+      ? end === 'minimum'
+        ? 'Minimum'
+        : 'Maximum'
+      : `${accessibilityLabel} ${end}`;
+
   const dim = disabled ? 0.35 : 1;
   return (
-    <View
-      style={[styles.row, { opacity: dim }]}
-      pointerEvents={disabled ? 'none' : 'auto'}
-      accessible
-      accessibilityLabel={accessibilityLabel ?? `Range ${shownLo} to ${shownHi}${unit}`}
-    >
+    <View style={[styles.row, { opacity: dim }]} pointerEvents={disabled ? 'none' : 'auto'}>
       <View style={[styles.trackBox, { width }]}>
         <View style={[styles.track, { backgroundColor: track }]} />
         <View
@@ -129,13 +153,25 @@ export function RangeSlider({
           {...thumbs.lo}
           hitSlop={{ top: 18, bottom: 18, left: 14, right: 8 }}
           style={[styles.thumb, { left: xOf(shownLo) - 10, backgroundColor: accent }]}
-          accessibilityLabel="Minimum"
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={thumbLabel('minimum')}
+          accessibilityValue={{ min, max: shownHi - 1, now: shownLo, text: `${shownLo}${unit}` }}
+          accessibilityActions={A11Y_ACTIONS}
+          onAccessibilityAction={(e) => a11yAdjust('lo', e)}
+          accessibilityState={{ disabled: disabled === true }}
         />
         <View
           {...thumbs.hi}
           hitSlop={{ top: 18, bottom: 18, left: 8, right: 14 }}
           style={[styles.thumb, { left: xOf(shownHi) - 10, backgroundColor: accent }]}
-          accessibilityLabel="Maximum"
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={thumbLabel('maximum')}
+          accessibilityValue={{ min: shownLo + 1, max, now: shownHi, text: `${shownHi}${unit}` }}
+          accessibilityActions={A11Y_ACTIONS}
+          onAccessibilityAction={(e) => a11yAdjust('hi', e)}
+          accessibilityState={{ disabled: disabled === true }}
         />
       </View>
       <Text variant="labelMedium" style={[styles.value, { color: accent }]}>

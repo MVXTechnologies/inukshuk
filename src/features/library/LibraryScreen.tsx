@@ -243,9 +243,11 @@ export function LibraryScreen() {
     onWindowHeight: onDragWindowHeight,
   } = useDragToFolder({
     onDrop: (item, target) => {
-      setItemFolder(item.kind, item.id, target);
       const folderName = target === null ? null : folders.find((f) => f.id === target)?.name;
-      showSnack(folderName ? `Moved to "${folderName}"` : 'Removed from folder');
+      // A target that no longer exists (deleted mid-drag, #303) is not a move.
+      if (folderName === undefined) return;
+      setItemFolder(item.kind, item.id, target);
+      showSnack(folderName === null ? 'Removed from folder' : `Moved to "${folderName}"`);
     },
   });
   const dragHandle = (item: DragItem) =>

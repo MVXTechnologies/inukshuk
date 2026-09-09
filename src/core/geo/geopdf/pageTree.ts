@@ -1,3 +1,4 @@
+import { DEFAULT_MEDIABOX, type PdfRect, effectivePageBox } from './pageBox';
 import type { PdfDocument } from './pdfReader';
 import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict } from './types';
 
@@ -5,11 +6,16 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict } from './t
 export interface PageInfo {
   index: number;
   dict: PdfDict;
-  /** MediaBox [x0, y0, x1, y1] in PDF points. */
-  mediaBox: [number, number, number, number];
+  /** MediaBox [x0, y0, x1, y1] in PDF points, as written (inherited if absent). */
+  mediaBox: PdfRect;
+  /** CropBox as written (inherited if absent); undefined when the page has none. */
+  cropBox?: PdfRect;
+  /**
+   * The box renderers actually draw: CropBox ∩ MediaBox, normalized (see
+   * `effectivePageBox`). Georeferencing is placed against THIS rectangle.
+   */
+  pageBox: PdfRect;
 }
-
-const DEFAULT_MEDIABOX: [number, number, number, number] = [0, 0, 612, 792];
 
 /** Read a numeric rectangle value (resolving refs and numbers). */
 export function readRect(
@@ -25,7 +31,8 @@ export function readRect(
 
 /**
  * Walk the catalog /Pages tree depth-first, returning leaf pages in order with
- * inherited MediaBox resolved. Guards against cycles and runaway trees.
+ * inherited MediaBox and CropBox resolved (both are inheritable page
+ * attributes per ISO 32000 §7.7.3.4). Guards against cycles and runaway trees.
  */
 export function collectPages(doc: PdfDocument): PageInfo[] {
   const root = doc.getTrailerRoot();
@@ -40,28 +47,36 @@ export function collectPages(doc: PdfDocument): PageInfo[] {
 
   const walk = (
     node: PdfValue | undefined,
-    inheritedMb: [number, number, number, number],
+    inheritedMb: PdfRect,
+    inheritedCb: PdfRect | undefined,
   ): void => {
     const d = doc.resolve(node);
     if (!isDict(d) || visited.has(d) || counter > MAX) return;
     visited.add(d);
     const mb = readRect(doc, d.entries.get('MediaBox')) ?? inheritedMb;
+    const cb = readRect(doc, d.entries.get('CropBox')) ?? inheritedCb;
     const type = d.entries.get('Type');
     const typeName = type && (type as { name?: string }).name;
     const kids = doc.resolve(d.entries.get('Kids'));
 
     if (typeName === 'Page' || (!isArray(kids) && typeName !== 'Pages')) {
       counter++;
-      pages.push({ index: pages.length, dict: d, mediaBox: mb });
+      pages.push({
+        index: pages.length,
+        dict: d,
+        mediaBox: mb,
+        ...(cb ? { cropBox: cb } : {}),
+        pageBox: effectivePageBox(mb, cb),
+      });
       return;
     }
     if (isArray(kids)) {
       for (const kid of kids as PdfArray) {
-        walk(kid, mb);
+        walk(kid, mb, cb);
       }
     }
   };
 
-  walk(pagesRoot, DEFAULT_MEDIABOX);
+  walk(pagesRoot, DEFAULT_MEDIABOX, undefined);
   return pages;
 }
