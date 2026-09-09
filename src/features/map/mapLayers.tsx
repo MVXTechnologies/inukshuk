@@ -1,5 +1,6 @@
 import { mapColors } from '@ui/theme';
 import { Layer } from '@maplibre/maplibre-react-native';
+import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 
 // ---------------------------------------------------------------------------
 // Static <Layer> children for the map's GeoJSON sources, hoisted out of the
@@ -34,6 +35,7 @@ import { Layer } from '@maplibre/maplibre-react-native';
 export const HEATMAP_LAYERS = (
   <Layer
     id="tracks-heatmap"
+    beforeId={TRAILS_ANCHOR}
     type="heatmap"
     paint={{
       'heatmap-weight': 1,
@@ -76,6 +78,7 @@ export const TRACKS_LINES_LAYER = {
   shown: (
     <Layer
       id="tracks-lines-layer"
+      beforeId={TRAILS_ANCHOR}
       type="line"
       filter={true}
       layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -85,6 +88,7 @@ export const TRACKS_LINES_LAYER = {
   hidden: (
     <Layer
       id="tracks-lines-layer"
+      beforeId={TRAILS_ANCHOR}
       type="line"
       filter={false}
       layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -96,6 +100,7 @@ export const TRACKS_LINES_LAYER = {
 export const FOCUSED_TRAIL_LAYER = (
   <Layer
     id="focused-trail-line-layer"
+    beforeId={TRAILS_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
@@ -105,6 +110,7 @@ export const FOCUSED_TRAIL_LAYER = (
 export const INSPECT_MARKER_LAYER = (
   <Layer
     id="inspect-marker-dot"
+    beforeId={TRAILS_ANCHOR}
     type="circle"
     paint={{
       'circle-radius': 7,
@@ -120,6 +126,7 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="casing"
     id="trail-casing"
+    beforeId={TRAILS_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
@@ -127,6 +134,7 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="line"
     id="trail-line"
+    beforeId={TRAILS_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trail, 'line-width': 5 }}
@@ -140,6 +148,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="halo"
         id="contours2d-minor-halo"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -150,6 +159,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-minor-line"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -162,6 +172,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="halo"
         id="contours2d-major-halo"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -172,6 +183,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-major-line"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -187,3 +199,37 @@ export const CONTOUR_LAYERS = {
   satellite: contourLayers(true),
   plain: contourLayers(false),
 } as const;
+
+/** PDF overview raster (#332): below the terrain overlays, trails and the puck. */
+export function pdfOverviewLayer(id: string) {
+  return (
+    <Layer
+      id={`${id}-layer`}
+      type="raster"
+      beforeId={PDF_MAPS_ANCHOR}
+      paint={{ 'raster-opacity': 0.92 }}
+    />
+  );
+}
+
+/** PDF detail tile raster (#332): same slot as the overview it refines. */
+export function pdfDetailLayer(id: string) {
+  return (
+    <Layer
+      id={`${id}-layer`}
+      type="raster"
+      beforeId={PDF_MAPS_ANCHOR}
+      paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
+    />
+  );
+}
+
+/** Slope-angle raster (#332): above the PDF maps, below trails and the puck. */
+export const SLOPE_LAYER = (
+  <Layer
+    id="slope2d-layer"
+    type="raster"
+    beforeId={TERRAIN_OVERLAY_ANCHOR}
+    paint={{ 'raster-opacity': 0.62, 'raster-resampling': 'nearest' }}
+  />
+);

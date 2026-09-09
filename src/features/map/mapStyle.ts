@@ -9,6 +9,7 @@ import type { MapBasemap } from '@state/mapStore';
 import { CHART_LAND_COLOR, CHART_WATER_COLOR } from '@core/geo/depthChart';
 import {
   drapeAnchorLayer,
+  ALWAYS_PRESENT_ANCHORS,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
@@ -558,6 +559,11 @@ export function buildOsmStyle(
   if (options.marineChart) {
     style.layers.push(drapeAnchorLayer(MARINE_SOUNDINGS_ANCHOR));
   }
+
+  // Unconditional anchors for the MapView-child overlays (#332): PDF maps,
+  // then terrain overlays, then trails — below the reference labels and,
+  // more importantly, below the position puck, which the map appends last.
+  for (const id of ALWAYS_PRESENT_ANCHORS) style.layers.push(drapeAnchorLayer(id));
 
   // Labels + coastline reference overlay, ABOVE the dim and the weather/
   // marine drapes (see the option's doc). Water outlines first, then towns,
