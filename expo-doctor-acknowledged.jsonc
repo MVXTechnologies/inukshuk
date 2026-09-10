@@ -1,0 +1,20 @@
+{
+  // Expo Doctor findings this project has looked at and accepted for now (see
+  // .github/workflows/nightly.yml and scripts/ci/expo-doctor-gate.mjs).
+  //
+  // Same contract as audit-ci.jsonc: every entry needs a reason AND an exit
+  // plan — plus an `until` date, because an accepted finding has to be
+  // re-argued rather than inherited. The gate also fails if an acknowledged
+  // check starts PASSING, so a spent entry is removed instead of quietly
+  // hiding the next real failure.
+  //
+  // `check` is matched as a substring of the name doctor prints.
+  "acknowledged": [
+    {
+      "check": "Check for Expo SDK versions affected by Hermes V1 regressions",
+      "reason": "expo@56.0.21 ships Hermes V1 250829098.0.10; the memory regression is fixed in 250829098.0.16, which arrives with React Native 0.86.2. There is no patch to take inside SDK 56 — doctor's own advice is the SDK 57 upgrade. Nothing in this project can close it, and it has made the nightly red every night since 2026-09-08, hiding every other check.",
+      "exitPlan": "The SDK 57 upgrade, scheduled after the App Store launch: `npx expo install expo@^57.0.9 --fix`, a full native rebuild on both platforms, and the device pass the PDF pipeline always needs. Remove this entry with that PR — the gate will fail on its own once the check passes.",
+      "until": "2026-12-31",
+    },
+  ],
+}

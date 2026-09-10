@@ -108,7 +108,8 @@
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "wind:motion": "node scripts/wind-motion-check.mjs",
     "doctor": "npx expo-doctor",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:ci",
+    "test:scripts": "node --test 'scripts/**/*.test.mjs'",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:ci && npm run test:scripts",
     "eas-build-pre-install": "sh scripts/eas-pre-install.sh"
   },
   "private": true
