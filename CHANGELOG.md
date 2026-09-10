@@ -10,6 +10,52 @@ on the same app version; native changes require a new store build. See
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-09-10
+
+### Fixed
+
+- **Maps whose page is one very large JPEG render on iPhone instead of
+  failing with "Load failed".** A 181-megapixel page exceeded the native
+  renderer's decode budget, so it fell back to PDF.js, which had to decode
+  the whole frame in JavaScript — 2.9 GB, which the OS kills, and WebKit
+  reports the kill to the page as a bare fetch error. Oversize crops now
+  decode at a reduced JPEG scale: the same sheet renders in 0.7 s at a
+  201 MB peak. The failing request is also named in the report now, instead
+  of "Load failed" with no URL, status or byte count.
+- **Georeferencing stored by an older parser is corrected on launch.**
+  Parsing happened once, at import, and was persisted, so every parser fix
+  reached new imports only — a sheet imported before the corner-order fix
+  kept drawing upside down forever. Each parse now carries a parser
+  revision, and stored maps below it are parsed again from their own PDF at
+  startup, cheaply, thanks to the random-access reader. Page choices are
+  kept; a parse that comes back empty is never applied.
+- **The position marker stays above every map overlay.** MapLibre appends a
+  layer added after first paint to the top of the style, so PDF overviews,
+  detail tiles, the slope raster and trail lines were landing on top of the
+  blue dot. Every overlay now inserts below a fixed anchor.
+- **Importing a very large map no longer runs out of memory.** Parsing read
+  the whole file to find a few hundred bytes of georeferencing; a 216 MB
+  sheet died on a 192 MB heap. The reader now works by random access —
+  68 KB read for that sheet — and falls back to the old whole-file parse for
+  a small file if the platform handle misbehaves.
+- **A pause no longer bridges the distance travelled while paused**, and
+  time the app spent closed while paused is no longer counted as active.
+  Each resume starts a new segment, written as its own `<trkseg>`.
+
+### Added
+
+- **Pages pre-render right after import**, in the background and yielding to
+  anything on screen, so the map opens with its rasters ready instead of
+  paying 15–20 s at the worst moment.
+- **The "PDF maps" master switch is back**, persisted, and overlays follow
+  the folder selection again.
+
+### Changed
+
+- The nightly health check applies dated Expo Doctor acknowledgements
+  instead of failing every night on one finding that only the SDK 57 upgrade
+  can close, and its tracking issue names the step that actually failed.
+
 ### Added
 
 - **Scrubbing a trail's elevation profile now moves a marker along the 2D

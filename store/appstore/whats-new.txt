@@ -1,6 +1,8 @@
-First public release.
+Maps, fixed.
 
-Inukshuk is an offline trail navigator: import georeferenced PDF maps, download
-official topo sheets or compose your own, record your outings with waypoints,
-notes and photos, and read the terrain in real 3D — all on your device, with no
-account and no tracking.
+• Large maps whose page is one big photo now render instead of failing with "Load failed". They also render far faster.
+• A map imported before an earlier fix is corrected automatically on launch, including sheets that drew upside down — no need to re-import.
+• Your position marker always stays on top of your maps.
+• Importing a very large map no longer runs out of memory.
+• Maps prepare themselves right after import, so the Map tab opens with them ready.
+• Pauses in a recording no longer add the distance you travelled while paused, and time the app spent closed while paused is no longer counted.
