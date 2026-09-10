@@ -1,4 +1,11 @@
+import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
+import {
+  nearestPinAt,
+  projectablePins,
+  unprojectablePins,
+  type ProjectedPin,
+} from '@core/geo/pinHitTest';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
@@ -1248,26 +1255,45 @@ export function MapScreen() {
 
       let best: (typeof visiblePins)[number] | null = null;
       if (visiblePins.length > 0) {
-        let bestD = WAYPOINT_HIT_PX;
-        try {
-          // Project each pin through the real camera — a linear mapping over the
-          // visible bounds is wrong the moment the map is rotated or pitched
-          // (taps would miss, or open a different waypoint's note).
-          const pts = await Promise.all(
-            visiblePins.map((wp) => map.project([wp.longitude, wp.latitude])),
+        // One bad pin must never cost the whole tap (#343). This used to
+        // project every pin with `Promise.all` and `return` on rejection, so a
+        // single stored waypoint the projector refused killed EVERY map tap —
+        // silently, because an async handler's throw is swallowed. The phone
+        // stayed that way across restarts: the waypoint is in library.json.
+        //
+        // Projection still goes through the real camera, per pin: a linear
+        // mapping over the visible bounds is wrong the moment the map is
+        // rotated or pitched (taps would miss, or open the wrong waypoint).
+        const skipped = unprojectablePins(visiblePins);
+        if (skipped.length > 0) {
+          const first = skipped[0];
+          reportError(
+            new Error(
+              `skipping ${skipped.length} waypoint(s) with an unmappable position, e.g. ` +
+                `${first?.id ?? '?'} at [${first?.longitude}, ${first?.latitude}]`,
+            ),
+            'map-tap',
           );
-          for (let i = 0; i < visiblePins.length; i++) {
-            const p = pts[i];
-            if (!p) continue;
-            const d = Math.hypot(px - p[0], py - (p[1] - WAYPOINT_BADGE_OFFSET));
-            if (d < bestD) {
-              bestD = d;
-              best = visiblePins[i] ?? null;
-            }
-          }
-        } catch {
-          return; // projection unavailable mid-teardown — ignore the tap
         }
+        const projected: ProjectedPin[] = new Array<ProjectedPin>(visiblePins.length).fill(null);
+        const results = await Promise.allSettled(
+          projectablePins(visiblePins).map(async ({ index, lngLat }) => ({
+            index,
+            point: await map.project(lngLat),
+          })),
+        );
+        for (const result of results) {
+          if (result.status !== 'fulfilled') continue;
+          const { index, point } = result.value;
+          if (point != null) projected[index] = point;
+        }
+        best = nearestPinAt(
+          visiblePins,
+          projected,
+          [px, py],
+          WAYPOINT_HIT_PX,
+          WAYPOINT_BADGE_OFFSET,
+        );
       }
       if (best) {
         // Pin tap opens the read-only viewer; a second tap on the same pin
