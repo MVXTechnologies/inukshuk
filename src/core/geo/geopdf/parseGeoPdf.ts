@@ -3,6 +3,7 @@ import { extractAdobeGeo } from './adobeGeo';
 import { extractLgiDict } from './lgidict';
 import { collectPages, type PageInfo } from './pageTree';
 import { type ByteSource, PdfDocument } from './pdfReader';
+import { GEOPDF_PARSER_REVISION } from './parserRevision';
 
 /** Result of parsing embedded georeferencing from a PDF. */
 export interface GeoPdfParseResult {
@@ -65,5 +66,11 @@ export function parseGeoPdf(input: Uint8Array | ByteSource): GeoPdfParseResult {
     warnings.push('no pages found — file may be malformed or not a PDF');
   }
 
-  return { pageCount, georeferences, warnings };
+  // Stamped here rather than in each extractor: one place to forget, and the
+  // re-parse pass (#336) depends on the stamp being on EVERY georeference.
+  return {
+    pageCount,
+    georeferences: georeferences.map((g) => ({ ...g, parserRevision: GEOPDF_PARSER_REVISION })),
+    warnings,
+  };
 }

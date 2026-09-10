@@ -41,6 +41,13 @@ export type GeoReferenceSource =
 export interface GeoReference {
   pageIndex: number;
   source: GeoReferenceSource;
+  /**
+   * Which parser produced this (see `GEOPDF_PARSER_REVISION`). Georeferencing
+   * is parsed once at import and persisted, so this is how a stored map that
+   * predates a parser fix is found and re-parsed (#336). Absent on anything
+   * imported before the stamp existed, which counts as revision 1.
+   */
+  parserRevision?: number;
   /** EPSG code of the PDF's native CRS, if identified (e.g. 4326, 3857, 32618). */
   sourceEpsg?: number;
   /**

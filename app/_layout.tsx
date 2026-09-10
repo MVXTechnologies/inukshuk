@@ -5,6 +5,7 @@
 import { cleanupBackgroundLocationAtLaunch } from '@lib/backgroundLocation';
 
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
+import { MapReparseWorker } from '@features/library/MapReparseWorker';
 import { PdfPrerenderWorker } from '@features/map/PdfPrerenderWorker';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
@@ -72,6 +73,7 @@ export default function RootLayout() {
               <ImportFeedbackSnackbar />
               <PdfRecoverySnackbar />
               <PdfPrerenderWorker />
+              <MapReparseWorker />
               <StravaPushPrompt />
             </PdfRasterizerProvider>
           </ErrorBoundary>
