@@ -19,8 +19,159 @@ import {
  *   - object streams (/Type /ObjStm) for compressed objects
  *   - linear scanning as a fallback when xref is missing/broken
  *
+ * The reader never needs the whole file: it reads the tail (startxref/trailer),
+ * the xref sections, and the handful of objects it dereferences. Callers hand
+ * it either an in-memory `Uint8Array` (tests, small files) or a {@link
+ * ByteSource} that serves slices on demand — a 200 MB GeoPDF is then parsed
+ * with a few hundred KB resident instead of the whole file (#328).
+ *
  * Everything is best-effort: callers should catch errors and degrade to warnings.
  */
+
+// ---- byte sources -----------------------------------------------------------
+
+/**
+ * Random access to a PDF's bytes. `read` returns the bytes at `[offset,
+ * offset + length)`; it may return fewer than `length` bytes at end of file.
+ * Implementations are synchronous (the SDK 56 `FileHandle` is) and are asked
+ * for at most a few hundred KB per call by the reader itself; a stream payload
+ * is the only larger read and it is capped at {@link MAX_RAW_STREAM_BYTES}.
+ */
+export interface ByteSource {
+  readonly size: number;
+  read(offset: number, length: number): Uint8Array;
+}
+
+/** A {@link ByteSource} over bytes already in memory. */
+export function memoryByteSource(bytes: Uint8Array): ByteSource {
+  return {
+    size: bytes.length,
+    read: (offset, length) => bytes.subarray(offset, offset + length),
+  };
+}
+
+function isByteSource(v: Uint8Array | ByteSource): v is ByteSource {
+  return typeof (v as ByteSource).read === 'function';
+}
+
+/** Decode latin1 bytes to a JS string (1 byte = 1 code unit). */
+function latin1FromArray(bytes: Uint8Array): string {
+  // `fromCharCode` over blocks is far faster than per-byte concatenation and
+  // stays well under any engine's argument-count limit.
+  const BLOCK = 8192;
+  if (bytes.length <= BLOCK) return String.fromCharCode(...bytes);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += BLOCK) {
+    s += String.fromCharCode(...bytes.subarray(i, i + BLOCK));
+  }
+  return s;
+}
+
+/**
+ * What the lexer and the xref/scan code read through: byte-at-a-time access
+ * plus small latin1 peeks and bounded slices. Two implementations: a plain
+ * array (in-memory files, decoded object streams) and an LRU of chunks over a
+ * {@link ByteSource}.
+ */
+interface Bytes {
+  readonly length: number;
+  /** The byte at `i`, or undefined outside `[0, length)`. */
+  byteAt(i: number): number | undefined;
+  /** Bytes `[start, end)` as a latin1 string; `end` is clamped to `length`. */
+  latin1(start: number, end: number): string;
+  /** A copy or view of bytes `[start, end)`; `end` is clamped to `length`. */
+  slice(start: number, end: number): Uint8Array;
+}
+
+class MemoryBytes implements Bytes {
+  readonly length: number;
+  constructor(private readonly bytes: Uint8Array) {
+    this.length = bytes.length;
+  }
+  byteAt(i: number): number | undefined {
+    return this.bytes[i];
+  }
+  latin1(start: number, end: number): string {
+    return latin1FromArray(this.bytes.subarray(start, Math.min(end, this.length)));
+  }
+  slice(start: number, end: number): Uint8Array {
+    return this.bytes.subarray(start, Math.min(end, this.length));
+  }
+}
+
+/** Size of one cached chunk of a {@link ByteSource}. */
+export const CHUNK_SIZE = 64 * 1024;
+/** Chunks kept resident (LRU): 64 × 64 KB = 4 MB. */
+export const MAX_RESIDENT_CHUNKS = 64;
+
+/**
+ * Chunked, LRU-cached view over a {@link ByteSource}. Sequential access inside
+ * one chunk is a bounds check and an index; crossing into another chunk is a
+ * map lookup or one `source.read`. Exported for its own unit tests only.
+ */
+export class ChunkedBytes implements Bytes {
+  readonly length: number;
+  private readonly chunks = new Map<number, Uint8Array>();
+  private cur: Uint8Array = new Uint8Array(0);
+  private curIndex = -1;
+
+  constructor(private readonly source: ByteSource) {
+    const size = Number(source.size);
+    this.length = Number.isFinite(size) && size > 0 ? Math.floor(size) : 0;
+  }
+
+  /** Chunks currently held (diagnostics/tests). */
+  get residentChunks(): number {
+    return this.chunks.size;
+  }
+
+  byteAt(i: number): number | undefined {
+    if (i < 0 || i >= this.length) return undefined;
+    const index = Math.floor(i / CHUNK_SIZE);
+    if (index !== this.curIndex) this.load(index);
+    return this.cur[i - index * CHUNK_SIZE];
+  }
+
+  private load(index: number): void {
+    let chunk = this.chunks.get(index);
+    if (chunk) {
+      // Refresh recency: Map iterates in insertion order, oldest first.
+      this.chunks.delete(index);
+    } else {
+      const start = index * CHUNK_SIZE;
+      chunk = this.source.read(start, Math.min(CHUNK_SIZE, this.length - start));
+    }
+    this.chunks.set(index, chunk);
+    if (this.chunks.size > MAX_RESIDENT_CHUNKS) {
+      const oldest = this.chunks.keys().next().value;
+      if (oldest !== undefined) this.chunks.delete(oldest);
+    }
+    this.cur = chunk;
+    this.curIndex = index;
+  }
+
+  latin1(start: number, end: number): string {
+    const stop = Math.min(end, this.length);
+    let s = '';
+    for (let i = Math.max(0, start); i < stop; i++) {
+      const b = this.byteAt(i);
+      if (b === undefined) break;
+      s += String.fromCharCode(b);
+    }
+    return s;
+  }
+
+  slice(start: number, end: number): Uint8Array {
+    const stop = Math.min(end, this.length);
+    const from = Math.max(0, start);
+    if (stop <= from) return new Uint8Array(0);
+    // Bypass the chunk cache: slices are stream payloads and scan windows,
+    // which would only churn the LRU.
+    return this.source.read(from, stop - from);
+  }
+}
+
+// ---- lexer --------------------------------------------------------------------
 
 const SPACE = new Set([0x00, 0x09, 0x0a, 0x0c, 0x0d, 0x20]);
 const DELIM = new Set([0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25]); // ( ) < > [ ] { } / %
@@ -34,12 +185,35 @@ function isDelim(b: number): boolean {
 function isRegular(b: number): boolean {
   return !isSpace(b) && !isDelim(b);
 }
+function isDigit(b: number | undefined): boolean {
+  return b !== undefined && b >= 0x30 && b <= 0x39;
+}
 
-/** Decode latin1 bytes to a JS string (1 byte = 1 code unit). */
-function latin1(bytes: Uint8Array, start: number, end: number): string {
-  let s = '';
-  for (let i = start; i < end; i++) s += String.fromCharCode(bytes[i]!);
-  return s;
+/**
+ * Largest stream payload the reader will pull into memory. Only xref streams
+ * and object streams are ever decoded — legitimately a few MB at most — while
+ * a page's image stream can be 100+ MB; dereferencing one must not allocate
+ * it (#328). Payloads are read lazily, so a stream object can be parsed and
+ * inspected without touching its bytes.
+ */
+export const MAX_RAW_STREAM_BYTES = 8 * 1024 * 1024;
+
+/** A stream whose payload is read from `buf` on first access to `raw`. */
+function lazyStream(dict: PdfDict, buf: Bytes, start: number, end: number): PdfStream {
+  let raw: Uint8Array | undefined;
+  return {
+    kind: 'stream',
+    dict,
+    get raw(): Uint8Array {
+      if (raw === undefined) {
+        if (end - start > MAX_RAW_STREAM_BYTES) {
+          throw new Error(`stream payload exceeds size cap (${end - start} bytes)`);
+        }
+        raw = buf.slice(start, end);
+      }
+      return raw;
+    },
+  };
 }
 
 /**
@@ -49,7 +223,7 @@ function latin1(bytes: Uint8Array, start: number, end: number): string {
 class Lexer {
   pos: number;
   constructor(
-    readonly buf: Uint8Array,
+    readonly buf: Bytes,
     start = 0,
     readonly limit: number = buf.length,
   ) {
@@ -59,10 +233,10 @@ class Lexer {
   skipWs(): void {
     const { buf, limit } = this;
     while (this.pos < limit) {
-      const b = buf[this.pos]!;
+      const b = buf.byteAt(this.pos)!;
       if (b === 0x25) {
         // comment to end of line
-        while (this.pos < limit && buf[this.pos] !== 0x0a && buf[this.pos] !== 0x0d) {
+        while (this.pos < limit && buf.byteAt(this.pos) !== 0x0a && buf.byteAt(this.pos) !== 0x0d) {
           this.pos++;
         }
       } else if (isSpace(b)) {
@@ -77,13 +251,13 @@ class Lexer {
   parseValue(): PdfValue | undefined {
     this.skipWs();
     if (this.pos >= this.limit) return undefined;
-    const b = this.buf[this.pos]!;
+    const b = this.buf.byteAt(this.pos)!;
 
     if (b === 0x2f) return this.parseName();
     if (b === 0x28) return this.parseLiteralString();
     if (b === 0x5b) return this.parseArray();
     if (b === 0x3c) {
-      if (this.buf[this.pos + 1] === 0x3c) return this.parseDict();
+      if (this.buf.byteAt(this.pos + 1) === 0x3c) return this.parseDict();
       return this.parseHexString();
     }
     if (b === 0x5d || b === 0x3e) return undefined; // close tokens handled by callers
@@ -125,19 +299,19 @@ class Lexer {
 
   readRegular(): string {
     const start = this.pos;
-    while (this.pos < this.limit && isRegular(this.buf[this.pos]!)) this.pos++;
-    return latin1(this.buf, start, this.pos);
+    while (this.pos < this.limit && isRegular(this.buf.byteAt(this.pos)!)) this.pos++;
+    return this.buf.latin1(start, this.pos);
   }
 
   parseName(): PdfValue {
     this.pos++; // slash
     let name = '';
     while (this.pos < this.limit) {
-      const b = this.buf[this.pos]!;
+      const b = this.buf.byteAt(this.pos)!;
       if (isSpace(b) || isDelim(b)) break;
       if (b === 0x23 && this.pos + 2 < this.limit) {
         // #XX hex escape
-        const hex = latin1(this.buf, this.pos + 1, this.pos + 3);
+        const hex = this.buf.latin1(this.pos + 1, this.pos + 3);
         const code = parseInt(hex, 16);
         if (!Number.isNaN(code)) {
           name += String.fromCharCode(code);
@@ -156,9 +330,9 @@ class Lexer {
     let depth = 1;
     let s = '';
     while (this.pos < this.limit && depth > 0) {
-      const b = this.buf[this.pos++]!;
+      const b = this.buf.byteAt(this.pos++)!;
       if (b === 0x5c) {
-        const n = this.buf[this.pos++]!;
+        const n = this.buf.byteAt(this.pos++)!;
         switch (n) {
           case 0x6e:
             s += '\n';
@@ -197,8 +371,8 @@ class Lexer {
   parseHexString(): string {
     this.pos++; // <
     let hex = '';
-    while (this.pos < this.limit && this.buf[this.pos] !== 0x3e) {
-      const b = this.buf[this.pos++]!;
+    while (this.pos < this.limit && this.buf.byteAt(this.pos) !== 0x3e) {
+      const b = this.buf.byteAt(this.pos++)!;
       if (!isSpace(b)) hex += String.fromCharCode(b);
     }
     this.pos++; // >
@@ -215,7 +389,7 @@ class Lexer {
     const arr: PdfArray = [];
     while (this.pos < this.limit) {
       this.skipWs();
-      if (this.buf[this.pos] === 0x5d) {
+      if (this.buf.byteAt(this.pos) === 0x5d) {
         this.pos++;
         break;
       }
@@ -223,7 +397,7 @@ class Lexer {
       const v = this.parseValue();
       if (v === undefined) {
         if (this.pos <= before) this.pos++;
-        if (this.buf[before] === 0x5d) break;
+        if (this.buf.byteAt(before) === 0x5d) break;
         continue;
       }
       arr.push(v);
@@ -236,11 +410,11 @@ class Lexer {
     const entries = new Map<string, PdfValue>();
     while (this.pos < this.limit) {
       this.skipWs();
-      if (this.buf[this.pos] === 0x3e && this.buf[this.pos + 1] === 0x3e) {
+      if (this.buf.byteAt(this.pos) === 0x3e && this.buf.byteAt(this.pos + 1) === 0x3e) {
         this.pos += 2;
         break;
       }
-      if (this.buf[this.pos] !== 0x2f) {
+      if (this.buf.byteAt(this.pos) !== 0x2f) {
         // not a name where a key is expected — bail out of dict
         this.pos++;
         continue;
@@ -255,45 +429,50 @@ class Lexer {
     // Is a stream attached?
     const save = this.pos;
     this.skipWs();
-    if (latin1(this.buf, this.pos, Math.min(this.pos + 6, this.limit)) === 'stream') {
+    if (this.buf.latin1(this.pos, Math.min(this.pos + 6, this.limit)) === 'stream') {
       this.pos += 6;
       // skip CRLF or LF after the stream keyword
-      if (this.buf[this.pos] === 0x0d) this.pos++;
-      if (this.buf[this.pos] === 0x0a) this.pos++;
+      if (this.buf.byteAt(this.pos) === 0x0d) this.pos++;
+      if (this.buf.byteAt(this.pos) === 0x0a) this.pos++;
       const dataStart = this.pos;
       const lenVal = entries.get('Length');
       let dataEnd = -1;
-      if (typeof lenVal === 'number' && lenVal >= 0) {
-        const candidate = dataStart + lenVal;
-        // Validate the declared length actually points at endstream.
-        const probe = latin1(this.buf, candidate, Math.min(candidate + 12, this.limit));
-        if (/^\s*endstream/.test(probe) || candidate <= this.limit) {
-          dataEnd = candidate;
-        }
+      let afterEndstream = -1;
+      if (typeof lenVal === 'number' && lenVal >= 0 && dataStart + lenVal <= this.limit) {
+        dataEnd = dataStart + lenVal;
+        // A declared length that lands on `endstream` is trusted outright, so
+        // the payload (possibly a 100 MB image) is never scanned.
+        const probe = this.buf.latin1(dataEnd, Math.min(dataEnd + 12, this.limit));
+        const m = /^\s*endstream/.exec(probe);
+        if (m) afterEndstream = dataEnd + m[0].length;
       }
-      if (dataEnd < 0) {
-        // Search for the endstream marker.
-        dataEnd = this.indexOf('endstream', dataStart);
-        if (dataEnd < 0) dataEnd = this.limit;
+      if (afterEndstream < 0) {
+        // No usable /Length (absent, indirect, or wrong): search for the
+        // marker. Bounded — a payload past the cap can't be read anyway.
+        const es = this.indexOf(
+          'endstream',
+          dataStart,
+          Math.min(this.limit, dataStart + MAX_RAW_STREAM_BYTES + 'endstream'.length),
+        );
+        if (dataEnd < 0) dataEnd = es >= 0 ? es : this.limit;
+        afterEndstream = es >= 0 ? es + 'endstream'.length : dataEnd;
       }
-      this.pos = dataEnd;
-      // advance past endstream
-      const es = this.indexOf('endstream', dataStart);
-      if (es >= 0) this.pos = es + 'endstream'.length;
-      return { kind: 'stream', dict, raw: this.buf.slice(dataStart, dataEnd) };
+      this.pos = afterEndstream;
+      return lazyStream(dict, this.buf, dataStart, dataEnd);
     }
     this.pos = save;
     return dict;
   }
 
-  indexOf(needle: string, from: number): number {
-    const { buf, limit } = this;
+  /** Index of `needle` in `[from, to)`, or -1. */
+  indexOf(needle: string, from: number, to: number = this.limit): number {
+    const { buf } = this;
     const first = needle.charCodeAt(0);
-    for (let i = from; i <= limit - needle.length; i++) {
-      if (buf[i] !== first) continue;
+    for (let i = from; i <= to - needle.length; i++) {
+      if (buf.byteAt(i) !== first) continue;
       let ok = true;
       for (let j = 1; j < needle.length; j++) {
-        if (buf[i + j] !== needle.charCodeAt(j)) {
+        if (buf.byteAt(i + j) !== needle.charCodeAt(j)) {
           ok = false;
           break;
         }
@@ -375,6 +554,15 @@ interface XrefEntry {
   field3: number;
 }
 
+/** Window the linear-scan fallback reads at a time. */
+export const SCAN_WINDOW = 256 * 1024;
+/**
+ * Extra bytes read past each window so an `N G obj` header (or `trailer`)
+ * that begins inside the window is always seen whole. Far longer than any
+ * plausible header.
+ */
+export const SCAN_OVERLAP = 64;
+
 /**
  * The parsed PDF: a lazy object store keyed by object number. We resolve
  * objects on demand and memoize them.
@@ -391,10 +579,17 @@ export class PdfDocument {
   readonly warnings: string[] = [];
   trailer: PdfDict | undefined;
 
-  private constructor(readonly bytes: Uint8Array) {}
+  private constructor(private readonly buf: Bytes) {}
 
-  static parse(bytes: Uint8Array): PdfDocument {
-    const doc = new PdfDocument(bytes);
+  /**
+   * Parse a PDF from bytes in memory or from a random-access {@link
+   * ByteSource}. With a source, only the tail, the xref sections and the
+   * objects actually dereferenced are ever read.
+   */
+  static parse(input: Uint8Array | ByteSource): PdfDocument {
+    const doc = new PdfDocument(
+      isByteSource(input) ? new ChunkedBytes(input) : new MemoryBytes(input),
+    );
     try {
       doc.buildXref();
     } catch (e) {
@@ -433,8 +628,8 @@ export class PdfDocument {
 
   /** Parse `N G obj ... endobj` at a byte offset. */
   private parseObjectAt(offset: number, expectNum: number): PdfValue | undefined {
-    if (offset < 0 || offset >= this.bytes.length) return undefined;
-    const lex = new Lexer(this.bytes, offset);
+    if (offset < 0 || offset >= this.buf.length) return undefined;
+    const lex = new Lexer(this.buf, offset);
     lex.skipWs();
     const n = lex.readRegular();
     lex.skipWs();
@@ -443,7 +638,12 @@ export class PdfDocument {
     const kw = lex.readRegular();
     if (kw !== 'obj') {
       // offset may be off; try a small forward search for "obj".
-      const at = lex.indexOf(`${expectNum} `, offset);
+      const needle = `${expectNum} `;
+      const at = lex.indexOf(
+        needle,
+        offset,
+        Math.min(this.buf.length, offset + 64 + needle.length),
+      );
       if (at >= 0 && at < offset + 64) return this.parseObjectAt(at, expectNum);
       return undefined;
     }
@@ -456,7 +656,7 @@ export class PdfDocument {
     const startxref = this.findLastStartxref();
     const visited = new Set<number>();
     let offset = startxref;
-    while (offset >= 0 && offset < this.bytes.length && !visited.has(offset)) {
+    while (offset >= 0 && offset < this.buf.length && !visited.has(offset)) {
       visited.add(offset);
       const next = this.readXrefSection(offset);
       offset = next;
@@ -465,9 +665,9 @@ export class PdfDocument {
 
   /** Returns the /Prev offset to follow, or -1 when done. */
   private readXrefSection(offset: number): number {
-    const lex = new Lexer(this.bytes, offset);
+    const lex = new Lexer(this.buf, offset);
     lex.skipWs();
-    const kw = latin1(this.bytes, lex.pos, Math.min(lex.pos + 4, this.bytes.length));
+    const kw = this.buf.latin1(lex.pos, lex.pos + 4);
     if (kw === 'xref') {
       return this.readClassicXref(lex);
     }
@@ -484,7 +684,7 @@ export class PdfDocument {
     // Subsections: "<start> <count>\n" then count lines of 20 bytes.
     for (;;) {
       lex.skipWs();
-      const peek = latin1(this.bytes, lex.pos, Math.min(lex.pos + 7, this.bytes.length));
+      const peek = this.buf.latin1(lex.pos, lex.pos + 7);
       if (peek.startsWith('trailer')) {
         lex.pos += 7;
         break;
@@ -497,11 +697,11 @@ export class PdfDocument {
       // Clamp the declared entry count to what the file can actually hold
       // (20 bytes per entry): a crafted "0 9999999999" subsection would
       // otherwise spin this loop ~1e10 times and freeze the JS thread.
-      const maxEntries = Math.max(0, Math.floor((this.bytes.length - lex.pos) / 20));
+      const maxEntries = Math.max(0, Math.floor((this.buf.length - lex.pos) / 20));
       const count = Math.min(Number(countStr), maxEntries);
       lex.skipWs();
       for (let i = 0; i < count; i++) {
-        const line = latin1(this.bytes, lex.pos, lex.pos + 20);
+        const line = this.buf.latin1(lex.pos, lex.pos + 20);
         const off = parseInt(line.slice(0, 10), 10);
         const typeChar = line[17];
         lex.pos += 20;
@@ -756,8 +956,9 @@ export class PdfDocument {
       this.warnings.push(`object stream ${stmNum} has invalid header bounds`);
       return result;
     }
+    const bytes = new MemoryBytes(data);
     // Header: N pairs of "<objNum> <offset>".
-    const headLex = new Lexer(data, 0, first);
+    const headLex = new Lexer(bytes, 0, first);
     const offsets: number[] = [];
     for (let i = 0; i < n; i++) {
       headLex.skipWs();
@@ -784,7 +985,7 @@ export class PdfDocument {
     for (let i = 0; i < n; i++) {
       const start = first + offsets[i]!;
       const end = i + 1 < n ? first + offsets[i + 1]! : data.length;
-      const objLex = new Lexer(data, start, end);
+      const objLex = new Lexer(bytes, start, end);
       const val = objLex.parseValue();
       if (val !== undefined) result.set(i, val);
     }
@@ -793,12 +994,12 @@ export class PdfDocument {
 
   private findLastStartxref(): number {
     const needle = 'startxref';
-    const tailStart = Math.max(0, this.bytes.length - 2048);
+    const tailStart = Math.max(0, this.buf.length - 2048);
     let idx = -1;
-    for (let i = this.bytes.length - needle.length; i >= tailStart; i--) {
+    for (let i = this.buf.length - needle.length; i >= tailStart; i--) {
       let ok = true;
       for (let j = 0; j < needle.length; j++) {
-        if (this.bytes[i + j] !== needle.charCodeAt(j)) {
+        if (this.buf.byteAt(i + j) !== needle.charCodeAt(j)) {
           ok = false;
           break;
         }
@@ -809,7 +1010,7 @@ export class PdfDocument {
       }
     }
     if (idx < 0) return -1;
-    const lex = new Lexer(this.bytes, idx + needle.length);
+    const lex = new Lexer(this.buf, idx + needle.length);
     lex.skipWs();
     return Number(lex.readRegular());
   }
@@ -817,25 +1018,40 @@ export class PdfDocument {
   /**
    * Fallback: scan the whole file for "N G obj" headers and index them. Lets us
    * read PDFs with broken/absent xref. Also recovers the trailer Root.
+   *
+   * The scan walks the file in {@link SCAN_WINDOW} slices (each read once,
+   * with a {@link SCAN_OVERLAP} tail so a header straddling two windows is
+   * seen whole by the first), so even a 200 MB file costs one window of
+   * memory at a time.
    */
   private linearScan(): void {
-    const bytes = this.bytes;
+    const total = this.buf.length;
     const re = /(\d+)\s+(\d+)\s+obj\b/g;
-    const text = latin1(bytes, 0, bytes.length);
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      const num = Number(m[1]);
-      const offset = m.index;
-      this.xref.set(num, { type: 1, field2: offset, field3: 0 });
+    let lastTrailer = -1;
+    for (let start = 0; start < total; start += SCAN_WINDOW) {
+      const text = latin1FromArray(this.buf.slice(start, start + SCAN_WINDOW + SCAN_OVERLAP));
+      // A match must BEGIN inside the window proper; the overlap only completes it.
+      const accept = Math.min(SCAN_WINDOW, text.length);
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index >= accept) break;
+        // Digits at the very start that continue a digit run from the previous
+        // window are the tail of a header that window already recorded.
+        if (m.index === 0 && start > 0 && isDigit(this.buf.byteAt(start - 1))) continue;
+        this.xref.set(Number(m[1]), { type: 1, field2: start + m.index, field3: 0 });
+      }
+      let t = text.indexOf('trailer');
+      while (t >= 0 && t < accept) {
+        lastTrailer = start + t;
+        t = text.indexOf('trailer', t + 1);
+      }
     }
     // Find a trailer with /Root, else synthesize one by locating /Type /Catalog.
-    if (!this.trailer || !this.getTrailerRoot()) {
-      const tIdx = text.lastIndexOf('trailer');
-      if (tIdx >= 0) {
-        const lex = new Lexer(bytes, tIdx + 7);
-        const td = lex.parseValue();
-        if (td && isDict(td)) this.trailer = td;
-      }
+    if ((!this.trailer || !this.getTrailerRoot()) && lastTrailer >= 0) {
+      const lex = new Lexer(this.buf, lastTrailer + 7);
+      const td = lex.parseValue();
+      if (td && isDict(td)) this.trailer = td;
     }
     if (!this.trailer || !this.getTrailerRoot()) {
       // Locate the catalog object directly.

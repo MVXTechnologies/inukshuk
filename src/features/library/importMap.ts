@@ -22,14 +22,48 @@ export async function mapDocumentFromStoredPdf(
 ): Promise<MapDocument> {
   let parsed: ReturnType<typeof parseGeoPdf>;
   try {
-    const bytes = await storage.readFileBytes(fileUri);
-    parsed = parseGeoPdf(bytes);
+    // Random access, not `readFileBytes`: a 200 MB GeoPDF read whole into
+    // memory OOMs a 192 MB heap, while the parser only needs its tail, xref
+    // and a handful of objects (#328).
+    parsed = storage.withFileByteSource(fileUri, (source) => parseGeoPdf(source));
   } catch (err) {
+    // `parseGeoPdf` never throws — it reports trouble as warnings — so the
+    // only way to land here is the platform file handle itself. That path is
+    // new (#328) and native; if some device's handle misbehaves, fall back to
+    // the pre-#328 whole-file read rather than failing an import that used to
+    // work. Only for a file small enough to survive being read whole: above
+    // that, the fallback IS the OOM we came here to avoid.
+    if (storage.fileSizeAt(fileUri) <= WHOLE_FILE_PARSE_LIMIT_BYTES) {
+      try {
+        const bytes = await storage.readFileBytes(fileUri);
+        reportError(err, 'pdf-import-byte-source');
+        parsed = parseGeoPdf(bytes);
+        return documentOf(id, fileUri, name, parsed);
+      } catch {
+        // Fall through to the original failure: it is the one worth reporting.
+      }
+    }
     // The copy landed in permanent storage before it could be read/parsed;
     // delete it or a failed import orphans the file there forever.
     storage.deleteFileAt(fileUri);
     throw err;
   }
+  return documentOf(id, fileUri, name, parsed);
+}
+
+/**
+ * Largest file the whole-file parse fallback above will attempt. A 192 MB
+ * Android heap dies on a 216 MB read (#328); this leaves room for the rest of
+ * the app on the smallest heap we support.
+ */
+export const WHOLE_FILE_PARSE_LIMIT_BYTES = 24 * 1024 * 1024;
+
+function documentOf(
+  id: string,
+  fileUri: string,
+  name: string,
+  parsed: ReturnType<typeof parseGeoPdf>,
+): MapDocument {
   return {
     id,
     name,

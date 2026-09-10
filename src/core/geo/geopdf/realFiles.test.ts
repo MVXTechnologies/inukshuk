@@ -2,21 +2,30 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { CornerCoordinates, PointRect } from '@core/models';
 import { renderedPageCorners } from './pageBox';
-import { parseGeoPdf } from './parseGeoPdf';
+import { type GeoPdfParseResult, parseGeoPdf } from './parseGeoPdf';
+import type { ByteSource } from './pdfReader';
 import { primaryGeoreferenceForPage } from './primary';
 
 /**
- * Placement regression against three real GeoPDFs (#287). The files are not
- * in git (3.6 MB / 52 MB / 216 MB); point `INUKSHUK_GEOPDF_DIR` at a directory
- * holding them and the suite runs, otherwise it is skipped.
+ * Placement regression against three real GeoPDFs (#287) and, since #328, the
+ * random-access read path. The files are not in git (3.6 MB / 52 MB / 216 MB);
+ * point `INUKSHUK_GEOPDF_DIR` at a directory holding them and the suite runs,
+ * otherwise it is skipped.
  *
  * Every value below was captured from the parser BEFORE the rendered-page-box
  * change. All three sheets have a zero-origin MediaBox and either no CropBox or
  * one equal to it, so the fix must leave their placement bit-for-bit
  * identical: the primary viewport's frame and corners, the page size, and the
  * full-page corners the overlay hands to MapLibre.
+ *
+ * #328: the same files parsed through a file-backed {@link ByteSource} must
+ * produce the identical result while reading a small fraction of the file —
+ * the import path no longer loads a 216 MB sheet into a 192 MB heap.
  */
 const dir = process.env.INUKSHUK_GEOPDF_DIR;
+
+/** Fraction of the file the streaming parse may read (the 216 MB sheet: < 11 MB). */
+const MAX_READ_FRACTION = 0.05;
 
 interface Expected {
   file: string;
@@ -93,27 +102,90 @@ const EXPECTED: Expected[] = [
   },
 ];
 
+interface ReadStats {
+  reads: number;
+  bytesRead: number;
+  maxRead: number;
+}
+
+/**
+ * The Node counterpart of `storage.withFileByteSource`: one descriptor, one
+ * positioned `readSync` per request, every read tallied.
+ */
+function withFileSource<T>(file: string, fn: (source: ByteSource, stats: ReadStats) => T): T {
+  const fd = fs.openSync(file, 'r');
+  const size = fs.fstatSync(fd).size;
+  const stats: ReadStats = { reads: 0, bytesRead: 0, maxRead: 0 };
+  try {
+    return fn(
+      {
+        size,
+        read(offset, length) {
+          const want = Math.max(0, Math.min(length, size - offset));
+          const out = new Uint8Array(want);
+          const got = want > 0 ? fs.readSync(fd, out, 0, want, offset) : 0;
+          stats.reads += 1;
+          stats.bytesRead += got;
+          stats.maxRead = Math.max(stats.maxRead, got);
+          return got === want ? out : out.subarray(0, got);
+        },
+      },
+      stats,
+    );
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 const available = dir !== undefined && EXPECTED.every((e) => fs.existsSync(path.join(dir, e.file)));
+
+const assertPlacement = (res: GeoPdfParseResult, expected: Expected): void => {
+  expect(res.warnings).toEqual([]);
+  expect(res.georeferences).toHaveLength(expected.georeferences);
+  const geo = primaryGeoreferenceForPage(res.georeferences, 0)!;
+  expect(geo.pageWidthPt).toBe(expected.pageWidthPt);
+  expect(geo.pageHeightPt).toBe(expected.pageHeightPt);
+  expect(geo.pageBox).toEqual({
+    x0: 0,
+    y0: 0,
+    x1: expected.pageWidthPt,
+    y1: expected.pageHeightPt,
+  });
+  expect(geo.viewport.rect).toEqual(expected.rect);
+  expect(geo.viewport.corners).toEqual(expected.corners);
+  expect(renderedPageCorners(geo)).toEqual(expected.page);
+};
 
 (available ? describe : describe.skip)('real GeoPDF placement is unchanged by #287', () => {
   for (const expected of EXPECTED) {
     it(expected.label, () => {
       const bytes = new Uint8Array(fs.readFileSync(path.join(dir!, expected.file)));
-      const res = parseGeoPdf(bytes);
-      expect(res.warnings).toEqual([]);
-      expect(res.georeferences).toHaveLength(expected.georeferences);
-      const geo = primaryGeoreferenceForPage(res.georeferences, 0)!;
-      expect(geo.pageWidthPt).toBe(expected.pageWidthPt);
-      expect(geo.pageHeightPt).toBe(expected.pageHeightPt);
-      expect(geo.pageBox).toEqual({
-        x0: 0,
-        y0: 0,
-        x1: expected.pageWidthPt,
-        y1: expected.pageHeightPt,
-      });
-      expect(geo.viewport.rect).toEqual(expected.rect);
-      expect(geo.viewport.corners).toEqual(expected.corners);
-      expect(renderedPageCorners(geo)).toEqual(expected.page);
+      assertPlacement(parseGeoPdf(bytes), expected);
     });
   }
 });
+
+(available ? describe : describe.skip)(
+  'real GeoPDFs parse identically through a ByteSource (#328)',
+  () => {
+    for (const expected of EXPECTED) {
+      it(`${expected.label} — reads under ${MAX_READ_FRACTION * 100}% of the file`, () => {
+        const file = path.join(dir!, expected.file);
+        const inMemory = parseGeoPdf(new Uint8Array(fs.readFileSync(file)));
+        const { streamed, stats, size } = withFileSource(file, (source, s) => ({
+          streamed: parseGeoPdf(source),
+          stats: s,
+          size: source.size,
+        }));
+        process.stdout.write(
+          `[#328] ${expected.file}: ${size} bytes, read ${stats.bytesRead} ` +
+            `(${((100 * stats.bytesRead) / size).toFixed(2)}%) in ${stats.reads} reads, ` +
+            `largest ${stats.maxRead}\n`,
+        );
+        expect(streamed).toEqual(inMemory);
+        assertPlacement(streamed, expected);
+        expect(stats.bytesRead).toBeLessThan(size * MAX_READ_FRACTION);
+      });
+    }
+  },
+);
