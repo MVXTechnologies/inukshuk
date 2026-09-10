@@ -20,17 +20,30 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck
+        id: typecheck
         run: npm run typecheck
       - name: Lint
+        id: lint
         run: npm run lint
       - name: Tests
+        id: tests
         run: npm run test:ci
-      - name: Expo Doctor (blocking)
-        run: npx expo-doctor
+      - name: CI script tests
+        id: scripts
+        run: npm run test:scripts
+      # Not raw `expo-doctor`: one known finding (the SDK 56 Hermes V1 memory
+      # regression, fixable only by the SDK 57 upgrade) made this red every
+      # night, which hid every other check. The gate applies the dated
+      # acknowledgements in expo-doctor-acknowledged.jsonc and still fails on
+      # anything unacknowledged, expired, or since fixed (#338).
+      - name: Expo Doctor (blocking, acknowledgements in expo-doctor-acknowledged.jsonc)
+        id: doctor
+        run: node scripts/ci/expo-doctor-gate.mjs
       # audit-ci instead of raw `npm audit`: same high+ threshold, but accepted
       # advisories can be allowlisted (with reasons and exit plans) in
       # audit-ci.jsonc instead of failing the gate every night.
       - name: Security audit (high+, allowlist in audit-ci.jsonc)
+        id: audit
         run: npx audit-ci@^7 --config ./audit-ci.jsonc
 
   report-failure:
@@ -44,10 +57,22 @@ jobs:
         with:
           script: |
             const title = '🩺 Nightly health check failed';
+            // Name the step that failed: "one of five things broke" is not
+            // something anyone can act on at 05:00 (#338). Read from the API
+            // rather than job outputs, which a failed job does not publish.
+            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            const failed = jobs.jobs
+              .flatMap((job) => job.steps ?? [])
+              .filter((step) => step.conclusion === 'failure')
+              .map((step) => step.name);
+            const which = failed.length > 0 ? failed.join(', ') : 'an unreported step';
             const body = `The nightly health check failed on ${new Date().toISOString().slice(0, 10)}.\n\n` +
-              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n` +
-              `One of: typecheck, lint, tests, expo-doctor, or npm audit regressed. ` +
-              `Check the logs and open a fix.`;
+              `**Failed: ${which}**\n\n` +
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
