@@ -32,8 +32,7 @@ cost of being on the stores, not the user's.
    app config already reads `process.env.EAS_PROJECT_ID`).
 4. Configure the OTA update URL: `eas update:configure` (sets `EAS_UPDATE_URL`).
 5. Create a GitHub Actions secret **`EXPO_TOKEN`** — generate it at
-   _expo.dev → Account → Access Tokens_. Until this secret exists, the
-   `release.yml` and `ota-update.yml` workflows safely no-op.
+   _expo.dev → Account → Access Tokens_. Release and OTA workflows fail with an explicit missing-credential error if this secret is absent.
 
 ### 1. iOS — App Store
 
@@ -65,8 +64,7 @@ ready-made listing copy in `store/appstore/` and the screenshot sets in
    Release manager), and download its **JSON key**.
 4. Add the JSON contents as the GitHub secret **`GOOGLE_SERVICE_ACCOUNT_JSON`**.
 5. The first upload to a new Play app must be done manually once (Google
-   requires the initial APK/AAB through the console); subsequent submissions go
-   through `eas submit` to the `production` track (configured in `eas.json`).
+   requires the initial APK/AAB through the console); subsequent submissions can use `eas submit`. The release workflow defaults to `internal`; choose the exact closed-test track API ID or explicitly choose `production` after Play grants access.
 
 EAS manages the Android upload keystore for you.
 
@@ -100,29 +98,19 @@ required locally; the Android hook is a no-op.
 
 ## Releasing
 
-Once the secrets above exist, a release is just a tag:
+Use the procedure in [CI/CD](CI.md#release-procedure). Update the marketing version in both package/config files and increment both native build numbers before building. The workflow checks for mismatches and previously used EAS build numbers.
 
-```bash
-npm version patch         # bumps version, creates a git tag
-git push --follow-tags
-```
+Run **Release (Build & Submit to Stores)** on `main`, choosing `ios`, `android`, or `all`. Choose the exact Google track API ID; the default is `internal`. A version tag on main also starts the workflow, targeting internal Google testing. Production requires explicit selection and Play production eligibility.
 
-`release.yml` then:
+The workflow waits separately for each signed build and its submission. It submits a validated **build ID**, never whichever binary happens to be latest. A failed submission can retry that ID from the same source commit without paying for another build.
 
-1. builds production binaries on EAS for both platforms, and
-2. auto-submits them — iOS to TestFlight/App Store review, Android to the
-   Play `production` track with `releaseStatus: completed`. This is a public
-   release, subject to Google Play review; it is not an internal draft.
+**Apple submission uploads to App Store Connect/TestFlight.** It does not submit App Review or make the app public. Complete App Review in App Store Connect using [APP-STORE-SUBMISSION.md](APP-STORE-SUBMISSION.md). Google may also require review before users receive the release.
 
-You can also trigger it manually from the Actions tab (choose `ios`, `android`,
-or `all`).
+As of September 9, 2026, Play production access is not yet available for this account; internal/custom closed testing are the available release routes. App Store version 1.5.0 was waiting for review. Consult the consoles for current state instead of inferring it from a green GitHub run.
 
 ## Field updates without a store release
 
-For JS/asset-only fixes, you don't need a store round-trip. Merging to `main`
-triggers `ota-update.yml`, which publishes an **EAS Update** to the `production`
-channel; installed apps pick it up on next launch. Native changes (new modules,
-permission changes) still require a full store release.
+Main pushes can publish production OTA updates after code checks and compatibility checks against the current runtime's finished store binaries. Native input changes require a new binary/runtime. The workflow no longer allows rewriting the app version to force an update onto older native runtimes. See [OTA compatibility](CI.md#ota-compatibility) for its conservative checks and limits.
 
 ## Error reporting (one-time, optional but recommended)
 

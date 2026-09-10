@@ -11,6 +11,7 @@ permissions:
 jobs:
   automerge:
     if: github.actor == 'dependabot[bot]'
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Fetch Dependabot metadata
@@ -19,9 +20,31 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for minor & patch updates
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Require real merge protection before enabling auto-merge
+        id: protection
+        uses: actions/github-script@v9
+        with:
+          script: |
+            try {
+              const { data } = await github.rest.repos.getBranchProtection({
+                ...context.repo, branch: context.payload.pull_request.base.ref,
+              });
+              const checks = data.required_status_checks;
+              const required = new Set([...(checks?.contexts ?? []), ...(checks?.checks ?? []).map(c => c.context)]);
+              const names = ['Typecheck · Lint · Format · Test', 'Workflow validation', 'Expo runtime health', 'Detect native build inputs', 'Android (Gradle assembleDebug)', 'iOS (xcodebuild simulator)'];
+              const safe = checks?.strict === true && names.every(name => required.has(name));
+              core.setOutput('enabled', String(safe));
+              if (!safe) core.notice('Auto-merge disabled: configure all documented required checks and up-to-date branches first.');
+            } catch (error) {
+              if (![403, 404].includes(error.status)) throw error;
+              core.setOutput('enabled', 'false');
+              core.notice('Auto-merge disabled: merge protection is absent or cannot be verified.');
+            }
+
+      - name: Enable protected auto-merge for minor and patch updates
+        if: steps.protection.outputs.enabled == 'true' && steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -14,9 +14,12 @@ on:
   schedule:
     - cron: '15 5 * * *'
 
+permissions:
+  contents: read
+
 concurrency:
-  group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  group: e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   android-e2e:
@@ -75,7 +78,9 @@ jobs:
 
       - name: Install Maestro
         run: |
-          curl -Ls https://get.maestro.mobile.dev | bash
+          curl --fail --show-error --silent --location https://get.maestro.mobile.dev -o "$RUNNER_TEMP/install-maestro.sh"
+          bash "$RUNNER_TEMP/install-maestro.sh"
+          "$HOME/.maestro/bin/maestro" --version
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Run Maestro flow on emulator
@@ -132,13 +137,15 @@ jobs:
             adb install -r android/app/build/outputs/apk/release/app-release.apk
             bash .github/scripts/e2e-attempts.sh
 
-      # Maestro writes screenshots + the UI hierarchy on failure; without this
-      # upload every red run is a black box.
+      # Preserve first-attempt evidence even when the existing retry passes.
+      # Maestro logs also record its exact version for reproducibility audits.
       - name: Upload Maestro debug artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: maestro-debug
+          include-hidden-files: true
+          if-no-files-found: ignore
           path: |
             ~/.maestro/tests
             logcat-failure-*.txt

@@ -1,17 +1,22 @@
 name: Nightly Health Check
 
-# Autonomous self-checkup. Runs the full gate plus a blocking expo-doctor and a
-# security audit every night. If anything regresses (e.g. a transitive dep
-# breaks, or a new SDK surfaces a config warning), it opens/updates a tracking
-# issue so problems surface without anyone watching.
 on:
   schedule:
     - cron: '0 5 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-health-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  health:
+  quality:
+    name: Code quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -19,54 +24,62 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Lint
-        run: npm run lint
-      - name: Tests
-        run: npm run test:ci
-      - name: Expo Doctor (blocking)
-        run: npx expo-doctor
-      # audit-ci instead of raw `npm audit`: same high+ threshold, but accepted
-      # advisories can be allowlisted (with reasons and exit plans) in
-      # audit-ci.jsonc instead of failing the gate every night.
-      - name: Security audit (high+, allowlist in audit-ci.jsonc)
-        run: npx audit-ci@^7 --config ./audit-ci.jsonc
+      - run: npx expo install --check
+      - run: npm run check
+      - run: node --test scripts/ci/*.test.mjs
+
+  doctor:
+    name: Expo runtime health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx --yes expo-doctor@1.20.4
+
+  security:
+    name: Dependency security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Security audit (high+, documented allowlist)
+        run: npx --yes audit-ci@7.1.0 --config ./audit-ci.jsonc
 
   report-failure:
-    needs: health
-    if: failure()
+    needs: [quality, doctor, security]
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       issues: write
     steps:
       - uses: actions/github-script@v9
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         with:
           script: |
             const title = '🩺 Nightly health check failed';
-            const body = `The nightly health check failed on ${new Date().toISOString().slice(0, 10)}.\n\n` +
+            const results = JSON.parse(process.env.RESULTS);
+            const rows = Object.entries(results).map(([name, value]) => `- ${name}: ${value.result}`).join('\n');
+            const body = `Latest check: ${new Date().toISOString().slice(0, 10)}\n\n${rows}\n\n` +
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n` +
-              `One of: typecheck, lint, tests, expo-doctor, or npm audit regressed. ` +
-              `Check the logs and open a fix.`;
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'health-check',
+              'Code quality, native runtime health, and dependency security run independently. A runtime warning must be fixed in the app, not hidden in CI.';
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'open', labels: 'health-check', per_page: 100,
             });
-            if (issues.length > 0) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issues[0].number,
-                body,
-              });
+            const existing = issues.find(issue => issue.title === title && !issue.pull_request);
+            if (existing) {
+              await github.rest.issues.update({ ...context.repo, issue_number: existing.number, body });
             } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title,
-                body,
-                labels: ['health-check'],
-              });
+              await github.rest.issues.create({ ...context.repo, title, body, labels: ['health-check'] });
             }

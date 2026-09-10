@@ -1,32 +1,59 @@
 name: Native Build Test
 
-# Proves the app actually compiles into real iOS and Android binaries on the
-# latest toolchains. No code signing, no store accounts needed — pure compile
-# verification. Runs on PRs that touch native-affecting files, and nightly.
+# Compile native inputs on PRs; nightly/manual runs exercise the full build.
+# Keep this workflow present on every PR so its existing check names report
+# "skipped" for JS/docs-only changes instead of remaining pending.
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'app.config.ts'
-      - 'app.json'
-      - 'src/**'
-      - 'app/**'
-      - 'assets/**'
-      - 'plugins/**'
-      - '.github/workflows/native-build.yml'
   workflow_dispatch:
   schedule:
-    # 04:30 UTC daily — catches breakage from new Xcode / Android SDK images.
+    # 04:30 UTC daily — verifies main against the selected native toolchains.
     - cron: '30 4 * * *'
 
+permissions:
+  contents: read
+
 concurrency:
-  group: native-${{ github.ref }}
-  cancel-in-progress: true
+  group: native-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Detect native build inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.paths.outputs.native }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check all changed paths (including deleted and renamed inputs)
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          native=true
+          if [ "$EVENT_NAME" = pull_request ]; then
+            native=false
+            git diff --no-renames --name-only -z "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/native-paths"
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                package.json|package-lock.json|app.config.*|app.json|eas.json|babel.config.*|metro.config.*|tsconfig.json|.npmrc|.nvmrc|.node-version|assets/*|plugins/*|modules/*|patches/*|android/*|ios/*|scripts/eas-pre-install.sh|.github/workflows/native-build.yml)
+                  native=true ;;
+              esac
+            done < "$RUNNER_TEMP/native-paths"
+          fi
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+          echo "Native compilation required: $native" >> "$GITHUB_STEP_SUMMARY"
+
   android:
     name: Android (Gradle assembleDebug)
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -76,7 +103,7 @@ jobs:
         run: npx expo prebuild --platform android --no-install
 
       - name: Compile debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         working-directory: android
 
       - uses: actions/upload-artifact@v7
@@ -84,20 +111,28 @@ jobs:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
+          if-no-files-found: error
 
   ios:
     name: iOS (xcodebuild simulator)
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    timeout-minutes: 60
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      # A Swift Package dependency requires Swift tools 6.2; the image's default
-      # Xcode 16.4 ships Swift 6.1, so package resolution fails ("Could not
-      # resolve package dependencies"). Select the newest stable Xcode (Swift 6.2+).
-      - name: Select newest Xcode (Swift 6.2+)
+      # Xcode 26.3 is verified by successful native run 34332683125.
+      # Keep Swift 6.2+ support without silently selecting a new stable Xcode.
+      - name: Select Xcode 26.3
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.3'
+
+      - name: Report native toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
       - uses: actions/setup-node@v7
         with:

@@ -1,78 +1,150 @@
 name: Release (Build & Submit to Stores)
 
-# Builds production binaries on EAS and submits them to the App Store
-# (TestFlight) and Google Play (production track). Triggered by pushing a version
-# tag like `v1.0.0`, or manually. No-ops until the required secrets are set —
-# see docs/DEPLOYMENT.md for the full account/secret checklist.
+# A successful run means each selected binary built AND its store upload finished.
+# Apple upload is TestFlight/App Store Connect, not App Review approval.
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       platform:
-        description: Platform to build & submit
+        description: Platforms to build and submit
         type: choice
         default: all
         options: [all, ios, android]
+      android_track:
+        description: Google track API ID (internal, production, or an existing closed-test ID)
+        default: internal
+        required: true
+        type: string
+      ios_build_id:
+        description: Retry upload of an existing finished iOS build from this exact commit
+        type: string
+      android_build_id:
+        description: Retry upload of an existing finished Android build from this exact commit
+        type: string
+
+permissions:
+  contents: read
+
+# Store edits must not race. Never cancel a running upload with a newer dispatch.
+concurrency:
+  group: store-release
+  cancel-in-progress: false
 
 jobs:
-  guard:
+  validate:
+    name: Validate release candidate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
-      enabled: ${{ steps.c.outputs.enabled }}
-    steps:
-      - id: c
-        run: echo "enabled=${{ secrets.EXPO_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
-
-  build-submit:
-    needs: guard
-    if: needs.guard.outputs.enabled == 'true'
-    runs-on: ubuntu-latest
-    # `secrets` can't be referenced in a step-level `if:`; surface their presence
-    # as job-level env (which `if:` may read) instead.
-    env:
-      HAS_GSA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
-      HAS_ASC: ${{ secrets.ASC_API_KEY_P8 != '' }}
+      platforms: ${{ steps.platforms.outputs.value }}
     steps:
       - uses: actions/checkout@v7
-
+        with:
+          fetch-depth: 0
+      - name: Require main history and configured credentials
+        env:
+          REF: ${{ github.ref }}
+          PLATFORM: ${{ inputs.platform || 'all' }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_KEY: ${{ secrets.ASC_API_KEY_P8 }}
+          GOOGLE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          case "$REF" in refs/heads/main|refs/tags/v*) ;; *) echo 'Release only main or a version tag on main.' >&2; exit 1;; esac
+          git merge-base --is-ancestor HEAD origin/main
+          test -n "$EXPO_TOKEN" || { echo 'EXPO_TOKEN is required.' >&2; exit 1; }
+          if [ "$PLATFORM" != android ]; then test -n "$ASC_KEY" || { echo 'ASC_API_KEY_P8 is required.' >&2; exit 1; }; fi
+          if [ "$PLATFORM" != ios ]; then test -n "$GOOGLE_KEY" || { echo 'GOOGLE_SERVICE_ACCOUNT_JSON is required.' >&2; exit 1; }; fi
+      - id: platforms
+        env:
+          PLATFORM: ${{ inputs.platform || 'all' }}
+        run: |
+          case "$PLATFORM" in
+            all) echo 'value=["ios","android"]' >> "$GITHUB_OUTPUT";;
+            ios) echo 'value=["ios"]' >> "$GITHUB_OUTPUT";;
+            android) echo 'value=["android"]' >> "$GITHUB_OUTPUT";;
+            *) exit 1;;
+          esac
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+      - run: npm ci
+      - name: Check package, Expo, tag, and runtime versions agree
+        run: |
+          npx expo config --json > "$RUNNER_TEMP/config.json"
+          node scripts/ci/release-policy.mjs check-config "$RUNNER_TEMP/config.json" package.json "$GITHUB_REF"
+      - run: npx expo install --check
+      - run: npm run check
+      - run: node --test scripts/ci/*.test.mjs
+      - name: Check native runtime health (blocking)
+        run: npx --yes expo-doctor@1.20.4
 
+  build-submit:
+    name: Build and upload (${{ matrix.platform }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.validate.outputs.platforms) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      BUILD_ID: ${{ inputs[format('{0}_build_id', matrix.platform)] }}
+      ANDROID_TRACK: ${{ inputs.android_track || 'internal' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
       - uses: expo/expo-github-action@v9
         with:
-          eas-version: latest
+          eas-version: 23.2.0
           token: ${{ secrets.EXPO_TOKEN }}
-
       - run: npm ci
-      - name: Verify SDK-pinned dependency versions
-        run: npx expo install --check
-      - name: Verify release candidate
-        run: npm run check
-
-      # Materialize store credentials from secrets into the files referenced by
-      # eas.json's submit profile. Missing secrets simply produce empty files;
-      # eas submit will then report the specific missing credential.
-      - name: Write Google Play service account key
-        if: env.HAS_GSA == 'true'
-        env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-        run: printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > google-service-account.json
-
-      - name: Write App Store Connect API key
-        if: env.HAS_ASC == 'true'
-        env:
-          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
-        run: printf '%s' "$ASC_API_KEY_P8" > asc-api-key.p8
-
-      - name: Build and submit
+      - name: Resolve release configuration
+        run: npx expo config --json > "$RUNNER_TEMP/config.json"
+      - name: Check native build number before spending build minutes
+        if: env.BUILD_ID == ''
         run: |
-          eas build \
-            --platform "${{ github.event.inputs.platform || 'all' }}" \
-            --profile production \
-            --auto-submit \
-            --non-interactive \
-            --no-wait
+          node scripts/ci/release-policy.mjs history "$RUNNER_TEMP/history.json" "$PLATFORM"
+          node scripts/ci/release-policy.mjs check-number "$RUNNER_TEMP/history.json" "$RUNNER_TEMP/config.json" "$PLATFORM"
+      - name: Build signed binary and wait for completion
+        if: env.BUILD_ID == ''
+        run: eas build --platform "$PLATFORM" --profile production --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+      - name: Load selected retry build
+        if: env.BUILD_ID != ''
+        run: eas build:view "$BUILD_ID" --json > "$RUNNER_TEMP/build.json"
+      - name: Verify exact binary before upload
+        id: binary
+        run: node scripts/ci/release-policy.mjs validate-build "$RUNNER_TEMP/build.json" "$RUNNER_TEMP/config.json" "$PLATFORM" "$GITHUB_SHA"
+      - name: Prepare submission credentials and destination
+        env:
+          ASC_KEY: ${{ secrets.ASC_API_KEY_P8 }}
+          GOOGLE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          umask 077
+          if [ "$PLATFORM" = ios ]; then printf '%s' "$ASC_KEY" > asc-api-key.p8; else printf '%s' "$GOOGLE_KEY" > google-service-account.json; fi
+          node scripts/ci/release-policy.mjs submit-profile eas.json
+      - name: Submit this binary and wait for the actual store upload result
+        env:
+          VERIFIED_BUILD_ID: ${{ steps.binary.outputs.build_id }}
+        run: eas submit --platform "$PLATFORM" --profile ci --id "$VERIFIED_BUILD_ID" --non-interactive --wait
+      - name: Release result
+        if: always()
+        env:
+          VERIFIED_BUILD_ID: ${{ steps.binary.outputs.build_id }}
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "Platform: $PLATFORM; result: $RESULT"
+            echo "Build ID: ${VERIFIED_BUILD_ID:-not completed}"
+            if [ "$PLATFORM" = ios ]; then echo 'Destination: App Store Connect / TestFlight. Apple App Review and public release are separate.'; else echo "Google destination: $ANDROID_TRACK. Google review may still be pending."; fi
+            echo 'A failed upload can be retried with this build ID; do not rebuild or use --latest.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove submission credentials
+        if: always()
+        run: rm -f asc-api-key.p8 google-service-account.json
