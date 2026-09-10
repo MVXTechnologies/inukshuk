@@ -7,6 +7,7 @@
  * RN JS runtime. Depends only on `proj4` and `fflate`.
  */
 export { parseGeoPdf, type GeoPdfParseResult } from './parseGeoPdf';
+export { GEOPDF_PARSER_REVISION, georeferenceRevision, needsReparse } from './parserRevision';
 export { type ByteSource, memoryByteSource } from './pdfReader';
 export { parseWorldFile } from './worldFile';
 export { parseAuxXml } from './auxXml';

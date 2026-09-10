@@ -189,3 +189,32 @@ const assertPlacement = (res: GeoPdfParseResult, expected: Expected): void => {
     }
   },
 );
+
+/**
+ * Orientation, stated as a property rather than as captured numbers (#336).
+ *
+ * Before #270 the parser paired `/GPTS` with the ISO default corner order
+ * instead of the file's own `/LPTS`, so EcoLL1 — whose producer lists the
+ * upper-left corner first — parsed with its top edge SOUTH of its bottom
+ * edge and drew upside down. Captured expectations would have caught it too,
+ * but only by mismatching; this says what actually has to be true, for every
+ * sheet, in the direction a human can check on the map.
+ */
+(dir ? describe : describe.skip)('real GeoPDFs are the right way up', () => {
+  for (const expected of EXPECTED) {
+    it(`${expected.label} — north at the top, west on the left`, () => {
+      const bytes = new Uint8Array(fs.readFileSync(path.join(dir as string, expected.file)));
+      const geo = primaryGeoreferenceForPage(parseGeoPdf(bytes).georeferences, 0);
+      expect(geo).toBeDefined();
+      const c = geo!.viewport!.corners;
+      // Latitude increases northward, so the top edge must sit north of the
+      // bottom edge on BOTH sides of the sheet.
+      expect(c.topLeft[1]).toBeGreaterThan(c.bottomLeft[1]);
+      expect(c.topRight[1]).toBeGreaterThan(c.bottomRight[1]);
+      // These sheets are all in the western hemisphere, none spans the
+      // antimeridian: the left edge is west of the right edge.
+      expect(c.topLeft[0]).toBeLessThan(c.topRight[0]);
+      expect(c.bottomLeft[0]).toBeLessThan(c.bottomRight[0]);
+    });
+  }
+});
