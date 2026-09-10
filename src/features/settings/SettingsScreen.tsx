@@ -15,6 +15,9 @@ import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import type { UiStyle } from '@ui/theme';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
+
+import { describeRunningUpdate } from '@core/app/updateInfo';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { Image, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
@@ -88,6 +91,18 @@ function isValidTileUrl(url: string): boolean {
     /^https?:\/\//i.test(url) && url.includes('{z}') && url.includes('{x}') && url.includes('{y}')
   );
 }
+
+/**
+ * Which bundle is running. Every field is a module constant captured at
+ * launch, so this is computed once and cannot change while the app runs.
+ */
+const updateLine = describeRunningUpdate({
+  isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+  updateId: Updates.updateId,
+  createdAt: Updates.createdAt,
+  isEmergencyLaunch: Updates.isEmergencyLaunch,
+  isEnabled: Updates.isEnabled,
+});
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -574,9 +589,16 @@ export function SettingsScreen() {
                   Offline trail navigation
                 </Text>
               </View>
+              {/* The version alone cannot answer "did the fix I published
+                  arrive?": an over-the-air update never changes it, so a
+                  stale bundle and a current one both read the same (#341).
+                  The second line says which bundle is actually running. */}
               <List.Item
                 title="Version"
-                description={`${Constants.expoConfig?.version ?? '1.0.0'}`}
+                description={`${Constants.expoConfig?.version ?? '1.0.0'}${
+                  updateLine === null ? '' : `\n${updateLine}`
+                }`}
+                descriptionNumberOfLines={2}
               />
               {/* The map screen no longer shows MapLibre's attribution button
               (owner call — it crowded the map), so this row is the one place
