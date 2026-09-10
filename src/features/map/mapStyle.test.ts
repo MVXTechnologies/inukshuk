@@ -1,5 +1,6 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import {
+  ALWAYS_PRESENT_ANCHORS,
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
@@ -20,7 +21,8 @@ describe('buildOsmStyle', () => {
   it('renders a plain raster base with no relief by default (offline-pack style)', () => {
     const s = buildOsmStyle(TILE, false, 'map');
     expect(s.sources.dem).toBeUndefined();
-    expect(layerIds(s)).toEqual(['background', 'osm']);
+    // The three puck anchors ride along in every style (#332); invisible, sourceless.
+    expect(layerIds(s)).toEqual(['background', 'osm', ...ALWAYS_PRESENT_ANCHORS]);
     expect(s.terrain).toBeUndefined();
   });
 
@@ -193,9 +195,13 @@ describe('buildOsmStyle', () => {
       color: '#FFFFFF',
     };
 
-    it('adds none of them on a plain map — an idle style stays byte-identical', () => {
+    it('adds none of the conditional ones on a plain map — only the puck anchors (#332)', () => {
       const ids = layerIds(buildOsmStyle(TILE, false, 'map', true));
-      for (const a of DRAPE_ANCHORS_BOTTOM_TO_TOP) expect(ids).not.toContain(a);
+      const conditional = DRAPE_ANCHORS_BOTTOM_TO_TOP.filter(
+        (a) => !(ALWAYS_PRESENT_ANCHORS as readonly string[]).includes(a),
+      );
+      for (const a of conditional) expect(ids).not.toContain(a);
+      for (const a of ALWAYS_PRESENT_ANCHORS) expect(ids).toContain(a);
     });
 
     it('is invisible and sourceless — a marker must never paint or fetch', () => {
@@ -650,5 +656,43 @@ describe('buildOsmStyle', () => {
         expect(ids.indexOf('downloaded-mask')).toBeGreaterThan(ids.indexOf('osm'));
       }
     });
+  });
+});
+
+// #332 — the blue dot must always be on top. MapLibre appends a MapView-child
+// layer without `beforeId` to the TOP of the style, above the puck that was
+// mounted at first paint. Every overlay therefore inserts `beforeId` one of
+// these anchors, which must exist in EVERY style variant or the layer would
+// wait for it forever.
+describe('position-puck anchors (#332)', () => {
+  const overlayLabels = { dark: false, tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] };
+  const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+  const variants: [string, Parameters<typeof buildOsmStyle>[4]][] = [
+    ['plain map', undefined],
+    ['satellite', undefined],
+    ['weather', { weatherMuted, overlayLabels }],
+    ['marine', { marineChart: { wmsFallback: false }, overlayLabels }],
+    ['labels only', { overlayLabels }],
+  ];
+
+  it.each(variants)('%s: carries all three, in order, above every drape anchor', (name, opts) => {
+    const ids = layerIds(
+      buildOsmStyle(TILE, false, name === 'satellite' ? 'satellite' : 'map', true, opts),
+    );
+    const at = (id: string) => ids.indexOf(id);
+    for (const a of ALWAYS_PRESENT_ANCHORS) expect(at(a)).toBeGreaterThanOrEqual(0);
+    expect(at(ALWAYS_PRESENT_ANCHORS[0])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[1]));
+    expect(at(ALWAYS_PRESENT_ANCHORS[1])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[2]));
+    for (const drape of [MARINE_DRAPE_ANCHOR, WEATHER_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
+      if (at(drape) >= 0) expect(at(drape)).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
+    }
+  });
+
+  it('keeps the reference labels above the overlays (ink beats maps)', () => {
+    const ids = layerIds(buildOsmStyle(TILE, false, 'map', true, { overlayLabels }));
+    const lastAnchor = ids.indexOf(ALWAYS_PRESENT_ANCHORS[2]);
+    const labelIds = ids.filter((id) => /label|overlay-labels|coast/i.test(id));
+    expect(labelIds.length).toBeGreaterThan(0);
+    for (const id of labelIds) expect(ids.indexOf(id)).toBeGreaterThan(lastAnchor);
   });
 });

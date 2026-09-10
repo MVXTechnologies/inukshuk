@@ -87,6 +87,9 @@ import { useTrailInspection } from './hooks/useTrailInspection';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYER,
+  SLOPE_LAYER,
+  pdfDetailLayer,
+  pdfOverviewLayer,
   HEATMAP_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
@@ -1717,7 +1720,7 @@ export function MapScreen() {
             overlays.map((o) => (
               <Fragment key={o.id}>
                 <ImageSource id={o.id} url={o.imageUri} coordinates={o.coordinates}>
-                  <Layer id={`${o.id}-layer`} type="raster" paint={{ 'raster-opacity': 0.92 }} />
+                  {pdfOverviewLayer(o.id)}
                 </ImageSource>
                 {pdfDetails
                   .filter((d) => (d.parentId ?? d.id) === o.id)
@@ -1728,11 +1731,7 @@ export function MapScreen() {
                       url={d.imageUri}
                       coordinates={d.coordinates}
                     >
-                      <Layer
-                        id={`${d.id}-detail-${fnv1a32(d.imageUri)}-layer`}
-                        type="raster"
-                        paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
-                      />
+                      {pdfDetailLayer(`${d.id}-detail-${fnv1a32(d.imageUri)}`)}
                     </ImageSource>
                   ))}
               </Fragment>
@@ -1749,11 +1748,7 @@ export function MapScreen() {
               url={terrainOverlays2d.slope.uri}
               coordinates={terrainOverlays2d.slope.coordinates}
             >
-              <Layer
-                id="slope2d-layer"
-                type="raster"
-                paint={{ 'raster-opacity': 0.62, 'raster-resampling': 'nearest' }}
-              />
+              {SLOPE_LAYER}
             </ImageSource>
           )}
           {/* Contours must contrast with the ground: white over satellite
