@@ -15,6 +15,13 @@
       "licence": "Public domain (17 U.S.C. §105)",
       "attribution": "NOAA Office of Coast Survey",
       "homepage": "https://nauticalcharts.noaa.gov"
+    },
+    {
+      "id": "inukshuk-fixtures",
+      "name": "Inukshuk e2e fixtures",
+      "licence": "CC0-1.0",
+      "attribution": "Inukshuk",
+      "homepage": "https://github.com/MVXTechnologies/inukshuk"
     }
   ],
   "shards": [
@@ -29,7 +36,20 @@
         -71.1,
         46.9
       ],
-      "byteSize": 944
+      "byteSize": 942
+    },
+    {
+      "id": "topo-n40w060",
+      "category": "topo",
+      "path": "shards/topo-n40w060.json",
+      "itemCount": 1,
+      "bbox": [
+        -54.1,
+        47.2,
+        -53.6,
+        47.6
+      ],
+      "byteSize": 506
     },
     {
       "id": "topo-n40w080",
@@ -42,15 +62,15 @@
         -71,
         47
       ],
-      "byteSize": 1345
+      "byteSize": 1344
     }
   ],
   "search": {
     "path": "search.json",
-    "byteSize": 573
+    "byteSize": 751
   },
   "categoryCounts": {
-    "topo": 3,
+    "topo": 4,
     "nautical": 2
   }
 }

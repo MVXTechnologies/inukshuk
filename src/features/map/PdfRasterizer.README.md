@@ -34,6 +34,15 @@ const result = await rasterize({
 URL whenever there is an origin, base64 only for files under 16 MB without
 one, and a clear refusal above that (#269).
 
+On the served path the page wraps `fetch` (#331): every request pdf.js makes
+is traced (path, `Range`, status, bytes read, failure), and a render error is
+suffixed with `[served fetch: N requests, F failed; GET /maps/<id>.pdf
+bytes=A-B -> 206 (X B read) failed: <reason>]` once any fetch failed. WebKit
+reports every network failure inside the page as a bare `TypeError: Load
+failed` — the whole content of auto-reports #279/#280 — and this names the
+request instead. `PdfRasterizer.served.test.tsx` runs the page script against
+a real loopback `http` server with Range support to pin the wording.
+
 ## Native detail acceleration
 
 Detail requests can provide `crop` and `nativePage: {fileUri, revision,

@@ -51,9 +51,13 @@ masks, blending, annotations, progressive or separate-component JPEG scans, and
 other unsupported layouts return `E_PDF_UNSUPPORTED` for PDF.js fallback.
 
 Input must resolve to a regular file inside private Documents or Caches storage.
-Source JPEG data is limited to 64 MiB, source edges to 20,000 pixels, and the source
-crop to 16 Mi pixels. The opaque PNG output has the same 3072-pixel edge and
-3 Mi-pixel limits as Android. A process-wide gate and serial worker retain ownership
+Source JPEG data is limited to 64 MiB and source edges to 20,000 pixels. A source
+crop of up to 16 Mi pixels is cropped lazily at full resolution; a larger one — the
+whole 181 MP Eco page at overview zoom (#331) — is decoded by ImageIO at the JPEG
+DCT reduction (1/2, 1/4 or 1/8) that fits that same budget and still carries the
+output resolution, so memory follows the reduced frame and the page is never
+refused into PDF.js, which cannot survive it on a phone. The opaque PNG output has
+the same 3072-pixel edge and 3 Mi-pixel limits as Android. A process-wide gate and serial worker retain ownership
 until native work and its autorelease pool finish; obsolete output is deleted.
 See [the iOS implementation notes](ios/README.md) for recognition limits, host tests,
 and the measured simulator memory/performance evidence.

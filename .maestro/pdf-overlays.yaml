@@ -1,0 +1,123 @@
+# PDF overlay rendering e2e (#331): the map front must never regress silently.
+#
+# Downloads the generated Eco-class GeoPDF fixture — one 5600×4200 baseline
+# JPEG page, above the native crop path's 16 Mi-pixel decode budget, the shape
+# of the 52 MB EcoLL1 sheet that always failed on iPhone with "Load failed" —
+# through the Store (the only import path Maestro can drive), then proves the
+# page RENDERS instead of being turned off:
+#   1. the Library card carries no recovery notice ("… turned off to keep other
+#      maps available") and no Retry button once rendering has settled;
+#   2. the map tab, parked over the sheet, is screenshotted; the runner
+#      (scripts/e2e/pdf-overlays.sh → scripts/e2e/check-overlay-screenshot.mjs)
+#      checks the screen is covered by the fixture's quadrant colours, which
+#      is what "the overlay drew" means in pixels.
+#
+# Fixture wiring — same as store.yaml: the build carries
+# CATALOG_MANIFEST_URL=http://127.0.0.1:8787/index.json and the host serves
+# .maestro/fixtures/catalog/ on :8787 (adb reverse on Android; the iOS
+# simulator shares the host loopback). The large JPEG zip is NOT checked in:
+# run `npx tsx scripts/catalog/make-fixture.ts` first (the runner does).
+#
+# Portability notes:
+# - GPS is parked at the fixture's centre (Placentia Bay, Newfoundland — see
+#   LARGE_JPEG_FIXTURE_BBOX in scripts/catalog/make-fixture.ts) BEFORE the map
+#   is shown, so the follow-camera lands inside the sheet without any camera
+#   gesture. It is far from the Québec City fixtures store.yaml counts on.
+# - Text matchers carry leading and trailing .* (iOS merges title +
+#   description into one accessible string).
+# - The Library card's inner status lines live inside the accessible card
+#   pressable and are collapsed on iOS, so success is asserted through what IS
+#   exposed on both platforms: the recovery notice / Retry button that a
+#   failure renders OUTSIDE the pressable (must stay absent), plus the pixels.
+# - A rerun on a device that already holds the fixture sees "Open" instead of
+#   "Download"; the download block is skipped then and the flow still asserts
+#   the rendered state.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            notifications: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+# Centre of LARGE_JPEG_FIXTURE_BBOX [-54.1, 47.2, -53.6, 47.6].
+- setLocation:
+    latitude: 47.4
+    longitude: -53.85
+- tapOn:
+    text: 'Search(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Search maps'
+    timeout: 40000
+- tapOn: 'Search maps'
+- inputText: 'jpeg'
+- extendedWaitUntil:
+    visible: '.*JPEG fixture.*'
+    timeout: 30000
+- hideKeyboard
+# Download → destination dialog (defaults to Ungrouped) → Add; skipped when a
+# previous run already imported the sheet (the card then offers Open).
+- runFlow:
+    when:
+      visible: 'Download'
+    commands:
+      - tapOn: 'Download'
+      - extendedWaitUntil:
+          visible: 'Add to Library'
+          timeout: 10000
+      - tapOn: 'Add'
+      # ~6.6 MB to fetch, unzip, parse, persist — and the import-time
+      # pre-render starts right after.
+      - extendedWaitUntil:
+          visible: '.*added to Library.*'
+          timeout: 120000
+- extendedWaitUntil:
+    visible: 'Open'
+    timeout: 20000
+# --- Library: the sheet is a regular map and was NOT turned off ---
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: '.*JPEG fixture.*'
+    timeout: 15000
+# Give the import-time pre-render time to finish (native path: ~1 s; PDF.js on
+# an emulator: several seconds) so the assertions below judge a settled
+# render, not a render that has not started. The Retry button is what a
+# failed page renders; it must never appear.
+- extendedWaitUntil:
+    notVisible: 'Rendering .*JPEG fixture.*'
+    timeout: 90000
+- assertNotVisible: 'Retry page 1 of .*JPEG fixture.*'
+- assertNotVisible: 'Page 1: .*turned off.*'
+# --- Map: the overlay draws where the GPS is parked ---
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 15000
+# A render still in flight announces itself above the scale bar; wait it out.
+- extendedWaitUntil:
+    notVisible: 'Rendering .*JPEG fixture.*'
+    timeout: 90000
+# Let MapLibre finish loading the overlay raster and settle tiles before the
+# pixel check; the screenshot lands in the runner's cwd.
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: pdf-overlays-map
+- assertVisible: 'Map actions'
+- assertNotVisible: 'Page 1: .*turned off.*'
