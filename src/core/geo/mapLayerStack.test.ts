@@ -1,8 +1,12 @@
 import {
+  ALWAYS_PRESENT_ANCHORS,
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   drapeAnchorLayer,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
 } from './mapLayerStack';
 
@@ -34,5 +38,27 @@ describe('drape anchors', () => {
       expect('source' in layer).toBe(false);
       expect('paint' in layer).toBe(false);
     }
+  });
+});
+
+// #332 — the position puck rendered beneath PDF maps: overlays added as
+// MapView children after first paint were appended ABOVE the puck. These
+// anchors give every such layer a fixed slot below it.
+describe('overlay anchors below the position puck (#332)', () => {
+  it('stacks PDF maps under terrain overlays under trails, all above the drape anchors', () => {
+    const order = [...DRAPE_ANCHORS_BOTTOM_TO_TOP];
+    expect(order.indexOf(PDF_MAPS_ANCHOR)).toBeGreaterThan(order.indexOf(MARINE_SOUNDINGS_ANCHOR));
+    expect(order.indexOf(TERRAIN_OVERLAY_ANCHOR)).toBeGreaterThan(order.indexOf(PDF_MAPS_ANCHOR));
+    expect(order.indexOf(TRAILS_ANCHOR)).toBeGreaterThan(order.indexOf(TERRAIN_OVERLAY_ANCHOR));
+    expect(order[order.length - 1]).toBe(TRAILS_ANCHOR);
+  });
+
+  it('the always-present anchors are exactly the three the puck depends on', () => {
+    expect([...ALWAYS_PRESENT_ANCHORS]).toEqual([
+      PDF_MAPS_ANCHOR,
+      TERRAIN_OVERLAY_ANCHOR,
+      TRAILS_ANCHOR,
+    ]);
+    for (const id of ALWAYS_PRESENT_ANCHORS) expect(DRAPE_ANCHORS_BOTTOM_TO_TOP).toContain(id);
   });
 });

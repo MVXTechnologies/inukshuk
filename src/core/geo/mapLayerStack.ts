@@ -64,10 +64,31 @@ export const MARINE_SOUNDINGS_ANCHOR = 'drape-soundings';
  * The anchors in the order `buildOsmStyle` must emit them, bottom first.
  * Every live drape anchors against exactly one of these.
  */
+/**
+ * The three anchors below are ALWAYS in the style (#332). Everything the map
+ * adds as a MapView child after first paint — PDF overviews and detail tiles
+ * (whose ids change per image), terrain overlays, trail lines — is inserted
+ * `beforeId` one of them, so a late layer can never land on top of the
+ * position puck and heading cone, which the map appends above them all.
+ */
+export const PDF_MAPS_ANCHOR = 'drape-pdf-maps';
+export const TERRAIN_OVERLAY_ANCHOR = 'drape-terrain';
+export const TRAILS_ANCHOR = 'drape-trails';
+
 export const DRAPE_ANCHORS_BOTTOM_TO_TOP = [
   MARINE_DRAPE_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
+] as const;
+
+/** Anchors present in every style, whatever the options — the puck depends on them. */
+export const ALWAYS_PRESENT_ANCHORS = [
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
 ] as const;
 
 export type DrapeAnchorId = (typeof DRAPE_ANCHORS_BOTTOM_TO_TOP)[number];
