@@ -6,6 +6,7 @@ import {
   type PdfDetailPlan,
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
+import { chooseFallbackDetails, unionOfBboxes } from '@core/geo/detailFallback';
 import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
 import { chooseRasterSource } from '@core/library/rasterSource';
 import { overlayDetailStatusKey } from '@core/library/overlayStatus';
@@ -42,6 +43,13 @@ interface Target {
   bbox: PdfOverlay['bbox'];
 }
 const VISIBLE_PIXELS = 6 * 1024 * 1024;
+/**
+ * Extra texture the already-rendered tiles kept under the fresh ones may use
+ * (#344). Deliberately smaller than the visible budget: continuity is worth
+ * memory, but not as much as the tiles the camera actually asked for.
+ */
+const FALLBACK_PIXELS = 4 * 1024 * 1024;
+const MAX_FALLBACK_TILES = 12;
 const HANDOFF_PIXELS = 18 * 1024 * 1024;
 const SETTLED_PIXELS = 12 * 1024 * 1024;
 const MAX_CACHE_FILES = 64;
@@ -180,7 +188,7 @@ export function usePdfDetails(
     w.desired = next;
     const publish = () => {
       if (w.paused) return;
-      const current: Detail[] = [];
+      const fresh: Detail[] = [];
       let pixels = 0;
       for (const target of w.desired) {
         const detail = w.cache.get(target.key);
@@ -193,8 +201,27 @@ export function usePdfDetails(
         // backend result is larger than the planner's requested raster.
         if (pixels + detail.pixels > VISIBLE_PIXELS) continue;
         pixels += detail.pixels;
-        current.push(detail);
+        fresh.push(detail);
       }
+
+      // Keep the detail already rendered until its replacement arrives (#344).
+      // A tile's key carries the camera-derived crop and width, so panning
+      // reuses tiles but ANY zoom change invalidates every key at once — and
+      // the screen had nothing to show until the new tiles finished, which
+      // reads as the map unloading and re-rendering on every pinch. Cached
+      // tiles are ordered least-recently-used first, so reverse for MRU.
+      const { keep } = chooseFallbackDetails<Detail>({
+        cached: [...w.cache.values()].reverse().filter((d) => new File(d.imageUri).exists),
+        freshKeys: new Set(fresh.map((d) => d.cacheKey)),
+        freshBboxes: fresh.map((d) => d.bbox),
+        liveOverviewKeys: new Set(w.desired.map((t) => t.overviewKey)),
+        bounds: unionOfBboxes(w.desired.map((t) => t.bbox)),
+        budgetPixels: FALLBACK_PIXELS,
+        maxCount: MAX_FALLBACK_TILES,
+      });
+      // Fallbacks first: MapLibre stacks later inserts above earlier ones
+      // under the same anchor, so the fresh tiles must come last to win.
+      const current: Detail[] = [...keep, ...fresh];
       w.pinned = new Set(current.map((detail) => detail.imageUri));
       setDisplayed((previous) =>
         previous.length === current.length &&
