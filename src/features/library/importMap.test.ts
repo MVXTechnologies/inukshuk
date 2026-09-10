@@ -17,12 +17,19 @@ import { type ByteSource, memoryByteSource } from '@core/geo/geopdf';
 import { buildClassicPdf } from '@core/geo/geopdf/testUtils';
 import * as storage from '@data/storage';
 import * as DocumentPicker from 'expo-document-picker';
-import { mapDocumentFromStoredPdf, pickAndImportMaps } from './importMap';
+import { reportError } from '@lib/errorReporting';
+import {
+  WHOLE_FILE_PARSE_LIMIT_BYTES,
+  mapDocumentFromStoredPdf,
+  pickAndImportMaps,
+} from './importMap';
 
 jest.mock('@data/storage', () => ({
   newId: jest.fn(() => 'new-id'),
   importPdf: jest.fn(),
   withFileByteSource: jest.fn(),
+  readFileBytes: jest.fn(),
+  fileSizeAt: jest.fn(() => 1024),
   deleteFileAt: jest.fn(),
 }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
@@ -104,10 +111,53 @@ describe('mapDocumentFromStoredPdf', () => {
 
   it('deletes the stored copy when the bytes cannot be read', async () => {
     mocked.withFileByteSource.mockImplementation(unreadable('file not found'));
+    mocked.readFileBytes.mockRejectedValue(new Error('file not found'));
     await expect(mapDocumentFromStoredPdf('m3', 'file:///maps/m3.pdf', 'Broken')).rejects.toThrow(
       'file not found',
     );
     expect(mocked.deleteFileAt).toHaveBeenCalledWith('file:///maps/m3.pdf');
+  });
+
+  // #328 moved parsing onto the platform's FileHandle. `parseGeoPdf` never
+  // throws, so a throw here is that handle — a native path this app had no
+  // reliance on before. A small file must still import the old way rather
+  // than fail, and a big one must NOT (the whole-file read is the OOM the
+  // random-access path exists to avoid).
+  describe('whole-file fallback when the platform file handle fails', () => {
+    it('parses a small map the old way, keeps it, and reports the handle failure', async () => {
+      mocked.withFileByteSource.mockImplementation(unreadable('file handle is closed'));
+      mocked.fileSizeAt.mockReturnValue(2 * 1024 * 1024);
+      mocked.readFileBytes.mockResolvedValue(GEO_PDF);
+
+      const doc = await mapDocumentFromStoredPdf('m4', 'file:///maps/m4.pdf', 'Fallback');
+
+      expect(doc.georeferences).toHaveLength(1);
+      expect(doc.activePages).toEqual([0]);
+      expect(mocked.deleteFileAt).not.toHaveBeenCalled();
+      expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'pdf-import-byte-source');
+    });
+
+    it('refuses to read a file too big to survive it, and fails as before', async () => {
+      mocked.withFileByteSource.mockImplementation(unreadable('file handle is closed'));
+      mocked.fileSizeAt.mockReturnValue(WHOLE_FILE_PARSE_LIMIT_BYTES + 1);
+
+      await expect(mapDocumentFromStoredPdf('m5', 'file:///maps/m5.pdf', 'Huge')).rejects.toThrow(
+        'file handle is closed',
+      );
+      expect(mocked.readFileBytes).not.toHaveBeenCalled();
+      expect(mocked.deleteFileAt).toHaveBeenCalledWith('file:///maps/m5.pdf');
+    });
+
+    it('still fails when the fallback read fails too, with the original reason', async () => {
+      mocked.withFileByteSource.mockImplementation(unreadable('file handle is closed'));
+      mocked.fileSizeAt.mockReturnValue(1024);
+      mocked.readFileBytes.mockRejectedValue(new Error('ENOSPC'));
+
+      await expect(mapDocumentFromStoredPdf('m6', 'file:///maps/m6.pdf', 'Gone')).rejects.toThrow(
+        'file handle is closed',
+      );
+      expect(mocked.deleteFileAt).toHaveBeenCalledWith('file:///maps/m6.pdf');
+    });
   });
 });
 
