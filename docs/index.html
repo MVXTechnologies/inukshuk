@@ -556,20 +556,20 @@
          drift at different rates on scroll and a small inukshuk walks the trail
          as you read down the page. Low contrast on purpose: it sits under text. */
       :root {
-        /* Dawn: the first stop of the ramp in the script below, so a page with
-           no JavaScript still opens on the scene the page is meant to start on. */
-        --sc-sky-top: #e3d2e6;
-        --sc-sky-bottom: #fbdfc4;
-        --sc-sun: #f7c9a2;
-        --sc-cloud: #fbe7dd;
-        --sc-far: #d5cddc;
-        --sc-cap: #fdf3ee;
-        --sc-mid: #c6ccb2;
-        --sc-near: #a9b591;
-        --sc-pine: #8b9c74;
-        --sc-river: #bcd3e3;
-        --sc-river-2: #a3c3d8;
-        --sc-trail: rgba(60, 55, 70, 0.34);
+        /* Daylight: the first stop of the ramp in the script below, so a page
+           with no JavaScript still opens on the scene it is meant to. */
+        --sc-sky-top: #f6f1e6;
+        --sc-sky-bottom: #e6ecec;
+        --sc-sun: #f4d7a3;
+        --sc-cloud: #fbf9f4;
+        --sc-far: #cdd7dc;
+        --sc-cap: #f9f7f2;
+        --sc-mid: #c9d3aa;
+        --sc-near: #aebc8f;
+        --sc-pine: #8fa26e;
+        --sc-river: #a9cde2;
+        --sc-river-2: #8fc0da;
+        --sc-trail: rgba(45, 55, 64, 0.38);
         --sc-figure: #2d3740;
         --sc-opacity: 0.9;
       }
@@ -1342,24 +1342,7 @@
         // scroll progress. Past the last stop the scene simply holds.
         var STOPS = [
           {
-            at: 0.0, // dawn — mauve overhead, peach along the horizon
-            c: {
-              '--sc-sky-top': '#e3d2e6',
-              '--sc-sky-bottom': '#fbdfc4',
-              '--sc-sun': '#f7c9a2',
-              '--sc-cloud': '#fbe7dd',
-              '--sc-far': '#d5cddc',
-              '--sc-cap': '#fdf3ee',
-              '--sc-mid': '#c6ccb2',
-              '--sc-near': '#a9b591',
-              '--sc-pine': '#8b9c74',
-              '--sc-river': '#bcd3e3',
-              '--sc-river-2': '#a3c3d8',
-              '--sc-trail': 'rgba(60, 55, 70, 0.34)',
-            },
-          },
-          {
-            at: 0.36, // full day
+            at: 0.0, // full daylight — the page opens on midday, not on a tint
             c: {
               '--sc-sky-top': '#f6f1e6',
               '--sc-sky-bottom': '#e6ecec',
@@ -1376,7 +1359,24 @@
             },
           },
           {
-            at: 0.7, // dusk — dusty violet overhead, apricot at the horizon
+            at: 0.5, // late afternoon — barely warmer, so the day is not static
+            c: {
+              '--sc-sky-top': '#f4ecdf',
+              '--sc-sky-bottom': '#f2e4d2',
+              '--sc-sun': '#f5cf90',
+              '--sc-cloud': '#fdf6ec',
+              '--sc-far': '#cfd2d4',
+              '--sc-cap': '#faf5ee',
+              '--sc-mid': '#c6cfa3',
+              '--sc-near': '#abb88b',
+              '--sc-pine': '#8b9e6a',
+              '--sc-river': '#a6c9dd',
+              '--sc-river-2': '#8cbcd6',
+              '--sc-trail': 'rgba(45, 55, 64, 0.38)',
+            },
+          },
+          {
+            at: 0.74, // dusk — the one pastel moment, violet over apricot
             c: {
               '--sc-sky-top': '#b9a8c9',
               '--sc-sky-bottom': '#f5c9a8',
@@ -1492,22 +1492,22 @@
           // Night is its own measure, not the palette ramp: the page's chrome,
           // the stars and the wash all key off how dark it actually is, which
           // only starts once dusk is under way.
-          var nightness = clamp01((progress - 0.72) / 0.2);
-          // The sun rises out of the horizon rather than starting halfway up,
-          // stands highest around full day, and sets into dusk. The arc peaks
-          // at y=200 rather than the top of the viewBox: the scene is drawn
-          // `slice` and anchored to its bottom, so a taller arc would put the
-          // sun off the top of a laptop window entirely.
-          ride(sun, 0.05 + clamp01(progress / 0.78) * 0.95, 1);
+          var nightness = clamp01((progress - 0.76) / 0.18);
+          // The sun is already well up when the page opens — it is the middle
+          // of the day — and comes down through the afternoon into dusk. The
+          // arc peaks at y=200 rather than the top of the viewBox: the scene
+          // is drawn `slice` and anchored to its bottom, so a taller arc would
+          // put the sun off the top of a laptop window entirely.
+          ride(sun, 0.32 + clamp01(progress / 0.82) * 0.68, 1);
           // The moon climbs but never sets on screen, and is tied to the dark
           // so it cannot hang about as a grey smudge in a daylit sky.
-          ride(moon, 0.04 + clamp01((progress - 0.45) / 0.55) * 0.24, nightness);
+          ride(moon, 0.04 + clamp01((progress - 0.5) / 0.5) * 0.24, nightness);
           paintScene(progress, nightness);
           setPageMode(nightness);
           // The land already carries most of the nightfall; this only deepens
           // the sky behind the stars.
           if (night) night.style.opacity = String(nightness * 0.35);
-          if (stars) stars.style.opacity = String(clamp01((progress - 0.74) / 0.16));
+          if (stars) stars.style.opacity = String(clamp01((progress - 0.78) / 0.15));
         }
         function render() {
           ticking = false;
@@ -1528,7 +1528,7 @@
         }
         if (reduce) {
           // No parallax and no travelling sun, but the scene still has to look
-          // like something: dawn, with the sun where it rises.
+          // like something: daylight, with the sun high.
           sky(0.06);
           return;
         }
