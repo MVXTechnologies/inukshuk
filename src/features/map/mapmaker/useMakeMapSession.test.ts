@@ -45,19 +45,19 @@ describe('useMakeMapSession (#309)', () => {
     await act(async () => view.result.current.cancelMakeMap());
     expect(first.run.handle?.aborted).toBe(true);
     expect(state()).toBeNull();
-    // The user goes again with a different region; its sheet is open.
-    await act(async () => view.result.current.setMakeMapState({ phase: 'options', bbox: bboxB }));
+    // The user goes again; the editor is open on a new frame.
+    await act(async () => view.result.current.setMakeMapState({ phase: 'editing' }));
 
-    // The first run notices the cancel and rejects — the sheet must survive,
+    // The first run notices the cancel and rejects — the editor must survive,
     // and no "couldn't make the map" for a cancel the user asked for.
     await act(async () => {
       first.reject(new Error('aborted'));
     });
-    expect(state()).toEqual({ phase: 'options', bbox: bboxB });
+    expect(state()).toEqual({ phase: 'editing' });
     expect(showSnack).not.toHaveBeenCalled();
     // ...nor may its late progress ticks touch the newer state.
     await act(async () => first.run.progress?.('compose', 0.5));
-    expect(state()).toEqual({ phase: 'options', bbox: bboxB });
+    expect(state()).toEqual({ phase: 'editing' });
   });
 
   it('a superseded run never resets the run that replaced it, but a saved map is still announced', async () => {
@@ -74,7 +74,7 @@ describe('useMakeMapSession (#309)', () => {
       first.resolve({ ...doc, name: 'Late' });
     });
     expect(showSnack).toHaveBeenCalledWith('"Late" saved to the library');
-    expect(state()).toMatchObject({ phase: 'generating', bbox: bboxB });
+    expect(state()).toMatchObject({ phase: 'generating' });
 
     await act(async () => second.run.progress?.('terrain', 0.4));
     expect(state()).toMatchObject({ progress: { phase: 'terrain', frac: 0.4 } });
@@ -85,14 +85,14 @@ describe('useMakeMapSession (#309)', () => {
     expect(showSnack).toHaveBeenLastCalledWith('"Sheet" saved to the library');
   });
 
-  it('a genuine failure of the current run reopens its options sheet with the message', async () => {
+  it('a genuine failure of the current run reopens the editor with the message', async () => {
     const run = armMakeMap();
     const { view, state, showSnack } = await setup();
     await act(async () => view.result.current.startMakeMap(bboxA, options));
     await act(async () => {
       run.reject(new Error('tiles offline'));
     });
-    expect(state()).toEqual({ phase: 'options', bbox: bboxA });
+    expect(state()).toEqual({ phase: 'editing' });
     expect(showSnack).toHaveBeenCalledWith("Couldn't make the map: tiles offline");
   });
 });

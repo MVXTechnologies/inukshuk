@@ -1,14 +1,18 @@
-# Map maker e2e (1.4.0): "+" dial → Make a map → region box (default) → options
-# sheet → Create → real compose (tile fetch + terrain + PDF) → Library entry.
+# Map maker e2e (#349): "+" dial -> Make a map -> the full-screen EDITOR over
+# the live map -> Create -> real compose (tile fetch + terrain + PDF) -> Library.
+#
+# There is no region-box step any more: the sheet framed on the live map IS the
+# selection, so the flow goes straight from the menu into the editor.
 #
 # Portability notes:
-# - Needs network (Esri basemap tiles + Terrarium DEM) — same services the
+# - Needs network (Esri basemap tiles + Terrarium DEM) - same services the
 #   3D-terrain flows already exercise in CI.
-# - Contours stay ON (default) so the compose covers the heightmap path;
-#   slope follows the persisted setting (off on a fresh install — fine).
+# - Contours stay ON (default) so the compose covers the heightmap path.
 # - The compose is CPU-bound on software-GL emulators: generous timeout on the
 #   success snackbar, then the Library must list the map by its default name
-#   prefix ("My map <date>" — asserted via regex).
+#   prefix ("My map <date>" - asserted via regex).
+# - Controls are addressed by testID, not by copy: renaming a chip must not
+#   break this flow (it did, every time, before #349).
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -41,41 +45,45 @@ appId: com.inukshuk.app
           visible: 'Make a map'
           timeout: 60000
 - tapOn: 'Make a map'
-# Step 1: the bare region selector (no layers/quality — just the box + Next).
+# The editor opens straight onto the live map - no box, no "Next".
 - extendedWaitUntil:
-    visible: 'Make a map — choose the area'
-    timeout: 10000
-- assertNotVisible: 'Standard'
-# Next enables once the flatten settles and the box geometry lands.
-- extendedWaitUntil:
-    visible: 'Next'
-    timeout: 10000
-- tapOn: 'Next'
-# Step 2: the desk & drawer editor — live preview up top, tabbed drawer
-# below. Walk all three tabs (Layers is the default), then Create with the
-# defaults (Map basemap, A4, contours + grid + compass on).
-- extendedWaitUntil:
-    visible: 'Contour lines'
+    visible:
+      id: 'make-map-editor'
     timeout: 15000
-- tapOn: 'Page'
+- assertNotVisible: 'Make a map — choose the area'
+# The readout proves the frame is bound to the camera: it can only render a
+# scale and a coverage once a real view state has been read back.
+- extendedWaitUntil:
+    visible:
+      id: 'make-map-readout'
+    timeout: 15000
+- assertVisible: '1:.*'
+# Drive the controls: a scale rung, a page shape, a print style.
+- tapOn:
+    id: 'make-map-chip-s50000'
+- tapOn:
+    id: 'make-map-chip-la'
+- tapOn:
+    id: 'make-map-chip-imagery'
+- tapOn:
+    id: 'make-map-chip-street'
+# Collapse to full bleed and come back, so the readout's restore path is covered.
+- tapOn:
+    id: 'make-map-collapse'
+- assertNotVisible: 'Map name'
+- tapOn:
+    id: 'make-map-readout'
 - extendedWaitUntil:
     visible: 'Map name'
     timeout: 8000
-- tapOn: 'Extras'
-- extendedWaitUntil:
-    visible: 'Gridlines'
-    timeout: 8000
-- tapOn: 'Layers'
-- extendedWaitUntil:
-    visible: 'Contour lines'
-    timeout: 8000
-- tapOn: 'Create'
-# Compose runs for real — tiles, DEM, PDF. Success lands as a snackbar.
+- tapOn:
+    id: 'make-map-create'
+# Compose runs for real - tiles, DEM, PDF. Success lands as a snackbar.
 - extendedWaitUntil:
     visible: '.*saved to the library.*'
     timeout: 180000
 # The made map must now exist in the Library, named with the default prefix.
-# (iOS labels tab items "Library, tab, N of M" — same regex as every flow.)
+# (iOS labels tab items "Library, tab, N of M" - same regex as every flow.)
 - tapOn:
     text: 'Library(, tab.*)?'
     retryTapIfNoChange: true

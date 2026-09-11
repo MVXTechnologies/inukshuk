@@ -92,3 +92,49 @@ it.each(['a4', 'letter'] as const)(
     expect(pixels).toBeLessThanOrEqual(4096);
   },
 );
+
+describe('layoutMadeMap with an explicit scale (#349)', () => {
+  // A frame the editor already sized: exactly A4-portrait aspect at 1:33 000,
+  // a denominator that is NOT on the standard ladder.
+  const framed = (denom: number) => {
+    const lat = 46.81;
+    const cos = Math.cos((lat * Math.PI) / 180);
+    const mapW = 595.28 - 60;
+    const mapH = 841.89 - 88 - 30;
+    const wM = mapW * (0.0254 / 72) * denom;
+    const hM = mapH * (0.0254 / 72) * denom;
+    return {
+      minLng: -71.25 - wM / (111320 * cos) / 2,
+      maxLng: -71.25 + wM / (111320 * cos) / 2,
+      minLat: lat - hM / 111320 / 2,
+      maxLat: lat + hM / 111320 / 2,
+    };
+  };
+
+  it('prints the denominator it was given instead of rounding up', () => {
+    const bbox = framed(33000);
+    expect(layoutMadeMap(bbox, 'a4').scaleDenom).toBe(40000); // today's snap-up
+    expect(layoutMadeMap(bbox, 'a4', { scaleDenom: 33000 }).scaleDenom).toBe(33000);
+  });
+
+  it('draws exactly the framed region, so the preview cannot lie', () => {
+    const bbox = framed(33000);
+    const l = layoutMadeMap(bbox, 'a4', { scaleDenom: 33000 });
+    // Snapped up, drawBbox would grow by 40000/33000 = 1.21x on each axis.
+    expect(l.drawBbox.maxLng - l.drawBbox.minLng).toBeCloseTo(bbox.maxLng - bbox.minLng, 6);
+    expect(l.drawBbox.maxLat - l.drawBbox.minLat).toBeCloseTo(bbox.maxLat - bbox.minLat, 6);
+  });
+
+  it('still derives the scale bar and raster zoom from the given scale', () => {
+    const l = layoutMadeMap(framed(33000), 'a4', { scaleDenom: 33000 });
+    expect(l.metersPerPt).toBeCloseTo(33000 * (0.0254 / 72), 9);
+    expect(l.scaleBar.widthPt).toBeCloseTo(l.scaleBar.meters / l.metersPerPt, 6);
+    expect(l.rasterZoom).toBeGreaterThan(0);
+  });
+
+  it('ignores a nonsensical override rather than printing 1:0', () => {
+    const bbox = framed(33000);
+    expect(layoutMadeMap(bbox, 'a4', { scaleDenom: 0 }).scaleDenom).toBe(40000);
+    expect(layoutMadeMap(bbox, 'a4', { scaleDenom: -5 }).scaleDenom).toBe(40000);
+  });
+});

@@ -57,8 +57,10 @@ import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
-import { MakeMapSheet } from './mapmaker/MakeMapSheet';
+import { MapMakerEditor, type EditorCamera } from './mapmaker/MapMakerEditor';
 import { useMakeMapSession } from './mapmaker/useMakeMapSession';
+import { printStyleById, type PrintStyleId } from '@core/mapmaker/printSources';
+import { clampZoom } from '@core/mapmaker/cameraFit';
 import { discardDraftPhoto, withDraftPhoto, type WaypointDraft } from './waypointDraft';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
@@ -88,7 +90,7 @@ import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
-import { regionBoundsFailureMessage, useOfflineDownload } from './hooks/useOfflineDownload';
+import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import {
@@ -383,6 +385,13 @@ export function MapScreen() {
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
   /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
   const showHillshade = useSettingsStore((s) => s.showHillshade);
+  /**
+   * Non-null while the map maker is open: the print style whose raster the
+   * live map must render so the framed preview matches the sheet (#349).
+   * Declared here, with the other style inputs, because the style memo below
+   * consumes it.
+   */
+  const [editorStyle, setEditorStyle] = useState<PrintStyleId | null>(null);
   const [scaleAt, setScaleAt] = useState<{ zoom: number; latitude: number } | null>(null);
   const updateScaleAt = useCallback((zoom: number, latitude: number) => {
     setScaleAt((prev) =>
@@ -597,9 +606,19 @@ export function MapScreen() {
           }
         : {}),
     };
-    return buildOsmStyle(tileUrl, false, basemap, showHillshade, options);
+    // While the map maker is open the base raster becomes the source the
+    // composer stitches, so the frame and the sheet cannot disagree (#349).
+    const editor = editorStyle === null ? null : printStyleById(editorStyle);
+    return buildOsmStyle(
+      editor ? editor.tileUrl : tileUrl,
+      false,
+      editor ? editor.drape : basemap,
+      showHillshade,
+      options,
+    );
   }, [
     tileUrl,
+    editorStyle,
     basemap,
     showHillshade,
     offlineOnly,
@@ -676,8 +695,6 @@ export function MapScreen() {
     beginRegionSelect,
     cancelRegionSelect,
     confirmDownload,
-    prepareRegionGeometry,
-    resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
 
   // M2: the model-comparison table route, for the long-pressed point when a
@@ -1042,6 +1059,61 @@ export function MapScreen() {
   const { makeMapState, setMakeMapState, startMakeMap, cancelMakeMap } = useMakeMapSession({
     showSnack,
   });
+
+  // --- Map maker editor (#349) ---------------------------------------------
+  // While the editor is open the live map becomes the preview, so it has to
+  // render the tile source the composer will actually stitch — otherwise the
+  // frame shows OSM and the sheet prints Esri. The camera is read back on
+  // every settle; it is the single source of truth for the print scale.
+  const makeMapOpen = makeMapState !== null;
+  const [editorCamera, setEditorCamera] = useState<EditorCamera | null>(null);
+  // Where the camera was before the editor moved it, restored on exit.
+  const preEditorCameraRef = useRef<EditorCamera | null>(null);
+
+  // getViewState() on an uninitialised native view crashes (see the mapLoaded
+  // gate's own note), so every read here is behind it.
+  const readEditorCamera = useCallback(() => {
+    if (!mapLoaded) return;
+    void mapRef.current
+      ?.getViewState()
+      .then((vs) => {
+        setEditorCamera({ center: [vs.center[0], vs.center[1]], zoom: vs.zoom });
+      })
+      .catch(() => undefined); // mid-teardown; the next settle re-reads
+  }, [mapLoaded]);
+
+  const requestEditorZoom = useCallback((zoom: number) => {
+    void cameraRef.current?.setStop({ zoom: clampZoom(zoom), duration: 260 });
+  }, []);
+
+  // Snapshot on open, restore on close — including an unexpected unmount, so a
+  // navigation away can never strand the user's map somewhere they never went.
+  useEffect(() => {
+    if (!makeMapOpen || !mapLoaded) return;
+    let cancelled = false;
+    // Copied for the cleanup: the ref could point elsewhere by the time this
+    // effect tears down (react-hooks/exhaustive-deps).
+    const camera = cameraRef.current;
+    void mapRef.current
+      ?.getViewState()
+      .then((vs) => {
+        if (cancelled) return;
+        const at: EditorCamera = { center: [vs.center[0], vs.center[1]], zoom: vs.zoom };
+        preEditorCameraRef.current = at;
+        setEditorCamera(at);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      const prev = preEditorCameraRef.current;
+      preEditorCameraRef.current = null;
+      setEditorStyle(null);
+      setEditorCamera(null);
+      if (prev) {
+        void camera?.setStop({ center: prev.center, zoom: prev.zoom, duration: 400 });
+      }
+    };
+  }, [makeMapOpen, mapLoaded]);
 
   // Whether the legend+scrubber dock owns the bottom edge right now.
   const weatherDockVisible =
@@ -1634,6 +1706,9 @@ export function MapScreen() {
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
             setRegionVersion((v) => v + 1);
+            // The map-maker frame's scale and bbox come straight off the
+            // settled camera (#349) — it is the only source of truth for both.
+            if (makeMapOpen) readEditorCamera();
             // Settled bounds for the marine chart's re-anchor check (the
             // wind layer keeps its own copy behind the windEnabled gate).
             setSettledBounds(windBoundsOf(e.nativeEvent));
@@ -2013,31 +2088,16 @@ export function MapScreen() {
         />
       )}
 
-      {/* Map maker: the same box selector in its bare variant, then options */}
-      {makeMapState?.phase === 'select' && !terrain3d && (
-        <RegionSelectOverlay
-          variant="makeMap"
-          toGeo={toGeo}
-          boundsVersion={boundsVersion}
-          activeBasemap={basemap}
-          tileUrl={tileUrl}
-          onCancel={() => setMakeMapState(null)}
-          onConfirm={(rect) => {
-            void resolveRegionRect(rect).then((resolved) => {
-              if (resolved.ok) setMakeMapState({ phase: 'options', bbox: resolved.bounds });
-              else {
-                setMakeMapState(null);
-                showSnack(regionBoundsFailureMessage(resolved.reason));
-              }
-            });
-          }}
-        />
-      )}
-      {(makeMapState?.phase === 'options' || makeMapState?.phase === 'generating') && (
-        <MakeMapSheet
-          bbox={makeMapState.bbox}
+      {/* Map maker (#349): a full-screen editor over the LIVE map. There is no
+          region-box step any more — the sheet on screen IS the selection, and
+          the bbox is read off the camera when Create is tapped. */}
+      {makeMapState !== null && !terrain3d && (
+        <MapMakerEditor
+          camera={editorCamera}
           progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
-          onCreate={(options) => startMakeMap(makeMapState.bbox, options)}
+          onRequestZoom={requestEditorZoom}
+          onStyleChange={setEditorStyle}
+          onCreate={(bbox, options, scaleDenom) => startMakeMap(bbox, { ...options, scaleDenom })}
           onCancel={cancelMakeMap}
         />
       )}
@@ -2123,13 +2183,13 @@ export function MapScreen() {
                   // Coordinate readout/entry (#97) — always available; it
                   // needs neither a GPS fix nor the flat 2D camera.
                   onGoToCoordinates: () => void openGoToCoordinates(),
-                  // The region box needs the flat 2D map, like the selector.
+                  // The editor frames the sheet over the live map, so it needs
+                  // the flat 2D camera — but no region box and no extra step.
                   onMakeMap: terrain3d
                     ? undefined
                     : () => {
                         inspect(null);
-                        setMakeMapState({ phase: 'select' });
-                        prepareRegionGeometry();
+                        setMakeMapState({ phase: 'editing' });
                       },
                 }
               : undefined
