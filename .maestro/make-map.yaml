@@ -58,15 +58,33 @@ appId: com.inukshuk.app
       id: 'make-map-readout'
     timeout: 15000
 - assertVisible: '1:.*'
-# Drive the controls: a scale rung, a page shape, a print style.
+# Page & scale is the default tab: a scale rung and a page shape.
 - tapOn:
     id: 'make-map-chip-s50000'
 - tapOn:
     id: 'make-map-chip-la'
+# Layers & style: swap the print source, then the overlay toggles.
+- tapOn:
+    id: 'make-map-tab-layers'
 - tapOn:
     id: 'make-map-chip-imagery'
 - tapOn:
     id: 'make-map-chip-street'
+- tapOn:
+    id: 'make-map-toggle-slope'
+- tapOn:
+    id: 'make-map-toggle-grid'
+- tapOn:
+    id: 'make-map-toggle-grid'
+# What to draw: the content picker replaces the old blanket switch.
+- tapOn:
+    id: 'make-map-tab-draw'
+- tapOn:
+    id: 'make-map-chip-picknone'
+- tapOn:
+    id: 'make-map-chip-pickall'
+- tapOn:
+    id: 'make-map-tab-page'
 # Collapse to full bleed and come back, so the readout's restore path is covered.
 - tapOn:
     id: 'make-map-collapse'

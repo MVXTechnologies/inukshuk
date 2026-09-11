@@ -129,15 +129,22 @@ export interface BasemapTexture {
 }
 
 /**
- * Stitch the Waymarked Trails hiking overlay for a tile range, PRESERVING
- * tile alpha (unlike {@link fetchBasemapTexture}, which flattens to opaque) —
- * the result is composited over a basemap raster by the map maker. A tile
- * that fails to download stays fully transparent rather than failing the
- * whole overlay (route coverage is spotty by nature).
+ * Stitch any `{z}/{x}/{y}` raster tile service over a tile range (#349).
+ *
+ * Two modes, because the map maker needs both:
+ * - `opaque`: force alpha to 255, for a BASE layer that must not let anything
+ *   show through (and whose JPEG tiles have no alpha to begin with).
+ * - otherwise: preserve tile alpha, for an OVERLAY that gets composited on
+ *   top — place labels, hillshade, route networks.
+ *
+ * A tile that fails to download is left as a hole rather than failing the
+ * whole texture: overlay coverage is patchy by nature, and one dropped base
+ * tile is a blank square rather than no map at all.
  */
-export async function fetchTrailsTexture(
+export async function fetchTileTexture(
   range: TileRange,
-  network: TrailNetworkId,
+  urlTemplate: string,
+  { opaque = false, cacheKey = 'tile' }: { opaque?: boolean; cacheKey?: string } = {},
 ): Promise<BasemapTexture> {
   const fullW = (range.maxX - range.minX + 1) * TILE;
   const fullH = (range.maxY - range.minY + 1) * TILE;
@@ -152,21 +159,34 @@ export async function fetchTrailsTexture(
         (async () => {
           let rgba: Uint8Array;
           try {
-            const url = trailNetworkTileUrl(network)
+            const url = urlTemplate
               .replace('{z}', String(range.z))
               .replace('{x}', String(tx))
               .replace('{y}', String(ty));
             rgba = decodeTileRGBA(
-              await storage.downloadBytes(url, `wmt-${network}-${range.z}-${tx}-${ty}.png`, UA),
+              await storage.downloadBytes(url, `${cacheKey}-${range.z}-${tx}-${ty}`, UA),
             );
           } catch {
-            return; // transparent hole
+            return; // hole
           }
-          for (let y = 0; y < TILE; y++) {
-            out.set(
-              rgba.subarray(y * TILE * 4, (y * TILE + TILE) * 4),
-              ((oy + y) * fullW + ox) * 4,
-            );
+          if (opaque) {
+            for (let y = 0; y < TILE; y++) {
+              for (let x = 0; x < TILE; x++) {
+                const si = (y * TILE + x) * 4;
+                const di = ((oy + y) * fullW + (ox + x)) * 4;
+                out[di] = rgba[si]!;
+                out[di + 1] = rgba[si + 1]!;
+                out[di + 2] = rgba[si + 2]!;
+                out[di + 3] = 255;
+              }
+            }
+          } else {
+            for (let y = 0; y < TILE; y++) {
+              out.set(
+                rgba.subarray(y * TILE * 4, (y * TILE + TILE) * 4),
+                ((oy + y) * fullW + ox) * 4,
+              );
+            }
           }
         })(),
       );
@@ -174,6 +194,16 @@ export async function fetchTrailsTexture(
   }
   await Promise.all(jobs);
   return { data: out, width: fullW, height: fullH };
+}
+
+/** The Waymarked Trails route overlay, in terms of {@link fetchTileTexture}. */
+export async function fetchTrailsTexture(
+  range: TileRange,
+  network: TrailNetworkId,
+): Promise<BasemapTexture> {
+  return fetchTileTexture(range, trailNetworkTileUrl(network), {
+    cacheKey: `wmt-${network}`,
+  });
 }
 
 /**

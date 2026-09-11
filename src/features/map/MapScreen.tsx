@@ -61,6 +61,7 @@ import { MapMakerEditor, type EditorCamera } from './mapmaker/MapMakerEditor';
 import { useMakeMapSession } from './mapmaker/useMakeMapSession';
 import { printStyleById, type PrintStyleId } from '@core/mapmaker/printSources';
 import { clampZoom } from '@core/mapmaker/cameraFit';
+import { EDITOR_RASTER_TILE_SIZE } from '@core/mapmaker/printSources';
 import { discardDraftPhoto, withDraftPhoto, type WaypointDraft } from './waypointDraft';
 import { BackgroundLocationRationale } from './components/BackgroundLocationRationale';
 import { CategoryStartSheet } from './components/CategoryStartSheet';
@@ -594,7 +595,12 @@ export function MapScreen() {
             },
           }
         : {}),
-      ...(offlineOnly
+      // The editor's base raster is an ONLINE Esri print source, so the
+      // offline packs' top stored zoom says nothing about it — applying that
+      // cap here would overscale the print source for anyone who owns a pack
+      // (#349). The source's own NATIVE_MAX_ZOOM still applies, from the
+      // basemap argument below.
+      ...(offlineOnly && editorStyle === null
         ? {
             rasterMaxZoom: offlinePackMaxZoom(offlineRegions, basemap),
             downloadedMask: {
@@ -614,7 +620,10 @@ export function MapScreen() {
       false,
       editor ? editor.drape : basemap,
       showHillshade,
-      options,
+      // Under-declare the tile size while the editor is open so the sheet gets
+      // four times the pixels on a retina screen (#349, owner: "load more
+      // pixels"). Scoped to the editor: it is also four times the tiles.
+      editor ? { ...options, rasterTileSize: EDITOR_RASTER_TILE_SIZE } : options,
     );
   }, [
     tileUrl,
