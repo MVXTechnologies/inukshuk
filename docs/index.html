@@ -211,10 +211,11 @@
         gap: 0.75rem;
         justify-content: center;
         flex-wrap: wrap;
-        margin-top: 1.8rem;
+        margin-top: 1.1rem;
       }
       .cta-note {
         margin-top: 0.9rem;
+        margin-bottom: 0;
         font-size: 0.85rem;
         color: var(--muted);
       }
@@ -555,18 +556,20 @@
          drift at different rates on scroll and a small inukshuk walks the trail
          as you read down the page. Low contrast on purpose: it sits under text. */
       :root {
-        --sc-sky-top: #f6f1e6;
-        --sc-sky-bottom: #e6ecec;
-        --sc-sun: #f4d7a3;
-        --sc-cloud: #fbf9f4;
-        --sc-far: #cdd7dc;
-        --sc-cap: #f9f7f2;
-        --sc-mid: #c9d3aa;
-        --sc-near: #aebc8f;
-        --sc-pine: #8fa26e;
-        --sc-river: #a9cde2;
-        --sc-river-2: #8fc0da;
-        --sc-trail: rgba(45, 55, 64, 0.38);
+        /* Dawn: the first stop of the ramp in the script below, so a page with
+           no JavaScript still opens on the scene the page is meant to start on. */
+        --sc-sky-top: #e3d2e6;
+        --sc-sky-bottom: #fbdfc4;
+        --sc-sun: #f7c9a2;
+        --sc-cloud: #fbe7dd;
+        --sc-far: #d5cddc;
+        --sc-cap: #fdf3ee;
+        --sc-mid: #c6ccb2;
+        --sc-near: #a9b591;
+        --sc-pine: #8b9c74;
+        --sc-river: #bcd3e3;
+        --sc-river-2: #a3c3d8;
+        --sc-trail: rgba(60, 55, 70, 0.34);
         --sc-figure: #2d3740;
         --sc-opacity: 0.9;
       }
@@ -634,39 +637,49 @@
       .stores {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.6rem;
+        gap: 0.75rem;
         justify-content: center;
-        margin: 0.25rem 0 0.9rem;
+        align-items: stretch;
+        margin-top: 1.8rem;
       }
+      /* A shared minimum width is what keeps the two buttons the same size:
+         their labels differ in length, so without it their edges disagree. */
       .store {
         display: inline-flex;
         align-items: center;
-        gap: 0.6rem;
-        padding: 0.55rem 1rem;
+        gap: 0.7rem;
+        min-width: 232px;
+        padding: 0.6rem 1.1rem;
         border-radius: 12px;
         border: 1px solid var(--card-border);
         background: var(--surface);
         color: var(--ink);
         text-decoration: none;
-        line-height: 1.15;
+        box-shadow: var(--shadow);
       }
       .store:hover {
         border-color: var(--foliage);
       }
       .store .glyph {
-        font-size: 1.35rem;
+        flex: none;
+        font-size: 1.6rem;
         line-height: 1;
       }
+      .store-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: left;
+        line-height: 1.2;
+      }
       .store .lead {
-        display: block;
         font-size: 0.72rem;
         color: var(--muted);
         letter-spacing: 0.02em;
       }
       .store .name {
-        display: block;
         font-weight: 650;
-        font-size: 0.98rem;
+        font-size: 1rem;
       }
       .scene .cloud {
         opacity: var(--sc-cloud-opacity, 1);
@@ -912,18 +925,10 @@
           <span class="pill">Community-Driven</span>
           <span class="pill">No Ads · No Tracking</span>
         </div>
-        <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/MVXTechnologies/inukshuk"
-            >★ Star on GitHub</a
-          >
-          <a class="btn btn-ghost" href="https://github.com/MVXTechnologies/inukshuk/discussions"
-            >💡 Suggest an idea</a
-          >
-        </div>
         <div class="stores">
           <a class="store" href="https://apps.apple.com/ca/app/inukshuk/id6797629589">
             <span class="glyph" aria-hidden="true">📱</span>
-            <span>
+            <span class="store-text">
               <span class="lead">Download on the</span>
               <span class="name">App Store</span>
             </span>
@@ -932,13 +937,21 @@
                closed test once it exists. Play has no public listing yet. -->
           <a class="store" href="https://groups.google.com/g/inukshuk-testers">
             <span class="glyph" aria-hidden="true">🤖</span>
-            <span>
+            <span class="store-text">
               <span class="lead">Android — early access</span>
               <span class="name">Join the beta</span>
             </span>
           </a>
         </div>
         <p class="cta-note">Currently in alpha testing on Android. Built in the open.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/MVXTechnologies/inukshuk"
+            >★ Star on GitHub</a
+          >
+          <a class="btn btn-ghost" href="https://github.com/MVXTechnologies/inukshuk/discussions"
+            >💡 Suggest an idea</a
+          >
+        </div>
       </div>
     </header>
 
@@ -1317,32 +1330,80 @@
         // :root, so a page with no JS still gets the bright landscape. These
         // are interpolated every frame, so the land darkens continuously —
         // unlike the page's own chrome, which crossfades once at dusk.
-        var DAY = {
-          '--sc-sky-top': '#f6f1e6',
-          '--sc-sky-bottom': '#e6ecec',
-          '--sc-cloud': '#fbf9f4',
-          '--sc-far': '#cdd7dc',
-          '--sc-cap': '#f9f7f2',
-          '--sc-mid': '#c9d3aa',
-          '--sc-near': '#aebc8f',
-          '--sc-pine': '#8fa26e',
-          '--sc-river': '#a9cde2',
-          '--sc-river-2': '#8fc0da',
-          '--sc-trail': 'rgba(45, 55, 64, 0.38)',
-        };
-        var NIGHT = {
-          '--sc-sky-top': '#101b2c',
-          '--sc-sky-bottom': '#17212c',
-          '--sc-cloud': '#2f4056',
-          '--sc-far': '#1f2a2c',
-          '--sc-cap': '#2b3a3c',
-          '--sc-mid': '#22301f',
-          '--sc-near': '#2a3b26',
-          '--sc-pine': '#34482e',
-          '--sc-river': '#274554',
-          '--sc-river-2': '#2f5566',
-          '--sc-trail': 'rgba(233, 236, 228, 0.30)',
-        };
+        // Four stops down the page, not two: dawn and dusk are the pastel ends
+        // of the day and are the whole point of the scene, so they are
+        // keyframes rather than a midpoint of a day-to-night fade. `at` is
+        // scroll progress. Past the last stop the scene simply holds.
+        var STOPS = [
+          {
+            at: 0.0, // dawn — mauve overhead, peach along the horizon
+            c: {
+              '--sc-sky-top': '#e3d2e6',
+              '--sc-sky-bottom': '#fbdfc4',
+              '--sc-sun': '#f7c9a2',
+              '--sc-cloud': '#fbe7dd',
+              '--sc-far': '#d5cddc',
+              '--sc-cap': '#fdf3ee',
+              '--sc-mid': '#c6ccb2',
+              '--sc-near': '#a9b591',
+              '--sc-pine': '#8b9c74',
+              '--sc-river': '#bcd3e3',
+              '--sc-river-2': '#a3c3d8',
+              '--sc-trail': 'rgba(60, 55, 70, 0.34)',
+            },
+          },
+          {
+            at: 0.36, // full day
+            c: {
+              '--sc-sky-top': '#f6f1e6',
+              '--sc-sky-bottom': '#e6ecec',
+              '--sc-sun': '#f4d7a3',
+              '--sc-cloud': '#fbf9f4',
+              '--sc-far': '#cdd7dc',
+              '--sc-cap': '#f9f7f2',
+              '--sc-mid': '#c9d3aa',
+              '--sc-near': '#aebc8f',
+              '--sc-pine': '#8fa26e',
+              '--sc-river': '#a9cde2',
+              '--sc-river-2': '#8fc0da',
+              '--sc-trail': 'rgba(45, 55, 64, 0.38)',
+            },
+          },
+          {
+            at: 0.7, // dusk — dusty violet overhead, apricot at the horizon
+            c: {
+              '--sc-sky-top': '#b9a8c9',
+              '--sc-sky-bottom': '#f5c9a8',
+              '--sc-sun': '#f2a765',
+              '--sc-cloud': '#ecd0ca',
+              '--sc-far': '#a1a2b7',
+              '--sc-cap': '#f2e0e2',
+              '--sc-mid': '#a8ae90',
+              '--sc-near': '#8d9a78',
+              '--sc-pine': '#6f8060',
+              '--sc-river': '#9db6c9',
+              '--sc-river-2': '#8aa6bd',
+              '--sc-trail': 'rgba(60, 50, 65, 0.36)',
+            },
+          },
+          {
+            at: 0.92, // night
+            c: {
+              '--sc-sky-top': '#101b2c',
+              '--sc-sky-bottom': '#17212c',
+              '--sc-sun': '#f2a765',
+              '--sc-cloud': '#2f4056',
+              '--sc-far': '#1f2a2c',
+              '--sc-cap': '#2b3a3c',
+              '--sc-mid': '#22301f',
+              '--sc-near': '#2a3b26',
+              '--sc-pine': '#34482e',
+              '--sc-river': '#274554',
+              '--sc-river-2': '#2f5566',
+              '--sc-trail': 'rgba(233, 236, 228, 0.30)',
+            },
+          },
+        ];
         function parseColor(c) {
           if (c.charAt(0) === '#') {
             return [
@@ -1356,13 +1417,13 @@
           return [+n[0], +n[1], +n[2], n.length > 3 ? +n[3] : 1];
         }
         var KEYS = [];
-        var DAY_RGBA = {};
-        var NIGHT_RGBA = {};
-        for (var key in DAY) {
-          if (Object.prototype.hasOwnProperty.call(DAY, key)) {
-            KEYS.push(key);
-            DAY_RGBA[key] = parseColor(DAY[key]);
-            NIGHT_RGBA[key] = parseColor(NIGHT[key]);
+        for (var key in STOPS[0].c) {
+          if (Object.prototype.hasOwnProperty.call(STOPS[0].c, key)) KEYS.push(key);
+        }
+        for (var si = 0; si < STOPS.length; si++) {
+          STOPS[si].rgba = {};
+          for (var ki = 0; ki < KEYS.length; ki++) {
+            STOPS[si].rgba[KEYS[ki]] = parseColor(STOPS[si].c[KEYS[ki]]);
           }
         }
         function mix(a, b, t) {
@@ -1373,21 +1434,30 @@
           if (al >= 1) return 'rgb(' + r + ', ' + g + ', ' + bl + ')';
           return 'rgba(' + r + ', ' + g + ', ' + bl + ', ' + al.toFixed(3) + ')';
         }
-        function paintScene(dark) {
-          for (var i = 0; i < KEYS.length; i++) {
-            var k = KEYS[i];
-            root.style.setProperty(k, mix(DAY_RGBA[k], NIGHT_RGBA[k], dark));
+        // Smoothstep between stops so the light eases in and out of each phase
+        // rather than changing direction with a visible corner at every one.
+        function ease(t) {
+          return t * t * (3 - 2 * t);
+        }
+        function paintScene(progress, nightness) {
+          var i = 0;
+          while (i < STOPS.length - 2 && progress >= STOPS[i + 1].at) i++;
+          var a = STOPS[i];
+          var b = STOPS[i + 1];
+          var t = ease(clamp01((progress - a.at) / (b.at - a.at)));
+          for (var k = 0; k < KEYS.length; k++) {
+            root.style.setProperty(KEYS[k], mix(a.rgba[KEYS[k]], b.rgba[KEYS[k]], t));
           }
-          root.style.setProperty('--sc-opacity', (0.9 - dark * 0.05).toFixed(3));
+          root.style.setProperty('--sc-opacity', (0.9 - nightness * 0.05).toFixed(3));
           // Clouds go with the daylight. Left up, a night-coloured cloud drifts
           // across the moon and reads as a smudge on it.
-          root.style.setProperty('--sc-cloud-opacity', (1 - dark).toFixed(3));
+          root.style.setProperty('--sc-cloud-opacity', (1 - nightness).toFixed(3));
         }
         // Hysteresis: without it, a scroll that rests on the threshold would
         // strobe the whole page between its day and night palettes.
         var isNight = false;
-        function setPageMode(dark) {
-          var next = isNight ? dark > 0.45 : dark > 0.6;
+        function setPageMode(nightness) {
+          var next = isNight ? nightness > 0.35 : nightness > 0.55;
           if (next === isNight) return;
           isNight = next;
           root.classList.toggle('is-night', isNight);
@@ -1413,23 +1483,25 @@
           el.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
         }
         function sky(progress) {
-          // The sun is already up when the page opens — a scene that starts
-          // with an empty sky is just a blank sky — and sets around three
-          // quarters of the way down. The moon rises behind it and is still
-          // climbing at the footer, so it never sets on screen.
-          var dark = clamp01((progress - 0.3) / 0.5);
-          ride(sun, 0.14 + clamp01(progress / 0.72) * 0.86, 1 - dark * 0.65);
+          // Night is its own measure, not the palette ramp: the page's chrome,
+          // the stars and the wash all key off how dark it actually is, which
+          // only starts once dusk is under way.
+          var nightness = clamp01((progress - 0.72) / 0.2);
+          // The sun rises out of the horizon rather than starting halfway up,
+          // stands highest around full day, and sets into dusk. The arc peaks
+          // at y=200 rather than the top of the viewBox: the scene is drawn
+          // `slice` and anchored to its bottom, so a taller arc would put the
+          // sun off the top of a laptop window entirely.
+          ride(sun, 0.05 + clamp01(progress / 0.78) * 0.95, 1);
           // The moon climbs but never sets on screen, and is tied to the dark
-          // so it cannot hang about as a grey smudge in a daytime sky.
-          // Kept to the left half of its arc: further along and the footer's
-          // cards sit in front of it.
-          ride(moon, 0.04 + clamp01((progress - 0.4) / 0.6) * 0.24, dark);
-          paintScene(dark);
-          setPageMode(dark);
+          // so it cannot hang about as a grey smudge in a daylit sky.
+          ride(moon, 0.04 + clamp01((progress - 0.45) / 0.55) * 0.24, nightness);
+          paintScene(progress, nightness);
+          setPageMode(nightness);
           // The land already carries most of the nightfall; this only deepens
           // the sky behind the stars.
-          if (night) night.style.opacity = String(dark * 0.35);
-          if (stars) stars.style.opacity = String(clamp01((progress - 0.42) / 0.33));
+          if (night) night.style.opacity = String(nightness * 0.35);
+          if (stars) stars.style.opacity = String(clamp01((progress - 0.74) / 0.16));
         }
         function render() {
           ticking = false;
@@ -1450,8 +1522,8 @@
         }
         if (reduce) {
           // No parallax and no travelling sun, but the scene still has to look
-          // like something: morning, with the sun where it rises.
-          sky(0.08);
+          // like something: dawn, with the sun where it rises.
+          sky(0.06);
           return;
         }
         window.addEventListener('scroll', onScroll, { passive: true });
