@@ -47,6 +47,13 @@ if (typeof global.Buffer === 'undefined') global.Buffer = Buffer;
 export interface MakeMapOptions {
   name: string;
   format: PageFormat;
+  /**
+   * The EXACT print scale the editor framed (#349). Omitted, the layout fits
+   * one and rounds it up to the next standard rung — which is right for a
+   * bbox nobody composed against a page, and wrong for one the user framed on
+   * screen, because it would print more ground than the frame showed.
+   */
+  scaleDenom?: number;
   basemap: DrapeSource;
   contours: boolean;
   contourIntervalM: number;
@@ -112,7 +119,7 @@ export async function composeMapPdf(
   handle: ComposeHandle = { aborted: false },
 ): Promise<Uint8Array> {
   const { bbox, options } = input;
-  const layout = layoutMadeMap(bbox, options.format);
+  const layout = layoutMadeMap(bbox, options.format, { scaleDenom: options.scaleDenom });
   const { mapRect, drawBbox } = layout;
 
   // --- basemap raster ------------------------------------------------------
