@@ -1,4 +1,6 @@
 import { parseGpx } from '@core/geo/gpx';
+import { layoutMadeMap } from '@core/mapmaker/layout';
+import { resolvePointsToLoad, resolveTracksToLoad } from '@core/mapmaker/contentSelection';
 import type { BoundingBox, LngLat, MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
@@ -20,8 +22,11 @@ import {
  * doubles as an end-to-end georeferencing check on every single make.
  *
  * Track geometries live in GPX files (the store holds summaries), so they're
- * loaded here; geometry outside the page is clipped by the composer, so the
- * only cost of loading a track that misses the region is the parse.
+ * loaded here — but ONLY for the tracks the user picked that can actually
+ * reach the page (#356). This used to read and XML-parse every GPX in the
+ * library on every make and let the composer's clipper discard the misses; a
+ * summary already carries a bounding box, so the ones that cannot print are
+ * excluded with no file I/O at all.
  *
  * Cancellation (#309): `handle.aborted` is re-checked after every await and
  * once more right before the durable `addMap`, so a Cancel that lands while
@@ -37,9 +42,20 @@ export async function makeMap(
   const lib = useLibraryStore.getState();
   const aborted = () => new Error('aborted');
 
+  // The page the composer will actually draw — the requested bbox expanded to
+  // the sheet's aspect. Filtering against the REQUESTED bbox would drop a
+  // trail that only enters the drawn margin. Computed lazily: a sheet with no
+  // user data on it needs no page and no selection work at all.
+  const pageBbox = () =>
+    layoutMadeMap(bbox, options.format, { scaleDenom: options.scaleDenom }).drawBbox;
+
   const tracks: ComposeInput['tracks'] = [];
   if (options.includeUserData) {
+    const page = pageBbox();
+    const summaries = lib.tracks.map((t) => ({ id: t.id, bbox: t.stats.bbox }));
+    const toLoad = new Set(resolveTracksToLoad(summaries, page, options.trackIds));
     for (const summary of lib.tracks) {
+      if (!toLoad.has(summary.id)) continue;
       if (handle.aborted) throw aborted();
       try {
         const { points } = parseGpx(await storage.readFileText(summary.fileUri));
@@ -52,15 +68,27 @@ export async function makeMap(
       }
     }
   }
-  const waypoints: ComposeInput['waypoints'] = lib.waypoints.map((w, i) => {
-    // The badge number printed beside a pin. Only an untouched auto label
-    // carries a meaningful one, so match that exact shape: since waypoints
-    // became renameable the label is arbitrary user text, and the old loose
-    // trailing-digit match would print "2026" for a "Bivouac 2026". Anything
-    // else falls back to the waypoint's position on the sheet.
-    const n = /^Waypoint (\d+)$/.exec(w.label)?.[1];
-    return { index: n ? Number(n) : i + 1, pos: [w.longitude, w.latitude] as LngLat };
-  });
+  const wantWaypoints = options.includeUserData
+    ? new Set(resolvePointsToLoad(lib.waypoints, pageBbox(), options.waypointIds))
+    : new Set<string>();
+  const waypoints: ComposeInput['waypoints'] = lib.waypoints
+    .map((w, i) => {
+      // The badge number printed beside a pin. Only an untouched auto label
+      // carries a meaningful one, so match that exact shape: since waypoints
+      // became renameable the label is arbitrary user text, and the old loose
+      // trailing-digit match would print "2026" for a "Bivouac 2026". Anything
+      // else falls back to the waypoint's position on the sheet.
+      const n = /^Waypoint (\d+)$/.exec(w.label)?.[1];
+      return {
+        index: n ? Number(n) : i + 1,
+        pos: [w.longitude, w.latitude] as LngLat,
+        keep: wantWaypoints.has(w.id),
+      };
+    })
+    // Numbering is computed over the WHOLE library first, so a pin keeps the
+    // number it wears on the map even when its neighbours are left off.
+    .filter((w) => w.keep)
+    .map(({ index, pos }) => ({ index, pos }));
 
   // Magnetic declination for the compass rose, straight off the device
   // compass (the OS runs the real geomagnetic model): true − magnetic

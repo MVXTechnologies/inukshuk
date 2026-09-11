@@ -63,6 +63,13 @@ export interface MakeMapOptions {
   /** Opacity of the slope shading layer, 0..1. */
   slopeOpacity: number;
   includeUserData: boolean;
+  /**
+   * Which of the user's own trails and waypoints to draw (#349). Ids come from
+   * the editor's picker; `undefined` means "everything that reaches the page",
+   * which is what a make with no picker involvement should do.
+   */
+  trackIds?: string[];
+  waypointIds?: string[];
   /** Marked-trail databases composited over the basemap (empty = none). */
   markedTrailsNetworks: TrailNetworkId[];
   markedTrailsOpacity: number;
