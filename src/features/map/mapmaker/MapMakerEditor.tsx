@@ -2,6 +2,7 @@ import {
   clampZoom,
   metersPerPixel,
   scaleDenomForZoom,
+  sharpestScaleDenom,
   zoomForGroundSpan,
 } from '@core/mapmaker/cameraFit';
 import {
@@ -15,8 +16,10 @@ import {
 } from '@core/mapmaker/pageSpec';
 import {
   DEFAULT_PRINT_STYLE,
+  EDITOR_RASTER_TILE_SIZE,
   PRINT_STYLES,
   printStyleById,
+  styleMaxSourceZoom,
   type PrintStyleId,
 } from '@core/mapmaker/printSources';
 import type { BoundingBox } from '@core/models';
@@ -138,6 +141,25 @@ export function MapMakerEditor({
       scaleDenom: scaleDenomForZoom(camera.zoom, sheet.winW, lat, geometry.mapRect.w),
     };
   }, [camera, sheet.winW, sheet.winH, geometry.mapRect.w]);
+
+  /**
+   * Past this scale the chosen source has no more real tiles and the sheet is
+   * showing overscaled ones. Imagery (z17) runs out two levels before street
+   * (z19), which looks like a rendering fault unless we say so.
+   */
+  const softBelow = useMemo(() => {
+    if (!camera || sheet.winW <= 0) return null;
+    const limit = sharpestScaleDenom(
+      styleMaxSourceZoom(printStyleById(style)),
+      EDITOR_RASTER_TILE_SIZE,
+      sheet.winW,
+      camera.center[1],
+      geometry.mapRect.w,
+    );
+    return limit > 0 ? limit : null;
+  }, [camera, sheet.winW, style, geometry.mapRect.w]);
+
+  const overscaled = live !== null && softBelow !== null && live.scaleDenom < softBelow;
 
   // Tapping a rung drives the camera to the zoom that shows its coverage.
   const goToScale = useCallback(
@@ -441,6 +463,16 @@ export function MapMakerEditor({
               chip(s.label, null, style === s.id, () => setStyle(s.id), s.id),
             )}
           </View>
+          {overscaled && softBelow !== null ? (
+            <Text
+              variant="labelSmall"
+              testID="make-map-detail-limit"
+              style={[styles.limitNote, { color: theme.colors.onSurfaceVariant }]}
+            >
+              {printStyleById(style).label} has no more detail past {fmtScale(softBelow)} — the
+              sheet is enlarging the tiles it has.
+            </Text>
+          ) : null}
 
           <View style={styles.actions}>
             <Button
@@ -557,6 +589,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 5 },
   chipSub: { opacity: 0.75, fontSize: 9.5 },
+  limitNote: { opacity: 0.85, marginTop: 2 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
   actionBtn: { minWidth: 110 },
   floatRow: {

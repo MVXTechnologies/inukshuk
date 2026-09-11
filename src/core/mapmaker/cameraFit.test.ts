@@ -1,6 +1,8 @@
 import {
   cameraChanged,
   clampZoom,
+  maxSharpCameraZoom,
+  sharpestScaleDenom,
   MERCATOR_M_PER_PX_Z0,
   metersPerPixel,
   scaleDenomForZoom,
@@ -85,5 +87,40 @@ describe('cameraChanged', () => {
     expect(cameraChanged(at(-71.25, 46.81, 13), at(-71.2, 46.81, 13))).toBe(true);
     expect(cameraChanged(at(-71.25, 46.81, 13), at(-71.25, 46.9, 13))).toBe(true);
     expect(cameraChanged(at(-71.25, 46.81, 13), at(-71.25, 46.81, 14))).toBe(true);
+  });
+});
+
+describe('maxSharpCameraZoom (#349 "load more pixels")', () => {
+  // A source declared at 256 is fetched one level below the camera; at 128,
+  // two. So under-declaring buys a level of real detail — and runs into the
+  // service's own ceiling a level sooner.
+  it('accounts for the declared tile size', () => {
+    expect(maxSharpCameraZoom(19, 256)).toBe(19);
+    expect(maxSharpCameraZoom(19, 128)).toBe(18);
+    expect(maxSharpCameraZoom(19, 512)).toBe(20);
+  });
+
+  it('shows why imagery runs out before street', () => {
+    // NATIVE_MAX_ZOOM: map 19, satellite 17.
+    expect(maxSharpCameraZoom(17, 128)).toBe(16);
+    expect(maxSharpCameraZoom(19, 128) - maxSharpCameraZoom(17, 128)).toBe(2);
+  });
+});
+
+describe('sharpestScaleDenom', () => {
+  it('is a smaller denominator for the source with more zoom levels', () => {
+    const g = pageGeometry({ preset: 'a4', orientation: 'portrait' });
+    const street = sharpestScaleDenom(19, 128, 312, 46.8, g.mapRect.w);
+    const imagery = sharpestScaleDenom(17, 128, 312, 46.8, g.mapRect.w);
+    expect(street).toBeLessThan(imagery);
+    // Four times: two zoom levels is 4x the ground per pixel.
+    expect(imagery / street).toBeCloseTo(4, 6);
+  });
+
+  it('round-trips through the zoom it names', () => {
+    const g = pageGeometry({ preset: 'a4', orientation: 'portrait' });
+    const denom = sharpestScaleDenom(17, 128, 312, 46.8, g.mapRect.w);
+    const cov = coverageMeters(g, denom);
+    expect(zoomForGroundSpan(cov.widthM, 312, 46.8)).toBeCloseTo(maxSharpCameraZoom(17, 128), 6);
   });
 });
