@@ -24,7 +24,7 @@
     <link rel="alternate" hreflang="x-default" href="https://inukshuk.mvxtechnologies.com/" />
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: light;
         /* Palette sampled from the app logo + Material theme. */
         --inukshuk: #2d3740; /* charcoal-navy — the stone figure */
         --foliage: #566b33; /* deepened sage — primary */
@@ -38,18 +38,16 @@
         --card-border: rgba(45, 55, 64, 0.12);
         --shadow: 0 1px 2px rgba(45, 55, 64, 0.06), 0 12px 32px rgba(45, 55, 64, 0.1);
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --foliage: #b6c98a;
-          --foliage-bright: #c9d89e;
-          --river: #8fc3e0;
-          --cream: #10140f;
-          --surface: #171c14;
-          --ink: #e9ece4;
-          --muted: #aab3a3;
-          --card-border: rgba(182, 201, 138, 0.16);
-          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px rgba(0, 0, 0, 0.45);
-        }
+      :root.is-night {
+        --foliage: #b6c98a;
+        --foliage-bright: #c9d89e;
+        --river: #8fc3e0;
+        --cream: #10140f;
+        --surface: #171c14;
+        --ink: #e9ece4;
+        --muted: #aab3a3;
+        --card-border: rgba(182, 201, 138, 0.16);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px rgba(0, 0, 0, 0.45);
       }
 
       * {
@@ -151,11 +149,10 @@
         color: #fff;
         box-shadow: var(--shadow);
       }
-      @media (prefers-color-scheme: dark) {
-        .btn-primary {
-          color: #1a230b;
-        }
+      :root.is-night .btn-primary {
+        color: #1a230b;
       }
+
       .btn-primary:hover {
         background: var(--foliage-bright);
       }
@@ -186,11 +183,10 @@
         margin: 1.2rem 0 0.4rem;
         color: var(--inukshuk);
       }
-      @media (prefers-color-scheme: dark) {
-        .hero h1 {
-          color: var(--ink);
-        }
+      :root.is-night .hero h1 {
+        color: var(--ink);
       }
+
       .hero .tagline {
         font-size: clamp(1.05rem, 2.6vw, 1.3rem);
         color: var(--muted);
@@ -218,10 +214,11 @@
         gap: 0.75rem;
         justify-content: center;
         flex-wrap: wrap;
-        margin-top: 1.8rem;
+        margin-top: 1.1rem;
       }
       .cta-note {
         margin-top: 0.9rem;
+        margin-bottom: 0;
         font-size: 0.85rem;
         color: var(--muted);
       }
@@ -237,11 +234,10 @@
         margin: 0 0 0.5rem;
         color: var(--inukshuk);
       }
-      @media (prefers-color-scheme: dark) {
-        section h2 {
-          color: var(--ink);
-        }
+      :root.is-night section h2 {
+        color: var(--ink);
       }
+
       section .sub {
         text-align: center;
         color: var(--muted);
@@ -345,11 +341,10 @@
         font-weight: 800;
         font-size: 0.95rem;
       }
-      @media (prefers-color-scheme: dark) {
-        .step::before {
-          color: #1a230b;
-        }
+      :root.is-night .step::before {
+        color: #1a230b;
       }
+
       .step h3 {
         margin: 0 0 0.25rem;
         font-size: 1.05rem;
@@ -555,16 +550,17 @@
         background: var(--foliage);
         color: #fff;
       }
-      @media (prefers-color-scheme: dark) {
-        .lang-switch a[aria-current='page'] {
-          color: #1a230b;
-        }
+      :root.is-night .lang-switch a[aria-current='page'] {
+        color: #1a230b;
       }
+
       /* ---- Trail scene (#262) ----
          A fixed pastel landscape behind the page, in the icon's palette. Layers
          drift at different rates on scroll and a small inukshuk walks the trail
          as you read down the page. Low contrast on purpose: it sits under text. */
       :root {
+        /* Daylight: the first stop of the ramp in the script below, so a page
+           with no JavaScript still opens on the scene it is meant to. */
         --sc-sky-top: #f6f1e6;
         --sc-sky-bottom: #e6ecec;
         --sc-sun: #f4d7a3;
@@ -580,22 +576,43 @@
         --sc-figure: #2d3740;
         --sc-opacity: 0.9;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --sc-sky-top: #10140f;
-          --sc-sky-bottom: #141a18;
-          --sc-sun: #3a3b2c;
-          --sc-cloud: #1c231f;
-          --sc-far: #1f2a2c;
-          --sc-cap: #2b3a3c;
-          --sc-mid: #22301f;
-          --sc-near: #2a3b26;
-          --sc-pine: #34482e;
-          --sc-river: #274554;
-          --sc-river-2: #2f5566;
-          --sc-trail: rgba(233, 236, 228, 0.3);
-          --sc-figure: #e9ece4;
-          --sc-opacity: 0.85;
+      /* Night falls once, at dusk, rather than crossfading the whole way down:
+         a page that spent several hundred pixels of scroll half-way between
+         the two palettes would be mid-grey text on a mid-grey ground. Buttons
+         and links are left to snap so their hover stays instant. */
+      body,
+      nav,
+      footer,
+      .card,
+      .idea,
+      .step,
+      .pill,
+      .sub,
+      .tagline,
+      h1,
+      h2,
+      h3,
+      p {
+        transition:
+          background-color 0.55s ease,
+          border-color 0.55s ease,
+          color 0.55s ease;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        body,
+        nav,
+        footer,
+        .card,
+        .idea,
+        .step,
+        .pill,
+        .sub,
+        .tagline,
+        h1,
+        h2,
+        h3,
+        p {
+          transition: none;
         }
       }
       body {
@@ -618,7 +635,62 @@
       .scene .layer {
         will-change: transform;
       }
+      /* Where to get it. The Android half is a beta invite, not a store
+         listing, because Play has no public listing for the app yet. */
+      .stores {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: center;
+        align-items: center;
+        margin-top: 1.8rem;
+      }
+      /* Apple's badge is supplied artwork and may be scaled but not altered,
+         so it sets the height and the Android button is built to match it:
+         same 52px, same corner, same black. */
+      .badge-link {
+        display: block;
+        line-height: 0;
+        border-radius: 9px;
+      }
+      .badge-link img {
+        display: block;
+        height: 52px;
+        width: auto;
+      }
+      .store {
+        display: inline-flex;
+        align-items: center;
+        height: 52px;
+        padding: 0 1.1rem;
+        border-radius: 9px;
+        background: #000;
+        border: 1px solid #000;
+        color: #fff;
+        text-decoration: none;
+      }
+      .store:hover {
+        background: #1a1a1a;
+      }
+      .store-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: left;
+        line-height: 1.25;
+      }
+      .store .lead {
+        font-size: 0.66rem;
+        color: #c9c9c9;
+        letter-spacing: 0.01em;
+      }
+      .store .name {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #fff;
+      }
       .scene .cloud {
+        opacity: var(--sc-cloud-opacity, 1);
         animation: sc-drift 90s linear infinite;
       }
       .scene .cloud.c2 {
@@ -635,6 +707,38 @@
         }
         to {
           transform: translateX(1700px);
+        }
+      }
+      /* --- Sky: a day that turns to night as you scroll (#351) --- */
+      .scene .night {
+        opacity: 0;
+        will-change: opacity;
+      }
+      .scene .stars {
+        opacity: 0;
+        will-change: opacity;
+      }
+      .scene .stars circle {
+        fill: #fdfcf6;
+        animation: sc-twinkle 4s ease-in-out infinite;
+      }
+      @keyframes sc-twinkle {
+        0%,
+        100% {
+          opacity: 0.35;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .scene .sun,
+      .scene .moon {
+        will-change: transform, opacity;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .scene .stars circle {
+          animation: none;
+          opacity: 0.8;
         }
       }
       .scene .trail {
@@ -658,6 +762,17 @@
     <div class="scene" aria-hidden="true">
       <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" focusable="false">
         <defs>
+          <mask
+            id="sc-moon-cut"
+            maskUnits="userSpaceOnUse"
+            x="-60"
+            y="-60"
+            width="120"
+            height="120"
+          >
+            <circle cx="0" cy="0" r="46" fill="#fff" />
+            <circle cx="20" cy="-13" r="41" fill="#000" />
+          </mask>
           <linearGradient id="sc-sky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="var(--sc-sky-top)" />
             <stop offset="1" stop-color="var(--sc-sky-bottom)" />
@@ -668,8 +783,62 @@
           </linearGradient>
         </defs>
         <rect width="1600" height="900" fill="url(#sc-sky)" />
+        <rect class="night" width="1600" height="900" fill="#0d1b2a" />
+        <g class="stars" aria-hidden="true">
+          <circle cx="121.6" cy="423.4" r="1.3" style="animation-delay: 1.07s" />
+          <circle cx="1051.2" cy="158.0" r="2.0" style="animation-delay: 2.97s" />
+          <circle cx="144.4" cy="284.1" r="0.9" style="animation-delay: 2.26s" />
+          <circle cx="959.8" cy="181.4" r="2.0" style="animation-delay: 3.91s" />
+          <circle cx="966.7" cy="92.5" r="1.1" style="animation-delay: 2.49s" />
+          <circle cx="848.2" cy="92.4" r="2.0" style="animation-delay: 1.55s" />
+          <circle cx="1500.6" cy="25.9" r="2.0" style="animation-delay: 2.35s" />
+          <circle cx="1489.2" cy="59.6" r="1.6" style="animation-delay: 1.04s" />
+          <circle cx="797.3" cy="391.7" r="0.9" style="animation-delay: 1.54s" />
+          <circle cx="199.2" cy="233.0" r="1.3" style="animation-delay: 3.05s" />
+          <circle cx="117.3" cy="310.5" r="1.6" style="animation-delay: 2s" />
+          <circle cx="469.8" cy="168.9" r="1.6" style="animation-delay: 2.91s" />
+          <circle cx="1235.2" cy="149.2" r="1.6" style="animation-delay: 0.75s" />
+          <circle cx="593.8" cy="194.0" r="1.1" style="animation-delay: 3.61s" />
+          <circle cx="1422.7" cy="228.5" r="1.6" style="animation-delay: 1.47s" />
+          <circle cx="975.1" cy="286.1" r="2.0" style="animation-delay: 3.13s" />
+          <circle cx="705.0" cy="293.5" r="2.0" style="animation-delay: 3.64s" />
+          <circle cx="1106.2" cy="244.5" r="2.0" style="animation-delay: 2.35s" />
+          <circle cx="1219.9" cy="327.2" r="1.6" style="animation-delay: 0.73s" />
+          <circle cx="994.8" cy="271.3" r="0.9" style="animation-delay: 1.27s" />
+          <circle cx="1037.2" cy="138.6" r="1.1" style="animation-delay: 0.04s" />
+          <circle cx="559.4" cy="375.0" r="1.3" style="animation-delay: 0.6s" />
+          <circle cx="1410.1" cy="120.6" r="0.9" style="animation-delay: 2.61s" />
+          <circle cx="317.7" cy="303.2" r="1.1" style="animation-delay: 0.73s" />
+          <circle cx="1017.4" cy="48.3" r="2.0" style="animation-delay: 0.2s" />
+          <circle cx="893.9" cy="232.7" r="0.9" style="animation-delay: 2.87s" />
+          <circle cx="423.4" cy="242.7" r="1.1" style="animation-delay: 3.61s" />
+          <circle cx="839.4" cy="30.8" r="1.1" style="animation-delay: 0.37s" />
+          <circle cx="824.4" cy="136.9" r="1.3" style="animation-delay: 0.17s" />
+          <circle cx="1423.5" cy="140.6" r="0.9" style="animation-delay: 1.66s" />
+          <circle cx="84.3" cy="298.7" r="1.6" style="animation-delay: 2.65s" />
+          <circle cx="319.9" cy="428.1" r="1.1" style="animation-delay: 3.79s" />
+          <circle cx="1454.7" cy="256.2" r="1.3" style="animation-delay: 0.94s" />
+          <circle cx="881.3" cy="409.5" r="2.0" style="animation-delay: 3.82s" />
+          <circle cx="227.2" cy="402.9" r="2.0" style="animation-delay: 2.41s" />
+          <circle cx="38.0" cy="313.8" r="0.9" style="animation-delay: 3.85s" />
+          <circle cx="1044.0" cy="83.4" r="2.0" style="animation-delay: 1.06s" />
+          <circle cx="227.6" cy="268.0" r="0.9" style="animation-delay: 3.46s" />
+          <circle cx="1559.4" cy="155.6" r="0.9" style="animation-delay: 1.65s" />
+          <circle cx="67.7" cy="193.0" r="1.1" style="animation-delay: 1.57s" />
+          <circle cx="1009.2" cy="305.9" r="1.6" style="animation-delay: 2.41s" />
+          <circle cx="885.5" cy="90.9" r="1.6" style="animation-delay: 0.36s" />
+          <circle cx="413.2" cy="42.3" r="0.9" style="animation-delay: 3.94s" />
+          <circle cx="196.1" cy="63.0" r="1.1" style="animation-delay: 0.16s" />
+          <circle cx="231.3" cy="168.8" r="2.0" style="animation-delay: 1.59s" />
+          <circle cx="157.8" cy="389.6" r="1.3" style="animation-delay: 1.73s" />
+        </g>
         <g class="layer sky" data-rate="-0.01">
-          <circle cx="1210" cy="180" r="74" fill="var(--sc-sun)" />
+          <g class="sun">
+            <circle cx="0" cy="0" r="74" fill="var(--sc-sun)" />
+          </g>
+          <g class="moon">
+            <circle cx="0" cy="0" r="46" fill="#eef2f6" mask="url(#sc-moon-cut)" />
+          </g>
           <g class="cloud c1" fill="var(--sc-cloud)">
             <ellipse cx="120" cy="150" rx="70" ry="26" />
             <ellipse cx="160" cy="132" rx="46" ry="30" />
@@ -730,16 +899,8 @@
           <path
             id="sc-trail"
             class="trail"
-            d="M70 826 C160 800 220 770 320 740 C420 710 470 690 560 690 C660 690 720 640 800 600 C880 560 960 570 1040 540 C1120 510 1160 470 1230 430 C1290 396 1330 384 1372 372"
+            d="M-20 884 C 170 858, 330 826, 520 816 S 900 792, 1120 764 S 1430 728, 1640 708"
           />
-          <g id="sc-hiker" fill="var(--sc-figure)">
-            <rect x="-9" y="-8" width="6" height="9" rx="1.5" />
-            <rect x="3" y="-8" width="6" height="9" rx="1.5" />
-            <rect x="-10" y="-14" width="20" height="5" rx="1.5" />
-            <rect x="-17" y="-20" width="34" height="5" rx="2" />
-            <rect x="-5" y="-27" width="10" height="6" rx="1.5" />
-            <rect x="-4" y="-34" width="8" height="6" rx="2" />
-          </g>
         </g>
       </svg>
     </div>
@@ -772,6 +933,29 @@
           <span class="pill">Communautaire</span>
           <span class="pill">Sans pub · Sans pistage</span>
         </div>
+        <div class="stores">
+          <a class="badge-link" href="https://apps.apple.com/ca/app/inukshuk/id6797629589">
+            <img
+              src="../assets/badges/app-store-fr.svg"
+              alt="Télécharger Inukshuk sur l’App Store"
+              width="165"
+              height="52"
+            />
+          </a>
+          <!-- No Google Play badge: Google's guidelines require it to link to a
+               Play listing, and there is no public one yet.
+               This points at Discussions deliberately — it is a real page that
+               exists today. Swap the href for the Google Group (or signup form)
+               backing the closed test the moment one exists, and the label back
+               to "Rejoindre la bêta". Never ship a placeholder URL here. -->
+          <a class="store" href="https://github.com/MVXTechnologies/inukshuk/discussions">
+            <span class="store-text">
+              <span class="lead">Android — accès anticipé</span>
+              <span class="name">Demander une invitation</span>
+            </span>
+          </a>
+        </div>
+        <p class="cta-note">Actuellement en test alpha sur Android. Développé au grand jour.</p>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://github.com/MVXTechnologies/inukshuk"
             >★ Étoile sur GitHub</a
@@ -780,7 +964,6 @@
             >💡 Proposer une idée</a
           >
         </div>
-        <p class="cta-note">Actuellement en test alpha sur Android. Développé au grand jour.</p>
       </div>
     </header>
 
@@ -792,7 +975,7 @@
     >
       <div class="wrap">
         <h2>Sur le terrain</h2>
-        <p class="sub">Six écrans de l'application — rien de mis en scène, rien de simulé.</p>
+        <p class="sub">Six écrans de l’application, sur des sentiers autour de Québec.</p>
       </div>
       <div class="carousel">
         <button class="carousel-btn prev" type="button" aria-label="Capture précédente">‹</button>
@@ -917,10 +1100,10 @@
           </div>
           <div class="card">
             <div class="ico">⛰️</div>
-            <h3>Un vrai relief 3D</h3>
+            <h3>Choisissez votre vue</h3>
             <p>
-              Voyez le paysage autour de vous en relief 3D, avec vos sentiers et votre itinéraire
-              drapés sur les montagnes.
+              Basculez entre carte, imagerie satellite et relief topographique pour explorer
+              l’itinéraire qui vous attend.
             </p>
           </div>
           <div class="card">
@@ -1160,13 +1343,192 @@
         if (!scene) return;
         var layers = Array.prototype.slice.call(scene.querySelectorAll('.layer'));
         var trail = document.getElementById('sc-trail');
-        var hiker = document.getElementById('sc-hiker');
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        var length = trail.getTotalLength();
         var ticking = false;
-        function place(progress) {
-          var p = trail.getPointAtLength(progress * length);
-          hiker.setAttribute('transform', 'translate(' + p.x + ' ' + p.y + ')');
+        var night = scene.querySelector('.night');
+        var stars = scene.querySelector('.stars');
+        var sun = scene.querySelector('.sun');
+        var moon = scene.querySelector('.moon');
+        var clamp01 = function (v) {
+          return v < 0 ? 0 : v > 1 ? 1 : v;
+        };
+        var root = document.documentElement;
+        // The scene's two palettes. Day is what the stylesheet holds for
+        // :root, so a page with no JS still gets the bright landscape. These
+        // are interpolated every frame, so the land darkens continuously —
+        // unlike the page's own chrome, which crossfades once at dusk.
+        // Four stops down the page, not two: dawn and dusk are the pastel ends
+        // of the day and are the whole point of the scene, so they are
+        // keyframes rather than a midpoint of a day-to-night fade. `at` is
+        // scroll progress. Past the last stop the scene simply holds.
+        var STOPS = [
+          {
+            at: 0.0, // full daylight — the page opens on midday, not on a tint
+            c: {
+              '--sc-sky-top': '#f6f1e6',
+              '--sc-sky-bottom': '#e6ecec',
+              '--sc-sun': '#f4d7a3',
+              '--sc-cloud': '#fbf9f4',
+              '--sc-far': '#cdd7dc',
+              '--sc-cap': '#f9f7f2',
+              '--sc-mid': '#c9d3aa',
+              '--sc-near': '#aebc8f',
+              '--sc-pine': '#8fa26e',
+              '--sc-river': '#a9cde2',
+              '--sc-river-2': '#8fc0da',
+              '--sc-trail': 'rgba(45, 55, 64, 0.38)',
+            },
+          },
+          {
+            at: 0.5, // late afternoon — barely warmer, so the day is not static
+            c: {
+              '--sc-sky-top': '#f4ecdf',
+              '--sc-sky-bottom': '#f2e4d2',
+              '--sc-sun': '#f5cf90',
+              '--sc-cloud': '#fdf6ec',
+              '--sc-far': '#cfd2d4',
+              '--sc-cap': '#faf5ee',
+              '--sc-mid': '#c6cfa3',
+              '--sc-near': '#abb88b',
+              '--sc-pine': '#8b9e6a',
+              '--sc-river': '#a6c9dd',
+              '--sc-river-2': '#8cbcd6',
+              '--sc-trail': 'rgba(45, 55, 64, 0.38)',
+            },
+          },
+          {
+            at: 0.74, // dusk — the one pastel moment, violet over apricot
+            c: {
+              '--sc-sky-top': '#b9a8c9',
+              '--sc-sky-bottom': '#f5c9a8',
+              '--sc-sun': '#f2a765',
+              '--sc-cloud': '#ecd0ca',
+              '--sc-far': '#a1a2b7',
+              '--sc-cap': '#f2e0e2',
+              '--sc-mid': '#a8ae90',
+              '--sc-near': '#8d9a78',
+              '--sc-pine': '#6f8060',
+              '--sc-river': '#9db6c9',
+              '--sc-river-2': '#8aa6bd',
+              '--sc-trail': 'rgba(60, 50, 65, 0.36)',
+            },
+          },
+          {
+            at: 0.92, // night
+            c: {
+              '--sc-sky-top': '#101b2c',
+              '--sc-sky-bottom': '#17212c',
+              '--sc-sun': '#f2a765',
+              '--sc-cloud': '#2f4056',
+              '--sc-far': '#1f2a2c',
+              '--sc-cap': '#2b3a3c',
+              '--sc-mid': '#22301f',
+              '--sc-near': '#2a3b26',
+              '--sc-pine': '#34482e',
+              '--sc-river': '#274554',
+              '--sc-river-2': '#2f5566',
+              '--sc-trail': 'rgba(233, 236, 228, 0.30)',
+            },
+          },
+        ];
+        function parseColor(c) {
+          if (c.charAt(0) === '#') {
+            return [
+              parseInt(c.substr(1, 2), 16),
+              parseInt(c.substr(3, 2), 16),
+              parseInt(c.substr(5, 2), 16),
+              1,
+            ];
+          }
+          var n = c.replace(/[^0-9.,]/g, '').split(',');
+          return [+n[0], +n[1], +n[2], n.length > 3 ? +n[3] : 1];
+        }
+        var KEYS = [];
+        for (var key in STOPS[0].c) {
+          if (Object.prototype.hasOwnProperty.call(STOPS[0].c, key)) KEYS.push(key);
+        }
+        for (var si = 0; si < STOPS.length; si++) {
+          STOPS[si].rgba = {};
+          for (var ki = 0; ki < KEYS.length; ki++) {
+            STOPS[si].rgba[KEYS[ki]] = parseColor(STOPS[si].c[KEYS[ki]]);
+          }
+        }
+        function mix(a, b, t) {
+          var r = Math.round(a[0] + (b[0] - a[0]) * t);
+          var g = Math.round(a[1] + (b[1] - a[1]) * t);
+          var bl = Math.round(a[2] + (b[2] - a[2]) * t);
+          var al = a[3] + (b[3] - a[3]) * t;
+          if (al >= 1) return 'rgb(' + r + ', ' + g + ', ' + bl + ')';
+          return 'rgba(' + r + ', ' + g + ', ' + bl + ', ' + al.toFixed(3) + ')';
+        }
+        // Smoothstep between stops so the light eases in and out of each phase
+        // rather than changing direction with a visible corner at every one.
+        function ease(t) {
+          return t * t * (3 - 2 * t);
+        }
+        function paintScene(progress, nightness) {
+          var i = 0;
+          while (i < STOPS.length - 2 && progress >= STOPS[i + 1].at) i++;
+          var a = STOPS[i];
+          var b = STOPS[i + 1];
+          var t = ease(clamp01((progress - a.at) / (b.at - a.at)));
+          for (var k = 0; k < KEYS.length; k++) {
+            root.style.setProperty(KEYS[k], mix(a.rgba[KEYS[k]], b.rgba[KEYS[k]], t));
+          }
+          root.style.setProperty('--sc-opacity', (0.9 - nightness * 0.05).toFixed(3));
+          // Clouds go with the daylight. Left up, a night-coloured cloud drifts
+          // across the moon and reads as a smudge on it.
+          root.style.setProperty('--sc-cloud-opacity', (1 - nightness).toFixed(3));
+        }
+        // Hysteresis: without it, a scroll that rests on the threshold would
+        // strobe the whole page between its day and night palettes.
+        var isNight = false;
+        function setPageMode(nightness) {
+          var next = isNight ? nightness > 0.35 : nightness > 0.55;
+          if (next === isNight) return;
+          isNight = next;
+          root.classList.toggle('is-night', isNight);
+        }
+        // Sun and moon ride the same arc, offset in time: the sun is most of
+        // the way across before the moon clears the horizon, so the two share
+        // the sky briefly at dusk rather than swapping in one frame.
+        // `fade` lets the moon stay out of a daylit sky however high it has
+        // climbed. The arc peaks at y=200 rather than the top of the viewBox:
+        // the scene is drawn `slice` and anchored to its bottom, so a tall
+        // arc puts the sun off the top of a laptop window entirely.
+        function ride(el, t, fade) {
+          if (!el) return;
+          if (t <= 0 || t >= 1) {
+            el.style.opacity = '0';
+            return;
+          }
+          el.style.opacity = String(
+            clamp01(Math.min(t, 1 - t) * 8) * (fade === undefined ? 1 : fade),
+          );
+          var x = 150 + t * 1300;
+          var y = 400 - Math.sin(t * Math.PI) * 200;
+          el.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
+        }
+        function sky(progress) {
+          // Night is its own measure, not the palette ramp: the page's chrome,
+          // the stars and the wash all key off how dark it actually is, which
+          // only starts once dusk is under way.
+          var nightness = clamp01((progress - 0.76) / 0.18);
+          // The sun is already well up when the page opens — it is the middle
+          // of the day — and comes down through the afternoon into dusk. The
+          // arc peaks at y=200 rather than the top of the viewBox: the scene
+          // is drawn `slice` and anchored to its bottom, so a taller arc would
+          // put the sun off the top of a laptop window entirely.
+          ride(sun, 0.32 + clamp01(progress / 0.82) * 0.68, 1);
+          // The moon climbs but never sets on screen, and is tied to the dark
+          // so it cannot hang about as a grey smudge in a daylit sky.
+          ride(moon, 0.04 + clamp01((progress - 0.5) / 0.5) * 0.24, nightness);
+          paintScene(progress, nightness);
+          setPageMode(nightness);
+          // The land already carries most of the nightfall; this only deepens
+          // the sky behind the stars.
+          if (night) night.style.opacity = String(nightness * 0.35);
+          if (stars) stars.style.opacity = String(clamp01((progress - 0.78) / 0.15));
         }
         function render() {
           ticking = false;
@@ -1178,7 +1540,7 @@
             var rate = parseFloat(g.getAttribute('data-rate')) || 0;
             g.style.transform = 'translateY(' + y * rate + 'px)';
           });
-          place(progress);
+          sky(progress);
         }
         function onScroll() {
           if (ticking) return;
@@ -1186,7 +1548,9 @@
           window.requestAnimationFrame(render);
         }
         if (reduce) {
-          place(0);
+          // No parallax and no travelling sun, but the scene still has to look
+          // like something: daylight, with the sun high.
+          sky(0.06);
           return;
         }
         window.addEventListener('scroll', onScroll, { passive: true });
