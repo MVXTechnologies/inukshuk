@@ -637,6 +637,38 @@
           transform: translateX(1700px);
         }
       }
+      /* --- Sky: a day that turns to night as you scroll (#351) --- */
+      .scene .night {
+        opacity: 0;
+        will-change: opacity;
+      }
+      .scene .stars {
+        opacity: 0;
+        will-change: opacity;
+      }
+      .scene .stars circle {
+        fill: #fdfcf6;
+        animation: sc-twinkle 4s ease-in-out infinite;
+      }
+      @keyframes sc-twinkle {
+        0%,
+        100% {
+          opacity: 0.35;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .scene .sun,
+      .scene .moon {
+        will-change: transform, opacity;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .scene .stars circle {
+          animation: none;
+          opacity: 0.8;
+        }
+      }
       .scene .trail {
         fill: none;
         stroke: var(--sc-trail);
@@ -668,8 +700,63 @@
           </linearGradient>
         </defs>
         <rect width="1600" height="900" fill="url(#sc-sky)" />
+        <rect class="night" width="1600" height="900" fill="#0d1b2a" />
+        <g class="stars" aria-hidden="true">
+          <circle cx="121.6" cy="423.4" r="1.3" style="animation-delay: 1.07s" />
+          <circle cx="1051.2" cy="158.0" r="2.0" style="animation-delay: 2.97s" />
+          <circle cx="144.4" cy="284.1" r="0.9" style="animation-delay: 2.26s" />
+          <circle cx="959.8" cy="181.4" r="2.0" style="animation-delay: 3.91s" />
+          <circle cx="966.7" cy="92.5" r="1.1" style="animation-delay: 2.49s" />
+          <circle cx="848.2" cy="92.4" r="2.0" style="animation-delay: 1.55s" />
+          <circle cx="1500.6" cy="25.9" r="2.0" style="animation-delay: 2.35s" />
+          <circle cx="1489.2" cy="59.6" r="1.6" style="animation-delay: 1.04s" />
+          <circle cx="797.3" cy="391.7" r="0.9" style="animation-delay: 1.54s" />
+          <circle cx="199.2" cy="233.0" r="1.3" style="animation-delay: 3.05s" />
+          <circle cx="117.3" cy="310.5" r="1.6" style="animation-delay: 2s" />
+          <circle cx="469.8" cy="168.9" r="1.6" style="animation-delay: 2.91s" />
+          <circle cx="1235.2" cy="149.2" r="1.6" style="animation-delay: 0.75s" />
+          <circle cx="593.8" cy="194.0" r="1.1" style="animation-delay: 3.61s" />
+          <circle cx="1422.7" cy="228.5" r="1.6" style="animation-delay: 1.47s" />
+          <circle cx="975.1" cy="286.1" r="2.0" style="animation-delay: 3.13s" />
+          <circle cx="705.0" cy="293.5" r="2.0" style="animation-delay: 3.64s" />
+          <circle cx="1106.2" cy="244.5" r="2.0" style="animation-delay: 2.35s" />
+          <circle cx="1219.9" cy="327.2" r="1.6" style="animation-delay: 0.73s" />
+          <circle cx="994.8" cy="271.3" r="0.9" style="animation-delay: 1.27s" />
+          <circle cx="1037.2" cy="138.6" r="1.1" style="animation-delay: 0.04s" />
+          <circle cx="559.4" cy="375.0" r="1.3" style="animation-delay: 0.6s" />
+          <circle cx="1410.1" cy="120.6" r="0.9" style="animation-delay: 2.61s" />
+          <circle cx="317.7" cy="303.2" r="1.1" style="animation-delay: 0.73s" />
+          <circle cx="1017.4" cy="48.3" r="2.0" style="animation-delay: 0.2s" />
+          <circle cx="893.9" cy="232.7" r="0.9" style="animation-delay: 2.87s" />
+          <circle cx="423.4" cy="242.7" r="1.1" style="animation-delay: 3.61s" />
+          <circle cx="839.4" cy="30.8" r="1.1" style="animation-delay: 0.37s" />
+          <circle cx="824.4" cy="136.9" r="1.3" style="animation-delay: 0.17s" />
+          <circle cx="1423.5" cy="140.6" r="0.9" style="animation-delay: 1.66s" />
+          <circle cx="84.3" cy="298.7" r="1.6" style="animation-delay: 2.65s" />
+          <circle cx="319.9" cy="428.1" r="1.1" style="animation-delay: 3.79s" />
+          <circle cx="1454.7" cy="256.2" r="1.3" style="animation-delay: 0.94s" />
+          <circle cx="881.3" cy="409.5" r="2.0" style="animation-delay: 3.82s" />
+          <circle cx="227.2" cy="402.9" r="2.0" style="animation-delay: 2.41s" />
+          <circle cx="38.0" cy="313.8" r="0.9" style="animation-delay: 3.85s" />
+          <circle cx="1044.0" cy="83.4" r="2.0" style="animation-delay: 1.06s" />
+          <circle cx="227.6" cy="268.0" r="0.9" style="animation-delay: 3.46s" />
+          <circle cx="1559.4" cy="155.6" r="0.9" style="animation-delay: 1.65s" />
+          <circle cx="67.7" cy="193.0" r="1.1" style="animation-delay: 1.57s" />
+          <circle cx="1009.2" cy="305.9" r="1.6" style="animation-delay: 2.41s" />
+          <circle cx="885.5" cy="90.9" r="1.6" style="animation-delay: 0.36s" />
+          <circle cx="413.2" cy="42.3" r="0.9" style="animation-delay: 3.94s" />
+          <circle cx="196.1" cy="63.0" r="1.1" style="animation-delay: 0.16s" />
+          <circle cx="231.3" cy="168.8" r="2.0" style="animation-delay: 1.59s" />
+          <circle cx="157.8" cy="389.6" r="1.3" style="animation-delay: 1.73s" />
+        </g>
         <g class="layer sky" data-rate="-0.01">
-          <circle cx="1210" cy="180" r="74" fill="var(--sc-sun)" />
+          <g class="sun">
+            <circle cx="0" cy="0" r="74" fill="var(--sc-sun)" />
+          </g>
+          <g class="moon">
+            <circle cx="0" cy="0" r="46" fill="#eef2f6" />
+            <circle cx="20" cy="-13" r="41" fill="#0d1b2a" class="moon-bite" />
+          </g>
           <g class="cloud c1" fill="var(--sc-cloud)">
             <ellipse cx="120" cy="150" rx="70" ry="26" />
             <ellipse cx="160" cy="132" rx="46" ry="30" />
@@ -730,16 +817,8 @@
           <path
             id="sc-trail"
             class="trail"
-            d="M70 826 C160 800 220 770 320 740 C420 710 470 690 560 690 C660 690 720 640 800 600 C880 560 960 570 1040 540 C1120 510 1160 470 1230 430 C1290 396 1330 384 1372 372"
+            d="M-20 884 C 170 858, 330 826, 520 816 S 900 792, 1120 764 S 1430 728, 1640 708"
           />
-          <g id="sc-hiker" fill="var(--sc-figure)">
-            <rect x="-9" y="-8" width="6" height="9" rx="1.5" />
-            <rect x="3" y="-8" width="6" height="9" rx="1.5" />
-            <rect x="-10" y="-14" width="20" height="5" rx="1.5" />
-            <rect x="-17" y="-20" width="34" height="5" rx="2" />
-            <rect x="-5" y="-27" width="10" height="6" rx="1.5" />
-            <rect x="-4" y="-34" width="8" height="6" rx="2" />
-          </g>
         </g>
       </svg>
     </div>
@@ -1160,13 +1239,49 @@
         if (!scene) return;
         var layers = Array.prototype.slice.call(scene.querySelectorAll('.layer'));
         var trail = document.getElementById('sc-trail');
-        var hiker = document.getElementById('sc-hiker');
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        var length = trail.getTotalLength();
         var ticking = false;
-        function place(progress) {
-          var p = trail.getPointAtLength(progress * length);
-          hiker.setAttribute('transform', 'translate(' + p.x + ' ' + p.y + ')');
+        var night = scene.querySelector('.night');
+        var stars = scene.querySelector('.stars');
+        var sun = scene.querySelector('.sun');
+        var moon = scene.querySelector('.moon');
+        var clamp01 = function (v) {
+          return v < 0 ? 0 : v > 1 ? 1 : v;
+        };
+        // Sun and moon ride the same arc, offset in time: the sun is most of
+        // the way across before the moon clears the horizon, so the two share
+        // the sky briefly at dusk rather than swapping in one frame.
+        // `fade` lets the moon stay out of a daylit sky however high it has
+        // climbed. The arc peaks at y=200 rather than the top of the viewBox:
+        // the scene is drawn `slice` and anchored to its bottom, so a tall
+        // arc puts the sun off the top of a laptop window entirely.
+        function ride(el, t, fade) {
+          if (!el) return;
+          if (t <= 0 || t >= 1) {
+            el.style.opacity = '0';
+            return;
+          }
+          el.style.opacity = String(
+            clamp01(Math.min(t, 1 - t) * 8) * (fade === undefined ? 1 : fade),
+          );
+          var x = 150 + t * 1300;
+          var y = 400 - Math.sin(t * Math.PI) * 200;
+          el.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
+        }
+        function sky(progress) {
+          // The sun is already up when the page opens — a scene that starts
+          // with an empty sky is just a blank sky — and sets around three
+          // quarters of the way down. The moon rises behind it and is still
+          // climbing at the footer, so it never sets on screen.
+          var dark = clamp01((progress - 0.3) / 0.5);
+          ride(sun, 0.14 + clamp01(progress / 0.72) * 0.86, 1 - dark * 0.65);
+          // The moon climbs but never sets on screen, and is tied to the dark
+          // so it cannot hang about as a grey smudge in a daytime sky.
+          // Kept to the left half of its arc: further along and the footer's
+          // cards sit in front of it.
+          ride(moon, 0.04 + clamp01((progress - 0.4) / 0.6) * 0.24, dark);
+          if (night) night.style.opacity = String(dark * 0.82);
+          if (stars) stars.style.opacity = String(clamp01((progress - 0.42) / 0.33));
         }
         function render() {
           ticking = false;
@@ -1178,7 +1293,7 @@
             var rate = parseFloat(g.getAttribute('data-rate')) || 0;
             g.style.transform = 'translateY(' + y * rate + 'px)';
           });
-          place(progress);
+          sky(progress);
         }
         function onScroll() {
           if (ticking) return;
@@ -1186,7 +1301,9 @@
           window.requestAnimationFrame(render);
         }
         if (reduce) {
-          place(0);
+          // No parallax and no travelling sun, but the scene still has to look
+          // like something: morning, with the sun where it rises.
+          sky(0.08);
           return;
         }
         window.addEventListener('scroll', onScroll, { passive: true });
