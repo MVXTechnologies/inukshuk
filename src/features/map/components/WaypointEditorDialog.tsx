@@ -1,4 +1,5 @@
 import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
+import type { WaypointIcon } from '@core/models';
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { useIosKeyboardHeight } from '../../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { Button, Dialog, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { WaypointIconPicker } from './WaypointIconPicker';
 
 /**
  * The minimal waypoint shape the editor needs — satisfied by both a live
@@ -15,6 +17,8 @@ import { Button, Dialog, Portal, Text, TextInput, useTheme } from 'react-native-
 interface EditableWaypoint {
   label: string;
   photoUri?: string;
+  /** Chosen pin icon (#350); standalone waypoints only — see `onSetIcon`. */
+  icon?: WaypointIcon;
 }
 
 interface Props {
@@ -36,6 +40,13 @@ interface Props {
   onDelete: () => void;
   /** Attach a stored photo uri to the waypoint ('' removes the photo). */
   onSetPhoto: (uri: string) => void;
+  /**
+   * Choose the pin icon (`undefined` = the default pin). **Omitted where the
+   * icon cannot be stored** — a live recording waypoint is materialized as a
+   * distance-anchored trail note when the recording stops, and a note has no
+   * icon, so the picker is not offered rather than silently discarded.
+   */
+  onSetIcon?: (icon: WaypointIcon | undefined) => void;
 }
 
 /** Editor dialog for a waypoint's note + photo (camera or library). */
@@ -53,6 +64,7 @@ function WaypointEditorContent({
   onSave,
   onDelete,
   onSetPhoto,
+  onSetIcon,
 }: Props) {
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +185,7 @@ function WaypointEditorContent({
               // #235 — multiline: Return types a newline, so Done is the only exit.
               inputAccessoryViewID={KEYBOARD_DONE_BAR_ID}
             />
+            {onSetIcon && <WaypointIconPicker value={waypoint?.icon} onChange={onSetIcon} />}
             {waypoint?.photoUri ? (
               <View style={styles.wpPhotoWrap}>
                 <Image source={{ uri: waypoint.photoUri }} style={styles.wpPhoto} />

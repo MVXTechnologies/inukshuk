@@ -1,6 +1,6 @@
 import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
@@ -52,6 +52,7 @@ import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { space, target } from '@ui/tokens';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { waypointIconGlyph } from '@core/library/waypointIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
@@ -396,6 +397,11 @@ export function LibraryScreen() {
   const deleteWaypointFromEditor = () => {
     if (editWpId) removeWaypoint(editWpId);
     setEditWpId(null);
+  };
+  const setWaypointIcon = (icon: WaypointIcon | undefined) => {
+    // Applied straight away, like the photo: the row behind the dialog redraws
+    // with the new mark, which is the whole point of choosing one.
+    if (editWpId) updateWaypoint(editWpId, { icon: icon ?? null });
   };
   const setWaypointPhoto = (uri: string) => {
     if (editWpId) updateWaypoint(editWpId, { photoUri: uri });
@@ -921,6 +927,7 @@ export function LibraryScreen() {
         detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
         caption={shortDate(w.createdAt, nowMs)}
         photoUri={w.photoUri}
+        glyph={waypointIconGlyph(w.icon)}
         accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
         onPress={() => openWaypointEditor(w)}
         onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
@@ -1408,6 +1415,7 @@ export function LibraryScreen() {
         onSave={saveWaypoint}
         onDelete={deleteWaypointFromEditor}
         onSetPhoto={setWaypointPhoto}
+        onSetIcon={setWaypointIcon}
       />
 
       {/* Trail filter panel (header sort/filter button). Stays mounted so its
