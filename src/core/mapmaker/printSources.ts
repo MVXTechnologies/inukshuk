@@ -12,7 +12,7 @@
  * `{z}/{y}/{x}` is not a typo: Esri's REST tile path is row-before-column.
  */
 
-import type { Basemap } from '@core/geo/tiles';
+import { NATIVE_MAX_ZOOM, type Basemap } from '@core/geo/tiles';
 
 /** The drape sources the composer can stitch (see `features/map/dem`). */
 export type PrintDrapeSource = Exclude<Basemap, 'relief'>;
@@ -29,6 +29,11 @@ export interface PrintStyle {
   tileUrl: string;
   /** Credit line for the printed footer. */
   attribution: string;
+}
+
+/** Deepest zoom this style's service actually serves real tiles at. */
+export function styleMaxSourceZoom(style: PrintStyle): number {
+  return NATIVE_MAX_ZOOM[style.drape];
 }
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
@@ -51,6 +56,22 @@ export const PRINT_STYLES: readonly PrintStyle[] = [
 ] as const;
 
 export const DEFAULT_PRINT_STYLE: PrintStyleId = 'street';
+
+/**
+ * Tile size the editor DECLARES for its base raster, in points (#349).
+ *
+ * Zoom is defined against a 512-point canonical tile, so declaring 128 makes
+ * MapLibre fetch two levels deeper than the camera instead of one — four times
+ * the tiles, four times the pixels. The default 256 is right for a 1x screen
+ * and visibly soft on a 3x one, because MapLibre does not raise raster tile
+ * zoom for device pixel ratio (only vector), so a 256-point tile is stretched
+ * across ~768 device pixels and the baked-in labels blur.
+ *
+ * 128 rather than 64: it lands imagery exactly on its native maximum (z17)
+ * instead of past it, and 64 would be sixteen times the tiles for detail two
+ * of the five sources do not have.
+ */
+export const EDITOR_RASTER_TILE_SIZE = 128;
 
 export function printStyleById(id: PrintStyleId): PrintStyle {
   return PRINT_STYLES.find((s) => s.id === id) ?? PRINT_STYLES[0]!;
