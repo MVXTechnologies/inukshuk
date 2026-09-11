@@ -579,13 +579,17 @@
         --sc-trail: rgba(45, 55, 64, 0.38);
         --sc-figure: #2d3740;
         --sc-opacity: 0.9;
+        /* How far the night wash may go. Light mode keeps dark body text on
+           the darkened sky, so it stops at dusk; dark mode has light text and
+           can go all the way. */
+        --sc-night-max: 0.5;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --sc-sky-top: #10140f;
-          --sc-sky-bottom: #141a18;
-          --sc-sun: #3a3b2c;
-          --sc-cloud: #1c231f;
+          --sc-sky-top: #24354a;
+          --sc-sky-bottom: #2d3c45;
+          --sc-sun: #e8b563;
+          --sc-cloud: rgba(188, 208, 234, 0.2);
           --sc-far: #1f2a2c;
           --sc-cap: #2b3a3c;
           --sc-mid: #22301f;
@@ -596,6 +600,7 @@
           --sc-trail: rgba(233, 236, 228, 0.3);
           --sc-figure: #e9ece4;
           --sc-opacity: 0.85;
+          --sc-night-max: 0.82;
         }
       }
       body {
@@ -690,6 +695,17 @@
     <div class="scene" aria-hidden="true">
       <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" focusable="false">
         <defs>
+          <mask
+            id="sc-moon-cut"
+            maskUnits="userSpaceOnUse"
+            x="-60"
+            y="-60"
+            width="120"
+            height="120"
+          >
+            <circle cx="0" cy="0" r="46" fill="#fff" />
+            <circle cx="20" cy="-13" r="41" fill="#000" />
+          </mask>
           <linearGradient id="sc-sky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="var(--sc-sky-top)" />
             <stop offset="1" stop-color="var(--sc-sky-bottom)" />
@@ -754,8 +770,7 @@
             <circle cx="0" cy="0" r="74" fill="var(--sc-sun)" />
           </g>
           <g class="moon">
-            <circle cx="0" cy="0" r="46" fill="#eef2f6" />
-            <circle cx="20" cy="-13" r="41" fill="#0d1b2a" class="moon-bite" />
+            <circle cx="0" cy="0" r="46" fill="#eef2f6" mask="url(#sc-moon-cut)" />
           </g>
           <g class="cloud c1" fill="var(--sc-cloud)">
             <ellipse cx="120" cy="150" rx="70" ry="26" />
@@ -1248,6 +1263,20 @@
         var clamp01 = function (v) {
           return v < 0 ? 0 : v > 1 ? 1 : v;
         };
+        // Read from the palette so the cap lives next to the colours it has to
+        // stay readable against, and re-read if the OS theme flips mid-page.
+        var root = document.documentElement;
+        function readNightMax() {
+          var v = parseFloat(getComputedStyle(root).getPropertyValue('--sc-night-max'));
+          return v > 0 ? v : 0.82;
+        }
+        var nightMax = readNightMax();
+        var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        var onTheme = function () {
+          nightMax = readNightMax();
+          render();
+        };
+        if (darkQuery.addEventListener) darkQuery.addEventListener('change', onTheme);
         // Sun and moon ride the same arc, offset in time: the sun is most of
         // the way across before the moon clears the horizon, so the two share
         // the sky briefly at dusk rather than swapping in one frame.
@@ -1280,7 +1309,7 @@
           // Kept to the left half of its arc: further along and the footer's
           // cards sit in front of it.
           ride(moon, 0.04 + clamp01((progress - 0.4) / 0.6) * 0.24, dark);
-          if (night) night.style.opacity = String(dark * 0.82);
+          if (night) night.style.opacity = String(dark * nightMax);
           if (stars) stars.style.opacity = String(clamp01((progress - 0.42) / 0.33));
         }
         function render() {
