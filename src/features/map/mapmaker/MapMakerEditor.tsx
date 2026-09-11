@@ -5,6 +5,11 @@ import {
   sharpestScaleDenom,
   zoomForGroundSpan,
 } from '@core/mapmaker/cameraFit';
+import { pointsOnPage, tracksOnPage } from '@core/mapmaker/contentSelection';
+import { formatDistance } from '@core/format';
+import { categoryColor } from '@core/library/categories';
+import { useLibraryStore } from '@state/libraryStore';
+import { ScrollView } from 'react-native';
 import {
   BOTTOM_STRIP_PT,
   coverageBbox,
@@ -26,7 +31,7 @@ import type { BoundingBox } from '@core/models';
 import { useSettingsStore } from '@state/settingsStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
-import { Button, ProgressBar, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, ProgressBar, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 import type { ComposePhase, MakeMapOptions } from './composeMapPdf';
 
 /**
@@ -47,6 +52,8 @@ import type { ComposePhase, MakeMapOptions } from './composeMapPdf';
  */
 
 export type MakeMapProgress = { phase: ComposePhase; frac: number };
+
+type DrawerTab = 'page' | 'layers' | 'draw';
 
 export interface EditorCamera {
   center: [number, number];
@@ -92,6 +99,15 @@ export function MapMakerEditor({
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
   const [style, setStyle] = useState<PrintStyleId>(DEFAULT_PRINT_STYLE);
   const [collapsed, setCollapsed] = useState(false);
+  const [tab, setTab] = useState<DrawerTab>('page');
+  // Explicit ids, seeded from the frame. Deliberately NOT re-evaluated as the
+  // map moves: a checkbox that unticks itself while you pan is worse than one
+  // that needs a tap to re-seed, and "Everything in the frame" is that tap.
+  const [pickedTracks, setPickedTracks] = useState<string[] | null>(null);
+  const [pickedWaypoints, setPickedWaypoints] = useState<string[] | null>(null);
+  const [contours, setContours] = useState(true);
+  const [slope, setSlope] = useState(false);
+  const [grid, setGrid] = useState(true);
   // Dated default, as before — the region's own name lands with the content
   // picker (resolveRegionName already exists; the map maker never called it).
   const [name, setName] = useState(() => `My map ${new Date().toISOString().slice(0, 10)}`);
@@ -161,6 +177,30 @@ export function MapMakerEditor({
 
   const overscaled = live !== null && softBelow !== null && live.scaleDenom < softBelow;
 
+  // --- what of the user's own data is on the page --------------------------
+  const libTracks = useLibraryStore((l) => l.tracks);
+  const libWaypoints = useLibraryStore((l) => l.waypoints);
+  const customCategories = useLibraryStore((l) => l.customCategories);
+  const units = useSettingsStore((st) => st.units);
+
+  const onPage = useMemo(() => {
+    if (!live) return { trackIds: [] as string[], waypointIds: [] as string[] };
+    return {
+      trackIds: tracksOnPage(
+        libTracks.map((t) => ({ id: t.id, bbox: t.stats.bbox })),
+        live.bbox,
+      ),
+      waypointIds: pointsOnPage(libWaypoints, live.bbox),
+    };
+  }, [live, libTracks, libWaypoints]);
+
+  // Until the user touches the picker, the selection IS whatever is in frame.
+  const selectedTracks = pickedTracks ?? onPage.trackIds;
+  const selectedWaypoints = pickedWaypoints ?? onPage.waypointIds;
+
+  const toggleId = (current: string[], id: string, set: (v: string[]) => void) =>
+    set(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+
   // Tapping a rung drives the camera to the zoom that shows its coverage.
   const goToScale = useCallback(
     (denom: number) => {
@@ -197,20 +237,34 @@ export function MapMakerEditor({
       name: name.trim() || 'My map',
       format: preset,
       basemap: s.drape,
-      contours: true,
+      contours,
       contourIntervalM,
-      slope: false,
+      slope,
       slopeMinDeg,
       slopeMaxDeg,
       slopeOpacity: 0.55,
-      includeUserData: true,
+      includeUserData: selectedTracks.length > 0 || selectedWaypoints.length > 0,
+      trackIds: selectedTracks,
+      waypointIds: selectedWaypoints,
       markedTrailsNetworks: [],
       markedTrailsOpacity: 0.85,
-      grid: true,
+      grid,
       compass: true,
       declinationDeg: null,
     };
-  }, [name, preset, style, contourIntervalM, slopeMinDeg, slopeMaxDeg]);
+  }, [
+    name,
+    preset,
+    style,
+    contourIntervalM,
+    slopeMinDeg,
+    slopeMaxDeg,
+    contours,
+    slope,
+    grid,
+    selectedTracks,
+    selectedWaypoints,
+  ]);
 
   // ---------------------------------------------------------------- compose
   if (progress) {
@@ -241,6 +295,28 @@ export function MapMakerEditor({
   const scrim = theme.dark ? 'rgba(4,6,3,0.62)' : 'rgba(30,27,20,0.55)';
   const surface = theme.colors.elevation?.level2 ?? theme.colors.surface;
   const activeScale = live ? live.scaleDenom : 0;
+
+  const groupStyle = { color: theme.colors.onSurfaceVariant, marginTop: 6 };
+
+  const toggleRow = (
+    label: string,
+    sub: string | null,
+    value: boolean,
+    onChange: (v: boolean) => void,
+    key: string,
+  ) => (
+    <View style={styles.toggleRow} key={key}>
+      <View style={styles.toggleText}>
+        <Text variant="bodySmall">{label}</Text>
+        {sub ? (
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      <Switch testID={`make-map-toggle-${key}`} value={value} onValueChange={onChange} />
+    </View>
+  );
 
   const chip = (
     label: string,
@@ -393,86 +469,228 @@ export function MapMakerEditor({
             <View style={[styles.grab, { backgroundColor: theme.colors.outline }]} />
           </Pressable>
 
-          <TextInput
-            mode="outlined"
-            dense
-            label="Map name"
-            defaultValue={name}
-            onChangeText={setName}
-            placeholder="My map"
-            // #235 — Return is the only iOS way out of this field.
-            returnKeyType="done"
-            blurOnSubmit
-            onSubmitEditing={() => Keyboard.dismiss()}
-            style={styles.name}
-          />
-
-          <Text
-            variant="labelSmall"
-            style={[styles.groupLabel, { color: theme.colors.onSurfaceVariant }]}
-          >
-            Scale — pinch the map to go between rungs
-          </Text>
-          <View style={styles.chipRow}>
-            {SCALE_LADDER.map((d) => {
-              const cov = coverageMeters(geometry, d);
-              const active = activeScale > 0 && Math.abs(Math.log(activeScale / d)) < 0.06;
-              return chip(
-                `1:${d / 1000}k`,
-                fmtCoverage(cov.widthM, cov.heightM),
-                active,
-                () => goToScale(d),
-                `s${d}`,
-              );
-            })}
+          <View style={styles.tabs}>
+            {(
+              [
+                ['page', 'Page & scale'],
+                ['layers', 'Layers & style'],
+                ['draw', 'What to draw'],
+              ] as const
+            ).map(([id, label]) => (
+              <Pressable
+                key={id}
+                testID={`make-map-tab-${id}`}
+                onPress={() => setTab(id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === id }}
+                style={[
+                  styles.tab,
+                  tab === id && { backgroundColor: theme.colors.primaryContainer },
+                ]}
+              >
+                <Text
+                  variant="labelSmall"
+                  style={{
+                    color:
+                      tab === id ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
-          <Text
-            variant="labelSmall"
-            style={[styles.groupLabel, { color: theme.colors.onSurfaceVariant }]}
+          <ScrollView
+            style={styles.panelScroll}
+            contentContainerStyle={styles.panelBody}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
-            Page
-          </Text>
-          <View style={styles.chipRow}>
-            {chip('A4', null, preset === 'a4', () => setPreset('a4'), 'a4')}
-            {chip('Letter', null, preset === 'letter', () => setPreset('letter'), 'lt')}
-            {chip(
-              'Portrait',
-              null,
-              orientation === 'portrait',
-              () => setOrientation('portrait'),
-              'po',
+            {tab === 'page' && (
+              <>
+                <TextInput
+                  mode="outlined"
+                  dense
+                  label="Map name"
+                  defaultValue={name}
+                  onChangeText={setName}
+                  placeholder="My map"
+                  // #235 — Return is the only iOS way out of this field.
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  style={styles.name}
+                />
+                <Text variant="labelSmall" style={groupStyle}>
+                  Scale — pinch the map to go between rungs
+                </Text>
+                <View style={styles.chipRow}>
+                  {SCALE_LADDER.map((d) => {
+                    const cov = coverageMeters(geometry, d);
+                    const active = activeScale > 0 && Math.abs(Math.log(activeScale / d)) < 0.06;
+                    return chip(
+                      `1:${d / 1000}k`,
+                      fmtCoverage(cov.widthM, cov.heightM),
+                      active,
+                      () => goToScale(d),
+                      `s${d}`,
+                    );
+                  })}
+                </View>
+                <Text variant="labelSmall" style={groupStyle}>
+                  Page
+                </Text>
+                <View style={styles.chipRow}>
+                  {chip('A4', null, preset === 'a4', () => setPreset('a4'), 'a4')}
+                  {chip('Letter', null, preset === 'letter', () => setPreset('letter'), 'lt')}
+                  {chip(
+                    'Portrait',
+                    null,
+                    orientation === 'portrait',
+                    () => setOrientation('portrait'),
+                    'po',
+                  )}
+                  {chip(
+                    'Landscape',
+                    null,
+                    orientation === 'landscape',
+                    () => setOrientation('landscape'),
+                    'la',
+                  )}
+                </View>
+              </>
             )}
-            {chip(
-              'Landscape',
-              null,
-              orientation === 'landscape',
-              () => setOrientation('landscape'),
-              'la',
-            )}
-          </View>
 
-          <Text
-            variant="labelSmall"
-            style={[styles.groupLabel, { color: theme.colors.onSurfaceVariant }]}
-          >
-            Style — what you see is what prints
-          </Text>
-          <View style={styles.chipRow}>
-            {PRINT_STYLES.map((s) =>
-              chip(s.label, null, style === s.id, () => setStyle(s.id), s.id),
+            {tab === 'layers' && (
+              <>
+                <Text variant="labelSmall" style={groupStyle}>
+                  Style — what you see is what prints
+                </Text>
+                <View style={styles.chipRow}>
+                  {PRINT_STYLES.map((st) =>
+                    chip(st.label, null, style === st.id, () => setStyle(st.id), st.id),
+                  )}
+                </View>
+                {overscaled && softBelow !== null ? (
+                  <Text
+                    variant="labelSmall"
+                    testID="make-map-detail-limit"
+                    style={[styles.limitNote, { color: theme.colors.onSurfaceVariant }]}
+                  >
+                    {printStyleById(style).label} has no more detail past {fmtScale(softBelow)} —
+                    the sheet is enlarging the tiles it has.
+                  </Text>
+                ) : null}
+                <Text variant="labelSmall" style={groupStyle}>
+                  Overlays
+                </Text>
+                {toggleRow(
+                  'Contour lines',
+                  `Every ${contourIntervalM} m`,
+                  contours,
+                  setContours,
+                  'contours',
+                )}
+                {toggleRow(
+                  'Steep ground',
+                  `Shaded from ${slopeMinDeg}° to ${slopeMaxDeg}°`,
+                  slope,
+                  setSlope,
+                  'slope',
+                )}
+                {toggleRow(
+                  'Coordinate grid',
+                  'Lat/long, labelled in the margin',
+                  grid,
+                  setGrid,
+                  'grid',
+                )}
+              </>
             )}
-          </View>
-          {overscaled && softBelow !== null ? (
-            <Text
-              variant="labelSmall"
-              testID="make-map-detail-limit"
-              style={[styles.limitNote, { color: theme.colors.onSurfaceVariant }]}
-            >
-              {printStyleById(style).label} has no more detail past {fmtScale(softBelow)} — the
-              sheet is enlarging the tiles it has.
-            </Text>
-          ) : null}
+
+            {tab === 'draw' && (
+              <>
+                <View style={styles.chipRow}>
+                  {chip(
+                    'Everything in the frame',
+                    `${onPage.trackIds.length} trails · ${onPage.waypointIds.length} points`,
+                    false,
+                    () => {
+                      setPickedTracks(onPage.trackIds);
+                      setPickedWaypoints(onPage.waypointIds);
+                    },
+                    'pickall',
+                  )}
+                  {chip(
+                    'None',
+                    null,
+                    false,
+                    () => {
+                      setPickedTracks([]);
+                      setPickedWaypoints([]);
+                    },
+                    'picknone',
+                  )}
+                </View>
+
+                {libTracks.length === 0 ? (
+                  <Text variant="bodySmall" style={groupStyle}>
+                    No saved trails yet — record or import a GPX and it can go on the sheet.
+                  </Text>
+                ) : (
+                  libTracks.map((t) => {
+                    const here = onPage.trackIds.includes(t.id);
+                    const on = selectedTracks.includes(t.id);
+                    return (
+                      <Pressable
+                        key={t.id}
+                        testID={`make-map-track-${t.id}`}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: on }}
+                        onPress={() => toggleId(selectedTracks, t.id, setPickedTracks)}
+                        style={styles.pickRow}
+                      >
+                        <View
+                          style={[
+                            styles.box,
+                            {
+                              borderColor: on ? theme.colors.primary : theme.colors.outline,
+                              backgroundColor: on ? theme.colors.primary : 'transparent',
+                            },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.swatch,
+                            {
+                              backgroundColor:
+                                categoryColor(t.category, customCategories) ?? theme.colors.outline,
+                            },
+                          ]}
+                        />
+                        <Text variant="bodySmall" numberOfLines={1} style={styles.pickName}>
+                          {t.name}
+                        </Text>
+                        <Text variant="labelSmall" style={styles.pickMeta}>
+                          {formatDistance(t.stats.distanceM, units)}
+                          {here ? '' : ' · off page'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                )}
+
+                {toggleRow(
+                  'Waypoints',
+                  `${selectedWaypoints.length} of ${libWaypoints.length} on this page`,
+                  selectedWaypoints.length > 0,
+                  (v) => setPickedWaypoints(v ? onPage.waypointIds : []),
+                  'waypoints',
+                )}
+              </>
+            )}
+          </ScrollView>
 
           <View style={styles.actions}>
             <Button
@@ -589,6 +807,23 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 5 },
   chipSub: { opacity: 0.75, fontSize: 9.5 },
+  tabs: { flexDirection: 'row', gap: 4, marginBottom: 4 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: 999 },
+  panelScroll: { maxHeight: 220 },
+  panelBody: { gap: 4, paddingBottom: 4 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+    gap: 10,
+  },
+  toggleText: { flex: 1 },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  box: { width: 16, height: 16, borderRadius: 3, borderWidth: 1.5 },
+  swatch: { width: 10, height: 10, borderRadius: 2 },
+  pickName: { flex: 1 },
+  pickMeta: { opacity: 0.7 },
   limitNote: { opacity: 0.85, marginTop: 2 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
   actionBtn: { minWidth: 110 },
