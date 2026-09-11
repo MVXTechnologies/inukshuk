@@ -1,3 +1,5 @@
+import { WAYPOINT_ICONS } from '@core/library/waypointIcons';
+import type { WaypointIcon } from '@core/models';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -174,5 +176,79 @@ describe('waypoint persistence failure feedback', () => {
       fireEvent.press(dones[dones.length - 1]!);
     });
     expect(handlers.onSave).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * #350 — the pin icon picker. It is offered only where the choice can be
+ * stored: `onSetIcon` is omitted for a live recording waypoint, which becomes
+ * a distance-anchored trail note on stop and has nowhere to keep an icon.
+ */
+describe('WaypointEditorDialog icon picker (#350)', () => {
+  async function setupPicker(icon?: WaypointIcon) {
+    const onSetIcon = jest.fn();
+    await render(
+      <PaperProvider>
+        <WaypointEditorDialog
+          waypoint={{ label: 'Camp', ...(icon ? { icon } : {}) }}
+          name="Camp"
+          draft=""
+          onChangeName={jest.fn()}
+          onChangeDraft={jest.fn()}
+          onSave={jest.fn()}
+          onDelete={jest.fn()}
+          onSetPhoto={jest.fn()}
+          onSetIcon={onSetIcon}
+        />
+      </PaperProvider>,
+    );
+    return onSetIcon;
+  }
+
+  it('offers the default pin plus every catalogue icon, each named for a screen reader', async () => {
+    await setupPicker();
+    expect(await screen.findByLabelText('Default pin')).toBeOnTheScreen();
+    for (const spec of WAYPOINT_ICONS) {
+      expect(screen.getByLabelText(spec.label)).toBeOnTheScreen();
+    }
+  });
+
+  it('checks the waypoint’s current icon, and only that one', async () => {
+    await setupPicker('camp');
+    const checked = WAYPOINT_ICONS.filter(
+      (spec) => screen.getByLabelText(spec.label).props.accessibilityState?.checked === true,
+    );
+    expect(checked.map((spec) => spec.id)).toEqual(['camp']);
+    expect(screen.getByLabelText('Default pin').props.accessibilityState?.checked).toBe(false);
+  });
+
+  it('checks the default pin when the waypoint has no icon', async () => {
+    await setupPicker();
+    expect((await screen.findByLabelText('Default pin')).props.accessibilityState?.checked).toBe(
+      true,
+    );
+  });
+
+  it('reports a chosen icon up to the caller', async () => {
+    const onSetIcon = await setupPicker();
+    fireEvent.press(await screen.findByLabelText('Summit'));
+    expect(onSetIcon).toHaveBeenCalledWith('summit');
+  });
+
+  it('reports going back to the default pin as no icon at all', async () => {
+    const onSetIcon = await setupPicker('camp');
+    fireEvent.press(await screen.findByLabelText('Default pin'));
+    expect(onSetIcon).toHaveBeenCalledWith(undefined);
+  });
+
+  it('names the current choice in writing, for everyone who cannot read the glyph', async () => {
+    await setupPicker('ford');
+    expect(await screen.findByText('Ford')).toBeOnTheScreen();
+  });
+
+  it('is absent for a live recording waypoint, whose icon could not be kept', async () => {
+    await setup();
+    expect(screen.queryByLabelText('Default pin')).toBeNull();
+    expect(screen.queryByLabelText('Camp')).toBeNull();
   });
 });

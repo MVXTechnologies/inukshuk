@@ -1,5 +1,5 @@
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import type { TrackSummary, Waypoint } from '@core/models';
+import type { TrackSummary, Waypoint, WaypointIcon } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import {
   formatDistance,
@@ -53,6 +53,7 @@ import {
   renderStatusLine,
 } from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
+import { waypointIconGlyph } from '@core/library/waypointIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
@@ -340,6 +341,11 @@ export function LibraryScreen() {
   const deleteWaypointFromEditor = () => {
     if (editWpId) removeWaypoint(editWpId);
     setEditWpId(null);
+  };
+  const setWaypointIcon = (icon: WaypointIcon | undefined) => {
+    // Applied straight away, like the photo: the row behind the dialog redraws
+    // with the new mark, which is the whole point of choosing one.
+    if (editWpId) updateWaypoint(editWpId, { icon: icon ?? null });
   };
   const setWaypointPhoto = (uri: string) => {
     if (editWpId) updateWaypoint(editWpId, { photoUri: uri });
@@ -962,7 +968,11 @@ export function LibraryScreen() {
             onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
             accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
           >
-            <Icon source="map-marker" size={22} color={theme.colors.onSurfaceVariant} />
+            <Icon
+              source={waypointIconGlyph(w.icon) ?? 'map-marker'}
+              size={22}
+              color={theme.colors.onSurfaceVariant}
+            />
             <View style={styles.mapTitleCol}>
               <Text variant="titleSmall" numberOfLines={1}>
                 {w.label}
@@ -1365,6 +1375,7 @@ export function LibraryScreen() {
         onSave={saveWaypoint}
         onDelete={deleteWaypointFromEditor}
         onSetPhoto={setWaypointPhoto}
+        onSetIcon={setWaypointIcon}
       />
 
       {/* Trail filter panel (appbar filter icon). Stays mounted so its draft

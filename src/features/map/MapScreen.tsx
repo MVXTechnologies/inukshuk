@@ -26,7 +26,7 @@ import {
   resolveModelWmsLayer,
   weatherModelById,
 } from '@core/weather/weatherModels';
-import type { BoundingBox, LatLng, LngLat, TrackPoint } from '@core/models';
+import type { BoundingBox, LatLng, LngLat, TrackPoint, WaypointIcon } from '@core/models';
 import { resolveEffectiveModel } from '@core/weather/modelCoverage';
 import { WEATHER_DRAPE_OPACITY } from '@core/weather/weatherLook';
 import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
@@ -1084,7 +1084,11 @@ export function MapScreen() {
   // being composed (#232). Only `label`/`photoUri` are read by the dialog.
   const editWaypoint =
     newWp !== null
-      ? { label: wpName, ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}) }
+      ? {
+          label: wpName,
+          ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}),
+          ...(newWp.icon ? { icon: newWp.icon } : {}),
+        }
       : findWp(editWp);
   const viewWaypoint = findWp(viewWp);
 
@@ -1094,10 +1098,11 @@ export function MapScreen() {
       // field was prefilled with), then fold in whatever the form collected.
       const id = addSavedWaypoint(newWp.latitude, newWp.longitude, wpName);
       const note = wpDraft.trim();
-      if (note !== '' || newWp.photoUri) {
+      if (note !== '' || newWp.photoUri || newWp.icon) {
         updateSavedWaypoint(id, {
           ...(note !== '' ? { note } : {}),
           ...(newWp.photoUri ? { photoUri: newWp.photoUri } : {}),
+          ...(newWp.icon ? { icon: newWp.icon } : {}),
         });
       }
       setNewWp(null);
@@ -1128,6 +1133,23 @@ export function MapScreen() {
     }
     setEditWp(null);
   };
+  /**
+   * Pick the pin icon (#350). Applied immediately for a saved waypoint — the
+   * pin under the dialog redraws with the new mark — and held on the draft for
+   * one that does not exist yet, which Done then creates with it.
+   *
+   * Only offered for standalone waypoints: a live recording waypoint becomes a
+   * distance-anchored trail note on stop, and a note has no icon.
+   */
+  const setWaypointIcon = (icon: WaypointIcon | undefined) => {
+    if (newWp) {
+      const { icon: _previous, ...rest } = newWp;
+      setNewWp(icon ? { ...rest, icon } : rest);
+      return;
+    }
+    if (editWp?.source === 'saved') updateSavedWaypoint(editWp.id, { icon: icon ?? null });
+  };
+
   const setWaypointPhoto = (uri: string) => {
     if (newWp) {
       // '' removes: drop the field (#306 — spreading kept it for Done to save)
@@ -1903,6 +1925,7 @@ export function MapScreen() {
               anchor="bottom"
             >
               <WaypointMarkerPin
+                icon={w.source === 'saved' ? w.icon : undefined}
                 hasPhoto={!!w.photoUri}
                 label={w.label}
                 selected={viewWp?.id === w.id && viewWp.source === w.source}
@@ -2449,6 +2472,9 @@ export function MapScreen() {
         onSave={saveWaypoint}
         onDelete={deleteWaypoint}
         onSetPhoto={setWaypointPhoto}
+        // Live recording pins take no icon (they end up as trail notes), so
+        // the picker is simply not part of their editor.
+        onSetIcon={editWp?.source === 'live' ? undefined : setWaypointIcon}
       />
 
       <Snackbar
