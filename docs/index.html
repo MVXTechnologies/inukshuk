@@ -21,7 +21,7 @@
     <link rel="alternate" hreflang="x-default" href="https://inukshuk.mvxtechnologies.com/" />
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: light;
         /* Palette sampled from the app logo + Material theme. */
         --inukshuk: #2d3740; /* charcoal-navy — the stone figure */
         --foliage: #566b33; /* deepened sage — primary */
@@ -35,18 +35,16 @@
         --card-border: rgba(45, 55, 64, 0.12);
         --shadow: 0 1px 2px rgba(45, 55, 64, 0.06), 0 12px 32px rgba(45, 55, 64, 0.1);
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --foliage: #b6c98a;
-          --foliage-bright: #c9d89e;
-          --river: #8fc3e0;
-          --cream: #10140f;
-          --surface: #171c14;
-          --ink: #e9ece4;
-          --muted: #aab3a3;
-          --card-border: rgba(182, 201, 138, 0.16);
-          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px rgba(0, 0, 0, 0.45);
-        }
+      :root.is-night {
+        --foliage: #b6c98a;
+        --foliage-bright: #c9d89e;
+        --river: #8fc3e0;
+        --cream: #10140f;
+        --surface: #171c14;
+        --ink: #e9ece4;
+        --muted: #aab3a3;
+        --card-border: rgba(182, 201, 138, 0.16);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px rgba(0, 0, 0, 0.45);
       }
 
       * {
@@ -148,11 +146,10 @@
         color: #fff;
         box-shadow: var(--shadow);
       }
-      @media (prefers-color-scheme: dark) {
-        .btn-primary {
-          color: #1a230b;
-        }
+      :root.is-night .btn-primary {
+        color: #1a230b;
       }
+
       .btn-primary:hover {
         background: var(--foliage-bright);
       }
@@ -183,11 +180,10 @@
         margin: 1.2rem 0 0.4rem;
         color: var(--inukshuk);
       }
-      @media (prefers-color-scheme: dark) {
-        .hero h1 {
-          color: var(--ink);
-        }
+      :root.is-night .hero h1 {
+        color: var(--ink);
       }
+
       .hero .tagline {
         font-size: clamp(1.05rem, 2.6vw, 1.3rem);
         color: var(--muted);
@@ -234,11 +230,10 @@
         margin: 0 0 0.5rem;
         color: var(--inukshuk);
       }
-      @media (prefers-color-scheme: dark) {
-        section h2 {
-          color: var(--ink);
-        }
+      :root.is-night section h2 {
+        color: var(--ink);
       }
+
       section .sub {
         text-align: center;
         color: var(--muted);
@@ -342,11 +337,10 @@
         font-weight: 800;
         font-size: 0.95rem;
       }
-      @media (prefers-color-scheme: dark) {
-        .step::before {
-          color: #1a230b;
-        }
+      :root.is-night .step::before {
+        color: #1a230b;
       }
+
       .step h3 {
         margin: 0 0 0.25rem;
         font-size: 1.05rem;
@@ -552,11 +546,10 @@
         background: var(--foliage);
         color: #fff;
       }
-      @media (prefers-color-scheme: dark) {
-        .lang-switch a[aria-current='page'] {
-          color: #1a230b;
-        }
+      :root.is-night .lang-switch a[aria-current='page'] {
+        color: #1a230b;
       }
+
       /* ---- Trail scene (#262) ----
          A fixed pastel landscape behind the page, in the icon's palette. Layers
          drift at different rates on scroll and a small inukshuk walks the trail
@@ -576,28 +569,44 @@
         --sc-trail: rgba(45, 55, 64, 0.38);
         --sc-figure: #2d3740;
         --sc-opacity: 0.9;
-        /* How far the night wash may go. Light mode keeps dark body text on
-           the darkened sky, so it stops at dusk; dark mode has light text and
-           can go all the way. */
-        --sc-night-max: 0.5;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --sc-sky-top: #24354a;
-          --sc-sky-bottom: #2d3c45;
-          --sc-sun: #e8b563;
-          --sc-cloud: rgba(188, 208, 234, 0.2);
-          --sc-far: #1f2a2c;
-          --sc-cap: #2b3a3c;
-          --sc-mid: #22301f;
-          --sc-near: #2a3b26;
-          --sc-pine: #34482e;
-          --sc-river: #274554;
-          --sc-river-2: #2f5566;
-          --sc-trail: rgba(233, 236, 228, 0.3);
-          --sc-figure: #e9ece4;
-          --sc-opacity: 0.85;
-          --sc-night-max: 0.82;
+      /* Night falls once, at dusk, rather than crossfading the whole way down:
+         a page that spent several hundred pixels of scroll half-way between
+         the two palettes would be mid-grey text on a mid-grey ground. Buttons
+         and links are left to snap so their hover stays instant. */
+      body,
+      nav,
+      footer,
+      .card,
+      .idea,
+      .step,
+      .pill,
+      .sub,
+      .tagline,
+      h1,
+      h2,
+      h3,
+      p {
+        transition:
+          background-color 0.55s ease,
+          border-color 0.55s ease,
+          color 0.55s ease;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        body,
+        nav,
+        footer,
+        .card,
+        .idea,
+        .step,
+        .pill,
+        .sub,
+        .tagline,
+        h1,
+        h2,
+        h3,
+        p {
+          transition: none;
         }
       }
       body {
@@ -620,7 +629,47 @@
       .scene .layer {
         will-change: transform;
       }
+      /* Where to get it. The Android half is a beta invite, not a store
+         listing, because Play has no public listing for the app yet. */
+      .stores {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        justify-content: center;
+        margin: 0.25rem 0 0.9rem;
+      }
+      .store {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.55rem 1rem;
+        border-radius: 12px;
+        border: 1px solid var(--card-border);
+        background: var(--surface);
+        color: var(--ink);
+        text-decoration: none;
+        line-height: 1.15;
+      }
+      .store:hover {
+        border-color: var(--foliage);
+      }
+      .store .glyph {
+        font-size: 1.35rem;
+        line-height: 1;
+      }
+      .store .lead {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }
+      .store .name {
+        display: block;
+        font-weight: 650;
+        font-size: 0.98rem;
+      }
       .scene .cloud {
+        opacity: var(--sc-cloud-opacity, 1);
         animation: sc-drift 90s linear infinite;
       }
       .scene .cloud.c2 {
@@ -871,6 +920,24 @@
             >💡 Suggest an idea</a
           >
         </div>
+        <div class="stores">
+          <a class="store" href="https://apps.apple.com/ca/app/inukshuk/id6797629589">
+            <span class="glyph" aria-hidden="true">📱</span>
+            <span>
+              <span class="lead">Download on the</span>
+              <span class="name">App Store</span>
+            </span>
+          </a>
+          <!-- Placeholder: replace with the Google Group that backs the Play
+               closed test once it exists. Play has no public listing yet. -->
+          <a class="store" href="https://groups.google.com/g/inukshuk-testers">
+            <span class="glyph" aria-hidden="true">🤖</span>
+            <span>
+              <span class="lead">Android — early access</span>
+              <span class="name">Join the beta</span>
+            </span>
+          </a>
+        </div>
         <p class="cta-note">Currently in alpha testing on Android. Built in the open.</p>
       </div>
     </header>
@@ -883,7 +950,7 @@
     >
       <div class="wrap">
         <h2>See it in the field</h2>
-        <p class="sub">Six screens from the app — nothing staged, nothing mocked up.</p>
+        <p class="sub">Six screens from the app, on trails around Québec.</p>
       </div>
       <div class="carousel">
         <button class="carousel-btn prev" type="button" aria-label="Previous screenshot">‹</button>
@@ -1004,10 +1071,10 @@
           </div>
           <div class="card">
             <div class="ico">⛰️</div>
-            <h3>Real 3D terrain</h3>
+            <h3>Find your view</h3>
             <p>
-              See the landscape around you in true 3D relief, with your trails and route draped over
-              the mountains.
+              Switch between maps, satellite imagery and topographic relief to explore the route
+              ahead.
             </p>
           </div>
           <div class="card">
@@ -1245,20 +1312,86 @@
         var clamp01 = function (v) {
           return v < 0 ? 0 : v > 1 ? 1 : v;
         };
-        // Read from the palette so the cap lives next to the colours it has to
-        // stay readable against, and re-read if the OS theme flips mid-page.
         var root = document.documentElement;
-        function readNightMax() {
-          var v = parseFloat(getComputedStyle(root).getPropertyValue('--sc-night-max'));
-          return v > 0 ? v : 0.82;
-        }
-        var nightMax = readNightMax();
-        var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        var onTheme = function () {
-          nightMax = readNightMax();
-          render();
+        // The scene's two palettes. Day is what the stylesheet holds for
+        // :root, so a page with no JS still gets the bright landscape. These
+        // are interpolated every frame, so the land darkens continuously —
+        // unlike the page's own chrome, which crossfades once at dusk.
+        var DAY = {
+          '--sc-sky-top': '#f6f1e6',
+          '--sc-sky-bottom': '#e6ecec',
+          '--sc-cloud': '#fbf9f4',
+          '--sc-far': '#cdd7dc',
+          '--sc-cap': '#f9f7f2',
+          '--sc-mid': '#c9d3aa',
+          '--sc-near': '#aebc8f',
+          '--sc-pine': '#8fa26e',
+          '--sc-river': '#a9cde2',
+          '--sc-river-2': '#8fc0da',
+          '--sc-trail': 'rgba(45, 55, 64, 0.38)',
         };
-        if (darkQuery.addEventListener) darkQuery.addEventListener('change', onTheme);
+        var NIGHT = {
+          '--sc-sky-top': '#101b2c',
+          '--sc-sky-bottom': '#17212c',
+          '--sc-cloud': '#2f4056',
+          '--sc-far': '#1f2a2c',
+          '--sc-cap': '#2b3a3c',
+          '--sc-mid': '#22301f',
+          '--sc-near': '#2a3b26',
+          '--sc-pine': '#34482e',
+          '--sc-river': '#274554',
+          '--sc-river-2': '#2f5566',
+          '--sc-trail': 'rgba(233, 236, 228, 0.30)',
+        };
+        function parseColor(c) {
+          if (c.charAt(0) === '#') {
+            return [
+              parseInt(c.substr(1, 2), 16),
+              parseInt(c.substr(3, 2), 16),
+              parseInt(c.substr(5, 2), 16),
+              1,
+            ];
+          }
+          var n = c.replace(/[^0-9.,]/g, '').split(',');
+          return [+n[0], +n[1], +n[2], n.length > 3 ? +n[3] : 1];
+        }
+        var KEYS = [];
+        var DAY_RGBA = {};
+        var NIGHT_RGBA = {};
+        for (var key in DAY) {
+          if (Object.prototype.hasOwnProperty.call(DAY, key)) {
+            KEYS.push(key);
+            DAY_RGBA[key] = parseColor(DAY[key]);
+            NIGHT_RGBA[key] = parseColor(NIGHT[key]);
+          }
+        }
+        function mix(a, b, t) {
+          var r = Math.round(a[0] + (b[0] - a[0]) * t);
+          var g = Math.round(a[1] + (b[1] - a[1]) * t);
+          var bl = Math.round(a[2] + (b[2] - a[2]) * t);
+          var al = a[3] + (b[3] - a[3]) * t;
+          if (al >= 1) return 'rgb(' + r + ', ' + g + ', ' + bl + ')';
+          return 'rgba(' + r + ', ' + g + ', ' + bl + ', ' + al.toFixed(3) + ')';
+        }
+        function paintScene(dark) {
+          for (var i = 0; i < KEYS.length; i++) {
+            var k = KEYS[i];
+            root.style.setProperty(k, mix(DAY_RGBA[k], NIGHT_RGBA[k], dark));
+          }
+          root.style.setProperty('--sc-opacity', (0.9 - dark * 0.05).toFixed(3));
+          // Clouds go with the daylight. Left up, a night-coloured cloud drifts
+          // across the moon and reads as a smudge on it.
+          root.style.setProperty('--sc-cloud-opacity', (1 - dark).toFixed(3));
+        }
+        // Hysteresis: without it, a scroll that rests on the threshold would
+        // strobe the whole page between its day and night palettes.
+        var isNight = false;
+        function setPageMode(dark) {
+          var next = isNight ? dark > 0.45 : dark > 0.6;
+          if (next === isNight) return;
+          isNight = next;
+          root.classList.toggle('is-night', isNight);
+        }
         // Sun and moon ride the same arc, offset in time: the sun is most of
         // the way across before the moon clears the horizon, so the two share
         // the sky briefly at dusk rather than swapping in one frame.
@@ -1291,7 +1424,11 @@
           // Kept to the left half of its arc: further along and the footer's
           // cards sit in front of it.
           ride(moon, 0.04 + clamp01((progress - 0.4) / 0.6) * 0.24, dark);
-          if (night) night.style.opacity = String(dark * nightMax);
+          paintScene(dark);
+          setPageMode(dark);
+          // The land already carries most of the nightfall; this only deepens
+          // the sky behind the stars.
+          if (night) night.style.opacity = String(dark * 0.35);
           if (stars) stars.style.opacity = String(clamp01((progress - 0.42) / 0.33));
         }
         function render() {
