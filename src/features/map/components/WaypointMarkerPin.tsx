@@ -1,9 +1,13 @@
+import type { WaypointIcon } from '@core/models';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { mapColors } from '@ui/theme';
 import { StyleSheet, View } from 'react-native';
-import { Icon } from 'react-native-paper';
 import { InukshukIcon } from './InukshukIcon';
+import { mciGlyph } from './waypointGlyph';
 
 interface Props {
+  /** Chosen pin icon (#350); absent = the inukshuk glyph. */
+  icon?: WaypointIcon;
   /** Whether the waypoint has a photo attached (shows a small camera badge). */
   hasPhoto?: boolean;
   /** Accessible name of the pin (the waypoint's label, e.g. "Waypoint 1"). */
@@ -13,15 +17,22 @@ interface Props {
 }
 
 /**
- * Live recording waypoint marker: an inukshuk glyph in a round badge with a
- * downward pointer whose tip sits on the dropped coordinate (anchor="bottom").
+ * Waypoint map marker: the waypoint's chosen icon — or the inukshuk glyph when
+ * it has none — in a round badge with a downward pointer whose tip sits on the
+ * dropped coordinate (anchor="bottom").
  *
  * The pin is visual-only (`pointerEvents="none"` — taps are hit-tested at the
  * map level, see MapScreen's onMapPress) but it still announces itself to the
  * accessibility tree: screen readers (and the e2e suite) can locate a pin by
  * its label even though the touch itself falls through to the map.
+ *
+ * **Plain `View`s and a bare `@expo/vector-icons` glyph, on purpose.** A Paper
+ * `Icon`/`Pressable` inside a MapLibre `<Marker>` stops the marker drawing at
+ * all on iOS (see the PDF-overlay pipeline notes) — whatever this badge grows
+ * next, it must stay out of react-native-paper.
  */
-export function WaypointMarkerPin({ hasPhoto, label, selected }: Props) {
+export function WaypointMarkerPin({ icon, hasPhoto, label, selected }: Props) {
+  const glyph = mciGlyph(icon);
   return (
     <View
       style={[styles.wrap, selected && styles.wrapSelected]}
@@ -31,10 +42,14 @@ export function WaypointMarkerPin({ hasPhoto, label, selected }: Props) {
       accessibilityState={selected !== undefined ? { selected } : undefined}
     >
       <View style={[styles.badge, selected && styles.badgeSelected]}>
-        <InukshukIcon size={20} color="#ffffff" />
+        {glyph === null ? (
+          <InukshukIcon size={20} color="#ffffff" />
+        ) : (
+          <MaterialCommunityIcons name={glyph} size={20} color="#ffffff" />
+        )}
         {hasPhoto && (
           <View style={styles.photoDot}>
-            <Icon source="camera" size={9} color="#ffffff" />
+            <MaterialCommunityIcons name="camera" size={9} color="#ffffff" />
           </View>
         )}
       </View>

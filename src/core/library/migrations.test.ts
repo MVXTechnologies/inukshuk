@@ -495,7 +495,8 @@ describe('migrateLibraryIndex', () => {
       maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], activePages: [0] }],
     };
     const index = migrateLibraryIndex(v7);
-    expect(index.schemaVersion).toBe(8);
+    // The ladder always walks all the way to the current version.
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
     expect(index.maps[0]?.georeferences[0]).toEqual(geoRef(0));
     expect('pageBox' in (index.maps[0]?.georeferences[0] ?? {})).toBe(false);
   });
@@ -672,6 +673,36 @@ describe('malformed nested library records', () => {
       { ...note, id: 'photo', photoUri: 'photos/photo.jpg' },
     ]);
     expect(index.waypoints[0]).not.toHaveProperty('photoUri');
+  });
+
+  it('upgrades a v8 index: waypoints keep drawing the default pin (#350)', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: 8,
+      waypoints: [{ id: 'w1', latitude: 46, longitude: -71, label: 'Waypoint 1', createdAt: 1 }],
+    });
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.waypoints[0]).not.toHaveProperty('icon');
+  });
+
+  it('carries a known waypoint icon through hydration (#350)', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      waypoints: [
+        { id: 'w1', latitude: 46, longitude: -71, label: 'Camp', createdAt: 1, icon: 'camp' },
+      ],
+    });
+    expect(index.waypoints[0]?.icon).toBe('camp');
+  });
+
+  it('drops an unknown or junk waypoint icon rather than asking for a glyph that does not exist (#350)', () => {
+    for (const icon of ['zipline', '', 'Camp', 42, null, {}, ['camp'], 'toString']) {
+      const index = migrateLibraryIndex({
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        waypoints: [{ id: 'w1', latitude: 46, longitude: -71, label: 'W', createdAt: 1, icon }],
+      });
+      expect(index.waypoints).toHaveLength(1);
+      expect(index.waypoints[0]).not.toHaveProperty('icon');
+    }
   });
 });
 

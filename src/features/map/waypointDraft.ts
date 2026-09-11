@@ -1,3 +1,4 @@
+import type { WaypointIcon } from '@core/models';
 import * as storage from '@data/storage';
 
 /**
@@ -12,6 +13,8 @@ export interface WaypointDraft {
   longitude: number;
   /** Absolute file:// uri of a photo already copied into app storage. */
   photoUri?: string;
+  /** Chosen pin icon (#350); absent = the default pin. Saved on Done. */
+  icon?: WaypointIcon;
 }
 
 function discard(uri: string | undefined): void {

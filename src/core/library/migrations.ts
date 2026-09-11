@@ -8,6 +8,7 @@ import type {
 } from '@core/models';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
+import { isWaypointIcon } from './waypointIcons';
 
 /**
  * Versioned migrations for Inukshuk's persisted JSON documents (`library.json`
@@ -22,7 +23,7 @@ import type { CustomCategory } from './categories';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 8;
+export const LIBRARY_SCHEMA_VERSION = 9;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -164,6 +165,18 @@ function normalizePhoto<T extends { photoUri?: unknown }>(raw: T) {
   return { ...rest, ...(typeof photoUri === 'string' && photoUri !== '' ? { photoUri } : {}) };
 }
 
+/**
+ * Normalize one persisted waypoint's optional nested fields (#350): a junk or
+ * unknown `icon` is DROPPED rather than carried, so the pin falls back to the
+ * default instead of asking the renderer for a glyph that does not exist. That
+ * also covers the downgrade case — an index written by a build whose catalogue
+ * has icons this one lacks loads fine, it just draws default pins.
+ */
+function normalizeWaypoint(raw: Waypoint): Waypoint {
+  const { icon, ...rest } = normalizePhoto(raw);
+  return { ...rest, ...(isWaypointIcon(icon) ? { icon } : {}) };
+}
+
 function normalizeNotes(raw: unknown): TrackNote[] {
   return asArray(raw)
     .filter(isRecord)
@@ -293,6 +306,11 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // `needsPageBoxReprocessing`), and the sanitize pass validates the field
   // wherever it is present.
   7: (doc) => ({ ...doc, schemaVersion: 8 }),
+  // v8 → v9: waypoints gained the optional pin `icon` (#350). Absent means the
+  // default inukshuk pin — exactly what every pre-v9 waypoint drew — so there
+  // is nothing to synthesize and nothing to lose; a pure version stamp. The
+  // sanitize pass below validates the field wherever it IS present.
+  8: (doc) => ({ ...doc, schemaVersion: 9 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -372,7 +390,7 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
     // drop such junk rather than let it reach the map's marker projection.
     waypoints: recordsWithId<Waypoint>(doc.waypoints)
       .filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude))
-      .map(normalizePhoto),
+      .map(normalizeWaypoint),
     // Keep only well-formed custom categories: junk entries would render as
     // broken chips, and a missing color would defeat the theme-safety gate.
     customCategories: recordsWithId<CustomCategory>(doc.customCategories).filter(

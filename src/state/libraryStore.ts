@@ -1,4 +1,12 @@
-import type { Folder, MapDocument, Track, TrackNote, TrackSummary, Waypoint } from '@core/models';
+import type {
+  Folder,
+  MapDocument,
+  Track,
+  TrackNote,
+  TrackSummary,
+  Waypoint,
+  WaypointIcon,
+} from '@core/models';
 import type { ImportedNote } from '@core/geo/track';
 import { toggleId } from '@core/library/toggleId';
 import type { CustomCategory } from '@core/library/categories';
@@ -151,8 +159,16 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    * omitted falls back to the next `Waypoint N`.
    */
   addWaypoint: (latitude: number, longitude: number, label?: string) => string;
-  /** Edit a waypoint's note text and/or photo (empty photoUri removes the photo). */
-  updateWaypoint: (id: string, patch: { note?: string; photoUri?: string }) => void;
+  /**
+   * Edit a waypoint's note text, photo and/or pin icon. An empty `photoUri`
+   * removes the photo; a `null` icon puts the waypoint back on the default
+   * pin (#350) — `undefined` means "leave this field alone", as everywhere
+   * else in this patch shape.
+   */
+  updateWaypoint: (
+    id: string,
+    patch: { note?: string; photoUri?: string; icon?: WaypointIcon | null },
+  ) => void;
   /**
    * Rename a waypoint (its `label` — the title shown on the pin, the Library
    * row, the drag ghost and the delete confirmation). Same guard as
@@ -733,6 +749,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           if (w.id !== id) return w;
           const updated: Waypoint = { ...w };
           if (patch.note !== undefined) updated.note = patch.note;
+          if (patch.icon !== undefined) {
+            if (patch.icon) updated.icon = patch.icon;
+            else delete updated.icon;
+          }
           if (patch.photoUri !== undefined) {
             if (patch.photoUri) updated.photoUri = patch.photoUri;
             else delete updated.photoUri;
