@@ -13,7 +13,7 @@ import {
   takeNextPrerender,
   type PrerenderJob,
 } from '@core/library/prerenderQueue';
-import { chooseRasterSource } from '@core/library/rasterSource';
+import { chooseRasterSource, emptyInlineReadReason } from '@core/library/rasterSource';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
@@ -81,16 +81,20 @@ export function usePrerenderOnImport(): void {
       const startedAt = Date.now();
       const render = (async (): Promise<string> => {
         const origin = await serverOrigin();
-        const choice = chooseRasterSource({
-          origin,
-          documentPath: storage.toDocumentPath(job.fileUri),
-          sizeBytes: storage.fileSizeAt(job.fileUri),
-        });
+        const documentPath = storage.toDocumentPath(job.fileUri);
+        const sizeBytes = storage.fileSizeAt(job.fileUri);
+        const choice = chooseRasterSource({ origin, documentPath, sizeBytes });
         if (choice.kind === 'unrenderable') throw new Error(choice.reason);
-        const source: RasterizeSource =
-          choice.kind === 'url'
-            ? { url: choice.url }
-            : { base64: await storage.readFileBase64(job.fileUri) };
+        let source: RasterizeSource;
+        if (choice.kind === 'url') {
+          source = { url: choice.url };
+        } else {
+          const base64 = await storage.readFileBase64(job.fileUri);
+          // Reported once and dropped like any preparation failure (#382).
+          const unreadable = emptyInlineReadReason(documentPath, base64, sizeBytes);
+          if (unreadable !== null) throw new Error(unreadable);
+          source = { base64 };
+        }
         // Same request the overlay hook would make, so the bytes on disk are
         // the same whichever of the two got there first.
         const nativeGeometry = nativePageGeometry(job.geo);

@@ -8,7 +8,13 @@ import {
 } from '@core/geo/pdfDetail';
 import { chooseFallbackDetails, unionOfBboxes } from '@core/geo/detailFallback';
 import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
-import { chooseRasterSource } from '@core/library/rasterSource';
+import { chooseRasterSource, emptyInlineReadReason } from '@core/library/rasterSource';
+import {
+  activeBackoff,
+  emptyBackoffLedger,
+  recordFailure,
+  recordSuccess,
+} from '@core/library/renderBackoff';
 import { overlayDetailStatusKey } from '@core/library/overlayStatus';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
@@ -18,7 +24,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { isPdfRenderCancellation, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
-import { usePdfRasterizer, usePdfRasterizerServer } from './PdfRasterizer';
+import { usePdfRasterizer, usePdfRasterizerServer, type RasterizeSource } from './PdfRasterizer';
 import type { PdfOverlay } from './usePdfOverlay';
 
 interface Detail extends PdfOverlay {
@@ -54,6 +60,8 @@ const HANDOFF_PIXELS = 18 * 1024 * 1024;
 const SETTLED_PIXELS = 12 * 1024 * 1024;
 const MAX_CACHE_FILES = 64;
 const overviewKey = (o: PdfOverlay) => JSON.stringify([o.id, o.imageUri, o.coordinates]);
+/** A page's file revision: a re-import or replacement starts its backoff over. */
+const pageRevision = (t: Target) => `${t.fileUri}@${t.revision}`;
 
 /** One in-flight refinement; later camera positions replace waiting work. */
 export function usePdfDetails(
@@ -75,6 +83,8 @@ export function usePdfDetails(
     serial: 0,
     pinned: new Set<string>(),
     paused: false,
+    // Pages whose last attempt failed without being quarantined (#382).
+    backoff: emptyBackoffLedger(),
   });
   const targets: Target[] = [];
   if (bounds) {
@@ -263,22 +273,46 @@ export function usePdfDetails(
               }
               if (!detail) {
                 const statusKey = overlayDetailStatusKey(target.parentId);
+                // A page whose last failure was not its own fault sits out a
+                // growing window instead of failing — and being reported —
+                // again on every pan and pinch (#382). Its status keeps the
+                // reason; nothing is attempted or reported until it expires.
+                const held = activeBackoff(
+                  w.backoff,
+                  target.parentId,
+                  pageRevision(target),
+                  Date.now(),
+                );
+                if (held) {
+                  if (!failed.has(statusKey) && !w.paused) {
+                    useOverlayStatusStore
+                      .getState()
+                      .setStatus(statusKey, { phase: 'failed', reason: held.reason });
+                  }
+                  failed.add(statusKey);
+                  continue;
+                }
                 attempted.add(statusKey);
                 if (!failed.has(statusKey)) {
                   useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendering' });
                 }
                 const origin = await serverOrigin();
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
-                const choice = chooseRasterSource({
-                  origin,
-                  documentPath: storage.toDocumentPath(target.fileUri),
-                  sizeBytes: storage.fileSizeAt(target.fileUri),
-                });
+                const documentPath = storage.toDocumentPath(target.fileUri);
+                const sizeBytes = storage.fileSizeAt(target.fileUri);
+                const choice = chooseRasterSource({ origin, documentPath, sizeBytes });
                 if (choice.kind === 'unrenderable') throw new Error(choice.reason);
-                const source =
-                  choice.kind === 'url'
-                    ? { url: choice.url }
-                    : { base64: await storage.readFileBase64(target.fileUri) };
+                let source: RasterizeSource;
+                if (choice.kind === 'url') {
+                  source = { url: choice.url };
+                } else {
+                  const base64 = await storage.readFileBase64(target.fileUri);
+                  // An empty read is a preparation failure, not an engine
+                  // that "did not start" (#382).
+                  const unreadable = emptyInlineReadReason(documentPath, base64, sizeBytes);
+                  if (unreadable !== null) throw new Error(unreadable);
+                  source = { base64 };
+                }
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
                 dispatched = true;
                 const result = await rasterize({
@@ -325,6 +359,7 @@ export function usePdfDetails(
                   bbox: target.bbox,
                 };
                 w.cache.set(target.key, detail);
+                w.backoff = recordSuccess(w.backoff, target.parentId);
               }
               // Touch LRU order. Cache stale completions, but never display them.
               w.cache.delete(target.key);
@@ -334,7 +369,27 @@ export function usePdfDetails(
               publish();
               prune(HANDOFF_PIXELS);
             } catch (error) {
-              reportError(error, 'pdf-detail-render');
+              const quarantine =
+                dispatched &&
+                !(error instanceof PdfRenderNotStartedError) &&
+                !isPdfRenderCancellation(error) &&
+                w.epoch === epoch &&
+                !w.paused;
+              let report = true;
+              if (!quarantine && !isPdfRenderCancellation(error)) {
+                // Not the page's fault, so not quarantined: back off instead,
+                // and report the same failure at most once per capped window.
+                const failure = recordFailure(
+                  w.backoff,
+                  target.parentId,
+                  pageRevision(target),
+                  error instanceof Error ? error.message : String(error),
+                  Date.now(),
+                );
+                w.backoff = failure.ledger;
+                report = failure.report;
+              }
+              if (report) reportError(error, 'pdf-detail-render');
               if (w.desired === snapshot && w.epoch === epoch && !w.paused) {
                 const statusKey = overlayDetailStatusKey(target.parentId);
                 if (!failed.has(statusKey)) {
@@ -345,13 +400,7 @@ export function usePdfDetails(
                 }
                 failed.add(statusKey);
               }
-              if (
-                dispatched &&
-                !(error instanceof PdfRenderNotStartedError) &&
-                !isPdfRenderCancellation(error) &&
-                w.epoch === epoch &&
-                !w.paused
-              ) {
+              if (quarantine) {
                 // A pan supersedes a tile, not the identity of its still-active
                 // page. Quarantine that page before another tile can dispatch.
                 w.desired = w.desired.filter(

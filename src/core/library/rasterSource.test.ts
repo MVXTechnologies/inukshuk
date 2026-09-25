@@ -1,4 +1,4 @@
-import { MAX_INLINE_PDF_BYTES, chooseRasterSource } from './rasterSource';
+import { MAX_INLINE_PDF_BYTES, chooseRasterSource, emptyInlineReadReason } from './rasterSource';
 
 const origin = 'http://127.0.0.1:5555';
 
@@ -61,5 +61,26 @@ describe('chooseRasterSource', () => {
         '50 MB PDF is too large to load without the in-app file server (limit 16 MB without it)',
       );
     }
+  });
+});
+
+describe('emptyInlineReadReason', () => {
+  it('is null when the read produced bytes', () => {
+    expect(emptyInlineReadReason('maps/abc.pdf', 'JVBERi0=', 5)).toBeNull();
+  });
+
+  it('names the app-owned map file and what the disk claimed', () => {
+    expect(emptyInlineReadReason('maps/3oNr-fPT_zqb.pdf', '', 1_234)).toBe(
+      'Could not read maps/3oNr-fPT_zqb.pdf for rendering (0 bytes read, 1234 B on disk)',
+    );
+  });
+
+  it('never echoes a path that could carry a user file name', () => {
+    expect(emptyInlineReadReason('file:///private/var/Mes cartes/Chic-Chocs.pdf', '', 0)).toBe(
+      'Could not read the PDF for rendering (0 bytes read)',
+    );
+    expect(emptyInlineReadReason('maps/../Chic-Chocs.pdf', '', Number.NaN)).toBe(
+      'Could not read the PDF for rendering (0 bytes read)',
+    );
   });
 });

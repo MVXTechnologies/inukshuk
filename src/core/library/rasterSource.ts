@@ -63,3 +63,26 @@ export function chooseRasterSource({
       `(limit ${MAX_INLINE_PDF_BYTES / (1024 * 1024)} MB without it)`,
   };
 }
+
+/**
+ * The preparation failure for an inline read that came back empty, or `null`
+ * when the read produced bytes (#382).
+ *
+ * `rasterize` refuses an empty base64 source with a "not started" error, which
+ * callers rightly treat as transient — so an unreadable file used to be
+ * retried, and reported, on every pan. Raising this BEFORE the request is
+ * made classifies it as what it is: the source could not be prepared.
+ *
+ * The message names the document path only when it is the app's own
+ * `maps/<id>.pdf` form, never a user-chosen file name.
+ */
+export function emptyInlineReadReason(
+  documentPath: string,
+  base64: string,
+  sizeBytes: number,
+): string | null {
+  if (base64.length > 0) return null;
+  const file = /^maps\/[\w-]+\.pdf$/.test(documentPath) ? documentPath : 'the PDF';
+  const onDisk = Number.isFinite(sizeBytes) && sizeBytes > 0 ? `, ${sizeBytes} B on disk` : '';
+  return `Could not read ${file} for rendering (0 bytes read${onDisk})`;
+}
