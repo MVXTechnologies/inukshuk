@@ -52,18 +52,22 @@ export default function RootLayout() {
   }, [hydrateLibrary, hydrateSettings, hydrateStrava]);
 
   // A launch hydration that fails (an I/O error — a corrupt file hydrates
-  // empty instead) leaves the library refusing every write for the rest of
-  // the process. Try again whenever the app comes back to the foreground;
-  // the store is a no-op once hydrated, and recording's Stop retries too.
+  // empty instead) leaves the library refusing every write, and settings
+  // holding every change in memory, for the rest of the process. Try again
+  // whenever the app comes back to the foreground; recording's Stop retries
+  // the library too.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       if (!useLibraryStore.getState().hydrated) {
         hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
       }
+      if (!useSettingsStore.getState().hydrated) {
+        hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
+      }
     });
     return () => subscription.remove();
-  }, [hydrateLibrary]);
+  }, [hydrateLibrary, hydrateSettings]);
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
   // (redirectSystemPath), which intercepts the URI before expo-router routes it.

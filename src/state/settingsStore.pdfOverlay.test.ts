@@ -10,6 +10,12 @@ jest.mock('@data/storage', () => ({
   readJson: async () => mockSaved,
 }));
 
+// Writes are held until settings.json has been read (see
+// settingsStore.hydration.test.ts); these cases are about a loaded store.
+beforeAll(async () => {
+  await useSettingsStore.getState().hydrate();
+});
+
 beforeEach(() => {
   mockSaved = null;
   useSettingsStore.getState().reset();

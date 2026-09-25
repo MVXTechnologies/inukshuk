@@ -226,6 +226,25 @@ function persist(s: Settings): void {
   storage.writeJson(SETTINGS_FILE, { schemaVersion: SETTINGS_SCHEMA_VERSION, ...s });
 }
 
+/**
+ * Keys written before hydration, waiting to be laid over what is on disk.
+ *
+ * Until settings.json has been read, the store holds DEFAULTS, and `set`
+ * persists the WHOLE snapshot — so one early write used to overwrite every
+ * saved setting with its default, the error-reporting opt-out included. The
+ * guard lived in one caller (useLocation); now it lives here. Early writes
+ * are not refused: every caller is a user gesture (a switch, a sort pick)
+ * whose new value is already on screen, and dropping it would make the
+ * control snap back for no visible reason. They are applied in memory and
+ * remembered by key; `hydrate` keeps them over the file's values — they are
+ * the user's newest word for those keys, and only those — and writes once.
+ */
+const pendingWrites = new Set<keyof Settings>();
+
+// Single-flight, like the library's: a foreground retry that races the
+// launch read must not land a second, older snapshot over the first.
+let hydration: Promise<void> | null = null;
+
 /** Pick just the persisted Settings fields out of the full store state. */
 function snapshot(s: SettingsState): Settings {
   const {
@@ -302,32 +321,48 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   hydrated: false,
 
-  hydrate: async () => {
-    const saved = await storage.readJson<unknown>(SETTINGS_FILE);
-    // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
-    // fields and wrong-typed values are dropped instead of crashing hydration.
-    const next = migrateSettings(saved, DEFAULTS);
-    // migrateSettings only checks `typeof` against the default; with a `null`
-    // default any object-typed junk would slip through — deep-validate here.
-    next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
-    next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
-    next.marineLayers = sanitizeMarineLayers(next.marineLayers);
-    next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
-    // weatherLayer's default is null (typeof 'object'), so the migration
-    // ladder's typeof check DROPS a valid persisted string id (and would pass
-    // object junk through). Recover the raw value and deep-validate it.
-    next.weatherLayer = sanitizeWeatherLayer(
-      typeof saved === 'object' && saved !== null
-        ? (saved as { weatherLayer?: unknown }).weatherLayer
-        : null,
-    );
-    // weatherModel's default is a string, so the ladder keeps any string —
-    // including junk ids from older builds. Deep-validate to the catalog.
-    next.weatherModel = sanitizeWeatherModel(next.weatherModel);
-    // Same story for the Library sort: the ladder keeps any string, so a key
-    // retired by a later build would survive as an unmatched switch case.
-    if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
-    set({ ...next, hydrated: true });
+  hydrate: () => {
+    hydration ??= (async () => {
+      const saved = await storage.readJson<unknown>(SETTINGS_FILE);
+      // Migration ladder: legacy unversioned files merge over DEFAULTS; junk
+      // fields and wrong-typed values are dropped instead of crashing hydration.
+      const next = migrateSettings(saved, DEFAULTS);
+      // migrateSettings only checks `typeof` against the default; with a `null`
+      // default any object-typed junk would slip through — deep-validate here.
+      next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
+      next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
+      next.marineLayers = sanitizeMarineLayers(next.marineLayers);
+      next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
+      // weatherLayer's default is null (typeof 'object'), so the migration
+      // ladder's typeof check DROPS a valid persisted string id (and would pass
+      // object junk through). Recover the raw value and deep-validate it.
+      next.weatherLayer = sanitizeWeatherLayer(
+        typeof saved === 'object' && saved !== null
+          ? (saved as { weatherLayer?: unknown }).weatherLayer
+          : null,
+      );
+      // weatherModel's default is a string, so the ladder keeps any string —
+      // including junk ids from older builds. Deep-validate to the catalog.
+      next.weatherModel = sanitizeWeatherModel(next.weatherModel);
+      // Same story for the Library sort: the ladder keeps any string, so a key
+      // retired by a later build would survive as an unmatched switch case.
+      if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
+      // Writes that landed before the file was read win for their own keys.
+      const current = get();
+      const early: Partial<Settings> = {};
+      for (const key of pendingWrites) Object.assign(early, { [key]: current[key] });
+      set({ ...next, ...early, hydrated: true });
+      if (pendingWrites.size > 0) {
+        pendingWrites.clear();
+        // One write for all of them. Should it fail, the store is hydrated and
+        // the values are in memory, so the next `set` writes them again; the
+        // error reaches hydrate()'s caller, which reports it.
+        persist(snapshot(get()));
+      }
+    })().finally(() => {
+      hydration = null;
+    });
+    return hydration;
   },
 
   set: (key, value) => {
@@ -337,12 +372,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // holds is common — bail before paying for it.
     if (Object.is(get()[key], value)) return;
     set({ [key]: value } as Pick<Settings, typeof key>);
+    if (!get().hydrated) {
+      // Not read yet: never write DEFAULTS over the file (see pendingWrites).
+      pendingWrites.add(key);
+      return;
+    }
     const next = snapshot(get());
     persist(next);
   },
 
   reset: () => {
     set({ ...DEFAULTS });
+    if (!get().hydrated) {
+      for (const key of Object.keys(DEFAULTS) as (keyof Settings)[]) pendingWrites.add(key);
+      return;
+    }
     persist(DEFAULTS);
   },
 }));
