@@ -66,7 +66,9 @@ ready-made listing copy in `store/appstore/` and the screenshot sets in
 4. Add the JSON contents as the GitHub secret **`GOOGLE_SERVICE_ACCOUNT_JSON`**.
 5. The first upload to a new Play app must be done manually once (Google
    requires the initial APK/AAB through the console); subsequent submissions go
-   through `eas submit` to the `production` track (configured in `eas.json`).
+   through `eas submit` to the `internal` testing track (configured in
+   `eas.json`). Promotion to production is a manual Play Console step — see
+   _Releasing_ below.
 
 EAS manages the Android upload keystore for you.
 
@@ -110,9 +112,21 @@ git push --follow-tags
 `release.yml` then:
 
 1. builds production binaries on EAS for both platforms, and
-2. auto-submits them — iOS to TestFlight/App Store review, Android to the
-   Play `production` track with `releaseStatus: completed`. This is a public
-   release, subject to Google Play review; it is not an internal draft.
+2. auto-submits them — iOS to TestFlight, Android to the Play **internal
+   testing** track with `releaseStatus: completed` (rolled out to internal
+   testers at once; valid for the internal track).
+
+Neither store goes public on its own. The binary reaches real users only
+when you promote it:
+
+- **Android:** Play Console → _Test and release_ → _Internal testing_ →
+  the release → **Promote release** → _Closed testing_ (the beta) or
+  _Production_ (or a staged rollout). Submitting straight to `production`
+  made every tag a public release, with no chance to install the signed store
+  build first; the internal track is that chance — testers get it within
+  minutes.
+- **iOS:** App Store Connect → the version → select the TestFlight build →
+  **Submit for Review**, as before.
 
 You can also trigger it manually from the Actions tab (choose `ios`, `android`,
 or `all`).
