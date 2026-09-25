@@ -61,13 +61,38 @@ jobs:
         run: npx expo install --check
       - name: Verify release candidate
         run: npm run check
-      - name: Publish OTA update to the production channel
-        # ERROR_REPORT_TOKEN must be present when app.config.ts is evaluated
-        # here: clients read `extra` from the LATEST update's manifest, not the
-        # store build, so an OTA published without it silently disables
-        # automatic error reports for every updated install. (Empty/missing is
-        # harmless — the app treats '' as no channel and just queues.)
+      # Clients read `extra` from the LATEST update's manifest, not from the
+      # store build, and the manifest's `extra` is app.config.ts evaluated on
+      # THIS runner: a credential missing here is missing on every install
+      # that takes the update (Strava "not configured", error reports stuck
+      # on the device). `--environment production` below loads the EAS
+      # production variables, but secret-visibility ones never leave EAS's
+      # servers — so STRAVA_CLIENT_SECRET and ERROR_REPORT_TOKEN must also be
+      # GitHub secrets here, with the same values. Each is exported only when
+      # set: GitHub renders an unset secret as '', and an empty variable must
+      # not shadow a value EAS would otherwise supply.
+      - name: Load update credentials
         env:
+          STRAVA_CLIENT_ID: ${{ vars.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
           ERROR_REPORT_TOKEN: ${{ secrets.ERROR_REPORT_TOKEN }}
           ERROR_REPORT_ENDPOINT: ${{ vars.ERROR_REPORT_ENDPOINT }}
-        run: eas update --auto --branch production --non-interactive
+        run: |
+          for name in STRAVA_CLIENT_ID STRAVA_CLIENT_SECRET ERROR_REPORT_TOKEN ERROR_REPORT_ENDPOINT; do
+            if [ -n "${!name}" ]; then
+              { echo "$name<<__INUKSHUK_ENV__"; printf '%s\n' "${!name}"; echo '__INUKSHUK_ENV__'; } >> "$GITHUB_ENV"
+            fi
+          done
+      # Fails before anything is published if a required key would be empty
+      # in the update's manifest; prints which keys are set, never values.
+      # OTA_REQUIRED_EXTRA (repo variable, comma-separated, `none` to disable)
+      # overrides the default — the Strava pair every production binary has.
+      - name: Check the update's extra before it reaches installed apps
+        env:
+          REQUIRED_EXTRA: ${{ vars.OTA_REQUIRED_EXTRA || 'stravaClientId,stravaClientSecret' }}
+        run: >
+          node scripts/ci/assert-update-extra.mjs
+          --require "$REQUIRED_EXTRA"
+          --any-of errorReportEndpoint,errorReportToken
+      - name: Publish OTA update to the production channel
+        run: eas update --auto --branch production --environment production --non-interactive

@@ -156,6 +156,29 @@ in the field, branch from its release tag, cherry-pick the fix, and run
 branch). If the branch's native project matches the binary, the fingerprint
 matches and the update lands on it.
 
+### Credentials in an update
+
+Installed apps read `extra` (Strava keys, error-report channel) from the
+running **update's** manifest, not from the store binary, and that `extra`
+is `app.config.ts` evaluated on the GitHub runner that publishes. A value
+missing there is missing on every install that takes the update — Strava
+turns into "not configured in this build".
+
+- `eas update` runs with `--environment production`, which loads the EAS
+  production variables with **plain text** or **sensitive** visibility.
+- **Secret**-visibility EAS variables never leave EAS's servers, so they
+  cannot reach an update. `STRAVA_CLIENT_SECRET` and `ERROR_REPORT_TOKEN`
+  must therefore also exist as **GitHub Actions secrets**, with the same
+  values as in EAS. `STRAVA_CLIENT_ID` and `ERROR_REPORT_ENDPOINT` go in
+  GitHub **variables** (or stay EAS-only, but then the check below cannot
+  see them).
+- Before publishing, `scripts/ci/assert-update-extra.mjs` evaluates the same
+  public config and **fails the job** if `extra.stravaClientId` or
+  `extra.stravaClientSecret` would be empty (it prints which keys are set,
+  never their values). The repo variable `OTA_REQUIRED_EXTRA` overrides that
+  list (comma-separated; `none` turns the check off). A missing error-report
+  channel is only a warning, since reports then just stay queued.
+
 ## Error reporting (one-time, optional but recommended)
 
 Crashes and swallowed failures are captured, queued on disk, and filed as GitHub
@@ -179,6 +202,10 @@ eas env:create --name ERROR_REPORT_TOKEN \
   --value <fine-grained PAT> \
   --environment production --visibility secret
 ```
+
+Add the same value as the GitHub Actions secret `ERROR_REPORT_TOKEN`, so OTA
+updates carry it too (a secret EAS variable never reaches the runner that
+publishes them — see _Credentials in an update_).
 
 `app.config.ts` reads `process.env.ERROR_REPORT_TOKEN` into
 `extra.errorReportToken`, so the token is **baked into the shipped binary** at
@@ -242,6 +269,11 @@ eas env:create --name STRAVA_CLIENT_SECRET \
   --environment production --visibility secret
 ```
 
+OTA updates need the same two values on GitHub (`STRAVA_CLIENT_ID` as a
+repo variable, `STRAVA_CLIENT_SECRET` as a secret): a secret EAS variable
+never reaches the runner that publishes updates — see _Credentials in an
+update_ under _Field updates_.
+
 `app.config.ts` reads both into `extra.stravaClientId/stravaClientSecret`, so —
 like `ERROR_REPORT_TOKEN` — **the client secret is baked into the shipped
 binary**. This is unavoidable: Strava's token endpoint requires the client
@@ -266,13 +298,20 @@ higher cap from Strava if others should connect.
 
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
-| Secret                        | Needed for        |
-| ----------------------------- | ----------------- |
-| `EXPO_TOKEN`                  | all EAS workflows |
-| `ASC_API_KEY_P8`              | iOS submit        |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit    |
+| Secret                        | Needed for                                        |
+| ----------------------------- | ------------------------------------------------- |
+| `EXPO_TOKEN`                  | all EAS workflows                                 |
+| `ASC_API_KEY_P8`              | iOS submit                                        |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit                                    |
+| `STRAVA_CLIENT_SECRET`        | OTA updates (same value as the EAS variable)      |
+| `ERROR_REPORT_TOKEN`          | OTA updates, if that channel is used (same value) |
 
-And in `app.config.ts` env / repo variables: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`,
-and (EAS environment, not GitHub Actions) `ERROR_REPORT_TOKEN` **or**
-`ERROR_REPORT_ENDPOINT` — see _Error reporting_ above — plus the optional
-`STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` — see _Strava_ above.
+Repo **variables** (not secrets): `STRAVA_CLIENT_ID`, `ERROR_REPORT_ENDPOINT`
+(if used), and optionally `OTA_REQUIRED_EXTRA` — see _Credentials in an
+update_ above.
+
+And in `app.config.ts` env: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`. Store builds
+take `ERROR_REPORT_TOKEN` **or** `ERROR_REPORT_ENDPOINT` — see _Error
+reporting_ above — and the optional `STRAVA_CLIENT_ID` /
+`STRAVA_CLIENT_SECRET` — see _Strava_ above — from the EAS environment; OTA
+updates need the GitHub copies listed here as well.
