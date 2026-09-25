@@ -88,12 +88,32 @@ export function parseDoctorOutput(output) {
 const matches = (ack, checkName) => checkName.toLowerCase().includes(ack.check.toLowerCase());
 
 /**
+ * Failures with a known, mechanical fix, so the report says what to run and
+ * not only what broke. Matched like acknowledgements (a substring of the name
+ * doctor prints).
+ *
+ * The SDK-versions check is the common one: Expo publishes SDK patch releases
+ * (expo, expo-router, expo-updates, …) at any time, and from that moment
+ * `expo install --check` fails on every branch until the bumps are committed.
+ * See docs/CI.md.
+ */
+export const REMEDIES = [
+  {
+    check: 'Check that packages match versions required by installed Expo SDK',
+    remedy: 'Run: npx expo install --fix && npm run check',
+  },
+];
+
+/**
  * Decide whether the gate passes.
  *
  * Fails when an unacknowledged check failed, when an acknowledgement has
  * expired, or when an acknowledged check has started passing — an accepted
  * finding must be re-argued on a date, and a spent entry must be removed
  * rather than left to hide the next real failure.
+ *
+ * `remedies` carries the one-line fix for any unacknowledged failure listed in
+ * REMEDIES; it never changes the verdict.
  */
 export function decideDoctorGate({ report, acknowledgements, today }) {
   const problems = [];
@@ -134,9 +154,12 @@ export function decideDoctorGate({ report, acknowledgements, today }) {
     (name) => !acknowledgements.some((ack) => matches(ack, name)),
   );
   for (const name of unacknowledged) problems.push(`unacknowledged check failed: ${name}`);
+  const remedies = REMEDIES.filter((r) => unacknowledged.some((name) => matches(r, name))).map(
+    (r) => r.remedy,
+  );
 
   if (problems.length === 0 && report.passed !== null) {
     notes.push(`${report.passed}/${report.total} checks passed`);
   }
-  return { ok: problems.length === 0, notes, problems };
+  return { ok: problems.length === 0, notes, problems, remedies };
 }

@@ -48,6 +48,25 @@ Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
   until those secrets exist**, via a `guard` job — so a fresh clone has green CI
   out of the box.
 
+## Expo SDK patch releases break every branch at once
+
+Expo publishes SDK patch releases (`expo`, `expo-router`, `expo-updates`, …)
+whenever it likes. From that moment `npx expo install --check` — the
+`Verify SDK-pinned dependency versions` step in `ci.yml`, and expo-doctor's
+"Check that packages match versions required by installed Expo SDK" in the
+nightly — fails on `main`, on every open PR and on every Dependabot PR, although
+nothing in the repo changed. It stays red until someone runs
+
+```sh
+npx expo install --fix && npm run check
+```
+
+and commits the resulting `package.json` + `package-lock.json` bumps (plus the
+usual device pass if a native package moved). Do not hand-edit the lockfile or
+acknowledge the check in `expo-doctor-acknowledged.jsonc`: the fix is mechanical
+and a stale SDK pin is exactly what the check exists to catch. When the nightly
+fails this way, its tracking issue says so and quotes that command.
+
 ## Coverage
 
 `jest.config.js` enforces 80% line / 80% function / 70% branch coverage on
