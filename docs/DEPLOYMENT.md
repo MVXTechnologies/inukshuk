@@ -102,12 +102,25 @@ required locally; the Android hook is a no-op.
 
 ## Releasing
 
-Once the secrets above exist, a release is just a tag:
+Once the secrets above exist, a release is a bump, a commit and a tag:
 
 ```bash
-npm version patch         # bumps version, creates a git tag
-git push --follow-tags
+npm run release:bump -- --version 1.6.0   # or: major | minor | patch
+# Rewrite the release-note comments it lists, add the CHANGELOG section,
+# commit ("Release 1.6.0 (iOS build 9, Play vc55)") and merge as usual. Then
+# tag the merged commit:
+git tag v1.6.0 <commit> && git push origin v1.6.0
 ```
+
+`release:bump` (`scripts/release/bump-version.mjs`) moves `version` in
+`package.json`, `app.config.ts` and the lock file's root together, and adds
+one to the iOS `buildNumber` and the Android `versionCode` — both stores
+refuse a build number they have seen. It refuses to go backwards, refuses
+when `package.json` and `app.config.ts` disagree, and refuses when a field is
+not where it expects; `--dry-run` shows the plan without writing. It does no
+git itself: it prints the tag to create. (It replaces `npm version patch`,
+which moved only `package.json` and left the store-facing numbers to hand
+edits.)
 
 `release.yml` then:
 
