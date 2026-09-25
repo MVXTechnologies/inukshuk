@@ -1,5 +1,6 @@
 import { gpsQualityLevel } from '@core/geo/track/gpsQuality';
 import { liveSpeed } from '@core/geo/track/liveSpeed';
+import { LibraryNotHydratedError } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -135,13 +136,19 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
           ? `Saved "${track.name}"`
           : 'Recording discarded (no points)',
       );
-    } catch {
+    } catch (err) {
       // stop() persists the GPX before it resets the store, so a write failure
       // (e.g. storage full) rejects with the session STILL intact — status
       // unchanged, crash checkpoint freshly written, timer still running. Don't
       // reset the UI as if it saved; tell the user so they can free space and
-      // stop again, and the trail stays recoverable.
-      showSnack('Couldn’t save your trail — storage may be full. Free up space and try again.');
+      // stop again, and the trail stays recoverable. Same contract when the
+      // library index could not be read (stop() has already retried it and
+      // reported why): nothing was written, the journal is kept.
+      showSnack(
+        err instanceof LibraryNotHydratedError
+          ? 'Couldn’t open your library to save this trail. It’s kept — try Stop again in a moment.'
+          : 'Couldn’t save your trail — storage may be full. Free up space and try again.',
+      );
     }
   };
 

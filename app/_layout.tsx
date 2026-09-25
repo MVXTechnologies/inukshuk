@@ -19,7 +19,7 @@ import { resolveTheme } from '@ui/theme';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -50,6 +50,20 @@ export default function RootLayout() {
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
   }, [hydrateLibrary, hydrateSettings, hydrateStrava]);
+
+  // A launch hydration that fails (an I/O error — a corrupt file hydrates
+  // empty instead) leaves the library refusing every write for the rest of
+  // the process. Try again whenever the app comes back to the foreground;
+  // the store is a no-op once hydrated, and recording's Stop retries too.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (!useLibraryStore.getState().hydrated) {
+        hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
+      }
+    });
+    return () => subscription.remove();
+  }, [hydrateLibrary]);
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
   // (redirectSystemPath), which intercepts the URI before expo-router routes it.
