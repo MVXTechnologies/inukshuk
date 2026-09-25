@@ -202,6 +202,48 @@ describe('flushErrorQueue', () => {
  * at the top of the flush (#305, audit A24). Reports stay queued so a later
  * opt-in can still deliver them.
  */
+// Issues are public; the privacy policy promises no location, no map or trail
+// content. The scrub happens at delivery, so reports queued by an older build
+// (before there was a scrubber) are cleaned on their way out too.
+describe('what leaves the device', () => {
+  const leaky = (): ErrorReport => ({
+    ...report(),
+    message: 'Error: re-parse of "Lac Blanc" failed at [-71.208231, 46.813422]',
+    stack:
+      'Error\n    at open (address at /var/containers/Bundle/Application/0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0/main.jsbundle:1:2)',
+    context: 'made-map-import {"name":"Chalet de Marc"}',
+    breadcrumbs: ['2026-09-25T12:00:00.000Z opened file:///var/mobile/Documents/maps/Chalet.pdf'],
+  });
+  const LEAKS = [/Lac Blanc/, /46\.81/, /0F1E2D3C/, /Chalet/, /\/var\//];
+
+  it('files a GitHub issue with no user content in the title or body', async () => {
+    const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [leaky()]);
+    expect((await flushErrorQueue()).status).toBe('delivered');
+
+    const [, , title, body] = mockGithub.createIssue.mock.calls[0]!;
+    for (const leak of LEAKS) {
+      expect(title).not.toMatch(leak);
+      expect(body).not.toMatch(leak);
+    }
+    // Still a useful report: the frame survives, minus the path.
+    expect(body).toContain('at open (address at <path>.jsbundle:1:2)');
+    // ...dequeued by its original fingerprint.
+    expect(mockDoc.value.queue).toHaveLength(0);
+  });
+
+  it('posts a scrubbed report to the relay', async () => {
+    const { flushErrorQueue } = loadReporter({ errorReportEndpoint: 'https://relay.example' }, [
+      leaky(),
+    ]);
+    await flushErrorQueue();
+
+    const [, sent] = mockEndpoint.postReportToEndpoint.mock.calls[0]!;
+    const serialized = JSON.stringify(sent);
+    for (const leak of LEAKS) expect(serialized).not.toMatch(leak);
+    expect(sent.fingerprint).toBe('aabbccdd');
+  });
+});
+
 describe('flushErrorQueue consent', () => {
   it('does not deliver before the persisted consent has hydrated', async () => {
     const { flushErrorQueue } = loadReporter({ errorReportToken: 't' }, [report()]);

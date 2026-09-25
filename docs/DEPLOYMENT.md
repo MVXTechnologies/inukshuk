@@ -212,7 +212,11 @@ Crashes and swallowed failures are captured, queued on disk, and filed as GitHub
 issues **automatically and silently** (`src/lib/errorReporting`). The app never
 asks the user to open GitHub or file anything themselves; without a delivery
 channel configured, reports simply stay queued on the device and nothing is
-shown. Pick **one** of the two channels below.
+shown. Reports become public issues, so on the way out each one is scrubbed of
+file paths and URIs, container ids, quoted text (map and trail names) and
+coordinates (`src/core/errors/scrub.ts`), which is what lets the privacy page
+promise "no location, no map or trail content". Pick **one** of the two
+channels below.
 
 ### A. Embedded fine-grained token (simplest)
 

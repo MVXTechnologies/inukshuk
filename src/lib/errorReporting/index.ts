@@ -7,6 +7,7 @@ import {
   mergeReport,
   pruneSentHistory,
 } from '@core/errors/queue';
+import { scrubReport } from '@core/errors/scrub';
 import type { ErrorEnvironment, ErrorQueueDoc, ErrorReport } from '@core/errors/types';
 import { readErrorQueueDoc, writeErrorQueueDoc } from '@data/errorQueue';
 import { useSettingsStore } from '@state/settingsStore';
@@ -286,8 +287,15 @@ export interface FlushResult {
  * One report → one issue (or one "seen again" comment). Throws on failure,
  * and `ConsentWithdrawn` if the user opts out between the GitHub lookup and
  * the write (the lookup is read-only; the write is the report leaving).
+ *
+ * Every report leaves the device through here, so this is where it is
+ * scrubbed of paths, quoted user text and coordinates (@core/errors/scrub) —
+ * the issues are public. Here rather than at capture, so reports an older
+ * build queued unscrubbed are covered too; the on-device queue keeps the
+ * original, which never leaves the phone.
  */
-async function deliverReport(channel: DeliveryChannel, report: ErrorReport): Promise<void> {
+async function deliverReport(channel: DeliveryChannel, queued: ErrorReport): Promise<void> {
+  const report = scrubReport(queued);
   if (channel.kind === 'endpoint') {
     await postReportToEndpoint(channel.endpoint, report);
     return;
