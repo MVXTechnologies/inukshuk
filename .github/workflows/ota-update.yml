@@ -3,6 +3,12 @@ name: OTA Update
 # Self-correction in the field: every merge to main that changes JS/assets is
 # published as an over-the-air EAS Update, so shipped apps pick up fixes without
 # a new store submission. No-ops until EXPO_TOKEN is configured.
+#
+# The update targets the runtime FINGERPRINT of this checkout (app.config.ts
+# `runtimeVersion`): only binaries built from the same native project receive
+# it. A merge that changes native code — a native dependency bump included —
+# publishes to a runtime no installed binary has yet, and reaches no one until
+# a store build ships with it. That is the point, not a failure.
 on:
   push:
     branches: [main]
@@ -16,17 +22,14 @@ on:
       - 'babel.config.js'
       - 'metro.config.js'
       - '.github/workflows/ota-update.yml'
+  # No inputs. `app_version_override` is gone: it republished HEAD to an older
+  # runtime by rewriting `version`, which only meant something while the
+  # runtime WAS the version. Under the fingerprint policy it would change
+  # nothing — and pushing HEAD's JS to an older binary is the very skew the
+  # fingerprint prevents. A fix for an older binary is published by running
+  # this workflow on a branch cut from that binary's release tag (see
+  # docs/DEPLOYMENT.md § Field updates without a store release).
   workflow_dispatch:
-    inputs:
-      app_version_override:
-        description: >
-          Publish this update for an OLDER runtime by overriding the app
-          version (e.g. "1.4.0"). Needed after a version bump: pushes to main
-          publish only for the NEW runtime, and installs still on the previous
-          store build stop receiving fixes unless their runtime is re-published
-          too (the runtime-lineage trap). Leave empty for the current version.
-        required: false
-        default: ''
 
 jobs:
   guard:
@@ -58,18 +61,6 @@ jobs:
         run: npx expo install --check
       - name: Verify release candidate
         run: npm run check
-      - name: Apply app version override (legacy-runtime publish)
-        if: github.event.inputs.app_version_override != ''
-        env:
-          APP_VERSION_OVERRIDE: ${{ github.event.inputs.app_version_override }}
-        run: |
-          v="$APP_VERSION_OVERRIDE"
-          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo 'App version override must be a numeric major.minor.patch version.' >&2
-            exit 1
-          fi
-          sed -i "s/^  version: '.*',$/  version: '$v',/" app.config.ts
-          grep -n "version: '$v'" app.config.ts
       - name: Publish OTA update to the production channel
         # ERROR_REPORT_TOKEN must be present when app.config.ts is evaluated
         # here: clients read `extra` from the LATEST update's manifest, not the

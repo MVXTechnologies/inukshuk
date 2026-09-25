@@ -5,7 +5,8 @@ All notable changes to Inukshuk are documented here. The format follows
 adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Field updates (JS/asset-only) ship over-the-air via EAS Update to installed apps
-on the same app version; native changes require a new store build. See
+with the same native runtime (a fingerprint of the native project, since 1.6.0;
+the app version before that); native changes require a new store build. See
 `docs/DEPLOYMENT.md`.
 
 ## [Unreleased]

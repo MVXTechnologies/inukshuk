@@ -124,6 +124,38 @@ triggers `ota-update.yml`, which publishes an **EAS Update** to the `production`
 channel; installed apps pick it up on next launch. Native changes (new modules,
 permission changes) still require a full store release.
 
+### Which installs receive an update: the runtime fingerprint
+
+`runtimeVersion` uses the **fingerprint** policy (`app.config.ts`): the runtime
+is a hash of the native project — native dependencies and their versions,
+config plugins, `modules/`, `eas.json`, and the native parts of the Expo
+config. An update reaches exactly the binaries built from the same native
+project. `fingerprint.config.js` lists what is deliberately left out of the
+hash (the environment-filled `extra`, the version and build numbers, npm
+scripts, `.gitignore`) and why.
+
+What that means in practice:
+
+- A JS-only merge publishes to the runtime of the binaries in the stores, as
+  before.
+- A merge that changes native code — a native dependency bump included —
+  publishes to a new runtime that no installed binary has. It reaches no one
+  until a store build carries it. Nothing breaks; the fix simply waits for
+  the release.
+- A JS-only store release (version bump, same native project) keeps the
+  runtime, so installs of the previous version keep receiving updates.
+- To see the runtime of a checkout:
+  `npx expo-updates fingerprint:generate --platform ios` (or `android`).
+
+The old `app_version_override` input is gone. Under `appVersion` it
+republished HEAD for an older runtime by rewriting `version`; under the
+fingerprint it would change nothing, and shipping HEAD's JS to an older
+binary is exactly the skew the fingerprint prevents. To fix an older binary
+in the field, branch from its release tag, cherry-pick the fix, and run
+**OTA Update** on that branch from the Actions tab (_Run workflow_ → pick the
+branch). If the branch's native project matches the binary, the fingerprint
+matches and the update lands on it.
+
 ## Error reporting (one-time, optional but recommended)
 
 Crashes and swallowed failures are captured, queued on disk, and filed as GitHub

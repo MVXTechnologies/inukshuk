@@ -180,6 +180,8 @@ try {
  * True when THIS binary can run the background task without dying. The vc44
  * (1.0.2) binary lacks RECEIVE_BOOT_COMPLETED, so any backgrounded fix
  * delivery is a native process death — see @core/geo/track/backgroundSupport.
+ * From 1.6.0 the runtime is a fingerprint hash, which never parses as a
+ * version and so always passes — correct, as every such binary is newer.
  */
 export function canUseBackgroundTask(): boolean {
   const runtime =
