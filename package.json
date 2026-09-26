@@ -1,6 +1,6 @@
 {
   "name": "inukshuk",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.40.2",
