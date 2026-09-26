@@ -11,8 +11,21 @@ the app version before that); native changes require a new store build. See
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-26
+
 ### Fixed
 
+- **PDF maps keep drawing after the app comes back from the background.**
+  On iOS the app's built-in map file server could stop answering while the
+  app was suspended, and every page it served then failed: pages were
+  turned off, large maps stopped rendering, and one phone sent 677 identical
+  error reports in two and a half minutes. The app now checks the server
+  after a resume, after a minute idle and after any refused request,
+  restarts it on the same port when it is down, and retries the page
+  instead of failing it. A page that keeps failing for a reason that is not
+  its own now waits (2 s, doubling up to a minute) instead of retrying on
+  every pan, and reports once. A PDF that reads back empty now says so,
+  with the size on disk, instead of a generic error.
 - **A finished recording can no longer vanish from the library.** If the
   library index could not be read at launch, Stop wrote the trail's GPX,
   silently skipped the index, and then deleted the crash journal — leaving
@@ -43,6 +56,13 @@ the app version before that); native changes require a new store build. See
 
 ### Changed
 
+- **A new icon and launch screen.** The Inukshuk stone figure, drawn from
+  the approved artwork: a new app icon, an Android adaptive icon with a
+  one-colour version for themed icons, and a light and a dark launch
+  screen. Waiting in the map store or the 3D view now shows the stones
+  falling into place instead of a spinner.
+- **Expo SDK 56 patch releases** (seven packages), brought in with
+  `npx expo install --fix`.
 - **Over-the-air updates target a fingerprint of the native project, not
   the app version.** An update now reaches only binaries built from the
   same native code, so a native dependency bump can no longer be shipped

@@ -11,12 +11,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.5.3: the map front. Oversize single-JPEG pages render natively instead
-  // of falling back to a PDF.js decode the OS kills (the "Load failed" map),
-  // stored georeferencing from an older parser is re-parsed on launch (the
-  // sheet that stayed upside down), the position puck is pinned above every
-  // overlay, imports parse by random access, and pages pre-render at import.
-  version: '1.5.3',
+  // 1.6.0: hardening. OTA updates follow a native fingerprint (so one can no
+  // longer reach a binary without its native code), PDF maps survive an iOS
+  // resume (loopback server probe + restart), library/settings writes are
+  // durable across a failed load, error reports are scrubbed, and the brand
+  // refresh (icon, splash, stone loader). Store build only: no OTA to 1.5.x.
+  version: '1.6.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '8',
+    buildNumber: '9',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -65,8 +65,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // Play build 54 ships 1.5.3 (see the version note above).
-    versionCode: 54,
+    // Play build 55 ships 1.6.0 (see the version note above).
+    versionCode: 55,
     // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
     // is the background, the stone figure + contact shadow the foreground (inside
     // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed
