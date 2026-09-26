@@ -8,3 +8,21 @@
 // real regressions (deprecations, act() warnings, bad-prop warnings). If a
 // dependency emits a genuinely unavoidable warning, filter that exact message
 // here with a comment explaining why.
+
+// Reanimated 4 (InukshukLoader). Its native entry needs the Worklets native
+// module, which does not exist under Jest: swap both packages for their own
+// shipped mocks (hooks run their worklet once, synchronously; animations
+// resolve to their target). The mock leaves out `useReducedMotion`, so add it
+// (off by default; tests flip it with jest.mocked(...).mockReturnValue), and
+// make `cancelAnimation` a spy so unmount cleanup can be asserted.
+jest.mock('react-native-worklets', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('react-native-worklets/src/mock'),
+);
+jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ...require('react-native-reanimated/mock'),
+  useReducedMotion: jest.fn(() => false),
+  cancelAnimation: jest.fn(),
+}));
