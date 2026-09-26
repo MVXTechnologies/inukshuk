@@ -2,7 +2,8 @@ import type { TrackPoint } from '@core/models';
 import { computeSegmentedTrackStats, computeTrackStats } from '@core/geo/track';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
-import { useLibraryStore } from './libraryStore';
+import { reportError } from '@lib/errorReporting';
+import { LibraryNotHydratedError, useLibraryStore } from './libraryStore';
 import {
   initRecorderRecovery,
   resetRecorderRecoveryForTests,
@@ -19,6 +20,8 @@ jest.mock('@data/storage', () => ({
   writeIndex: jest.fn(),
   writeTrackGpx: jest.fn(() => 'file://tracks/test.gpx'),
 }));
+
+jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 
 // In-memory checkpoint journal: the store's persistence boundary, mocked so the
 // checkpoint→restore round-trip is testable without a filesystem. The throttled
@@ -99,8 +102,9 @@ beforeEach(() => {
   // recovery test whose session starts in the same millisecond then trips the
   // ghost-session guard (startedAt match ⇒ checkpoint discarded). Impossible
   // in production — one recording at a time — but the shared store must not
-  // leak that collision across tests.
-  useLibraryStore.setState({ tracks: [], hydrated: false });
+  // leak that collision across tests. A loaded library is the normal state at
+  // Stop; the unloaded one has its own suite below.
+  useLibraryStore.setState({ tracks: [], hydrated: true });
 });
 
 describe('recording waypoint photo durability (audit A06)', () => {
@@ -1163,5 +1167,114 @@ describe('index writes on save (stop())', () => {
     (storage.writeIndex as jest.Mock).mockClear();
     await useRecorderStore.getState().stop();
     expect(storage.writeIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe('Stop when the library index has not loaded', () => {
+  // The field hazard: launch hydration failed (an I/O error), so every index
+  // write was silently skipped — and Stop then cleared the crash journal
+  // anyway. The GPX sat on disk, the trail was in no library, and nothing
+  // was left to recover it from.
+  const realHydrate = useLibraryStore.getState().hydrate;
+  const realAddTrack = useLibraryStore.getState().addTrack;
+
+  const record = () => {
+    const s = useRecorderStore.getState();
+    s.start('Unindexed hike');
+    s.addPoint(pt({ time: 1_000_000 }));
+    useRecorderStore.getState().addPoint(pt({ time: 1_002_000, latitude: 46.800025 }));
+  };
+
+  beforeEach(() => {
+    useLibraryStore.setState({ tracks: [], hydrated: false });
+  });
+
+  afterEach(() => {
+    useLibraryStore.setState({ hydrate: realHydrate, addTrack: realAddTrack, hydrated: true });
+  });
+
+  it('retries hydration at Stop and saves normally when it succeeds', async () => {
+    const hydrate = jest.fn(async () => {
+      useLibraryStore.setState({ hydrated: true });
+    });
+    useLibraryStore.setState({ hydrate });
+    record();
+
+    const track = await useRecorderStore.getState().stop();
+
+    expect(hydrate).toHaveBeenCalledTimes(1);
+    expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+    expect(useLibraryStore.getState().tracks.map((t) => t.id)).toEqual([track!.id]);
+    expect(checkpoint.clearCheckpoint).toHaveBeenCalled();
+    expect(useRecorderStore.getState().status).toBe('idle');
+  });
+
+  it('keeps the session and its crash journal when the library still cannot load', async () => {
+    const failure = new Error('EIO: library.json');
+    useLibraryStore.setState({ hydrate: jest.fn(async () => Promise.reject(failure)) });
+    record();
+    (checkpoint.clearCheckpoint as jest.Mock).mockClear();
+
+    await expect(useRecorderStore.getState().stop()).rejects.toBeInstanceOf(
+      LibraryNotHydratedError,
+    );
+
+    // Nothing was written, nothing was thrown away.
+    expect(storage.writeTrackGpx).not.toHaveBeenCalled();
+    expect(storage.writeIndex).not.toHaveBeenCalled();
+    expect(checkpoint.clearCheckpoint).not.toHaveBeenCalled();
+    expect(useRecorderStore.getState().status).toBe('recording');
+    expect(useRecorderStore.getState().points).toHaveLength(2);
+    expect(reportError).toHaveBeenCalledWith(failure, 'library-hydrate-at-stop');
+
+    // The journal still recovers the whole recording after a crash.
+    simulateCrash();
+    expect(await initRecorderRecovery()).toBe(true);
+    expect(useRecorderStore.getState().name).toBe('Unindexed hike');
+    expect(useRecorderStore.getState().points).toHaveLength(2);
+  });
+
+  it('saves on a later Stop once the library loads', async () => {
+    let readable = false;
+    useLibraryStore.setState({
+      hydrate: jest.fn(async () => {
+        if (!readable) throw new Error('EIO');
+        useLibraryStore.setState({ hydrated: true });
+      }),
+    });
+    record();
+    await expect(useRecorderStore.getState().stop()).rejects.toThrow(LibraryNotHydratedError);
+
+    readable = true;
+    const track = await useRecorderStore.getState().stop();
+
+    expect(track?.name).toBe('Unindexed hike');
+    expect(useLibraryStore.getState().tracks.map((t) => t.id)).toEqual([track!.id]);
+    expect(checkpoint.clearCheckpoint).toHaveBeenCalled();
+  });
+
+  it('does not need the library to discard an empty recording', async () => {
+    const hydrate = jest.fn(async () => Promise.reject(new Error('EIO')));
+    useLibraryStore.setState({ hydrate });
+    useRecorderStore.getState().start('Empty');
+
+    await expect(useRecorderStore.getState().stop()).resolves.not.toBeNull();
+    expect(hydrate).not.toHaveBeenCalled();
+    expect(useRecorderStore.getState().status).toBe('idle');
+  });
+
+  // Backstop: the journal is cleared only on the index write's own say-so.
+  it('keeps the journal and drops the unindexed GPX if the index write is refused', async () => {
+    useLibraryStore.setState({ hydrated: true, addTrack: jest.fn(() => false) });
+    record();
+    (checkpoint.clearCheckpoint as jest.Mock).mockClear();
+
+    await expect(useRecorderStore.getState().stop()).rejects.toBeInstanceOf(
+      LibraryNotHydratedError,
+    );
+
+    expect(storage.deleteFileAt).toHaveBeenCalledWith('file://tracks/test.gpx');
+    expect(checkpoint.clearCheckpoint).not.toHaveBeenCalled();
+    expect(useRecorderStore.getState().status).toBe('recording');
   });
 });

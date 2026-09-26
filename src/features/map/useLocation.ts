@@ -19,9 +19,10 @@ export const WATCH_RETRY_MS = 5000;
 /**
  * Persist `pos` as the settings store's last known map position (the cold-start
  * camera seed — see `@core/geo/lastKnownPosition`). Before hydration the write
- * must be deferred, because `set()` snapshots
- * the whole settings state and a pre-hydration write would clobber
- * settings.json with DEFAULTS. An unchanged position is "accepted" without a
+ * is deferred: the store would only hold it until settings.json is read (it
+ * never writes DEFAULTS over the file — see settingsStore's pendingWrites),
+ * and 'deferred' keeps this caller's throttle retrying instead of counting a
+ * write that has not happened. An unchanged position is "accepted" without a
  * disk write. Failures count toward the caller's throttle too, so a full disk
  * cannot cause a write and an error report on every GPS fix.
  */

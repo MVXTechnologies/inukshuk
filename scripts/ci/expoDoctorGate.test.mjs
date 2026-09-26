@@ -10,6 +10,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** The nightly's real output on 2026-09-10, trimmed to the shape that matters. */
 const HERMES_CHECK = 'Check for Expo SDK versions affected by Hermes V1 regressions';
+const SDK_VERSIONS_CHECK = 'Check that packages match versions required by installed Expo SDK';
 const REAL_OUTPUT = `Running 22 checks on your project...
 21/22 checks passed. 1 checks failed. Possible issues detected:
 Use the --verbose flag to see more details about passed checks.
@@ -72,12 +73,42 @@ describe('decideDoctorGate', () => {
   it('fails on a check nobody acknowledged', () => {
     const output = REAL_OUTPUT.replace(
       `✖ ${HERMES_CHECK}`,
-      `✖ ${HERMES_CHECK}\n✖ Check that packages match versions required by installed Expo SDK`,
+      `✖ ${HERMES_CHECK}\n✖ ${SDK_VERSIONS_CHECK}`,
     );
     const verdict = decide({ report: parseDoctorOutput(output) });
     assert.equal(verdict.ok, false);
     contains(verdict.problems.join(' '), 'unacknowledged check failed');
     contains(verdict.problems.join(' '), 'packages match versions');
+  });
+
+  // An Expo SDK patch release fails this check everywhere at once; the
+  // tracking issue should say what to run, not just what broke.
+  it('names the fix when the SDK-versions check fails, and still fails', () => {
+    const output = REAL_OUTPUT.replace(
+      `✖ ${HERMES_CHECK}`,
+      `✖ ${HERMES_CHECK}\n✖ ${SDK_VERSIONS_CHECK}`,
+    );
+    const verdict = decide({ report: parseDoctorOutput(output) });
+    assert.equal(verdict.ok, false);
+    assert.deepEqual(verdict.remedies, ['Run: npx expo install --fix && npm run check']);
+  });
+
+  it('offers no remedy for a failure it has none for', () => {
+    const output = REAL_OUTPUT.replace(`✖ ${HERMES_CHECK}`, `✖ ${HERMES_CHECK}\n✖ Some new check`);
+    const verdict = decide({ report: parseDoctorOutput(output) });
+    assert.equal(verdict.ok, false);
+    assert.deepEqual(verdict.remedies, []);
+  });
+
+  // An acknowledged failure is accepted; its remedy would be noise.
+  it('offers no remedy for an acknowledged failure', () => {
+    const output = REAL_OUTPUT.replace(`✖ ${HERMES_CHECK}`, `✖ ${SDK_VERSIONS_CHECK}`);
+    const verdict = decide({
+      report: parseDoctorOutput(output),
+      acknowledgements: [ack({ check: SDK_VERSIONS_CHECK })],
+    });
+    assert.equal(verdict.ok, true);
+    assert.deepEqual(verdict.remedies, []);
   });
 
   // The whole point: an accepted finding is re-argued on a date, not inherited.

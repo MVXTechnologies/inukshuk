@@ -66,7 +66,9 @@ ready-made listing copy in `store/appstore/` and the screenshot sets in
 4. Add the JSON contents as the GitHub secret **`GOOGLE_SERVICE_ACCOUNT_JSON`**.
 5. The first upload to a new Play app must be done manually once (Google
    requires the initial APK/AAB through the console); subsequent submissions go
-   through `eas submit` to the `production` track (configured in `eas.json`).
+   through `eas submit` to the `internal` testing track (configured in
+   `eas.json`). Promotion to production is a manual Play Console step — see
+   _Releasing_ below.
 
 EAS manages the Android upload keystore for you.
 
@@ -100,19 +102,44 @@ required locally; the Android hook is a no-op.
 
 ## Releasing
 
-Once the secrets above exist, a release is just a tag:
+Once the secrets above exist, a release is a bump, a commit and a tag:
 
 ```bash
-npm version patch         # bumps version, creates a git tag
-git push --follow-tags
+npm run release:bump -- --version 1.6.0   # or: major | minor | patch
+# Rewrite the release-note comments it lists, add the CHANGELOG section,
+# commit ("Release 1.6.0 (iOS build 9, Play vc55)") and merge as usual. Then
+# tag the merged commit:
+git tag v1.6.0 <commit> && git push origin v1.6.0
 ```
+
+`release:bump` (`scripts/release/bump-version.mjs`) moves `version` in
+`package.json`, `app.config.ts` and the lock file's root together, and adds
+one to the iOS `buildNumber` and the Android `versionCode` — both stores
+refuse a build number they have seen. It refuses to go backwards, refuses
+when `package.json` and `app.config.ts` disagree, and refuses when a field is
+not where it expects; `--dry-run` shows the plan without writing. It does no
+git itself: it prints the tag to create. (It replaces `npm version patch`,
+which moved only `package.json` and left the store-facing numbers to hand
+edits.)
 
 `release.yml` then:
 
 1. builds production binaries on EAS for both platforms, and
-2. auto-submits them — iOS to TestFlight/App Store review, Android to the
-   Play `production` track with `releaseStatus: completed`. This is a public
-   release, subject to Google Play review; it is not an internal draft.
+2. auto-submits them — iOS to TestFlight, Android to the Play **internal
+   testing** track with `releaseStatus: completed` (rolled out to internal
+   testers at once; valid for the internal track).
+
+Neither store goes public on its own. The binary reaches real users only
+when you promote it:
+
+- **Android:** Play Console → _Test and release_ → _Internal testing_ →
+  the release → **Promote release** → _Closed testing_ (the beta) or
+  _Production_ (or a staged rollout). Submitting straight to `production`
+  made every tag a public release, with no chance to install the signed store
+  build first; the internal track is that chance — testers get it within
+  minutes.
+- **iOS:** App Store Connect → the version → select the TestFlight build →
+  **Submit for Review**, as before.
 
 You can also trigger it manually from the Actions tab (choose `ios`, `android`,
 or `all`).
@@ -124,13 +151,72 @@ triggers `ota-update.yml`, which publishes an **EAS Update** to the `production`
 channel; installed apps pick it up on next launch. Native changes (new modules,
 permission changes) still require a full store release.
 
+### Which installs receive an update: the runtime fingerprint
+
+`runtimeVersion` uses the **fingerprint** policy (`app.config.ts`): the runtime
+is a hash of the native project — native dependencies and their versions,
+config plugins, `modules/`, `eas.json`, and the native parts of the Expo
+config. An update reaches exactly the binaries built from the same native
+project. `fingerprint.config.js` lists what is deliberately left out of the
+hash (the environment-filled `extra`, the version and build numbers, npm
+scripts, `.gitignore`) and why.
+
+What that means in practice:
+
+- A JS-only merge publishes to the runtime of the binaries in the stores, as
+  before.
+- A merge that changes native code — a native dependency bump included —
+  publishes to a new runtime that no installed binary has. It reaches no one
+  until a store build carries it. Nothing breaks; the fix simply waits for
+  the release.
+- A JS-only store release (version bump, same native project) keeps the
+  runtime, so installs of the previous version keep receiving updates.
+- To see the runtime of a checkout:
+  `npx expo-updates fingerprint:generate --platform ios` (or `android`).
+
+The old `app_version_override` input is gone. Under `appVersion` it
+republished HEAD for an older runtime by rewriting `version`; under the
+fingerprint it would change nothing, and shipping HEAD's JS to an older
+binary is exactly the skew the fingerprint prevents. To fix an older binary
+in the field, branch from its release tag, cherry-pick the fix, and run
+**OTA Update** on that branch from the Actions tab (_Run workflow_ → pick the
+branch). If the branch's native project matches the binary, the fingerprint
+matches and the update lands on it.
+
+### Credentials in an update
+
+Installed apps read `extra` (Strava keys, error-report channel) from the
+running **update's** manifest, not from the store binary, and that `extra`
+is `app.config.ts` evaluated on the GitHub runner that publishes. A value
+missing there is missing on every install that takes the update — Strava
+turns into "not configured in this build".
+
+- `eas update` runs with `--environment production`, which loads the EAS
+  production variables with **plain text** or **sensitive** visibility.
+- **Secret**-visibility EAS variables never leave EAS's servers, so they
+  cannot reach an update. `STRAVA_CLIENT_SECRET` and `ERROR_REPORT_TOKEN`
+  must therefore also exist as **GitHub Actions secrets**, with the same
+  values as in EAS. `STRAVA_CLIENT_ID` and `ERROR_REPORT_ENDPOINT` go in
+  GitHub **variables** (or stay EAS-only, but then the check below cannot
+  see them).
+- Before publishing, `scripts/ci/assert-update-extra.mjs` evaluates the same
+  public config and **fails the job** if `extra.stravaClientId` or
+  `extra.stravaClientSecret` would be empty (it prints which keys are set,
+  never their values). The repo variable `OTA_REQUIRED_EXTRA` overrides that
+  list (comma-separated; `none` turns the check off). A missing error-report
+  channel is only a warning, since reports then just stay queued.
+
 ## Error reporting (one-time, optional but recommended)
 
 Crashes and swallowed failures are captured, queued on disk, and filed as GitHub
 issues **automatically and silently** (`src/lib/errorReporting`). The app never
 asks the user to open GitHub or file anything themselves; without a delivery
 channel configured, reports simply stay queued on the device and nothing is
-shown. Pick **one** of the two channels below.
+shown. Reports become public issues, so on the way out each one is scrubbed of
+file paths and URIs, container ids, quoted text (map and trail names) and
+coordinates (`src/core/errors/scrub.ts`), which is what lets the privacy page
+promise "no location, no map or trail content". Pick **one** of the two
+channels below.
 
 ### A. Embedded fine-grained token (simplest)
 
@@ -147,6 +233,10 @@ eas env:create --name ERROR_REPORT_TOKEN \
   --value <fine-grained PAT> \
   --environment production --visibility secret
 ```
+
+Add the same value as the GitHub Actions secret `ERROR_REPORT_TOKEN`, so OTA
+updates carry it too (a secret EAS variable never reaches the runner that
+publishes them — see _Credentials in an update_).
 
 `app.config.ts` reads `process.env.ERROR_REPORT_TOKEN` into
 `extra.errorReportToken`, so the token is **baked into the shipped binary** at
@@ -210,6 +300,11 @@ eas env:create --name STRAVA_CLIENT_SECRET \
   --environment production --visibility secret
 ```
 
+OTA updates need the same two values on GitHub (`STRAVA_CLIENT_ID` as a
+repo variable, `STRAVA_CLIENT_SECRET` as a secret): a secret EAS variable
+never reaches the runner that publishes updates — see _Credentials in an
+update_ under _Field updates_.
+
 `app.config.ts` reads both into `extra.stravaClientId/stravaClientSecret`, so —
 like `ERROR_REPORT_TOKEN` — **the client secret is baked into the shipped
 binary**. This is unavoidable: Strava's token endpoint requires the client
@@ -234,13 +329,20 @@ higher cap from Strava if others should connect.
 
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
-| Secret                        | Needed for        |
-| ----------------------------- | ----------------- |
-| `EXPO_TOKEN`                  | all EAS workflows |
-| `ASC_API_KEY_P8`              | iOS submit        |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit    |
+| Secret                        | Needed for                                        |
+| ----------------------------- | ------------------------------------------------- |
+| `EXPO_TOKEN`                  | all EAS workflows                                 |
+| `ASC_API_KEY_P8`              | iOS submit                                        |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit                                    |
+| `STRAVA_CLIENT_SECRET`        | OTA updates (same value as the EAS variable)      |
+| `ERROR_REPORT_TOKEN`          | OTA updates, if that channel is used (same value) |
 
-And in `app.config.ts` env / repo variables: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`,
-and (EAS environment, not GitHub Actions) `ERROR_REPORT_TOKEN` **or**
-`ERROR_REPORT_ENDPOINT` — see _Error reporting_ above — plus the optional
-`STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` — see _Strava_ above.
+Repo **variables** (not secrets): `STRAVA_CLIENT_ID`, `ERROR_REPORT_ENDPOINT`
+(if used), and optionally `OTA_REQUIRED_EXTRA` — see _Credentials in an
+update_ above.
+
+And in `app.config.ts` env: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`. Store builds
+take `ERROR_REPORT_TOKEN` **or** `ERROR_REPORT_ENDPOINT` — see _Error
+reporting_ above — and the optional `STRAVA_CLIENT_ID` /
+`STRAVA_CLIENT_SECRET` — see _Strava_ above — from the EAS environment; OTA
+updates need the GitHub copies listed here as well.

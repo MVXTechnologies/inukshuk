@@ -52,6 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      actions: read
+      checks: read
     steps:
       - uses: actions/github-script@v9
         with:
@@ -70,8 +72,31 @@ jobs:
               .filter((step) => step.conclusion === 'failure')
               .map((step) => step.name);
             const which = failed.length > 0 ? failed.join(', ') : 'an unreported step';
+            // ...and what the failing steps said about it: their error
+            // annotations, e.g. the expo-doctor gate's unacknowledged check
+            // and its one-line remedy. A job's id is its check-run id. Best
+            // effort — the issue is still filed if this read fails.
+            const details = [];
+            for (const job of jobs.jobs.filter((j) => j.conclusion === 'failure')) {
+              try {
+                const { data: annotations } = await github.rest.checks.listAnnotations({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  check_run_id: job.id,
+                });
+                // Skip the runner's own "Process completed with exit code 1.".
+                const said = annotations.filter(
+                  (a) => a.annotation_level === 'failure' && !a.message.startsWith('Process completed'),
+                );
+                for (const a of said) details.push(`- ${a.message}`);
+              } catch (err) {
+                core.warning(`Could not read annotations of ${job.name}: ${err.message}`);
+              }
+            }
             const body = `The nightly health check failed on ${new Date().toISOString().slice(0, 10)}.\n\n` +
               `**Failed: ${which}**\n\n` +
+              // Capped: a tsc or eslint problem matcher can raise dozens.
+              (details.length > 0 ? `${details.slice(0, 10).join('\n')}\n\n` : '') +
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,

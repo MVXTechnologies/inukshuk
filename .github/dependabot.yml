@@ -1,7 +1,8 @@
 version: 2
 updates:
   # Keep npm dependencies fresh. Grouped so related bumps land in one PR and CI
-  # gates them; the dependabot-automerge workflow merges green minor/patch PRs.
+  # gates them; the dependabot-automerge workflow merges green minor/patch PRs,
+  # except native-bearing ones (the `native` group below).
   - package-ecosystem: npm
     directory: '/'
     schedule:
@@ -57,14 +58,25 @@ updates:
       - dependency-name: '@types/react'
       - dependency-name: 'typescript'
     groups:
-      expo:
+      # Native-bearing packages, in ONE PR: a bump to any of them changes the
+      # binary, so it ships in a store build and is never auto-merged. Mirrors
+      # NATIVE_DEPENDENCIES in .github/workflows/dependabot-automerge.yml, the
+      # list that actually holds them back (scripts/ci/dependabotNative.test.mjs
+      # keeps the two in step). Most of these are also ignored above and move
+      # with `npx expo install`; @maplibre/* and @dr.pogodin/* are not, and
+      # were auto-merged mid-runtime before (28498e3, 7ffb3cc, c6b7a49, 91df235).
+      # This group replaces the old `expo` one; its @expo/* entry is SDK-managed
+      # and ignored above, so no group needs it.
+      native:
         patterns:
-          - 'expo'
-          - 'expo-*'
-          - '@expo/*'
+          - '@maplibre/*'
+          - '@dr.pogodin/*'
           - 'react-native'
           - 'react-native-*'
           - '@react-native/*'
+          - '@react-native-*/*'
+          - 'expo'
+          - 'expo-*'
       dev-tooling:
         patterns:
           - 'eslint*'

@@ -38,8 +38,10 @@ function reparseOne(job: ReparseJob): void {
     // A parse that lost every georeference the stored one had. Never replace
     // on that: far likelier a short read than a map that stopped being
     // georeferenced.
+    // The map's id, not its name: reports are public, and the name is the
+    // user's own words (docs/privacy — "no map or trail content").
     reportError(
-      new Error(`re-parse of "${job.name}" found no georeferencing; keeping the stored one`),
+      new Error(`re-parse of map ${job.docId} found no georeferencing; keeping the stored one`),
       'pdf-reparse',
     );
     return;
