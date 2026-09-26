@@ -42,6 +42,7 @@ import {
 import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
+import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
@@ -946,7 +947,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
             })}
           {trailViewMode === '3d' && status === 'loading' && (
             <View style={styles.center} pointerEvents="none">
-              <ActivityIndicator size="large" />
+              {/* The GL surface clears to the light sky (SKY_COLOR) in both
+                  themes, so the stones keep their day tone here. */}
+              <InukshukLoader tone="day" />
               <Text style={styles.loadingText}>Building 3D terrain…</Text>
             </View>
           )}

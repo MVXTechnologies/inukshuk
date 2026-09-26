@@ -67,10 +67,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.inukshuk.app',
     // Play build 54 ships 1.5.3 (see the version note above).
     versionCode: 54,
+    // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
+    // is the background, the stone figure + contact shadow the foreground (inside
+    // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed
+    // icons. backgroundColor is only a fallback — backgroundImage overrides it.
     adaptiveIcon: {
       foregroundImage: './assets/android-icon-foreground.png',
-      // Cream paper from the logo; the full-bleed foreground covers it, this only
-      // shows at the mask edges during launcher parallax.
+      backgroundImage: './assets/android-icon-background.png',
+      monochromeImage: './assets/android-icon-monochrome.png',
       backgroundColor: '#E0D8CC',
     },
     // While-in-use location, a recording foreground service (the expo-location
@@ -133,6 +137,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // seamless hand-off from splash to first screen.
         backgroundColor: '#F2ECE0',
         imageWidth: 200,
+        // Dark appearance: stone-night background, and the figure in its night
+        // tone (the charcoal stones vanish on a dark background otherwise).
+        dark: {
+          image: './assets/splash-icon-dark.png',
+          backgroundColor: '#13171B',
+        },
       },
     ],
     [
