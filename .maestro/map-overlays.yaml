@@ -16,7 +16,7 @@
 # - Guarded-tap idiom on the opener (tap only while 'Topology' is not
 #   visible) so a retry can never toggle an open sheet closed.
 # - Sub-menu rows are plain visible-text matches; the slope window is a
-#   two-thumb range slider (its container a11y label is asserted, not
+#   two-thumb range slider (its thumbs' a11y labels are asserted, not
 #   dragged — thumb pans are flake bait).
 # - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
 #   it auto-dismisses and nothing below asserts during that window.
@@ -85,12 +85,25 @@ appId: com.inukshuk.app
 - tapOn: '50 m'
 - tapOn: 'Auto'
 - tapOn: 'Slope'
-# The range slider renders its committed window; default = every band. Assert
-# its container a11y label — iOS collapses the inner value text ("27–90°")
-# into the accessible container, so the glyph text is Android-only.
+# The range slider renders its committed window; default = every band. Since
+# 31b811e (#308) each thumb is its own adjustable a11y element labelled
+# '<label> minimum' / '<label> maximum' — the container is no longer an
+# element, so there is no whole-range label to match. The thumbs are separate
+# elements on both platforms, but they read differently: Android folds
+# accessibilityValue.text into the content description ("Slope minimum,
+# 27°"), iOS keeps the label bare and carries the value separately. The
+# trailing .* matches both; the default window itself is pinned on Android,
+# where the value is part of the matchable string.
 - extendedWaitUntil:
-    visible: 'Slope range 27 to 90 degrees'
+    visible: 'Slope minimum.*'
     timeout: 10000
+- assertVisible: 'Slope maximum.*'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertVisible: 'Slope minimum, 27°'
+      - assertVisible: 'Slope maximum, 90°'
 # --- 'PDF maps' master switch (#233): the row the D-6 rework dropped. It is
 # a checkbox row (a11y label 'PDF maps', trailing .* for iOS merged strings)
 # whose OFF state is explained by a 'Hidden on the map' line under the label.
