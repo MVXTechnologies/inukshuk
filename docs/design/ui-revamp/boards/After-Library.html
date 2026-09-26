@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library as a logbook (after)</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2ECE0;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',-apple-system,system-ui,sans-serif;color:#2D3740}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #F2ECE0; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, system-ui, sans-serif; color: #2D3740">
+<svg width="390" height="170" viewBox="0 0 390 170" aria-hidden="true" style="position: absolute; left: 0; top: 0"><path d="M0 13 4 14 9 18 12 24 13 30 12 37 8 42 4 44 0 45M0 130 2 118 6 110 30 93 45 66 52 59 67 50 78 28 98 12 108 0M342 0 359 2 364 6 364 12 361 24 361 32 368 46 388 72 388 78 384 90 383 98 385 106 390 117M0 169 18 160 37 136 56 120 72 102 88 92 96 84 104 74 108 66 108 48 110 42 116 36 132 31 136 28 141 8 145 0M280 0 328 27 338 38 359 64 362 74 365 100 373 126 371 160 384 182M244 20 258 19 268 21 314 45 321 50 336 66 344 79 346 92 347 116 349 136 343 182M242 40 256 41 274 48 314 74 327 86 330 98 329 138 327 154 322 165 308 180M248 63 256 62 265 66 296 86 305 96 308 104 308 114 299 144 294 152 287 160 276 169M240 104 250 103 258 104 264 108 265 112 263 124 256 136 248 142 240 144 234 143 228 139 220 130 217 124 219 118 224 112 232 107 240 104M76 170 102 116 120 92 138 77 158 50 174 23 192 13 209 0" fill="none" stroke="#2D3740" stroke-opacity="0.07" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+
+<header style="position: absolute; left: 0; top: 54px; width: 390px; height: 52px; box-sizing: border-box; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 2px">
+<h1 style="margin: 0; flex-grow: 1; font-size: 28px; line-height: 34px; font-weight: 800; letter-spacing: -0.01em">Library</h1>
+<button style="height: 48px; border: 0; padding: 0 10px; background: transparent; color: #2D3740; font-size: 16px; font-weight: 700">Organize</button>
+<button aria-label="Sort and filter" style="width: 48px; height: 48px; border: 0; padding: 0; background: transparent; color: #2D3740; display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"></path></svg>
+</button>
+<button aria-label="Settings" style="width: 48px; height: 48px; border: 0; padding: 0; background: transparent; color: #2D3740; display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"></path></svg>
+</button>
+</header>
+
+<div role="group" aria-label="Filter by type" style="position: absolute; left: 16px; top: 110px; display: flex; gap: 8px">
+<button aria-pressed="true" style="height: 48px; border: 0; padding: 0; background: transparent"><span style="height: 36px; padding: 0 14px; border-radius: 18px; background: #2D3740; color: #F2ECE0; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700">All<span style="font-weight: 500; font-variant-numeric: tabular-nums; color: #D9D2C3">13</span></span></button>
+<button aria-pressed="false" style="height: 48px; border: 0; padding: 0; background: transparent"><span style="height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 18px; background: #FBF8F2; border: 1px solid #D5CEBF; color: #2D3740; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700">Trails<span style="font-weight: 500; font-variant-numeric: tabular-nums; color: #4A5561">9</span></span></button>
+<button aria-pressed="false" style="height: 48px; border: 0; padding: 0; background: transparent"><span style="height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 18px; background: #FBF8F2; border: 1px solid #D5CEBF; color: #2D3740; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700">Maps<span style="font-weight: 500; font-variant-numeric: tabular-nums; color: #4A5561">2</span></span></button>
+<button aria-pressed="false" style="height: 48px; border: 0; padding: 0; background: transparent"><span style="height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 18px; background: #FBF8F2; border: 1px solid #D5CEBF; color: #2D3740; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700">Waypoints<span style="font-weight: 500; font-variant-numeric: tabular-nums; color: #4A5561">2</span></span></button>
+</div>
+
+<div style="position: absolute; left: 0; top: 166px; width: 390px; display: flex; flex-direction: column">
+
+<button aria-expanded="true" style="height: 40px; border: 0; padding: 0 16px; background: transparent; color: #2D3740; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; text-align: left">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>Jacques-Cartier<span style="font-weight: 500; color: #4A5561; font-variant-numeric: tabular-nums">3</span>
+</button>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="position: relative; width: 56px; height: 56px; flex-shrink: 0"><span style="display: block; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 16C12 10 26 20 58 12M-2 32C14 26 30 38 58 28M-2 48C16 42 30 52 58 44" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M10 46C14 38 12 30 20 26S30 16 36 18 46 12 46 22 38 34 44 42" fill="none" stroke="#5A1E0B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M10 46C14 38 12 30 20 26S30 16 36 18 46 12 46 22 38 34 44 42" fill="none" stroke="#E8612C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="10" cy="46" r="3" fill="#2D3740"></circle></svg></span><span aria-hidden="true" style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #FBF8F2; border: 1.5px solid #566B33; color: #566B33; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2.2" fill="currentColor" stroke="none"></circle><path d="M12 8l-2.5 6 3 3v5M9.5 14 7.5 21M12 8l3.5 3.5H18M18.5 10v11"></path></svg></span></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Les Loups — Jacques-Cartier</span>
+<span style="font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">11.2 km · 3:31 · ↑1068 m</span>
+<span style="font-size: 12px; color: #4A5561">Aug 29 · Hike</span>
+</a>
+<button aria-label="More for Les Loups — Jacques-Cartier" style="width: 44px; height: 48px; border: 0; padding: 0; background: transparent; color: #4A5561; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg></button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="position: relative; width: 56px; height: 56px; flex-shrink: 0"><span style="display: block; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 20C12 12 26 24 58 14M-2 36C14 30 30 42 58 30M-2 52C16 46 30 54 58 46" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M12 44C8 34 12 22 22 16 32 10 44 14 46 24 48 34 40 40 32 38 24 36 20 42 12 44" fill="none" stroke="#5A1E0B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 44C8 34 12 22 22 16 32 10 44 14 46 24 48 34 40 40 32 38 24 36 20 42 12 44" fill="none" stroke="#E8612C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="12" cy="44" r="3" fill="#2D3740"></circle></svg></span><span aria-hidden="true" style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #FBF8F2; border: 1.5px solid #2F6E96; color: #2F6E96; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="15.5" cy="4" r="2.2" fill="currentColor" stroke="none"></circle><path d="M14.5 7.5 10 12l4.5 3-2 4M10 12 7 10.5M14.5 7.5l3 2.5M3 20l18-3.5"></path></svg></span></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Camp Mercier — Boucle 5</span>
+<span style="font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">15.1 km · 2:07 · ↑693 m</span>
+<span style="font-size: 12px; color: #4A5561">Apr 27 · Ski</span>
+</a>
+<button aria-label="More for Camp Mercier — Boucle 5" style="width: 44px; height: 48px; border: 0; padding: 0; background: transparent; color: #4A5561; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg></button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="position: relative; width: 56px; height: 56px; flex-shrink: 0"><span style="display: block; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 12C12 6 26 16 58 8M-2 28C14 22 30 34 58 24M-2 44C16 38 30 48 58 40" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M12 47C18 41 16 33 22 31 26 29 24 23 28 19 30 15 34 13 38 11 42 17 45 21 44 27 43 34 36 41 30 45" fill="none" stroke="#5A1E0B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 47C18 41 16 33 22 31 26 29 24 23 28 19 30 15 34 13 38 11 42 17 45 21 44 27 43 34 36 41 30 45" fill="none" stroke="#E8612C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="12" cy="47" r="3" fill="#2D3740"></circle></svg></span><span aria-hidden="true" style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #FBF8F2; border: 1.5px solid #566B33; color: #566B33; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2.2" fill="currentColor" stroke="none"></circle><path d="M12 8l-2.5 6 3 3v5M9.5 14 7.5 21M12 8l3.5 3.5H18M18.5 10v11"></path></svg></span></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Acropole des Draveurs</span>
+<span style="font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">10.1 km · 4:05 · ↑830 m</span>
+<span style="font-size: 12px; color: #4A5561">Jul 20 · Hike</span>
+</a>
+<button aria-label="More for Acropole des Draveurs" style="width: 44px; height: 48px; border: 0; padding: 0; background: transparent; color: #4A5561; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg></button>
+</div>
+
+<button aria-expanded="true" style="height: 40px; margin-top: 4px; border: 0; border-top: 1px solid #D5CEBF; padding: 0 16px; background: transparent; color: #2D3740; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; text-align: left">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>Charlevoix<span style="font-weight: 500; color: #4A5561; font-variant-numeric: tabular-nums">3</span>
+</button>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #E9E3D5; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><rect x="11" y="5" width="34" height="46" rx="1.5" fill="#FBF8F2" stroke="#C9C0AE" stroke-width="1"></rect><path d="M11 20H45M11 36H45M22 5V51M34 5V51" stroke="#E3DCCB" stroke-width="0.8"></path><path d="M13 14C18 10 24 16 30 12S40 10 43 13M13 26C19 22 25 30 32 25S40 23 43 26M13 42C19 38 26 44 33 40S40 38 43 41" fill="none" stroke="#B8946A" stroke-width="0.9"></path><path d="M24 30C27 27 33 28 34 32S29 38 25 36 21 33 24 30Z" fill="#A9CBE0" stroke="#5C93B7" stroke-width="0.8"></path></svg></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Charlevoix · 3 pages</span>
+<span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">Sheet 21M/16 · PDF · 18 MB</span>
+</a>
+<button aria-pressed="true" aria-label="Show Charlevoix on map" style="height: 48px; border: 0; padding: 0; background: transparent; flex-shrink: 0"><span style="height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: 17px; background: #E4E9CF; border: 1px solid #93A25E; color: #3D4D22; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg>On map</span></button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="position: relative; width: 56px; height: 56px; flex-shrink: 0"><span style="display: block; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M28 6C40 6 50 16 50 28S40 50 28 50 6 40 6 28 16 6 28 6ZM28 16C35 16 40 21 40 28S35 40 28 40 16 35 16 28 21 16 28 16Z" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M28 47C18 45 12 35 16 27 20 17 30 11 38 15 46 19 46 31 40 39 37 44 33 46 28 47" fill="none" stroke="#5A1E0B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M28 47C18 45 12 35 16 27 20 17 30 11 38 15 46 19 46 31 40 39 37 44 33 46 28 47" fill="none" stroke="#E8612C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="28" cy="47" r="3" fill="#2D3740"></circle></svg></span><span aria-hidden="true" style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #FBF8F2; border: 1.5px solid #566B33; color: #566B33; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2.2" fill="currentColor" stroke="none"></circle><path d="M12 8l-2.5 6 3 3v5M9.5 14 7.5 21M12 8l3.5 3.5H18M18.5 10v11"></path></svg></span></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mont du Lac des Cygnes</span>
+<span style="font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">5.6 km · 2:24 · ↑520 m</span>
+<span style="font-size: 12px; color: #4A5561">Jul 6 · Hike</span>
+</a>
+<button aria-label="More for Mont du Lac des Cygnes" style="width: 44px; height: 48px; border: 0; padding: 0; background: transparent; color: #4A5561; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg></button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="position: relative; width: 56px; height: 56px; flex-shrink: 0"><span style="display: block; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 40C10 44 20 38 30 42S48 46 58 40" fill="none" stroke="#5C93B7" stroke-width="1" stroke-opacity="0.7"></path><path d="M-2 18C12 12 26 22 58 14M-2 30C14 24 30 34 58 26" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M6 33C12 29 16 37 22 32S30 23 36 27 46 32 50 23" fill="none" stroke="#5A1E0B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 33C12 29 16 37 22 32S30 23 36 27 46 32 50 23" fill="none" stroke="#E8612C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="6" cy="33" r="3" fill="#2D3740"></circle></svg></span><span aria-hidden="true" style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 10px; background: #FBF8F2; border: 1.5px solid #9A4A14; color: #9A4A14; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="4" r="2.2" fill="currentColor" stroke="none"></circle><path d="M14 8l-3.5 5 3.5 3-1.5 5.5M10.5 13 6 14M14 8l2.5 3.5 3.5-1"></path></svg></span></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Sentier des Caps</span>
+<span style="font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">9.3 km · 3:12 · ↑610 m</span>
+<span style="font-size: 12px; color: #4A5561">Jun 28 · Run</span>
+</a>
+<button aria-label="More for Sentier des Caps" style="width: 44px; height: 48px; border: 0; padding: 0; background: transparent; color: #4A5561; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg></button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 0 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB; color: #2D3740; display: flex; align-items: center; justify-content: center"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><path d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg></span>
+<a href="#" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2D3740; text-decoration: none">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Belvédère de l’Éperon</span>
+<span style="font-size: 14px; font-weight: 600">Waypoint · south-facing lookout</span>
+<span style="font-size: 12px; color: #4A5561">Aug 16</span>
+</a>
+</div>
+</div>
+
+<nav aria-label="Tabs" style="position: absolute; left: 0; top: 754px; width: 390px; height: 90px; box-sizing: border-box; background: #F3EDE1; border-top: 1px solid #D5CEBF; padding: 6px 8px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start">
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Map</span>
+</button>
+<button aria-current="page" style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #2D3740">
+<span style="width: 60px; height: 30px; border-radius: 15px; background: #D6DEB8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></span>
+<span style="font-size: 12px; font-weight: 800">Library</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M17.5 13.5V21m-3-3 3 3 3-3"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Maps</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3Z"></path><path d="M5 17a3 3 0 0 1 3-3h11"></path><path d="M9 8h6"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Logbook</span>
+</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

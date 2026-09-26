@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stone and Paper tokens</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2ECE0;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',-apple-system,system-ui,sans-serif;color:#2D3740}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 1280px; height: 844px; box-sizing: border-box; overflow: hidden; padding: 32px 40px; background: #F2ECE0; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, system-ui, sans-serif; color: #2D3740; display: flex; flex-direction: column; gap: 24px">
+<svg width="1280" height="90" viewBox="0 0 1280 90" aria-hidden="true" style="position: absolute; left: 0; top: 14px"><path d="M52 0 68 28 74 32 80 27 86 19 92 0M166 0 156 14 142 39 136 44 114 47 92 58 86 56 74 47 70 46 66 48 45 70 43 76 44 90M216 0 218 5 224 7 228 5 230 0M391 0 395 12 411 32 411 42 408 49 400 52 378 50 365 28 356 24 346 25 341 30 333 48 316 73 311 90M479 0 482 5 488 7 492 5 495 0M616 0 620 12 628 16 634 14 644 7 656 6 658 0M0 28 6 25 10 20 17 0M130 90 131 76 138 63 142 60 152 63 158 62 166 55 173 44 179 30 180 20 179 10 174 0M288 90 282 82 272 79 260 83 253 90M446 90 447 66 443 46 438 34 425 20 425 0M532 90 536 58 534 55 530 54 522 56 514 63 511 72 510 90M254 22 246 24 239 30 235 38 236 42 249 42 260 36 262 28 259 24 254 22M580 21 570 30 563 44 569 50 582 54 586 53 590 49 593 34 590 24 586 21 580 21M652 60 644 66 644 70 646 72 658 72 663 70 667 66 666 62 663 60 652 60M778 90 774 58 773 34 763 6 763 0M1273 0 1280 13M808 90 819 58 819 26 815 6 817 0M1245 0 1245 26 1250 42 1251 50 1246 66 1234 90M835 90 837 78 856 36 862 30 881 20 907 0M1210 0 1212 10 1210 30 1220 52 1222 60 1220 70 1209 90M879 90 881 80 890 50 896 42 916 25 926 0M1158 0 1175 20 1189 54 1185 60 1172 64 1166 68 1154 90M923 90 915 66 914 58 918 52 934 41 939 36 942 10 950 0M1116 0 1124 13 1136 26 1138 32 1135 40 1112 78 1104 86 1096 89 1090 87 1070 74 1062 73 1056 77 1048 90M1021 90 1019 86 1019 82 1031 66 1034 58 1033 50 1025 32 1026 24 1066 9 1077 0" fill="none" stroke="#2D3740" stroke-opacity="0.10" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+
+<header style="position: relative; height: 60px; display: flex; align-items: center; gap: 16px">
+<svg width="48" height="48" viewBox="0 0 24 24" fill="#2D3740" aria-hidden="true"><path d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><path d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+<h1 style="margin: 0; font-size: 32px; line-height: 36px; font-weight: 800; letter-spacing: -0.01em">Stone &amp; Paper</h1>
+<p style="margin: 0; font-size: 14px; color: #4A5561">Inukshuk tokens · palette → semantic → scale · themes: light, stone night, Sunlight, Night red</p>
+</div>
+<span style="padding: 6px 12px; border-radius: 8px; border: 1px solid #D5CEBF; background: #FBF8F2; font-size: 13px; font-weight: 600; color: #2D3740">src/ui/tokens.ts</span>
+</header>
+
+<div style="position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; flex-grow: 1">
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">PALETTE</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px">
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #2D3740; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Stone</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#2D3740</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 8px; background: #F2ECE0; border: 1px solid #D5CEBF; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Paper</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#F2ECE0</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 8px; background: #FBF8F2; border: 1px solid #D5CEBF; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Surface</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#FBF8F2</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #D5CEBF; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Outline var.</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#D5CEBF</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #93A25E; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Sage</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#93A25E</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #566B33; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Sage deep</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#566B33</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #5C93B7; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">River</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#5C93B7</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #2F7FC1; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Puck blue</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#2F7FC1</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #8A8B8C; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Granite</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#8A8B8C</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #5F6B76; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Granite deep</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#5F6B76</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #C98A2B; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Ochre</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#C98A2B</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #B45309; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Amber status</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#B45309</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #C62828; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Signal red</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#C62828</span></span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 8px; background: #E8612C; box-shadow: inset 0 0 0 3px #5A1E0B; flex-shrink: 0"></span><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 700">Route + casing</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">#E8612C</span></span></div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">CONTRAST · AS USED</h2>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; border-radius: 6px; background: #2D3740; color: #F2ECE0; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">Paper on stone chrome</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">10.3</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; box-sizing: border-box; border-radius: 6px; background: #F3EDE1; border: 1px solid #D5CEBF; color: #2D3740; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">Stone on tab bar</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">10.4</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; box-sizing: border-box; border-radius: 6px; background: #F3EDE1; border: 1px solid #D5CEBF; color: #4A5561; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">Muted ink #4A5561, labels</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">6.5</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; border-radius: 6px; background: #B45309; color: #FFFFFF; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">White on amber, PAUSED</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">5.0</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; box-sizing: border-box; border-radius: 6px; background: #FBF8F2; border: 1px solid #D5CEBF; color: #B45309; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">Amber on surface, Weak GPS</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">4.7</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; border-radius: 6px; background: #000000; color: #FF3B30; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1">Night ink on black</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums">5.9</span></div>
+<div style="display: flex; align-items: center; gap: 10px; height: 30px"><span style="width: 44px; height: 28px; box-sizing: border-box; border-radius: 6px; background: #FBF8F2; border: 1px solid #D5CEBF; color: #AECCDF; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">Aa</span><span style="font-size: 13px; flex-grow: 1; color: #4A5561">Retired: tertiary as ink</span><span style="font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; color: #C62828; text-decoration: line-through">1.6</span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">ELEVATION STEPS</h2>
+<div style="padding: 12px; border-radius: 12px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; color: #4A5561">Light · paper steps · outline #D5CEBF</span>
+<div style="display: flex; gap: 6px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; border: 1.5px dashed #D5CEBF"></span><span style="font-size: 12px; color: #4A5561">0</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #F7F2E8; border: 1px solid #E3DCCB"></span><span style="font-size: 12px; color: #4A5561">1</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #F3EDE1; border: 1px solid #E3DCCB"></span><span style="font-size: 12px; color: #4A5561">2</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #EEE7D9; border: 1px solid #E3DCCB"></span><span style="font-size: 12px; color: #4A5561">3</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #ECE4D5; border: 1px solid #E3DCCB"></span><span style="font-size: 12px; color: #4A5561">4</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #E8E0CF; border: 1px solid #E3DCCB"></span><span style="font-size: 12px; color: #4A5561">5</span></div>
+</div>
+</div>
+<div style="padding: 12px; border-radius: 12px; background: #13171B; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; color: #A7B0B8">Stone night · bg #13171B · outline #3E4852</span>
+<div style="display: flex; gap: 6px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 10px; background: #1A1F24; border: 1px solid #3E4852"></span><span style="font-size: 12px; color: #A7B0B8">S</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; border-radius: 10px; background: #1F252B"></span><span style="font-size: 12px; color: #A7B0B8">1</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; border-radius: 10px; background: #242B32"></span><span style="font-size: 12px; color: #A7B0B8">2</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; border-radius: 10px; background: #29313A"></span><span style="font-size: 12px; color: #A7B0B8">3</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; border-radius: 10px; background: #2B343D"></span><span style="font-size: 12px; color: #A7B0B8">4</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 36px; height: 36px; border-radius: 10px; background: #2F3842"></span><span style="font-size: 12px; color: #A7B0B8">5</span></div>
+</div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">TYPE · ATKINSON · TNUM</h2>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #4A5561">Display · 32 / 700</span><span style="font-size: 32px; line-height: 38px; font-weight: 700; font-variant-numeric: tabular-nums">1:02:14</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #4A5561">Title · 20 / 700</span><span style="font-size: 20px; line-height: 26px; font-weight: 700">Sentier des Caps</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #4A5561">Body · 16 / 400</span><span style="font-size: 16px; line-height: 22px">No trails yet. Record one, or import a GPX.</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #4A5561">Label · 13 / 700 caps</span><span style="font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.08em">DISTANCE</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #4A5561">Caption · 12 / 500 · the floor</span><span style="font-size: 12px; line-height: 16px; font-weight: 500">Aug 29 · Hike</span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">SPACE</h2>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">4</span><span style="width: 12px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">8</span><span style="width: 24px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">12</span><span style="width: 36px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">16</span><span style="width: 48px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">24</span><span style="width: 72px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums">32</span><span style="width: 96px; height: 12px; background: #2D3740; border-radius: 2px"></span></div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">RADIUS</h2>
+<div style="display: flex; gap: 14px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 52px; height: 52px; box-sizing: border-box; border-radius: 8px; border: 2px solid #2D3740; background: #FBF8F2"></span><span style="font-size: 12px; font-weight: 700">8</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 52px; height: 52px; box-sizing: border-box; border-radius: 12px; border: 2px solid #2D3740; background: #FBF8F2"></span><span style="font-size: 12px; font-weight: 700">12</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 52px; height: 52px; box-sizing: border-box; border-radius: 16px; border: 2px solid #2D3740; background: #FBF8F2"></span><span style="font-size: 12px; font-weight: 700">16</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 52px; height: 52px; box-sizing: border-box; border-radius: 26px; border: 2px solid #2D3740; background: #FBF8F2"></span><span style="font-size: 12px; font-weight: 700">28</span></div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">TARGET · 48 MIN</h2>
+<div style="display: flex; gap: 24px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<span style="width: 48px; height: 48px; border-radius: 16px; background: #2D3740; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2ECE0" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+<span style="font-size: 12px; color: #4A5561">48 visual</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<span style="width: 48px; height: 48px; box-sizing: border-box; border: 1.5px dashed #2D3740; border-radius: 8px; display: flex; align-items: center; justify-content: center"><span style="width: 36px; height: 36px; border-radius: 18px; background: #2D3740"></span></span>
+<span style="font-size: 12px; color: #4A5561">36 + hitSlop 6</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<span style="width: 56px; height: 56px; border-radius: 28px; background: #2D3740; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="#F2ECE0" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"></rect><rect x="14" y="4" width="5" height="16" rx="1.5"></rect></svg></span>
+<span style="font-size: 12px; color: #4A5561">56 record</span>
+</div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">MAP CHROME · STONE 92%</h2>
+<div style="position: relative; height: 96px; border-radius: 12px; overflow: hidden; border: 1px solid #D5CEBF">
+<img src="blobs/1d745d6ff6ae84f92d10e90b22a9754b.svg" alt="" style="position: absolute; left: -40px; top: -330px; width: 390px; height: 844px">
+<span style="position: absolute; left: 12px; top: 24px; width: 48px; height: 48px; border-radius: 24px; background: rgba(45,55,64,0.92); display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 16.2 12H7.8Z" fill="#FF6B5E"></path><path d="M12 21.5 7.8 12h8.4Z" fill="#F2ECE0"></path></svg></span>
+<span style="position: absolute; left: 70px; top: 24px; height: 48px; padding: 0 16px; border-radius: 24px; background: rgba(45,55,64,0.92); color: #E6DFD1; font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>Search places</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">STATUS · TEXT + SHAPE</h2>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 14px; background: #2D3740; color: #F2ECE0; font-size: 12px; font-weight: 800; letter-spacing: 0.08em"><span style="width: 9px; height: 9px; border-radius: 5px; background: #FF5A4E"></span>REC</span><span style="font-size: 12px; color: #4A5561">status.recording</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 6px; background: #B45309; color: #FFFFFF; font-size: 12px; font-weight: 800; letter-spacing: 0.08em"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="6" height="18" rx="1.5"></rect><rect x="14" y="3" width="6" height="18" rx="1.5"></rect></svg>PAUSED</span><span style="font-size: 12px; color: #4A5561">status.paused</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; border: 1.5px solid #B45309; background: #FBF8F2; color: #B45309; font-size: 13px; font-weight: 700"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg>Weak GPS · ±35 m</span><span style="font-size: 12px; color: #4A5561">status.gpsWeak</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; background: #C62828; color: #FFFFFF; font-size: 13px; font-weight: 700"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4 4l16 16"></path></svg>No GPS · 2 min</span><span style="font-size: 12px; color: #4A5561">status.gpsLost</span></div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">LOCATION PUCK · OVER FOREST</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="height: 76px; border-radius: 10px; background: #CFD3AC; display: flex; align-items: center; justify-content: center"><svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="7" fill="#566B33"></circle></svg></div>
+<span style="font-size: 12px; color: #4A5561">Before · olive dot, 3.9:1</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="height: 76px; border-radius: 10px; background: #CFD3AC; display: flex; align-items: center; justify-content: center"><svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><path d="M36 36 22 6A34 34 0 0 1 50 6Z" fill="#2F7FC1" fill-opacity="0.24"></path><circle cx="36" cy="36" r="13" fill="#2F7FC1" fill-opacity="0.18"></circle><circle cx="36" cy="36" r="9.5" fill="#2D3740"></circle><circle cx="36" cy="36" r="8.5" fill="#F7F2E8"></circle><circle cx="36" cy="36" r="5.5" fill="#2F7FC1"></circle></svg></div>
+<span style="font-size: 12px; color: #4A5561">After · paper ring + cone</span>
+</div>
+</div>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">LOADER · STONES STACK</h2>
+<div style="display: flex; gap: 14px; align-items: flex-end">
+<svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2D3740" d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path fill="#2D3740" d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path fill="#2D3740" transform="translate(-0.8 -4.2) rotate(-12 12 14.8)" d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><path fill="#DDD6C6" d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path fill="#DDD6C6" d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg>
+<svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2D3740" d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path fill="#2D3740" d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path fill="#2D3740" transform="translate(12 14.8) scale(1.12 0.84) translate(-12 -14.8)" d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><circle cx="5.1" cy="14.2" r="0.45" fill="#5F6B76" fill-opacity="0.6"></circle><circle cx="4.2" cy="13.6" r="0.35" fill="#A89E8C"></circle><circle cx="18.9" cy="14.2" r="0.45" fill="#5F6B76" fill-opacity="0.6"></circle><circle cx="19.7" cy="13.5" r="0.35" fill="#A89E8C"></circle><path fill="#2D3740" transform="translate(1 -3.6) rotate(10 12 9.99)" d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path fill="#DDD6C6" d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg>
+<svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2D3740" d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path fill="#2D3740" d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path fill="#2D3740" d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><path fill="#2D3740" d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path fill="#2D3740" transform="translate(-0.6 -3) rotate(-14 12 6.28)" d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg>
+<svg width="44" height="44" viewBox="0 0 24 24" fill="#2D3740" aria-hidden="true"><path d="M7.74 15.27L10.33 15.27Q10.98 15.27 10.89 15.91L9.96 22.36Q9.87 23 9.22 23L5.98 23Q5.33 23 5.47 22.37L6.95 15.90Q7.09 15.27 7.74 15.27Z"></path><path d="M13.67 15.27L16.26 15.27Q16.91 15.27 17.05 15.90L18.53 22.37Q18.67 23 18.02 23L14.78 23Q14.13 23 14.04 22.36L13.11 15.91Q13.02 15.27 13.67 15.27Z"></path><path d="M7.46 10.45L16.54 10.45Q17.19 10.45 17.19 11.10L17.19 14.15Q17.19 14.80 16.54 14.80L7.46 14.80Q6.81 14.80 6.81 14.15L6.81 11.10Q6.81 10.45 7.46 10.45Z"></path><path d="M3.01 6.74L20.99 6.74Q21.63 6.74 21.63 7.39L21.63 9.34Q21.63 9.99 20.99 9.99L3.01 9.99Q2.37 9.99 2.37 9.34L2.37 7.39Q2.37 6.74 3.01 6.74Z"></path><path d="M10.15 1L13.85 1Q14.50 1 14.50 1.65L14.50 5.63Q14.50 6.28 13.85 6.28L10.15 6.28Q9.50 6.28 9.50 5.63L9.50 1.65Q9.50 1 10.15 1Z"></path></svg>
+</div>
+<span style="font-size: 12px; color: #4A5561">Stones fall tilted, straighten, squash on landing and kick up dust. Drops start 280 ms apart. Replaces the spinner.</span>
+
+<h2 style="margin: 14px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">CONTOUR TEXTURE</h2>
+<div style="position: relative; height: 100px; border-radius: 12px; overflow: hidden; background: #FBF8F2; border: 1px solid #D5CEBF">
+<svg width="282" height="100" viewBox="0 0 282 100" aria-hidden="true" style="position: absolute; left: 0; top: 0"><path d="M0 11 8 10 36 19 46 19 52 17 58 13 67 0M282 22 273 40 269 54 269 70 276 92 274 97 269 100M6 100 6 94 7 88 16 70 21 56 24 52 30 49 50 42 69 32 75 26 85 10 92 0M261 0 263 8 263 18 252 76 243 100M59 100 44 84 42 80 43 76 50 71 68 68 79 62 92 42 100 20 117 0M221 0 239 22 242 30 243 38 242 58 240 72 234 90 227 100M143 100 130 86 119 70 114 60 114 50 119 24 124 15 134 7 155 0M205 0 210 4 214 10 220 20 224 28 228 58 227 66 225 74 220 82 211 88 192 91 168 93 154 91 148 88 142 82 136 74 132 66 130 60 131 54 143 28 148 22 156 17 178 9 194 0M198 20 202 20 206 23 209 28 211 34 212 58 210 64 206 70 197 76 184 79 162 79 151 74 147 68 145 60 148 52 158 37 168 29 198 20" fill="none" stroke="#2D3740" stroke-opacity="0.16" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+<span style="position: absolute; left: 12px; bottom: 10px; font-size: 12px; font-weight: 600; color: #4A5561">Empty states · Library header · splash</span>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

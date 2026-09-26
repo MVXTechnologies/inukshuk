@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map, idle (after)</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2ECE0;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',-apple-system,system-ui,sans-serif;color:#2D3740}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #F3EEE2; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, system-ui, sans-serif; color: #2D3740">
+<img src="blobs/1d745d6ff6ae84f92d10e90b22a9754b.svg" alt="Topographic map around Lac des Cygnes with the loaded trail in orange and your location" style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; display: block">
+
+<button aria-label="Compass: north up. Tap to reset bearing" style="position: absolute; left: 16px; top: 54px; width: 48px; height: 48px; border-radius: 24px; border: 0; padding: 0; background: rgba(45,55,64,0.92); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(20,24,28,0.28)">
+<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 16.2 12H7.8Z" fill="#FF6B5E"></path><path d="M12 21.5 7.8 12h8.4Z" fill="#F2ECE0"></path></svg>
+</button>
+
+<button aria-label="Search places, peaks, lakes and coordinates" style="position: absolute; left: 76px; top: 54px; width: 238px; height: 48px; border-radius: 24px; border: 0; padding: 0 16px; background: rgba(45,55,64,0.92); color: #E6DFD1; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(20,24,28,0.28); font-size: 16px; font-weight: 500; text-align: left">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+<span>Search places</span>
+</button>
+
+<div style="position: absolute; right: 16px; top: 54px; display: flex; flex-direction: column; gap: 8px">
+<button aria-label="Go to my position" style="width: 48px; height: 48px; border-radius: 24px; border: 0; padding: 0; background: rgba(45,55,64,0.92); color: #F2ECE0; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(20,24,28,0.28)">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6.5"></circle><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"></path><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"></circle></svg>
+</button>
+<div style="width: 48px; border-radius: 16px; overflow: hidden; background: rgba(45,55,64,0.92); box-shadow: 0 2px 8px rgba(20,24,28,0.28); display: flex; flex-direction: column">
+<button aria-label="Base map" style="width: 48px; height: 48px; border: 0; padding: 0; background: transparent; color: #F2ECE0; display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"></path><path d="m3 12 9 4.5 9-4.5"></path><path d="m3 16.5 9 4.5 9-4.5"></path></svg>
+</button>
+<div style="height: 1px; margin: 0 10px; background: rgba(242,236,224,0.22)"></div>
+<button aria-label="Map overlays (PDF maps)" style="width: 48px; height: 48px; border: 0; padding: 0; background: transparent; color: #F2ECE0; display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7Z"></path><path d="M14 3v5h5"></path><path d="M10 13.5c1.5-1.2 3-.2 4.5-1"></path><path d="M10 17.5c1.5-1.2 3-.2 4.5-1"></path></svg>
+</button>
+</div>
+<button aria-label="More actions: waypoint, download area, make a map, coordinates" style="width: 48px; height: 48px; border-radius: 16px; border: 0; padding: 0; background: rgba(45,55,64,0.92); color: #F2ECE0; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(20,24,28,0.28)">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+</button>
+</div>
+
+<div aria-label="Scale 500 metres" style="position: absolute; left: 16px; top: 712px; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; border-radius: 8px; background: rgba(251,248,242,0.86)">
+<span style="font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: #2D3740">500 m</span>
+<div style="width: 62px; height: 5px; border: 1.5px solid #2D3740; border-top: 0"></div>
+</div>
+<div style="position: absolute; right: 16px; top: 722px; padding: 3px 8px; border-radius: 8px; background: rgba(251,248,242,0.86); font-size: 12px; color: #4A5561">© OpenStreetMap</div>
+
+<div style="position: absolute; left: 155px; top: 638px; width: 80px; display: flex; flex-direction: column; align-items: center; gap: 6px">
+<button aria-label="Record a track" style="width: 64px; height: 64px; border-radius: 32px; border: 3px solid #F2ECE0; padding: 0; background: #2D3740; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(20,24,28,0.35)">
+<span style="width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF"></span>
+</button>
+<span aria-hidden="true" style="padding: 2px 10px; border-radius: 10px; background: rgba(251,248,242,0.92); font-size: 12px; font-weight: 700; color: #2D3740; letter-spacing: 0.02em">Record</span>
+</div>
+
+<nav aria-label="Tabs" style="position: absolute; left: 0; top: 754px; width: 390px; height: 90px; box-sizing: border-box; background: #F3EDE1; border-top: 1px solid #D5CEBF; padding: 6px 8px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start">
+<button aria-current="page" style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #2D3740">
+<span style="width: 60px; height: 30px; border-radius: 15px; background: #D6DEB8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg></span>
+<span style="font-size: 12px; font-weight: 800">Map</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Library</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M17.5 13.5V21m-3-3 3 3 3-3"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Maps</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3Z"></path><path d="M5 17a3 3 0 0 1 3-3h11"></path><path d="M9 8h6"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Logbook</span>
+</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

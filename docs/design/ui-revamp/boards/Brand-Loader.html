@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inukshuk loader</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2ECE0;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',-apple-system,system-ui,sans-serif;color:#2D3740}
+button{font-family:inherit;cursor:pointer}
+.ink-img{transform-origin:50% 100%;animation-duration:3.4s;animation-iteration-count:infinite;animation-fill-mode:both;will-change:transform}
+.ink-leg-left{animation-name:ink-leg-l}.ink-leg-right{animation-name:ink-leg-r}.ink-torso{animation-name:ink-torso}.ink-arm{animation-name:ink-arm}.ink-head{animation-name:ink-head}
+.ink-dust{opacity:0;border-radius:50%;animation-duration:3.4s;animation-iteration-count:infinite;animation-fill-mode:both}
+.ink-da{animation-name:dust-a}.ink-db{animation-name:dust-b}.ink-dc{animation-name:dust-c}.ink-dd{animation-name:dust-d}.ink-de{animation-name:dust-e}
+.ink-at-leg-left{animation-delay:400ms}.ink-at-leg-right{animation-delay:680ms}.ink-at-torso{animation-delay:960ms}.ink-at-arm{animation-delay:1240ms}.ink-at-head{animation-delay:1520ms}
+.ink-pulse{animation:ink-pulse 3.4s ease-in-out infinite}
+@keyframes ink-leg-l{0%{opacity:0;transform:translate(-20px,-260px) rotate(-10deg)}1.5%{opacity:1;transform:translate(-19px,-250px) rotate(-10deg);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%{transform:translate(0,0) rotate(0) scale(1.08,.88);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}15.29%{transform:translate(0,-5px) rotate(0) scale(.97,1.05);animation-timing-function:cubic-bezier(.55,0,1,.45)}17.65%{transform:translate(0,0) rotate(0) scale(1.02,.98);animation-timing-function:cubic-bezier(.22,1,.36,1)}18.82%,87.06%{opacity:1;transform:translate(0,0) rotate(0) scale(1,1)}95.88%,100%{opacity:0;transform:translate(0,0) rotate(0) scale(1,1)}}
+@keyframes ink-leg-r{0%,8.23%{opacity:0;transform:translate(22px,-260px) rotate(12deg)}8.24%{opacity:1;transform:translate(22px,-260px) rotate(12deg);animation-timing-function:cubic-bezier(.55,0,1,.45)}20%{transform:translate(0,0) rotate(0) scale(1.08,.88);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}23.53%{transform:translate(0,-5px) rotate(0) scale(.97,1.05);animation-timing-function:cubic-bezier(.55,0,1,.45)}25.88%{transform:translate(0,0) rotate(0) scale(1.02,.98);animation-timing-function:cubic-bezier(.22,1,.36,1)}27.06%,87.06%{opacity:1;transform:translate(0,0) rotate(0) scale(1,1)}95.88%,100%{opacity:0;transform:translate(0,0) rotate(0) scale(1,1)}}
+@keyframes ink-torso{0%,16.46%{opacity:0;transform:translate(-18px,-260px) rotate(-12deg)}16.47%{opacity:1;transform:translate(-18px,-260px) rotate(-12deg);animation-timing-function:cubic-bezier(.55,0,1,.45)}28.24%{transform:translate(0,0) rotate(0) scale(1.12,.84);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}31.76%{transform:translate(0,-5px) rotate(0) scale(.96,1.06);animation-timing-function:cubic-bezier(.55,0,1,.45)}34.12%{transform:translate(0,0) rotate(0) scale(1.03,.97);animation-timing-function:cubic-bezier(.22,1,.36,1)}35.29%,87.06%{opacity:1;transform:translate(0,0) rotate(0) scale(1,1)}95.88%,100%{opacity:0;transform:translate(0,0) rotate(0) scale(1,1)}}
+@keyframes ink-arm{0%,24.70%{opacity:0;transform:translate(24px,-260px) rotate(10deg)}24.71%{opacity:1;transform:translate(24px,-260px) rotate(10deg);animation-timing-function:cubic-bezier(.55,0,1,.45)}36.47%{transform:translate(0,0) rotate(0) scale(1.08,.8);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}40%{transform:translate(0,-5px) rotate(0) scale(.97,1.08);animation-timing-function:cubic-bezier(.55,0,1,.45)}42.35%{transform:translate(0,0) rotate(0) scale(1.02,.97);animation-timing-function:cubic-bezier(.22,1,.36,1)}43.53%,87.06%{opacity:1;transform:translate(0,0) rotate(0) scale(1,1)}95.88%,100%{opacity:0;transform:translate(0,0) rotate(0) scale(1,1)}}
+@keyframes ink-head{0%,32.93%{opacity:0;transform:translate(-14px,-260px) rotate(-14deg)}32.94%{opacity:1;transform:translate(-14px,-260px) rotate(-14deg);animation-timing-function:cubic-bezier(.55,0,1,.45)}44.71%{transform:translate(0,0) rotate(0) scale(1.14,.82);animation-timing-function:cubic-bezier(.34,1.56,.64,1)}48.24%{transform:translate(0,-6px) rotate(0) scale(.95,1.08);animation-timing-function:cubic-bezier(.55,0,1,.45)}50.59%{transform:translate(0,0) rotate(0) scale(1.03,.97);animation-timing-function:cubic-bezier(.22,1,.36,1)}51.76%,87.06%{opacity:1;transform:translate(0,0) rotate(0) scale(1,1)}95.88%,100%{opacity:0;transform:translate(0,0) rotate(0) scale(1,1)}}
+@keyframes dust-a{0%{opacity:0;transform:translate(0,0) scale(.5);animation-timing-function:cubic-bezier(.2,.8,.3,1)}.5%{opacity:.6}5.88%{opacity:.55;transform:translate(-17px,-8px) scale(1);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%,100%{opacity:0;transform:translate(-21px,-4px) scale(.8)}}
+@keyframes dust-b{0%{opacity:0;transform:translate(0,0) scale(.5);animation-timing-function:cubic-bezier(.2,.8,.3,1)}.5%{opacity:.6}5.88%{opacity:.55;transform:translate(-10px,-13px) scale(1);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%,100%{opacity:0;transform:translate(-12px,-9px) scale(.8)}}
+@keyframes dust-c{0%{opacity:0;transform:translate(0,0) scale(.5);animation-timing-function:cubic-bezier(.2,.8,.3,1)}.5%{opacity:.6}5.88%{opacity:.55;transform:translate(-23px,-3px) scale(1);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%,100%{opacity:0;transform:translate(-29px,1px) scale(.8)}}
+@keyframes dust-d{0%{opacity:0;transform:translate(0,0) scale(.5);animation-timing-function:cubic-bezier(.2,.8,.3,1)}.5%{opacity:.6}5.88%{opacity:.55;transform:translate(17px,-8px) scale(1);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%,100%{opacity:0;transform:translate(21px,-4px) scale(.8)}}
+@keyframes dust-e{0%{opacity:0;transform:translate(0,0) scale(.5);animation-timing-function:cubic-bezier(.2,.8,.3,1)}.5%{opacity:.6}5.88%{opacity:.55;transform:translate(11px,-13px) scale(1);animation-timing-function:cubic-bezier(.55,0,1,.45)}11.76%,100%{opacity:0;transform:translate(14px,-9px) scale(.8)}}
+@keyframes ink-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion: reduce){.ink-img{animation:ink-pulse 3.4s ease-in-out infinite!important;transform:none!important}.ink-dust{display:none}}
+</style>
+</helmet>
+<div style="position: relative; width: 880px; height: 844px; box-sizing: border-box; overflow: hidden; padding: 30px 40px; background: #F2ECE0; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, system-ui, sans-serif; color: #2D3740; display: flex; flex-direction: column; gap: 18px">
+
+<header style="display: flex; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 800">Loader · Marc's stones fall into place</h1>
+<p style="margin: 0; font-size: 14px; color: #4A5561">3.4 s loop · legs, torso, arm, head drop 280 ms apart · tilted entry, squash, dust · 1.2 s hold · figure: {{figureLabel}}</p>
+</div>
+<button onClick="{{replay}}" style="height: 48px; border: 0; border-radius: 24px; padding: 0 20px; background: #2D3740; color: #F2ECE0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; flex-shrink: 0">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path></svg>Replay</button>
+</header>
+
+<div style="display: flex; gap: 24px">
+<div role="img" aria-label="Loading animation: stones stack into an inukshuk" style="width: 420px; height: 420px; border-radius: 20px; background: #FBF8F2; border: 1px solid #D5CEBF; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<sc-if value="{{showA}}" hint-placeholder-val="{{ true }}">
+<div style="position: relative; width: {{fw}}px; height: {{fh}}px">
+<sc-for list="{{stones}}" as="s" hint-placeholder-count="5">
+<img src="{{s.src}}" alt="" class="ink-img ink-{{s.key}}" style="position: absolute; image-rendering: auto; backface-visibility: hidden; left: {{s.x}}px; top: {{s.y}}px; width: {{s.w}}px; height: {{s.h}}px">
+</sc-for>
+<sc-for list="{{dust}}" as="d" hint-placeholder-count="25">
+<span class="ink-dust ink-{{d.dir}} ink-at-{{d.at}}" style="position: absolute; left: {{d.x}}px; top: {{d.y}}px; width: {{d.w}}px; height: {{d.h}}px; background: {{d.c}}"></span>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{showB}}" hint-placeholder-val="{{ false }}">
+<div style="position: relative; width: {{fw}}px; height: {{fh}}px">
+<sc-for list="{{stones}}" as="s" hint-placeholder-count="5">
+<img src="{{s.src}}" alt="" class="ink-img ink-{{s.key}}" style="position: absolute; image-rendering: auto; backface-visibility: hidden; left: {{s.x}}px; top: {{s.y}}px; width: {{s.w}}px; height: {{s.h}}px">
+</sc-for>
+<sc-for list="{{dust}}" as="d" hint-placeholder-count="25">
+<span class="ink-dust ink-{{d.dir}} ink-at-{{d.at}}" style="position: absolute; left: {{d.x}}px; top: {{d.y}}px; width: {{d.w}}px; height: {{d.h}}px; background: {{d.c}}"></span>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">STONE SETS · SWITCH WITH THE FIGURE TWEAK</h2>
+<div style="display: flex; gap: 12px">
+<div style="width: 104px; height: 104px; border-radius: 16px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">
+<img src="blobs/5bf78430f1ab9c7ff287e5ec71c7caee.png" alt="Wide figure" style="width: 64px; height: 62px; object-fit: contain; display: block">
+<span style="font-size: 12px; color: #4A5561">wide</span>
+</div>
+<div style="width: 104px; height: 104px; border-radius: 16px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">
+<img src="blobs/8742ad2af24c04c3039bfb4ade2b1beb.svg" alt="Compact figure" style="width: 64px; height: 62px; object-fit: contain; display: block">
+<span style="font-size: 12px; color: #4A5561">compact</span>
+</div>
+<div style="width: 104px; height: 104px; border-radius: 16px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">
+<img class="ink-pulse" src="blobs/8742ad2af24c04c3039bfb4ade2b1beb.svg" alt="Reduced motion: the whole figure pulses" style="width: 64px; height: 62px; object-fit: contain; display: block">
+<span style="font-size: 12px; color: #4A5561">reduced motion</span>
+</div>
+</div>
+
+<h2 style="margin: 8px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: #4A5561">TIMELINE · 3400 MS LOOP</h2>
+<div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #D5CEBF; background: #FBF8F2; overflow: hidden">
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; background: #EEE7D9; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: #4A5561"><span>STONE</span><span>STARTS</span><span>LANDS</span><span>ENTERS AT</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Leg, left</span><span>0</span><span>400</span><span>−10°, x −20</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Leg, right</span><span>280</span><span>680</span><span>+12°, x +22</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Torso</span><span>560</span><span>960</span><span>−12°, x −18</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Arm</span><span>840</span><span>1240</span><span>+10°, x +24</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Head</span><span>1120</span><span>1520</span><span>−14°, x −14</span></div>
+<div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr; padding: 7px 12px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px solid #E3DCCB"><span style="font-weight: 700">Hold · fade</span><span>1760</span><span>2960</span><span>out by 3260</span></div>
+</div>
+</div>
+</div>
+
+<section aria-label="Easing" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="padding: 12px 14px; border-radius: 12px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; gap: 12px; align-items: center">
+<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M4 52H52M4 4V52" stroke="#D5CEBF" stroke-width="1"></path><path d="M4 52C34.4 52 60 26.8 52 4" fill="none" stroke="#2D3740" stroke-width="2.4" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 800">Fall + straighten · 400 ms</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">cubic-bezier(0.55, 0, 1, 0.45)</span></div>
+</div>
+<div style="padding: 12px 14px; border-radius: 12px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; gap: 12px; align-items: center">
+<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M4 52H52M4 4V52M4 12H52" stroke="#D5CEBF" stroke-width="1"></path><path d="M4 52C16 -2 30 4 52 12" fill="none" stroke="#2D3740" stroke-width="2.4" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 800">Land · squash, 240 ms</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">cubic-bezier(0.34, 1.56, 0.64, 1)</span></div>
+</div>
+<div style="padding: 12px 14px; border-radius: 12px; background: #FBF8F2; border: 1px solid #D5CEBF; display: flex; gap: 12px; align-items: center">
+<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M28 40H52" stroke="#D5CEBF" stroke-width="1"></path><circle cx="14" cy="30" r="3" fill="#5F6B76" fill-opacity="0.6"></circle><circle cx="8" cy="36" r="2.2" fill="#A89E8C"></circle><circle cx="42" cy="30" r="3" fill="#5F6B76" fill-opacity="0.6"></circle><circle cx="48" cy="35" r="2.2" fill="#A89E8C"></circle><rect x="18" y="34" width="20" height="10" rx="2" fill="#2D3740"></rect></svg>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 800">Dust · 5 specks, 400 ms</span><span style="font-size: 12px; color: #4A5561; font-variant-numeric: tabular-nums">cubic-bezier(0.2, 0.8, 0.3, 1)</span></div>
+</div>
+</section>
+<p style="margin: 0; font-size: 13px; line-height: 18px; color: #4A5561">Each stone is its own image, placed from stones-wide.json or stones-compact.json and pivoting on its bottom centre. Dust puffs from every contact line: the ground for the legs, then each supporting stone. With Reduce Motion on, the figure appears whole and pulses gently, with no dust. Spec: reports/brand/loader-spec.md.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"figure":{"editor":"enum","options":["wide","compact"],"default":"compact"},"$preview":{"width":880,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const SETS = {
+      wide: {
+        w: 1076, h: 1040,
+        stones: {
+          head: { x: 377, y: 2, w: 319, h: 261, src: 'blobs/d3579262d8925b61f4be9880bf3d3634.png' },
+          arm: { x: 2, y: 268, w: 1072, h: 198, src: 'blobs/35b4c6aee9274e729dc426a2f23de9c2.png' },
+          torso: { x: 273, y: 468, w: 568, h: 203, src: 'blobs/a409468b40f859cb7e7236d2fdbcb3f6.png' },
+          'leg-left': { x: 171, y: 668, w: 315, h: 370, src: 'blobs/83646acc0c31e8ed158421365ee600a1.png' },
+          'leg-right': { x: 593, y: 669, w: 332, h: 367, src: 'blobs/cb42972dca4c2deac6ab205ae8464894.png' }
+        }
+      },
+      compact: {
+        w: 784, h: 870,
+        stones: {
+          head: { x: 271, y: 4, w: 229, h: 201, src: 'blobs/2f291c857a55294b44994732b4c9675b.svg' },
+          arm: { x: 2, y: 182, w: 780, h: 186, src: 'blobs/b0d870e9ce2ac4d4c1bc16b778dfaa38.svg' },
+          torso: { x: 177, y: 374, w: 438, h: 174, src: 'blobs/57491c471006e2927efc2ba21cd2751a.svg' },
+          'leg-left': { x: 99, y: 549, w: 248, h: 317, src: 'blobs/e1f0172ea73c4216b1bde3fbb0bac3e0.svg' },
+          'leg-right': { x: 428, y: 548, w: 255, h: 318, src: 'blobs/6fc4538c35a557ab55597b26d13c3d0a.svg' }
+        }
+      }
+    };
+    const fig = this.props.figure === 'wide' ? 'wide' : 'compact';
+    const S = SETS[fig];
+    const k = 240 / S.h;
+    const r = (v) => Math.round(v * k * 10) / 10;
+    const order = ['leg-left', 'leg-right', 'torso', 'arm', 'head'];
+    const st = S.stones;
+    const stones = order.map((key) => ({ key, src: st[key].src, x: r(st[key].x), y: r(st[key].y), w: r(st[key].w), h: r(st[key].h) }));
+    const contact = {
+      'leg-left': [st['leg-left'].x, st['leg-left'].x + st['leg-left'].w, st['leg-left'].y + st['leg-left'].h],
+      'leg-right': [st['leg-right'].x, st['leg-right'].x + st['leg-right'].w, st['leg-right'].y + st['leg-right'].h],
+      torso: [st.torso.x, st.torso.x + st.torso.w, st.torso.y + st.torso.h],
+      arm: [st.torso.x, st.torso.x + st.torso.w, st.arm.y + st.arm.h],
+      head: [st.head.x, st.head.x + st.head.w, st.head.y + st.head.h]
+    };
+    const specks = [
+      { dir: 'da', side: 0, dx: 0, dy: 0, w: 5, h: 3, c: 'rgba(95,107,118,1)' },
+      { dir: 'db', side: 0, dx: 3, dy: -1, w: 4, h: 4, c: 'rgba(168,158,140,1)' },
+      { dir: 'dc', side: 0, dx: -2, dy: 1, w: 3, h: 3, c: 'rgba(95,107,118,1)' },
+      { dir: 'dd', side: 1, dx: 0, dy: 0, w: 5, h: 3, c: 'rgba(168,158,140,1)' },
+      { dir: 'de', side: 1, dx: -3, dy: -1, w: 4, h: 4, c: 'rgba(95,107,118,1)' }
+    ];
+    const dust = [];
+    order.forEach((at) => {
+      const [xl, xr, y] = contact[at];
+      specks.forEach((p) => {
+        dust.push({ at, dir: p.dir, w: p.w, h: p.h, c: p.c, x: Math.round(((p.side ? xr : xl) * k + p.dx - p.w / 2) * 10) / 10, y: Math.round((y * k + p.dy - p.h / 2) * 10) / 10 });
+      });
+    });
+    const n = (this.state && this.state.n) || 0;
+    return {
+      fw: r(S.w), fh: r(S.h),
+      stones, dust,
+      figureLabel: fig,
+      showA: n % 2 === 0,
+      showB: n % 2 === 1,
+      replay: () => this.setState({ n: n + 1 })
+    };
+  }
+}
+</script>
+</body>
+</html>
