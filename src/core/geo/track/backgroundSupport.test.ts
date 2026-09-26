@@ -32,4 +32,10 @@ describe('backgroundTaskSupported', () => {
     expect(backgroundTaskSupported('')).toBe(true);
     expect(backgroundTaskSupported('exposdk:56.0.0')).toBe(true);
   });
+
+  // From 1.6.0 the runtime is a fingerprint hash, not the app version. Every
+  // such binary postdates 1.0.3, so a hash must keep the task enabled.
+  it('keeps the task on for a fingerprint runtime', () => {
+    expect(backgroundTaskSupported('1c99d72834c465c5830bcdc91989d7ed468b10f3')).toBe(true);
+  });
 });

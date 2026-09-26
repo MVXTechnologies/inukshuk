@@ -5,10 +5,59 @@ All notable changes to Inukshuk are documented here. The format follows
 adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Field updates (JS/asset-only) ship over-the-air via EAS Update to installed apps
-on the same app version; native changes require a new store build. See
+with the same native runtime (a fingerprint of the native project, since 1.6.0;
+the app version before that); native changes require a new store build. See
 `docs/DEPLOYMENT.md`.
 
 ## [Unreleased]
+
+### Fixed
+
+- **A finished recording can no longer vanish from the library.** If the
+  library index could not be read at launch, Stop wrote the trail's GPX,
+  silently skipped the index, and then deleted the crash journal — leaving
+  nothing to recover the hike from. Stop now retries loading the library
+  first; if it still cannot, the recording stays open with its journal
+  intact and says so, and the journal is only cleared once the trail is in
+  the index. The library also retries loading when the app returns to the
+  foreground, and a write it has to refuse is reported instead of dropped
+  silently.
+- **A setting changed during startup can no longer reset every other
+  setting.** A change made before the settings file had been read wrote the
+  defaults over it — the error-reporting opt-out included. Early changes are
+  now held and applied on top of the saved settings once they load.
+- **Strava stays connected after an over-the-air update.** Updates were
+  published without the Strava keys, so any install that took one reported
+  "Strava is not configured". Updates now carry them (from the GitHub
+  copies described in `docs/DEPLOYMENT.md`), and the publish job refuses to
+  run without them.
+
+### Security
+
+- **Error reports no longer carry file paths, map or trail names, or
+  coordinates.** Reports are public issues; before they leave the device,
+  paths and URIs, container ids, quoted text and coordinate pairs are
+  scrubbed, including from reports queued by an earlier version. The
+  re-parse report names a map by id instead of by its title. This is what
+  the privacy policy already promised.
+
+### Changed
+
+- **Over-the-air updates target a fingerprint of the native project, not
+  the app version.** An update now reaches only binaries built from the
+  same native code, so a native dependency bump can no longer be shipped
+  to older binaries that lack it (as `@maplibre/maplibre-react-native`
+  11.3.7/11.3.8 were). The manual "publish for an older app version"
+  option is gone: it has no meaning under a fingerprint.
+- **Native dependency updates are never merged automatically.** Dependabot
+  groups them into one PR (`@maplibre/*` and `@dr.pogodin/*` now included),
+  and they wait for a person and a store build.
+- **Android builds go to the Play internal testing track.** Promotion to
+  the beta or production is a deliberate step in the Play Console, as
+  TestFlight → App Review already is on iOS.
+- **One command bumps a release.** `npm run release:bump -- --version 1.6.0`
+  (or `major`, `minor`, `patch`) moves the version in every file and both
+  store build numbers, refuses to go backwards, and prints the tag to create.
 
 ## [1.5.3] - 2026-09-10
 

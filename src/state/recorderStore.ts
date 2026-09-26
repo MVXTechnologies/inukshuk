@@ -19,9 +19,10 @@ import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import { findCategory } from '@core/library/categories';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 import * as Location from 'expo-location';
 import { create } from 'zustand';
-import { useLibraryStore } from './libraryStore';
+import { LibraryNotHydratedError, useLibraryStore } from './libraryStore';
 
 const EMPTY_STATS: TrackStats = {
   distanceM: 0,
@@ -122,7 +123,12 @@ interface RecorderState {
   removeWaypoint: (id: string) => void;
   pause: () => void;
   resume: () => void;
-  /** Finalize: compute authoritative stats, persist GPX, index it, reset. */
+  /**
+   * Finalize: compute authoritative stats, persist GPX, index it, reset.
+   * Rejects with the session untouched (still recording/paused, crash
+   * journal kept) when the trail could not be saved — storage full, or a
+   * {@link LibraryNotHydratedError} when the library index cannot be read.
+   */
   stop: () => Promise<Track | null>;
   /** Consume {@link lastSavedTrackId} (one prompt per save). */
   acknowledgeSavedTrack: () => void;
@@ -484,6 +490,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     const journaled = await checkpoint.readBackgroundPoints();
     if (generation !== sessionGeneration) return null;
     if (journaled.length > 0) get().mergeBackgroundPoints(journaled);
+    // A trail is saved when it is in the library INDEX, and the index refuses
+    // writes until it has been read. If the launch read failed, try once more
+    // now — before anything is written — rather than finish a save that
+    // cannot land.
+    if (get().points.length > 0 && !useLibraryStore.getState().hydrated) {
+      try {
+        await useLibraryStore.getState().hydrate();
+      } catch (err) {
+        reportError(err, 'library-hydrate-at-stop');
+      }
+      if (generation !== sessionGeneration) return null;
+    }
     const { points, segmentStarts, name, category, startedAt, status, waypoints } = get();
     if (status === 'idle' || startedAt === null) return null;
 
@@ -507,6 +525,11 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     };
 
     if (points.length > 0) {
+      // Still unreadable: stop here, with the session and its crash journal
+      // intact, so Stop can be retried and a relaunch can recover the trail.
+      // Clearing the journal after a save the index never took is how a
+      // finished hike used to vanish: its GPX on disk, its entry nowhere.
+      if (!useLibraryStore.getState().hydrated) throw new LibraryNotHydratedError();
       const gpx = buildGpx({
         points,
         segmentStarts, // one <trkseg> per leg — a pause is a segment boundary
@@ -526,7 +549,18 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         text: wp.note?.trim() || wp.label,
         ...(wp.photoUri ? { photoUri: wp.photoUri } : {}),
       }));
-      lib.addTrack(track, fileUri, notes);
+      if (!lib.addTrack(track, fileUri, notes)) {
+        // Unreachable while the check above holds (nothing between them
+        // yields), kept as the backstop that decides whether the journal is
+        // cleared. The GPX is not referenced by anything: drop it, so a retry
+        // does not leave an orphan beside its own copy.
+        try {
+          storage.deleteFileAt(fileUri);
+        } catch {
+          /* an orphan GPX is harmless; losing the journal is not */
+        }
+        throw new LibraryNotHydratedError();
+      }
       // Auto-named recording → try for a friendlier region title, async.
       const first = points[0];
       if (first && name === defaultName(startedAt)) {
@@ -537,8 +571,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       for (const wp of waypoints) if (wp.photoUri) storage.deleteFileAt(wp.photoUri);
     }
 
-    // The recording is safely persisted (or intentionally empty) — the crash
-    // journal is now stale and must not resurrect on next launch.
+    // The recording is safely persisted — GPX written AND indexed — or
+    // intentionally empty: the crash journal is now stale and must not
+    // resurrect on next launch.
     sessionGeneration += 1;
     checkpoint.clearCheckpoint();
     set({

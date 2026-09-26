@@ -1,9 +1,11 @@
 name: Release (Build & Submit to Stores)
 
 # Builds production binaries on EAS and submits them to the App Store
-# (TestFlight) and Google Play (production track). Triggered by pushing a version
-# tag like `v1.0.0`, or manually. No-ops until the required secrets are set —
-# see docs/DEPLOYMENT.md for the full account/secret checklist.
+# (TestFlight) and Google Play (internal testing track). Promotion to the
+# public stores is a manual step in each console (docs/DEPLOYMENT.md §
+# Releasing). Triggered by pushing a version tag like `v1.0.0`, or manually.
+# No-ops until the required secrets are set — see docs/DEPLOYMENT.md for the
+# full account/secret checklist.
 on:
   push:
     tags:

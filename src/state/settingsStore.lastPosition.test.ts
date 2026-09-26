@@ -12,6 +12,12 @@ const storage = jest.requireMock('@data/storage') as {
   readJson: jest.Mock;
 };
 
+// Writes are held until settings.json has been read (see
+// settingsStore.hydration.test.ts); these cases are about a loaded store.
+beforeAll(async () => {
+  await useSettingsStore.getState().hydrate();
+});
+
 afterEach(() => {
   useSettingsStore.getState().reset();
   storage.readJson.mockResolvedValue(null);

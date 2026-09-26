@@ -76,8 +76,13 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    * Add a trail with all of its seeded notes in ONE index write — the recorder's
    * save path relies on this: a per-note `addTrackNote` loop cost one full
    * serialization + atomic swap of the whole library per dropped waypoint.
+   *
+   * Returns whether the index was written. False means the library has not
+   * hydrated: the trail is in memory only, and gone at the next hydrate — a
+   * caller that is about to discard its own copy (the recorder's crash
+   * journal) must not.
    */
-  addTrack: (track: Track, fileUri: string, notes?: readonly SeedNote[]) => void;
+  addTrack: (track: Track, fileUri: string, notes?: readonly SeedNote[]) => boolean;
   /** Add several imported trails in `items` order, in ONE index write. */
   addTracks: (items: readonly ImportedTrack[]) => void;
   /** Patch a saved trail, including switching its file URI to a committed revision. */
@@ -167,12 +172,32 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   activeMap: () => MapDocument | null;
 }
 
-function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolean }): void {
+/**
+ * A library write refused because `library.json` has not been read yet.
+ * Reported, never thrown by `persist` itself: the mutations run inside
+ * zustand `set` from UI handlers that do not expect a throw. Callers for
+ * whom the write IS the point (the recorder's Stop) throw it themselves.
+ */
+export class LibraryNotHydratedError extends Error {
+  constructor(message = 'the library index has not loaded; the change was kept in memory only') {
+    super(message);
+    this.name = 'LibraryNotHydratedError';
+  }
+}
+
+/** Write the index; false (and a report) when it was refused before hydration. */
+function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolean }): boolean {
   // Never write before hydration: a mutation that lands mid-hydrate (e.g. a
   // cold-start "Open with" import) would persist an index built from the empty
   // initial state and wipe the on-disk library. Callers that can run that early
-  // must `await hydrate()` first; this guard is the backstop.
-  if (!state.hydrated) return;
+  // must `await hydrate()` first; this guard is the backstop. It used to return
+  // silently, so a hydration that failed (an I/O error, not a corrupt file)
+  // turned every later edit into a memory-only one nobody heard about — a
+  // recording's Stop included. Now it is reported, and it says so to callers.
+  if (!state.hydrated) {
+    reportError(new LibraryNotHydratedError(), 'library-persist-before-hydration');
+    return false;
+  }
   const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     maps: state.maps,
@@ -192,6 +217,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
   // Relativising here, and resolving in `hydrate`, keeps that translation in
   // exactly one place per direction.
   storage.writeIndex(mapLibraryIndexPaths(index, storage.toDocumentPath));
+  return true;
 }
 
 /** Commit metadata before best-effort cleanup of files it no longer references. */
@@ -199,8 +225,8 @@ function persistAndDelete(
   state: LibraryState,
   orphanedUris: readonly (string | undefined)[],
 ): void {
-  persist(state);
-  if (!state.hydrated) return;
+  // Nothing was committed: the files are still referenced by the index on disk.
+  if (!persist(state)) return;
   for (const uri of orphanedUris) {
     if (!uri) continue;
     try {
@@ -478,12 +504,15 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return next;
     }),
 
-  addTrack: (track, fileUri, notes) =>
+  addTrack: (track, fileUri, notes) => {
+    let persisted = false;
     set((s) => {
       const next = { ...s, tracks: [toSummary({ track, fileUri, notes }), ...s.tracks] };
-      persist(next);
+      persisted = persist(next);
       return next;
-    }),
+    });
+    return persisted;
+  },
 
   addTracks: (items) =>
     set((s) => {

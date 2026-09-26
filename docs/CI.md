@@ -11,7 +11,7 @@ tests, and corrects itself without anyone watching.
 | `nightly.yml`              | nightly; manual                    | full gate + **blocking** expo-doctor + `npm audit`; opens a tracking issue on failure          |
 | `ota-update.yml`           | push to `main` (JS/assets)         | publishes an EAS Update so installed apps self-correct                                         |
 | `release.yml`              | version tag `v*`; manual           | EAS build + auto-submit to App Store & Play Store                                              |
-| `dependabot-automerge.yml` | Dependabot PRs                     | auto-merges green minor/patch dependency updates                                               |
+| `dependabot-automerge.yml` | Dependabot PRs                     | auto-merges green minor/patch updates, except native-bearing ones (they need a store build)    |
 
 Plus `.github/dependabot.yml` (weekly npm + actions updates, grouped).
 
