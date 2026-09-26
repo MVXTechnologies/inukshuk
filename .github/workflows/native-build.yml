@@ -2,19 +2,19 @@ name: Native Build Test
 
 # Proves the app actually compiles into real iOS and Android binaries on the
 # latest toolchains. No code signing, no store accounts needed — pure compile
-# verification. Runs on PRs that touch native-affecting files, and nightly.
+# verification. Builds on PRs that touch native-affecting files, and nightly.
+#
+# Runs on EVERY pull request, deliberately without a `paths` filter (#369):
+# `Android (Gradle assembleDebug)` is a required check on main, and a workflow
+# skipped by path filtering never reports its checks, so a docs-only PR waited
+# forever on a check that could not arrive. The `changes` job does the
+# filtering instead and the build jobs are skipped by `if` — and GitHub counts
+# a job skipped by a conditional as a passing required check: "If, however, a
+# job within a workflow is skipped due to a conditional, it will report its
+# status as 'Success'" (docs.github.com, "Troubleshooting required status
+# checks" › "Handling skipped but required checks").
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'app.config.ts'
-      - 'app.json'
-      - 'src/**'
-      - 'app/**'
-      - 'assets/**'
-      - 'plugins/**'
-      - '.github/workflows/native-build.yml'
   workflow_dispatch:
   schedule:
     # 04:30 UTC daily — catches breakage from new Xcode / Android SDK images.
@@ -25,8 +25,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether this PR can affect the native build. Schedule and manual
+  # runs always build.
+  changes:
+    name: Detect native-affecting changes
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.diff.outputs.native }}
+    steps:
+      # A pull_request checkout is the PR's merge commit; depth 2 brings its
+      # first parent, which is the base branch tip it merges onto.
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+      # Native-affecting paths: the manifests and Expo config, JS/TS sources
+      # and assets bundled into the binary, config plugins, the local native
+      # modules (modules/**, built by both jobs), and this workflow.
+      # --no-renames lists both sides of a rename, so moving a file OUT of
+      # src/ still counts.
+      - name: Diff against the PR base
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "native=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if ! files=$(git diff --name-only --no-renames HEAD^1 HEAD); then
+            echo "could not diff against the base; building to be safe"
+            echo "native=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          printf '%s\n' "$files"
+          native_re='^(package\.json|package-lock\.json|app\.config\.ts|app\.json|\.github/workflows/native-build\.yml)$|^(src|app|assets|plugins|modules)/'
+          if printf '%s\n' "$files" | grep -Eq "$native_re"; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No native-affecting changes: the build jobs are skipped (a skipped job passes)."
+            echo "native=false" >> "$GITHUB_OUTPUT"
+          fi
+
   android:
     name: Android (Gradle assembleDebug)
+    needs: changes
+    # Only an explicit 'false' skips: if `changes` itself failed, its output is
+    # empty and this builds rather than letting a required check pass unbuilt.
+    # !cancelled() is what lets it run after a failed `changes`.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.native != 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -87,6 +132,9 @@ jobs:
 
   ios:
     name: iOS (xcodebuild simulator)
+    needs: changes
+    # Same gate as android.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.native != 'false') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7

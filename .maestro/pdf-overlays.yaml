@@ -115,7 +115,9 @@ appId: com.inukshuk.app
     notVisible: 'Rendering .*JPEG fixture.*'
     timeout: 90000
 # Let MapLibre finish loading the overlay raster and settle tiles before the
-# pixel check; the screenshot lands in the runner's cwd.
+# pixel check. Where the screenshot lands depends on the Maestro CLI (cwd on
+# older ones, this flow's artifact bundle under ~/.maestro/tests on current
+# ones); scripts/e2e/find-screenshot.sh finds it for the check.
 - waitForAnimationToEnd:
     timeout: 8000
 - takeScreenshot: pdf-overlays-map

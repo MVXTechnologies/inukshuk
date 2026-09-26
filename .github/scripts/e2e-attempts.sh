@@ -31,6 +31,8 @@ adb reverse tcp:8787 tcp:8787 || true
 trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null' EXIT
 
 RC=0
+# Screenshots taken from here on are this run's; anything older is stale.
+SHOT_MARK=$(mktemp)
 # Order matters: category-record creates the saved (Run) trail that
 # heatmap, library-filter and trail-view depend on. heatmap records a SECOND
 # Run over the same simulated path right after, so the two trails overlap
@@ -63,10 +65,14 @@ for flow in .maestro/smoke.yaml .maestro/waypoint.yaml .maestro/category-record.
   fi
 done
 # pdf-overlays.yaml proves the overlay drew through its map screenshot (#331);
-# the flow passing without the pixels is not a pass.
-if [ -f pdf-overlays-map.png ]; then
-  node scripts/e2e/check-overlay-screenshot.mjs pdf-overlays-map.png || RC=1
+# the flow passing without the pixels is not a pass. Where Maestro writes it
+# depends on the CLI version (current ones: the flow's artifact bundle under
+# ~/.maestro/tests, not the cwd) — find-screenshot.sh looks everywhere.
+if SHOT=$(bash scripts/e2e/find-screenshot.sh pdf-overlays-map.png .maestro "$SHOT_MARK"); then
+  echo "=== pdf-overlays screenshot: $SHOT ==="
+  node scripts/e2e/check-overlay-screenshot.mjs "$SHOT" || RC=1
 else
   echo "=== pdf-overlays screenshot missing ==="; RC=1
 fi
+rm -f "$SHOT_MARK"
 exit $RC

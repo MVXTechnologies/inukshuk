@@ -51,4 +51,15 @@ if (verdict.ok) {
   process.exit(0);
 }
 for (const line of verdict.problems) console.error(`expo-doctor gate: ${line}`);
+for (const line of verdict.remedies) console.error(`expo-doctor gate: ${line}`);
+// In Actions, also raise them as error annotations: the nightly's
+// report-failure job copies those into the tracking issue, which otherwise
+// could only name the failed step. (%, CR and LF are the characters a
+// workflow command's message must escape.)
+if (process.env.GITHUB_ACTIONS === 'true') {
+  for (const line of [...verdict.problems, ...verdict.remedies]) {
+    const message = line.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+    console.log(`::error title=Expo Doctor::${message}`);
+  }
+}
 process.exit(1);
