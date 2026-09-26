@@ -20,7 +20,7 @@ import {
   rasterFileName,
 } from '@core/library/overlayRaster';
 import { overlayStatusKey } from '@core/library/overlayStatus';
-import { chooseRasterSource } from '@core/library/rasterSource';
+import { chooseRasterSource, emptyInlineReadReason } from '@core/library/rasterSource';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
@@ -345,17 +345,18 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
               pending = (async () => {
                 const origin = await serverOrigin();
                 if (!enabledRef.current) throw new Error('PDF overlays are hidden');
-                const choice = chooseRasterSource({
-                  origin,
-                  documentPath: storage.toDocumentPath(t.fileUri),
-                  sizeBytes: storage.fileSizeAt(t.fileUri),
-                });
+                const documentPath = storage.toDocumentPath(t.fileUri);
+                const sizeBytes = storage.fileSizeAt(t.fileUri);
+                const choice = chooseRasterSource({ origin, documentPath, sizeBytes });
                 if (choice.kind === 'unrenderable') throw new Error(choice.reason);
                 let source: RasterizeSource;
                 if (choice.kind === 'url') {
                   source = { url: choice.url };
                 } else {
                   base64 ??= await storage.readFileBase64(t.fileUri);
+                  // A preparation failure, not an engine that "did not start" (#382).
+                  const unreadable = emptyInlineReadReason(documentPath, base64, sizeBytes);
+                  if (unreadable !== null) throw new Error(unreadable);
                   source = { base64 };
                 }
                 if (!enabledRef.current) throw new Error('PDF overlays are hidden');

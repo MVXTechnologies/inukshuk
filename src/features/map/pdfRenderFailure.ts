@@ -22,3 +22,14 @@ export class PdfRenderNotStartedError extends Error {
     this.name = 'PdfRenderNotStartedError';
   }
 }
+/**
+ * The loopback server could not deliver the PDF (refused or dropped
+ * connections, or no server at all). Says nothing about the page, so it is a
+ * "not started" failure: callers retry later instead of pausing the page.
+ */
+export class PdfLoopbackUnavailableError extends PdfRenderNotStartedError {
+  constructor(error: unknown) {
+    super(error);
+    this.name = 'PdfLoopbackUnavailableError';
+  }
+}

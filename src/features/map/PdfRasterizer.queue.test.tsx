@@ -55,6 +55,9 @@ jest.mock('@data/localServer', () => ({
     value: 'http://127.0.0.1:8080',
     release: async () => undefined,
   }),
+  // The server is alive in these tests (liveness: PdfRasterizer.liveness.test.tsx).
+  probeLocalServer: async () => true,
+  restartLocalServer: async (origin: string) => origin,
   writeServedText: jest.fn(),
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));

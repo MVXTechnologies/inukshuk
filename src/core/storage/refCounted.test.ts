@@ -76,4 +76,85 @@ describe('refCounted', () => {
     await b.release();
     expect(log).toEqual(['start', 'stop', 'start', 'stop']);
   });
+
+  describe('restart (a resource that died under live leases)', () => {
+    function makeRestartable() {
+      const log: string[] = [];
+      let port = 1;
+      const pool = refCounted<string>(
+        async () => {
+          log.push('start');
+          return `http://127.0.0.1:${port}`;
+        },
+        async () => {
+          log.push('stop');
+        },
+        async () => {
+          log.push('replace');
+          port += 1;
+          return `http://127.0.0.1:${port}`;
+        },
+      );
+      return { pool, log };
+    }
+
+    it('replaces the value every live lease reads', async () => {
+      const { pool, log } = makeRestartable();
+      const a = await pool.acquire();
+      const b = await pool.acquire();
+      await expect(pool.restart('http://127.0.0.1:1')).resolves.toBe('http://127.0.0.1:2');
+      expect(a.value).toBe('http://127.0.0.1:2');
+      expect(b.value).toBe('http://127.0.0.1:2');
+      expect(log).toEqual(['start', 'start', 'replace']);
+      await a.release();
+      await b.release();
+    });
+
+    it('restarts once when two callers notice the same death', async () => {
+      const { pool, log } = makeRestartable();
+      const lease = await pool.acquire();
+      const [x, y] = await Promise.all([
+        pool.restart('http://127.0.0.1:1'),
+        pool.restart('http://127.0.0.1:1'),
+      ]);
+      expect(x).toBe('http://127.0.0.1:2');
+      expect(y).toBe('http://127.0.0.1:2');
+      expect(log.filter((l) => l === 'replace')).toHaveLength(1);
+      await lease.release();
+    });
+
+    it('refuses when nothing is leased', async () => {
+      const { pool, log } = makeRestartable();
+      await expect(pool.restart('http://127.0.0.1:1')).rejects.toThrow(/no lease is held/);
+      expect(log).toEqual([]);
+    });
+
+    it('keeps the old value when the replacement fails, and a later restart can succeed', async () => {
+      let fail = true;
+      const pool = refCounted<string>(
+        async () => 'old',
+        async () => undefined,
+        async () => {
+          if (fail) throw new Error('bind failed');
+          return 'new';
+        },
+      );
+      const lease = await pool.acquire();
+      await expect(pool.restart('old')).rejects.toThrow('bind failed');
+      expect(lease.value).toBe('old');
+      fail = false;
+      await expect(pool.restart('old')).resolves.toBe('new');
+      expect(lease.value).toBe('new');
+      await lease.release();
+    });
+
+    it('defaults to stop-then-start, serialized with the other operations', async () => {
+      const { pool, log } = makePool();
+      const lease = await pool.acquire();
+      await expect(pool.restart('http://127.0.0.1:1')).resolves.toBe('http://127.0.0.1:1');
+      expect(log).toEqual(['start', 'stop', 'start']);
+      await lease.release();
+      expect(log).toEqual(['start', 'stop', 'start', 'stop']);
+    });
+  });
 });

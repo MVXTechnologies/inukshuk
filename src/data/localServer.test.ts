@@ -200,3 +200,143 @@ describe('start failures (#290)', () => {
     await lease.release();
   });
 });
+
+// iOS resume (#381, #385): the listener died under a live lease.
+describe('restartLocalServer', () => {
+  type Mod = typeof import('./localServer');
+  function freshModule(): Mod {
+    let mod: Mod | undefined;
+    jest.isolateModules(() => {
+      mod = jest.requireActual<Mod>('./localServer');
+    });
+    if (!mod) throw new Error('module did not load');
+    return mod;
+  }
+
+  beforeEach(() => {
+    serverMock.__instances.length = 0;
+    serverMock.__startPlan.length = 0;
+  });
+
+  it('stops the dead instance and starts a fresh one on the same port', async () => {
+    serverMock.__startPlan.push(
+      async () => 'http://127.0.0.1:41234',
+      async () => 'http://127.0.0.1:41234',
+    );
+    const mod = freshModule();
+    const lease = await mod.acquireLocalServer();
+    await expect(mod.restartLocalServer('http://127.0.0.1:41234')).resolves.toBe(
+      'http://127.0.0.1:41234',
+    );
+    expect(serverMock.__instances).toHaveLength(2);
+    expect(serverMock.__instances[0]?.stop).toHaveBeenCalledTimes(1);
+    expect(serverMock.__instances[1]?.options.port).toBe(41234);
+    expect(lease.value).toBe('http://127.0.0.1:41234');
+    await lease.release();
+    // The replacement is the one a last release stops.
+    expect(serverMock.__instances[1]?.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes any free port when the old one cannot be bound again, and leases see it', async () => {
+    serverMock.__startPlan.push(
+      async () => 'http://127.0.0.1:41234',
+      () => Promise.reject(new Error('Server #2 crashed: bind: Address already in use')),
+      async () => 'http://127.0.0.1:50000',
+    );
+    const mod = freshModule();
+    const lease = await mod.acquireLocalServer();
+    await expect(mod.restartLocalServer('http://127.0.0.1:41234')).resolves.toBe(
+      'http://127.0.0.1:50000',
+    );
+    expect(serverMock.__instances.map((i) => i.options.port)).toEqual([0, 41234, 0]);
+    expect(lease.value).toBe('http://127.0.0.1:50000');
+    await lease.release();
+  });
+
+  it('does not start a second server while the first will not stop', async () => {
+    jest.useFakeTimers();
+    try {
+      const mod = freshModule();
+      const lease = await mod.acquireLocalServer();
+      serverMock.__instances[0]?.stop.mockImplementationOnce(() => new Promise(() => undefined));
+      const restarting = mod.restartLocalServer('http://127.0.0.1:8080');
+      const settled = expect(restarting).rejects.toThrow(/did not stop within 3000 ms/);
+      await jest.advanceTimersByTimeAsync(mod.STOP_TIMEOUT_MS);
+      await settled;
+      expect(serverMock.__instances).toHaveLength(1);
+      // The next acquire starts over rather than handing out the dead value.
+      const next = await mod.acquireLocalServer();
+      expect(serverMock.__instances).toHaveLength(2);
+      await next.release();
+      await lease.release();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('restarts when the old instance fails to stop cleanly', async () => {
+    const mod = freshModule();
+    const lease = await mod.acquireLocalServer();
+    serverMock.__instances[0]?.stop.mockRejectedValueOnce(new Error('crashed'));
+    await expect(mod.restartLocalServer('http://127.0.0.1:8080')).resolves.toBe(
+      'http://127.0.0.1:8080',
+    );
+    expect(serverMock.__instances).toHaveLength(2);
+    await lease.release();
+  });
+
+  it('refuses without a lease', async () => {
+    const mod = freshModule();
+    await expect(mod.restartLocalServer('http://127.0.0.1:8080')).rejects.toThrow(
+      /no lease is held/,
+    );
+    expect(serverMock.__instances).toHaveLength(0);
+  });
+});
+
+describe('probeLocalServer', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  it('counts any HTTP answer as alive and asks for the unserved root', async () => {
+    const fetchMock = jest.fn(async () => ({ status: 403 }) as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const { probeLocalServer } =
+      jest.requireActual<typeof import('./localServer')>('./localServer');
+    await expect(probeLocalServer('http://127.0.0.1:8080/')).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8080/',
+      expect.objectContaining({ method: 'HEAD', cache: 'no-store' }),
+    );
+  });
+
+  it('is dead when the connection is refused', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('Could not connect to the server.');
+    }) as unknown as typeof fetch;
+    const { probeLocalServer } =
+      jest.requireActual<typeof import('./localServer')>('./localServer');
+    await expect(probeLocalServer('http://127.0.0.1:8080')).resolves.toBe(false);
+  });
+
+  it('is dead when nothing answers in time', async () => {
+    jest.useFakeTimers();
+    try {
+      global.fetch = jest.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+          }),
+      ) as unknown as typeof fetch;
+      const { probeLocalServer } =
+        jest.requireActual<typeof import('./localServer')>('./localServer');
+      const probe = probeLocalServer('http://127.0.0.1:8080', 1_500);
+      await jest.advanceTimersByTimeAsync(1_500);
+      await expect(probe).resolves.toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

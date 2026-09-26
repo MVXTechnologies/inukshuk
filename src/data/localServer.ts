@@ -1,6 +1,7 @@
 import StaticServer, { ERROR_LOG_FILE } from '@dr.pogodin/react-native-static-server';
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { PROBE_TIMEOUT_MS } from '@core/storage/loopbackLiveness';
 import { refCounted, type RefCountedLease } from '@core/storage/refCounted';
 import { SERVED_DOCUMENT_PREFIXES, lighttpdAccessConfig } from '@core/storage/servedPaths';
 import { describeServerStartFailure, logTail } from '@core/storage/serverStartFailure';
@@ -35,10 +36,27 @@ import { documentDirUri } from './storage';
  * start is retried once on a FRESH instance (the library forbids restarting
  * a crashed one), and if that fails too the thrown error carries the tail of
  * lighttpd's own error log — the only place the real reason is written.
+ *
+ * ## Death under a live lease (iOS resume)
+ *
+ * iOS reclaims a suspended app's listening sockets; lighttpd keeps running
+ * with a dead listener and the library still says ACTIVE (see
+ * `@core/storage/loopbackLiveness`). {@link probeLocalServer} tells whether a
+ * connection is accepted; {@link restartLocalServer} replaces the server in
+ * place — on the SAME port when it can be had again, so every URL already
+ * handed out (the rasterizer page, an offline download's style) stays valid,
+ * and on a new port only if that bind fails.
  */
 
 /** Starts attempted before giving up: the first, plus one on a fresh instance. */
 export const START_ATTEMPTS = 2;
+
+/**
+ * How long a restart waits for the old server to stop. The native stop holds
+ * a semaphore the next start waits on forever, so a stop that does not finish
+ * must not be followed by a start.
+ */
+export const STOP_TIMEOUT_MS = 3_000;
 
 // The native server wants a plain filesystem path; expo-file-system gives file:// URIs.
 function fsPath(uri: string): string {
@@ -49,11 +67,13 @@ function fsPath(uri: string): string {
 // start() is idempotent while ACTIVE and permitted again from INACTIVE, so one
 // object serves every lease. A crashed instance is dropped (see startServer).
 let server: StaticServer | null = null;
+// The origin of the last successful start: a restart asks for its port again.
+let lastOrigin: string | null = null;
 
-function sharedServer(): StaticServer {
+function sharedServer(port: number): StaticServer {
   server ??= new StaticServer({
     fileDir: fsPath(documentDirUri()),
-    port: 0,
+    port,
     hostname: '127.0.0.1',
     extraConfig: lighttpdAccessConfig(SERVED_DOCUMENT_PREFIXES),
   });
@@ -71,11 +91,13 @@ async function readErrorLogTail(): Promise<string | null> {
   }
 }
 
-async function startServer(): Promise<string> {
+/** `preferredPort` is tried first; a retry always takes any free port. */
+async function startServer(preferredPort = 0): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
     try {
-      return await sharedServer().start();
+      lastOrigin = await sharedServer(attempt === 1 ? preferredPort : 0).start();
+      return lastOrigin;
     } catch (err) {
       lastError = err;
       // Never reuse an instance that crashed: the library's own contract, and
@@ -86,13 +108,46 @@ async function startServer(): Promise<string> {
   throw new Error(describeServerStartFailure(lastError, await readErrorLogTail(), START_ATTEMPTS));
 }
 
-const pool = refCounted<string>(startServer, () =>
-  server === null
-    ? Promise.resolve()
-    : server.stop().then(
-        () => undefined,
-        () => undefined,
+/**
+ * Replace a server whose listener died: stop it (bounded), then start a FRESH
+ * instance on the same port — lighttpd sets SO_REUSEADDR, and the library
+ * reuses an explicit port as given.
+ */
+async function restartServer(): Promise<string> {
+  const dead = server;
+  const port = Number(/:(\d+)$/.exec(lastOrigin ?? '')?.[1] ?? 0);
+  server = null;
+  lastOrigin = null;
+  if (dead !== null) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stopped = await Promise.race([
+      dead.stop().then(
+        () => true,
+        // A stop that fails leaves the instance CRASHED, its thread gone.
+        () => true,
       ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), STOP_TIMEOUT_MS);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!stopped) {
+      throw new Error(`Loopback server did not stop within ${STOP_TIMEOUT_MS} ms; not restarting`);
+    }
+  }
+  return startServer(port);
+}
+
+const pool = refCounted<string>(
+  startServer,
+  () =>
+    server === null
+      ? Promise.resolve()
+      : server.stop().then(
+          () => undefined,
+          () => undefined,
+        ),
+  restartServer,
 );
 
 /** A held reference to the running server; `value` is its origin (`http://127.0.0.1:<port>`). */
@@ -106,6 +161,43 @@ export type LocalServerLease = RefCountedLease<string>;
  */
 export function acquireLocalServer(): Promise<LocalServerLease> {
   return pool.acquire();
+}
+
+/**
+ * Replace the server under its live leases after `staleOrigin` stopped
+ * accepting connections. Resolves to the new origin — the same one when its
+ * port could be bound again — which every lease's `value` now reads. A second
+ * caller reporting the same dead origin joins the first restart. Rejects when
+ * the server cannot be brought back (callers fall back as for a failed start).
+ */
+export function restartLocalServer(staleOrigin: string): Promise<string> {
+  return pool.restart(staleOrigin);
+}
+
+/**
+ * Does the server at `origin` accept a connection? Any HTTP answer counts —
+ * `/` itself is outside the served allowlist, so a live server answers 403
+ * without touching a file. A refused connection, a network error or no answer
+ * within `timeoutMs` means it is dead.
+ */
+export async function probeLocalServer(
+  origin: string,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fetch(`${origin.replace(/\/+$/, '')}/`, {
+      method: 'HEAD',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Outstanding leases — for diagnostics and tests. */

@@ -1,4 +1,4 @@
-import { PdfRenderNotStartedError } from './pdfRenderFailure';
+import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
@@ -23,11 +23,36 @@ import { type PdfCrop } from '@core/geo/pdfDetail';
  * PDF.js returns a PNG through `postMessage`. Eligible Android detail crops
  * instead hand validated geometry to the native renderer and return a file URI.
  *
+ * **Loopback liveness (iOS resume).** A suspended app's listening socket can
+ * be reclaimed while lighttpd and the WebView page live on; every served
+ * fetch is then refused ("Load failed", #381/#385). The server is probed on
+ * return to the foreground, before served work after a long idle, after a
+ * served transport failure and when the page itself fails to load; a dead
+ * one is restarted (same port when possible) and the page reloaded, and the
+ * request that hit the dead server is retried once. See
+ * `@core/storage/loopbackLiveness` for the policy.
+ *
  * See `PdfRasterizer.README.md` for the bundling/offline design and limitations.
  */
 import { fnv1a32 } from '@core/encoding/fnv1a';
+import {
+  applyLoopbackSignal,
+  isServedTransportFailure,
+  needsProbe,
+  rebaseServedUrl,
+  recoveryAfterFailedProbe,
+  startedHealth,
+  type LoopbackHealth,
+  type LoopbackSignal,
+} from '@core/storage/loopbackLiveness';
 import { servedFileUrl } from '@core/storage/servedPaths';
-import { acquireLocalServer, writeServedText, type LocalServerLease } from '@data/localServer';
+import {
+  acquireLocalServer,
+  probeLocalServer,
+  restartLocalServer,
+  writeServedText,
+  type LocalServerLease,
+} from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { reportError } from '@lib/errorReporting';
@@ -42,7 +67,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type {
   WebViewErrorEvent,
@@ -202,6 +227,8 @@ const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
 
 interface PendingRequest {
   backendDispatched: boolean;
+  /** Re-queued once already after a served transport failure. */
+  transportRetried: boolean;
   args: Required<RasterizeArgs>;
   recoveryPage: { fileUri: string; pageIndex: number } | null;
   recoveryToken: string | null;
@@ -222,6 +249,9 @@ function finishRecovery(pending: PendingRequest): void {
 }
 
 type RasterizeFn = (args: RasterizeArgs) => Promise<RasterResult>;
+
+/** Why the loopback server's liveness is being checked. */
+type VerifyReason = 'resume' | 'idle' | 'transport' | 'page-load';
 
 /**
  * Resolves to the loopback origin the engine serves PDFs from, or `null` when
@@ -632,6 +662,17 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const originRef = useRef<string | null>(null);
   const settledRef = useRef(deferred());
   const leaseRef = useRef<LocalServerLease | null>(null);
+  // Whether the server is known to accept connections, and the check in
+  // flight, if any. Served dispatch waits while one runs.
+  const healthRef = useRef<LoopbackHealth>(startedHealth(0));
+  const verifyingRef = useRef<Promise<void> | null>(null);
+  // Origins of servers replaced by a restart on a new port. A URL a caller
+  // built on one before the restart is moved to the live origin at dispatch.
+  const retiredOriginsRef = useRef(new Set<string>());
+  const verifyServerRef = useRef<(reason: VerifyReason) => Promise<void>>(() => Promise.resolve());
+  const signalHealth = useCallback((signal: LoopbackSignal) => {
+    healthRef.current = applyLoopbackSignal(healthRef.current, signal, Date.now());
+  }, []);
 
   // Pending requests keyed by id, plus a FIFO queue so only one render runs at
   // a time (the single canvas/WebView is a shared resource).
@@ -693,6 +734,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         if (pageUrl === null)
           throw new Error(`${RASTERIZER_PAGE_PATH} is not on the served allowlist`);
         originRef.current = lease.value;
+        healthRef.current = startedHealth(Date.now());
         applyEngine({ kind: 'served', uri: `${pageUrl}?v=${fnv1a32(html)}` });
       } catch (err) {
         if (cancelled) return;
@@ -829,6 +871,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     if (busyRef.current || nativeActiveRef.current !== null || !readyRef.current) {
       return;
     }
+    // A liveness check pumps again when it is done.
+    if (verifyingRef.current !== null) return;
+    const head = queueRef.current[0];
+    if (
+      head?.args.source.url !== undefined &&
+      engineRef.current?.kind === 'served' &&
+      needsProbe(healthRef.current, Date.now())
+    ) {
+      // Served work after a long idle, or with the server under suspicion:
+      // prove it alive first rather than fail this request on a dead port.
+      void verifyServerRef.current('idle');
+      return;
+    }
     const next = queueRef.current.shift();
     if (!next) {
       return;
@@ -887,6 +942,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
     }
     const idLiteral = JSON.stringify(id);
+    const live = originRef.current;
+    if (args.source.url !== undefined && live !== null) {
+      let url = args.source.url;
+      for (const retired of retiredOriginsRef.current) url = rebaseServedUrl(url, retired, live);
+      if (url !== args.source.url) args.source = { url };
+    }
     const { source } = args;
     if (source.url !== undefined) {
       // Served: the request is four small values; pdf.js fetches the bytes.
@@ -958,10 +1019,35 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       // Once handed off, only the native promise owns this request.
       if (nativeActiveRef.current === message.id) return;
+      if (
+        !message.ok &&
+        pending.args.source.url !== undefined &&
+        isServedTransportFailure(message.error)
+      ) {
+        // The server refused or dropped the connection: nothing is known
+        // about the page. Retry once behind a liveness check (which restarts
+        // a dead server); a second transport failure is still not the page's
+        // fault, so it rejects as "not started" and the page is not paused.
+        signalHealth({ kind: 'unreachable' });
+        activeRequestRef.current = null;
+        busyRef.current = false;
+        if (!pending.transportRetried) {
+          pending.transportRetried = true;
+          queueRef.current.unshift({ id: message.id, args: pending.args });
+        } else {
+          clearTimeout(pending.timeout);
+          pendingRef.current.delete(message.id);
+          finishRecovery(pending);
+          pending.reject(new PdfLoopbackUnavailableError(message.error));
+        }
+        void verifyServerRef.current('transport');
+        return;
+      }
       clearTimeout(pending.timeout);
       pendingRef.current.delete(message.id);
       finishRecovery(pending);
       if (message.ok) {
+        if (pending.args.source.url !== undefined) signalHealth({ kind: 'reachable' });
         pending.resolve({
           pngDataUri: message.pngDataUri,
           widthPx: message.widthPx,
@@ -985,7 +1071,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       finishCurrent();
     },
-    [finishCurrent, startNative, replaceEngine],
+    [finishCurrent, startNative, replaceEngine, signalHealth],
   );
 
   // WKWebView/Android renderer death has its own event and need not emit a
@@ -1019,19 +1105,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   /**
-   * The served page itself failed to load (server died, 403 from a wrong
-   * allowlist, …): drop to inline mode so small maps still draw, and fail
-   * every queued served request now rather than after its 45 s timeout —
-   * the inline page cannot fetch their URLs.
+   * The served page failed to load twice (403 from a wrong allowlist, …), or
+   * the server could not be brought back: drop to inline mode so small maps
+   * still draw, and fail every queued served request now rather than after
+   * its 45 s timeout — the inline page cannot fetch their URLs. `summary`
+   * prefixes the report; `null` when the cause was already reported.
    */
   const fallbackToInline = useCallback(
-    (reason: string) => {
+    (reason: string, summary: string | null = 'rasterizer page failed to load over loopback') => {
       const html = htmlRef.current;
       if (engineRef.current?.kind !== 'served' || html === null) return;
-      reportError(
-        new Error(`rasterizer page failed to load over loopback: ${reason}`),
-        'pdf-rasterizer-server',
-      );
+      if (summary !== null) {
+        reportError(new Error(`${summary}: ${reason}`), 'pdf-rasterizer-server');
+      }
       originRef.current = null;
       readyRef.current = false;
       setReady(false);
@@ -1052,7 +1138,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         clearTimeout(pending.timeout);
         pendingRef.current.delete(id);
         if (nativeActiveRef.current !== id) finishRecovery(pending);
-        pending.reject(new Error(`PdfRasterizer: loopback server unavailable (${reason})`));
+        // The server is gone, not the page: never a reason to pause it.
+        pending.reject(
+          new PdfLoopbackUnavailableError(`PdfRasterizer: loopback server unavailable (${reason})`),
+        );
       }
     },
     [applyEngine, replaceEngine],
@@ -1071,14 +1160,141 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         // back to inline so small maps remain usable without a reload loop.
         if (!servedLoadRetryRef.current) {
           servedLoadRetryRef.current = true;
-          handleProcessGone();
+          readyRef.current = false;
+          setReady(false);
+          // "Could not connect to the server" after a resume is a dead
+          // listener (#381, #385): probe, restart it if needed, reload the page.
+          void verifyServerRef.current('page-load');
           return;
         }
         fallbackToInline(description || 'load error');
       }
     },
-    [fallbackToInline, handleProcessGone],
+    [fallbackToInline],
   );
+
+  /**
+   * Point the engine at `origin` and load a fresh page from it. The pdf.js
+   * request in flight (if any) goes back to the head of the queue instead of
+   * failing — its server died, not its page — and every queued served URL
+   * moves to the new origin. A native crop keeps the queue until it settles.
+   */
+  const reloadServedEngine = useCallback(
+    (origin: string) => {
+      const html = htmlRef.current;
+      const pageUrl = servedFileUrl(origin, RASTERIZER_PAGE_PATH);
+      if (html === null || pageUrl === null) return;
+      const previous = originRef.current;
+      originRef.current = origin;
+      readyRef.current = false;
+      setReady(false);
+      if (nativeActiveRef.current === null) {
+        const id = activeRequestRef.current;
+        const active = id === null ? undefined : pendingRef.current.get(id);
+        if (active && id !== null) queueRef.current.unshift({ id, args: active.args });
+        activeRequestRef.current = null;
+        busyRef.current = false;
+      }
+      if (previous !== null && previous !== origin) {
+        retiredOriginsRef.current.add(previous);
+        retiredOriginsRef.current.delete(origin);
+        const rebase = (args: Required<RasterizeArgs>) => {
+          if (args.source.url !== undefined) {
+            args.source = { url: rebaseServedUrl(args.source.url, previous, origin) };
+          }
+        };
+        queueRef.current.forEach((queued) => rebase(queued.args));
+        pendingRef.current.forEach((pending) => rebase(pending.args));
+      }
+      applyEngine({ kind: 'served', uri: `${pageUrl}?v=${fnv1a32(html)}` });
+      replaceEngine();
+    },
+    [applyEngine, replaceEngine],
+  );
+
+  /**
+   * Prove the loopback server alive, or bring it back. Single-flight; while
+   * it runs, `serverOrigin()` waits and nothing is dispatched. Outcomes:
+   * alive → carry on (reloading the page only when it failed to load, or to
+   * leave inline mode); dead → restart it and reload the page from it; out
+   * of restarts, or the restart failed → inline mode, as before.
+   */
+  const verifyServer = useCallback(
+    (reason: VerifyReason): Promise<void> => {
+      if (verifyingRef.current !== null) return verifyingRef.current;
+      const lease = leaseRef.current;
+      if (lease === null || htmlRef.current === null || !mountedRef.current) {
+        return Promise.resolve();
+      }
+      const gate = deferred();
+      settledRef.current = gate;
+      const staleOrigin = lease.value;
+      const run = (async () => {
+        let origin = staleOrigin;
+        if (await probeLocalServer(staleOrigin)) {
+          signalHealth({ kind: 'reachable' });
+        } else {
+          signalHealth({ kind: 'unreachable' });
+          if (!mountedRef.current) return;
+          if (recoveryAfterFailedProbe(healthRef.current, Date.now()) === 'give-up') {
+            fallbackToInline(reason, 'loopback server unreachable, restart budget spent');
+            return;
+          }
+          origin = await restartLocalServer(staleOrigin);
+          signalHealth({ kind: 'restarted' });
+          // Field evidence for the resume hypothesis: how often, and why.
+          reportError(
+            new Error(
+              `Loopback server was unreachable (${reason}); restarted on ` +
+                `${origin === staleOrigin ? 'the same' : 'a new'} port`,
+            ),
+            'pdf-rasterizer-server-restart',
+          );
+        }
+        if (!mountedRef.current || leaseRef.current !== lease) return;
+        if (
+          engineRef.current?.kind !== 'served' ||
+          origin !== originRef.current ||
+          reason === 'page-load'
+        ) {
+          reloadServedEngine(origin);
+        }
+      })()
+        .catch((error: unknown) => {
+          // Restart failed (or the probe threw): lose URL rendering, keep inline.
+          reportError(error, 'pdf-rasterizer-server');
+          if (mountedRef.current) {
+            fallbackToInline(error instanceof Error ? error.message : String(error), null);
+          }
+        })
+        .finally(() => {
+          verifyingRef.current = null;
+          gate.resolve();
+          pumpQueueRef.current();
+        });
+      verifyingRef.current = run;
+      return run;
+    },
+    [fallbackToInline, reloadServedEngine, signalHealth],
+  );
+  useEffect(() => {
+    verifyServerRef.current = verifyServer;
+  }, [verifyServer]);
+
+  // Resume: iOS may have reclaimed the listener while the app was suspended.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        signalHealth({ kind: 'background' });
+        return;
+      }
+      if (state !== 'active') return;
+      const returning = healthRef.current.backgroundedAt !== null;
+      signalHealth({ kind: 'foreground' });
+      if (returning) void verifyServerRef.current('resume');
+    });
+    return () => subscription.remove();
+  }, [signalHealth]);
 
   const handleHttpError = useCallback(
     (event: WebViewHttpErrorEvent) => {
@@ -1168,6 +1384,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const pendingRequest: PendingRequest = {
           backendDispatched: false,
+          transportRetried: false,
           args: normalized,
           recoveryPage: args.nativePage
             ? { fileUri: args.nativePage.fileUri, pageIndex: args.pageIndex }
@@ -1175,7 +1392,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           recoveryToken: null,
           resolve,
           reject: (error) =>
-            reject(pendingRequest.backendDispatched ? error : new PdfRenderNotStartedError(error)),
+            reject(
+              pendingRequest.backendDispatched || error instanceof PdfRenderNotStartedError
+                ? error
+                : new PdfRenderNotStartedError(error),
+            ),
           timeout,
           expire,
         };
