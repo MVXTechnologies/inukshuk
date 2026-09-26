@@ -28,6 +28,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { CatalogItemCard } from './CatalogItemCard';
 import { CategoryGrid } from './CategoryGrid';
 import { DestinationFolderDialog } from './DestinationFolderDialog';
@@ -279,7 +280,7 @@ export function StoreScreen() {
     if (status === 'loading' || status === 'idle') {
       return (
         <View style={styles.emptyWrap}>
-          <ActivityIndicator />
+          <InukshukLoader />
           <Text variant="bodyMedium" style={styles.emptyText}>
             Loading the map catalog…
           </Text>
