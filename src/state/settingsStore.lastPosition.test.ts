@@ -1,5 +1,6 @@
 // src/state/settingsStore.lastPosition.test.ts — persisted last known map
 // position: the cold-start camera seed (see @core/geo/lastKnownPosition).
+import { SETTINGS_SCHEMA_VERSION } from '@core/library/migrations';
 import { useSettingsStore } from './settingsStore';
 
 jest.mock('@data/storage', () => ({
@@ -28,7 +29,7 @@ it('defaults to null (never saved)', () => {
 });
 
 it('hydrates to null from an old settings.json without the field', async () => {
-  storage.readJson.mockResolvedValue({ schemaVersion: 2, units: 'imperial' });
+  storage.readJson.mockResolvedValue({ schemaVersion: SETTINGS_SCHEMA_VERSION, units: 'imperial' });
   await useSettingsStore.getState().hydrate();
   expect(useSettingsStore.getState().lastKnownPosition).toBeNull();
   expect(useSettingsStore.getState().units).toBe('imperial');
@@ -42,7 +43,7 @@ it('hydrates to null from a legacy unversioned settings.json', async () => {
 
 it('hydrates a valid persisted position, dropping extra fields', async () => {
   storage.readJson.mockResolvedValue({
-    schemaVersion: 2,
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
     lastKnownPosition: { latitude: 46.81, longitude: -71.21, junk: true },
   });
   await useSettingsStore.getState().hydrate();
@@ -61,7 +62,10 @@ it.each([
   ['non-finite coordinates', { latitude: NaN, longitude: Infinity }],
   ['out-of-range coordinates', { latitude: 123.4, longitude: 567.8 }],
 ])('hydrates junk (%s) to null without crashing', async (_label, junk) => {
-  storage.readJson.mockResolvedValue({ schemaVersion: 2, lastKnownPosition: junk });
+  storage.readJson.mockResolvedValue({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    lastKnownPosition: junk,
+  });
   await useSettingsStore.getState().hydrate();
   expect(useSettingsStore.getState().lastKnownPosition).toBeNull();
 });
@@ -72,7 +76,7 @@ it('set() persists the position inside the versioned settings envelope', () => {
   expect(storage.writeJson).toHaveBeenLastCalledWith(
     'settings.json',
     expect.objectContaining({
-      schemaVersion: 2,
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
       lastKnownPosition: { latitude: 1.5, longitude: -2.5 },
     }),
   );

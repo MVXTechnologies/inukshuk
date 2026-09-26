@@ -1,41 +1,30 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSettingsStore } from '@state/settingsStore';
 import { buildTabBarOptions } from '@ui/tabBarStyle';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const theme = useTheme();
   const tokens = useSchemeTokens();
-  const insets = useSafeAreaInsets();
-  const uiStyle = useSettingsStore((s) => s.uiStyle);
-  // Per-style tab bar: Minimal drops the icons (text-only labels, fixed
-  // thinner bar); Edge keeps icons but colours the active tab in the
-  // pastel-river blue of the "+" dial instead of sage. The style/inset
-  // arithmetic lives in @ui/tabBarStyle so it can be unit-tested.
-  const minimal = uiStyle === 'minimal';
   const icon = (name: keyof typeof MaterialCommunityIcons.glyphMap) => {
-    const TabIcon = ({ color, size }: { color: ColorValue; size: number }) =>
-      minimal ? null : <MaterialCommunityIcons name={name} color={color} size={size} />;
+    const TabIcon = ({ color, size }: { color: ColorValue; size: number }) => (
+      <MaterialCommunityIcons name={name} color={color} size={size} />
+    );
     return TabIcon;
   };
 
   const tabBar = buildTabBarOptions({
-    uiStyle,
     colors: {
       surface: theme.colors.elevation.level2,
       outline: theme.colors.outlineVariant,
-      // Classic: primary is now stone, the same as secondary text, so the
-      // active tab takes sage and inactive tabs the muted ink until the
-      // revamp's sage pill lands with the new tabs (PR 3).
-      primary: uiStyle === 'classic' ? theme.colors.secondary : theme.colors.primary,
-      tertiary: theme.colors.tertiary,
-      onSurfaceVariant: uiStyle === 'classic' ? tokens.inkMuted : theme.colors.onSurfaceVariant,
+      // Primary is stone, the same as secondary text, so the active tab takes
+      // sage and inactive tabs the muted ink until the revamp's sage pill
+      // lands with the new tabs (PR 3).
+      active: theme.colors.secondary,
+      inactive: tokens.inkMuted,
     },
-    insets,
   });
 
   return (

@@ -566,7 +566,7 @@ describe('migrateSettings', () => {
     });
   });
 
-  it('passes current v2 values through', () => {
+  it('passes current values through', () => {
     const settings = migrateSettings(
       { schemaVersion: SETTINGS_SCHEMA_VERSION, tileUrl: 'https://mine', minDisplacementM: 10 },
       defaults,
@@ -591,6 +591,36 @@ describe('migrateSettings', () => {
     for (const junk of [null, undefined, 'x', 3, []]) {
       expect(migrateSettings(junk, defaults)).toEqual(defaults);
     }
+  });
+
+  describe('v2 → v3: Edge and Minimal app styles retired', () => {
+    const v3Defaults = { themeMode: 'system', compactMapChrome: false };
+
+    it("keeps a Minimal user's folded controls as compact map chrome", () => {
+      const settings = migrateSettings(
+        { schemaVersion: 2, themeMode: 'dark', uiStyle: 'minimal' },
+        v3Defaults,
+      );
+      expect(settings).toEqual({ themeMode: 'dark', compactMapChrome: true });
+    });
+
+    it.each(['classic', 'edge', 42, undefined])('lands uiStyle %p on the one look', (uiStyle) => {
+      const settings = migrateSettings({ schemaVersion: 2, uiStyle }, v3Defaults);
+      expect(settings).toEqual(v3Defaults);
+      expect(settings).not.toHaveProperty('uiStyle');
+    });
+
+    it('runs from an unversioned file too', () => {
+      expect(migrateSettings({ uiStyle: 'minimal' }, v3Defaults).compactMapChrome).toBe(true);
+    });
+
+    it('does not re-run on a v3 file', () => {
+      const settings = migrateSettings(
+        { schemaVersion: 3, uiStyle: 'minimal', compactMapChrome: false },
+        v3Defaults,
+      );
+      expect(settings.compactMapChrome).toBe(false);
+    });
   });
 });
 

@@ -1,10 +1,9 @@
 /**
  * Weather-surface chrome (weather UX M1 polish, the Windy idiom): the
  * scrubber bar, legend pill and layer picker float over map tiles, not
- * themed surfaces — so, like the edge rail's pill slab (`edgePill` in
- * `@ui/theme`), they wear ONE fixed dark translucent look in BOTH colour
- * schemes. The accent is our sage green in its dark-surface lift (the dark
- * theme's own primary), so the brand green survives on the slab where the
+ * themed surfaces — so they wear ONE fixed dark translucent look in BOTH
+ * colour schemes. The accent is our sage green in its dark-surface lift (the
+ * dark theme's secondary), so the brand green survives on the slab where the
  * light theme's deep foliage would vanish.
  */
 export const weatherChrome = {

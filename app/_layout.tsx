@@ -30,9 +30,8 @@ export default function RootLayout() {
   // the default 'system', so a forced theme applies one render after launch —
   // visually a non-event because the splash still covers the first frames.
   const themeMode = useSettingsStore((s) => s.themeMode);
-  const uiStyle = useSettingsStore((s) => s.uiStyle);
   const scheme = themeMode === 'system' ? (osScheme ?? 'light') : themeMode;
-  const theme = resolveTheme(uiStyle, scheme === 'dark' ? 'dark' : 'light');
+  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light');
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);

@@ -13,7 +13,6 @@ import {
 import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
-import type { UiStyle } from '@ui/theme';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 
@@ -121,7 +120,7 @@ export function SettingsScreen() {
   const minDisplacement = useSettingsStore((s) => s.minDisplacementM);
   const units = useSettingsStore((s) => s.units);
   const themeMode = useSettingsStore((s) => s.themeMode);
-  const uiStyle = useSettingsStore((s) => s.uiStyle);
+  const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const set = useSettingsStore((s) => s.set);
@@ -316,20 +315,16 @@ export function SettingsScreen() {
                   />
                 </View>
                 <List.Item
-                  title="App style"
-                  description="Classic brand look, quiet Minimal, or the pastel Edge style"
+                  title="Compact map chrome"
+                  description="Fold the map buttons behind one chevron until you need them"
+                  right={() => (
+                    <Switch
+                      value={compactMapChrome}
+                      onValueChange={(v) => set('compactMapChrome', v)}
+                      accessibilityLabel="Compact map chrome"
+                    />
+                  )}
                 />
-                <View style={styles.segment}>
-                  <SegmentedButtons
-                    value={uiStyle}
-                    onValueChange={(v) => set('uiStyle', v as UiStyle)}
-                    buttons={[
-                      { value: 'classic', label: 'Classic' },
-                      { value: 'minimal', label: 'Minimal' },
-                      { value: 'edge', label: 'Edge' },
-                    ]}
-                  />
-                </View>
               </List.Section>
 
               <Divider />

@@ -5,7 +5,6 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FAB, Icon, Menu, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
-import { EdgePill } from './EdgePill';
 
 /** Base-map choices. */
 const BASEMAPS: { key: MapBasemap; label: string }[] = [
@@ -89,29 +88,22 @@ export function BasemapRows({ onPicked }: { onPicked?: () => void }) {
   );
 }
 
-/**
- * The mountain FAB + base-map menu (classic/minimal styles; the edge rail
- * renders {@link BasemapRows} in its own expanding panel instead).
- */
-export function BasemapMenu({ edgeAnchor }: { edgeAnchor?: boolean }) {
+/** The mountain FAB + base-map menu. */
+export function BasemapMenu() {
   const [open, setOpen] = useState(false);
   return (
     <Menu
       visible={open}
       onDismiss={() => setOpen(false)}
       anchor={
-        edgeAnchor ? (
-          <EdgePill icon="image-filter-hdr" label="Base map" onPress={() => setOpen(true)} />
-        ) : (
-          <FAB
-            icon="image-filter-hdr"
-            size="small"
-            variant="surface"
-            onPress={() => setOpen(true)}
-            style={styles.controlFab}
-            accessibilityLabel="Base map"
-          />
-        )
+        <FAB
+          icon="image-filter-hdr"
+          size="small"
+          variant="surface"
+          onPress={() => setOpen(true)}
+          style={styles.controlFab}
+          accessibilityLabel="Base map"
+        />
       }
     >
       <BasemapRows onPicked={() => setOpen(false)} />

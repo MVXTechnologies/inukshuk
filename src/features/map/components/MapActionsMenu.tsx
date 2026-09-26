@@ -1,7 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { FAB, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
-import { EdgePill } from './EdgePill';
 import { InukshukIcon } from './InukshukIcon';
 
 /**
@@ -17,7 +16,7 @@ import { InukshukIcon } from './InukshukIcon';
  * Surface (the absolutely-positioned iOS flex collapse) — following
  * WeatherModelSheet's pattern, with the same fixed dark chrome. `open` is
  * owned by the rail so it can also drop a map-covering backdrop that closes
- * the sheet on an outside tap (the EdgeRail idiom).
+ * the sheet on an outside tap.
  *
  * A11y/Maestro contract: the trigger keeps the EXACT label 'Map actions';
  * action rows keep 'Record track' / 'Add waypoint' / 'Download offline
@@ -52,13 +51,10 @@ export function MapActionsMenu({
   actions,
   open,
   onToggle,
-  edge = false,
 }: {
   actions: MapActions;
   open: boolean;
   onToggle: (open: boolean) => void;
-  /** Render the trigger as an edge half-pill (the 'edge' UI style rail). */
-  edge?: boolean;
 }) {
   const run = (action: (() => void) | undefined) => () => {
     onToggle(false);
@@ -84,24 +80,14 @@ export function MapActionsMenu({
 
   return (
     <>
-      {edge ? (
-        <EdgePill
-          icon={open ? 'close' : 'plus'}
-          label="Map actions"
-          accessibilityLabel="Map actions"
-          active={open}
-          onPress={() => onToggle(!open)}
-        />
-      ) : (
-        <FAB
-          icon={open ? 'close' : 'plus'}
-          size="small"
-          variant="surface"
-          onPress={() => onToggle(!open)}
-          style={styles.controlFab}
-          accessibilityLabel="Map actions"
-        />
-      )}
+      <FAB
+        icon={open ? 'close' : 'plus'}
+        size="small"
+        variant="surface"
+        onPress={() => onToggle(!open)}
+        style={styles.controlFab}
+        accessibilityLabel="Map actions"
+      />
       {open && (
         <View style={styles.sheet}>
           {row('timer-outline', 'Record track', run(actions.onRecord))}

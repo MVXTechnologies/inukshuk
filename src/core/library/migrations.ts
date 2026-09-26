@@ -27,7 +27,7 @@ export const LIBRARY_SCHEMA_VERSION = 8;
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
 /** Current `settings.json` schema. v1 = the unversioned legacy settings. */
-export const SETTINGS_SCHEMA_VERSION = 2;
+export const SETTINGS_SCHEMA_VERSION = 3;
 
 /** The persisted shape of `library.json` at {@link LIBRARY_SCHEMA_VERSION}. */
 export interface LibraryIndex {
@@ -391,6 +391,18 @@ const SETTINGS_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // v1 (unversioned) → v2: no field changes — v2 only added the version
   // envelope. Future settings migrations slot in here.
   1: (doc) => ({ ...doc, schemaVersion: 2 }),
+  // v2 → v3 (UI revamp): the Edge and Minimal app styles are retired. What a
+  // Minimal user kept is its folded map controls, now the "Compact map
+  // chrome" toggle; everyone else lands on the one look. `uiStyle` is
+  // dropped (an older build reading v3 falls back to its 'classic' default).
+  2: (doc) => {
+    const { uiStyle, ...rest } = doc;
+    return {
+      ...rest,
+      ...(uiStyle === 'minimal' ? { compactMapChrome: true } : {}),
+      schemaVersion: 3,
+    };
+  },
 };
 
 /**
