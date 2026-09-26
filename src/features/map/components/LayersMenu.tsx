@@ -3,8 +3,9 @@ import { type MapBasemap, useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { FAB, Icon, Menu, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { Icon, Menu, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { RegionPreviewThumb } from '../RegionPreviewThumb';
+import { MapButton } from './MapButton';
 
 /** Base-map choices. */
 const BASEMAPS: { key: MapBasemap; label: string }[] = [
@@ -88,20 +89,21 @@ export function BasemapRows({ onPicked }: { onPicked?: () => void }) {
   );
 }
 
-/** The mountain FAB + base-map menu. */
-export function BasemapMenu() {
+/**
+ * The base-map button + menu. `grouped` draws the trigger without its own
+ * fill, to sit in the rail's joined pill (revamp `Main.html`).
+ */
+export function BasemapMenu({ grouped = false }: { grouped?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <Menu
       visible={open}
       onDismiss={() => setOpen(false)}
       anchor={
-        <FAB
-          icon="image-filter-hdr"
-          size="small"
-          variant="surface"
+        <MapButton
+          icon="layers-outline"
+          grouped={grouped}
           onPress={() => setOpen(true)}
-          style={styles.controlFab}
           accessibilityLabel="Base map"
         />
       }
@@ -112,7 +114,6 @@ export function BasemapMenu() {
 }
 
 const styles = StyleSheet.create({
-  controlFab: { borderRadius: 24 },
   // minWidth stretches the row inside the content-sized paper Menu so the
   // banner is a real strip, not a sliver.
   bmRow: { paddingVertical: 7, paddingHorizontal: 12, minWidth: 308 },

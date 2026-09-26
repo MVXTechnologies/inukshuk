@@ -53,6 +53,12 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     // Map chrome (translucent: judged over light and dark tiles).
     ['chrome ink on map chrome', t.map.chromeInk, t.map.chrome, TEXT],
     ['follow ink on map chrome', t.map.followInk, t.map.chrome, GRAPHIC],
+    ['follow ink on active chrome', t.map.followInk, t.map.chromeActive, GRAPHIC],
+    ['compass north tip on map chrome', t.map.compassNorth, t.map.chrome, GRAPHIC],
+    ['compass south tail on map chrome', t.map.compassSouth, t.map.chrome, GRAPHIC],
+    ['chip ink on chip', t.map.chipInk, t.map.chip, TEXT],
+    ['chip muted ink on chip', t.map.chipInkMuted, t.map.chip, TEXT],
+    ['puck on its ring', t.map.puck, t.map.puckRing, GRAPHIC],
     // Status (text + shape).
     ['text on paused fill', t.status.onPaused, t.status.paused, TEXT],
     ['paused ink on surface', t.status.pausedInk, t.surface, TEXT],

@@ -77,6 +77,22 @@ function baseSource(
 }
 
 /**
+ * The short credit the attribution chip shows for a basemap (bottom-right of
+ * the map, revamp `Main.html`). MapLibre's own attribution button stays off
+ * (it crowded the map); Settings › System info carries the full credits roll.
+ */
+export function basemapAttribution(basemap: MapBasemap): string {
+  switch (basemap) {
+    case 'satellite':
+      return '© Esri, Maxar';
+    case 'relief':
+      return '© Esri, USGS';
+    default:
+      return '© OpenStreetMap';
+  }
+}
+
+/**
  * The raster tile-URL template ({z}/{x}/{y} or {z}/{y}/{x}) for a basemap — used
  * to fetch a single preview tile without spinning up a whole MapLibre instance.
  */

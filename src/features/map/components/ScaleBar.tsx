@@ -1,7 +1,8 @@
 import { scaleBar } from '@core/geo/scaleBar';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
-import { Surface, Text, useTheme } from 'react-native-paper';
+import { Text } from 'react-native-paper';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 /**
  * The map scale bar, bottom-left (owner call, 2026-09-08; #97 had originally
@@ -30,7 +31,7 @@ import { Surface, Text, useTheme } from 'react-native-paper';
 const MAX_BAR_PX = 104;
 
 export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number }) {
-  const theme = useTheme();
+  const tokens = useSchemeTokens();
   // Subscribed, not read per call: the bar must re-label the moment the unit
   // system flips, and it is cheap to re-render (see `@state/formatters`).
   const units = useSettingsStore((s) => s.units);
@@ -38,39 +39,34 @@ export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number })
   if (bar === null) return null;
 
   return (
-    <Surface
-      style={[styles.pill, { backgroundColor: theme.colors.elevation?.level2 }]}
-      elevation={3}
+    // A paper chip over the map (revamp `Main.html`), not a raised card.
+    <View
+      style={[styles.pill, { backgroundColor: tokens.map.chip }]}
       accessibilityLabel={`Scale ${bar.label}`}
     >
-      <Text variant="labelSmall" style={styles.label}>
-        {bar.label}
-      </Text>
+      <Text style={[styles.label, { color: tokens.map.chipInk }]}>{bar.label}</Text>
       <View
-        style={[
-          styles.bar,
-          { width: Math.round(bar.widthPx), borderColor: theme.colors.onSurface },
-        ]}
+        style={[styles.bar, { width: Math.round(bar.widthPx), borderColor: tokens.map.chipInk }]}
       />
-    </Surface>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   pill: {
-    borderRadius: 10,
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingTop: 4,
     paddingBottom: 6,
     alignItems: 'flex-start',
     gap: 2,
   },
-  label: { fontVariant: ['tabular-nums'] },
+  label: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
   // A classic bar: a baseline with an upright tick at each end.
   bar: {
     height: 6,
-    borderLeftWidth: 2,
-    borderRightWidth: 2,
-    borderBottomWidth: 2,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderBottomWidth: 1.5,
   },
 });

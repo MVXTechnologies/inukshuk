@@ -66,7 +66,10 @@ import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
+import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
+import { MapSearchPill } from './components/MapSearchPill';
+import { RecordButton } from './components/RecordButton';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
@@ -155,6 +158,12 @@ function windBoundsOf(vs: ViewState): WindBbox {
 // session. Generous on purpose: a slightly larger pad is a smaller trail
 // on-screen, never a trail hidden under the panel.
 const INSPECT_PANEL_H_ESTIMATE = 300;
+/**
+ * Top-centre chips (marine notice, destination readout) sit under the
+ * "Search places" pill: its 8 dp top margin + 48 dp height + an 8 dp gap.
+ */
+const TOP_CHIP_OFFSET = 8 + 48 + 8;
+
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
 
@@ -2038,11 +2047,19 @@ export function MapScreen() {
         />
       )}
 
-      {/* Top-left compass. The badge subscribes to the compass itself so the
-          rapid heading events re-render only the badge, not this whole tree. */}
+      {/* Top-left compass (decision 1): snug to the safe area. */}
       <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
         <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
       </View>
+
+      {/* "Search places" between the compass and the rail (revamp Main.html).
+          Phase 1 is coordinates-first: it opens the coordinates dialog. Same
+          gates as the rail; 2D only, like the dialog's fly-to. */}
+      {makeMapState === null && heatSelection === null && !terrain3d && (
+        <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <MapSearchPill onPress={() => void openGoToCoordinates()} />
+        </View>
+      )}
 
       {/* Mandatory marine notice (marine M3): whenever a marine layer is
           draped, the "Not for navigation" chip pins top-centre — between the
@@ -2050,7 +2067,10 @@ export function MapScreen() {
           like the GPS warning, never a Portal/Dialog. 2D only: the 3D view
           doesn't drape marine layers. */}
       {marineActive && !terrain3d && (
-        <View style={[styles.marineChip, { top: insets.top + 12 }]} pointerEvents="none">
+        <View
+          style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+          pointerEvents="none"
+        >
           <MarineDisclaimerChip />
         </View>
       )}
@@ -2060,7 +2080,10 @@ export function MapScreen() {
           marine notice uses, so the two are mutually exclusive. Only while a
           destination exists; the ✕ on it is the way out. */}
       {destination !== null && !marineActive && !terrain3d && (
-        <View style={[styles.topCenterChip, { top: insets.top + 12 }]} pointerEvents="box-none">
+        <View
+          style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+          pointerEvents="box-none"
+        >
           <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
         </View>
       )}
@@ -2076,6 +2099,8 @@ export function MapScreen() {
       {makeMapState === null && heatSelection === null && (
         <MapControlsRail
           top={insets.top + 8}
+          following={followUser}
+          onStopFollowing={() => setFollowUser(false)}
           onLocate={() => {
             setFollowUser(true);
             // Also zoom in to a useful "where am I" level (~2.5 km across);
@@ -2183,11 +2208,24 @@ export function MapScreen() {
             dock instead of colliding with them; with none of those up it sits
             just above the tab bar, in the cartographic corner. 2D only; the
             3D view has no Mercator zoom. */}
-        {showScaleBar && !terrain3d && scaleAt !== null && (
-          <View style={styles.scaleBarSlot} pointerEvents="none">
-            <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+        {/* Scale bar (left), the idle Record button (centre, revamp Main.html)
+            and the basemap credit (right) share one row. */}
+        <View style={styles.bottomRow} pointerEvents="box-none">
+          <View style={styles.bottomSide} pointerEvents="none">
+            {showScaleBar && !terrain3d && scaleAt !== null && (
+              <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+            )}
           </View>
-        )}
+          {status === 'idle' &&
+            !selecting &&
+            !pickingCategory &&
+            makeMapState === null &&
+            heatSelection === null &&
+            !weatherDockVisible && <RecordButton onPress={() => setPickingCategory(true)} />}
+          <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
+            {!terrain3d && <AttributionChip basemap={basemap} />}
+          </View>
+        </View>
         {/* Hide the recording UI while the region-select overlay is open so the
             Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
         {!selecting && status !== 'idle' && (
@@ -2476,19 +2514,21 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // Top-left instrument column: the compass badge alone since the scale bar
   // moved to the bottom-left corner — no gap left floating under it.
-  topLeft: { position: 'absolute', left: 12, alignItems: 'flex-start' },
-  // Centred between the compass (left) and the controls rail (right).
-  marineChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center' },
-  // Same free top-centre lane, used by the destination readout (#97).
-  topCenterChip: { position: 'absolute', left: 60, right: 60, alignItems: 'center', zIndex: 5 },
+  topLeft: { position: 'absolute', left: 16, alignItems: 'flex-start' },
+  // Between the compass (16 + 48) and the rail, with 12 dp either side.
+  searchPill: { position: 'absolute', left: 76, right: 76 },
+  // Centred under the search pill, between the compass and the rail.
+  marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
+  // Same lane, used by the destination readout (#97).
+  topCenterChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center', zIndex: 5 },
   banner: { position: 'absolute', left: 8, right: 8, borderRadius: 12 },
-  bottom: { position: 'absolute', left: 12, right: 12, bottom: 0, gap: 12, paddingBottom: 6 },
+  bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
+  bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  bottomSide: { flex: 1, alignItems: 'flex-start' },
+  bottomSideEnd: { alignItems: 'flex-end' },
   // Collapsed: center-align the pill against the (bigger) icon buttons so
   // they visibly pop out of the bar (item 3).
   recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  // The scale bar keeps the column's left edge and shrinks to its own width
-  // (the column itself is full-bleed for the recording bar and the dock).
-  scaleBarSlot: { alignItems: 'flex-start' },
   // The HUD yields width before the record buttons do (see the guard's
   // comment at the call site).
   hudShrink: { flexShrink: 1 },

@@ -10,7 +10,7 @@ import type {
   RasterDEMSourceSpecification,
   RasterSourceSpecification,
 } from '@maplibre/maplibre-react-native';
-import { buildOsmStyle, HILLSHADE_2D_MIN_ZOOM } from './mapStyle';
+import { basemapAttribution, buildOsmStyle, HILLSHADE_2D_MIN_ZOOM } from './mapStyle';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -694,5 +694,15 @@ describe('position-puck anchors (#332)', () => {
     const labelIds = ids.filter((id) => /label|overlay-labels|coast/i.test(id));
     expect(labelIds.length).toBeGreaterThan(0);
     for (const id of labelIds) expect(ids.indexOf(id)).toBeGreaterThan(lastAnchor);
+  });
+});
+
+describe('basemapAttribution', () => {
+  it.each([
+    ['map' as const, '© OpenStreetMap'],
+    ['relief' as const, '© Esri, USGS'],
+    ['satellite' as const, '© Esri, Maxar'],
+  ])('credits the %s basemap', (basemap, credit) => {
+    expect(basemapAttribution(basemap)).toBe(credit);
   });
 });

@@ -7,7 +7,7 @@ import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useState, type ReactNode } from 'react';
 import { PixelRatio, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { FAB, Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
   CONTOUR_INTERVALS,
   contourIntervalLabel,
@@ -19,6 +19,7 @@ import { DetentSlider } from './DetentSlider';
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { RangeSlider } from './RangeSlider';
 import { TrailNetworksDialog } from './TrailNetworksDialog';
+import { MapButton } from './MapButton';
 
 /**
  * THE overlays menu (D-6 drill-down rework): everything drawn on top of the
@@ -592,19 +593,22 @@ export function OverlaysDialogs({
 }
 
 /**
- * Classic/minimal styles: the overlays FAB + the drill-down sheet unfolding
- * beneath it in the rail's own column (the MapActionsMenu idiom). `open` is
- * owned by the rail so it can drop the map-covering backdrop that closes the
- * sheet on an outside tap.
+ * The overlays button + the drill-down sheet unfolding beneath it in the
+ * rail's own column (the MapActionsMenu idiom). `open` is owned by the rail so
+ * it can drop the map-covering backdrop that closes the sheet on an outside
+ * tap. `hideTrigger` lets the rail draw the button itself, joined with Base
+ * map in one pill (revamp `Main.html`); the sheet and dialogs still live here.
  */
 export function MapOverlaysMenu({
   showHypso = false,
   open,
   onToggle,
+  hideTrigger = false,
 }: {
   showHypso?: boolean;
   open: boolean;
   onToggle: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [networksOpen, setNetworksOpen] = useState(false);
@@ -612,14 +616,13 @@ export function MapOverlaysMenu({
 
   return (
     <>
-      <FAB
-        icon="gradient-vertical"
-        size="small"
-        variant="surface"
-        onPress={() => onToggle(!open)}
-        style={styles.controlFab}
-        accessibilityLabel="Map overlays"
-      />
+      {!hideTrigger && (
+        <MapButton
+          icon="gradient-vertical"
+          onPress={() => onToggle(!open)}
+          accessibilityLabel="Map overlays"
+        />
+      )}
       {open && (
         <View style={styles.sheet}>
           <OverlaysDrilldown
@@ -687,7 +690,6 @@ const WEATHER_LABEL_LINE = 20;
 const WEATHER_VISIBLE_ROWS = 6.5;
 
 const styles = StyleSheet.create({
-  controlFab: { borderRadius: 24 },
   sheet: {
     minWidth: 316,
     maxWidth: 344,
