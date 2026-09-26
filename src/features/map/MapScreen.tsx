@@ -2119,6 +2119,8 @@ export function MapScreen() {
                   // Coordinate readout/entry (#97) — always available; it
                   // needs neither a GPS fix nor the flat 2D camera.
                   onGoToCoordinates: () => void openGoToCoordinates(),
+                  // Settings left the tab bar (revamp decision 6).
+                  onOpenSettings: () => router.push('/settings'),
                   // The region box needs the flat 2D map, like the selector.
                   onMakeMap: terrain3d
                     ? undefined

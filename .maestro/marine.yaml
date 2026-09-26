@@ -169,9 +169,12 @@ appId: com.inukshuk.app
 # shows its empty state; the auto-update switch is always present. The row
 # is NOT tapped — flipping it would change persisted behaviour for later
 # flows, and deleting a pack needs one to exist. ---
+# Settings is a stack screen since the revamp's tabs (Map · Library · Maps ·
+# Logbook): reach it from the gear in the Library header.
 - tapOn:
-    text: 'Settings(, tab.*)?'
+    text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
+- tapOn: 'Settings'
 - assertVisible: '.*Data settings.*'
 - scrollUntilVisible:
     element:
@@ -201,6 +204,8 @@ appId: com.inukshuk.app
     direction: DOWN
 - assertVisible: '.*Auto-update marine packs.*'
 # Back to the map so reruns and later flows start where they expect to.
+# Settings has no tab bar: back out to Library first.
+- tapOn: 'Back'
 - tapOn:
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true

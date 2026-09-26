@@ -34,9 +34,12 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
+# Settings is a stack screen since the revamp's tabs (Map · Library · Maps ·
+# Logbook): reach it from the gear in the Library header.
 - tapOn:
-    text: 'Settings(, tab.*)?'
+    text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
+- tapOn: 'Settings'
 # iOS merges a row's title + subtitle into ONE accessibility string (Android
 # keeps them separate elements), so every row match below is a wildcard
 # regex — it hits the title element on Android and the merged row on iOS.

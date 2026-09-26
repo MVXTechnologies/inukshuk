@@ -423,7 +423,7 @@ export function StoreScreen() {
               ? CATALOG_CATEGORY_LABELS[category]
               : browsing
                 ? 'All maps'
-                : 'Search'
+                : 'Maps'
           }
         />
       </Appbar.Header>

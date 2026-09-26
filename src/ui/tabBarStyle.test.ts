@@ -1,4 +1,4 @@
-import { buildTabBarOptions, type TabBarColors } from './tabBarStyle';
+import { buildTabBarOptions, TAB_PILL, tabLabelStyle, type TabBarColors } from './tabBarStyle';
 
 const colors: TabBarColors = {
   surface: '#101010',
@@ -8,11 +8,12 @@ const colors: TabBarColors = {
 };
 
 describe('buildTabBarOptions', () => {
-  it('maps the theme colours onto the tab bar', () => {
+  it('maps the theme colours onto the tab bar and sizes the icon slot for the pill', () => {
     expect(buildTabBarOptions({ colors })).toEqual({
       tabBarActiveTintColor: colors.active,
       tabBarInactiveTintColor: colors.inactive,
       tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.outline },
+      tabBarIconStyle: { width: TAB_PILL.width, height: TAB_PILL.height },
     });
   });
 
@@ -22,5 +23,17 @@ describe('buildTabBarOptions', () => {
     const { tabBarStyle } = buildTabBarOptions({ colors });
     expect(tabBarStyle.height).toBeUndefined();
     expect(tabBarStyle.paddingBottom).toBeUndefined();
+  });
+});
+
+describe('tabLabelStyle', () => {
+  it('is 12 dp in the brand face, heavier when active', () => {
+    expect(tabLabelStyle(true, 'Brand')).toEqual({
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'Brand',
+      fontWeight: '800',
+    });
+    expect(tabLabelStyle(false, 'Brand').fontWeight).toBe('700');
   });
 });

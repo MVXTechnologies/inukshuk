@@ -60,9 +60,10 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000
-# (iOS labels tab items "Search, tab, N of M" — same regex as every flow.)
+# Maps is the store tab (the old "Search"). iOS labels tab items "Maps, tab,
+# N of M" — same regex as every flow.
 - tapOn:
-    text: 'Search(, tab.*)?'
+    text: 'Maps(, tab.*)?'
     retryTapIfNoChange: true
 # "Around you" proves the whole sharded path on a device: index fetched,
 # shards ranked nearest-first, the two nearest fetched and merged — then the

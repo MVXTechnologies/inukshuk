@@ -14,6 +14,7 @@ import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 
 import { describeRunningUpdate } from '@core/app/updateInfo';
@@ -104,6 +105,7 @@ const updateLine = describeRunningUpdate({
 });
 
 export function SettingsScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   // Owner feedback (2026-08-08): with a category open, the next collapsed
@@ -242,6 +244,7 @@ export function SettingsScreen() {
   return (
     <View style={styles.fill}>
       <Appbar.Header>
+        {router.canGoBack() && <Appbar.BackAction onPress={() => router.back()} />}
         <Appbar.Content title="Settings" />
       </Appbar.Header>
 

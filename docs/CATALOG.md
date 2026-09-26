@@ -1,6 +1,6 @@
 # The world catalog (`/catalog/v2/`)
 
-How the Search tab's catalog is generated, sharded, published and read.
+How the Maps tab's catalog (the store; "Search" before 1.7.0) is generated, sharded, published and read.
 Design background: `docs/plans/plan-map-store.md`.
 
 The rule that shapes everything below: **we link, we never rehost.** The
@@ -103,7 +103,7 @@ The cell grid is a **quadtree over WGS84 rooted at 10° cells** (`src/core/catal
 - Items with no bbox go to one `<category>-nogeo` shard, ranked last everywhere.
 
 Concretely: a 400-item shard of typical topo rows is ~150 KB of JSON. Opening
-the Search tab costs the index (tens of KB) plus at most 6 shards under a
+the Maps tab costs the index (tens of KB) plus at most 6 shards under a
 1.5 MB budget — not the whole world.
 
 **Why not shard by country/region?** Country codes are a poor proxy for "near
