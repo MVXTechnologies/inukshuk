@@ -1,6 +1,10 @@
 import { formatLatLng } from '@core/geo/formatCoords';
+import { waypointIconLabel } from '@core/library/waypointIcons';
+import type { WaypointIcon } from '@core/models';
 import { Image, StyleSheet, View } from 'react-native';
-import { Button, IconButton, Surface, Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { InukshukIcon } from './InukshukIcon';
+import { mciGlyph } from './waypointGlyph';
 
 export interface ViewableWaypoint {
   label: string;
@@ -8,6 +12,8 @@ export interface ViewableWaypoint {
   longitude: number;
   note?: string;
   photoUri?: string;
+  /** Chosen pin icon (#350); absent = the default pin. */
+  icon?: WaypointIcon;
 }
 
 interface Props {
@@ -34,10 +40,24 @@ export function WaypointViewerCard({
   onEdit,
   onClose,
 }: Props) {
+  const theme = useTheme();
   if (!waypoint) return null;
+  // The same mark the pin draws, so the card and the map agree at a glance.
+  const glyph = mciGlyph(waypoint.icon);
   return (
     <Surface style={styles.card} elevation={4}>
       <View style={styles.header}>
+        <View
+          style={styles.icon}
+          accessible
+          accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
+        >
+          {glyph === null ? (
+            <InukshukIcon size={20} color={theme.colors.onSurfaceVariant} />
+          ) : (
+            <Icon source={glyph} size={20} color={theme.colors.onSurfaceVariant} />
+          )}
+        </View>
         <Text variant="titleMedium" numberOfLines={1} style={styles.title}>
           {waypoint.label}
         </Text>
@@ -97,6 +117,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center' },
+  icon: { marginRight: 8 },
   title: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
   grow: { flex: 1 },
