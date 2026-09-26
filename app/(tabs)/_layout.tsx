@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSettingsStore } from '@state/settingsStore';
 import { buildTabBarOptions } from '@ui/tabBarStyle';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
 import { useTheme } from 'react-native-paper';
@@ -8,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const uiStyle = useSettingsStore((s) => s.uiStyle);
   // Per-style tab bar: Minimal drops the icons (text-only labels, fixed
@@ -26,9 +28,12 @@ export default function TabsLayout() {
     colors: {
       surface: theme.colors.elevation.level2,
       outline: theme.colors.outlineVariant,
-      primary: theme.colors.primary,
+      // Classic: primary is now stone, the same as secondary text, so the
+      // active tab takes sage and inactive tabs the muted ink until the
+      // revamp's sage pill lands with the new tabs (PR 3).
+      primary: uiStyle === 'classic' ? theme.colors.secondary : theme.colors.primary,
       tertiary: theme.colors.tertiary,
-      onSurfaceVariant: theme.colors.onSurfaceVariant,
+      onSurfaceVariant: uiStyle === 'classic' ? tokens.inkMuted : theme.colors.onSurfaceVariant,
     },
     insets,
   });
