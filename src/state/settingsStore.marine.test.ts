@@ -7,6 +7,12 @@ jest.mock('@data/storage', () => ({
   readJson: () => mockReadJson(),
 }));
 
+// Writes are held until settings.json has been read (see
+// settingsStore.hydration.test.ts); these cases are about a loaded store.
+beforeAll(async () => {
+  await useSettingsStore.getState().hydrate();
+});
+
 describe('marineLayers setting', () => {
   it('defaults to off (empty) and persists checked layers', () => {
     expect(useSettingsStore.getState().marineLayers).toEqual([]);

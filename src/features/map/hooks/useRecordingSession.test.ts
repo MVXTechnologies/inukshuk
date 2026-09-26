@@ -1,5 +1,6 @@
 import { GPS_LOST_MS, GPS_WEAK_MS } from '@core/geo/track/gpsQuality';
 import type { TrackPoint } from '@core/models';
+import { LibraryNotHydratedError } from '@state/libraryStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { act, renderHook } from '@testing-library/react-native';
 import { useRecordingSession } from './useRecordingSession';
@@ -195,5 +196,28 @@ describe('useRecordingSession — the elapsed/GPS-quality ticker', () => {
       useRecorderStore.getState().addPoint(fix());
     });
     expect(view.result.current.gpsQuality).toBe('good');
+  });
+});
+
+describe('useRecordingSession — a Stop that cannot save', () => {
+  const realStop = useRecorderStore.getState().stop;
+
+  afterEach(() => {
+    useRecorderStore.setState({ stop: realStop });
+  });
+
+  it.each([
+    ['the library index cannot load', new LibraryNotHydratedError(), /open your library.*kept/],
+    ['storage is full', new Error('ENOSPC'), /storage may be full/],
+  ])('says why when %s, and does not claim a save', async (_label, error, message) => {
+    useRecorderStore.setState({ stop: jest.fn(async () => Promise.reject(error)) });
+    const view = await renderHook(() => useRecordingSession({ showSnack }));
+
+    await act(async () => {
+      await view.result.current.handleStop();
+    });
+
+    expect(showSnack).toHaveBeenLastCalledWith(expect.stringMatching(message));
+    expect(showSnack).not.toHaveBeenCalledWith(expect.stringMatching(/^Saved/));
   });
 });

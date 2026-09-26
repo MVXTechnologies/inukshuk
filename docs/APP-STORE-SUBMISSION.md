@@ -65,7 +65,7 @@ eas submit --platform ios --profile production --latest
 `eas.json → submit.production.ios` already carries `ascAppId 6797629589`,
 `ascApiKeyId KLFW83ZF9L`, issuer `f0545d6d-…`, team `8S5UZVMQFA`, so `eas submit`
 needs no extra flags. (The tag-driven path in `docs/DEPLOYMENT.md` —
-`npm version …` + `git push --follow-tags` — does the same thing through
+`npm run release:bump` + a `v*` tag — does the same thing through
 `release.yml`; use whichever you prefer, but do **not** bump `version`: 1.5.0
 build 5 is what these screenshots and this checklist describe.)
 

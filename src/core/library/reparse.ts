@@ -19,8 +19,6 @@ import { defaultActivePages } from './overlayPages';
 export interface ReparseJob {
   docId: string;
   fileUri: string;
-  /** Only for the log/report line — never shown to the user. */
-  name: string;
 }
 
 /**
@@ -34,7 +32,7 @@ export function planReparse(maps: readonly MapDocument[]): ReparseJob[] {
   for (const m of maps) {
     if (!m.fileUri) continue;
     if (!needsReparse(m)) continue;
-    jobs.push({ docId: m.id, fileUri: m.fileUri, name: m.name });
+    jobs.push({ docId: m.id, fileUri: m.fileUri });
   }
   return jobs;
 }
