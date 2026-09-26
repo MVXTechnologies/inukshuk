@@ -1,5 +1,6 @@
 import type { MapBasemap } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
+import { schemeTokens } from '@ui/tokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FAB, Icon, type MD3Theme, Menu, useTheme } from 'react-native-paper';
@@ -34,7 +35,7 @@ const BASEMAPS: {
     key: 'satellite',
     label: 'Satellite',
     icon: 'satellite-variant',
-    color: (t) => t.colors.tertiary,
+    color: (t) => schemeTokens(t.dark).data.info,
   },
 ];
 

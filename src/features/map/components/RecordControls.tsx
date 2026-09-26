@@ -86,7 +86,7 @@ export function RecordControls({
   const iconSize = expanded ? 18 : 24;
 
   const pauseResume = recording
-    ? { icon: 'pause', label: 'Pause', onPress: onPause, color: theme.colors.tertiary }
+    ? { icon: 'pause', label: 'Pause', onPress: onPause, color: theme.colors.primary }
     : { icon: 'play', label: 'Resume', onPress: onResume, color: theme.colors.primary };
   const wpColor = recording ? theme.colors.primary : theme.colors.onSurfaceDisabled;
 

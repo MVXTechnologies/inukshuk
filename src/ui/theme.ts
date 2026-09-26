@@ -1,77 +1,102 @@
-import { MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
+import { configureFonts, MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
+
+import { FONT_FAMILY } from './fonts';
+import { darkScheme, lightScheme, palette, type SchemeTokens } from './tokens';
 
 /**
- * Inukshuk's visual identity is sampled directly from the app logo
- * (`assets/icon-source.png`): the charcoal stone figure, sage foliage, a slate
- * river, mountain grey and warm paper cream. These map onto React Native
- * Paper's Material Design 3 system so every component stays a standard,
- * well-documented Paper primitive — easy to maintain and theme.
+ * Inukshuk's Paper themes, built from the Stone & Paper tokens (`tokens.ts`).
+ * Every MD3 colour slot is set here: spreading MD3LightTheme/MD3DarkTheme
+ * left Material's lavender in the elevation steps, outlines, inverse and
+ * disabled colours (the "purple leak"); `theme.test.ts` now fails on any
+ * purple slot. Roles: stone leads primary actions, sage marks selection, red
+ * is reserved for stop, danger and lost GPS.
  */
 
-// Palette sampled from the logo. Surfaces use deepened variants of the logo's
-// sage (#93A25E) and river (#5C93B7) so white text meets contrast on them.
-const INUKSHUK = '#2D3740'; // charcoal-navy — the stone figure, our primary mark
-const FOLIAGE_DEEP = '#566B33'; // deepened sage — green surfaces
-const STONE = '#8A8B8C'; // mountain grey
-const CREAM = '#F2ECE0'; // warm paper — app background
+const fonts = configureFonts({ config: { fontFamily: FONT_FAMILY } });
+
+/** The MD3 slots every scheme shares the shape of. */
+function schemeColors(t: SchemeTokens) {
+  return {
+    background: t.background,
+    onBackground: t.ink,
+    surface: t.surface,
+    onSurface: t.ink,
+    surfaceVariant: t.surfaceVariant,
+    // Secondary text (List descriptions, subheaders, card subtitles, inactive
+    // nav). Kept strong on purpose: at small sizes a mid-grey reads "pale" once
+    // anti-aliased against cream outdoors (field report). Gated AAA by
+    // theme.test.ts. The muted ink is for captions only.
+    onSurfaceVariant: t.inkVariant,
+    outline: t.outline,
+    outlineVariant: t.outlineVariant,
+    elevation: { ...t.elevation },
+  };
+}
 
 export const lightTheme: MD3Theme = {
   ...MD3LightTheme,
+  fonts,
   colors: {
-    ...MD3LightTheme.colors,
-    primary: FOLIAGE_DEEP,
-    onPrimary: '#FFFFFF',
-    primaryContainer: '#DCE8BC',
-    onPrimaryContainer: '#18250A',
-    secondary: INUKSHUK,
-    onSecondary: '#FFFFFF',
-    secondaryContainer: '#D6DBE0',
-    onSecondaryContainer: '#161C22',
-    // Softened to the Edge family's pastel river (user call): the "+" dial
-    // and compass wear this, and the deep slate read too heavy next to them.
-    tertiary: '#AECCDF',
-    onTertiary: '#17303F',
-    tertiaryContainer: '#D6E7F1',
-    onTertiaryContainer: '#142A38',
-    background: CREAM,
-    surface: '#FBF8F2',
-    surfaceVariant: '#E3DDD0',
-    // Secondary text (List descriptions, subheaders, card subtitles, inactive
-    // nav). Pushed to near-black: at small/thin subheader sizes a mid-dark olive
-    // still reads "pale" once anti-aliased against cream, so we maximize stroke
-    // darkness (~15:1 on surface) for crisp outdoor readability. Gated by
-    // theme.test.ts.
-    onSurfaceVariant: '#242A20',
-    outline: STONE,
-    error: '#BA1A1A',
+    ...schemeColors(lightScheme),
+    primary: palette.stone,
+    onPrimary: palette.surface,
+    primaryContainer: '#DCE1E6',
+    onPrimaryContainer: '#161C22',
+    secondary: palette.sageDeep,
+    onSecondary: palette.white,
+    secondaryContainer: palette.sagePill,
+    onSecondaryContainer: palette.stone,
+    tertiary: palette.graniteDeep,
+    onTertiary: palette.white,
+    tertiaryContainer: '#E1E5E8',
+    onTertiaryContainer: palette.ink,
+    error: palette.signalRed,
+    onError: palette.white,
+    errorContainer: '#F9DEDC',
+    onErrorContainer: '#410E0B',
+    surfaceDisabled: 'rgba(30,37,44,0.12)',
+    onSurfaceDisabled: 'rgba(30,37,44,0.38)',
+    inverseSurface: palette.stone,
+    inverseOnSurface: palette.paper,
+    inversePrimary: '#B6C98A',
+    shadow: palette.black,
+    scrim: palette.black,
+    backdrop: 'rgba(45,55,64,0.4)',
   },
 };
 
+/** Stone night. */
 export const darkTheme: MD3Theme = {
   ...MD3DarkTheme,
+  fonts,
   colors: {
-    ...MD3DarkTheme.colors,
-    primary: '#B6C98A',
-    onPrimary: '#28340A',
-    primaryContainer: '#3E5021',
-    onPrimaryContainer: '#D2E5A4',
-    secondary: '#B9C4CE',
-    onSecondary: '#243039',
-    secondaryContainer: '#3B4750',
-    onSecondaryContainer: '#D6DBE0',
-    // Matched to the Edge family's pastel river so the "+" dial and compass
-    // wear the same blue across styles (user call).
-    tertiary: '#AECCDF',
-    onTertiary: '#122B3A',
-    tertiaryContainer: '#2E4756',
-    onTertiaryContainer: '#D6E7F1',
-    background: '#12150F',
-    surface: '#1B1E17',
-    surfaceVariant: '#43483E',
-    // Brighten secondary text for parity with the light theme's contrast.
-    onSurfaceVariant: '#D2DAC8',
-    outline: STONE,
+    ...schemeColors(darkScheme),
+    // Stone vanishes on the night ground, so primary actions invert: paper ink
+    // buttons with stone labels.
+    primary: darkScheme.ink,
+    onPrimary: palette.stone,
+    primaryContainer: darkScheme.elevation.level5,
+    onPrimaryContainer: darkScheme.ink,
+    secondary: '#B6C98A',
+    onSecondary: '#28340A',
+    secondaryContainer: '#3F4B2A',
+    onSecondaryContainer: '#DCE5BE',
+    tertiary: darkScheme.inkVariant,
+    onTertiary: darkScheme.surface,
+    tertiaryContainer: darkScheme.elevation.level3,
+    onTertiaryContainer: darkScheme.ink,
     error: '#FFB4AB',
+    onError: '#690005',
+    errorContainer: '#93000A',
+    onErrorContainer: '#FFDAD6',
+    surfaceDisabled: 'rgba(233,228,216,0.12)',
+    onSurfaceDisabled: 'rgba(233,228,216,0.38)',
+    inverseSurface: darkScheme.ink,
+    inverseOnSurface: palette.stone,
+    inversePrimary: palette.stone,
+    shadow: palette.black,
+    scrim: palette.black,
+    backdrop: 'rgba(0,0,0,0.5)',
   },
 };
 
@@ -86,10 +111,10 @@ export const darkTheme: MD3Theme = {
 export type UiStyle = 'classic' | 'minimal' | 'edge';
 
 export const minimalLightTheme: MD3Theme = {
-  ...MD3LightTheme,
+  ...lightTheme,
   roundness: 2,
   colors: {
-    ...MD3LightTheme.colors,
+    ...lightTheme.colors,
     primary: '#1F1F1F',
     onPrimary: '#FFFFFF',
     primaryContainer: '#E8E8E8',
@@ -112,10 +137,10 @@ export const minimalLightTheme: MD3Theme = {
 };
 
 export const minimalDarkTheme: MD3Theme = {
-  ...MD3DarkTheme,
+  ...darkTheme,
   roundness: 2,
   colors: {
-    ...MD3DarkTheme.colors,
+    ...darkTheme.colors,
     primary: '#E6E6E6',
     onPrimary: '#111111',
     primaryContainer: '#333333',
@@ -141,10 +166,10 @@ export const minimalDarkTheme: MD3Theme = {
 // river #5C93B7 → pastel river, paper cream #F2ECE0 as the ground, and the
 // charcoal-navy stone figure (#2D3740) as the night ground.
 export const edgeLightTheme: MD3Theme = {
-  ...MD3LightTheme,
+  ...lightTheme,
   roundness: 6,
   colors: {
-    ...MD3LightTheme.colors,
+    ...lightTheme.colors,
     primary: '#BECBA0', // pastel sage
     onPrimary: '#2A331A',
     primaryContainer: '#E2E9CE',
@@ -167,10 +192,10 @@ export const edgeLightTheme: MD3Theme = {
 };
 
 export const edgeDarkTheme: MD3Theme = {
-  ...MD3DarkTheme,
+  ...darkTheme,
   roundness: 6,
   colors: {
-    ...MD3DarkTheme.colors,
+    ...darkTheme.colors,
     primary: '#BECBA0',
     onPrimary: '#232B13',
     primaryContainer: '#454F31',
@@ -213,19 +238,17 @@ export function resolveTheme(style: UiStyle, scheme: 'light' | 'dark'): MD3Theme
   return dark ? darkTheme : lightTheme;
 }
 
-// Warm orange-red route line, in the AllTrails/Gaia idiom — reads clearly over a
-// muted topographic basemap where the brand slate-blue washed out. The blue
-// (RIVER_DEEP) still leads the app chrome; orange is reserved for "your path".
-const ROUTE_WARM = '#E8612C';
-
 /** Semantic colours used by the map HUD that aren't part of MD3. */
 export const mapColors = {
-  trail: ROUTE_WARM, // recorded GPX route — warm orange-red
-  trailCasing: 'rgba(38, 28, 18, 0.5)', // dark casing under the route, for legibility on topo
+  // Warm orange-red route line, in the AllTrails/Gaia idiom: reads over a muted
+  // topo basemap. Its casing is what carries it on paper-coloured ground
+  // (route alone is 2.9:1 there; on its casing 3.8:1).
+  trail: lightScheme.data.route,
+  trailCasing: lightScheme.data.routeCasing,
   trackOverlay: '#C2410C', // saved-track overlays — burnt orange
   trackOverlayActive: '#EA580C', // the inspected track — brighter orange
-  userLocation: FOLIAGE_DEEP, // live position dot / scrub marker — olive, stands apart
-  pdfOverlayBorder: INUKSHUK,
+  userLocation: palette.sageDeep, // live position dot / scrub marker (becomes the puck in PR 4)
+  pdfOverlayBorder: palette.stone,
   // Trim preview: the kept segment pops, the cut ends recede. Drawn over map
   // tiles (not themed surfaces), so one pair works in light and dark mode.
   trimKept: '#EA580C',

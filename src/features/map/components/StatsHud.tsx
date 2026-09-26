@@ -2,6 +2,7 @@ import type { GpsQuality } from '@core/geo/track/gpsQuality';
 import type { TrackStats } from '@core/models';
 import { formatDistance, formatDuration, formatElevation, formatSpeed } from '@state/formatters';
 import { StatTile } from '@ui/components/StatTile';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
@@ -48,9 +49,10 @@ export function StatsHud({
   onToggleExpanded,
 }: StatsHudProps) {
   const theme = useTheme();
+  const tokens = useSchemeTokens();
 
   const statusMark = paused ? (
-    <Text variant="labelSmall" style={{ color: theme.colors.tertiary }}>
+    <Text variant="labelSmall" style={{ color: tokens.status.pausedInk }}>
       PAUSED
     </Text>
   ) : (
@@ -58,9 +60,9 @@ export function StatsHud({
   );
 
   // Weak/lost GPS warning — only meaningful while actively recording (a paused
-  // recording isn't expecting fixes). 'lost' is error-red; 'weak' is tertiary.
+  // recording isn't expecting fixes). 'lost' is red; 'weak' is amber.
   const showGpsWarn = !paused && (gpsQuality === 'weak' || gpsQuality === 'lost');
-  const gpsColor = gpsQuality === 'lost' ? theme.colors.error : theme.colors.tertiary;
+  const gpsColor = gpsQuality === 'lost' ? tokens.status.gpsLostInk : tokens.status.gpsWeak;
   const gpsWarn = showGpsWarn ? (
     <View
       style={styles.gpsWarn}
