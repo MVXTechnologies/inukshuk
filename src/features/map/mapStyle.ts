@@ -193,6 +193,20 @@ export interface OsmStyleOptions {
    */
   rasterMaxZoom?: number;
   /**
+   * Declared tile size for the base raster source, in POINTS. Zoom is defined
+   * against {@link CANONICAL_TILE_PX} (512), so under-declaring makes MapLibre
+   * fetch deeper: 256 fetches one level past the camera, 128 fetches two —
+   * four times the tiles and four times the pixels.
+   *
+   * Default 256, which is right for a 1x screen and soft on a 3x one: MapLibre
+   * does not raise RASTER tile zoom for device pixel ratio the way it does for
+   * vector, so one 256-point tile is stretched over ~768 device pixels and the
+   * baked-in labels go mushy. The map maker's editor passes 128 while it is
+   * open — sharpness is the whole point of a WYSIWYG sheet — and the rest of
+   * the app keeps today's tile budget.
+   */
+  rasterTileSize?: number;
+  /**
    * "Locally downloaded only" mask: an opaque fill drawn ABOVE the raster/
    * hillshade layers (but below everything added at runtime — trails, markers,
    * the location dot) hiding the basemap outside downloaded regions. `data` is
@@ -350,7 +364,7 @@ export function buildOsmStyle(
       osm: {
         type: 'raster',
         tiles: base.tiles,
-        tileSize: 256,
+        tileSize: options.rasterTileSize ?? 256,
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },

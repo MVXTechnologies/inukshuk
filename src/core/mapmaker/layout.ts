@@ -63,7 +63,25 @@ const SCALE_BAR_METERS = [
   100, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000, 100000,
 ] as const;
 
-export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLayout {
+export interface LayoutOptions {
+  /**
+   * Print this EXACT denominator instead of fitting one (#349).
+   *
+   * The editor already framed the sheet on screen at a scale the user chose,
+   * so re-fitting here would round it up to the next standard rung and print a
+   * sheet covering more ground than the frame showed — the preview would lie
+   * about its own output, which is the thing the editor exists to stop. The
+   * caller guarantees the bbox matches the frame's aspect; drawBbox is still
+   * expanded to the frame, so containment holds either way.
+   */
+  scaleDenom?: number;
+}
+
+export function layoutMadeMap(
+  bbox: BoundingBox,
+  format: PageFormat,
+  options: LayoutOptions = {},
+): MadeMapLayout {
   const latMid = (bbox.minLat + bbox.maxLat) / 2;
   const cosLat = Math.cos((latMid * Math.PI) / 180);
   const groundW = (bbox.maxLng - bbox.minLng) * M_PER_DEG * cosLat;
@@ -98,8 +116,10 @@ export function layoutMadeMap(bbox: BoundingBox, format: PageFormat): MadeMapLay
   // their denominator below the scale needed to fit: containment would expand
   // drawBbox without updating the printed scale, scale bar, or raster budget.
   const scaleDenom =
-    SCALE_DENOMS.find((d) => d >= fitScaleDenom - 1e-9) ??
-    Math.ceil(fitScaleDenom / 1000000) * 1000000;
+    options.scaleDenom !== undefined && options.scaleDenom > 0
+      ? options.scaleDenom
+      : (SCALE_DENOMS.find((d) => d >= fitScaleDenom - 1e-9) ??
+        Math.ceil(fitScaleDenom / 1000000) * 1000000);
   const metersPerPt = scaleDenom * M_PER_PT;
   spanLngM = metersPerPt * mapRect.w;
   spanLatM = metersPerPt * mapRect.h;
