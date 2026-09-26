@@ -36,7 +36,11 @@ if command -v adb >/dev/null 2>&1; then adb reverse tcp:8787 tcp:8787 >/dev/null
 sleep 1
 
 echo "== flow"
-# Maestro writes takeScreenshot files into its cwd.
+# Older Maestro CLIs write takeScreenshot files into their cwd; current ones
+# put them in the flow's artifact bundle under ~/.maestro/tests. Run from
+# $SHOTS for the former, and let find-screenshot.sh locate either.
+MARK=$(mktemp)
+trap 'kill $CATALOG_PID 2>/dev/null; rm -f "$MARK"' EXIT
 cd "$SHOTS" || exit 1
 if [ -n "$DEVICE" ]; then
   maestro --device "$DEVICE" test "$REPO/.maestro/pdf-overlays.yaml"
@@ -48,4 +52,7 @@ echo "== flow exit $FLOW_RC"
 [ "$FLOW_RC" -eq 0 ] || exit "$FLOW_RC"
 
 echo "== pixel check"
-node "$REPO/scripts/e2e/check-overlay-screenshot.mjs" "$SHOTS/pdf-overlays-map.png"
+SHOT=$(bash "$REPO/scripts/e2e/find-screenshot.sh" pdf-overlays-map.png "$REPO/.maestro" "$MARK") ||
+  exit 1
+echo "screenshot: $SHOT"
+node "$REPO/scripts/e2e/check-overlay-screenshot.mjs" "$SHOT"

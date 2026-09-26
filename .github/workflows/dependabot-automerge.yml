@@ -1,7 +1,8 @@
 name: Dependabot Auto-merge
 
 # Self-maintaining dependencies: once CI passes, automatically merge Dependabot
-# minor/patch updates. Major bumps are left for human review.
+# minor/patch updates. Major bumps are left for human review, and so is any
+# update that touches native code (see NATIVE_DEPENDENCIES below).
 on: pull_request_target
 
 permissions:
@@ -12,6 +13,28 @@ jobs:
   automerge:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    env:
+      # Native-bearing dependencies — THE list (one glob per line). A bump to
+      # any of these changes the binary: it has to ship in a store build that
+      # someone installs and checks, so it is never merged unattended. Before
+      # the fingerprint runtime such merges were even published OTA to older
+      # binaries: @maplibre/maplibre-react-native 11.3.7 (28498e3) and 11.3.8
+      # (7ffb3cc), @dr.pogodin/react-native-fs 2.40.1/2.40.2 (c6b7a49,
+      # 91df235) all auto-merged mid-runtime. `@react-native-*/*` covers the
+      # community scopes (@react-native-masked-view/…). Anything Dependabot
+      # updates under modules/ (our own native module) counts too.
+      # .github/dependabot.yml's `native` group mirrors this list, so these
+      # arrive as one PR; scripts/ci/dependabotNative.test.mjs keeps the two
+      # in step.
+      NATIVE_DEPENDENCIES: |
+        @maplibre/*
+        @dr.pogodin/*
+        react-native
+        react-native-*
+        @react-native/*
+        @react-native-*/*
+        expo
+        expo-*
     steps:
       - name: Fetch Dependabot metadata
         id: meta
@@ -19,8 +42,37 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check for native-bearing dependencies
+        id: native
+        env:
+          NAMES: ${{ steps.meta.outputs.dependency-names }}
+          DIRECTORY: ${{ steps.meta.outputs.directory }}
+        run: |
+          native=false
+          case "$DIRECTORY" in
+            /modules | /modules/*) native=true; echo "Updates under $DIRECTORY (our native module)." ;;
+          esac
+          IFS=',' read -ra names <<< "$NAMES"
+          for raw in "${names[@]}"; do
+            name="$(echo "$raw" | xargs)"
+            [ -z "$name" ] && continue
+            while IFS= read -r pattern; do
+              [ -z "$pattern" ] && continue
+              # Unquoted on purpose: `case` matches it as a glob.
+              case "$name" in
+                $pattern) native=true; echo "$name is native-bearing ($pattern)." ;;
+              esac
+            done <<< "$NATIVE_DEPENDENCIES"
+          done
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+          if [ "$native" = true ]; then
+            echo '::notice::Native-bearing update: left for a human and a store build, not auto-merged.'
+          fi
+
       - name: Enable auto-merge for minor & patch updates
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        if: >
+          steps.meta.outputs.update-type != 'version-update:semver-major' &&
+          steps.native.outputs.native != 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

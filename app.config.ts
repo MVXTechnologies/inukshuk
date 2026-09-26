@@ -220,7 +220,22 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     url: process.env.EAS_UPDATE_URL ?? 'https://u.expo.dev/ba200eac-11b2-4c40-bd17-c0c66351ea54',
     fallbackToCacheTimeout: 0,
   },
+  // The runtime an OTA update targets is a fingerprint: a hash of everything
+  // native in the project — native dependencies and their versions, config
+  // plugins, modules/, the native half of this config (fingerprint.config.js
+  // lists what is deliberately left out). It changes exactly when a new binary
+  // is needed, without anyone having to remember to bump it.
+  //
+  // It replaces `appVersion`, which only moved when a human bumped `version`.
+  // Dependabot auto-merged native-bearing bumps mid-runtime —
+  // @maplibre/maplibre-react-native 11.3.6 → 11.3.7 (28498e3) and → 11.3.8
+  // (7ffb3cc), @dr.pogodin/react-native-fs twice — and each lockfile change
+  // was published OTA to 1.5.0 binaries built with the older native code.
+  // Nothing crashed, by luck: a changed native module contract fails at call
+  // time, not at launch. Under a fingerprint the same merge gets a runtime no
+  // installed binary has, so the update reaches nobody until a store build
+  // ships with it.
   runtimeVersion: {
-    policy: 'appVersion',
+    policy: 'fingerprint',
   },
 });

@@ -1,8 +1,11 @@
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
 import type { Track, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
+import { reportError } from '@lib/errorReporting';
 
-import { useLibraryStore } from './libraryStore';
+import { LibraryNotHydratedError, useLibraryStore } from './libraryStore';
+
+jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 
 jest.mock('@data/storage', () => ({
   ...jest
@@ -49,12 +52,28 @@ const persisted: TrackSummary = {
 // persistence contract after it.
 
 it('persist() is a no-op before hydration (anti-clobber guard)', () => {
-  useLibraryStore.getState().addTrack(track, 'file://t1.gpx');
+  const persisted = useLibraryStore.getState().addTrack(track, 'file://t1.gpx');
 
   // The mutation lands in memory but never reaches disk: persisting the
   // near-empty pre-hydration state would wipe the on-disk library.
   expect(useLibraryStore.getState().tracks.map((t) => t.id)).toEqual(['t1']);
   expect(storage.writeIndex).not.toHaveBeenCalled();
+  // ...and it is no longer silent: the caller is told, and so are we.
+  expect(persisted).toBe(false);
+  expect(reportError).toHaveBeenCalledWith(
+    expect.any(LibraryNotHydratedError),
+    'library-persist-before-hydration',
+  );
+});
+
+it('deletes no files for a removal it could not commit before hydration', () => {
+  useLibraryStore.getState().removeTrack('t1');
+
+  // The on-disk index still references the GPX: deleting it would leave the
+  // library pointing at nothing once it loads.
+  expect(storage.writeIndex).not.toHaveBeenCalled();
+  expect(storage.deleteFileAt).not.toHaveBeenCalled();
+  expect(reportError).toHaveBeenCalledTimes(1);
 });
 
 it('allows hydration retry after an initial read failure without persisting partial state', async () => {
@@ -104,9 +123,10 @@ it('hydrate resolves without re-reading once hydrated', async () => {
 });
 
 it('post-hydration mutations persist with the current schemaVersion', () => {
-  useLibraryStore.getState().addTrack({ ...track, id: 't2' }, 'file://t2.gpx');
+  expect(useLibraryStore.getState().addTrack({ ...track, id: 't2' }, 'file://t2.gpx')).toBe(true);
 
   expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+  expect(reportError).not.toHaveBeenCalled();
   const written = (storage.writeIndex as jest.Mock).mock.calls[0]?.[0] as {
     schemaVersion: number;
     tracks: { id: string }[];
