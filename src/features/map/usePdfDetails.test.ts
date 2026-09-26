@@ -14,7 +14,9 @@ jest.mock('@core/geo/pdfDetail', () => ({
 }));
 
 const mockRasterize = jest.fn();
-const mockServerOrigin = async () => 'http://127.0.0.1:1234';
+const mockServerOrigin = jest.fn<Promise<string | null>, []>();
+const mockFileSize = jest.fn<number, [string]>();
+const mockReadBase64 = jest.fn<Promise<string>, [string]>();
 const mockFiles = new Map<string, string>();
 jest.mock('./PdfRasterizer', () => ({
   usePdfRasterizer: () => mockRasterize,
@@ -24,10 +26,8 @@ jest.mock('@data/storage', () => ({
   clearPdfDetailPngs: () => undefined,
   toDocumentPath: (p: string) => p,
   resolveDocumentPath: (p: string) => p,
-  fileSizeAt: () => 216_000_000,
-  readFileBase64: () => {
-    throw new Error('Large file must not cross bridge');
-  },
+  fileSizeAt: (uri: string) => mockFileSize(uri),
+  readFileBase64: (uri: string) => mockReadBase64(uri),
   writeOverlayPng: (id: string, data: string) => {
     const uri = `file://${id}`;
     mockFiles.set(uri, data);
@@ -86,6 +86,11 @@ beforeEach(() => {
   useOverlayStatusStore.setState({ statuses: { 'map:0': { phase: 'rendered' } } });
   mockFiles.clear();
   mockRasterize.mockReset().mockResolvedValue(raster);
+  mockServerOrigin.mockReset().mockResolvedValue('http://127.0.0.1:1234');
+  mockFileSize.mockReset().mockReturnValue(216_000_000);
+  mockReadBase64.mockReset().mockImplementation(() => {
+    throw new Error('Large file must not cross bridge');
+  });
   mockPlans.mockReset().mockImplementation((...args: Parameters<typeof planPdfDetail>) => {
     const plan = planPdfDetail(...args);
     return plan ? [{ ...plan, tileKey: JSON.stringify(plan.crop) }] : [];
@@ -735,4 +740,143 @@ it('does not pause the PDF page for a typed pre-dispatch failure', async () => {
   await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
   await flush();
   expect(mockPauseFailedPage).not.toHaveBeenCalled();
+});
+
+describe("backoff for failures that are not the page's fault (#382)", () => {
+  const reportError = jest.requireMock<{ reportError: jest.Mock }>(
+    '@lib/errorReporting',
+  ).reportError;
+  const shifted = (i: number) => ({
+    ...bounds,
+    west: bounds.west + i * 0.03,
+    east: bounds.east + i * 0.03,
+  });
+  const lastTileKey = () =>
+    (mockPlans.mock.results.at(-1)?.value as { tileKey: string }[] | undefined)?.[0]?.tileKey;
+  const detailLine = () => renderStatusLine(map, useOverlayStatusStore.getState().statuses)?.text;
+  async function mountPanning(maps: MapDocument[] = [map]) {
+    // One tile per camera position, keyed by it: every pan plans a new tile.
+    mockPlans.mockImplementation((_corners: unknown, _size: unknown, b: typeof bounds) => [
+      tile(`west${b.west.toFixed(3)}`, 0.25),
+    ]);
+    const view = await renderHook(
+      ({ b, m }: { b: typeof bounds; m: MapDocument[] }) => usePdfDetails(m, [overview], b, 1200),
+      { initialProps: { b: bounds, m: maps } },
+    );
+    await flush();
+    let step = 0;
+    const pan = async (m: MapDocument[] = maps) => {
+      step += 1;
+      const before = lastTileKey();
+      await view.rerender({ b: shifted(step), m });
+      // Every pan in these tests is a camera change the worker must see.
+      expect(lastTileKey()).not.toBe(before);
+      await flush();
+    };
+    return { view, pan };
+  }
+
+  it('sits a not-started page out on every pan instead of retrying and reporting each time', async () => {
+    mockRasterize.mockRejectedValue(new PdfRenderNotStartedError('PdfRasterizer: engine busy'));
+    const { view, pan } = await mountPanning();
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledTimes(1);
+
+    // The 677-reports pattern: a burst of camera changes inside the window.
+    for (let i = 0; i < 5; i++) await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(detailLine()).toBe("Couldn't render page 1 detail: PdfRasterizer: engine busy");
+    expect(mockPauseFailedPage).not.toHaveBeenCalled();
+
+    // The 2 s window is over: one attempt, which fails again — not re-reported.
+    await act(async () => jest.advanceTimersByTime(500));
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
+    expect(reportError).toHaveBeenCalledTimes(1);
+
+    // Now it waits 4 s.
+    await act(async () => jest.advanceTimersByTime(3_000));
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTime(1_000));
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(3);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(mockPauseFailedPage).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('reports a different failure at once, and starts over after a success', async () => {
+    mockRasterize
+      .mockRejectedValueOnce(new PdfRenderNotStartedError('engine busy'))
+      .mockRejectedValueOnce(new PdfRenderNotStartedError('checkpoint unavailable'))
+      .mockResolvedValueOnce(raster)
+      .mockRejectedValueOnce(new PdfRenderNotStartedError('checkpoint unavailable'));
+    const { view, pan } = await mountPanning();
+    await act(async () => jest.advanceTimersByTime(2_000));
+    await pan();
+    expect(reportError).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTime(4_000));
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(3);
+    expect(detailLine()).toBeUndefined();
+    // Success cleared the record: the very next failure is reported, and the
+    // wait is back to the base 2 s, not 8 s.
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(4);
+    expect(reportError).toHaveBeenCalledTimes(3);
+    await act(async () => jest.advanceTimersByTime(2_000));
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(5);
+    await view.unmount();
+  });
+
+  it('retries at once when the page gets a new revision', async () => {
+    mockRasterize
+      .mockRejectedValueOnce(new PdfRenderNotStartedError('engine busy'))
+      .mockResolvedValue(raster);
+    const { view, pan } = await mountPanning();
+    await pan();
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
+    await pan([{ ...map, importedAt: 2 }]);
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
+    expect(view.result.current).toHaveLength(1);
+    await view.unmount();
+  });
+
+  it('keeps quarantining real render failures rather than backing them off', async () => {
+    mockRasterize.mockRejectedValueOnce(new Error('render timed out after 45000ms'));
+    const { view } = await mountPanning();
+    expect(mockPauseFailedPage).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  it('fails an empty inline read as a preparation error before rasterizing', async () => {
+    mockServerOrigin.mockResolvedValue(null);
+    mockFileSize.mockReturnValue(1_234);
+    mockReadBase64.mockResolvedValue('');
+    const { view, pan } = await mountPanning();
+    const reason = 'Could not read maps/map.pdf for rendering (0 bytes read, 1234 B on disk)';
+    expect(mockRasterize).not.toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(reportError.mock.calls[0]?.[0]).toMatchObject({ message: reason });
+    expect(reportError.mock.calls[0]?.[1]).toBe('pdf-detail-render');
+    expect(detailLine()).toBe(`Couldn't render page 1 detail: ${reason}`);
+    await pan();
+    expect(mockReadBase64).toHaveBeenCalledTimes(1);
+    expect(mockPauseFailedPage).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('still renders a small file inline when the server is unavailable', async () => {
+    mockServerOrigin.mockResolvedValue(null);
+    mockFileSize.mockReturnValue(1_234);
+    mockReadBase64.mockResolvedValue('JVBERi0=');
+    const { view } = await mountPanning();
+    expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ source: { base64: 'JVBERi0=' } });
+    expect(view.result.current).toHaveLength(1);
+    await view.unmount();
+  });
 });

@@ -19,6 +19,7 @@ import { writeServedText } from '@data/localServer';
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import { PdfRasterizerProvider, usePdfRasterizer } from './PdfRasterizer';
+import { PdfLoopbackUnavailableError } from './pdfRenderFailure';
 
 const mockInject = jest.fn();
 jest.mock(
@@ -61,6 +62,9 @@ jest.mock('@data/localServer', () => ({
     value: 'http://127.0.0.1:8080',
     release: async () => undefined,
   }),
+  // The server is alive in these tests (liveness: PdfRasterizer.liveness.test.tsx).
+  probeLocalServer: async () => true,
+  restartLocalServer: async (origin: string) => origin,
   writeServedText: jest.fn(),
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
@@ -351,8 +355,12 @@ it('names the request, its Range and the bytes read when a served fetch dies mid
     /^Load failed \[served fetch: 4 requests, 1 failed; GET \/maps\/big\.pdf bytes=2097152-3145727 -> 206 \(4096 B read\) failed: Load failed\]$/,
   );
   expect(posted.at(-1)).toMatchObject({ id: 'req-1', ok: false, error: message });
-  // The chunk before the dead one was fully read; nothing after it was asked for.
-  expect(served.hits).toHaveLength(4);
+  // A dropped connection is the server's failure, not the page's: retried
+  // once (the server is alive here), then rejected as "not started".
+  expect(failure).toBeInstanceOf(PdfLoopbackUnavailableError);
+  // Each attempt: the chunk before the dead one was fully read; nothing after it was asked for.
+  expect(served.hits).toHaveLength(8);
+  expect(served.hits.slice(4)).toEqual(served.hits.slice(0, 4));
   await view.unmount();
 });
 

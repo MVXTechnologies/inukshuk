@@ -173,6 +173,19 @@ with the file.
   queue resumes automatically.
 - On provider unmount, all still-pending promises are rejected so callers never
   hang.
+- **Loopback liveness.** iOS can reclaim the server's listening socket while
+  the app is suspended; lighttpd keeps running and the static-server library
+  still reports ACTIVE, but every connection is refused (#381, #385, "Load
+  failed … (0 B read)"). The provider therefore probes the server (a `HEAD /`
+  with a 1.5 s timeout; any HTTP answer counts) on return from the background,
+  before served work after 60 s without proof of life, after a served
+  transport failure and when the page fails to load. A dead server is
+  restarted — on the same port when it can be bound again, so issued URLs stay
+  valid — and the page reloaded; the request that hit it is retried once and,
+  failing again, rejects as `PdfLoopbackUnavailableError` (a "not started"
+  error: its page is never paused). More than 3 restarts in 10 min, or a failed
+  restart, falls back to inline mode; the next resume tries to leave it. Policy:
+  `@core/storage/loopbackLiveness`.
 
 ## Asset bundling (the offline guarantee)
 
