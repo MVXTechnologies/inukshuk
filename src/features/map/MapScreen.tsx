@@ -2091,8 +2091,9 @@ export function MapScreen() {
 
       {/* "Search places" between the compass and the rail (revamp Main.html).
           Phase 1 is coordinates-first: it opens the coordinates dialog. Same
-          gates as the rail; 2D only, like the dialog's fly-to. */}
-      {makeMapState === null && heatSelection === null && !terrain3d && (
+          gates as the rail, plus the offline-area selector, whose box
+          starts right under it; 2D only, like the dialog's fly-to. */}
+      {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
           <MapSearchPill onPress={() => void openGoToCoordinates()} />
         </View>
@@ -2251,16 +2252,21 @@ export function MapScreen() {
         {/* Scale bar (left) and the basemap credit (right) share one row.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
-        <View style={styles.bottomRow} pointerEvents="box-none">
-          <View style={styles.bottomSide} pointerEvents="none">
-            {showScaleBar && !terrain3d && scaleAt !== null && (
-              <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
-            )}
+        {/* Not while the region selector or the map maker owns the bottom
+            edge: their sheets sit in this column's footprint, and the row
+            would draw over their Cancel / Download / Next buttons. */}
+        {!selecting && makeMapState === null && (
+          <View style={styles.bottomRow} pointerEvents="box-none">
+            <View style={styles.bottomSide} pointerEvents="none">
+              {showScaleBar && !terrain3d && scaleAt !== null && (
+                <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+              )}
+            </View>
+            <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
+              {!terrain3d && <AttributionChip basemap={basemap} />}
+            </View>
           </View>
-          <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
-            {!terrain3d && <AttributionChip basemap={basemap} />}
-          </View>
-        </View>
+        )}
         {/* Depth legend (marine wave D §D2): the chart's quantized band
             scale, in the same bottom column as the weather dock and above it
             (the weather scrubber must keep the bottom edge). Only while the
