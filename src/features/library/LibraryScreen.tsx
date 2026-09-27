@@ -49,6 +49,7 @@ import {
 } from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { space, target } from '@ui/tokens';
+import { useDisplayCondition } from '@ui/displayCondition';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -122,6 +123,7 @@ export function LibraryScreen() {
   const router = useRouter();
   const theme = useTheme();
   const tokens = useSchemeTokens();
+  const night = useDisplayCondition() === 'night';
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -815,7 +817,9 @@ export function LibraryScreen() {
     const selected = selectedTrackIds.includes(t.id);
     // Decision 7: the type is a badge on the thumbnail, a word in the caption
     // and part of the spoken label — never colour alone.
-    const category = findCategory(t.category, customCategories);
+    const found = findCategory(t.category, customCategories);
+    // Night red (decision 4) allows no other hue: the badge takes the ink red.
+    const category = found && night ? { ...found, color: tokens.ink } : found;
     const stats = trailStatsLine(t.stats, units);
     const caption = trailCaption(t.startedAt, category?.name ?? null, nowMs);
     const spoken = [t.name, category?.name, shortDate(t.startedAt, nowMs), stats]
