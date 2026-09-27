@@ -84,7 +84,9 @@ appId: com.inukshuk.app
     stopApp: false
 # Still alive and still recording?
 - assertVisible: 'Stop recording'
-- tapOn: 'Stop recording'
+# Stop needs a 0.8 s hold since the revamp's recording panel (no confirm
+# dialog); longPressOn holds well past it.
+- longPressOn: 'Stop recording'
 # Zero or few accepted fixes → discarded; real fixes → saved. Either way the
 # map screen must be interactive again.
 - assertVisible: 'Map actions'

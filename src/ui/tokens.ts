@@ -67,12 +67,16 @@ export interface SchemeTokens {
   outline: string;
   /** Dividers and hairlines (decorative). */
   outlineVariant: string;
+  /** Hairlines between instrument fields (recording panel). */
+  divider: string;
   map: {
     /** Chrome floating over the map (pills, rail, compass). */
     chrome: string;
     chromeInk: string;
     /** The "following" state of the target button (decision 2). */
     followInk: string;
+    /** The minimized recording pill (decision 3 A: stone at 70 %). */
+    chromeMini: string;
     /** Solid fill of a pressed/active map button (the following target). */
     chromeActive: string;
     /** Hairline between buttons joined in one pill. */
@@ -134,10 +138,14 @@ export const lightScheme: SchemeTokens = {
   inkMuted: palette.muted,
   outline: palette.granite,
   outlineVariant: palette.outlineVariant,
+  divider: '#E3DCCB',
   map: {
     chrome: 'rgba(45,55,64,0.92)',
     chromeInk: palette.paper,
     followInk: '#8CC4F0',
+    // The board's 70 % leans on a blur(14) backdrop; without blur, 70 % over
+    // a white map is 4.1:1 for the paper ink. 78 % clears text contrast alone.
+    chromeMini: 'rgba(45,55,64,0.78)',
     chromeActive: palette.stone,
     chromeDivider: 'rgba(242,236,224,0.22)',
     compassNorth: '#FF6B5E',
@@ -192,11 +200,13 @@ export const darkScheme: SchemeTokens = {
   // 3:1, so outline is lifted and #3E4852 serves as outlineVariant.
   outline: '#77828E',
   outlineVariant: '#3E4852',
+  divider: '#2F3842',
   map: {
     // After-Map-Dark.html: level2 at 94 %, not stone (stone on #13171B is 1.5:1).
     chrome: 'rgba(36,43,50,0.94)',
     chromeInk: '#E9E4D8',
     followInk: '#8CC4F0',
+    chromeMini: 'rgba(36,43,50,0.78)',
     chromeActive: '#13171B',
     chromeDivider: 'rgba(233,228,216,0.18)',
     compassNorth: '#FF6B5E',

@@ -5,7 +5,7 @@ import { Icon, Surface, Text, useTheme } from 'react-native-paper';
 /**
  * The mandatory "Not for navigation" notice (marine M3): a small persistent
  * chip shown whenever any marine layer is draped on the map — the CHS NONNA
- * licence is explicitly non-navigational. Same idiom as the StatsHud GPS
+ * licence is explicitly non-navigational. Same idiom as the recording panel's GPS
  * warning: a plain themed Surface pill, never a Portal/Dialog (launch-path
  * overlays soft-lock on One UI — see [[paper-portal-touch-swallow]]).
  * Colours ride the theme's error-container pair so it reads clearly on both

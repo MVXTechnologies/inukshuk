@@ -217,7 +217,9 @@ appId: com.inukshuk.app
 - waitForAnimationToEnd:
     timeout: 1500
 - assertVisible: 'Stop recording'
-- tapOn: 'Stop recording'
+# Stop needs a 0.8 s hold since the revamp's recording panel (no confirm
+# dialog); longPressOn holds well past it.
+- longPressOn: 'Stop recording'
 # Recorder back to idle…
 - extendedWaitUntil:
     notVisible: 'Stop recording'

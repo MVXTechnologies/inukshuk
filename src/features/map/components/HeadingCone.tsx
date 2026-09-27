@@ -3,6 +3,7 @@ import type { LatLng } from '@core/models';
 import { signedDeltaDeg } from '@core/signal/heading';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useEffect, useMemo, useState } from 'react';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { subscribeHeading } from '../useCompass';
 
 /** Ground radius of the beam, metres. Sized to read clearly at the zooms the
@@ -16,9 +17,6 @@ const CONE_RADIUS_M = 70;
  * while you turn, hence the sub-degree value.
  */
 const MIN_UPDATE_DELTA_DEG = 0.5;
-
-/** Matches the blue of maplibre-react-native's default user-location puck. */
-const CONE_BLUE = '#33B5E5';
 
 interface HeadingConeProps {
   /** Latest fix; the cone hides until one exists. */
@@ -43,6 +41,7 @@ interface HeadingConeProps {
  * ≥1° changes to keep GeoJSON regeneration cheap.
  */
 export function HeadingCone({ location }: HeadingConeProps) {
+  const tokens = useSchemeTokens();
   const [beam, setBeam] = useState<{ headingDeg: number; accuracy: number | null } | null>(null);
 
   useEffect(
@@ -80,9 +79,9 @@ export function HeadingCone({ location }: HeadingConeProps) {
         type="fill"
         beforeId="mlrn-user-location-puck-white"
         paint={{
-          'fill-color': CONE_BLUE,
+          'fill-color': tokens.map.puck,
           'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.18],
-          'fill-outline-color': 'rgba(51, 181, 229, 0)',
+          'fill-outline-color': 'transparent',
         }}
       />
     </GeoJSONSource>

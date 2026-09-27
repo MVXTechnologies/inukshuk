@@ -15,7 +15,6 @@ const HEX_ALLOWLIST = [
   'src/features/map/Trail3DGLScreen.tsx',
   'src/features/map/TrailViewerRail.tsx',
   'src/features/map/components/DestinationMarkerPin.tsx',
-  'src/features/map/components/HeadingCone.tsx',
   'src/features/map/components/HeatPointCarousel.tsx',
   'src/features/map/components/InukshukIcon.tsx',
   'src/features/map/components/MapOverlaysMenu.tsx',
