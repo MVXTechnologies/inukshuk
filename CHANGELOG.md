@@ -11,6 +11,57 @@ the app version before that); native changes require a new store build. See
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-27
+
+The first half of the UI revamp ("Stone & Paper", spec in
+`docs/design/ui-revamp/`). Display modes, the library and the Maps/Logbook
+restyle follow in later releases.
+
+### Changed
+
+- **A new look, and no more lavender.** Colours come from one set of tokens
+  sampled from the logo: stone, paper and sage. Material's inherited purple
+  tint is gone from every surface, outline and menu. Contrast is now checked
+  in the tests against the colours as they are actually drawn, so pale text
+  can't return unnoticed.
+- **Atkinson Hyperlegible Next**, a typeface designed for legibility, is now
+  used everywhere, with numbers that keep their width as they change.
+- **One app style.** Edge and Minimal are retired. If you used Minimal, its
+  folded map buttons stay on as the new **Compact map chrome** switch in
+  Settings.
+- **New tabs: Map · Library · Maps · Logbook.** Maps is the map store (it was
+  called Search) and Logbook is the old Dashboard. Settings is no longer a
+  tab: open it from the gear in the Library and Logbook headers, or from the
+  map's "+" menu.
+- **The map controls are redesigned.** Every button is at least 48 dp, big
+  enough to use with gloves.
+  - The compass is a small round badge top-left; tap it to turn the map back
+    to north. It no longer shows your heading; the cone around your position
+    does.
+  - The target button, first on the right, follows your position; tap it
+    again to stop following.
+  - Base map and overlays share one button group.
+  - A **Search places** bar opens coordinate entry.
+  - A big **Record** button sits at the bottom of the map.
+  - Your position is a blue dot in a white ring.
+- **A new recording panel.**
+  - Three sizes: a small pill, the default strip, and an expanded view with
+    six more fields and your elevation so far. Chevrons or swipes switch
+    between them, and switching never touches the recording.
+  - Tap a large field to change what it shows. The fields available include
+    time left until sunset.
+  - **Stop needs a 0.8-second hold**, so a pocket tap can't end a hike.
+  - The GPS state is spelled out, for example "Weak GPS · ±35 m", with an
+    amber ring on the map.
+  - **Glove lock** blocks the map and every button until you hold to unlock.
+  - While recording, the Map tab hides the tab bar. From any other tab, a
+    pill takes you back to the map.
+
+### Notes
+
+- 1.7.0 is a store build only. The new typeface is built into the app, so
+  1.6.x installs don't receive it as an over-the-air update.
+
 ## [1.6.0] - 2026-09-26
 
 ### Fixed
