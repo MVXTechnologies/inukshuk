@@ -48,6 +48,7 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
+import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -69,13 +70,13 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
+import { PuckLayers } from './components/PuckLayers';
 import { RecordButton } from './components/RecordButton';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
-import { RecordControls } from './components/RecordControls';
 import { ScaleBar } from './components/ScaleBar';
-import { StatsHud } from './components/StatsHud';
+import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
@@ -641,7 +642,6 @@ export function MapScreen() {
 
   const {
     status,
-    name,
     stats,
     points,
     segmentStarts,
@@ -660,10 +660,11 @@ export function MapScreen() {
     respondToBgRationale,
   } = useRecordingSession({ showSnack });
 
-  // Collapsed pill / expanded card — shared between StatsHud and
-  // RecordControls (item 3: the buttons' row/column layout follows the same
-  // state as the stats HUD's own expand toggle).
-  const [hudExpanded, setHudExpanded] = useState(false);
+  // Recording panel (revamp decision 3): its measured height lifts the map's
+  // bottom chrome above it, and glove lock shields everything else.
+  const [panelHeight, setPanelHeight] = useState(0);
+  const [gloveLockRequested, setGloveLocked] = useState(false);
+  const lastAccuracyM = useRecorderStore((s) => s.lastAccuracyM);
 
   // #90 — location lost mid-recording: auto-pause, but only on a SUSTAINED
   // loss (debounced in the hook; transient watch re-subscription and the
@@ -684,6 +685,10 @@ export function MapScreen() {
     prepareRegionGeometry,
     resolveRegionRect,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
+  // The recording panel yields the bottom edge to the region-select overlay.
+  const recordingPanelUp = status !== 'idle' && !selecting;
+  // Glove lock only means anything while the panel is up; stopping clears it.
+  const gloveLocked = gloveLockRequested && recordingPanelUp;
 
   // M2: the model-comparison table route, for the long-pressed point when a
   // forecast card is up, else the map centre (gated on mapLoaded — ungated
@@ -1988,6 +1993,12 @@ export function MapScreen() {
               still); the cone tracks the smoothed compass instead. */}
           <HeadingCone location={location} />
           <UserLocation animated accuracy />
+          {/* Revamp puck: paper ring + puck blue over the default puck (whose
+              accuracy halo stays), plus the amber uncertainty ring on a weak
+              signal while recording. */}
+          <PuckLayers
+            weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
+          />
         </Map>
       )}
 
@@ -2197,7 +2208,10 @@ export function MapScreen() {
           inset itself — padding it again double-paid the inset and floated
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
-      <View style={styles.bottom} pointerEvents="box-none">
+      <View
+        style={[styles.bottom, recordingPanelUp && { bottom: panelHeight }]}
+        pointerEvents="box-none"
+      >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
             First in the column so they stack above the scale bar. */}
         <RenderingToasts />
@@ -2226,44 +2240,6 @@ export function MapScreen() {
             {!terrain3d && <AttributionChip basemap={basemap} />}
           </View>
         </View>
-        {/* Hide the recording UI while the region-select overlay is open so the
-            Record button doesn't sit on top of the overlay's Confirm/Cancel bar. */}
-        {!selecting && status !== 'idle' && (
-          <View
-            style={hudExpanded ? styles.recordingBarExpanded : styles.recordingBarCollapsed}
-            pointerEvents="box-none"
-          >
-            {/* flexShrink guard (backlog item 3): the HUD must yield width to
-                the buttons, never push them off-screen — after an
-                expand→collapse cycle iOS re-lays the pill out wide (the Paper
-                Surface flex quirk) and without this the third button left the
-                screen. */}
-            <View style={styles.hudShrink} pointerEvents="box-none">
-              <StatsHud
-                name={name}
-                stats={stats}
-                elapsedS={elapsedS}
-                liveSpeedMps={liveSpeedMps}
-                paused={status === 'paused'}
-                gpsQuality={gpsQuality}
-                expanded={hudExpanded}
-                onToggleExpanded={() => setHudExpanded((e) => !e)}
-              />
-            </View>
-            <RecordControls
-              status={status}
-              expanded={hudExpanded}
-              onPause={pause}
-              onResume={resume}
-              onStop={handleStop}
-              onWaypoint={() => {
-                const n = addWaypoint();
-                if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
-                else showSnack('Waiting for a GPS fix before dropping a waypoint');
-              }}
-            />
-          </View>
-        )}
         {/* Depth legend (marine wave D §D2): the chart's quantized band
             scale, in the same bottom column as the weather dock and above it
             (the weather scrubber must keep the bottom edge). Only while the
@@ -2343,6 +2319,46 @@ export function MapScreen() {
           onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
           onLayout={setInspectPanelHeight}
         />
+      )}
+
+      {/* Glove lock (revamp §3): a shield over the map and all its chrome;
+          only the panel's hold-to-unlock stays live. */}
+      {recordingPanelUp && gloveLocked && (
+        <View
+          style={StyleSheet.absoluteFill}
+          onStartShouldSetResponder={() => true}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        />
+      )}
+
+      {/* Recording panel (revamp decision 3): mini overlay / strip /
+          expanded, full-width at the bottom — the tab bar hides while
+          recording. Hidden while the region-select overlay owns the bottom. */}
+      {recordingPanelUp && (
+        <View style={styles.panelDock} pointerEvents="box-none">
+          <RecordingPanel
+            status={status === 'paused' ? 'paused' : 'recording'}
+            stats={stats}
+            elapsedS={elapsedS}
+            liveSpeedMps={liveSpeedMps}
+            gpsQuality={gpsQuality}
+            onPause={pause}
+            onResume={resume}
+            onStop={() => {
+              setGloveLocked(false);
+              void handleStop();
+            }}
+            onMark={() => {
+              const n = addWaypoint();
+              if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
+              else showSnack('Waiting for a GPS fix before dropping a waypoint');
+            }}
+            gloveLocked={gloveLocked}
+            onGloveLockChange={setGloveLocked}
+            onHeightChange={setPanelHeight}
+          />
+        </View>
       )}
 
       {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
@@ -2526,15 +2542,7 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
   bottomSideEnd: { alignItems: 'flex-end' },
-  // Collapsed: center-align the pill against the (bigger) icon buttons so
-  // they visibly pop out of the bar (item 3).
-  recordingBarCollapsed: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  // The HUD yields width before the record buttons do (see the guard's
-  // comment at the call site).
-  hudShrink: { flexShrink: 1 },
-  // Expanded: bottom-align the (smaller) card on the left against the
-  // buttons stacked vertically to its right (item 3).
-  recordingBarExpanded: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).
   weatherDock: { gap: 6 },

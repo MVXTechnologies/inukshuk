@@ -9,6 +9,10 @@
 // dependency emits a genuinely unavoidable warning, filter that exact message
 // here with a comment explaining why.
 
+// Gesture Handler's own Jest mocks: the recording panel's swipe uses a
+// GestureDetector, whose native module does not exist under Jest.
+import 'react-native-gesture-handler/jestSetup';
+
 // Reanimated 4 (InukshukLoader). Its native entry needs the Worklets native
 // module, which does not exist under Jest: swap both packages for their own
 // shipped mocks (hooks run their worklet once, synchronously; animations

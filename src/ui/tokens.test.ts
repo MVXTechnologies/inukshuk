@@ -52,6 +52,7 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['muted on elevation 3', t.inkMuted, t.elevation.level3, TEXT],
     // Map chrome (translucent: judged over light and dark tiles).
     ['chrome ink on map chrome', t.map.chromeInk, t.map.chrome, TEXT],
+    ['chrome ink on the mini recording pill', t.map.chromeInk, t.map.chromeMini, TEXT],
     ['follow ink on map chrome', t.map.followInk, t.map.chrome, GRAPHIC],
     ['follow ink on active chrome', t.map.followInk, t.map.chromeActive, GRAPHIC],
     ['compass north tip on map chrome', t.map.compassNorth, t.map.chrome, GRAPHIC],
