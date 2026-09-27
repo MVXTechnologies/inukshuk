@@ -71,6 +71,9 @@ import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
 import { PuckLayers } from './components/PuckLayers';
+import { NightExitPill } from '@features/display/NightExitPill';
+import { useDisplayCondition } from '@ui/displayCondition';
+import { NIGHT_MAP } from '@ui/tokens';
 import { RecordButton } from './components/RecordButton';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
@@ -537,8 +540,12 @@ export function MapScreen() {
     installedPacks,
     installedPacks.size + packTotalBytes,
   );
+  // Display mode in effect (decision 4): drives the night raster and veil.
+  const displayCondition = useDisplayCondition();
   const style = useMemo(() => {
     const options = {
+      // Night red (decision 4): greyscale, dimmed raster under the red veil.
+      night: displayCondition === 'night',
       // Marked-trail networks (network-only; hidden while offline-only).
       markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
       // Marine drapes ride the same offline-only rule.
@@ -613,6 +620,7 @@ export function MapScreen() {
     offlineRegions,
     theme.dark,
     theme.colors.background,
+    displayCondition,
     markedTrailsNetworks,
     marineLayers,
     marineActive,
@@ -2319,6 +2327,24 @@ export function MapScreen() {
           onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
           onLayout={setInspectPanelHeight}
         />
+      )}
+
+      {/* Night red veil (decision 4): tints the whole map; never catches touches. */}
+      {displayCondition === 'night' && (
+        <View
+          style={[StyleSheet.absoluteFill, { backgroundColor: NIGHT_MAP.veil }]}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
+      {displayCondition === 'night' && makeMapState === null && (
+        <View
+          style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+          pointerEvents="box-none"
+        >
+          <NightExitPill />
+        </View>
       )}
 
       {/* Glove lock (revamp §3): a shield over the map and all its chrome;

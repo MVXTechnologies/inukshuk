@@ -1,3 +1,4 @@
+import { NIGHT_MAP } from '@ui/tokens';
 import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
 import type {
   FilterSpecification,
@@ -197,6 +198,11 @@ export interface OsmStyleOptions {
   /** Checked marked-trail databases, each draped as its own tile overlay. */
   markedTrailsNetworks?: readonly TrailNetworkId[];
   /**
+   * Night red (decision 4): the raster goes greyscale and dim, under the red
+   * veil MapScreen draws over the map. Wins over the weather/chart mute.
+   */
+  night?: boolean;
+  /**
    * Checked marine reference layers (CHS NONNA bathymetry / OpenSeaMap
    * seamarks — see `@core/geo/marineLayers`). Network-only like the trail
    * networks: callers must pass [] while `offlineOnly` is on. Catalog order
@@ -278,6 +284,12 @@ export interface OsmStyleOptions {
  * colour space. Applied to every basemap — the "don't mute satellite" rule
  * yields here because under weather the drape IS the content.
  */
+/** Night red's raster: no colour (no blue or green), brightness capped. */
+const NIGHT_RASTER_PAINT: Record<string, number> = {
+  'raster-saturation': NIGHT_MAP.rasterSaturation,
+  'raster-brightness-max': NIGHT_MAP.rasterBrightnessMax,
+};
+
 const WEATHER_MUTED_PAINT: Record<string, number> = {
   'raster-saturation': -0.85,
   'raster-contrast': -0.08,
@@ -393,8 +405,9 @@ export function buildOsmStyle(
         source: 'osm',
         // Chart mode mutes the raster exactly like weather mode: the chart
         // colours own the palette; streets/labels ghost through the tan dim.
-        paint:
-          options.weatherMuted || options.marineChart
+        paint: options.night
+          ? NIGHT_RASTER_PAINT
+          : options.weatherMuted || options.marineChart
             ? WEATHER_MUTED_PAINT
             : (RASTER_PAINT[basemap] ?? {}),
       },

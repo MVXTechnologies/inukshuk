@@ -5,6 +5,7 @@
 import { cleanupBackgroundLocationAtLaunch } from '@lib/backgroundLocation';
 
 import { ErrorBoundary } from '@features/common/components/ErrorBoundary';
+import { useEffectiveDisplayCondition } from '@features/display/useEffectiveDisplayCondition';
 import { MapReparseWorker } from '@features/library/MapReparseWorker';
 import { PdfPrerenderWorker } from '@features/map/PdfPrerenderWorker';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
@@ -15,6 +16,7 @@ import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
+import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -31,7 +33,9 @@ export default function RootLayout() {
   // visually a non-event because the splash still covers the first frames.
   const themeMode = useSettingsStore((s) => s.themeMode);
   const scheme = themeMode === 'system' ? (osScheme ?? 'light') : themeMode;
-  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light');
+  // Display mode (decision 4): Sunlight and Night red override light/dark.
+  const condition = useEffectiveDisplayCondition();
+  const theme = resolveTheme(scheme === 'dark' ? 'dark' : 'light', condition);
 
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
@@ -74,28 +78,30 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider theme={theme}>
-          <ErrorBoundary>
-            <PdfRasterizerProvider>
-              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: theme.colors.background },
-                }}
-              >
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="trail3d/[id]" />
-                <Stack.Screen name="settings" />
-              </Stack>
-              <ImportFeedbackSnackbar />
-              <PdfRecoverySnackbar />
-              <PdfPrerenderWorker />
-              <MapReparseWorker />
-              <StravaPushPrompt />
-            </PdfRasterizerProvider>
-          </ErrorBoundary>
-        </PaperProvider>
+        <DisplayConditionContext.Provider value={condition}>
+          <PaperProvider theme={theme}>
+            <ErrorBoundary>
+              <PdfRasterizerProvider>
+                <StatusBar style={theme.dark ? 'light' : 'dark'} />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: theme.colors.background },
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="trail3d/[id]" />
+                  <Stack.Screen name="settings" />
+                </Stack>
+                <ImportFeedbackSnackbar />
+                <PdfRecoverySnackbar />
+                <PdfPrerenderWorker />
+                <MapReparseWorker />
+                <StravaPushPrompt />
+              </PdfRasterizerProvider>
+            </ErrorBoundary>
+          </PaperProvider>
+        </DisplayConditionContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

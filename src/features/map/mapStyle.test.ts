@@ -706,3 +706,18 @@ describe('basemapAttribution', () => {
     expect(basemapAttribution(basemap)).toBe(credit);
   });
 });
+
+describe('night red raster (decision 4)', () => {
+  const osmPaint = (night: boolean) => {
+    const style = buildOsmStyle('https://tiles/{z}/{x}/{y}.png', false, 'map', false, { night });
+    return style.layers.find((l) => l.id === 'osm')?.paint as Record<string, number> | undefined;
+  };
+
+  it('goes greyscale and dim at night', () => {
+    expect(osmPaint(true)).toEqual({ 'raster-saturation': -1, 'raster-brightness-max': 0.35 });
+  });
+
+  it('keeps the normal paint otherwise', () => {
+    expect(osmPaint(false)?.['raster-brightness-max']).not.toBe(0.35);
+  });
+});

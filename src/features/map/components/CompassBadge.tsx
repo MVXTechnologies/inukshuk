@@ -1,6 +1,7 @@
 import { isNorthUp, normalizeBearingDeg } from '@core/geo/northSnap';
 import { unwrapDeg } from '@core/signal/heading';
 import { palette, target } from '@ui/tokens';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, useAnimatedValue } from 'react-native';
@@ -43,6 +44,7 @@ const NEEDLE_BOX = 26;
  */
 export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
 
   const bearing = normalizeBearingDeg(mapBearing ?? 0);
   const rotated = !isNorthUp(bearing);
@@ -81,6 +83,7 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
       style={({ pressed }) => [
         styles.puck,
         { backgroundColor: tokens.map.chrome },
+        outline,
         pressed && styles.pressed,
       ]}
     >

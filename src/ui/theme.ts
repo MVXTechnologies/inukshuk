@@ -1,7 +1,16 @@
 import { configureFonts, MD3DarkTheme, MD3LightTheme, type MD3Theme } from 'react-native-paper';
 
 import { FONT_FAMILY } from './fonts';
-import { darkScheme, lightScheme, palette, type SchemeTokens } from './tokens';
+import type { DisplayCondition } from '@core/display/condition';
+
+import {
+  darkScheme,
+  lightScheme,
+  nightScheme,
+  palette,
+  sunlightScheme,
+  type SchemeTokens,
+} from './tokens';
 
 /**
  * Inukshuk's Paper themes, built from the Stone & Paper tokens (`tokens.ts`).
@@ -100,8 +109,82 @@ export const darkTheme: MD3Theme = {
   },
 };
 
-/** The Paper theme for a resolved colour scheme. */
-export function resolveTheme(scheme: 'light' | 'dark'): MD3Theme {
+/** Sunlight: black on white, maximum contrast (decision 4). */
+export const sunlightTheme: MD3Theme = {
+  ...MD3LightTheme,
+  fonts,
+  colors: {
+    ...schemeColors(sunlightScheme),
+    primary: palette.black,
+    onPrimary: palette.white,
+    primaryContainer: '#EEEEEE',
+    onPrimaryContainer: palette.black,
+    secondary: palette.black,
+    onSecondary: palette.white,
+    secondaryContainer: palette.black,
+    onSecondaryContainer: palette.white,
+    tertiary: palette.black,
+    onTertiary: palette.white,
+    tertiaryContainer: '#EEEEEE',
+    onTertiaryContainer: palette.black,
+    error: palette.signalRed,
+    onError: palette.white,
+    errorContainer: '#FFE5E5',
+    onErrorContainer: '#5F0000',
+    surfaceDisabled: 'rgba(0,0,0,0.12)',
+    onSurfaceDisabled: 'rgba(0,0,0,0.45)',
+    inverseSurface: palette.black,
+    inverseOnSurface: palette.white,
+    inversePrimary: palette.white,
+    shadow: palette.black,
+    scrim: palette.black,
+    backdrop: 'rgba(0,0,0,0.5)',
+  },
+};
+
+/** Night red: red on black, no blue or green (decision 4). */
+export const nightTheme: MD3Theme = {
+  ...MD3DarkTheme,
+  fonts,
+  colors: {
+    ...schemeColors(nightScheme),
+    primary: nightScheme.ink,
+    onPrimary: palette.black,
+    primaryContainer: nightScheme.elevation.level5,
+    onPrimaryContainer: nightScheme.ink,
+    secondary: nightScheme.ink,
+    onSecondary: palette.black,
+    secondaryContainer: nightScheme.elevation.level5,
+    onSecondaryContainer: nightScheme.ink,
+    tertiary: nightScheme.ink,
+    onTertiary: palette.black,
+    tertiaryContainer: nightScheme.elevation.level5,
+    onTertiaryContainer: nightScheme.ink,
+    error: nightScheme.ink,
+    onError: palette.black,
+    errorContainer: nightScheme.elevation.level5,
+    onErrorContainer: nightScheme.ink,
+    surfaceDisabled: 'rgba(255,59,48,0.12)',
+    onSurfaceDisabled: 'rgba(255,59,48,0.5)',
+    inverseSurface: nightScheme.ink,
+    inverseOnSurface: palette.black,
+    inversePrimary: palette.black,
+    shadow: palette.black,
+    scrim: palette.black,
+    backdrop: 'rgba(0,0,0,0.6)',
+  },
+};
+
+/**
+ * The Paper theme for the resolved colour scheme and display mode. Sunlight
+ * and Night red override the system light/dark choice while they are on.
+ */
+export function resolveTheme(
+  scheme: 'light' | 'dark',
+  condition: DisplayCondition = 'normal',
+): MD3Theme {
+  if (condition === 'sunlight') return sunlightTheme;
+  if (condition === 'night') return nightTheme;
   return scheme === 'dark' ? darkTheme : lightTheme;
 }
 

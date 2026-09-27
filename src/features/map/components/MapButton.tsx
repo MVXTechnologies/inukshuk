@@ -1,4 +1,5 @@
 import { palette, target } from '@ui/tokens';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Children, Fragment, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -32,6 +33,7 @@ export function MapButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
   const fill = selected ? tokens.map.chromeActive : tokens.map.chrome;
   return (
     <Pressable
@@ -43,7 +45,7 @@ export function MapButton({
       style={({ pressed }) => [
         styles.button,
         shape === 'round' ? styles.round : styles.square,
-        !grouped && [styles.shadow, { backgroundColor: fill }],
+        !grouped && [styles.shadow, { backgroundColor: fill }, outline],
         pressed && styles.pressed,
         style,
       ]}
@@ -60,11 +62,12 @@ export function MapButton({
 /** Buttons joined in one stone pill with hairlines between them (Base map · Overlays). */
 export function MapButtonGroup({ children }: { children: ReactNode }) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
   const items = Children.toArray(children);
   return (
     // Outer view carries the shadow, inner one clips the corners: on iOS a
     // view that clips its own bounds loses its shadow.
-    <View style={[styles.group, styles.shadow, { backgroundColor: tokens.map.chrome }]}>
+    <View style={[styles.group, styles.shadow, { backgroundColor: tokens.map.chrome }, outline]}>
       <View style={styles.groupClip}>
         {items.map((child, i) => (
           <Fragment key={i}>

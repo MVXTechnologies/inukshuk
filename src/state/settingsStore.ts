@@ -1,4 +1,5 @@
 import { type Units } from '@core/format';
+import { isDisplayCondition, type DisplayCondition } from '@core/display/condition';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
@@ -76,6 +77,15 @@ export interface Settings {
    * old Minimal style's rail, kept as a toggle when the styles were retired).
    */
   compactMapChrome: boolean;
+  /**
+   * Display mode the user chose (decision 4): Normal by default; Sunlight and
+   * Night red are opt-in. The mode in effect also depends on the toggles.
+   */
+  displayCondition: DisplayCondition;
+  /** Switch to Night red after sunset (until sunrise). */
+  autoNightAtSunset: boolean;
+  /** Switch to Sunlight while a recording is running. */
+  sunlightWhileRecording: boolean;
   /** Checked marked-trail databases draped on the main map (empty = off). */
   markedTrailsNetworks: TrailNetworkId[];
   /**
@@ -193,6 +203,9 @@ const DEFAULTS: Settings = {
   units: 'metric',
   themeMode: 'system',
   compactMapChrome: false,
+  displayCondition: 'normal',
+  autoNightAtSunset: false,
+  sunlightWhileRecording: false,
   markedTrailsNetworks: [],
   weatherLayer: null,
   weatherModel: DEFAULT_WEATHER_MODEL,
@@ -260,6 +273,9 @@ function snapshot(s: SettingsState): Settings {
     units,
     themeMode,
     compactMapChrome,
+    displayCondition,
+    autoNightAtSunset,
+    sunlightWhileRecording,
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,
@@ -294,6 +310,9 @@ function snapshot(s: SettingsState): Settings {
     units,
     themeMode,
     compactMapChrome,
+    displayCondition,
+    autoNightAtSunset,
+    sunlightWhileRecording,
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,
@@ -349,6 +368,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Same story for the Library sort: the ladder keeps any string, so a key
       // retired by a later build would survive as an unmatched switch case.
       if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
+      if (!isDisplayCondition(next.displayCondition)) next.displayCondition = 'normal';
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

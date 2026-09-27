@@ -21,13 +21,16 @@ import {
   formatPace,
   formatSpeed,
 } from '@state/formatters';
+import { DisplaySheet } from '@features/display/DisplaySheet';
 import { useRecorderStore } from '@state/recorderStore';
+import { useSettingsStore } from '@state/settingsStore';
+import { useDisplayCondition } from '@ui/displayCondition';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Switch, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
@@ -94,6 +97,12 @@ export function RecordingPanel(props: Props) {
   } = props;
   const theme = useTheme();
   const tokens = useSchemeTokens();
+  // Sunlight (decision 4): hero values one step up, 32 → 40.
+  const sunlight = useDisplayCondition() === 'sunlight';
+  const chosenDisplay = useSettingsStore((s) => s.displayCondition);
+  const autoNight = useSettingsStore((s) => s.autoNightAtSunset);
+  const setSetting = useSettingsStore((s) => s.set);
+  const [displaySheetOpen, setDisplaySheetOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const [panel, setPanel] = useState<PanelState>(INITIAL_PANEL_STATE);
   const [fields, setFields] = useState<HeroField[]>([...DEFAULT_HERO_FIELDS]);
@@ -192,7 +201,10 @@ export function RecordingPanel(props: Props) {
     const label = FIELD_LABEL[f];
     const body = (
       <>
-        <Text style={[styles.heroValue, { color: ink }]} maxFontSizeMultiplier={1.4}>
+        <Text
+          style={[styles.heroValue, sunlight && styles.heroValueSunlight, { color: ink }]}
+          maxFontSizeMultiplier={1.4}
+        >
           {value}
           {unit !== '' && <Text style={styles.heroUnit}> {unit}</Text>}
         </Text>
@@ -333,6 +345,53 @@ export function RecordingPanel(props: Props) {
 
         {optionsOpen && !gloveLocked && (
           <View style={[styles.options, { borderColor: tokens.outlineVariant }]}>
+            {/* Display · opt-in (After-Sunlight / After-Night boards). */}
+            <View style={styles.optionBlock}>
+              <Text style={[styles.optionCaps, { color: muted }]}>DISPLAY · OPT-IN</Text>
+              <View style={[styles.segment, { borderColor: tokens.outlineVariant }]}>
+                {(
+                  [
+                    ['normal', 'Normal'],
+                    ['sunlight', 'Sun'],
+                    ['night', 'Night'],
+                  ] as const
+                ).map(([value, label]) => {
+                  const selected = chosenDisplay === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => setSetting('displayCondition', value)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`Display ${label}`}
+                      style={[
+                        styles.segmentItem,
+                        selected && { backgroundColor: theme.colors.secondaryContainer },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          { color: selected ? theme.colors.onSecondaryContainer : ink },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.optionSwitchRow}>
+                <Text style={[styles.optionTitle, { color: ink, flex: 1 }]}>
+                  Auto night at sunset
+                </Text>
+                <Switch
+                  value={autoNight}
+                  onValueChange={(v) => setSetting('autoNightAtSunset', v)}
+                  accessibilityLabel="Auto night at sunset"
+                />
+              </View>
+            </View>
             <Pressable
               onPress={() => {
                 setOptionsOpen(false);
@@ -351,8 +410,22 @@ export function RecordingPanel(props: Props) {
                 </Text>
               </View>
             </Pressable>
+            <Pressable
+              onPress={() => {
+                setOptionsOpen(false);
+                setDisplaySheetOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="All display options"
+              style={styles.optionRow}
+            >
+              <Icon source="tune-variant" size={22} color={ink} />
+              <Text style={[styles.optionTitle, { color: ink, flex: 1 }]}>All display options</Text>
+              <Icon source="chevron-right" size={22} color={ink} />
+            </Pressable>
           </View>
         )}
+        <DisplaySheet visible={displaySheetOpen} onDismiss={() => setDisplaySheetOpen(false)} />
 
         {/* Three hero fields; tap one to cycle it. */}
         <View style={styles.heroRow}>{fields.map((f, i) => field(f, i))}</View>
@@ -553,6 +626,13 @@ const styles = StyleSheet.create({
   optionCaption: { fontSize: 12 },
   heroRow: { flexDirection: 'row', paddingHorizontal: 8 },
   heroCell: { flex: 1, alignItems: 'center', paddingTop: 4, paddingBottom: 6, gap: 2 },
+  heroValueSunlight: { fontSize: 40, lineHeight: 46 },
+  optionBlock: { padding: 12, gap: 10 },
+  optionCaps: { fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  segment: { flexDirection: 'row', borderWidth: 1, borderRadius: 24, overflow: 'hidden' },
+  segmentItem: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  segmentText: { fontSize: 15, fontWeight: '700' },
+  optionSwitchRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
   heroValue: {
     fontSize: 32,
     lineHeight: 38,
