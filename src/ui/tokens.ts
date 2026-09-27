@@ -322,6 +322,136 @@ export const darkScheme: SchemeTokens = {
   },
 };
 
+/**
+ * Sunlight (decision 4, `After-Sunlight.html`): opt-in maximum contrast for
+ * bright sun — white surfaces, black ink and outlines, blue kept for "you".
+ */
+export const sunlightScheme: SchemeTokens = {
+  background: palette.white,
+  surface: palette.white,
+  surfaceVariant: '#F2F2F2',
+  elevation: {
+    level0: 'transparent',
+    level1: palette.white,
+    level2: palette.white,
+    level3: '#F5F5F5',
+    level4: '#F2F2F2',
+    level5: '#EEEEEE',
+  },
+  ink: palette.black,
+  inkVariant: palette.black,
+  inkMuted: '#333333',
+  outline: palette.black,
+  outlineVariant: palette.black,
+  divider: '#555555',
+  map: {
+    chrome: palette.white,
+    chromeMini: palette.white,
+    chromeInk: palette.black,
+    followInk: '#1565C0',
+    chromeActive: palette.black,
+    chromeDivider: palette.black,
+    compassNorth: palette.signalRed,
+    compassSouth: palette.black,
+    chip: palette.white,
+    chipInk: palette.black,
+    chipInkMuted: palette.black,
+    puck: '#1565C0',
+    puckRing: palette.white,
+    puckHalo: 'rgba(21,101,192,0.2)',
+  },
+  status: {
+    recording: palette.black,
+    recordingDot: '#FF3B30',
+    paused: palette.amber,
+    onPaused: palette.white,
+    pausedInk: '#8F4206',
+    gpsWeak: '#8F4206',
+    gpsLost: palette.signalRed,
+    onGpsLost: palette.white,
+    gpsLostInk: '#B02222',
+  },
+  data: {
+    route: palette.route,
+    routeCasing: palette.black,
+    ascent: palette.black,
+    descent: '#555555',
+    heading: '#1565C0',
+    info: '#1565C0',
+  },
+};
+
+/** Night red's ink: the one red that reads on black (5.9:1). */
+const NIGHT_INK = '#FF3B30';
+
+/**
+ * Night red (decision 4, `After-Night.html`): opt-in, red on black, no blue
+ * or green anywhere, to keep night vision. The board's muted #7A1C17 is only
+ * 2:1 on black, so text stays in the ink red (hierarchy by size and weight)
+ * and #7A1C17 / #3A0B08 serve as hairlines and raised surfaces.
+ */
+export const nightScheme: SchemeTokens = {
+  background: palette.black,
+  surface: '#1A0000',
+  surfaceVariant: '#2A0503',
+  elevation: {
+    level0: 'transparent',
+    level1: '#1A0000',
+    level2: '#220301',
+    level3: '#2A0503',
+    level4: '#320805',
+    level5: '#3A0B08',
+  },
+  ink: NIGHT_INK,
+  inkVariant: NIGHT_INK,
+  inkMuted: NIGHT_INK,
+  outline: '#CC2E24',
+  outlineVariant: '#7A1C17',
+  divider: '#3A0B08',
+  map: {
+    chrome: 'rgba(0,0,0,0.94)',
+    chromeMini: 'rgba(0,0,0,0.94)',
+    chromeInk: NIGHT_INK,
+    followInk: NIGHT_INK,
+    chromeActive: '#3A0B08',
+    chromeDivider: 'rgba(255,59,48,0.25)',
+    compassNorth: NIGHT_INK,
+    compassSouth: '#D13A30',
+    chip: 'rgba(0,0,0,0.94)',
+    chipInk: NIGHT_INK,
+    chipInkMuted: NIGHT_INK,
+    puck: NIGHT_INK,
+    puckRing: palette.black,
+    puckHalo: 'rgba(255,59,48,0.2)',
+  },
+  status: {
+    recording: '#3A0B08',
+    recordingDot: NIGHT_INK,
+    paused: NIGHT_INK,
+    onPaused: palette.black,
+    pausedInk: NIGHT_INK,
+    gpsWeak: NIGHT_INK,
+    gpsLost: NIGHT_INK,
+    onGpsLost: palette.black,
+    gpsLostInk: NIGHT_INK,
+  },
+  data: {
+    route: NIGHT_INK,
+    routeCasing: palette.black,
+    ascent: NIGHT_INK,
+    descent: '#CC2E24',
+    heading: NIGHT_INK,
+    info: NIGHT_INK,
+  },
+};
+
+/** Night red's map treatment: greyscale, dimmed raster under a red veil. */
+export const NIGHT_MAP = {
+  rasterSaturation: -1,
+  rasterBrightnessMax: 0.35,
+  veil: 'rgba(120,0,0,0.35)',
+} as const;
+
 export function schemeTokens(dark: boolean): SchemeTokens {
   return dark ? darkScheme : lightScheme;
 }

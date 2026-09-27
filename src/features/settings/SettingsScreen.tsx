@@ -38,6 +38,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DisplaySheet } from '@features/display/DisplaySheet';
 import { exportAllData } from './exportAllData';
 import { MAP_DATA_CREDITS } from './mapDataCredits';
 import { MarinePacksSection } from './MarinePacksSection';
@@ -104,6 +105,8 @@ const updateLine = describeRunningUpdate({
   isEnabled: Updates.isEnabled,
 });
 
+const DISPLAY_LABEL = { normal: 'Normal', sunlight: 'Sunlight', night: 'Night red' } as const;
+
 export function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -123,6 +126,8 @@ export function SettingsScreen() {
   const units = useSettingsStore((s) => s.units);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
+  const displayCondition = useSettingsStore((s) => s.displayCondition);
+  const [displaySheetOpen, setDisplaySheetOpen] = useState(false);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   const set = useSettingsStore((s) => s.set);
@@ -317,6 +322,13 @@ export function SettingsScreen() {
                     ]}
                   />
                 </View>
+                <List.Item
+                  title="Display mode"
+                  description={`${DISPLAY_LABEL[displayCondition]} · Sunlight and Night are opt-in`}
+                  onPress={() => setDisplaySheetOpen(true)}
+                  right={(props) => <List.Icon {...props} icon="chevron-right" />}
+                  accessibilityLabel="Display mode"
+                />
                 <List.Item
                   title="Compact map chrome"
                   description="Fold the map buttons behind one chevron until you need them"
@@ -657,6 +669,7 @@ export function SettingsScreen() {
       >
         {snack ?? ''}
       </Snackbar>
+      <DisplaySheet visible={displaySheetOpen} onDismiss={() => setDisplaySheetOpen(false)} />
     </View>
   );
 }

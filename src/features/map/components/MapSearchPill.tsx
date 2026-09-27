@@ -1,4 +1,5 @@
 import { palette, target } from '@ui/tokens';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
@@ -11,6 +12,7 @@ import { Icon, Text } from 'react-native-paper';
  */
 export function MapSearchPill({ onPress }: { onPress: () => void }) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
   return (
     <Pressable
       onPress={onPress}
@@ -20,6 +22,7 @@ export function MapSearchPill({ onPress }: { onPress: () => void }) {
       style={({ pressed }) => [
         styles.pill,
         { backgroundColor: tokens.map.chrome },
+        outline,
         pressed && styles.pressed,
       ]}
     >

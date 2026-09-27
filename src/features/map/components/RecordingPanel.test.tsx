@@ -3,7 +3,13 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Animated } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSettingsStore } from '@state/settingsStore';
 import { RecordingPanel } from './RecordingPanel';
+
+jest.mock('@data/storage', () => ({
+  writeJson: jest.fn(),
+  readJson: jest.fn(async () => null),
+}));
 
 const stats: TrackStats = {
   distanceM: 3420,
@@ -116,5 +122,15 @@ describe('RecordingPanel', () => {
     await renderPanel({ gloveLocked: true });
     expect(screen.queryByLabelText('Pause')).toBeNull();
     expect(screen.getByLabelText('Unlock controls')).toBeOnTheScreen();
+  });
+
+  it('offers the display modes in its options (opt-in)', async () => {
+    useSettingsStore.setState({ displayCondition: 'normal' });
+    await renderPanel();
+    await fireEvent.press(screen.getByLabelText('Recording options'));
+    expect(screen.getByText('DISPLAY · OPT-IN')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByLabelText('Display Night'));
+    expect(useSettingsStore.getState().displayCondition).toBe('night');
+    expect(screen.getByLabelText('All display options')).toBeOnTheScreen();
   });
 });

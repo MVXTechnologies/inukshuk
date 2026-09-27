@@ -2,6 +2,7 @@ import { scaleBar } from '@core/geo/scaleBar';
 import { useSettingsStore } from '@state/settingsStore';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 /**
@@ -32,6 +33,7 @@ const MAX_BAR_PX = 104;
 
 export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number }) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
   // Subscribed, not read per call: the bar must re-label the moment the unit
   // system flips, and it is cheap to re-render (see `@state/formatters`).
   const units = useSettingsStore((s) => s.units);
@@ -41,7 +43,7 @@ export function ScaleBar({ zoom, latitude }: { zoom: number; latitude: number })
   return (
     // A paper chip over the map (revamp `Main.html`), not a raised card.
     <View
-      style={[styles.pill, { backgroundColor: tokens.map.chip }]}
+      style={[styles.pill, { backgroundColor: tokens.map.chip }, outline]}
       accessibilityLabel={`Scale ${bar.label}`}
     >
       <Text style={[styles.label, { color: tokens.map.chipInk }]}>{bar.label}</Text>
