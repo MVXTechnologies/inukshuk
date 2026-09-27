@@ -22,6 +22,30 @@ import { act, fireEvent, render, type RenderResult } from '@testing-library/reac
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+// Paper's Menu measures its anchor (measureInWindow) and mounts its items
+// through a Portal before showing them — unreliable under Jest. The screen's
+// menu wiring is what is under test, so a plain stand-in renders the anchor
+// and, while visible, the items.
+jest.mock('react-native-paper', () => {
+  const paper = jest.requireActual('react-native-paper');
+  const { View } = jest.requireActual('react-native');
+  const Menu = ({
+    visible,
+    anchor,
+    children,
+  }: {
+    visible: boolean;
+    anchor: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <View>
+      {anchor}
+      {visible ? children : null}
+    </View>
+  );
+  Menu.Item = paper.Menu.Item;
+  return { ...paper, Menu };
+});
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: jest.fn(), push: jest.fn() }),
 }));
@@ -34,6 +58,9 @@ jest.mock('@data/storage', () => ({
   toDocumentPath: (uri: string) => uri,
   resolveDocumentPath: (path: string) => path,
   documentDirUri: () => 'file:///Documents',
+  // The row's page-1 thumbnail and size lookups (useMapThumbnail).
+  existingOverlayPng: () => null,
+  fileSizeAt: () => 0,
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
 jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));
@@ -97,8 +124,15 @@ async function press(view: RenderResult, label: string) {
   });
 }
 
-/** Expand the card's overlay-page list (the chevron beside the map's name). */
-const expandOverlayPages = (view: RenderResult) => press(view, 'Overlay pages');
+/** Expand the row's overlay-page list (its ⋮ menu → Overlay pages). */
+async function expandOverlayPages(view: RenderResult) {
+  await press(view, 'Map options');
+  // Paper's Menu measures its anchor before it shows: wait for the item.
+  const item = await view.findByLabelText('Overlay pages');
+  await act(async () => {
+    fireEvent.press(item);
+  });
+}
 
 type Rendered = { props?: Record<string, unknown>; children?: unknown[] };
 

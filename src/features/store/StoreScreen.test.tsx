@@ -176,3 +176,51 @@ it('still says "no maps match" when the catalog genuinely has none', async () =>
 
   expect(view.getByText('No maps match your search.')).toBeTruthy();
 });
+
+it('lands on Canadian sheets first from Québec City, Maine quads after (the ranking bug)', async () => {
+  const maine: CatalogItem = {
+    ...item('usgs-burntland', 'Burntland Pond — US Topo', 45.85, -70.3),
+    sourceId: 'usgs-ustopo',
+    region: 'US-ME',
+    sizeBytes: 24 * 1024 * 1024,
+  };
+  const nb: CatalogItem = {
+    ...item('cantopo-021g14', 'Canterbury — CanTopo 021G14', 45.9, -67.4),
+    sourceId: 'nrcan-cantopo',
+    sizeBytes: 31 * 1024 * 1024,
+  };
+  (loadCatalogManifest as jest.Mock).mockResolvedValue({
+    index: {
+      schemaVersion: 2,
+      sources: [
+        { id: 'usgs-ustopo', name: 'USGS US Topo', licence: 'PD', attribution: 'USGS' },
+        { id: 'nrcan-cantopo', name: 'NRCan CanTopo', licence: 'OGL', attribution: 'NRCan' },
+      ],
+      shards: [],
+      items: [maine, nb],
+      categoryCounts: { topo: 2 },
+    } satisfies CatalogIndex,
+    fromCache: false,
+    warnings: [],
+  });
+  useSettingsStore.setState({
+    lastKnownPosition: { latitude: 46.8139, longitude: -71.2082 },
+    units: 'metric',
+  });
+  const view = await mount();
+  await flush();
+
+  const texts = view
+    .getAllByText(/Near you|NEAREST USGS|CanTopo 021G14|US Topo$/)
+    .map((node) => String(node.props.children));
+  expect(texts).toEqual([
+    'Near you · Canadian sources first',
+    'Canterbury — CanTopo 021G14',
+    'NEAREST USGS QUADS · ACROSS THE BORDER',
+    'Burntland Pond — US Topo',
+  ]);
+  expect(view.getByText('NRCan CanTopo')).toBeTruthy();
+  expect(view.getByText('USGS US Topo · Maine')).toBeTruthy();
+  expect(view.getByText(/^24 MB · 1\d\d km away$/)).toBeTruthy();
+  expect(view.getByText('US Topo covers the United States only.')).toBeTruthy();
+});

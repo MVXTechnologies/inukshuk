@@ -100,6 +100,18 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['descent on surface', t.data.descent, t.surface, GRAPHIC],
     // Control borders.
     ['outline on surface', t.outline, t.surface, GRAPHIC],
+    // Library (After-Library.html).
+    ['thumbnail route on its ground', t.data.route, t.library.thumb, GRAPHIC],
+    ['thumbnail route on its casing', t.data.route, t.library.thumbCasing, GRAPHIC],
+    ['thumbnail start dot on its ground', t.library.thumbStart, t.library.thumb, GRAPHIC],
+    ['map placeholder sheet edge', t.library.mapSheetEdge, t.library.mapSheet, GRAPHIC],
+    ['selected type chip label', t.library.chipOnInk, t.library.chipOn, TEXT],
+    ['selected type chip count', t.library.chipOnCount, t.library.chipOn, TEXT],
+    ['type chip label', t.library.chipInk, t.library.chip, TEXT],
+    ['type chip count', t.library.chipCount, t.library.chip, TEXT],
+    ['on-map chip label', t.library.onMapInk, t.library.onMap, TEXT],
+    ['muted on background (row captions)', t.inkMuted, t.background, TEXT],
+    ['ink variant on background (row names)', t.inkVariant, t.background, TEXT],
   ];
 }
 
