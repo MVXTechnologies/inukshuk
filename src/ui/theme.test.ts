@@ -1,6 +1,6 @@
 import { contrastRatio } from '@core/color/contrast';
 import { isPurple } from '@core/color/hsl';
-import { darkTheme, lightTheme, resolveTheme } from './theme';
+import { darkTheme, lightTheme, nightTheme, resolveTheme, sunlightTheme } from './theme';
 
 /**
  * Legibility gate. This is an outdoor trail app, so we hold text to AAA (7:1) for
@@ -13,8 +13,14 @@ const AA = 4.5;
 describe.each([
   ['light', lightTheme],
   ['stone night', darkTheme],
-])('%s theme', (_name, theme) => {
+  ['sunlight', sunlightTheme],
+  ['night red', nightTheme],
+])('%s theme', (name, theme) => {
   const c = theme.colors;
+  // Night red cannot reach AAA: pure red on pure black is only 5.25:1, and a
+  // brighter red needs green or blue, which night vision rules out. It is held
+  // to AA, the most red-on-black allows.
+  const BODY = name === 'night red' ? AA : AAA;
 
   // The purple leak: Paper's MD3 defaults tint elevation, outlines, inverse
   // and disabled colours lavender. Every slot is now set from tokens.
@@ -31,12 +37,12 @@ describe.each([
     }
   });
 
-  it('primary body text meets AAA on its surface', () => {
-    expect(contrastRatio(c.onSurface, c.surface)).toBeGreaterThanOrEqual(AAA);
+  it('primary body text meets AAA on its surface (AA for night red)', () => {
+    expect(contrastRatio(c.onSurface, c.surface)).toBeGreaterThanOrEqual(BODY);
   });
 
   it('secondary text (onSurfaceVariant) meets AAA on surface and AA on cards', () => {
-    expect(contrastRatio(c.onSurfaceVariant, c.surface)).toBeGreaterThanOrEqual(AAA);
+    expect(contrastRatio(c.onSurfaceVariant, c.surface)).toBeGreaterThanOrEqual(BODY);
     expect(contrastRatio(c.onSurfaceVariant, c.surfaceVariant)).toBeGreaterThanOrEqual(AA);
   });
 
@@ -54,5 +60,11 @@ describe('resolveTheme', () => {
   it('picks the theme for the colour scheme', () => {
     expect(resolveTheme('light')).toBe(lightTheme);
     expect(resolveTheme('dark')).toBe(darkTheme);
+  });
+
+  it('lets Sunlight and Night red override the system scheme', () => {
+    expect(resolveTheme('dark', 'sunlight')).toBe(sunlightTheme);
+    expect(resolveTheme('light', 'night')).toBe(nightTheme);
+    expect(resolveTheme('dark', 'normal')).toBe(darkTheme);
   });
 });

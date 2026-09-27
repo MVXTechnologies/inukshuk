@@ -1,7 +1,16 @@
 import { contrastRatio } from '@core/color/contrast';
-import { compositeOver, isPurple, parseRgba } from '@core/color/hsl';
+import { compositeOver, isPurple, parseRgba, toHsl } from '@core/color/hsl';
 
-import { darkScheme, lightScheme, MIN_FONT_SIZE, palette, type SchemeTokens, type } from './tokens';
+import {
+  darkScheme,
+  lightScheme,
+  MIN_FONT_SIZE,
+  nightScheme,
+  palette,
+  sunlightScheme,
+  type SchemeTokens,
+  type,
+} from './tokens';
 
 /** WCAG 2.1: text (SC 1.4.3) and graphics/UI components (SC 1.4.11). */
 const TEXT = 4.5;
@@ -31,8 +40,20 @@ describe('no purple (decision: Stone & Paper replaces Material lavender)', () =>
     },
   );
 
-  it.each(colourEntries(darkScheme, 'dark'))('%s %s', (_path, colour) => {
+  it.each([
+    ...colourEntries(darkScheme, 'dark'),
+    ...colourEntries(sunlightScheme, 'sunlight'),
+    ...colourEntries(nightScheme, 'night'),
+  ])('%s %s', (_path, colour) => {
     expect(isPurple(colour)).toBe(false);
+  });
+});
+
+describe('night red keeps night vision (decision 4: no blue or green)', () => {
+  it.each(colourEntries(nightScheme, 'night'))('%s %s is red or neutral', (_path, colour) => {
+    const { h, s } = toHsl(colour);
+    const neutral = s < 0.08 || parseRgba(colour).a === 0;
+    expect(neutral || h <= 20 || h >= 340).toBe(true);
   });
 });
 
@@ -85,6 +106,8 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
 describe.each([
   ['light', lightScheme],
   ['stone night', darkScheme],
+  ['sunlight', sunlightScheme],
+  ['night red', nightScheme],
 ])('%s contrast, as used', (_name, scheme) => {
   it.each(pairs(scheme))('%s', (_label, fg, bg, min) => {
     for (const ground of asDrawn(fg, bg)) {

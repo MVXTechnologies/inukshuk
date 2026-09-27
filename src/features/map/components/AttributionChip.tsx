@@ -1,4 +1,5 @@
 import type { MapBasemap } from '@state/mapStore';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -11,8 +12,9 @@ import { basemapAttribution } from '../mapStyle';
  */
 export function AttributionChip({ basemap }: { basemap: MapBasemap }) {
   const tokens = useSchemeTokens();
+  const outline = useChromeOutline();
   return (
-    <View style={[styles.chip, { backgroundColor: tokens.map.chip }]} pointerEvents="none">
+    <View style={[styles.chip, { backgroundColor: tokens.map.chip }, outline]} pointerEvents="none">
       <Text style={[styles.label, { color: tokens.map.chipInkMuted }]}>
         {basemapAttribution(basemap)}
       </Text>
