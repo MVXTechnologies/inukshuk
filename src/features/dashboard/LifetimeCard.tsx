@@ -77,7 +77,9 @@ function Hero({ value, label, ink }: { value: HeroValue; label: string; ink: str
         style={[styles.value, tabularNums, { color: ink }]}
       >
         {value.value}
-        <Text style={styles.unit}> {value.unit}</Text>
+        {/* Paper's Text sets its own theme colour, so a nested span must be
+            given the card's ink explicitly or it renders dark on stone. */}
+        <Text style={[styles.unit, { color: ink }]}> {value.unit}</Text>
       </Text>
       <Text
         numberOfLines={1}
