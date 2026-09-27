@@ -37,6 +37,8 @@ export const palette = {
   ink: '#1E252C',
   white: '#FFFFFF',
   black: '#000000',
+  /** Drop-shadow colour for chrome floating over the map. */
+  shadow: '#14181C',
 } as const;
 
 /** MD3 elevation steps. Light: warm paper steps, replacing MD3's lavender tint. */
@@ -71,6 +73,21 @@ export interface SchemeTokens {
     chromeInk: string;
     /** The "following" state of the target button (decision 2). */
     followInk: string;
+    /** Solid fill of a pressed/active map button (the following target). */
+    chromeActive: string;
+    /** Hairline between buttons joined in one pill. */
+    chromeDivider: string;
+    /** Compass needle: north tip and south tail. */
+    compassNorth: string;
+    compassSouth: string;
+    /** Scale bar and attribution chips over the map. */
+    chip: string;
+    chipInk: string;
+    chipInkMuted: string;
+    /** Location puck: fill, ring, accuracy halo. */
+    puck: string;
+    puckRing: string;
+    puckHalo: string;
   };
   status: {
     /** Recording: stone chip with a pulsing red dot. */
@@ -121,6 +138,16 @@ export const lightScheme: SchemeTokens = {
     chrome: 'rgba(45,55,64,0.92)',
     chromeInk: palette.paper,
     followInk: '#8CC4F0',
+    chromeActive: palette.stone,
+    chromeDivider: 'rgba(242,236,224,0.22)',
+    compassNorth: '#FF6B5E',
+    compassSouth: palette.paper,
+    chip: 'rgba(251,248,242,0.86)',
+    chipInk: palette.stone,
+    chipInkMuted: palette.muted,
+    puck: palette.puck,
+    puckRing: palette.paper,
+    puckHalo: 'rgba(47,127,193,0.18)',
   },
   status: {
     recording: palette.stone,
@@ -170,6 +197,16 @@ export const darkScheme: SchemeTokens = {
     chrome: 'rgba(36,43,50,0.94)',
     chromeInk: '#E9E4D8',
     followInk: '#8CC4F0',
+    chromeActive: '#13171B',
+    chromeDivider: 'rgba(233,228,216,0.18)',
+    compassNorth: '#FF6B5E',
+    compassSouth: '#E9E4D8',
+    chip: 'rgba(26,31,36,0.86)',
+    chipInk: '#E9E4D8',
+    chipInkMuted: '#A7B0B8',
+    puck: palette.puck,
+    puckRing: palette.paper,
+    puckHalo: 'rgba(47,127,193,0.22)',
   },
   status: {
     recording: palette.stone,

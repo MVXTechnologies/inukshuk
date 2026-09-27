@@ -3,13 +3,6 @@ import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { CompassBadge } from './CompassBadge';
 
-// The badge subscribes to the shared compass stream, which reaches for
-// expo-location's heading watch. The needle-under-test here is the MAP one, so
-// hold the device heading still at due north.
-jest.mock('../useCompass', () => ({
-  useCompass: () => ({ headingDeg: 0, accuracy: 3 }),
-}));
-
 async function renderBadge(props: { mapBearing?: number | null; onPress?: () => void } = {}) {
   await render(
     <PaperProvider>
@@ -52,32 +45,24 @@ describe('CompassBadge north needle', () => {
     expect(needleRotation()).toBe('10deg');
   });
 
-  it('labels the arrow tip with an N while rotated (#266)', async () => {
-    await renderBadge({ mapBearing: 45 });
-    expect(screen.getByText('N')).toBeOnTheScreen();
-  });
-
-  it('draws the north arrow after the heading needle, so it paints on top (#266)', async () => {
-    await renderBadge({ mapBearing: 45 });
-    const arrow = screen.getByTestId('compass-north-needle');
-    const box = arrow.parent;
-    const siblings = box?.children ?? [];
-    expect(siblings[siblings.length - 1]).toBe(arrow);
-  });
-
-  it('hides the needle at north-up', async () => {
+  // The revamp's puck (decision 1) shows only the map's orientation — no
+  // device-heading needle to be told apart from — so the needle is always
+  // drawn and simply points up at north-up.
+  it('points straight up at north-up', async () => {
     await renderBadge({ mapBearing: 0 });
-    expect(screen.queryByTestId('compass-north-needle')).toBeNull();
+    expect(screen.getByTestId('compass-north-needle')).toBeOnTheScreen();
+    expect(needleRotation()).toBe('0deg');
   });
 
-  it('hides the needle for a sub-degree residue', async () => {
-    await renderBadge({ mapBearing: 0.5 });
-    expect(screen.queryByTestId('compass-north-needle')).toBeNull();
-  });
-
-  it('hides the needle when no bearing is supplied at all', async () => {
+  it('points up when no bearing is supplied at all', async () => {
     await renderBadge();
-    expect(screen.queryByTestId('compass-north-needle')).toBeNull();
+    expect(needleRotation()).toBe('0deg');
+  });
+
+  it('calls a sub-degree residue north-up in its label', async () => {
+    await renderBadge({ mapBearing: 0.5 });
+    expect(needleRotation()).toBe('-0.5deg');
+    expect(screen.getByLabelText('Compass')).toBeOnTheScreen();
   });
 });
 

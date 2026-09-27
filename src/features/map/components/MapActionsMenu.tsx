@@ -1,7 +1,8 @@
 import { StyleSheet, View } from 'react-native';
-import { FAB, Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
 import { InukshukIcon } from './InukshukIcon';
+import { MapButton } from './MapButton';
 
 /**
  * The map-actions entry point (wave A item 6): the old bottom-right "+"
@@ -82,12 +83,10 @@ export function MapActionsMenu({
 
   return (
     <>
-      <FAB
+      <MapButton
         icon={open ? 'close' : 'plus'}
-        size="small"
-        variant="surface"
+        shape="square"
         onPress={() => onToggle(!open)}
-        style={styles.controlFab}
         accessibilityLabel="Map actions"
       />
       {open && (
@@ -108,7 +107,6 @@ export function MapActionsMenu({
 }
 
 const styles = StyleSheet.create({
-  controlFab: { borderRadius: 24 },
   sheet: {
     minWidth: 210,
     backgroundColor: wc.panelSolid,

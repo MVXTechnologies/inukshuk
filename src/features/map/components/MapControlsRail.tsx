@@ -1,15 +1,20 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { FAB } from 'react-native-paper';
 import { BasemapMenu } from './LayersMenu';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
+import { MapButton, MapButtonGroup } from './MapButton';
 import { MapOverlaysMenu } from './MapOverlaysMenu';
 
 interface Props {
   /** Distance from the top of the screen (safe-area inset + margin). */
   top: number;
+  /** Whether the camera follows the user's position. */
+  following: boolean;
+  /** Start following (and zoom to a useful "where am I" level). */
   onLocate: () => void;
+  /** Stop following, leaving the camera where it is. */
+  onStopFollowing: () => void;
   /** Shown only when at least one PDF overlay is active. */
   showFitControl: boolean;
   onFit: () => void;
@@ -18,11 +23,9 @@ interface Props {
   pdfOverlayCount: number;
   trackOverlayCount: number;
   /**
-   * The "+" map actions (wave A item 6: moved here from the bottom-right
-   * FAB.Group), rendered as a rail button directly below Map overlays.
-   * undefined hides the button entirely (recording under way, region select,
-   * category sheet up) — 'Map actions' then leaves the a11y tree, exactly
-   * like the old FAB's own gating.
+   * The "+" map actions, the last button of the rail. undefined hides the
+   * button entirely (recording under way, region select, category sheet
+   * up) — 'Map actions' then leaves the a11y tree.
    */
   actions?: MapActions;
   /**
@@ -34,7 +37,14 @@ interface Props {
   onCompactOpenChange: (open: boolean) => void;
 }
 
-/** Right-side map controls: locate, fit, base map, overlays, map actions. */
+/**
+ * Right-side map controls (revamp `Main.html`, decision 2), top to bottom:
+ * the target button (go to my position; tap again to stop following), Fit
+ * map while PDF overlays are up, Base map and Map overlays joined in one
+ * pill, then "+". Every button is a 48 dp {@link MapButton}; the Maestro
+ * labels ('Locate', 'Fit map', 'Base map', 'Map overlays', 'Map actions',
+ * 'Map controls', 'Hide map controls') are unchanged.
+ */
 export function MapControlsRail(props: Props) {
   const compact = useSettingsStore((s) => s.compactMapChrome);
   const { compactOpen, onCompactOpenChange } = props;
@@ -43,18 +53,16 @@ export function MapControlsRail(props: Props) {
   // outside tap on the backdrop below closes whichever is up.
   const [openMenu, setOpenMenu] = useState<null | 'overlays' | 'actions'>(null);
 
-  const { top, onLocate, showFitControl, onFit, terrain3d, actions } = props;
+  const { top, following, onLocate, onStopFollowing, showFitControl, onFit, terrain3d, actions } =
+    props;
 
-  // Compact map chrome: everything folded behind one small chevron until asked.
+  // Compact map chrome: everything folded behind one chevron until asked.
   if (compact && !compactOpen) {
     return (
       <View style={[styles.rightControls, { top }]} pointerEvents="box-none">
-        <FAB
+        <MapButton
           icon="chevron-left"
-          size="small"
-          variant="surface"
           onPress={() => onCompactOpenChange(true)}
-          style={styles.controlFab}
           accessibilityLabel="Map controls"
         />
       </View>
@@ -69,44 +77,43 @@ export function MapControlsRail(props: Props) {
         pointerEvents="box-none"
       >
         {compact && (
-          <FAB
+          <MapButton
             icon="chevron-right"
-            size="small"
-            variant="surface"
             onPress={() => onCompactOpenChange(false)}
-            style={styles.controlFab}
             accessibilityLabel="Hide map controls"
           />
         )}
-        <FAB
-          icon="crosshairs-gps"
-          size="small"
-          variant="surface"
-          onPress={onLocate}
-          style={styles.controlFab}
+        {/* Decision 2: a target, first in the rail. Idle it recentres and
+            starts following; while following it is solid with the river-blue
+            ink and a filled centre, and a tap stops following. */}
+        <MapButton
+          icon={following ? 'crosshairs-gps' : 'crosshairs'}
+          selected={following}
+          onPress={following ? onStopFollowing : onLocate}
           accessibilityLabel="Locate"
         />
         {showFitControl && (
-          <FAB
-            icon="fit-to-page-outline"
-            size="small"
-            variant="surface"
-            onPress={onFit}
-            style={styles.controlFab}
-            accessibilityLabel="Fit map"
-          />
+          <MapButton icon="fit-to-page-outline" onPress={onFit} accessibilityLabel="Fit map" />
         )}
         {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
             working so well ... until we figure it out"). The focused trail
-            viewer keeps its 3D. To restore, re-add the video-3d FAB here —
+            viewer keeps its 3D. To restore, re-add a 3D button here —
             everything behind terrain3d still works. */}
-        <BasemapMenu />
+        <MapButtonGroup>
+          <BasemapMenu grouped />
+          <MapButton
+            icon="gradient-vertical"
+            grouped
+            onPress={() => setOpenMenu(openMenu === 'overlays' ? null : 'overlays')}
+            accessibilityLabel="Map overlays"
+          />
+        </MapButtonGroup>
         <MapOverlaysMenu
+          hideTrigger
           showHypso={terrain3d}
           open={openMenu === 'overlays'}
           onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
         />
-        {/* "+" map actions, directly below Map overlays (wave A item 6). */}
         {actions !== undefined && (
           <MapActionsMenu
             actions={actions}
@@ -120,9 +127,8 @@ export function MapControlsRail(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  rightControls: { position: 'absolute', right: 12, gap: 10, alignItems: 'flex-end' },
+  rightControls: { position: 'absolute', right: 16, gap: 8, alignItems: 'flex-end' },
   // While a sheet is up, the rail must stack above its backdrop.
   railAboveBackdrop: { zIndex: 5 },
-  controlFab: { borderRadius: 24 },
   backdrop: { ...StyleSheet.absoluteFill, zIndex: 4 },
 });
