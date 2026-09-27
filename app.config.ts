@@ -127,7 +127,39 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
-    'expo-font',
+    // Atkinson Hyperlegible Next, embedded natively so text is in the brand
+    // face from the first frame (no load gate). Families and weights are
+    // mirrored in src/ui/fonts.ts. Embedding changes the native fingerprint:
+    // from here on, OTA updates from main target the 1.7.0 runtime only.
+    [
+      'expo-font',
+      {
+        ios: {
+          fonts: [
+            './assets/fonts/AtkinsonHyperlegibleNext_400Regular.ttf',
+            './assets/fonts/AtkinsonHyperlegibleNext_500Medium.ttf',
+            './assets/fonts/AtkinsonHyperlegibleNext_700Bold.ttf',
+            './assets/fonts/AtkinsonHyperlegibleNext_800ExtraBold.ttf',
+          ],
+        },
+        android: {
+          fonts: [
+            {
+              fontFamily: 'AtkinsonHyperlegibleNext',
+              fontDefinitions: [
+                { path: './assets/fonts/AtkinsonHyperlegibleNext_400Regular.ttf', weight: 400 },
+                { path: './assets/fonts/AtkinsonHyperlegibleNext_500Medium.ttf', weight: 500 },
+                { path: './assets/fonts/AtkinsonHyperlegibleNext_700Bold.ttf', weight: 700 },
+                {
+                  path: './assets/fonts/AtkinsonHyperlegibleNext_800ExtraBold.ttf',
+                  weight: 800,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
     'expo-sharing',
     [
       'expo-splash-screen',

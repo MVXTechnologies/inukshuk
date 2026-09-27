@@ -12,3 +12,6 @@ package-lock.json
 docs/catalog/
 scripts/catalog/fragments/
 .maestro/fixtures/
+
+# Approved design boards: exported artifacts, kept byte-for-byte as approved.
+docs/design/ui-revamp/boards/

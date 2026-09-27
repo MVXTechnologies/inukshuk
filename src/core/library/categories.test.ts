@@ -47,7 +47,7 @@ describe('built-in categories', () => {
     // Card surfaces from src/ui/theme.ts (lightTheme.surface / darkTheme.surface).
     // If the theme's surfaces change, re-verify these mirrors.
     const LIGHT_SURFACE = '#FBF8F2';
-    const DARK_SURFACE = '#1B1E17';
+    const DARK_SURFACE = '#1A1F24'; // stone night (src/ui/tokens.ts)
     const colors = [...BUILT_IN_CATEGORIES.map((c) => c.color), ...CATEGORY_COLOR_PALETTE];
     for (const color of colors) {
       expect(contrastRatio(color, LIGHT_SURFACE)).toBeGreaterThanOrEqual(3);

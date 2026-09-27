@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Maps tab, map store (after)</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2ECE0;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',-apple-system,system-ui,sans-serif;color:#2D3740}
+button,input{font-family:inherit}
+button{cursor:pointer}
+input::placeholder{color:#4A5561;opacity:1}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #F2ECE0; font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, system-ui, sans-serif; color: #2D3740">
+
+<header style="position: absolute; left: 0; top: 54px; width: 390px; height: 52px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center">
+<h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 800; letter-spacing: -0.01em">Maps</h1>
+</header>
+
+<label style="position: absolute; left: 16px; top: 112px; width: 358px; height: 48px; box-sizing: border-box; border-radius: 24px; border: 1px solid #D5CEBF; background: #FBF8F2; padding: 0 16px; display: flex; align-items: center; gap: 10px; color: #4A5561">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Search maps</span>
+<input type="search" placeholder="Search maps" style="flex-grow: 1; min-width: 0; height: 44px; border: 0; padding: 0; background: transparent; color: #2D3740; font-size: 16px; outline: none">
+</label>
+
+<div style="position: absolute; left: 0; top: 176px; width: 390px; display: flex; flex-direction: column">
+<div style="padding: 0 16px 8px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 800">Near you · Canadian sources first</h2>
+<p style="margin: 0; font-size: 13px; line-height: 18px; color: #4A5561">Québec 1:50 000 sheets from NRCan, sorted by distance. The nearest USGS quads follow.</p>
+</div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 16C12 10 26 20 58 12M-2 32C14 26 30 38 58 28M-2 48C16 42 30 52 58 44" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M30 20C34 16 40 18 40 24S34 30 30 28 26 24 30 20Z" fill="#A9CBE0" stroke="#5C93B7" stroke-width="0.8"></path><rect x="12" y="10" width="32" height="36" fill="#93A25E" fill-opacity="0.12" stroke="#2D3740" stroke-width="1.6"></rect><circle cx="22" cy="36" r="3.5" fill="#2F7FC1" stroke="#F7F2E8" stroke-width="1.5"></circle></svg></span>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Lac-Jacques-Cartier</span>
+<span style="font-size: 13px; color: #4A5561">NRCan CanTopo</span>
+<span style="font-size: 13px; color: #4A5561; font-variant-numeric: tabular-nums">31 MB · 12 km away</span>
+</div>
+<button style="height: 44px; border: 0; border-radius: 22px; padding: 0 16px; background: #2D3740; color: #F2ECE0; font-size: 14px; font-weight: 700; flex-shrink: 0">Download</button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 22C12 16 26 26 58 18M-2 38C14 32 30 44 58 34" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M40 -2C42 12 50 22 58 26V-2Z" fill="#A9CBE0" stroke="#5C93B7" stroke-width="0.8"></path><rect x="10" y="12" width="32" height="36" fill="#93A25E" fill-opacity="0.12" stroke="#2D3740" stroke-width="1.6"></rect></svg></span>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Mont-Sainte-Anne</span>
+<span style="font-size: 13px; color: #4A5561">NRCan CanTopo</span>
+<span style="font-size: 13px; color: #4A5561; font-variant-numeric: tabular-nums">22 MB · 31 km away</span>
+</div>
+<button style="height: 44px; border: 0; border-radius: 22px; padding: 0 16px; background: #2D3740; color: #F2ECE0; font-size: 14px; font-weight: 700; flex-shrink: 0">Download</button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 14C12 8 26 18 58 10M-2 30C14 24 30 36 58 26" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M-2 40C14 36 30 44 58 38V58H-2Z" fill="#A9CBE0" stroke="#5C93B7" stroke-width="0.8"></path><rect x="14" y="8" width="32" height="36" fill="#93A25E" fill-opacity="0.12" stroke="#2D3740" stroke-width="1.6"></rect></svg></span>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Baie-Saint-Paul</span>
+<span style="font-size: 13px; color: #4A5561">NRCan CanTopo</span>
+<span style="font-size: 13px; color: #4A5561; font-variant-numeric: tabular-nums">26 MB · 48 km away</span>
+</div>
+<button aria-label="Downloaded. Open map options" style="height: 44px; box-sizing: border-box; border: 1px solid #93A25E; border-radius: 22px; padding: 0 12px; background: #E4E9CF; color: #3D4D22; font-size: 14px; font-weight: 700; flex-shrink: 0; display: flex; align-items: center; gap: 6px">Downloaded<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></button>
+</div>
+
+<div style="padding: 14px 16px 6px; border-top: 1px solid #D5CEBF; margin-top: 4px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; color: #4A5561">NEAREST USGS QUADS · ACROSS THE BORDER</h3>
+</div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 18C12 12 26 22 58 14M-2 34C14 28 30 40 58 30" fill="none" stroke="#DDD5C4" stroke-width="1"></path><path d="M18 20C22 16 28 20 26 26S18 28 18 20Z" fill="#A9CBE0" stroke="#5C93B7" stroke-width="0.8"></path><rect x="12" y="10" width="32" height="36" fill="none" stroke="#2D3740" stroke-width="1.6" stroke-dasharray="3 2"></rect></svg></span>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Burntland Pond (West)</span>
+<span style="font-size: 13px; color: #4A5561">USGS US Topo · Maine</span>
+<span style="font-size: 13px; color: #4A5561; font-variant-numeric: tabular-nums">24 MB · 106 km away</span>
+</div>
+<button style="height: 44px; border: 0; border-radius: 22px; padding: 0 16px; background: #2D3740; color: #F2ECE0; font-size: 14px; font-weight: 700; flex-shrink: 0">Download</button>
+</div>
+<div style="height: 1px; margin-left: 84px; background: #E3DCCB"></div>
+
+<div style="height: 76px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 12px">
+<span style="width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: #F7F2E8; box-shadow: inset 0 0 0 1px #E3DCCB"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><path d="M-2 12C12 6 26 16 58 8M-2 28C14 22 30 34 58 24M-2 44C16 38 30 48 58 40" fill="none" stroke="#DDD5C4" stroke-width="1"></path><rect x="12" y="10" width="32" height="36" fill="none" stroke="#2D3740" stroke-width="1.6" stroke-dasharray="3 2"></rect></svg></span>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Hardwood Mountain (SW)</span>
+<span style="font-size: 13px; color: #4A5561">USGS US Topo · Maine</span>
+<span style="font-size: 13px; color: #4A5561; font-variant-numeric: tabular-nums">22 MB · 107 km away</span>
+</div>
+<button style="height: 44px; border: 0; border-radius: 22px; padding: 0 16px; background: #2D3740; color: #F2ECE0; font-size: 14px; font-weight: 700; flex-shrink: 0">Download</button>
+</div>
+
+<div style="margin: 8px 16px 0; padding: 12px 14px; border-radius: 12px; background: #F7F2E8; border: 1px solid #D5CEBF; display: flex; gap: 10px; align-items: flex-start">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2D3740" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><path d="M12 7.5h.01"></path></svg>
+<p style="margin: 0; font-size: 13px; line-height: 18px; color: #2D3740">US Topo covers the United States only. Dashed sheets are outside Canada.</p>
+</div>
+</div>
+
+<nav aria-label="Tabs" style="position: absolute; left: 0; top: 754px; width: 390px; height: 90px; box-sizing: border-box; background: #F3EDE1; border-top: 1px solid #D5CEBF; padding: 6px 8px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start">
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Map</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Library</span>
+</button>
+<button aria-current="page" style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #2D3740">
+<span style="width: 60px; height: 30px; border-radius: 15px; background: #D6DEB8; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M17.5 13.5V21m-3-3 3 3 3-3"></path></svg></span>
+<span style="font-size: 12px; font-weight: 800">Maps</span>
+</button>
+<button style="height: 56px; border: 0; padding: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #4A5561">
+<span style="width: 60px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3Z"></path><path d="M5 17a3 3 0 0 1 3-3h11"></path><path d="M9 8h6"></path></svg></span>
+<span style="font-size: 12px; font-weight: 600">Logbook</span>
+</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { headingToCardinal } from '@core/format';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, useAnimatedValue } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
 import { useCompass } from '../useCompass';
 
@@ -76,6 +77,7 @@ const NEEDLE_BOX = 40;
 export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
   const sample = useCompass();
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const heading = sample?.headingDeg ?? null;
 
   // Continuous (unwrapped) heading the needle is animating toward.
@@ -161,7 +163,7 @@ export function CompassBadge({ onPress, mapBearing }: CompassBadgeProps) {
         <View style={styles.content}>
           <View style={styles.needleBox}>
             <Animated.View style={[styles.needleWrap, { transform: [{ rotate }] }]}>
-              <MaterialCommunityIcons name="navigation" size={26} color={theme.colors.tertiary} />
+              <MaterialCommunityIcons name="navigation" size={26} color={tokens.data.heading} />
             </Animated.View>
             {/* Rendered AFTER the heading needle so it paints on top (#266):
                 a red arrow from the box centre to the rim, N at the tip. The

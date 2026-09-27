@@ -1,4 +1,5 @@
 import { contrastRatio } from '@core/color/contrast';
+import { isPurple } from '@core/color/hsl';
 import {
   darkTheme,
   edgeDarkTheme,
@@ -23,8 +24,23 @@ describe.each([
   ['minimal dark', minimalDarkTheme],
   ['edge light', edgeLightTheme],
   ['edge dark', edgeDarkTheme],
-])('%s theme contrast', (_name, theme) => {
+])('%s theme', (_name, theme) => {
   const c = theme.colors;
+
+  // The purple leak: Paper's MD3 defaults tint elevation, outlines, inverse
+  // and disabled colours lavender. Every slot is now set from tokens.
+  it('has no purple in any colour slot', () => {
+    const slots = Object.entries(c).flatMap(([k, v]) =>
+      typeof v === 'string' ? [[k, v]] : Object.entries(v).map(([l, w]) => [`${k}.${l}`, w]),
+    );
+    expect(slots.filter(([, v]) => isPurple(v as string))).toEqual([]);
+  });
+
+  it('uses Atkinson Hyperlegible Next for every text variant', () => {
+    for (const variant of Object.values(theme.fonts)) {
+      expect(variant.fontFamily).toMatch(/Atkinson ?Hyperlegible ?Next/);
+    }
+  });
 
   it('primary body text meets AAA on its surface', () => {
     expect(contrastRatio(c.onSurface, c.surface)).toBeGreaterThanOrEqual(AAA);
