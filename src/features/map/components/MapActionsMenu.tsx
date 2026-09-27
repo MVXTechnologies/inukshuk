@@ -45,6 +45,8 @@ export interface MapActions {
    * This row survives as the way to type a coordinate you have not tapped.
    */
   onGoToCoordinates?: () => void;
+  /** Open Settings (a stack route since Settings left the tab bar). */
+  onOpenSettings?: () => void;
 }
 
 export function MapActionsMenu({
@@ -97,6 +99,8 @@ export function MapActionsMenu({
           {actions.onMakeMap !== undefined && row('map-plus', 'Make a map', run(actions.onMakeMap))}
           {actions.onGoToCoordinates !== undefined &&
             row('crosshairs', 'Navigate to coordinates', run(actions.onGoToCoordinates))}
+          {actions.onOpenSettings !== undefined &&
+            row('cog-outline', 'Settings', run(actions.onOpenSettings))}
         </View>
       )}
     </>

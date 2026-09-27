@@ -6,8 +6,8 @@
 # - MUST run after category-record.yaml: its freshly recorded Run trail
 #   (recorded "today") is the fixture — deterministically inside every period
 #   window and on today's calendar cell.
-# - The tab may read "Dashboard" (classic/edge) or "Dashboard, tab, N of 4"
-#   (a11y) — and in minimal style it's text-only; the regex covers both.
+# - The tab (the old Dashboard) reads "Logbook", or "Logbook, tab, N of 4" on
+#   iOS; the regex covers both.
 # - The readout distance uses formatDistance ("N.N km" / "N m"); assert a
 #   loose distance regex, not an exact value (GPS fix jitter varies the sum).
 # - The negative filter case (Ski) proves the filter is real: the suite never
@@ -33,7 +33,7 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 - tapOn:
-    text: 'Dashboard(, tab.*)?'
+    text: 'Logbook(, tab.*)?'
 - extendedWaitUntil:
     visible: 'Activity graph'
     timeout: 15000

@@ -57,7 +57,7 @@ appId: com.inukshuk.app
     latitude: 47.4
     longitude: -53.85
 - tapOn:
-    text: 'Search(, tab.*)?'
+    text: 'Maps(, tab.*)?'
     retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: 'Search maps'

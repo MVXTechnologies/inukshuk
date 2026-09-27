@@ -11,8 +11,7 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Chip, Icon, Menu, SegmentedButtons, Text, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Appbar, Chip, Icon, Menu, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 import { ActivityGraph } from './ActivityGraph';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
 import { LifetimeSummary } from './LifetimeSummary';
@@ -28,7 +27,6 @@ import { useDashboardClock } from './useDashboardClock';
  */
 export function DashboardScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const tracks = useLibraryStore((s) => s.tracks);
   const customCategories = useLibraryStore((s) => s.customCategories);
@@ -139,159 +137,170 @@ export function DashboardScreen() {
     return tracks.filter((t) => ids.has(t.id));
   }, [dayPick, tracks]);
 
+  // Logbook header (the old Dashboard): Settings left the tab bar, so its
+  // gear lives here and in the Library header (revamp decision 6).
+  const header = (
+    <Appbar.Header>
+      <Appbar.Content title="Logbook" />
+      <Appbar.Action
+        icon="cog-outline"
+        onPress={() => router.push('/settings')}
+        accessibilityLabel="Settings"
+      />
+    </Appbar.Header>
+  );
+
   if (!hasAnyActivity) {
     return (
-      <View style={[styles.empty, { paddingTop: insets.top }]}>
-        <Icon source="chart-line-variant" size={48} color={dim} />
-        <Text variant="titleMedium" style={styles.emptyTitle}>
-          No activities yet
-        </Text>
-        <Text variant="bodyMedium" style={[styles.emptyBody, { color: dim }]}>
-          Record a trail from the Map tab and it will show up here.
-        </Text>
+      <View style={styles.fill}>
+        {header}
+        <View style={styles.empty}>
+          <Icon source="chart-line-variant" size={48} color={dim} />
+          <Text variant="titleMedium" style={styles.emptyTitle}>
+            No activities yet
+          </Text>
+          <Text variant="bodyMedium" style={[styles.emptyBody, { color: dim }]}>
+            Record a trail from the Map tab and it will show up here.
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.fill}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}
-    >
-      <Text variant="headlineSmall" style={styles.title}>
-        Dashboard
-      </Text>
-
-      {/* Readout: the selected bucket's date, then distance · time · D+. */}
-      <View style={styles.readout}>
-        <Text variant="bodySmall" style={{ color: dim }}>
-          {selected ? bucketDateLabel(selected.startMs, selected.endMs) : ''}
-        </Text>
-        {selected && selected.trackIds.length > 0 ? (
-          <Text variant="titleMedium">
-            <Text variant="titleMedium" style={{ color: accent }}>
-              {formatDistance(selected.distanceM)}
-            </Text>
-            <Text variant="titleMedium" style={{ color: dim }}>
-              {'  ·  '}
-            </Text>
-            <Text variant="titleMedium" style={{ color: accent }}>
-              {selected.movingTimeS > 0 ? formatDuration(selected.movingTimeS) : '—'}
-            </Text>
-            <Text variant="titleMedium" style={{ color: dim }}>
-              {'  ·  '}
-            </Text>
-            <Text variant="titleMedium" style={{ color: accent }}>
-              ↑ {formatElevation(selected.ascentM)}
-            </Text>
+    <View style={styles.fill}>
+      {header}
+      <ScrollView style={styles.fill} contentContainerStyle={[styles.content, { paddingTop: 8 }]}>
+        {/* Readout: the selected bucket's date, then distance · time · D+. */}
+        <View style={styles.readout}>
+          <Text variant="bodySmall" style={{ color: dim }}>
+            {selected ? bucketDateLabel(selected.startMs, selected.endMs) : ''}
           </Text>
-        ) : (
-          <Text variant="titleMedium" style={{ color: dim }}>
-            No activities
-          </Text>
-        )}
-      </View>
+          {selected && selected.trackIds.length > 0 ? (
+            <Text variant="titleMedium">
+              <Text variant="titleMedium" style={{ color: accent }}>
+                {formatDistance(selected.distanceM)}
+              </Text>
+              <Text variant="titleMedium" style={{ color: dim }}>
+                {'  ·  '}
+              </Text>
+              <Text variant="titleMedium" style={{ color: accent }}>
+                {selected.movingTimeS > 0 ? formatDuration(selected.movingTimeS) : '—'}
+              </Text>
+              <Text variant="titleMedium" style={{ color: dim }}>
+                {'  ·  '}
+              </Text>
+              <Text variant="titleMedium" style={{ color: accent }}>
+                ↑ {formatElevation(selected.ascentM)}
+              </Text>
+            </Text>
+          ) : (
+            <Text variant="titleMedium" style={{ color: dim }}>
+              No activities
+            </Text>
+          )}
+        </View>
 
-      <ActivityGraph
-        buckets={buckets}
-        selectedIndex={selectedIndex}
-        onSelect={(i) => setSelectedFromEnd(buckets.length - 1 - i)}
-        accent={accent}
-      />
-
-      {/* Period bottom-left, category bottom-right. */}
-      <View style={styles.selectorRow}>
-        <SegmentedButtons
-          value={period}
-          onValueChange={(v) => {
-            setPeriod(v as DashboardPeriod);
-            setSelectedFromEnd(null);
-          }}
-          density="small"
-          style={styles.periods}
-          buttons={[
-            { value: '7d', label: '7d', accessibilityLabel: 'Past 7 days' },
-            { value: '3m', label: '3m', accessibilityLabel: 'Past 3 months' },
-            { value: '1y', label: '1y', accessibilityLabel: 'Past year' },
-          ]}
+        <ActivityGraph
+          buckets={buckets}
+          selectedIndex={selectedIndex}
+          onSelect={(i) => setSelectedFromEnd(buckets.length - 1 - i)}
+          accent={accent}
         />
-        <Menu
-          visible={categoryMenuOpen}
-          onDismiss={() => setCategoryMenuOpen(false)}
-          anchor={
-            <Chip
-              icon={selectedCategory?.icon ?? 'filter-variant'}
-              compact
-              onPress={() => setCategoryMenuOpen(true)}
-              accessibilityLabel="Filter by category"
-            >
-              {selectedCategory?.name ?? 'All'}
-            </Chip>
-          }
-        >
-          <Menu.Item
-            title="All"
-            leadingIcon="filter-variant"
-            onPress={() => {
-              setCategoryId(null);
-              setCategoryMenuOpen(false);
+
+        {/* Period bottom-left, category bottom-right. */}
+        <View style={styles.selectorRow}>
+          <SegmentedButtons
+            value={period}
+            onValueChange={(v) => {
+              setPeriod(v as DashboardPeriod);
               setSelectedFromEnd(null);
             }}
+            density="small"
+            style={styles.periods}
+            buttons={[
+              { value: '7d', label: '7d', accessibilityLabel: 'Past 7 days' },
+              { value: '3m', label: '3m', accessibilityLabel: 'Past 3 months' },
+              { value: '1y', label: '1y', accessibilityLabel: 'Past year' },
+            ]}
           />
-          {allCategories([...customCategories]).map((c) => (
+          <Menu
+            visible={categoryMenuOpen}
+            onDismiss={() => setCategoryMenuOpen(false)}
+            anchor={
+              <Chip
+                icon={selectedCategory?.icon ?? 'filter-variant'}
+                compact
+                onPress={() => setCategoryMenuOpen(true)}
+                accessibilityLabel="Filter by category"
+              >
+                {selectedCategory?.name ?? 'All'}
+              </Chip>
+            }
+          >
             <Menu.Item
-              key={c.id}
-              title={c.name}
-              leadingIcon={c.icon}
+              title="All"
+              leadingIcon="filter-variant"
               onPress={() => {
-                setCategoryId(c.id);
+                setCategoryId(null);
                 setCategoryMenuOpen(false);
                 setSelectedFromEnd(null);
               }}
             />
-          ))}
-        </Menu>
-      </View>
+            {allCategories([...customCategories]).map((c) => (
+              <Menu.Item
+                key={c.id}
+                title={c.name}
+                leadingIcon={c.icon}
+                onPress={() => {
+                  setCategoryId(c.id);
+                  setCategoryMenuOpen(false);
+                  setSelectedFromEnd(null);
+                }}
+              />
+            ))}
+          </Menu>
+        </View>
 
-      <MonthCalendar
-        todayMs={now}
-        year={visibleMonth.year}
-        month={visibleMonth.month}
-        entries={monthEntries}
-        customCategories={customCategories}
-        onPrev={() => shiftMonth(-1)}
-        onNext={() => shiftMonth(1)}
-        canPrev={canPrevMonth()}
-        canNext={canNextMonth}
-        onDayPress={onDayPress}
-      />
+        <MonthCalendar
+          todayMs={now}
+          year={visibleMonth.year}
+          month={visibleMonth.month}
+          entries={monthEntries}
+          customCategories={customCategories}
+          onPrev={() => shiftMonth(-1)}
+          onNext={() => shiftMonth(1)}
+          canPrev={canPrevMonth()}
+          canNext={canNextMonth}
+          onDayPress={onDayPress}
+        />
 
-      {/* Running totals for the same (category-filtered) set the graph and
+        {/* Running totals for the same (category-filtered) set the graph and
           calendar show, with no 7d/3m/1y window. */}
-      <LifetimeSummary tracks={matching} customCategories={customCategories} />
+        <LifetimeSummary tracks={matching} customCategories={customCategories} />
 
-      <DayActivitiesDialog
-        title={
-          dayPick
-            ? `Activities on ${new Date(dayPick.dateMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
-            : null
-        }
-        tracks={dayPickTracks}
-        customCategories={customCategories}
-        onPick={(id) => {
-          setDayPick(null);
-          router.push(`/trail3d/${id}`);
-        }}
-        onDismiss={() => setDayPick(null)}
-      />
-    </ScrollView>
+        <DayActivitiesDialog
+          title={
+            dayPick
+              ? `Activities on ${new Date(dayPick.dateMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+              : null
+          }
+          tracks={dayPickTracks}
+          customCategories={customCategories}
+          onPick={(id) => {
+            setDayPick(null);
+            router.push(`/trail3d/${id}`);
+          }}
+          onDismiss={() => setDayPick(null)}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: 16, paddingBottom: 24, gap: 12 },
-  title: { fontWeight: '700' },
   readout: { minHeight: 52, gap: 2 },
   selectorRow: {
     flexDirection: 'row',

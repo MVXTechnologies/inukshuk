@@ -1,5 +1,6 @@
 import { StoreScreen } from '@features/store/StoreScreen';
 
-export default function SearchTab() {
+/** Maps: the map store (the old "Search" tab). */
+export default function MapsTab() {
   return <StoreScreen />;
 }

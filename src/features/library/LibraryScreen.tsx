@@ -1094,6 +1094,13 @@ export function LibraryScreen() {
             onPress={() => setNewFolderVisible(true)}
             accessibilityLabel="New folder"
           />
+          {/* Settings left the tab bar (revamp decision 6): a gear here and in
+              the Logbook header, plus a row in the map's "+" sheet. */}
+          <Appbar.Action
+            icon="cog-outline"
+            onPress={() => router.push('/settings')}
+            accessibilityLabel="Settings"
+          />
         </Appbar.Header>
       )}
 

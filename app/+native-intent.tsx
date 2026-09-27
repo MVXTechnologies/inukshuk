@@ -31,7 +31,7 @@ export async function redirectSystemPath({
   // the raw callback path must never reach routing as an Unmatched Route.
   if (handleStravaAuthRedirect(path)) {
     addBreadcrumb('strava oauth redirect received');
-    return '/(tabs)/settings';
+    return '/settings';
   }
   if (/^(content|file):\/\//i.test(path)) {
     addBreadcrumb('open-with intent received');
