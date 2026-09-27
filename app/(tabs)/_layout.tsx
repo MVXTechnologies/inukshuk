@@ -11,6 +11,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
+const TAB_COUNT = 4;
+
+/**
+ * The label React Navigation builds for a tab whose label is a plain string
+ * ("Library, tab, 2 of 4"). The label here is a render function (the active
+ * tab is heavier), which makes the library skip it, and iOS then merges the
+ * children's text instead. Kept identical so VoiceOver and the Maestro
+ * 'Library(, tab.*)?' selectors read what they always did.
+ */
+function tabA11yLabel(title: string, position: number): string {
+  return `${title}, tab, ${position} of ${TAB_COUNT}`;
+}
+
 /**
  * Map · Library · Maps · Logbook (revamp decision 6). Settings is not a tab:
  * it is a stack route reached from the Library and Logbook headers and the
@@ -27,8 +40,15 @@ export default function TabsLayout() {
   const recording = useRecorderStore((s) => s.status !== 'idle');
 
   const icon = (name: IconName) => {
+    // Hidden from accessibility: the glyph is an icon-font character, and
+    // left exposed it prefixes the tab's label ("󰉖, Library"), which breaks
+    // VoiceOver/TalkBack and every Maestro 'Library(, tab.*)?' selector.
     const TabIcon = ({ color, focused }: { color: ColorValue; focused: boolean }) => (
-      <View style={[styles.pill, focused && { backgroundColor: pill }]}>
+      <View
+        style={[styles.pill, focused && { backgroundColor: pill }]}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
         <MaterialCommunityIcons name={name} color={color} size={22} />
       </View>
     );
@@ -76,18 +96,37 @@ export default function TabsLayout() {
               : tabBar.tabBarStyle,
         })}
       >
-        <Tabs.Screen name="index" options={{ title: 'Map', tabBarIcon: icon('map-outline') }} />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Map',
+            tabBarIcon: icon('map-outline'),
+            tabBarAccessibilityLabel: tabA11yLabel('Map', 1),
+          }}
+        />
         <Tabs.Screen
           name="library"
-          options={{ title: 'Library', tabBarIcon: icon('folder-outline') }}
+          options={{
+            title: 'Library',
+            tabBarIcon: icon('folder-outline'),
+            tabBarAccessibilityLabel: tabA11yLabel('Library', 2),
+          }}
         />
         <Tabs.Screen
           name="maps"
-          options={{ title: 'Maps', tabBarIcon: icon('view-grid-plus-outline') }}
+          options={{
+            title: 'Maps',
+            tabBarIcon: icon('view-grid-plus-outline'),
+            tabBarAccessibilityLabel: tabA11yLabel('Maps', 3),
+          }}
         />
         <Tabs.Screen
           name="logbook"
-          options={{ title: 'Logbook', tabBarIcon: icon('notebook-outline') }}
+          options={{
+            title: 'Logbook',
+            tabBarIcon: icon('notebook-outline'),
+            tabBarAccessibilityLabel: tabA11yLabel('Logbook', 4),
+          }}
         />
       </Tabs>
       {recording && !onMap && (
