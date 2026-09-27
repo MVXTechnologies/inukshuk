@@ -18,6 +18,7 @@ import {
   formatDistance,
   formatDuration,
   formatElevation,
+  formatElevationChange,
   formatPace,
   formatSpeed,
 } from '@state/formatters';
@@ -131,7 +132,7 @@ export function RecordingPanel(props: Props) {
       case 'distance':
         return formatDistance(stats.distanceM);
       case 'gain':
-        return `+${formatElevation(stats.ascentM)}`;
+        return formatElevationChange(stats.ascentM, 'up');
       case 'speed':
         return formatSpeed(liveSpeedMps);
       case 'pace':
@@ -139,7 +140,7 @@ export function RecordingPanel(props: Props) {
       case 'altitude':
         return typeof lastPoint?.altitude === 'number' ? formatElevation(lastPoint.altitude) : '—';
       case 'descent':
-        return `−${formatElevation(stats.descentM)}`;
+        return formatElevationChange(stats.descentM, 'down');
       case 'moving':
         return formatDuration(stats.movingTimeS);
       case 'sunset': {
