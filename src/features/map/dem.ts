@@ -65,15 +65,19 @@ export interface Heightmap {
  * Fetch the free Terrarium DEM tiles covering `bounds`, decode their elevation,
  * and downsample to a `grid × grid` heightmap for a 3D mesh. Network-bound.
  */
-export async function fetchHeightmap(bounds: BoundingBox, grid = 256): Promise<Heightmap> {
+export async function fetchHeightmap(
+  bounds: BoundingBox,
+  grid = 256,
+  maxTilesPerSide = 6,
+): Promise<Heightmap> {
   // Allow more DEM tiles per side → a higher zoom level → finer elevation detail
   // (and a sharper basemap drape, which reuses the same tile range/zoom).
-  const z = pickTerrainZoom(bounds, 6);
+  const z = pickTerrainZoom(bounds, maxTilesPerSide);
   // pickTerrainZoom bottoms out at its zMin for very large boxes (a long
   // imported tour), where the range can still span dozens of tiles per side —
   // hundreds of downloads and an OOM-sized heightmap. Enforce the same budget
   // on the range we actually fetch, cropped around the box centre.
-  const range = clampTileRange(tileRangeForBbox(bounds, z), 6);
+  const range = clampTileRange(tileRangeForBbox(bounds, z), maxTilesPerSide);
   const fullW = (range.maxX - range.minX + 1) * TILE;
   const fullH = (range.maxY - range.minY + 1) * TILE;
   const full = new Float32Array(fullW * fullH);
@@ -120,6 +124,29 @@ export async function fetchHeightmap(bounds: BoundingBox, grid = 256): Promise<H
   }
 
   return { data, grid, bbox: rangeBbox(range), range, minH, maxH };
+}
+
+/**
+ * Warm the DEM tile cache for `bounds` at zoom `z` (no decoding): the tiles a
+ * pan is about to need are then on disk before the next compute asks for them.
+ * Capped at `maxTilesPerSide` around the centre; failures are ignored (it is
+ * only a head start — the real fetch retries).
+ */
+export async function prefetchDemTiles(
+  bounds: BoundingBox,
+  z: number,
+  maxTilesPerSide = 12,
+): Promise<void> {
+  const range = clampTileRange(tileRangeForBbox(bounds, z), maxTilesPerSide);
+  const jobs: Promise<unknown>[] = [];
+  for (let ty = range.minY; ty <= range.maxY; ty++) {
+    for (let tx = range.minX; tx <= range.maxX; tx++) {
+      jobs.push(
+        storage.downloadBytes(demUrl(z, tx, ty), `dem-${z}-${tx}-${ty}.png`).catch(() => undefined),
+      );
+    }
+  }
+  await Promise.all(jobs);
 }
 
 export interface BasemapTexture {
