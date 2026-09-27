@@ -71,6 +71,23 @@ export const WEATHER_ENABLED: boolean = false;
 export const MARINE_ENABLED: boolean = false;
 
 /**
+ * Vector "Stone & Paper" base map (OpenFreeMap / OpenMapTiles vector tiles
+ * styled by `@core/map/stoneStyle`) in place of the OSM raster for the
+ * `map` basemap. Relief and satellite stay raster; offline packs are
+ * untouched (they keep building raster styles, and the vector base only
+ * draws online — offline-only mode falls back to the raster packs).
+ *
+ * OFF — in development (docs/design/vector-basemap.md). Known gaps before
+ * this can flip: Atkinson glyphs are not hosted yet (labels use the Noto
+ * fallback from OpenFreeMap), there are no contours or sprites, and the
+ * offline-download story for vector tiles is an open owner decision.
+ *
+ * To preview: set this to `true`, pick the `map` basemap. That alone swaps
+ * the base (plus one OpenFreeMap TileJSON fetch per app session).
+ */
+export const VECTOR_BASEMAP_ENABLED: boolean = false;
+
+/**
  * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
  * constant so the menu copy and the e2e matchers can never drift apart.
  */

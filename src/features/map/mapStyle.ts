@@ -24,6 +24,9 @@ import {
   type ReferenceLineWidths,
 } from '@core/weather/weatherLook';
 import type { Feature, Polygon } from 'geojson';
+import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
+import { buildStoneLayers, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
+import { stoneScheme } from './stoneScheme';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -47,6 +50,9 @@ const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium
  */
 const OFM_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
+const OFM_BASE_ATTRIBUTION = '© OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
+/** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
+export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
 /**
  * Free, key-free raster base layers. Satellite/relief come from Esri's public
@@ -267,6 +273,15 @@ export interface OsmStyleOptions {
    * degrade). `soundings` needs glyphs, so it only draws when the labels
    * overlay resolved.
    */
+  /**
+   * The vector Stone & Paper base (`@core/map/stoneStyle`) — used in place of
+   * the OSM raster ONLY while `VECTOR_BASEMAP_ENABLED` is on and the basemap
+   * is `map`; ignored otherwise. `tiles` are the resolved OpenFreeMap
+   * templates (see `useOverlayLabelTiles` — native drops a TileJSON `url`).
+   * Callers leave it unset for offline packs and offline-only mode, which
+   * stay raster.
+   */
+  vectorBasemap?: { tiles: readonly string[]; dark: boolean };
   marineChart?: {
     wmsFallback: boolean;
     /**
@@ -465,6 +480,33 @@ export function buildOsmStyle(
     ],
   };
 
+  // Vector Stone & Paper base (flag-gated): swaps the paper backdrop + OSM
+  // raster for the vector source and the stone body layers; its labels go
+  // on after the hillshade, below.
+  const stone =
+    VECTOR_BASEMAP_ENABLED && basemap === 'map' && options.vectorBasemap
+      ? buildStoneLayers(stoneScheme(options.vectorBasemap.dark), {
+          source: VECTOR_BASEMAP_SOURCE,
+          // Atkinson glyphs aren't hosted yet — OpenFreeMap's Noto fallback.
+          fonts: STONE_FONTS_NOTO,
+        })
+      : null;
+  if (stone && options.vectorBasemap) {
+    delete style.sources.osm;
+    style.sources[VECTOR_BASEMAP_SOURCE] = {
+      type: 'vector',
+      tiles: [...options.vectorBasemap.tiles],
+      minzoom: 0,
+      maxzoom: 14,
+      attribution: OFM_BASE_ATTRIBUTION,
+    };
+    style.glyphs = OFM_GLYPHS_URL;
+    style.layers = [
+      ...stone.base,
+      ...style.layers.filter((l) => l.id !== 'background' && l.id !== 'osm'),
+    ];
+  }
+
   // The client-rendered depth-band drape and the spot soundings are NOT
   // declared here either: they are MapView children (`MarineChartLayers`),
   // so a re-anchored chart updates the image source in place instead of
@@ -536,6 +578,9 @@ export function buildOsmStyle(
     });
     style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
+
+  // Stone labels above the map body and its hillshade.
+  if (stone) style.layers.push(...stone.labels);
 
   // Weather-mode dim: a semi-opaque neutral BACKGROUND layer above the
   // basemap/overlay rasters and below the weather drape. `background` paints
