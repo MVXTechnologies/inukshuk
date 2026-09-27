@@ -1,17 +1,23 @@
-# Dashboard/profile view e2e (1.5.0): the period graph shows real data from
-# the suite's fixture trail, the period selector and category filter drive the
-# readout, and the month calendar taps through to the trail viewer.
+# Logbook (the old Dashboard) e2e: the lifetime totals and the "Distance per
+# week" chart show real data from the suite's fixture trail, the Week/Month/
+# Year segment and the "Activities by type" chips (which are the type filter)
+# drive the chart, and the month calendar taps through to the trail viewer.
 #
 # Portability notes:
 # - MUST run after category-record.yaml: its freshly recorded Run trail
-#   (recorded "today") is the fixture — deterministically inside every period
+#   (recorded "today") is the fixture — deterministically inside every chart
 #   window and on today's calendar cell.
-# - The tab (the old Dashboard) reads "Logbook", or "Logbook, tab, N of 4" on
-#   iOS; the regex covers both.
-# - The readout distance uses formatDistance ("N.N km" / "N m"); assert a
-#   loose distance regex, not an exact value (GPS fix jitter varies the sum).
+# - The tab reads "Logbook", or "Logbook, tab, N of 4" on iOS; the regex covers
+#   both.
+# - Distances use formatDistance ("N.N km" / "N m"); assert a loose distance
+#   regex, not an exact value (GPS fix jitter varies the sum).
+# - The type chips carry accessibilityLabel "<Type>, <n> activit(y|ies)".
 # - The negative filter case (Ski) proves the filter is real: the suite never
-#   records a Ski activity, so the readout must flip to "No activities".
+#   records a Ski activity, so the chart must flip to "No activities".
+# - Revamp step 8 (After-Logbook.html) changed the selectors: the old dot
+#   graph ("Activity graph", "Past 3 months"), the "Filter by category" menu and
+#   the readout were replaced by the chart card, the Week/Month/Year segment
+#   and the type chips; the calendar moved below "Recent", so it is scrolled to.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -35,25 +41,35 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Logbook(, tab.*)?'
 - extendedWaitUntil:
-    visible: 'Activity graph'
+    visible: 'Distance per week'
     timeout: 15000
-# Default readout: newest bucket holds today's fixture trail → real distance.
+# Lifetime totals carry today's fixture trail → a real distance.
 - assertVisible: '.*(km|\d+ m).*'
-# Period switch keeps a data-bearing readout (the trail is in every window).
-- tapOn: 'Past 3 months'
-- assertVisible: 'Activity graph'
-- assertVisible: '.*(km|\d+ m).*'
-# Category filter: the fixture is a Run.
-- tapOn: 'Filter by category'
+# The fixture is inside the 12-week window, so the chart is not empty.
+- assertNotVisible: 'No activities'
+# Period switch: months, still data-bearing.
+- tapOn: 'Month'
 - extendedWaitUntil:
-    visible: 'Trail Run'
+    visible: 'Distance per month'
     timeout: 10000
-- tapOn:
-    text: 'Run'
-    index: 0
-- assertVisible: '.*(km|\d+ m).*'
-# Calendar: today's cell carries at least one activity; tapping opens the
-# trail (single) or the picker (multiple — take the first row).
+- assertNotVisible: 'No activities'
+- tapOn: 'Week'
+- extendedWaitUntil:
+    visible: 'Distance per week'
+    timeout: 10000
+# Type filter: the fixture is a Run. Selecting Run keeps the chart populated.
+- tapOn: 'Run, [1-9]\d* activit.*'
+- assertNotVisible: 'No activities'
+# Clear the filter again (tap the selected chip).
+- tapOn: 'Run, [1-9]\d* activit.*'
+# Calendar (below Recent): today's cell carries at least one activity; tapping
+# opens the trail (single) or the picker (multiple — take the first row).
+- scrollUntilVisible:
+    element:
+      text: '.*: [1-9] activit.*'
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
 - tapOn: '.*: [1-9] activit.*'
 - runFlow:
     when:
@@ -71,14 +87,16 @@ appId: com.inukshuk.app
 # 'back' the Maestro command is Android-only.
 - tapOn: 'Back'
 - extendedWaitUntil:
-    visible: 'Activity graph'
+    visible: '.*: [1-9] activit.*'
     timeout: 15000
-# Negative filter: no Ski activity exists → empty readout, calendar intact.
-- tapOn: 'Filter by category'
-- extendedWaitUntil:
-    visible: 'Ski'
-    timeout: 10000
-- tapOn: 'Ski'
+# Negative filter: no Ski activity exists → the chart says so.
+- scrollUntilVisible:
+    element:
+      text: 'Ski, 0 activities'
+    direction: UP
+    timeout: 20000
+    centerElement: true
+- tapOn: 'Ski, 0 activities'
 - extendedWaitUntil:
     visible: 'No activities'
     timeout: 10000

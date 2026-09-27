@@ -1,4 +1,4 @@
-# Map store e2e: Search tab → sharded fixture catalog → "Around you" → category
+# Map store e2e: Search tab → sharded fixture catalog → "Near you" → category
 # → text search → download with the destination dialog → the map lands in the
 # Library.
 #
@@ -19,13 +19,16 @@
 # "Saint-Raymond — CanTopo 021L13", "Lac-Saint-Joseph — CanTopo 021L11") and
 # two nautical charts, all around Québec City, so:
 # - the landing shows Topo AND Nautical category cards;
-# - "Around you" has a cross-category mix to show (the emulator is geo-fixed to
+# - "Near you" has a cross-category mix to show (the emulator is geo-fixed to
 #   Québec by e2e-attempts.sh, and this flow re-sets the same point so the
 #   section does not depend on a GPS race);
-# - the section holds exactly NEARBY_ROWS = 5 rows, which is only true when the
-#   per-category cap adapts to the categories present (3 topo + 2 nautical).
+# - since the Maps-tab revamp the landing is grouped "Canadian sources first":
+#   "Near you · Canadian sources first" holds the 3 CanTopo sheets, then
+#   "Nearest US maps · across the border" holds the 2 NOAA charts
+#   (@core/catalog/nearbySections). Five rows in all, and the Canadian group
+#   is only 3 rows when the per-category cap adapts to what is present.
 #   That count is deliberate: it is what the shipped bug got wrong. A fixed cap
-#   of 2 renders 4 rows and drops 021L11, so the assertion below on the THIRD
+#   of 2 renders 2 topo rows and drops 021L11, so the assertion below on the THIRD
 #   topo sheet is what stands between that regression and users — in the
 #   production catalog, which is a single category, the same bug capped the
 #   whole section at 2 rows;
@@ -65,19 +68,19 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Maps(, tab.*)?'
     retryTapIfNoChange: true
-# "Around you" proves the whole sharded path on a device: index fetched,
+# "Near you" proves the whole sharded path on a device: index fetched,
 # shards ranked nearest-first, the two nearest fetched and merged — then the
 # nearest few items across BOTH categories, so a chart and a topo sheet share
 # the section (the per-category cap is what stops topo taking all the rows).
 - extendedWaitUntil:
-    visible: 'Around you.*'
+    visible: 'Near you.*'
     timeout: 40000
 - extendedWaitUntil:
     visible: '.*Chart 14771.*'
     timeout: 20000
 # All five rows: both charts and ALL THREE topo sheets. The third topo sheet
 # (021L11) is the row a fixed per-category cap of 2 silently drops — asserting
-# it here is what makes this flow able to catch the "Around you" regression at
+# it here is what makes this flow able to catch the "Near you" regression at
 # all. Scrolled into view because five cards plus the header can outrun a short
 # emulator screen; the section scrolls, the guard below re-checks we are still
 # on the landing.
@@ -91,15 +94,15 @@ appId: com.inukshuk.app
     timeout: 20000
     centerElement: true
 # Scroll back to the top of the landing: the guarded category tap below is
-# gated on "Around you" still being visible, and five rows are tall enough that
+# gated on "Near you" still being visible, and five rows are tall enough that
 # the scroll above can push the header off screen.
 - scrollUntilVisible:
     element:
-      text: 'Around you.*'
+      text: 'Near you.*'
     direction: UP
     timeout: 20000
     centerElement: true
-# The category grid sits BELOW "Around you", so scroll to it rather than
+# The category grid sits BELOW "Near you", so scroll to it rather than
 # assuming it is on screen. Matchers are anchored at the start ("Topo.*", not
 # ".*Topo.*"): a leading .* would also match the "… — CanTopo 021L14" rows
 # above and tap a map card instead of the category.
@@ -113,7 +116,7 @@ appId: com.inukshuk.app
 # Entering the Topo category shows all three fixture sheets (nearest-first).
 # The tap is GUARDED on still being on the landing, so a retry can never re-tap
 # once we are already inside. The guard is the appbar BACK ACTION — which only
-# exists once browsing a category — and NOT "Around you": that header scrolls
+# exists once browsing a category — and NOT "Near you": that header scrolls
 # out of view on the way down to the category grid now the section is five rows
 # tall, which silently turned the guard false and skipped this whole step.
 # A scroll-position-independent guard cannot fail that way.
@@ -175,9 +178,10 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: '.*added to Library.*'
     timeout: 60000
-# Dedup: the card now offers Open instead of Download.
+# Dedup: the row now offers the sage "Downloaded" (opens the map) instead of
+# Download. Was "Open" before the Maps-tab revamp (After-Maps.html).
 - extendedWaitUntil:
-    visible: 'Open'
+    visible: 'Downloaded.*'
     timeout: 10000
 # The downloaded sheet must be a regular Library map.
 - tapOn:

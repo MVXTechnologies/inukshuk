@@ -1,45 +1,52 @@
 import {
-  aggregateBuckets,
   calendarIndex,
   matchesCategoryFilter,
   type CalendarDayEntry,
-  type DashboardPeriod,
 } from '@core/dashboard/aggregate';
-import { allCategories, categoryColor, findCategory } from '@core/library/categories';
-import { formatDistance, formatDuration, formatElevation } from '@state/formatters';
+import {
+  countsByType,
+  distanceSeries,
+  recentActivities,
+  type ChartGranularity,
+} from '@core/dashboard/logbook';
+import { findCategory } from '@core/library/categories';
 import { useLibraryStore } from '@state/libraryStore';
+import { useSettingsStore } from '@state/settingsStore';
+import { space } from '@ui/tokens';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Appbar, Chip, Icon, Menu, SegmentedButtons, Text, useTheme } from 'react-native-paper';
-import { ActivityGraph } from './ActivityGraph';
+import { Appbar, Icon, Text, useTheme } from 'react-native-paper';
+import { ActivityTypeChips } from './ActivityTypeChips';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
-import { LifetimeSummary } from './LifetimeSummary';
+import { DistanceChart } from './DistanceChart';
+import { LifetimeCard } from './LifetimeCard';
 import { MonthCalendar } from './MonthCalendar';
+import { RecentActivityRow } from './RecentActivityRow';
 import { useDashboardClock } from './useDashboardClock';
 
+/** How many rows the Recent list shows. */
+const RECENT_ROWS = 5;
+
 /**
- * The profile/dashboard view (1.5.0): a Strava-like period graph (7d/3m/1y)
- * of the recorded activities with a scrubbable readout, category filtering,
- * and a month calendar that taps through to each trail. Everything derives
- * from the library's TrackSummary index — pure aggregation in
- * `@core/dashboard/aggregate`, nothing persisted.
+ * The Logbook tab (the old Dashboard; revamp `After-Logbook.html`, spec §7):
+ * lifetime totals, "Distance per week" (Week/Month/Year), "Activities by type"
+ * — which doubles as the type filter — the Recent list, and the month
+ * calendar that taps through to each trail. Everything derives from the
+ * library's TrackSummary index — pure aggregation in `@core/dashboard`,
+ * nothing persisted.
  */
 export function DashboardScreen() {
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const router = useRouter();
   const tracks = useLibraryStore((s) => s.tracks);
   const customCategories = useLibraryStore((s) => s.customCategories);
+  const units = useSettingsStore((s) => s.units);
 
-  const [period, setPeriod] = useState<DashboardPeriod>('7d');
+  const [granularity, setGranularity] = useState<ChartGranularity>('week');
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  // The graph's selected bucket, counted FROM THE END (newest = 0) so the
-  // default selection survives period switches without an effect. null =
-  // "auto": the newest bucket WITH data (a fresh dashboard reading "No
-  // activities" because today is empty was a terrible first impression),
-  // falling back to the newest bucket.
-  const [selectedFromEnd, setSelectedFromEnd] = useState<number | null>(null);
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const now = useDashboardClock();
   // Following the current month is the default; explicit browsing pins it.
   const [browsedMonth, setBrowsedMonth] = useState<{ year: number; month: number } | null>(null);
@@ -50,17 +57,9 @@ export function DashboardScreen() {
   const [dayPick, setDayPick] = useState<{ entry: CalendarDayEntry; dateMs: number } | null>(null);
 
   const buckets = useMemo(
-    () => aggregateBuckets(tracks, period, now, categoryId),
-    [tracks, period, now, categoryId],
+    () => distanceSeries(tracks, granularity, now, categoryId),
+    [tracks, granularity, now, categoryId],
   );
-  const autoFromEnd = (() => {
-    for (let i = buckets.length - 1; i >= 0; i--) {
-      if (buckets[i]!.trackIds.length > 0) return buckets.length - 1 - i;
-    }
-    return 0;
-  })();
-  const selectedIndex = Math.max(0, buckets.length - 1 - (selectedFromEnd ?? autoFromEnd));
-  const selected = buckets[selectedIndex];
 
   const monthEntries = useMemo(
     () => calendarIndex(tracks, visibleMonth.year, visibleMonth.month, categoryId),
@@ -75,34 +74,21 @@ export function DashboardScreen() {
     () => tracks.filter((t) => matchesCategoryFilter(t, categoryId)),
     [tracks, categoryId],
   );
+  const typeCounts = useMemo(() => countsByType(tracks), [tracks]);
+  const recent = useMemo(
+    () => recentActivities(tracks, categoryId, RECENT_ROWS),
+    [tracks, categoryId],
+  );
   // Back-navigation floor: the month of the oldest matching track.
   const oldest = useMemo(
     () => (matching.length > 0 ? Math.min(...matching.map((t) => t.startedAt)) : now),
     [matching, now],
   );
 
-  const accent = categoryColor(categoryId, customCategories) ?? theme.colors.primary;
   const selectedCategory = findCategory(categoryId, customCategories);
   const dim = theme.colors.onSurfaceVariant;
 
-  const weeklyBuckets = period !== '7d';
-  const bucketDateLabel = (startMs: number, endMs: number) => {
-    if (!weeklyBuckets) {
-      return new Date(startMs).toLocaleDateString(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
-    const a = new Date(startMs);
-    const b = new Date(endMs - 1);
-    const aTxt = a.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    const bTxt = b.toLocaleDateString(
-      undefined,
-      a.getMonth() === b.getMonth() ? { day: 'numeric' } : { month: 'short', day: 'numeric' },
-    );
-    return `${aTxt} – ${bTxt}`;
-  };
+  const openTrail = useCallback((id: string) => router.push(`/trail3d/${id}`), [router]);
 
   const canPrevMonth = () => {
     const floor = new Date(oldest);
@@ -140,8 +126,8 @@ export function DashboardScreen() {
   // Logbook header (the old Dashboard): Settings left the tab bar, so its
   // gear lives here and in the Library header (revamp decision 6).
   const header = (
-    <Appbar.Header>
-      <Appbar.Content title="Logbook" />
+    <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+      <Appbar.Content title="Logbook" titleStyle={styles.screenTitle} />
       <Appbar.Action
         icon="cog-outline"
         onPress={() => router.push('/settings')}
@@ -152,7 +138,7 @@ export function DashboardScreen() {
 
   if (!hasAnyActivity) {
     return (
-      <View style={styles.fill}>
+      <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
         {header}
         <View style={styles.empty}>
           <Icon source="chart-line-variant" size={48} color={dim} />
@@ -168,116 +154,65 @@ export function DashboardScreen() {
   }
 
   return (
-    <View style={styles.fill}>
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
       {header}
-      <ScrollView style={styles.fill} contentContainerStyle={[styles.content, { paddingTop: 8 }]}>
-        {/* Readout: the selected bucket's date, then distance · time · D+. */}
-        <View style={styles.readout}>
-          <Text variant="bodySmall" style={{ color: dim }}>
-            {selected ? bucketDateLabel(selected.startMs, selected.endMs) : ''}
-          </Text>
-          {selected && selected.trackIds.length > 0 ? (
-            <Text variant="titleMedium">
-              <Text variant="titleMedium" style={{ color: accent }}>
-                {formatDistance(selected.distanceM)}
-              </Text>
-              <Text variant="titleMedium" style={{ color: dim }}>
-                {'  ·  '}
-              </Text>
-              <Text variant="titleMedium" style={{ color: accent }}>
-                {selected.movingTimeS > 0 ? formatDuration(selected.movingTimeS) : '—'}
-              </Text>
-              <Text variant="titleMedium" style={{ color: dim }}>
-                {'  ·  '}
-              </Text>
-              <Text variant="titleMedium" style={{ color: accent }}>
-                ↑ {formatElevation(selected.ascentM)}
-              </Text>
-            </Text>
-          ) : (
-            <Text variant="titleMedium" style={{ color: dim }}>
-              No activities
-            </Text>
-          )}
-        </View>
-
-        <ActivityGraph
-          buckets={buckets}
-          selectedIndex={selectedIndex}
-          onSelect={(i) => setSelectedFromEnd(buckets.length - 1 - i)}
-          accent={accent}
-        />
-
-        {/* Period bottom-left, category bottom-right. */}
-        <View style={styles.selectorRow}>
-          <SegmentedButtons
-            value={period}
-            onValueChange={(v) => {
-              setPeriod(v as DashboardPeriod);
-              setSelectedFromEnd(null);
-            }}
-            density="small"
-            style={styles.periods}
-            buttons={[
-              { value: '7d', label: '7d', accessibilityLabel: 'Past 7 days' },
-              { value: '3m', label: '3m', accessibilityLabel: 'Past 3 months' },
-              { value: '1y', label: '1y', accessibilityLabel: 'Past year' },
-            ]}
+      <ScrollView style={styles.fill} contentContainerStyle={styles.content}>
+        <View style={styles.top}>
+          <LifetimeCard tracks={matching} units={units} typeName={selectedCategory?.name ?? null} />
+          <DistanceChart
+            buckets={buckets}
+            granularity={granularity}
+            onGranularityChange={setGranularity}
+            units={units}
           />
-          <Menu
-            visible={categoryMenuOpen}
-            onDismiss={() => setCategoryMenuOpen(false)}
-            anchor={
-              <Chip
-                icon={selectedCategory?.icon ?? 'filter-variant'}
-                compact
-                onPress={() => setCategoryMenuOpen(true)}
-                accessibilityLabel="Filter by category"
-              >
-                {selectedCategory?.name ?? 'All'}
-              </Chip>
-            }
-          >
-            <Menu.Item
-              title="All"
-              leadingIcon="filter-variant"
-              onPress={() => {
-                setCategoryId(null);
-                setCategoryMenuOpen(false);
-                setSelectedFromEnd(null);
-              }}
-            />
-            {allCategories([...customCategories]).map((c) => (
-              <Menu.Item
-                key={c.id}
-                title={c.name}
-                leadingIcon={c.icon}
-                onPress={() => {
-                  setCategoryId(c.id);
-                  setCategoryMenuOpen(false);
-                  setSelectedFromEnd(null);
-                }}
-              />
-            ))}
-          </Menu>
+          <ActivityTypeChips
+            counts={typeCounts}
+            customCategories={customCategories}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+          />
+          <Text accessibilityRole="header" style={[styles.caps, { color: tokens.inkMuted }]}>
+            RECENT
+          </Text>
         </View>
 
-        <MonthCalendar
-          todayMs={now}
-          year={visibleMonth.year}
-          month={visibleMonth.month}
-          entries={monthEntries}
-          customCategories={customCategories}
-          onPrev={() => shiftMonth(-1)}
-          onNext={() => shiftMonth(1)}
-          canPrev={canPrevMonth()}
-          canNext={canNextMonth}
-          onDayPress={onDayPress}
-        />
+        {recent.length === 0 ? (
+          <Text style={[styles.none, { color: tokens.inkMuted }]}>
+            {selectedCategory !== null
+              ? `No ${selectedCategory.name} activities yet.`
+              : 'No activities yet.'}
+          </Text>
+        ) : (
+          recent.map((track, i) => (
+            <View key={track.id}>
+              {i > 0 && <View style={[styles.divider, { backgroundColor: tokens.divider }]} />}
+              <RecentActivityRow
+                track={track}
+                units={units}
+                customCategories={customCategories}
+                onPress={openTrail}
+              />
+            </View>
+          ))
+        )}
 
-        {/* Running totals for the same (category-filtered) set the graph and
-          calendar show, with no 7d/3m/1y window. */}
-        <LifetimeSummary tracks={matching} customCategories={customCategories} />
+        <View style={styles.calendar}>
+          <Text accessibilityRole="header" style={[styles.caps, { color: tokens.inkMuted }]}>
+            CALENDAR
+          </Text>
+          <MonthCalendar
+            todayMs={now}
+            year={visibleMonth.year}
+            month={visibleMonth.month}
+            entries={monthEntries}
+            customCategories={customCategories}
+            onPrev={() => shiftMonth(-1)}
+            onNext={() => shiftMonth(1)}
+            canPrev={canPrevMonth()}
+            canNext={canNextMonth}
+            onDayPress={onDayPress}
+          />
+        </View>
 
         <DayActivitiesDialog
           title={
@@ -300,15 +235,13 @@ export function DashboardScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingBottom: 24, gap: 12 },
-  readout: { minHeight: 52, gap: 2 },
-  selectorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  periods: { maxWidth: 200 },
+  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
+  content: { paddingTop: 2, paddingBottom: space.xl },
+  top: { paddingHorizontal: space.lg, gap: 10 },
+  caps: { fontSize: 12, lineHeight: 16, fontWeight: '800', letterSpacing: 1, marginTop: 4 },
+  divider: { height: 1, marginLeft: 84 },
+  none: { paddingHorizontal: space.lg, paddingVertical: space.lg, fontSize: 14, lineHeight: 20 },
+  calendar: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.sm },
   empty: {
     flex: 1,
     alignItems: 'center',
