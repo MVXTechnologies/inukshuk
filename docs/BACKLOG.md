@@ -197,6 +197,17 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
   errors queue invisibly — resume = ask the 4 diagnostic questions, then
   TestFlight build 5 (rotated token + FPS overlay). Probe parked on branch
   `ios-perf-probe`.
-- **Garmin Connect sync + third-party hub** — Garmin's developer program is
-  being upgraded, no timeline. Full package parked on PR #171 (branch
-  `third-party-sync`); ships as 1.6.0 when thawed.
+- **Garmin Connect sync + third-party hub** — the official Connect
+  Developer Program answered negatively (upgrade, no timeline). New plan
+  (2026-09-27): sync through an unofficial Garmin Connect API library from
+  GitHub (username/password login, same endpoints as the web app) instead.
+  To assess before building: pick a maintained library (licence, activity
+  upload support), where the login runs (on device vs. our backend — never
+  store the user's Garmin password), rate limits / breakage risk when
+  Garmin changes its web API, and store-review wording. Reuse the hub UI
+  parked on PR #171 (branch `third-party-sync`).
+- **Strava — parked (2026-09-27).** Strava's API now needs a premium
+  (subscriber) account for users, so it isn't worth pursuing for now. OTA
+  updates no longer require the Strava keys (repo variable
+  `OTA_REQUIRED_EXTRA=none`); installs that take an update show the Strava
+  row disabled ("not configured in this build").
