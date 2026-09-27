@@ -1046,6 +1046,9 @@ export function MapScreen() {
   // its Start button actually begins the recording (owner ask: pick an
   // activity category BEFORE recording starts).
   const [pickingCategory, setPickingCategory] = useState(false);
+  // The empty Library's "Record a trail" opens the same start sheet.
+  const recordRequested = useMapStore((s) => s.recordRequested);
+  const setRecordRequested = useMapStore((s) => s.setRecordRequested);
 
   // --- Map maker (1.4.0): region box → options sheet → compose → Library ---
   // One session at a time; a cancelled/superseded run can't reset the UI (#309).
@@ -2391,12 +2394,16 @@ export function MapScreen() {
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}
       <CategoryStartSheet
-        visible={pickingCategory && status === 'idle'}
+        visible={(pickingCategory || recordRequested) && status === 'idle'}
         onStart={(categoryId) => {
           setPickingCategory(false);
+          setRecordRequested(false);
           startRecording(categoryId);
         }}
-        onDismiss={() => setPickingCategory(false)}
+        onDismiss={() => {
+          setPickingCategory(false);
+          setRecordRequested(false);
+        }}
       />
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />

@@ -44,6 +44,13 @@ interface MapState {
    * controls, like {@link focusBounds}.
    */
   focusWaypoint: { latitude: number; longitude: number } | null;
+  /**
+   * One-shot request (the empty Library's "Record a trail") for the map to
+   * open its record-start sheet. The map shows the sheet while this is set
+   * and clears it when the sheet starts or is dismissed.
+   */
+  recordRequested: boolean;
+  setRecordRequested: (requested: boolean) => void;
   setFollowUser: (follow: boolean) => void;
   toggleTrackOverlays: () => void;
   toggleTerrain3d: () => void;
@@ -63,6 +70,8 @@ export const useMapStore = create<MapState>((set) => ({
   mapCenter: null,
   focusBounds: null,
   focusWaypoint: null,
+  recordRequested: false,
+  setRecordRequested: (requested) => set({ recordRequested: requested }),
   setFocusBounds: (b) => set({ focusBounds: b }),
   setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),

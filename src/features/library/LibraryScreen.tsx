@@ -1,13 +1,6 @@
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import type { TrackSummary, Waypoint } from '@core/models';
+import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
-import {
-  formatDistance,
-  formatDuration,
-  formatElevation,
-  formatPace,
-  formatTimestamp,
-} from '@state/formatters';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useLibraryStore } from '@state/libraryStore';
@@ -17,19 +10,14 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
-import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Fragment, type ReactNode, useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
-  ActivityIndicator,
-  Appbar,
   Badge,
-  Banner,
   Button,
-  Card,
   Checkbox,
   Dialog,
   Divider,
-  FAB,
   Icon,
   IconButton,
   List,
@@ -38,11 +26,18 @@ import {
   Searchbar,
   Snackbar,
   Text,
-  TouchableRipple,
   useTheme,
 } from 'react-native-paper';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
+import {
+  shortDate,
+  showsKind,
+  trailCaption,
+  trailStatsLine,
+  typeCounts,
+  type LibraryTypeFilter,
+} from '@core/library/libraryRows';
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
@@ -53,10 +48,19 @@ import {
   renderStatusLine,
 } from '@core/library/overlayStatus';
 import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
+import { space, target } from '@ui/tokens';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
 import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
+import {
+  ContourTexture,
+  LibraryEmptyState,
+  SectionHeader,
+  TypeFilterChips,
+} from './components/LibraryChrome';
+import { MapRow, OnMapChip, RowDivider, TrailRow, WaypointRow } from './components/LibraryRows';
 import { pickAndImportGpxFiles } from './importGpx';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
@@ -96,10 +100,28 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
     },
   };
 
+/** Interleave rows with the indented row hairline. */
+function withDividers(rows: ReactNode[]): ReactNode[] {
+  return rows.map((row, i) => (
+    <Fragment key={i}>
+      {i > 0 && <RowDivider />}
+      {row}
+    </Fragment>
+  ));
+}
+
+/**
+ * The Library (revamp §5, boards `After-Library.html` / `After-Empty.html`):
+ * a header with Organize, sort/filter, the "+" import menu and Settings; the
+ * All · Trails · Maps · Waypoints chips; collapsible folder sections; 76 dp
+ * rows with route thumbnails; and a first-run empty state. Nothing floats
+ * over the list.
+ */
 export function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const theme = useTheme();
+  const tokens = useSchemeTokens();
 
   const maps = useLibraryStore((s) => s.maps);
   const tracks = useLibraryStore((s) => s.tracks);
@@ -128,7 +150,12 @@ export function LibraryScreen() {
   const renameWaypoint = useLibraryStore((s) => s.renameWaypoint);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
+  const setRecordRequested = useMapStore((s) => s.setRecordRequested);
   const stravaConnected = useStravaStore((s) => s.connection !== null);
+  const units = useSettingsStore((s) => s.units);
+  // "Now" for the row dates ("Aug 29" this year, with the year otherwise).
+  // Captured once per mount: a date caption never needs a live clock.
+  const [nowMs] = useState(() => Date.now());
 
   const [busy, setBusy] = useState(false);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
@@ -153,6 +180,11 @@ export function LibraryScreen() {
     id: string;
   } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // Organize mode (revamp §5): drag grips and folder rename/delete appear
+  // only here, like Files/Photos — the everyday list carries none of them.
+  const [organizing, setOrganizing] = useState(false);
+  // All · Trails · Maps · Waypoints. A view, not a preference: session-only.
+  const [typeFilter, setTypeFilter] = useState<LibraryTypeFilter>('all');
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [renamingTrack, setRenamingTrack] = useState<{ id: string; name: string } | null>(null);
@@ -168,8 +200,8 @@ export function LibraryScreen() {
   const selectionMode = selectedTrackIds.length > 0;
   // "Set category" dialog target (opened from a trail's ⋮ menu).
   const [categoryTarget, setCategoryTarget] = useState<string | null>(null);
-  // Trail filter (appbar filter icon). The criteria are built by the filter
-  // dialog; the pure predicate lives in @core/library/filterTracks.
+  // Trail filter (header sort/filter button). The criteria are built by the
+  // filter dialog; the pure predicate lives in @core/library/filterTracks.
   const [filter, setFilter] = useState<TrackFilter>({});
   const [filterOpen, setFilterOpen] = useState(false);
   const activeFilterCount = countActiveFilters(filter);
@@ -181,11 +213,12 @@ export function LibraryScreen() {
     setFilter(next);
     setSetting('librarySortKey', nextSort);
   };
-  // Trail search (appbar magnify icon). A query is not a preference: it is
-  // never persisted, and closing the field CLEARS it, so a library can never
-  // come back narrowed by a needle the user can no longer see — the same
-  // reasoning that keeps `filter` session-only, one step stricter because the
-  // search field, unlike the filter icon, has no badge once it is collapsed.
+  // Trail search (the magnifier at the end of the chip row). A query is not a
+  // preference: it is never persisted, and closing the field CLEARS it, so a
+  // library can never come back narrowed by a needle the user can no longer
+  // see — the same reasoning that keeps `filter` session-only, one step
+  // stricter because the search field, unlike the filter button, has no badge
+  // once it is collapsed.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searching = isSearchActive(searchQuery);
@@ -228,10 +261,18 @@ export function LibraryScreen() {
       ),
     [grouped],
   );
+  const chipCounts = typeCounts({
+    trails: tracks.length,
+    maps: maps.length,
+    waypoints: waypoints.length,
+  });
+  const showMaps = showsKind(typeFilter, 'maps') && !narrowed;
+  const showTrails = showsKind(typeFilter, 'trails');
+  const showWaypoints = showsKind(typeFilter, 'waypoints');
 
-  // Drag-and-drop moves: each card's grip handle drags a ghost chip onto a
-  // folder (or Ungrouped) header. The ⋮ move-to-folder menu remains for
-  // one-handed use. Handles render only once a folder exists.
+  // Drag-and-drop moves (Organize mode): each row's grip drags a ghost chip
+  // onto a folder (or Ungrouped) header. The ⋮ move-to-folder menu remains
+  // for one-handed use. Grips render only once a folder exists.
   const {
     dragging,
     hovered: dragHovered,
@@ -250,14 +291,15 @@ export function LibraryScreen() {
       showSnack(folderName === null ? 'Removed from folder' : `Moved to "${folderName}"`);
     },
   });
+  const hasFolders = folders.length > 0;
   const dragHandle = (item: DragItem) =>
-    hasFolders ? (
+    hasFolders && organizing ? (
       <View
         style={styles.dragHandle}
         {...handleProps(item)}
         accessibilityLabel={`Drag ${item.label} to a folder`}
       >
-        <Icon source="drag-vertical" size={20} color={theme.colors.onSurfaceVariant} />
+        <Icon source="drag-vertical" size={22} color={tokens.inkMuted} />
       </View>
     ) : null;
 
@@ -310,6 +352,13 @@ export function LibraryScreen() {
   // viewer now, not the map's inspect panel.
   const trimTrack = (id: string) => {
     router.push(`/trail3d/${id}?trim=1`);
+  };
+
+  // Empty state: "Record a trail" hands the map a one-shot request to open
+  // its record-start sheet; "Browse maps near you" opens the Maps tab.
+  const recordFromEmpty = () => {
+    setRecordRequested(true);
+    router.navigate('/');
   };
 
   // Waypoint editor (same dialog + libraryStore semantics as tapping a pin on
@@ -437,108 +486,144 @@ export function LibraryScreen() {
     showSnack(describeUploadOutcome(outcome, t.name));
   };
 
-  const sectionHeader = (
-    key: string,
-    title: string,
-    action?: ReactNode,
-    dropTarget?: string | null,
-  ) => (
-    <TouchableRipple onPress={() => toggleSection(key)} accessibilityRole="button">
-      <View
-        ref={dropTarget === undefined ? undefined : registerTarget(dropTarget)}
-        style={[
-          styles.sectionHeaderRow,
-          dropTarget !== undefined &&
-            dragging !== null &&
-            dragHovered === dropTarget && {
-              backgroundColor: theme.colors.secondaryContainer,
-              borderRadius: 8,
-            },
-        ]}
-      >
-        <View style={styles.sectionHeaderLeft}>
-          <Icon
-            source={collapsed[key] ? 'chevron-right' : 'chevron-down'}
-            size={24}
-            color={theme.colors.onSurface}
-          />
-          <Text variant="titleSmall" style={styles.sectionTitle}>
-            {title}
-          </Text>
-        </View>
-        {action}
-      </View>
-    </TouchableRipple>
+  // A section header that is also a drop target for Organize-mode drags
+  // (`dropTarget`: a folder id, or null for Ungrouped).
+  const sectionHeader = ({
+    key,
+    title,
+    count,
+    first,
+    actions,
+    dropTarget,
+  }: {
+    key: string;
+    title: string;
+    count: string;
+    first?: boolean;
+    actions?: ReactNode;
+    dropTarget?: string | null;
+  }) => (
+    <SectionHeader
+      title={title}
+      count={count}
+      first={first}
+      collapsed={collapsed[key] === true}
+      onToggle={() => toggleSection(key)}
+      actions={actions}
+      dropRef={dropTarget === undefined ? undefined : registerTarget(dropTarget)}
+      highlighted={dropTarget !== undefined && dragging !== null && dragHovered === dropTarget}
+    />
   );
 
-  // A per-card overflow menu for organization: moving the item into a folder
-  // (exclusive). The folder section only appears once a folder exists — a
-  // section of nothing but greyed-out placeholders is clutter, not guidance.
-  const itemMenu = (kind: 'map' | 'track', id: string, name: string, folderId?: string) => (
+  // The "Move to folder" block shared by every ⋮ menu. It only appears once a
+  // folder exists — a section of nothing but greyed-out placeholders is
+  // clutter, not guidance.
+  const moveToFolderItems = (
+    kind: 'map' | 'track' | 'waypoint',
+    id: string,
+    folderId: string | undefined,
+  ) =>
+    folders.length > 0 && (
+      <>
+        <Divider />
+        <Menu.Item disabled title="Move to folder" />
+        {folders.map((f) => (
+          <Menu.Item
+            key={f.id}
+            leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
+            title={f.name}
+            // Distinct from the folder section header's text (screen readers
+            // and the e2e driver would otherwise hit the header first).
+            accessibilityLabel={`Move to ${f.name}`}
+            onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
+          />
+        ))}
+        {folderId !== undefined && (
+          <Menu.Item
+            leadingIcon="folder-off-outline"
+            title="Remove from folder"
+            onPress={() => setItemFolder(kind, id, null)}
+          />
+        )}
+      </>
+    );
+
+  const menuAnchor = (kind: 'map' | 'track' | 'waypoint', id: string, label: string) => (
+    <IconButton
+      icon="dots-vertical"
+      size={22}
+      iconColor={tokens.inkMuted}
+      style={styles.menuButton}
+      onPress={() => setCardMenu({ kind, id })}
+      accessibilityLabel={label}
+    />
+  );
+
+  // A map's ⋮: rename, its page list, folders, delete. (The row itself opens
+  // the map; the "On map" chip shows/hides it.)
+  const mapMenu = (m: MapDocument, hasPages: boolean) => (
     <Menu
-      visible={cardMenu?.kind === kind && cardMenu.id === id}
+      visible={cardMenu?.kind === 'map' && cardMenu.id === m.id}
       onDismiss={() => setCardMenu(null)}
-      anchor={
-        <IconButton
-          icon="dots-vertical"
-          onPress={() => setCardMenu({ kind, id })}
-          accessibilityLabel="Organize"
-        />
-      }
+      // "Map options", not "Organize": the header's Organize button owns that name.
+      anchor={menuAnchor('map', m.id, 'Map options')}
     >
-      {/* First item, matching a trail's ⋮ → Rename. The rename is index-level
-          only: the stored file (the map's PDF) is never rewritten, so its own
-          embedded title is left alone — same reasoning as a trail's GPX. */}
+      {/* The rename is index-level only: the stored PDF is never rewritten,
+          so its own embedded title is left alone — same as a trail's GPX. */}
       <Menu.Item
         leadingIcon="pencil-outline"
         title="Rename"
         onPress={() => {
           setCardMenu(null);
-          if (kind === 'map') setRenamingMap({ id, name });
-          else setRenamingTrack({ id, name });
+          setRenamingMap({ id: m.id, name: m.name });
         }}
       />
-      {folders.length > 0 && (
-        <>
-          <Menu.Item disabled title="Move to folder" />
-          {folders.map((f) => (
-            <Menu.Item
-              key={f.id}
-              leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
-              title={f.name}
-              // Distinct from the folder section header's text (screen readers
-              // and the e2e driver would otherwise hit the header first).
-              accessibilityLabel={`Move to ${f.name}`}
-              onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
-            />
-          ))}
-          {folderId !== undefined && (
-            <Menu.Item
-              leadingIcon="folder-off-outline"
-              title="Remove from folder"
-              onPress={() => setItemFolder(kind, id, null)}
-            />
-          )}
-          <Divider />
-        </>
+      {hasPages && (
+        <Menu.Item
+          leadingIcon="layers-outline"
+          title={expandedMap === m.id ? 'Hide overlay pages' : 'Overlay pages'}
+          accessibilityLabel="Overlay pages"
+          onPress={() => {
+            setCardMenu(null);
+            setExpandedMap(expandedMap === m.id ? null : m.id);
+          }}
+        />
       )}
+      {moveToFolderItems('map', m.id, m.folderId)}
+      <Divider />
       <Menu.Item
         leadingIcon="trash-can-outline"
-        title={kind === 'map' ? 'Delete map' : 'Delete trail'}
+        title="Delete map"
         onPress={() => {
           setCardMenu(null);
-          setConfirmDelete({ kind, id, name });
+          setConfirmDelete({ kind: 'map', id: m.id, name: m.name });
         }}
       />
     </Menu>
   );
 
-  const renderMapCard = (m: (typeof maps)[number]) => {
+  // "On map": every drawable page on, or all off. Pages that failed to render
+  // stay off when others can be shown; re-enabling a failed page is the
+  // Retry button's job (or the page list's).
+  const toggleMapOnMap = (m: MapDocument) => {
+    if (m.activePages.length > 0) {
+      for (const page of m.activePages) toggleMapPage(m.id, page);
+      return;
+    }
+    const pages = primaryGeoreferences(m.georeferences).map((g) => g.pageIndex);
+    const failed = new Set((m.renderRecoveryErrors ?? []).map((e) => e.pageIndex));
+    const healthy = pages.filter((p) => !failed.has(p));
+    for (const page of healthy.length > 0 ? healthy : pages.slice(0, 1)) {
+      toggleMapPage(m.id, page);
+    }
+  };
+
+  const renderMapRow = (m: MapDocument) => {
+    const primaries = primaryGeoreferences(m.georeferences);
     const hasPages = m.georeferences.length > 0;
     // Non-null when the map can never be drawn: no georeferencing at all, or a
-    // projection we could not resolve (#243). Shown INSTEAD of the counts —
-    // "1 page(s) · 1/1 shown" over a sheet the overlay silently skips is the
-    // exact lie this replaces.
+    // projection we could not resolve (#243). Shown INSTEAD of the size and
+    // page counts, and the map gets no "On map" chip.
     const notice = georeferenceNotice(m);
     // "Rendering page N…" / "Couldn't render page N: <reason>" — so a page
     // that never appears on the map always says why, here, not only in a
@@ -551,76 +636,43 @@ export function LibraryScreen() {
         overlayStatuses[overlayDetailStatusKey(key)]?.phase === 'rendering'
       );
     });
-    const active = m.activePages.length;
-    const expanded = expandedMap === m.id;
     return (
-      <Card key={m.id} style={styles.trackCard} mode="contained">
-        <View style={styles.trackRow}>
-          {dragHandle({ kind: 'map', id: m.id, label: m.name })}
-          <Pressable
-            style={styles.trackMain}
-            onPress={() => openMap(m.id)}
-            accessibilityLabel={`${m.name} — view on map`}
-          >
-            {rendering ? (
-              <ActivityIndicator
-                size={22}
-                color={theme.colors.primary}
-                accessibilityLabel={`Rendering ${m.name}`}
-              />
-            ) : (
-              <Icon source="map" size={22} color={theme.colors.onSurfaceVariant} />
-            )}
-            <View style={styles.mapTitleCol}>
-              <Text variant="titleSmall" numberOfLines={1}>
-                {m.name}
-              </Text>
-              {/* A map that cannot be drawn must SAY so: the raw parser
-                  warning was jargon and was simply absent on some documents,
-                  which rendered as a blank line under the name — a map that
-                  can never be drawn and never explains why (#236, #243). */}
-              <Text
-                variant="bodySmall"
-                numberOfLines={notice ? 2 : 1}
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                {notice ??
-                  `${m.pageCount} page(s) · ${active}/${primaryGeoreferences(m.georeferences).length} shown`}
-              </Text>
-              {renderStatus && (
-                <Text
-                  variant="bodySmall"
-                  numberOfLines={2}
-                  style={{
-                    color:
-                      renderStatus.kind === 'failed'
-                        ? theme.colors.error
-                        : theme.colors.onSurfaceVariant,
-                  }}
-                >
-                  {renderStatus.text}
-                </Text>
-              )}
-            </View>
-          </Pressable>
-          {hasPages && (
-            <IconButton
-              icon={expanded ? 'chevron-up' : 'chevron-down'}
-              size={22}
-              onPress={() => setExpandedMap(expanded ? null : m.id)}
-              accessibilityLabel="Overlay pages"
+      <MapRow
+        key={m.id}
+        map={m}
+        title={m.pageCount > 1 ? `${m.name} · ${m.pageCount} pages` : m.name}
+        notice={notice}
+        pagesLine={
+          primaries.length > 1 ? `${m.activePages.length}/${primaries.length} pages on map` : null
+        }
+        status={
+          renderStatus ? { text: renderStatus.text, failed: renderStatus.kind === 'failed' } : null
+        }
+        rendering={rendering}
+        renderingLabel={`Rendering ${m.name}`}
+        accessibilityLabel={`${m.name} — view on map`}
+        onPress={() => openMap(m.id)}
+        leading={dragHandle({ kind: 'map', id: m.id, label: m.name })}
+        toggle={
+          notice === null && hasPages ? (
+            <OnMapChip
+              on={m.activePages.length > 0}
+              name={m.name}
+              onToggle={() => toggleMapOnMap(m)}
             />
-          )}
-          {itemMenu('map', m.id, m.name, m.folderId)}
-        </View>
+          ) : null
+        }
+        trailing={mapMenu(m, hasPages)}
+      >
         {m.renderRecoveryErrors?.map((error) => (
-          <Card.Content key={`recovery-${error.pageIndex}`}>
+          <View key={`recovery-${error.pageIndex}`} style={styles.rowExtra}>
             <Text variant="bodySmall" style={{ color: theme.colors.error }}>
               {error.reason === 'interrupted'
                 ? `Page ${error.pageIndex + 1}: Rendering was interrupted. This page was turned off to keep other maps available.`
                 : `Page ${error.pageIndex + 1}: ${error.message} This page was turned off to keep other maps available.`}
             </Text>
             <Button
+              style={styles.retry}
               accessibilityLabel={`Retry page ${error.pageIndex + 1} of ${m.name}`}
               onPress={() => {
                 try {
@@ -633,10 +685,10 @@ export function LibraryScreen() {
             >
               Retry
             </Button>
-          </Card.Content>
+          </View>
         ))}
-        {hasPages && expanded && (
-          <Card.Content>
+        {hasPages && expandedMap === m.id && (
+          <View style={styles.rowExtra}>
             <Text variant="labelMedium" style={styles.overlayLabel}>
               Show as overlay
             </Text>
@@ -649,8 +701,8 @@ export function LibraryScreen() {
                 Material box draws both states on both platforms.
                 labelStyle keeps the label beside its box: `position="leading"`
                 makes Paper right-align the label, which parked it against the
-                far edge of the card. */}
-            {primaryGeoreferences(m.georeferences).map((g) => (
+                far edge of the row. */}
+            {primaries.map((g) => (
               <Checkbox.Item
                 key={g.pageIndex}
                 mode="android"
@@ -662,29 +714,19 @@ export function LibraryScreen() {
                 style={styles.checkboxItem}
               />
             ))}
-          </Card.Content>
+          </View>
         )}
-      </Card>
+      </MapRow>
     );
   };
 
-  // Full overflow menu for a trail: every secondary action plus folder/bundle
-  // membership, so the card itself only needs the profile-peek + this button.
-  // The organize sections only appear once a folder/bundle exists (same rule
-  // as itemMenu): placeholders like "No folders yet" were pure clutter.
-  const trackMenu = (t: (typeof tracks)[number]) => (
+  // Full overflow menu for a trail: every secondary action plus folder
+  // membership — the row itself only opens the trail (revamp §5).
+  const trackMenu = (t: TrackSummary) => (
     <Menu
       visible={cardMenu?.kind === 'track' && cardMenu.id === t.id}
       onDismiss={() => setCardMenu(null)}
-      anchor={
-        <IconButton
-          icon="dots-vertical"
-          size={22}
-          style={styles.trackAction}
-          onPress={() => setCardMenu({ kind: 'track', id: t.id })}
-          accessibilityLabel="More options"
-        />
-      }
+      anchor={menuAnchor('track', t.id, 'More options')}
     >
       <Menu.Item
         leadingIcon="pencil-outline"
@@ -702,12 +744,22 @@ export function LibraryScreen() {
           viewTrack(t.id);
         }}
       />
+      {/* The row's old chart button: an inline profile peek under the row. */}
+      <Menu.Item
+        leadingIcon="chart-areaspline"
+        title={expandedTrack === t.id ? 'Hide elevation profile' : 'Elevation profile'}
+        accessibilityLabel="Elevation profile"
+        onPress={() => {
+          setCardMenu(null);
+          toggleElevation(t.id);
+        }}
+      />
       <Menu.Item
         leadingIcon="share-variant"
         title="Share GPX"
         onPress={() => {
           setCardMenu(null);
-          shareTrack(t.fileUri);
+          void shareTrack(t.fileUri);
         }}
       />
       {stravaConnected && (
@@ -716,7 +768,7 @@ export function LibraryScreen() {
           title="Send to Strava"
           onPress={() => {
             setCardMenu(null);
-            sendToStrava(t);
+            void sendToStrava(t);
           }}
         />
       )}
@@ -746,28 +798,7 @@ export function LibraryScreen() {
           setCategoryTarget(t.id);
         }}
       />
-      {folders.length > 0 && (
-        <>
-          <Divider />
-          <Menu.Item disabled title="Move to folder" />
-          {folders.map((f) => (
-            <Menu.Item
-              key={f.id}
-              leadingIcon={t.folderId === f.id ? 'folder-check' : 'folder-outline'}
-              title={f.name}
-              accessibilityLabel={`Move to ${f.name}`}
-              onPress={() => setItemFolder('track', t.id, t.folderId === f.id ? null : f.id)}
-            />
-          ))}
-          {t.folderId !== undefined && (
-            <Menu.Item
-              leadingIcon="folder-off-outline"
-              title="Remove from folder"
-              onPress={() => setItemFolder('track', t.id, null)}
-            />
-          )}
-        </>
-      )}
+      {moveToFolderItems('track', t.id, t.folderId)}
       <Divider />
       <Menu.Item
         leadingIcon="trash-can-outline"
@@ -780,88 +811,39 @@ export function LibraryScreen() {
     </Menu>
   );
 
-  const renderTrackCard = (t: (typeof tracks)[number]) => {
-    const s = t.stats;
+  const renderTrackRow = (t: TrackSummary) => {
     const selected = selectedTrackIds.includes(t.id);
-    // Activity category: colored left border + icon; uncategorized stays
-    // neutral (no border, no icon). Colors are theme-safe (see categories.ts).
+    // Decision 7: the type is a badge on the thumbnail, a word in the caption
+    // and part of the spoken label — never colour alone.
     const category = findCategory(t.category, customCategories);
+    const stats = trailStatsLine(t.stats, units);
+    const caption = trailCaption(t.startedAt, category?.name ?? null, nowMs);
+    const spoken = [t.name, category?.name, shortDate(t.startedAt, nowMs), stats]
+      .filter((part): part is string => typeof part === 'string' && part.length > 0)
+      .join(', ');
     return (
-      <Card
+      <TrailRow
         key={t.id}
-        style={[
-          styles.trackCard,
-          category !== null && { borderLeftWidth: 4, borderLeftColor: category.color },
-          selected && { borderWidth: 2, borderColor: theme.colors.primary },
-        ]}
-        mode="contained"
+        track={t}
+        category={category}
+        stats={stats}
+        caption={caption}
+        // Long-press enters trail selection (for merging); while selecting,
+        // taps toggle membership instead of opening the trail.
+        accessibilityLabel={
+          selectionMode
+            ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
+            : `${spoken} — open 3D view, long-press to select`
+        }
+        onPress={() =>
+          selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
+        }
+        onLongPress={() => toggleTrackSelected(t.id)}
+        selecting={selectionMode}
+        selected={selected}
+        leading={dragHandle({ kind: 'track', id: t.id, label: t.name })}
+        trailing={trackMenu(t)}
       >
-        <View style={styles.trackRow}>
-          {dragHandle({ kind: 'track', id: t.id, label: t.name })}
-          <Pressable
-            style={styles.trackMain}
-            // Long-press enters trail selection (for merging); while selecting,
-            // taps toggle membership instead of opening the 3D view.
-            onPress={() =>
-              selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
-            }
-            onLongPress={() => toggleTrackSelected(t.id)}
-            accessibilityLabel={
-              selectionMode
-                ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
-                : `${t.name} — open 3D view, long-press to select`
-            }
-          >
-            {selectionMode && (
-              <Icon
-                source={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
-                size={22}
-                color={selected ? theme.colors.primary : theme.colors.onSurfaceVariant}
-              />
-            )}
-            {!selectionMode && category !== null && (
-              <Icon source={category.icon} size={22} color={category.color} />
-            )}
-            <View
-              style={[
-                styles.trackTitleCol,
-                (selectionMode || category !== null) && styles.trackTitleColSelecting,
-              ]}
-            >
-              <Text variant="titleSmall" numberOfLines={1}>
-                {t.name}
-              </Text>
-              <Text
-                variant="bodySmall"
-                numberOfLines={1}
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                {formatTimestamp(t.startedAt)}
-              </Text>
-              {/* One full-width stats line under the date (a right-hand stats
-                  column fights long titles for width). Untimed trails
-                  (navigation GPX) have no meaningful duration/pace — omitted. */}
-              <Text variant="labelSmall" numberOfLines={1}>
-                {[
-                  formatDistance(s.distanceM),
-                  ...(s.durationS > 0
-                    ? [formatDuration(s.durationS), formatPace(s.avgSpeedMps)]
-                    : []),
-                  `↑${formatElevation(s.ascentM)}`,
-                  `↓${formatElevation(s.descentM)}`,
-                ].join(' · ')}
-              </Text>
-            </View>
-          </Pressable>
-          <IconButton
-            icon={expandedTrack === t.id ? 'chevron-up' : 'chart-areaspline'}
-            size={22}
-            style={styles.trackAction}
-            onPress={() => toggleElevation(t.id)}
-            accessibilityLabel="Elevation profile"
-          />
-          {trackMenu(t)}
-        </View>
         {expandedTrack === t.id &&
           (elevationPreview?.points ? (
             <ElevationProfile
@@ -872,34 +854,26 @@ export function LibraryScreen() {
           ) : (
             <ActivityIndicator style={styles.loader} />
           ))}
-      </Card>
+      </TrailRow>
     );
   };
 
-  // ⋮ / long-press menu for a waypoint row: jump the map to the pin, or delete
-  // (through the same confirm flow as every other Library delete).
+  // ⋮ / long-press menu for a waypoint row: rename, jump the map to the pin,
+  // folders, or delete (through the same confirm flow as every other delete).
   const waypointMenu = (w: Waypoint) => (
     <Menu
       visible={cardMenu?.kind === 'waypoint' && cardMenu.id === w.id}
       onDismiss={() => setCardMenu(null)}
-      anchor={
-        <IconButton
-          icon="dots-vertical"
-          size={22}
-          onPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
-          // Distinct from the trail card's "More options": two buttons sharing
-          // one label is ambiguous for screen readers AND for Maestro, which
-          // could not resolve the trail menu once a saved waypoint was on
-          // screen (folders.yaml failed on main, 2026-08-10).
-          accessibilityLabel="Waypoint options"
-        />
-      }
+      // Distinct from the trail row's "More options": two buttons sharing one
+      // label is ambiguous for screen readers AND for Maestro, which could not
+      // resolve the trail menu once a saved waypoint was on screen
+      // (folders.yaml failed on main, 2026-08-10).
+      anchor={menuAnchor('waypoint', w.id, 'Waypoint options')}
     >
-      {/* Renaming without opening the note/photo form — the same shape as a
-          trail's ⋮ → Rename. The editor dialog grew its own Name field in
-          #232 (an inline TextInput, NOT a stacked NameDialog Portal over an
-          open Paper Dialog — that is the touch-swallow trap); this row is the
-          quick path from the list. */}
+      {/* Renaming without opening the note/photo form. The editor dialog grew
+          its own Name field in #232 (an inline TextInput, NOT a stacked
+          NameDialog Portal over an open Paper Dialog — that is the
+          touch-swallow trap); this row is the quick path from the list. */}
       <Menu.Item
         leadingIcon="pencil-outline"
         title="Rename"
@@ -916,28 +890,7 @@ export function LibraryScreen() {
           showWaypointOnMap(w);
         }}
       />
-      {folders.length > 0 && (
-        <>
-          <Divider />
-          <Menu.Item disabled title="Move to folder" />
-          {folders.map((f) => (
-            <Menu.Item
-              key={f.id}
-              leadingIcon={w.folderId === f.id ? 'folder-check' : 'folder-outline'}
-              title={f.name}
-              accessibilityLabel={`Move to ${f.name}`}
-              onPress={() => setItemFolder('waypoint', w.id, w.folderId === f.id ? null : f.id)}
-            />
-          ))}
-          {w.folderId !== undefined && (
-            <Menu.Item
-              leadingIcon="folder-off-outline"
-              title="Remove from folder"
-              onPress={() => setItemFolder('waypoint', w.id, null)}
-            />
-          )}
-        </>
-      )}
+      {moveToFolderItems('waypoint', w.id, w.folderId)}
       <Divider />
       <Menu.Item
         leadingIcon="trash-can-outline"
@@ -950,335 +903,409 @@ export function LibraryScreen() {
     </Menu>
   );
 
-  const renderWaypointCard = (w: Waypoint) => {
+  const renderWaypointRow = (w: Waypoint) => {
     const preview = notePreview(w.note);
     return (
-      <Card key={w.id} style={styles.trackCard} mode="contained">
-        <View style={styles.trackRow}>
-          {dragHandle({ kind: 'waypoint', id: w.id, label: w.label })}
-          <Pressable
-            style={styles.trackMain}
-            onPress={() => openWaypointEditor(w)}
-            onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
-            accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
-          >
-            <Icon source="map-marker" size={22} color={theme.colors.onSurfaceVariant} />
-            <View style={styles.mapTitleCol}>
-              <Text variant="titleSmall" numberOfLines={1}>
-                {w.label}
-              </Text>
-              {preview !== null && (
-                <Text
-                  variant="bodySmall"
-                  numberOfLines={1}
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  {preview}
-                </Text>
-              )}
-              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {formatTimestamp(w.createdAt)}
-              </Text>
-            </View>
-            {w.photoUri !== undefined && (
-              <Image source={{ uri: w.photoUri }} style={styles.waypointThumb} />
-            )}
-          </Pressable>
-          {waypointMenu(w)}
-        </View>
-      </Card>
+      <WaypointRow
+        key={w.id}
+        name={w.label}
+        detail={preview !== null ? `Waypoint · ${preview}` : 'Waypoint'}
+        caption={shortDate(w.createdAt, nowMs)}
+        photoUri={w.photoUri}
+        accessibilityLabel={`${w.label} — edit note and photo, long-press for more options`}
+        onPress={() => openWaypointEditor(w)}
+        onLongPress={() => setCardMenu({ kind: 'waypoint', id: w.id })}
+        leading={dragHandle({ kind: 'waypoint', id: w.id, label: w.label })}
+        trailing={waypointMenu(w)}
+      />
     );
   };
 
-  // Folder groups (cross-type: each folder shows its maps then its trails).
+  const emptyRow = (title: string, description: string) => (
+    <List.Item title={title} description={description} titleStyle={styles.emptyRowTitle} />
+  );
+
+  // Folder groups (cross-type: each folder shows its maps, trails, waypoints),
+  // narrowed to the selected type chip.
   const renderFolderGroups = () =>
-    grouped.groups.map((g) => {
+    grouped.groups.flatMap((g, index) => {
       const key = `folder:${g.folder.id}`;
-      const count = folderItemCount(g);
-      return (
-        <List.Section key={key}>
-          {sectionHeader(
+      const rows = [
+        // Trail filters and trail search are about trails — maps drop out of
+        // results while either narrowing is active.
+        ...(showMaps ? g.maps.map(renderMapRow) : []),
+        ...(showTrails ? g.tracks.map(renderTrackRow) : []),
+        ...(showWaypoints
+          ? (sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointRow)
+          : []),
+      ];
+      const count = typeFilter === 'all' ? folderItemCount(g) : rows.length;
+      // Under a type chip, a folder holding none of that type steps aside.
+      if (typeFilter !== 'all' && rows.length === 0 && !organizing) return [];
+      return [
+        <View key={key}>
+          {sectionHeader({
             key,
-            `${g.folder.name}${count ? ` (${count})` : ''}`,
-            <View style={styles.rowEnd}>
-              <IconButton
-                icon="pencil-outline"
-                size={20}
-                onPress={() => setRenamingFolder({ id: g.folder.id, name: g.folder.name })}
-                accessibilityLabel="Rename folder"
-              />
-              <IconButton
-                icon="trash-can-outline"
-                size={20}
-                onPress={() =>
-                  setConfirmDelete({ kind: 'folder', id: g.folder.id, name: g.folder.name })
-                }
-                accessibilityLabel="Delete folder"
-              />
-            </View>,
-            g.folder.id,
-          )}
-          {collapsed[key] ? null : count === 0 ? (
-            <List.Item
-              title="Empty folder"
-              description="Drag an item's grip here, or use its ⋮ menu"
-            />
-          ) : (
-            [
-              // Trail filters and trail search are about trails — maps drop
-              // out of results while either narrowing is active.
-              ...(narrowed ? [] : g.maps.map(renderMapCard)),
-              ...g.tracks.map(renderTrackCard),
-              ...(sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointCard),
-            ]
-          )}
-        </List.Section>
-      );
+            title: g.folder.name,
+            count: count ? `(${count})` : '',
+            first: index === 0,
+            dropTarget: g.folder.id,
+            actions: organizing ? (
+              <View style={styles.folderActions}>
+                <IconButton
+                  icon="pencil-outline"
+                  size={20}
+                  onPress={() => setRenamingFolder({ id: g.folder.id, name: g.folder.name })}
+                  accessibilityLabel="Rename folder"
+                />
+                <IconButton
+                  icon="trash-can-outline"
+                  size={20}
+                  onPress={() =>
+                    setConfirmDelete({ kind: 'folder', id: g.folder.id, name: g.folder.name })
+                  }
+                  accessibilityLabel="Delete folder"
+                />
+              </View>
+            ) : undefined,
+          })}
+          {collapsed[key]
+            ? null
+            : rows.length === 0
+              ? emptyRow(
+                  'Empty folder',
+                  organizing
+                    ? "Drag an item's grip here, or use its ⋮ menu"
+                    : 'Move items here from their ⋮ menu',
+                )
+              : withDividers(rows)}
+        </View>,
+      ];
     });
 
-  const hasFolders = folders.length > 0;
-  const ungroupedCount =
-    grouped.ungroupedMaps.length +
-    grouped.ungroupedTracks.length +
-    grouped.ungroupedWaypoints.length;
+  const ungroupedRows = [
+    ...(showMaps ? grouped.ungroupedMaps.map(renderMapRow) : []),
+    ...(showTrails ? grouped.ungroupedTracks.map(renderTrackRow) : []),
+    ...(showWaypoints ? sortedUngroupedWaypoints.map(renderWaypointRow) : []),
+  ];
+
+  const trailsCount = tracks.length
+    ? narrowed
+      ? `(${visibleTracks.length}/${tracks.length})`
+      : `(${tracks.length})`
+    : '';
+
+  // No folders yet: the familiar Maps / Recorded trails / Waypoints split.
+  const renderTypeSections = () => {
+    const sections: ReactNode[] = [];
+    if (showMaps) {
+      sections.push(
+        <View key="maps">
+          {sectionHeader({
+            key: 'maps',
+            title: 'Maps',
+            count: maps.length ? `(${maps.length})` : '',
+            first: sections.length === 0,
+          })}
+          {collapsed.maps
+            ? null
+            : maps.length === 0
+              ? emptyRow('No maps yet', 'Import a PDF map with +, or get one from the Maps tab')
+              : withDividers(maps.map(renderMapRow))}
+        </View>,
+      );
+    }
+    if (showTrails) {
+      sections.push(
+        <View key="trails">
+          {sectionHeader({
+            key: 'trails',
+            title: 'Recorded trails',
+            count: trailsCount,
+            first: sections.length === 0,
+          })}
+          {collapsed.trails
+            ? null
+            : tracks.length === 0
+              ? emptyRow('No trails yet', 'Record one on the map, or import a GPX file with +')
+              : visibleTracks.length === 0
+                ? // Two honest empty states, not one: a query that found
+                  // nothing says so, and quotes what was typed, instead of
+                  // blaming filters the user may not have set.
+                  // `library-filter` asserts on the filter wording.
+                  searching
+                  ? emptyRow(
+                      `No trails match “${searchQuery.trim()}”`,
+                      activeFilterCount > 0
+                        ? 'Try another word, or clear the filters too'
+                        : 'Try another word, or a folder name',
+                    )
+                  : emptyRow(
+                      'No trails match the filters',
+                      'Adjust or clear the filters from the sort and filter button',
+                    )
+                : withDividers(visibleTracks.map(renderTrackRow))}
+        </View>,
+      );
+    }
+    // Standalone waypoints (map "+" sheet). Hidden entirely while there are
+    // none, unless the Waypoints chip asked for them.
+    if (showWaypoints && (waypoints.length > 0 || typeFilter === 'waypoints')) {
+      sections.push(
+        <View key="waypoints">
+          {sectionHeader({
+            key: 'waypoints',
+            title: 'Waypoints',
+            count: waypoints.length ? `(${waypoints.length})` : '',
+            first: sections.length === 0,
+          })}
+          {collapsed.waypoints
+            ? null
+            : waypoints.length === 0
+              ? emptyRow('No waypoints yet', 'Add one on the map from its + sheet')
+              : withDividers(sortedWaypoints.map(renderWaypointRow))}
+        </View>,
+      );
+    }
+    return sections;
+  };
+
+  // First run: nothing at all in the Library.
+  const libraryEmpty =
+    maps.length === 0 && tracks.length === 0 && waypoints.length === 0 && !hasFolders;
+
+  const importMenu = (
+    <Menu
+      visible={importOpen}
+      onDismiss={() => setImportOpen(false)}
+      anchor={
+        busy ? (
+          <View style={styles.headerIcon}>
+            <ActivityIndicator accessibilityLabel="Importing" color={tokens.ink} />
+          </View>
+        ) : (
+          <IconButton
+            icon="plus"
+            size={26}
+            iconColor={tokens.ink}
+            style={styles.headerButton}
+            onPress={() => setImportOpen(true)}
+            // "Import" is also the e2e mount proof for this screen (heatmap.yaml).
+            accessibilityLabel="Import"
+          />
+        )
+      }
+    >
+      <Menu.Item
+        leadingIcon="map-marker-path"
+        title="Import GPX trail"
+        onPress={() => {
+          setImportOpen(false);
+          void onImportGpx();
+        }}
+      />
+      <Menu.Item
+        leadingIcon="map"
+        title="Import PDF map"
+        onPress={() => {
+          setImportOpen(false);
+          void onImport();
+        }}
+      />
+      <Divider />
+      <Menu.Item
+        leadingIcon="folder-plus-outline"
+        title="New folder"
+        onPress={() => {
+          setImportOpen(false);
+          setNewFolderVisible(true);
+        }}
+      />
+    </Menu>
+  );
+
+  const header = selectionMode ? (
+    // Trail selection mode (entered by long-pressing a trail row).
+    <View style={styles.header}>
+      <IconButton
+        icon="close"
+        iconColor={tokens.ink}
+        style={styles.headerButton}
+        onPress={() => setSelectedTrackIds([])}
+        accessibilityLabel="Exit selection"
+      />
+      <Text style={[styles.selectionTitle, { color: tokens.ink }]}>
+        {`${selectedTrackIds.length} selected`}
+      </Text>
+      <IconButton
+        icon="call-merge"
+        iconColor={tokens.ink}
+        style={styles.headerButton}
+        onPress={() => void onMergeSelected()}
+        disabled={selectedTrackIds.length < 2 || merging}
+        accessibilityLabel="Merge selected trails"
+      />
+    </View>
+  ) : (
+    <View style={styles.header}>
+      <Text
+        accessibilityRole="header"
+        numberOfLines={1}
+        // 360 dp phones: shrink a little rather than truncate "Library".
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        style={[styles.title, { color: tokens.ink }]}
+      >
+        Library
+      </Text>
+      {!libraryEmpty && (
+        <Pressable
+          onPress={() => setOrganizing((o) => !o)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: organizing }}
+          style={({ pressed }) => [styles.organize, pressed && styles.pressed]}
+        >
+          <Text style={[styles.organizeLabel, { color: tokens.ink }]}>
+            {organizing ? 'Done' : 'Organize'}
+          </Text>
+        </Pressable>
+      )}
+      {!libraryEmpty && (
+        // Sort & filter: the badge counts active criteria (distance, date,
+        // category, …) so a filtered-down list is never mistaken for a small
+        // library.
+        <View>
+          <IconButton
+            icon="filter-variant"
+            iconColor={tokens.ink}
+            style={styles.headerButton}
+            onPress={() => setFilterOpen(true)}
+            accessibilityLabel="Filter trails"
+          />
+          {activeFilterCount > 0 && (
+            <Badge size={16} style={styles.filterBadge}>
+              {activeFilterCount}
+            </Badge>
+          )}
+        </View>
+      )}
+      {/* Import is a header "+" menu: nothing floats over the list. */}
+      {importMenu}
+      {/* Settings left the tab bar (revamp decision 6): a gear here and in
+          the Logbook header, plus a row in the map's "+" sheet. */}
+      <IconButton
+        icon="cog-outline"
+        iconColor={tokens.ink}
+        style={styles.headerButton}
+        onPress={() => router.push('/settings')}
+        accessibilityLabel="Settings"
+      />
+    </View>
+  );
 
   return (
-    <View style={styles.fill}>
-      {selectionMode ? (
-        // Trail selection mode (entered by long-pressing a trail card).
-        <Appbar.Header>
-          <Appbar.Action
-            icon="close"
-            onPress={() => setSelectedTrackIds([])}
-            accessibilityLabel="Exit selection"
-          />
-          <Appbar.Content title={`${selectedTrackIds.length} selected`} />
-          <Appbar.Action
-            icon="call-merge"
-            onPress={() => void onMergeSelected()}
-            disabled={selectedTrackIds.length < 2 || merging}
-            accessibilityLabel="Merge selected trails"
-          />
-        </Appbar.Header>
-      ) : (
-        <Appbar.Header>
-          <Appbar.Content title="Library" />
-          {/* Search is a collapsible field, not a permanent Searchbar row: the
-              header already carries two icons and a standing search box would
-              cost every user vertical space for a control most of them use on
-              a library too small to need it. Collapsed = zero chrome. */}
-          <Appbar.Action
-            icon={searchOpen ? 'close' : 'magnify'}
-            onPress={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
-            accessibilityLabel={searchOpen ? 'Close search' : 'Search trails'}
-          />
-          {/* Trail filter: the badge counts active criteria (distance, date,
-              category, …) so a filtered-down list is never mistaken for a
-              small library. */}
-          <View>
-            <Appbar.Action
-              icon="filter-variant"
-              onPress={() => setFilterOpen(true)}
-              accessibilityLabel="Filter trails"
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
+      <View style={{ paddingTop: insets.top }}>
+        <ContourTexture variant="header" />
+        {header}
+        {!selectionMode &&
+          !libraryEmpty &&
+          (searchOpen ? (
+            <Searchbar
+              placeholder="Search trails"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onIconPress={closeSearch}
+              icon="arrow-left"
+              searchAccessibilityLabel="Close search"
+              autoFocus
+              // #235 — the search key is this field's iOS exit: the list is
+              // already live-filtered, so Return only needs to free the screen.
+              returnKeyType="search"
+              blurOnSubmit
+              onSubmitEditing={() => Keyboard.dismiss()}
+              style={styles.searchbar}
+              accessibilityLabel="Search trails by name or folder"
             />
-            {activeFilterCount > 0 && (
-              <Badge size={16} style={styles.filterBadge}>
-                {activeFilterCount}
-              </Badge>
-            )}
-          </View>
-          {/* Exporting the library lives in Settings → "Download your data"
-              (maps included); a second entry point here only duplicated it. */}
-          <Appbar.Action
-            icon="folder-plus-outline"
-            onPress={() => setNewFolderVisible(true)}
-            accessibilityLabel="New folder"
-          />
-          {/* Settings left the tab bar (revamp decision 6): a gear here and in
-              the Logbook header, plus a row in the map's "+" sheet. */}
-          <Appbar.Action
-            icon="cog-outline"
-            onPress={() => router.push('/settings')}
-            accessibilityLabel="Settings"
-          />
-        </Appbar.Header>
-      )}
-
-      {!selectionMode && searchOpen && (
-        <Searchbar
-          placeholder="Search trails"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onIconPress={closeSearch}
-          icon="arrow-left"
-          autoFocus
-          // #235 — the search key is this field's iOS exit: the list is
-          // already live-filtered, so Return only needs to free the screen.
-          returnKeyType="search"
-          blurOnSubmit
-          onSubmitEditing={() => Keyboard.dismiss()}
-          style={styles.searchbar}
-          accessibilityLabel="Search trails by name or folder"
-        />
-      )}
-
-      <ScrollView
-        ref={dragScrollRef}
-        scrollEnabled={dragging === null}
-        onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
-        scrollEventThrottle={32}
-        onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-      >
-        {maps.length === 0 && tracks.length === 0 && (
-          <Banner visible icon="map-search-outline" style={styles.banner}>
-            Import a georeferenced PDF map to get started, then record trails from the Map tab.
-          </Banner>
-        )}
-
-        {/* The folder layout has no per-section empty state (each folder just
-            renders its matches), so a search that found nothing needs one row
-            of its own — otherwise the screen is a wall of folder headers with
-            nothing under them and no explanation. */}
-        {hasFolders && searching && visibleTracks.length === 0 && (
-          <List.Item
-            title={`No trails match “${searchQuery.trim()}”`}
-            description="Try another word, or a folder name"
-          />
-        )}
-
-        {renderFolderGroups()}
-
-        {hasFolders
-          ? // With folders: one cross-type "Ungrouped" catch-all for leftovers.
-            ungroupedCount > 0 && (
-              <List.Section>
-                {sectionHeader('ungrouped', `Ungrouped (${ungroupedCount})`, undefined, null)}
-                {collapsed.ungrouped
-                  ? null
-                  : [
-                      ...(narrowed ? [] : grouped.ungroupedMaps.map(renderMapCard)),
-                      ...grouped.ungroupedTracks.map(renderTrackCard),
-                      ...sortedUngroupedWaypoints.map(renderWaypointCard),
-                    ]}
-              </List.Section>
-            )
-          : // No folders yet: keep the familiar Maps + Recorded-trails split.
-            [
-              // Trail filters and trail search are about trails: the Maps
-              // section steps aside entirely while either is narrowing.
-              ...(narrowed
-                ? []
-                : [
-                    <List.Section key="maps">
-                      {sectionHeader('maps', `Maps${maps.length ? ` (${maps.length})` : ''}`)}
-                      {collapsed.maps ? null : maps.length === 0 ? (
-                        <List.Item
-                          title="No maps yet"
-                          description="Tap the PDF icon to import one"
-                        />
-                      ) : (
-                        maps.map(renderMapCard)
-                      )}
-                    </List.Section>,
-                    <Divider key="maps-divider" />,
-                  ]),
-              <List.Section key="trails">
-                {sectionHeader(
-                  'trails',
-                  `Recorded trails${
-                    tracks.length
-                      ? narrowed
-                        ? ` (${visibleTracks.length}/${tracks.length})`
-                        : ` (${tracks.length})`
-                      : ''
-                  }`,
-                )}
-                {collapsed.trails ? null : tracks.length === 0 ? (
-                  <List.Item
-                    title="No trails yet"
-                    description="Record one from the Map tab, or import a GPX file via the Import button"
-                  />
-                ) : visibleTracks.length === 0 ? (
-                  // Two honest empty states, not one: a query that found
-                  // nothing says so, and quotes what was typed, instead of
-                  // blaming filters the user may not have set. `library-filter`
-                  // asserts on the filter wording, which is unchanged.
-                  searching ? (
-                    <List.Item
-                      title={`No trails match “${searchQuery.trim()}”`}
-                      description={
-                        activeFilterCount > 0
-                          ? 'Try another word, or clear the filters too'
-                          : 'Try another word, or a folder name'
-                      }
-                    />
-                  ) : (
-                    <List.Item
-                      title="No trails match the filters"
-                      description="Adjust or clear the filters from the appbar's filter icon"
-                    />
-                  )
-                ) : (
-                  visibleTracks.map(renderTrackCard)
-                )}
-              </List.Section>,
-            ]}
-
-        {/* Standalone waypoints (map "+" speed-dial). With folders, waypoints
-            live inside their folder groups / Ungrouped like everything else;
-            this flat section only renders in the no-folders layout. Hidden
-            entirely while there are none. */}
-        {!hasFolders && waypoints.length > 0 && (
-          <>
-            <Divider />
-            <List.Section>
-              {sectionHeader('waypoints', `Waypoints (${waypoints.length})`)}
-              {collapsed.waypoints ? null : sortedWaypoints.map(renderWaypointCard)}
-            </List.Section>
-          </>
-        )}
-      </ScrollView>
-
-      {/* The FAB sits in normal flow inside an absolutely-positioned wrapper.
-          If the FAB itself is the absolutely-positioned child of paper's Menu
-          anchor (a zero-sized measuring View), Android clips touches to that
-          0x0 wrapper and the FAB renders but is untouchable. Anchoring the
-          absolute position on the wrapper gives it real bounds, so taps land. */}
-      <View style={[styles.fabWrap, { bottom: insets.bottom + 16 }]}>
-        <Menu
-          visible={importOpen}
-          onDismiss={() => setImportOpen(false)}
-          anchor={
-            <FAB
-              icon="plus"
-              label="Import"
-              loading={busy}
-              onPress={() => setImportOpen(true)}
-              style={styles.fab}
+          ) : (
+            <TypeFilterChips
+              value={typeFilter}
+              counts={chipCounts}
+              onChange={setTypeFilter}
+              trailing={
+                // Search is a collapsible field, not a permanent row: collapsed
+                // it costs one icon at the end of the chips.
+                <IconButton
+                  icon="magnify"
+                  iconColor={tokens.ink}
+                  style={styles.headerButton}
+                  onPress={() => setSearchOpen(true)}
+                  accessibilityLabel="Search trails"
+                />
+              }
             />
-          }
-        >
-          <Menu.Item
-            leadingIcon="map"
-            title="Georeferenced map (PDF)"
-            onPress={() => {
-              setImportOpen(false);
-              void onImport();
-            }}
-          />
-          <Menu.Item
-            leadingIcon="map-marker-path"
-            title="GPX trail"
-            onPress={() => {
-              setImportOpen(false);
-              void onImportGpx();
-            }}
-          />
-        </Menu>
+          ))}
       </View>
+
+      {libraryEmpty ? (
+        <LibraryEmptyState
+          busy={busy}
+          onRecord={recordFromEmpty}
+          onImportGpx={() => void onImportGpx()}
+          onBrowseMaps={() => router.navigate('/maps')}
+        />
+      ) : (
+        <ScrollView
+          ref={dragScrollRef}
+          scrollEnabled={dragging === null}
+          onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={32}
+          onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
+          contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+        >
+          {organizing && !hasFolders && (
+            <Text style={[styles.hint, { color: tokens.inkMuted }]}>
+              Create a folder with + to group trails, maps and waypoints. Grips, rename and delete
+              for folders appear here.
+            </Text>
+          )}
+
+          {/* The folder layout has no per-section empty state (each folder just
+              renders its matches), so a search that found nothing needs one row
+              of its own — otherwise the screen is a wall of folder headers with
+              nothing under them and no explanation. */}
+          {hasFolders &&
+            searching &&
+            visibleTracks.length === 0 &&
+            emptyRow(
+              `No trails match “${searchQuery.trim()}”`,
+              'Try another word, or a folder name',
+            )}
+
+          {hasFolders ? (
+            <>
+              {renderFolderGroups()}
+              {/* With folders: one cross-type "Ungrouped" catch-all for leftovers. */}
+              {ungroupedRows.length > 0 && (
+                <View>
+                  {sectionHeader({
+                    key: 'ungrouped',
+                    title: 'Ungrouped',
+                    count: `(${ungroupedRows.length})`,
+                    first: grouped.groups.length === 0,
+                    dropTarget: null,
+                  })}
+                  {collapsed.ungrouped ? null : withDividers(ungroupedRows)}
+                </View>
+              )}
+            </>
+          ) : (
+            renderTypeSections()
+          )}
+        </ScrollView>
+      )}
 
       <DragGhost
         dragging={dragging}
@@ -1341,7 +1368,7 @@ export function LibraryScreen() {
           onSubmit={commitRenameWaypoint}
         />
 
-        {/* Single confirm flow for every destructive delete (map/trail/bundle/folder). */}
+        {/* Single confirm flow for every destructive delete (map/trail/folder/waypoint). */}
         <Dialog visible={confirmDelete !== null} onDismiss={() => setConfirmDelete(null)}>
           <Dialog.Title>{confirmDelete ? DELETE_COPY[confirmDelete.kind].title : ''}</Dialog.Title>
           <Dialog.Content>
@@ -1374,8 +1401,8 @@ export function LibraryScreen() {
         onSetPhoto={setWaypointPhoto}
       />
 
-      {/* Trail filter panel (appbar filter icon). Stays mounted so its draft
-          inputs survive close/reopen and keep matching the active filter. */}
+      {/* Trail filter panel (header sort/filter button). Stays mounted so its
+          draft inputs survive close/reopen and keep matching the active filter. */}
       <TrackFilterDialog
         visible={filterOpen}
         onDismiss={() => setFilterOpen(false)}
@@ -1396,37 +1423,49 @@ export function LibraryScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  banner: { marginBottom: 4 },
-  rowEnd: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sectionHeaderRow: {
+  // Board: 52 dp, 16 dp left / 4 dp right, 28/800 title then 48 dp actions.
+  header: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 8,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    gap: 2,
   },
-  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  sectionTitle: { fontWeight: '700', paddingVertical: 12 },
+  title: { flex: 1, fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
+  selectionTitle: { flex: 1, fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  organize: {
+    minHeight: target.min,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+  },
+  organizeLabel: { fontSize: 16, lineHeight: 20, fontWeight: '700' },
+  pressed: { opacity: 0.6 },
+  headerButton: { margin: 0, width: target.min, height: target.min },
+  headerIcon: {
+    width: target.min,
+    height: target.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadge: { position: 'absolute', top: 4, right: 4 },
+  searchbar: { marginHorizontal: space.md, marginVertical: space.xs },
+  menuButton: { margin: 0, width: 44, height: target.min },
+  dragHandle: {
+    width: 36,
+    height: target.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  folderActions: { flexDirection: 'row', alignItems: 'center' },
+  rowExtra: { paddingLeft: space.lg, paddingRight: space.lg, paddingBottom: space.sm },
+  retry: { alignSelf: 'flex-start' },
   overlayLabel: { marginBottom: 2, marginTop: 4 },
   checkboxItem: { paddingVertical: 0, paddingHorizontal: 0 },
   // Paper right-aligns a leading-position label; left-align it so "Page N"
   // reads as the label of the box next to it, not as a stray right-edge word.
   checkboxLabel: { textAlign: 'left', marginLeft: 4 },
-  trackCard: { marginHorizontal: 12, marginVertical: 6 },
   loader: { paddingVertical: 24 },
-  trackRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 2 },
-  dragHandle: { paddingVertical: 14, paddingRight: 6, marginLeft: -6 },
-  trackMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  // Single column: title, date, then one full-width stats line. (The old
-  // right-hand stats column fought long titles for width — see the crush bug.)
-  trackTitleCol: { flex: 1, paddingVertical: 6, paddingRight: 4 },
-  trackTitleColSelecting: { paddingLeft: 10 },
-  mapTitleCol: { flex: 1, paddingVertical: 8, paddingLeft: 10, paddingRight: 8 },
-  // Squeeze the profile-peek and ⋮ buttons together (IconButton's default
-  // margins pushed them apart and padded the card).
-  trackAction: { marginHorizontal: -2, marginVertical: 0 },
-  waypointThumb: { width: 44, height: 44, borderRadius: 8, marginRight: 4 },
-  fabWrap: { position: 'absolute', right: 16 },
-  fab: { borderRadius: 28 },
-  filterBadge: { position: 'absolute', top: 4, right: 4 },
-  searchbar: { marginHorizontal: 12, marginBottom: 4 },
+  hint: { paddingHorizontal: space.lg, paddingVertical: space.md, fontSize: 14, lineHeight: 20 },
+  emptyRowTitle: { fontWeight: '700' },
 });
