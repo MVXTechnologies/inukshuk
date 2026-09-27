@@ -69,7 +69,7 @@ appId: com.inukshuk.app
     timeout: 30000
 - hideKeyboard
 # Download → destination dialog (defaults to Ungrouped) → Add; skipped when a
-# previous run already imported the sheet (the card then offers Open).
+# previous run already imported the sheet (the row then offers "Downloaded").
 - runFlow:
     when:
       visible: 'Download'
@@ -85,7 +85,7 @@ appId: com.inukshuk.app
           visible: '.*added to Library.*'
           timeout: 120000
 - extendedWaitUntil:
-    visible: 'Open'
+    visible: 'Downloaded.*'
     timeout: 20000
 # --- Library: the sheet is a regular map and was NOT turned off ---
 - tapOn:

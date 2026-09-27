@@ -1,7 +1,7 @@
 import { filterCatalogItems } from '@core/catalog/filterCatalog';
 import { indexInstallStatus } from '@core/catalog/installStatus';
-import { nearbyCatalogItems } from '@core/catalog/nearby';
-import { catalogItemDistanceMeters, sortCatalogItems } from '@core/catalog/nearest';
+import { catalogItemDistanceMeters } from '@core/catalog/nearest';
+import { nearbySections, sortCatalogItemsCanadianFirst } from '@core/catalog/nearbySections';
 import {
   CATALOG_CATEGORIES,
   CATALOG_CATEGORY_LABELS,
@@ -14,14 +14,22 @@ import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
   Button,
   Chip,
+  Icon,
   Portal,
-  Searchbar,
   Snackbar,
   Text,
   useTheme,
@@ -29,7 +37,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
-import { CatalogItemCard } from './CatalogItemCard';
+import { radius, space, target } from '@ui/tokens';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { CatalogItemRow } from './CatalogItemRow';
 import { CategoryGrid } from './CategoryGrid';
 import { DestinationFolderDialog } from './DestinationFolderDialog';
 import {
@@ -39,13 +49,15 @@ import {
 } from './downloadCatalogItem';
 
 /**
- * The Search tab — a free-map store over the world catalog.
+ * The Maps tab — a free-map store over the world catalog (revamp
+ * `After-Maps.html`, spec §6).
  *
- * Lands on **"Around you"** (the nearest few items across every category, from
- * the last known position) above the category grid, so a user standing on a
- * shoreline sees the chart of that shoreline before anything else. With no
- * known position the section simply isn't there and the grid takes the whole
- * screen — browsing the world still works.
+ * Lands on **"Near you · Canadian sources first"**: the nearest Canadian
+ * sheets, then the nearest US quads "across the border", each nearest-first
+ * (`@core/catalog/nearbySections` — plain nearest-first showed only Maine quads
+ * from Québec City, where CanTopo has a hole). The category grid follows. With
+ * no known position the sections simply aren't there and the grid takes the
+ * whole screen — browsing the world still works.
  *
  * The catalog is sharded (`/catalog/v2/`): the screen only ever has the index
  * plus the shards nearest to wherever the user is looking, so opening the tab
@@ -58,9 +70,6 @@ import {
  * "Open"/"Update" instead of a second Download.
  */
 
-/** How many rows the landing's "Around you" section shows. */
-const NEARBY_ROWS = 5;
-
 /** Settle time before a query costs a digest lookup and a shard fetch. */
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -69,6 +78,7 @@ const keyExtractor = (item: CatalogItem) => item.id;
 
 export function StoreScreen() {
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -93,6 +103,7 @@ export function StoreScreen() {
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
 
   const lastKnownPosition = useSettingsStore((s) => s.lastKnownPosition);
+  const units = useSettingsStore((s) => s.units);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3500);
 
@@ -145,11 +156,11 @@ export function StoreScreen() {
     [items, deferredQuery, category],
   );
   const sorted = useMemo(
-    () => sortCatalogItems(filtered, lastKnownPosition),
+    () => sortCatalogItemsCanadianFirst(filtered, lastKnownPosition),
     [filtered, lastKnownPosition],
   );
-  const nearby = useMemo(
-    () => nearbyCatalogItems(items, lastKnownPosition, { limit: NEARBY_ROWS }),
+  const sections = useMemo(
+    () => nearbySections(items, lastKnownPosition),
     [items, lastKnownPosition],
   );
   const categoryCounts = useMemo(() => index?.categoryCounts ?? {}, [index]);
@@ -167,7 +178,7 @@ export function StoreScreen() {
   // re-renders on each download-progress tick.
   const installStatusById = useMemo(() => indexInstallStatus(items, maps), [items, maps]);
 
-  // Landing (Around you + category grid) until the user types or picks one.
+  // Landing (Near you + category grid) until the user types or picks one.
   //
   // Deliberately keyed on `deferredQuery`, not `query`: the list below derives
   // from the deferred copy, so switching on the LIVE query flips to the list
@@ -231,7 +242,7 @@ export function StoreScreen() {
 
   const renderCard = useCallback(
     (item: CatalogItem, distanceMeters: number | null) => (
-      <CatalogItemCard
+      <CatalogItemRow
         key={item.id}
         item={item}
         source={sourcesById.get(item.sourceId)}
@@ -244,6 +255,7 @@ export function StoreScreen() {
         progress={downloads[item.id]}
         expanded={expandedId === item.id}
         distanceMeters={distanceMeters}
+        units={units}
         onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
         onDownload={() => setPendingItem(item)}
         onUpdate={() => void startUpdate(item)}
@@ -252,7 +264,7 @@ export function StoreScreen() {
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers close over stable store actions
-    [sourcesById, installStatusById, maps, downloads, expandedId],
+    [sourcesById, installStatusById, maps, downloads, expandedId, units],
   );
 
   const renderItem = ({ item }: { item: CatalogItem }) =>
@@ -267,10 +279,10 @@ export function StoreScreen() {
   //
   // `renderCard`'s useCallback above buys nothing on a progress tick — it
   // closes over `downloads` and `expandedId`, which are exactly what changes
-  // then — it is there so the landing's "Around you" rows and the list rows
+  // then — it is there so the landing's "Near you" rows and the list rows
   // stay one code path. Cells therefore still re-render on every tick. Fixing
   // that for real needs the progress subscribed per row inside
-  // `CatalogItemCard` — a UI refactor, not a mechanical one, so not done here.
+  // `CatalogItemRow` — a UI refactor, not a mechanical one, so not done here.
   const listContentStyle = useMemo(
     () => [styles.listContent, { paddingBottom: insets.bottom + 24 }],
     [insets.bottom],
@@ -379,6 +391,8 @@ export function StoreScreen() {
     );
   };
 
+  const hasUsSection = sections.some((section) => section.country === 'US');
+
   const landing = () => {
     if (status !== 'ready' || chipCategories.length === 0) return emptyState();
     return (
@@ -386,24 +400,70 @@ export function StoreScreen() {
         contentContainerStyle={[styles.landing, { paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
-        {nearby.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text variant="titleMedium">Around you</Text>
-              <Button compact onPress={() => enterCategory(null)}>
-                See all
-              </Button>
-            </View>
-            <View style={styles.sectionRows}>
-              {nearby.map((entry) => renderCard(entry.item, entry.distanceMeters))}
-            </View>
+        {sections.map((section, sectionIndex) => (
+          <View key={section.country} style={styles.section}>
+            {sectionIndex === 0 ? (
+              <View style={styles.leadHeader}>
+                <Text accessibilityRole="header" style={[styles.leadTitle, { color: tokens.ink }]}>
+                  {section.title}
+                </Text>
+                {section.country === 'CA' && (
+                  <Text style={[styles.leadSubtitle, { color: tokens.inkMuted }]}>
+                    {hasUsSection
+                      ? 'Canadian sheets, sorted by distance. The nearest US maps follow.'
+                      : 'Canadian sheets, sorted by distance.'}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.subHeader, { borderTopColor: tokens.outlineVariant }]}>
+                <Text
+                  accessibilityRole="header"
+                  style={[styles.subTitle, { color: tokens.inkMuted }]}
+                >
+                  {section.title.toUpperCase()}
+                </Text>
+              </View>
+            )}
+            {section.entries.map((entry, i) => (
+              <View key={entry.item.id}>
+                {i > 0 && <View style={[styles.divider, { backgroundColor: tokens.divider }]} />}
+                {renderCard(entry.item, entry.distanceMeters)}
+              </View>
+            ))}
+          </View>
+        ))}
+        {hasUsSection && (
+          <View
+            style={[
+              styles.footnote,
+              {
+                backgroundColor: tokens.elevation.level1,
+                borderColor: tokens.outlineVariant,
+              },
+            ]}
+          >
+            <Icon source="information-outline" size={20} color={tokens.inkVariant} />
+            <Text style={[styles.footnoteText, { color: tokens.inkVariant }]}>
+              US Topo covers the United States only.
+            </Text>
           </View>
         )}
-        {nearby.length === 0 && lastKnownPosition === null && (
-          <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
-            Open the Map tab once to let “Around you” show what’s near.
+        {sections.length === 0 && lastKnownPosition === null && (
+          <Text style={[styles.hint, { color: tokens.inkMuted }]}>
+            Open the Map tab once to see the maps near you first.
           </Text>
         )}
+        <View
+          style={[styles.subHeader, styles.browseHeader, { borderTopColor: tokens.outlineVariant }]}
+        >
+          <Text accessibilityRole="header" style={[styles.subTitle, { color: tokens.inkMuted }]}>
+            BROWSE BY TYPE
+          </Text>
+          <Button compact onPress={() => enterCategory(null)}>
+            See all
+          </Button>
+        </View>
         <CategoryGrid
           categories={chipCategories}
           counts={categoryCounts}
@@ -414,8 +474,8 @@ export function StoreScreen() {
   };
 
   return (
-    <View style={styles.fill}>
-      <Appbar.Header>
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         {browsing && <Appbar.BackAction onPress={leaveList} />}
         <Appbar.Content
           title={
@@ -425,19 +485,45 @@ export function StoreScreen() {
                 ? 'All maps'
                 : 'Maps'
           }
+          titleStyle={browsing ? undefined : styles.screenTitle}
         />
       </Appbar.Header>
 
-      <Searchbar
-        placeholder="Search maps"
-        value={query}
-        onChangeText={setQuery}
-        // #235 — results are live-filtered; Return just puts the keyboard away.
-        returnKeyType="search"
-        blurOnSubmit
-        onSubmitEditing={() => Keyboard.dismiss()}
-        style={styles.searchbar}
-      />
+      <View
+        style={[
+          styles.search,
+          { backgroundColor: tokens.surface, borderColor: tokens.outlineVariant },
+        ]}
+      >
+        <Icon source="magnify" size={20} color={tokens.inkMuted} />
+        <TextInput
+          placeholder="Search maps"
+          placeholderTextColor={tokens.inkMuted}
+          accessibilityLabel="Search maps"
+          value={query}
+          onChangeText={setQuery}
+          // #235 — results are live-filtered; Return just puts the keyboard away.
+          returnKeyType="search"
+          submitBehavior="blurAndSubmit"
+          onSubmitEditing={() => Keyboard.dismiss()}
+          autoCorrect={false}
+          style={[
+            styles.searchInput,
+            { color: tokens.ink, fontFamily: theme.fonts.bodyLarge.fontFamily },
+          ]}
+        />
+        {query !== '' && (
+          <Pressable
+            onPress={() => setQuery('')}
+            hitSlop={target.compactHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            style={styles.clear}
+          >
+            <Icon source="close" size={20} color={tokens.inkMuted} />
+          </Pressable>
+        )}
+      </View>
 
       {fromCache && status === 'ready' && (
         <Text
@@ -497,6 +583,7 @@ export function StoreScreen() {
             }}
             onEndReachedThreshold={0.6}
             contentContainerStyle={listContentStyle}
+            ItemSeparatorComponent={RowDivider}
             keyboardShouldPersistTaps="handled"
             // Each row builds an SVG locator thumbnail, so the defaults
             // (initialNumToRender 10, windowSize 21) do far more work up front
@@ -546,25 +633,68 @@ export function StoreScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  searchbar: { marginHorizontal: 12, marginBottom: 8 },
+  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
+  search: {
+    marginHorizontal: space.lg,
+    marginTop: 2,
+    marginBottom: space.lg,
+    height: target.min,
+    borderRadius: target.min / 2,
+    borderWidth: 1,
+    paddingLeft: space.lg,
+    paddingRight: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: { flex: 1, minWidth: 0, height: 44, padding: 0, fontSize: 16 },
+  clear: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   chipRow: { flexGrow: 0 },
-  chipRowContent: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
+  chipRowContent: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.sm },
   chip: { marginRight: 0 },
-  cacheNote: { paddingHorizontal: 16, paddingBottom: 6 },
-  landing: { paddingTop: 2 },
-  section: { paddingBottom: 12 },
-  sectionHeader: {
+  cacheNote: { paddingHorizontal: space.lg, paddingBottom: 6 },
+  landing: { paddingTop: 0 },
+  section: { paddingBottom: space.xs },
+  leadHeader: { paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.xs },
+  leadTitle: { fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  leadSubtitle: { fontSize: 13, lineHeight: 18 },
+  subHeader: {
+    marginTop: space.xs,
+    paddingTop: 14,
+    paddingHorizontal: space.lg,
+    paddingBottom: 6,
+    borderTopWidth: 1,
+  },
+  browseHeader: {
+    marginTop: space.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 16,
-    paddingRight: 8,
-    paddingBottom: 4,
+    paddingRight: space.sm,
   },
-  sectionRows: { paddingHorizontal: 12, gap: 8 },
-  hint: { paddingHorizontal: 16, paddingBottom: 10 },
-  listContent: { paddingHorizontal: 12, gap: 8 },
+  subTitle: { fontSize: 13, lineHeight: 18, fontWeight: '800', letterSpacing: 0.8 },
+  divider: { height: 1, marginLeft: 84 },
+  footnote: {
+    marginTop: space.sm,
+    marginHorizontal: space.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  footnoteText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  hint: { paddingHorizontal: space.lg, paddingBottom: 10, fontSize: 13, lineHeight: 18 },
+  listContent: {},
   footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
 });
+
+/** Hairline between list rows, inset past the thumbnail (board: 84 dp). */
+function RowDivider() {
+  const tokens = useSchemeTokens();
+  return <View style={[styles.divider, { backgroundColor: tokens.divider }]} />;
+}
