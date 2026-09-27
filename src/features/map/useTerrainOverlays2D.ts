@@ -1,12 +1,14 @@
 import { bytesToBase64 } from '@core/encoding/base64';
 import { contourFeatures, type ContourFeatures } from '@core/geo/contours';
+import { coverageScaleChanged, padBounds, viewStillCovered } from '@core/geo/overlayCoverage';
 import { slopeOverlayRgba } from '@core/geo/terrainAnalysis';
 import * as storage from '@data/storage';
 import type { MapRef } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import UPNG from 'upng-js';
-import { fetchHeightmap } from './dem';
+import type { BoundingBox } from '@core/models';
+import { fetchHeightmap, prefetchDemTiles } from './dem';
 
 /**
  * The 2D map's terrain overlays: a slope-band raster (PNG draped via
@@ -15,11 +17,14 @@ import { fetchHeightmap } from './dem';
  * cached Terrarium DEM the 3D terrain uses and bound to the same persisted
  * settings — so 2D and 3D always show the same analysis.
  *
- * Recomputes when the camera settles on a new region (`boundsVersion`: the
- * host bumps it on EVERY onRegionDidChange — rotated/pitched cameras
- * included, their bounds just cover a larger trapezoid bbox) or when any
- * overlay setting changes. Results cover the DEM's tile-aligned bbox (≥ the
- * viewport), so small pans often need no recompute.
+ * The camera settling (`boundsVersion`: the host bumps it on EVERY
+ * onRegionDidChange — rotated/pitched cameras included, their bounds just
+ * cover a larger trapezoid bbox) or any overlay setting changing prompts a
+ * check. Each compute covers the viewport plus half a viewport on every side,
+ * and is KEPT while the view stays well inside it — so panning shows no cut
+ * edge and most pans cost nothing. Once computed, the DEM tiles for the next
+ * ring out are prefetched, so the eventual recompute doesn't wait on the
+ * network either.
  */
 
 /** ImageSource corners: [TL, TR, BR, BL] as [lng, lat]. */
@@ -32,10 +37,22 @@ export interface TerrainOverlays2D {
   error: string | null;
 }
 
-/** Pad the visible bounds so small pans stay inside the computed area. */
-const PAD = 0.15;
-/** Grid resolution for the analysis (256 ≙ the 3D terrain mesh grid). */
-const GRID = 256;
+/**
+ * Compute half a viewport beyond the screen on every side (2× the width and
+ * height), so a pan reveals already-drawn contours instead of a cut edge.
+ */
+const PAD = 0.5;
+/**
+ * Grid resolution for the analysis. The area is ~1.5× wider than the old
+ * 15 %-padded one, so the grid grows to match and keeps the same detail.
+ */
+const GRID = 384;
+/** DEM tiles per side for the bigger area (6 would drop a zoom level). */
+const MAX_TILES = 8;
+/** Recompute once the view gets within this fraction of its size of the covered edge. */
+const EDGE_MARGIN = 0.15;
+/** Prefetch the ring beyond the computed area (1.5 viewports on every side). */
+const PREFETCH_PAD = 1.5;
 /** Settle delay after a region change before fetching DEM tiles. */
 const DEBOUNCE_MS = 350;
 
@@ -61,7 +78,9 @@ export function useTerrainOverlays2D({
     error: null,
   });
   const reqIdRef = useRef(0);
-  const coveredRef = useRef<string>('');
+  // What the current result covers: its tile-aligned bbox and the settings it
+  // was computed with. Kept while the view stays well inside the bbox.
+  const coveredRef = useRef<{ bbox: BoundingBox; knobs: string } | null>(null);
 
   const enabled = active && (slopeOn || contoursOn);
 
@@ -74,7 +93,7 @@ export function useTerrainOverlays2D({
       // background. The stale state object is hidden by the `enabled` guard
       // on the return value below.
       reqIdRef.current += 1;
-      coveredRef.current = '';
+      coveredRef.current = null;
       return;
     }
     const reqId = ++reqIdRef.current;
@@ -83,27 +102,20 @@ export function useTerrainOverlays2D({
         const view = await mapRef.current?.getViewState().catch(() => undefined);
         if (!view || reqId !== reqIdRef.current) return;
         const [w, s, e, n] = view.bounds as [number, number, number, number];
-        const padLng = (e - w) * PAD;
-        const padLat = (n - s) * PAD;
-        const bounds = {
-          minLng: w - padLng,
-          minLat: s - padLat,
-          maxLng: e + padLng,
-          maxLat: n + padLat,
-        };
-        // Skip when the settled viewport and all knobs match the last compute.
-        const key = [
-          bounds.minLng.toFixed(4),
-          bounds.minLat.toFixed(4),
-          bounds.maxLng.toFixed(4),
-          bounds.maxLat.toFixed(4),
-          slopeOn,
-          contoursOn,
-          intervalM,
-          slopeMinDeg,
-          slopeMaxDeg,
-        ].join('|');
-        if (key === coveredRef.current) return;
+        const viewport: BoundingBox = { minLng: w, minLat: s, maxLng: e, maxLat: n };
+        const bounds = padBounds(viewport, PAD);
+        const knobs = [slopeOn, contoursOn, intervalM, slopeMinDeg, slopeMaxDeg].join('|');
+        // Keep the current result while the view is still well inside it, at
+        // a similar zoom, with the same settings: nothing new to draw.
+        const covered = coveredRef.current;
+        if (
+          covered !== null &&
+          covered.knobs === knobs &&
+          viewStillCovered(viewport, covered.bbox, EDGE_MARGIN) &&
+          !coverageScaleChanged(viewport, covered.bbox, PAD)
+        ) {
+          return;
+        }
 
         // The slope raster, PNG encode and contour extraction each block the
         // JS thread for a noticeable chunk on-device; yielding between stages
@@ -116,7 +128,7 @@ export function useTerrainOverlays2D({
         };
 
         try {
-          const hm = await fetchHeightmap(bounds, GRID);
+          const hm = await fetchHeightmap(bounds, GRID, MAX_TILES);
           if (reqId !== reqIdRef.current) return;
 
           let slope: TerrainOverlays2D['slope'] = null;
@@ -159,11 +171,13 @@ export function useTerrainOverlays2D({
           if (await stale()) return;
           const contours = contoursOn ? contourFeatures(hm, intervalM) : null;
           if (reqId !== reqIdRef.current) return;
-          coveredRef.current = key;
+          coveredRef.current = { bbox: hm.bbox, knobs };
           setState({ slope, contours, error: null });
+          // Head start for the next pan: cache the DEM tiles one ring out.
+          void prefetchDemTiles(padBounds(viewport, PREFETCH_PAD), hm.range.z);
         } catch (err) {
           if (reqId !== reqIdRef.current) return;
-          coveredRef.current = '';
+          coveredRef.current = null;
           setState({
             slope: null,
             contours: null,
