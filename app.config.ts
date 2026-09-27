@@ -11,12 +11,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.6.0: hardening. OTA updates follow a native fingerprint (so one can no
-  // longer reach a binary without its native code), PDF maps survive an iOS
-  // resume (loopback server probe + restart), library/settings writes are
-  // durable across a failed load, error reports are scrubbed, and the brand
-  // refresh (icon, splash, stone loader). Store build only: no OTA to 1.5.x.
-  version: '1.6.0',
+  // 1.7.0: UI revamp, first half (docs/design/ui-revamp): Stone & Paper
+  // tokens, Atkinson Hyperlegible Next embedded natively (new fingerprint:
+  // store build only), one app style, tabs Map · Library · Maps · Logbook,
+  // 48 dp map chrome, the three-state recording panel with hold-to-stop.
+  version: '1.7.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -28,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '9',
+    buildNumber: '10',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -65,8 +64,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // Play build 55 ships 1.6.0 (see the version note above).
-    versionCode: 55,
+    // Play build 56 ships 1.7.0 (see the version note above).
+    versionCode: 56,
     // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
     // is the background, the stone figure + contact shadow the foreground (inside
     // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed
