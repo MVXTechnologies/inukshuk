@@ -1,5 +1,6 @@
 // src/state/settingsStore.units.test.ts
 import { formatDistance } from '@state/formatters';
+import { SETTINGS_SCHEMA_VERSION } from '@core/library/migrations';
 import { useSettingsStore } from './settingsStore';
 
 jest.mock('@data/storage', () => ({
@@ -53,7 +54,7 @@ it('hydrates a legacy unversioned file (junk dropped) and writes back versioned'
   useSettingsStore.getState().set('units', 'metric');
   expect(storage.writeJson).toHaveBeenLastCalledWith(
     'settings.json',
-    expect.objectContaining({ schemaVersion: 2, units: 'metric' }),
+    expect.objectContaining({ schemaVersion: SETTINGS_SCHEMA_VERSION, units: 'metric' }),
   );
 });
 

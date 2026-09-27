@@ -5,7 +5,6 @@ import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migratio
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
-import type { UiStyle } from '@ui/theme';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
@@ -72,8 +71,11 @@ export interface Settings {
   units: Units;
   /** App theme: follow the OS ('system') or force light/dark. */
   themeMode: 'system' | 'light' | 'dark';
-  /** Visual identity: classic brand look, quiet minimal, or the pastel edge style. */
-  uiStyle: UiStyle;
+  /**
+   * Fold the map's right-hand controls behind one chevron until asked (the
+   * old Minimal style's rail, kept as a toggle when the styles were retired).
+   */
+  compactMapChrome: boolean;
   /** Checked marked-trail databases draped on the main map (empty = off). */
   markedTrailsNetworks: TrailNetworkId[];
   /**
@@ -190,7 +192,7 @@ const DEFAULTS: Settings = {
   offlineOnly: false,
   units: 'metric',
   themeMode: 'system',
-  uiStyle: 'classic',
+  compactMapChrome: false,
   markedTrailsNetworks: [],
   weatherLayer: null,
   weatherModel: DEFAULT_WEATHER_MODEL,
@@ -257,7 +259,7 @@ function snapshot(s: SettingsState): Settings {
     offlineOnly,
     units,
     themeMode,
-    uiStyle,
+    compactMapChrome,
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,
@@ -291,7 +293,7 @@ function snapshot(s: SettingsState): Settings {
     offlineOnly,
     units,
     themeMode,
-    uiStyle,
+    compactMapChrome,
     markedTrailsNetworks,
     weatherLayer,
     weatherModel,

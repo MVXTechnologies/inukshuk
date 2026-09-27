@@ -35,8 +35,7 @@ import { weatherChrome as wc } from './weatherChrome';
  * heads are thinned to a minimum pixel gap (`spacedIndices`) so long
  * timelines stay readable. Even timelines render identically to M1.
  *
- * Fixed dark chrome in BOTH themes (see weatherChrome.ts — the edgePill
- * precedent), and a plain View, not a paper Surface (the absolutely-
+ * Fixed dark chrome in BOTH themes (see weatherChrome.ts), and a plain View, not a paper Surface (the absolutely-
  * positioned Surface flex collapse on iOS).
  */
 export function WeatherTimeScrubber({

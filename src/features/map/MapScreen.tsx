@@ -311,10 +311,9 @@ export function MapScreen() {
   // outside the downloaded regions with an opaque theme-matched fill (white in
   // light mode, the app background in dark mode) — downloaded areas show
   // through holes in the mask; trails/markers/location still draw on top.
-  const uiStyle = useSettingsStore((s) => s.uiStyle);
-  // 'minimal' style: chevron-rail unfold state (the "+" actions button now
+  // Compact map chrome: chevron-rail unfold state (the "+" actions button
   // lives in the rail too, so it folds away with the rest of the controls).
-  const [minimalControlsOpen, setMinimalControlsOpen] = useState(false);
+  const [compactControlsOpen, setCompactControlsOpen] = useState(false);
   const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
   // transient play flag, and the scrubbable timeline that owns the drape's
@@ -530,8 +529,6 @@ export function MapScreen() {
   );
   const style = useMemo(() => {
     const options = {
-      // The 'edge' UI style washes the raster into pastels to match its chrome.
-      pastel: uiStyle === 'edge',
       // Marked-trail networks (network-only; hidden while offline-only).
       markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
       // Marine drapes ride the same offline-only rule.
@@ -606,7 +603,6 @@ export function MapScreen() {
     offlineRegions,
     theme.dark,
     theme.colors.background,
-    uiStyle,
     markedTrailsNetworks,
     marineLayers,
     marineActive,
@@ -2134,8 +2130,8 @@ export function MapScreen() {
                 }
               : undefined
           }
-          minimalOpen={minimalControlsOpen}
-          onMinimalOpenChange={setMinimalControlsOpen}
+          compactOpen={compactControlsOpen}
+          onCompactOpenChange={setCompactControlsOpen}
         />
       )}
 
