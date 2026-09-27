@@ -2017,13 +2017,14 @@ export function MapScreen() {
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
           <HeadingCone location={location} />
-          <UserLocation animated accuracy />
-          {/* Revamp puck: paper ring + puck blue over the default puck (whose
-              accuracy halo stays), plus the amber uncertainty ring on a weak
-              signal while recording. */}
-          <PuckLayers
-            weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
-          />
+          {/* Revamp puck, replacing MapLibre's default one (children do):
+              halo, ring and dot in the scheme's puck tokens, plus the amber
+              uncertainty ring on a weak signal while recording. */}
+          <UserLocation animated>
+            <PuckLayers
+              weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
+            />
+          </UserLocation>
         </Map>
       )}
 

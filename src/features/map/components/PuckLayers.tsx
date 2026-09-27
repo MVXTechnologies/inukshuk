@@ -1,4 +1,4 @@
-import { Layer } from '@maplibre/maplibre-react-native';
+import { Layer, useCurrentPosition } from '@maplibre/maplibre-react-native';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 
 /** maplibre-react-native's user-location source (see its UserLocation component). */
@@ -6,9 +6,10 @@ const USER_LOCATION_SOURCE = 'mlrn-user-location';
 
 /**
  * The revamp's location puck (board `After-Tokens.html`: "paper ring + cone"):
- * a puck-blue dot in a 3 dp paper ring, drawn over MapLibre's default puck —
- * which stays underneath for its native accuracy halo — on the same source,
- * so it moves with the animated position. Render AFTER `<UserLocation>`.
+ * an accuracy halo, then a puck dot in a 3 dp ring, all in the scheme's puck
+ * tokens (red on black in Night). Render it as the CHILDREN of
+ * `<UserLocation>`: children replace MapLibre's default puck, whose fixed
+ * blue-and-white dot otherwise draws over ours and ignores the display mode.
  *
  * `weakAccuracyM`, while recording on a weak signal, adds the amber
  * uncertainty ring (`After-Paused.html`) sized like MapLibre's own halo.
@@ -16,8 +17,30 @@ const USER_LOCATION_SOURCE = 'mlrn-user-location';
  */
 export function PuckLayers({ weakAccuracyM }: { weakAccuracyM: number | null }) {
   const tokens = useSchemeTokens();
+  const accuracyM = useCurrentPosition()?.coords.accuracy;
   return (
     <>
+      {typeof accuracyM === 'number' && (
+        <Layer
+          id="inukshuk-puck-halo"
+          type="circle"
+          source={USER_LOCATION_SOURCE}
+          paint={{
+            'circle-color': tokens.map.puckHalo,
+            'circle-pitch-alignment': 'map',
+            // MapLibre's own accuracy-halo scale (UserLocationPuck).
+            'circle-radius': [
+              'interpolate',
+              ['exponential', 2],
+              ['zoom'],
+              0,
+              9,
+              22,
+              9 + accuracyM * 100,
+            ],
+          }}
+        />
+      )}
       {weakAccuracyM !== null && (
         <Layer
           id="inukshuk-puck-uncertainty"
@@ -29,7 +52,6 @@ export function PuckLayers({ weakAccuracyM }: { weakAccuracyM: number | null }) 
             'circle-stroke-color': tokens.status.gpsWeak,
             'circle-stroke-width': 2,
             'circle-pitch-alignment': 'map',
-            // MapLibre's own accuracy-halo scale (UserLocationPuck).
             'circle-radius': [
               'interpolate',
               ['exponential', 2],
