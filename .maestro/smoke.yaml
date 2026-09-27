@@ -38,7 +38,9 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
-- assertVisible: 'Recorded trails.*'
+# A fresh install shows the first-run empty state ("No trails yet", revamp
+# §5) instead of the "Recorded trails" section; either proves the screen.
+- assertVisible: '(Recorded trails.*|No trails yet)'
 # Settings is a stack screen since the revamp's tabs: the gear in the
 # Library header opens it, Back returns to Library.
 - tapOn: 'Settings'
@@ -46,7 +48,7 @@ appId: com.inukshuk.app
 # category header is the screen's mount proof, not any inner row.
 - assertVisible: 'App settings.*'
 - tapOn: 'Back'
-- assertVisible: 'Recorded trails.*'
+- assertVisible: '(Recorded trails.*|No trails yet)'
 - tapOn:
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true

@@ -9,6 +9,8 @@
 # Portability notes:
 # - Runs after category-record.yaml (needs >= 1 saved trail).
 # - NameDialog's input is uncontrolled; typing then "Create" is race-free.
+# - "New folder" lives in the Library header's "+" menu (a11y label "Import");
+#   folder rename/delete appear only in Organize mode (revamp §5).
 # - The trail card's menu anchor label is "More options"; folder rows appear
 #   under a disabled "Move to folder" header inside it.
 # - The Layers menu's "Folders" entry switches the visibility mode and opens
@@ -41,6 +43,10 @@ appId: com.inukshuk.app
     retryTapIfNoChange: true
 - assertVisible: 'Recorded trails.*'
 # --- Create a folder and move the trail in ---
+- tapOn: 'Import'
+- extendedWaitUntil:
+    visible: 'New folder'
+    timeout: 8000
 - tapOn: 'New folder'
 - extendedWaitUntil:
     visible: 'Folder name'
@@ -122,6 +128,7 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
+- tapOn: 'Organize'
 - tapOn: 'Delete folder'
 - extendedWaitUntil:
     visible: 'Delete'
@@ -130,3 +137,5 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Recorded trails.*'
     timeout: 8000
+# Leave Organize mode so the Library is back to its everyday state.
+- tapOn: 'Done'

@@ -119,6 +119,38 @@ export interface SchemeTokens {
     /** Satellite/info accent. */
     info: string;
   };
+  /** The Library (After-Library.html, After-Empty.html). */
+  library: {
+    /** Route thumbnail: ground, inner hairline, decorative contours, start dot. */
+    thumb: string;
+    thumbEdge: string;
+    thumbContour: string;
+    thumbStart: string;
+    /** Halo under the thumbnail route (the route's casing on paper). */
+    thumbCasing: string;
+    /** Activity badge fill (decision 7: paper; ring + glyph take the category colour). */
+    badge: string;
+    /** Map-row placeholder: ground, sheet, sheet edge, contour and water marks. */
+    mapThumb: string;
+    mapSheet: string;
+    mapSheetEdge: string;
+    mapContour: string;
+    mapWater: string;
+    /** Type chips: selected (stone) and idle (surface + hairline). */
+    chipOn: string;
+    chipOnInk: string;
+    chipOnCount: string;
+    chip: string;
+    chipBorder: string;
+    chipInk: string;
+    chipCount: string;
+    /** The sage "On map" toggle chip. */
+    onMap: string;
+    onMapBorder: string;
+    onMapInk: string;
+    /** Contour-line texture behind the header and the empty state. */
+    texture: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -177,6 +209,30 @@ export const lightScheme: SchemeTokens = {
     descent: palette.granite,
     heading: palette.puck,
     info: palette.puck,
+  },
+  library: {
+    thumb: '#F7F2E8',
+    thumbEdge: '#E3DCCB',
+    thumbContour: '#DDD5C4',
+    thumbStart: palette.stone,
+    thumbCasing: palette.routeCasing,
+    badge: palette.surface,
+    mapThumb: '#E9E3D5',
+    mapSheet: palette.surface,
+    mapSheetEdge: '#8F8674',
+    mapContour: '#B8946A',
+    mapWater: '#A9CBE0',
+    chipOn: palette.stone,
+    chipOnInk: palette.paper,
+    chipOnCount: '#D9D2C3',
+    chip: palette.surface,
+    chipBorder: palette.outlineVariant,
+    chipInk: palette.stone,
+    chipCount: palette.muted,
+    onMap: '#E4E9CF',
+    onMapBorder: palette.sage,
+    onMapInk: '#3D4D22',
+    texture: 'rgba(45,55,64,0.07)',
   },
 };
 
@@ -238,6 +294,32 @@ export const darkScheme: SchemeTokens = {
     heading: '#8CC4F0',
     info: '#8CC4F0',
   },
+  library: {
+    // Stone night keeps the thumbnail dark: a paper tile per row would glare.
+    thumb: '#1F252B',
+    thumbEdge: '#2F3842',
+    thumbContour: '#343E48',
+    thumbStart: '#E9E4D8',
+    // A dark halo instead of the brown casing (invisible on stone night).
+    thumbCasing: '#13171B',
+    badge: '#1A1F24',
+    mapThumb: '#242B32',
+    mapSheet: '#2F3842',
+    mapSheetEdge: '#8A949E',
+    mapContour: '#9C7F5C',
+    mapWater: '#3C5F78',
+    chipOn: '#E9E4D8',
+    chipOnInk: '#13171B',
+    chipOnCount: palette.muted,
+    chip: '#1A1F24',
+    chipBorder: '#3E4852',
+    chipInk: '#E9E4D8',
+    chipCount: '#A7B0B8',
+    onMap: '#2E3A1F',
+    onMapBorder: palette.sage,
+    onMapInk: '#D6DEB8',
+    texture: 'rgba(233,228,216,0.06)',
+  },
 };
 
 /**
@@ -296,6 +378,30 @@ export const sunlightScheme: SchemeTokens = {
     descent: '#555555',
     heading: '#1565C0',
     info: '#1565C0',
+  },
+  library: {
+    thumb: palette.white,
+    thumbEdge: palette.black,
+    thumbContour: '#D0D0D0',
+    thumbStart: palette.black,
+    thumbCasing: palette.black,
+    badge: palette.white,
+    mapThumb: '#F2F2F2',
+    mapSheet: palette.white,
+    mapSheetEdge: palette.black,
+    mapContour: '#8F6B3E',
+    mapWater: '#6FA3C8',
+    chipOn: palette.black,
+    chipOnInk: palette.white,
+    chipOnCount: '#D0D0D0',
+    chip: palette.white,
+    chipBorder: palette.black,
+    chipInk: palette.black,
+    chipCount: '#333333',
+    onMap: palette.white,
+    onMapBorder: palette.black,
+    onMapInk: palette.black,
+    texture: 'rgba(0,0,0,0.05)',
   },
 };
 
@@ -360,6 +466,30 @@ export const nightScheme: SchemeTokens = {
     descent: '#CC2E24',
     heading: NIGHT_INK,
     info: NIGHT_INK,
+  },
+  library: {
+    thumb: '#1A0000',
+    thumbEdge: '#3A0B08',
+    thumbContour: '#2A0503',
+    thumbStart: NIGHT_INK,
+    thumbCasing: palette.black,
+    badge: palette.black,
+    mapThumb: '#1A0000',
+    mapSheet: '#2A0503',
+    mapSheetEdge: '#CC2E24',
+    mapContour: '#7A1C17',
+    mapWater: '#3A0B08',
+    chipOn: NIGHT_INK,
+    chipOnInk: palette.black,
+    chipOnCount: palette.black,
+    chip: palette.black,
+    chipBorder: '#7A1C17',
+    chipInk: NIGHT_INK,
+    chipCount: NIGHT_INK,
+    onMap: '#3A0B08',
+    onMapBorder: NIGHT_INK,
+    onMapInk: NIGHT_INK,
+    texture: 'rgba(255,59,48,0.06)',
   },
 };
 

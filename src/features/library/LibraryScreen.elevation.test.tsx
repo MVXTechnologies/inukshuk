@@ -3,7 +3,7 @@ import { computeTrackStats } from '@core/geo/track';
 import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { useLibraryStore } from '@state/libraryStore';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LibraryScreen } from './LibraryScreen';
@@ -12,8 +12,28 @@ import { LibraryScreen } from './LibraryScreen';
 jest.mock('react-native-paper', () => {
   const paper = jest.requireActual('react-native-paper');
   const { Pressable } = jest.requireActual('react-native');
+  const { View } = jest.requireActual('react-native');
+  // Paper's Menu measures its anchor (measureInWindow) and mounts its items
+  // through a Portal before showing them — unreliable under Jest. A plain
+  // stand-in renders the anchor and, while visible, the items.
+  const Menu = ({
+    visible,
+    anchor,
+    children,
+  }: {
+    visible: boolean;
+    anchor: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <View>
+      {anchor}
+      {visible ? children : null}
+    </View>
+  );
+  Menu.Item = paper.Menu.Item;
   return {
     ...paper,
+    Menu,
     IconButton: ({
       onPress,
       ...props
@@ -45,6 +65,8 @@ jest.mock('@data/storage', () => ({
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
 jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
+// Row thumbnails read the GPX too; keep them out of the read counts below.
+jest.mock('./useRouteThumbnail', () => ({ useRouteThumbnail: () => undefined }));
 jest.mock('../common/components/ElevationProfile', () => {
   const { Text } = jest.requireActual('react-native');
   return {
@@ -92,6 +114,12 @@ async function show(tracks: TrackSummary[]) {
   );
 }
 
+/** The row's ⋮ → Elevation profile (the old chart button moved into the menu). */
+async function toggleProfile(view: RenderResult, row = 0) {
+  await fireEvent.press(view.getAllByLabelText('More options')[row]!);
+  await fireEvent.press(view.getByLabelText('Elevation profile'));
+}
+
 beforeEach(() => {
   jest.mocked(storage.readFileText).mockReset();
 });
@@ -105,7 +133,7 @@ it('refreshes an expanded elevation profile after overwrite with the same id and
     .mockResolvedValueOnce(buildGpx({ points: after }));
   const track = summary('trail', before);
   const view = await show([track]);
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
+  await toggleProfile(view);
   expect(view.getByTestId('elevation-points').props.children).toBe('100,200,300');
   await act(() =>
     useLibraryStore.setState({ tracks: [{ ...track, stats: computeTrackStats(after) }] }),
@@ -126,9 +154,8 @@ it('ignores a failed obsolete read after another profile has been expanded', asy
     )
     .mockResolvedValueOnce(buildGpx({ points: points([400, 500]) }));
   const view = await show([summary('a', points([100, 200])), summary('b', points([400, 500]))]);
-  const actions = view.getAllByLabelText('Elevation profile');
-  await fireEvent.press(actions[0]!);
-  await fireEvent.press(actions[1]!);
+  await toggleProfile(view, 0);
+  await toggleProfile(view, 1);
   expect(view.getByTestId('elevation-points').props.children).toBe('400,500');
   await act(() => rejectOld?.(new Error('old read failed')));
   expect(view.getByTestId('elevation-points').props.children).toBe('400,500');
@@ -148,9 +175,9 @@ it('lets a failed current preview be retried without replaying its old error', a
     );
   const pts = points([500, 600]);
   const view = await show([summary('retry', pts)]);
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
+  await toggleProfile(view);
   expect(view.getByText('Could not load elevation')).toBeTruthy();
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
+  await toggleProfile(view);
   await act(() => finishRetry?.(buildGpx({ points: pts })));
   expect(view.getByTestId('elevation-points').props.children).toBe('500,600');
 });
@@ -170,7 +197,7 @@ it('ignores an old successful read that finishes after a revised profile has loa
     .mockResolvedValueOnce(buildGpx({ points: after }));
   const track = summary('trail', before);
   const view = await show([track]);
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
+  await toggleProfile(view);
   await act(() =>
     useLibraryStore.setState({ tracks: [{ ...track, stats: computeTrackStats(after) }] }),
   );
@@ -183,9 +210,9 @@ it('reuses a cached profile when the same summary is collapsed and reopened', as
   const pts = points([100, 200]);
   jest.mocked(storage.readFileText).mockResolvedValue(buildGpx({ points: pts }));
   const view = await show([summary('same', pts)]);
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
-  await fireEvent.press(view.getByLabelText('Elevation profile'));
+  await toggleProfile(view);
+  await toggleProfile(view);
+  await toggleProfile(view);
   expect(view.getByTestId('elevation-points').props.children).toBe('100,200');
   expect(storage.readFileText).toHaveBeenCalledTimes(1);
 });

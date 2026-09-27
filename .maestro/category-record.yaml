@@ -42,13 +42,15 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# Baseline trail count (header reads "Recorded trails", "(n)" or "(n/m)").
+# Baseline trail count (header reads "Recorded trails", "(n)" or "(n/m)"; an
+# empty Library shows the first-run "No trails yet" state instead, which the
+# regex below reads as 0).
 - tapOn:
     text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
-- assertVisible: 'Recorded trails.*'
+- assertVisible: '(Recorded trails.*|No trails yet)'
 - copyTextFrom:
-    text: 'Recorded trails.*'
+    text: '(Recorded trails.*|No trails yet)'
 - evalScript: ${output.before = parseInt((maestro.copiedText.match(/\((\d+)/) || ['','0'])[1])}
 - tapOn:
     text: 'Map(, tab.*)?'
