@@ -1,4 +1,5 @@
 import { palette } from '@ui/tokens';
+import { useDisplayCondition } from '@ui/displayCondition';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -15,6 +16,11 @@ const DOT = 22;
  */
 export function RecordButton({ onPress }: { onPress: () => void }) {
   const tokens = useSchemeTokens();
+  // Follows the display mode: stone/paper/white normally, red on black at night.
+  const night = useDisplayCondition() === 'night';
+  const fill = night ? palette.black : palette.stone;
+  const ring = night ? tokens.map.chromeInk : palette.paper;
+  const dot = night ? tokens.map.chromeInk : palette.white;
   return (
     <View style={styles.column} pointerEvents="box-none">
       <Pressable
@@ -23,11 +29,11 @@ export function RecordButton({ onPress }: { onPress: () => void }) {
         accessibilityLabel="Record a track"
         style={({ pressed }) => [
           styles.button,
-          { borderColor: palette.paper, backgroundColor: palette.stone },
+          { borderColor: ring, backgroundColor: fill },
           pressed && styles.pressed,
         ]}
       >
-        <View style={[styles.dot, { backgroundColor: palette.white }]} />
+        <View style={[styles.dot, { backgroundColor: dot }]} />
       </Pressable>
       <View
         style={[styles.chip, { backgroundColor: tokens.map.chip }]}
