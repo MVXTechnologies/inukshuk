@@ -79,6 +79,7 @@ import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { metersPerPixel } from '@core/geo/scaleBar';
+import { heatRadiusPx } from '@core/heat/heatRadius';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
@@ -1342,7 +1343,11 @@ export function MapScreen() {
         lngLatArr && showTrackOverlays
           ? trackHeat.heatAt(
               { lng: lngLatArr[0], lat: lngLatArr[1] },
-              TRAIL_HIT_PX * (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
+              // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
+              // visible heat glow when the heatmap is on.
+              Math.max(TRAIL_HIT_PX, showHeatmap ? heatRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+                (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
+              showHeatmap,
             )
           : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
@@ -1437,6 +1442,7 @@ export function MapScreen() {
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
+      showHeatmap,
       inspect,
       showTrackOverlays,
       restoreCameraOnDeselect,
