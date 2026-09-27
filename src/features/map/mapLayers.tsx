@@ -1,6 +1,7 @@
 import { mapColors } from '@ui/theme';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
+import { heatRadiusExpression } from '@core/heat/heatRadius';
 
 // ---------------------------------------------------------------------------
 // Static <Layer> children for the map's GeoJSON sources, hoisted out of the
@@ -55,19 +56,8 @@ export const HEATMAP_LAYERS = (
         1,
         'rgba(255,120,0,0.55)',
       ],
-      'heatmap-radius': [
-        'interpolate',
-        ['exponential', 1.6],
-        ['zoom'],
-        6,
-        3,
-        10,
-        8,
-        13,
-        16,
-        16,
-        28,
-      ],
+      // Shared with the tap test (core/heat/heatRadius): the glow is what users aim at.
+      'heatmap-radius': heatRadiusExpression() as never,
       'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.5, 15, 0.5, 18, 0.35],
     }}
   />

@@ -74,11 +74,12 @@ import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { NIGHT_MAP } from '@ui/tokens';
-import { RecordButton } from './components/RecordButton';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
+import { metersPerPixel } from '@core/geo/scaleBar';
+import { heatRadiusPx } from '@core/heat/heatRadius';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
@@ -1219,6 +1220,10 @@ export function MapScreen() {
   // offset.
   const POINT_CHIP_OFFSET = 20;
   const POINT_CHIP_HIT_PX = 44;
+  // Trails and heat spots: a thin trace needs a finger-sized tolerance in
+  // SCREEN space (≈ a 44 dp target). The heat grid alone is a fixed ~25–50 m
+  // on the ground, a couple of pixels once zoomed out to a whole run.
+  const TRAIL_HIT_PX = 22;
   // How long a touch the chip's action row claimed keeps the map's own press
   // handler quiet (#232) — long enough to cover the recognizer that fires
   // just after it, short enough that the next deliberate tap goes through.
@@ -1339,7 +1344,14 @@ export function MapScreen() {
       const lngLatArr = e.nativeEvent?.lngLat;
       const at =
         lngLatArr && showTrackOverlays
-          ? trackHeat.heatAt({ lng: lngLatArr[0], lat: lngLatArr[1] })
+          ? trackHeat.heatAt(
+              { lng: lngLatArr[0], lat: lngLatArr[1] },
+              // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
+              // visible heat glow when the heatmap is on.
+              Math.max(TRAIL_HIT_PX, showHeatmap ? heatRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+                (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
+              showHeatmap,
+            )
           : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
         inspect(null); // opening the carousel hides the inspect panel
@@ -1432,6 +1444,8 @@ export function MapScreen() {
     [
       visiblePins,
       trackHeat,
+      scaleAt?.zoom,
+      showHeatmap,
       inspect,
       showTrackOverlays,
       restoreCameraOnDeselect,
@@ -2233,20 +2247,15 @@ export function MapScreen() {
             dock instead of colliding with them; with none of those up it sits
             just above the tab bar, in the cartographic corner. 2D only; the
             3D view has no Mercator zoom. */}
-        {/* Scale bar (left), the idle Record button (centre, revamp Main.html)
-            and the basemap credit (right) share one row. */}
+        {/* Scale bar (left) and the basemap credit (right) share one row.
+            Recording starts from "+" → Record track (owner call, 2026-09-27:
+            no separate Record button over the map). */}
         <View style={styles.bottomRow} pointerEvents="box-none">
           <View style={styles.bottomSide} pointerEvents="none">
             {showScaleBar && !terrain3d && scaleAt !== null && (
               <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
             )}
           </View>
-          {status === 'idle' &&
-            !selecting &&
-            !pickingCategory &&
-            makeMapState === null &&
-            heatSelection === null &&
-            !weatherDockVisible && <RecordButton onPress={() => setPickingCategory(true)} />}
           <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
             {!terrain3d && <AttributionChip basemap={basemap} />}
           </View>

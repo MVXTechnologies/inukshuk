@@ -1,6 +1,6 @@
 import { parseGpx } from '@core/geo/gpx';
-import { cellAt } from '@core/heat/grid';
-import { buildHeatIndex, trailsNear, type HeatTrackInput } from '@core/heat/heatIndex';
+import { cellAt, HEAT_CELL_M } from '@core/heat/grid';
+import { buildHeatIndex, trailsNearWithin, type HeatTrackInput } from '@core/heat/heatIndex';
 import { qualifiesForHeat } from '@core/heat/qualify';
 import { traceCells, type CellTrace } from '@core/heat/trace';
 import { categoryColor } from '@core/library/categories';
@@ -36,7 +36,16 @@ export interface TrackHeat {
    * detection (and the trackIds returned for a hot spot) is global, same as
    * `heatPoints`; a non-hot tap still falls back to the shown trails only,
    * matching trace-visibility rules for plain single-trail tap-to-inspect. */
-  heatAt: (lngLat: { lng: number; lat: number }) => { trackIds: string[]; hot: boolean };
+  /**
+   * Trails at a tapped point. `radiusM` is the finger's tolerance on the
+   * ground (the caller converts its pixel tolerance at the current zoom).
+   */
+  heatAt: (
+    lngLat: { lng: number; lat: number },
+    radiusM?: number,
+    /** The heat glow is on screen: a tap on it opens the trail that makes it. */
+    glowTappable?: boolean,
+  ) => { trackIds: string[]; hot: boolean };
   /** Line geometry for an arbitrary trackId, looked up from whatever's been
    * loaded regardless of shown/qualifying membership — lets the map draw a
    * focused-trail highlight even when its trace is hidden. Null until that
@@ -276,8 +285,13 @@ export function useTrackHeat(
     };
   }, [cache, tracks, shownTrackIds, allTrackIds, customCategories]);
 
-  const heatAt = (lngLat: { lng: number; lat: number }): { trackIds: string[]; hot: boolean } => {
-    const cell = cellAt(lngLat.lng, lngLat.lat);
+  const heatAt = (
+    lngLat: { lng: number; lat: number },
+    radiusM = 0,
+    glowTappable = false,
+  ): { trackIds: string[]; hot: boolean } => {
+    const near = (index: typeof heatIndex) =>
+      trailsNearWithin(index, lngLat.lng, lngLat.lat, radiusM, cellAt, HEAT_CELL_M);
     const sortByStartedAtDesc = (ids: readonly string[]) =>
       [...ids].sort((a, b) => {
         const ta = tracks.find((x) => x.id === a)?.startedAt ?? 0;
@@ -289,14 +303,21 @@ export function useTrackHeat(
     // same category) — a hot spot's carousel is populated from the same
     // global index, so it's never short a trail just because that trail's
     // trace is currently hidden.
-    const { trackIds: hotTrackIds, hot } = trailsNear(heatIndex, cell);
+    const { trackIds: hotTrackIds, hot } = near(heatIndex);
     if (hot) return { trackIds: sortByStartedAtDesc(hotTrackIds), hot: true };
 
-    // Not hot: fall back to the shown-trails tap index, so a plain
-    // single-trail tap only ever opens an inspect panel for a trail that's
-    // actually visible — trace-visibility rules apply here, unchanged.
-    const { trackIds: shownTrackIdsAtCell } = trailsNear(tapIndex, cell);
-    return { trackIds: sortByStartedAtDesc(shownTrackIdsAtCell), hot: false };
+    // Not hot: a shown trace under the finger wins (trace-visibility rules).
+    const { trackIds: shownTrackIdsAtCell } = near(tapIndex);
+    if (shownTrackIdsAtCell.length > 0) {
+      return { trackIds: sortByStartedAtDesc(shownTrackIdsAtCell), hot: false };
+    }
+    // No shown trace, but the heat glow is drawn for every qualifying trail,
+    // traces on or off — a tap on a single-trail glow patch used to match
+    // nothing ("hard to click"). The glow IS that trail: open it.
+    if (glowTappable && hotTrackIds.length > 0) {
+      return { trackIds: sortByStartedAtDesc(hotTrackIds).slice(0, 1), hot: false };
+    }
+    return { trackIds: [], hot: false };
   };
 
   return { lines, heatPoints, heatAt, lineFor };
