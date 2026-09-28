@@ -51,7 +51,10 @@ and Europe, about 70 GB. The rest of the world later is one more polygon (~120 G
    infra/tiles/nas/refresh.sh          # tiles, ~1–3 h (download + upload)
    infra/tiles/fonts/build-glyphs.sh   # glyphs, once
    ```
-7. **Monthly refresh**: a NAS cron entry running `refresh.sh` (first of the month, at night).
+7. **Monthly refresh**: user crontabs are disabled on the UGREEN NAS, so a small container runs
+   `nas/scheduler.sh` (1st of the month, 03:00): `docker compose -f nas/compose.yaml up -d`.
+   Uploads go through the Worker (`nas/upload.py`, token in `~/inukshuk-tiles/.upload-token`),
+   so no R2 S3 keys are needed.
 
 ## Check it
 
