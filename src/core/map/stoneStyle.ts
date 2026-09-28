@@ -1,7 +1,8 @@
 /**
  * "Stone & Paper" vector base map — MapLibre style layers for the
- * OpenMapTiles vector schema (the schema OpenFreeMap serves; see
- * `docs/design/vector-basemap.md` for the source decision).
+ * Protomaps basemap schema v4 (`roads`, `water`, `landuse`, … with `kind` /
+ * `kind_detail`), which our self-hosted PMTiles extract serves; see
+ * `docs/design/vector-basemap.md` for the source decision.
  *
  * The look is the approved topo board (`docs/design/ui-revamp/boards/
  * Main.html` and its `blobs/*.svg` illustration, dark twin in
@@ -102,7 +103,7 @@ export const STONE_FONTS_NOTO: StoneFonts = {
 export type StoneLabelLanguage = 'fr' | 'en' | 'local';
 
 /**
- * An optional contour-line source (OpenMapTiles carries none). `field` is the
+ * An optional contour-line source (the basemap carries none). `field` is the
  * numeric elevation attribute in metres; every `majorEvery`-th line on a
  * `intervalM` grid is drawn bold.
  */
@@ -115,7 +116,7 @@ export interface StoneContourSource {
 }
 
 export interface StoneStyleOptions {
-  /** Id of the OpenMapTiles vector source in the style. */
+  /** Id of the Protomaps vector source in the style. */
   source: string;
   fonts?: StoneFonts;
   language?: StoneLabelLanguage;
@@ -146,51 +147,108 @@ function isIn(key: string, values: readonly string[]): ExpressionSpecification {
   return ['in', ['get', key], ['literal', [...values]]];
 }
 
+const isLine: ExpressionSpecification = ['==', ['geometry-type'], 'LineString'];
+const isPolygon: ExpressionSpecification = ['==', ['geometry-type'], 'Polygon'];
+const isPoint: ExpressionSpecification = ['==', ['geometry-type'], 'Point'];
+/** Protomaps flags tunnels as a boolean; tunnels are not drawn. */
+const notTunnel: ExpressionSpecification = ['!', ['to-boolean', ['get', 'is_tunnel']]];
+/** A feature is due once the map reaches its `min_zoom` (Protomaps' own ranking). */
+const dueAtZoom: ExpressionSpecification = ['<=', ['coalesce', ['get', 'min_zoom'], 0], ['zoom']];
+
 /** Rivers and canals draw wider than streams, drains and ditches. */
-function byWaterwayClass(river: number, stream: number): ExpressionSpecification {
-  return ['match', ['get', 'class'], ['river', 'canal'], river, stream];
+function byWaterwayKind(river: number, stream: number): ExpressionSpecification {
+  return ['match', ['get', 'kind'], ['river', 'canal'], river, stream];
 }
 
 function nameField(language: StoneLabelLanguage): ExpressionSpecification {
   switch (language) {
     case 'fr':
-      return ['coalesce', ['get', 'name:fr'], ['get', 'name:latin'], ['get', 'name']];
+      return ['coalesce', ['get', 'name:fr'], ['get', 'name']];
     case 'en':
-      return [
-        'coalesce',
-        ['get', 'name:en'],
-        ['get', 'name_en'],
-        ['get', 'name:latin'],
-        ['get', 'name'],
-      ];
+      return ['coalesce', ['get', 'name:en'], ['get', 'name']];
     default:
-      return ['coalesce', ['get', 'name:latin'], ['get', 'name']];
+      return ['coalesce', ['get', 'name'], ''];
   }
 }
 
-/** Road classes, widest first, with their ribbon width ramp. */
-const ROADS: { id: string; classes: string[]; minzoom: number; width: Width }[] = [
+/** Land-use kinds by how they are washed. */
+const BUILT = [
+  'residential',
+  'commercial',
+  'industrial',
+  'retail',
+  'military',
+  'naval_base',
+  'railway',
+  'school',
+  'college',
+  'university',
+  'hospital',
+  'aerodrome',
+  'airfield',
+];
+const BARE = ['beach', 'sand', 'bare_rock', 'scree', 'quarry', 'barren'];
+const WOOD = ['wood', 'forest'];
+const GREEN = [
+  'grass',
+  'grassland',
+  'meadow',
+  'scrub',
+  'heath',
+  'wetland',
+  'marsh',
+  'swamp',
+  'orchard',
+  'vineyard',
+  'allotments',
+  'village_green',
+  'recreation_ground',
+  'golf_course',
+  'pitch',
+  'playground',
+  'garden',
+  'cemetery',
+];
+const PARK = ['park', 'nature_reserve', 'national_park', 'protected_area'];
+
+/**
+ * Road ribbons, widest first, each with its width ramp. Protomaps groups
+ * roads by `kind` and keeps the OSM class in `kind_detail`.
+ */
+const ROADS: { id: string; filter: ExpressionSpecification; minzoom: number; width: Width }[] = [
   {
     id: 'minor',
-    classes: ['minor', 'service'],
+    filter: isIn('kind', ['minor_road', 'other']),
     minzoom: 12,
     width: ramp([12, 0.5], [14, 2], [16, 5], [18, 12]),
   },
   {
     id: 'secondary',
-    classes: ['secondary', 'tertiary'],
+    filter: [
+      'any',
+      ['==', ['get', 'kind'], 'medium_road'],
+      [
+        'all',
+        ['==', ['get', 'kind'], 'major_road'],
+        isIn('kind_detail', ['secondary', 'secondary_link', 'tertiary', 'tertiary_link']),
+      ],
+    ],
     minzoom: 8,
     width: ramp([8, 0.6], [12, 1.8], [14, 3.6], [16, 7], [18, 16]),
   },
   {
     id: 'primary',
-    classes: ['primary', 'trunk'],
+    filter: [
+      'all',
+      ['==', ['get', 'kind'], 'major_road'],
+      isIn('kind_detail', ['primary', 'primary_link', 'trunk', 'trunk_link']),
+    ],
     minzoom: 6,
     width: ramp([6, 0.6], [10, 1.6], [14, 4.2], [16, 8], [18, 18]),
   },
   {
     id: 'motorway',
-    classes: ['motorway'],
+    filter: ['==', ['get', 'kind'], 'highway'],
     minzoom: 5,
     width: ramp([5, 0.6], [10, 2], [14, 5], [16, 9], [18, 20]),
   },
@@ -199,18 +257,39 @@ const ROADS: { id: string; classes: string[]; minzoom: number; width: Width }[] 
 /** Casing allowance each side of the ribbon, by zoom. */
 const CASING_ADD = ramp([8, 0.6], [14, 1.4], [18, 3]);
 
-const POI_CLASSES = [
+/** Trails proper — what a hiker follows. Drawn bold and dashed from z11. */
+const TRAIL_PATHS = ['path', 'bridleway'];
+/**
+ * Urban walkways: sidewalks, crossings, plazas, steps. A city is laced with
+ * them, so they stay thin and quiet (from z15) and sit UNDER the roads,
+ * leaving the trail dashes to mean "trail".
+ */
+const URBAN_PATHS = [
+  'footway',
+  'sidewalk',
+  'crossing',
+  'pedestrian',
+  'steps',
+  'corridor',
+  'parking_aisle',
+];
+
+const POI_KINDS = [
+  'camp_site',
   'campsite',
   'shelter',
+  'alpine_hut',
+  'wilderness_hut',
   'information',
   'drinking_water',
+  'viewpoint',
   'attraction',
   'toilets',
 ];
 
 /**
- * Stone & Paper layers for an OpenMapTiles vector source. Light or stone-
- * night follows `scheme` (see {@link StoneBasemapScheme.dark}).
+ * Stone & Paper layers for a Protomaps v4 vector source. Light or stone-night
+ * follows `scheme` (see {@link StoneBasemapScheme.dark}).
  */
 export function buildStoneLayers(
   scheme: StoneBasemapScheme,
@@ -226,64 +305,104 @@ export function buildStoneLayers(
   const vegOpacity = dark ? 0.28 : 0.3;
   const waterOpacity = dark ? 0.3 : 0.45;
   const halo = { 'text-halo-color': scheme.halo, 'text-halo-width': 1.4, 'text-halo-blur': 0.3 };
-  const notTunnel: ExpressionSpecification = ['!=', ['get', 'brunnel'], 'tunnel'];
+  const road = (extra: ExpressionSpecification): ExpressionSpecification => [
+    'all',
+    extra,
+    notTunnel,
+  ];
 
   const base: LayerSpecification[] = [
     { id: id('background'), type: 'background', paint: { 'background-color': scheme.land } },
-    {
-      id: id('landuse-built'),
-      type: 'fill',
-      source,
-      'source-layer': 'landuse',
-      minzoom: 10,
-      filter: isIn('class', ['residential', 'commercial', 'industrial', 'retail', 'suburb']),
-      paint: { 'fill-color': scheme.landAlt, 'fill-opacity': dark ? 0.5 : 0.6 },
-    },
+    // Low zooms (z0–7): Protomaps' generalised land cover.
     {
       id: id('landcover-bare'),
       type: 'fill',
       source,
       'source-layer': 'landcover',
-      filter: isIn('class', ['rock', 'sand']),
-      paint: { 'fill-color': scheme.landAlt, 'fill-opacity': 0.7 },
+      filter: isIn('kind', ['barren', 'urban_area']),
+      paint: { 'fill-color': scheme.landAlt, 'fill-opacity': 0.6 },
     },
     {
       id: id('landcover-ice'),
       type: 'fill',
       source,
       'source-layer': 'landcover',
-      filter: ['==', ['get', 'class'], 'ice'],
+      filter: ['==', ['get', 'kind'], 'glacier'],
       paint: { 'fill-color': scheme.water, 'fill-opacity': 0.12 },
-    },
-    {
-      id: id('landcover-grass'),
-      type: 'fill',
-      source,
-      'source-layer': 'landcover',
-      filter: isIn('class', ['grass', 'wetland']),
-      paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity * 0.5 },
     },
     {
       id: id('landcover-wood'),
       type: 'fill',
       source,
       'source-layer': 'landcover',
-      filter: ['==', ['get', 'class'], 'wood'],
+      filter: ['==', ['get', 'kind'], 'forest'],
+      paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity },
+    },
+    {
+      id: id('landcover-grass'),
+      type: 'fill',
+      source,
+      'source-layer': 'landcover',
+      filter: isIn('kind', ['grassland', 'scrub']),
+      paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity * 0.5 },
+    },
+    // From z8 on: detailed land use.
+    {
+      id: id('landuse-built'),
+      type: 'fill',
+      source,
+      'source-layer': 'landuse',
+      minzoom: 10,
+      filter: isIn('kind', BUILT),
+      paint: { 'fill-color': scheme.landAlt, 'fill-opacity': dark ? 0.5 : 0.6 },
+    },
+    {
+      id: id('landuse-bare'),
+      type: 'fill',
+      source,
+      'source-layer': 'landuse',
+      filter: isIn('kind', BARE),
+      paint: { 'fill-color': scheme.landAlt, 'fill-opacity': 0.7 },
+    },
+    {
+      id: id('landuse-ice'),
+      type: 'fill',
+      source,
+      'source-layer': 'landuse',
+      filter: ['==', ['get', 'kind'], 'glacier'],
+      paint: { 'fill-color': scheme.water, 'fill-opacity': 0.12 },
+    },
+    {
+      id: id('landuse-grass'),
+      type: 'fill',
+      source,
+      'source-layer': 'landuse',
+      filter: isIn('kind', GREEN),
+      paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity * 0.5 },
+    },
+    {
+      id: id('landuse-wood'),
+      type: 'fill',
+      source,
+      'source-layer': 'landuse',
+      filter: isIn('kind', WOOD),
       paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity },
     },
     {
       id: id('park'),
       type: 'fill',
       source,
-      'source-layer': 'park',
+      'source-layer': 'landuse',
+      filter: isIn('kind', PARK),
       paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity * 0.35 },
     },
     {
       id: id('park-outline'),
       type: 'line',
       source,
-      'source-layer': 'park',
+      'source-layer': 'landuse',
       minzoom: 8,
+      filter: isIn('kind', ['nature_reserve', 'national_park', 'protected_area']),
       paint: {
         'line-color': scheme.vegetation,
         'line-opacity': 0.7,
@@ -296,7 +415,7 @@ export function buildStoneLayers(
       type: 'fill',
       source,
       'source-layer': 'water',
-      filter: notTunnel,
+      filter: isPolygon,
       paint: { 'fill-color': scheme.water, 'fill-opacity': waterOpacity },
     },
     {
@@ -305,34 +424,32 @@ export function buildStoneLayers(
       source,
       'source-layer': 'water',
       minzoom: 8,
-      filter: notTunnel,
+      filter: isPolygon,
       paint: { 'line-color': scheme.waterLine, 'line-width': ramp([8, 0.5], [12, 1], [16, 1.6]) },
     },
     {
       id: id('waterway'),
       type: 'line',
       source,
-      'source-layer': 'waterway',
+      'source-layer': 'water',
       minzoom: 8,
-      filter: notTunnel,
+      filter: isLine,
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': scheme.waterLine,
         // One zoom curve (the spec allows a single zoom interpolate), the
-        // class picked per stop: rivers/canals vs streams and ditches.
+        // kind picked per stop: rivers/canals vs streams and ditches.
         'line-width': [
           'interpolate',
           ['exponential', 1.4],
           ['zoom'],
           8,
-          byWaterwayClass(0.8, 0.2),
+          byWaterwayKind(0.8, 0.2),
           12,
-          byWaterwayClass(1.6, 0.8),
+          byWaterwayKind(1.6, 0.8),
           16,
-          byWaterwayClass(4, 2),
+          byWaterwayKind(4, 2),
         ],
-        // Intermittent streams step back (a dash would need a second layer).
-        'line-opacity': ['match', ['get', 'intermittent'], 1, 0.6, 1],
       },
     },
   ];
@@ -376,19 +493,33 @@ export function buildStoneLayers(
 
   base.push(
     {
+      id: id('cliff'),
+      type: 'line',
+      source,
+      'source-layer': 'earth',
+      minzoom: 13,
+      filter: ['all', isLine, ['==', ['get', 'kind'], 'cliff']],
+      paint: {
+        'line-color': scheme.lineMuted,
+        'line-opacity': 0.8,
+        'line-width': ramp([13, 0.8], [17, 2]),
+      },
+    },
+    {
       id: id('building'),
       type: 'fill',
       source,
-      'source-layer': 'building',
+      'source-layer': 'buildings',
       minzoom: 13,
+      filter: ['all', isPolygon, isIn('kind', ['building', 'building_part'])],
       paint: { 'fill-color': scheme.building, 'fill-opacity': dark ? 0.6 : 0.5 },
     },
     {
       id: id('boundary'),
       type: 'line',
       source,
-      'source-layer': 'boundary',
-      filter: ['all', ['<=', ['get', 'admin_level'], 4], ['!=', ['get', 'maritime'], 1]],
+      'source-layer': 'boundaries',
+      filter: isIn('kind', ['country', 'region']),
       paint: {
         'line-color': scheme.lineMuted,
         'line-opacity': 0.7,
@@ -396,14 +527,30 @@ export function buildStoneLayers(
         'line-dasharray': [4, 2, 1, 2],
       },
     },
+    // Urban walkways, under the roads (see URBAN_PATHS).
+    {
+      id: id('footway'),
+      type: 'line',
+      source,
+      'source-layer': 'roads',
+      minzoom: 15,
+      filter: road(['all', ['==', ['get', 'kind'], 'path'], isIn('kind_detail', URBAN_PATHS)]),
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': scheme.path,
+        'line-opacity': 0.45,
+        'line-width': ramp([15, 0.6], [18, 1.4]),
+        'line-dasharray': [2, 2],
+      },
+    },
     // Casings, widest class last so its casing draws over lesser roads' ribbons.
     ...ROADS.map((r): LayerSpecification => ({
       id: id(`road-${r.id}-casing`),
       type: 'line',
       source,
-      'source-layer': 'transportation',
+      'source-layer': 'roads',
       minzoom: r.minzoom,
-      filter: ['all', isIn('class', r.classes), notTunnel],
+      filter: road(r.filter),
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': scheme.roadCasing,
@@ -415,9 +562,9 @@ export function buildStoneLayers(
       id: id(`road-${r.id}`),
       type: 'line',
       source,
-      'source-layer': 'transportation',
+      'source-layer': 'roads',
       minzoom: r.minzoom,
-      filter: ['all', isIn('class', r.classes), notTunnel],
+      filter: road(r.filter),
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': scheme.roadFill, 'line-width': r.width },
     })),
@@ -425,26 +572,48 @@ export function buildStoneLayers(
       id: id('rail'),
       type: 'line',
       source,
-      'source-layer': 'transportation',
+      'source-layer': 'roads',
       minzoom: 10,
-      filter: isIn('class', ['rail', 'transit']),
+      filter: road([
+        'all',
+        ['==', ['get', 'kind'], 'rail'],
+        ['!=', ['get', 'kind_detail'], 'yard'],
+      ]),
       paint: {
         'line-color': scheme.lineMuted,
         'line-width': ramp([10, 0.6], [16, 1.6]),
         'line-dasharray': [3, 3],
       },
     },
-    // The trail network — the point of the app. Tracks (forest/ATV roads) and
-    // paths are both dashed in the trail colour; tracks longer-dashed and a
-    // touch wider so the two read apart. Both are drawn from their first
-    // zoom in the tiles and stay above the road ribbons they cross.
+    {
+      id: id('ferry'),
+      type: 'line',
+      source,
+      'source-layer': 'roads',
+      minzoom: 9,
+      filter: ['==', ['get', 'kind'], 'ferry'],
+      paint: {
+        'line-color': scheme.waterLine,
+        'line-opacity': 0.8,
+        'line-width': ramp([9, 0.6], [16, 1.4]),
+        'line-dasharray': [4, 3],
+      },
+    },
+    // The trail network — the point of the app. Tracks (forest/ATV roads),
+    // cycleways and trails are dashed in the trail colour and drawn above the
+    // road ribbons they cross; tracks longer-dashed and a touch wider so the
+    // kinds read apart.
     {
       id: id('track'),
       type: 'line',
       source,
-      'source-layer': 'transportation',
+      'source-layer': 'roads',
       minzoom: 11,
-      filter: ['==', ['get', 'class'], 'track'],
+      filter: road([
+        'all',
+        ['==', ['get', 'kind'], 'path'],
+        ['==', ['get', 'kind_detail'], 'track'],
+      ]),
       layout: { 'line-join': 'round' },
       paint: {
         'line-color': scheme.path,
@@ -454,12 +623,35 @@ export function buildStoneLayers(
       },
     },
     {
+      id: id('cycleway'),
+      type: 'line',
+      source,
+      'source-layer': 'roads',
+      minzoom: 13,
+      filter: road([
+        'all',
+        ['==', ['get', 'kind'], 'path'],
+        ['==', ['get', 'kind_detail'], 'cycleway'],
+      ]),
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': scheme.path,
+        'line-opacity': 0.7,
+        'line-width': ramp([13, 0.8], [18, 2.2]),
+        'line-dasharray': [3.8, 2.7],
+      },
+    },
+    {
       id: id('path'),
       type: 'line',
       source,
-      'source-layer': 'transportation',
+      'source-layer': 'roads',
       minzoom: 11,
-      filter: ['==', ['get', 'class'], 'path'],
+      filter: road([
+        'all',
+        ['==', ['get', 'kind'], 'path'],
+        ['in', ['coalesce', ['get', 'kind_detail'], 'path'], ['literal', TRAIL_PATHS]],
+      ]),
       layout: { 'line-join': 'round' },
       paint: {
         'line-color': scheme.path,
@@ -475,9 +667,9 @@ export function buildStoneLayers(
       id: id('waterway-label'),
       type: 'symbol',
       source,
-      'source-layer': 'waterway',
+      'source-layer': 'water',
       minzoom: 12,
-      filter: ['has', 'name'],
+      filter: ['all', isLine, ['has', 'name']],
       layout: {
         'symbol-placement': 'line',
         'text-field': name,
@@ -491,8 +683,9 @@ export function buildStoneLayers(
       id: id('water-label'),
       type: 'symbol',
       source,
-      'source-layer': 'water_name',
-      filter: ['has', 'name'],
+      'source-layer': 'water',
+      // Protomaps ships one label point per named water body.
+      filter: ['all', isPoint, ['has', 'name'], dueAtZoom],
       layout: {
         'text-field': name,
         'text-font': fonts.italic,
@@ -505,8 +698,13 @@ export function buildStoneLayers(
       id: id('road-label'),
       type: 'symbol',
       source,
-      'source-layer': 'transportation_name',
+      'source-layer': 'roads',
       minzoom: 13,
+      filter: [
+        'all',
+        ['has', 'name'],
+        ['!', ['in', ['coalesce', ['get', 'kind_detail'], ''], ['literal', URBAN_PATHS]]],
+      ],
       layout: {
         'symbol-placement': 'line',
         'text-field': name,
@@ -519,9 +717,9 @@ export function buildStoneLayers(
       id: id('poi'),
       type: 'symbol',
       source,
-      'source-layer': 'poi',
-      minzoom: 15,
-      filter: ['all', isIn('class', POI_CLASSES), ['has', 'name']],
+      'source-layer': 'pois',
+      minzoom: 14,
+      filter: ['all', isIn('kind', POI_KINDS), ['has', 'name'], dueAtZoom],
       layout: {
         'text-field': name,
         'text-font': fonts.regular,
@@ -534,23 +732,28 @@ export function buildStoneLayers(
       id: id('peak'),
       type: 'symbol',
       source,
-      'source-layer': 'mountain_peak',
+      'source-layer': 'pois',
       minzoom: 11,
-      filter: ['==', ['get', 'class'], 'peak'],
+      filter: isIn('kind', ['peak', 'volcano']),
       layout: {
         'text-field': [
           'format',
-          ['coalesce', name, ''],
+          name,
           { 'text-font': ['literal', fonts.bold] },
           '\n',
           {},
-          ['case', ['has', 'ele'], ['concat', ['to-string', ['get', 'ele']], ' m'], ''],
+          [
+            'case',
+            ['has', 'elevation'],
+            ['concat', ['to-string', ['round', ['to-number', ['get', 'elevation'], 0]]], ' m'],
+            '',
+          ],
           { 'font-scale': 0.85 },
         ],
         'text-font': fonts.regular,
         'text-size': 12,
         'text-max-width': 8,
-        'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        'symbol-sort-key': ['-', 0, ['to-number', ['coalesce', ['get', 'elevation'], 0], 0]],
       },
       paint: { 'text-color': scheme.ink, ...halo },
     },
@@ -558,15 +761,27 @@ export function buildStoneLayers(
       id: id('place-village'),
       type: 'symbol',
       source,
-      'source-layer': 'place',
+      'source-layer': 'places',
       minzoom: 11,
-      filter: isIn('class', ['village', 'hamlet', 'suburb', 'neighbourhood', 'isolated_dwelling']),
+      filter: [
+        'all',
+        [
+          'any',
+          isIn('kind', ['neighbourhood', 'macrohood']),
+          [
+            'all',
+            ['==', ['get', 'kind'], 'locality'],
+            isIn('kind_detail', ['village', 'hamlet', 'locality', 'isolated_dwelling']),
+          ],
+        ],
+        dueAtZoom,
+      ],
       layout: {
         'text-field': name,
         'text-font': fonts.regular,
         'text-size': ramp([11, 11.5], [15, 14]),
         'text-max-width': 8,
-        'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        'symbol-sort-key': ['coalesce', ['get', 'min_zoom'], 99],
       },
       paint: { 'text-color': scheme.ink, ...halo },
     },
@@ -574,15 +789,20 @@ export function buildStoneLayers(
       id: id('place-town'),
       type: 'symbol',
       source,
-      'source-layer': 'place',
+      'source-layer': 'places',
       minzoom: 8,
-      filter: ['==', ['get', 'class'], 'town'],
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'locality'],
+        ['==', ['get', 'kind_detail'], 'town'],
+        dueAtZoom,
+      ],
       layout: {
         'text-field': name,
         'text-font': fonts.regular,
         'text-size': ramp([8, 12], [14, 16]),
         'text-max-width': 8,
-        'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        'symbol-sort-key': ['coalesce', ['get', 'min_zoom'], 99],
       },
       paint: { 'text-color': scheme.ink, ...halo },
     },
@@ -590,15 +810,20 @@ export function buildStoneLayers(
       id: id('place-city'),
       type: 'symbol',
       source,
-      'source-layer': 'place',
+      'source-layer': 'places',
       minzoom: 4,
-      filter: ['==', ['get', 'class'], 'city'],
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'locality'],
+        ['==', ['get', 'kind_detail'], 'city'],
+        dueAtZoom,
+      ],
       layout: {
         'text-field': name,
         'text-font': fonts.bold,
         'text-size': ramp([4, 11.5], [8, 13.5], [12, 18]),
         'text-max-width': 8,
-        'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
+        'symbol-sort-key': ['coalesce', ['get', 'min_zoom'], 99],
       },
       paint: { 'text-color': scheme.ink, ...halo },
     },
@@ -606,10 +831,10 @@ export function buildStoneLayers(
       id: id('place-province'),
       type: 'symbol',
       source,
-      'source-layer': 'place',
+      'source-layer': 'places',
       minzoom: 4,
       maxzoom: 8,
-      filter: isIn('class', ['state', 'province']),
+      filter: ['==', ['get', 'kind'], 'region'],
       layout: {
         'text-field': name,
         'text-font': fonts.bold,

@@ -51,7 +51,7 @@ const DARK: StoneBasemapScheme = {
   halo: '#1A1F25',
 };
 
-const SOURCE = 'omt';
+const SOURCE = 'protomaps';
 const CONTOURS = {
   source: 'contours',
   sourceLayer: 'contour',
@@ -60,24 +60,18 @@ const CONTOURS = {
   majorEvery: 5,
 };
 
-/** The OpenMapTiles 3.x vector layers (openmaptiles.org/schema). */
-const OMT_SOURCE_LAYERS = new Set([
-  'aerodrome_label',
-  'aeroway',
-  'boundary',
-  'building',
-  'housenumber',
+/** The Protomaps basemap v4 vector layers (docs.protomaps.com/basemaps/layers). */
+const PROTOMAPS_SOURCE_LAYERS = new Set([
+  'boundaries',
+  'buildings',
+  'earth',
   'landcover',
   'landuse',
-  'mountain_peak',
-  'park',
-  'place',
-  'poi',
-  'transportation',
-  'transportation_name',
+  'places',
+  'pois',
+  'roads',
+  'transit',
   'water',
-  'water_name',
-  'waterway',
 ]);
 
 const all = (scheme: StoneBasemapScheme, contours = false): LayerSpecification[] => {
@@ -107,13 +101,13 @@ describe('buildStoneLayers', () => {
     for (const id of ids) expect(id.startsWith(STONE_LAYER_PREFIX)).toBe(true);
   });
 
-  it('reads only real OpenMapTiles source layers from the given source', () => {
+  it('reads only real Protomaps source layers from the given source', () => {
     for (const l of all(LIGHT)) {
       if (l.type === 'background') continue;
       expect(l).toMatchObject({ source: SOURCE });
-      expect(OMT_SOURCE_LAYERS.has((l as { 'source-layer'?: string })['source-layer'] ?? '')).toBe(
-        true,
-      );
+      expect(
+        PROTOMAPS_SOURCE_LAYERS.has((l as { 'source-layer'?: string })['source-layer'] ?? ''),
+      ).toBe(true);
     }
   });
 
@@ -204,12 +198,12 @@ describe('buildStoneLayers', () => {
 
   it('draws trails: paths and tracks get their own dashed layers in the path colour', () => {
     const layers = all(LIGHT);
-    for (const cls of ['path', 'track']) {
-      const layer = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}${cls}`);
+    for (const kind of ['path', 'track']) {
+      const layer = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}${kind}`);
       expect(layer).toMatchObject({
         type: 'line',
-        'source-layer': 'transportation',
-        filter: ['==', ['get', 'class'], cls],
+        'source-layer': 'roads',
+        minzoom: 11,
         paint: { 'line-color': LIGHT.path },
       });
       expect((layer?.paint as Record<string, unknown>)['line-dasharray']).toBeDefined();
@@ -219,6 +213,21 @@ describe('buildStoneLayers', () => {
     expect(ids.indexOf(`${STONE_LAYER_PREFIX}path`)).toBeGreaterThan(
       ids.indexOf(`${STONE_LAYER_PREFIX}road-motorway`),
     );
+  });
+
+  it('keeps urban walkways quiet: thin, faded, late, and under the roads', () => {
+    const layers = all(LIGHT);
+    const ids = layers.map((l) => l.id);
+    const footway = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}footway`);
+    const trail = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}path`);
+    expect(footway?.minzoom).toBe(15);
+    expect((footway?.paint as Record<string, unknown>)['line-opacity']).toBeLessThan(0.6);
+    expect(ids.indexOf(`${STONE_LAYER_PREFIX}footway`)).toBeLessThan(
+      ids.indexOf(`${STONE_LAYER_PREFIX}road-minor-casing`),
+    );
+    // A sidewalk is never styled as a trail.
+    expect(JSON.stringify((trail as { filter?: unknown }).filter)).not.toContain('footway');
+    expect(JSON.stringify((footway as { filter?: unknown }).filter)).toContain('footway');
   });
 
   it('casts every road casing below every road ribbon', () => {
@@ -269,8 +278,8 @@ describe('buildStoneLayers', () => {
     const town = labels.find((l) => l.id === `${STONE_LAYER_PREFIX}place-town`);
     expect((town?.layout as Record<string, unknown>)['text-field']).toEqual([
       'coalesce',
-      ['get', 'name:latin'],
       ['get', 'name'],
+      '',
     ]);
   });
 });

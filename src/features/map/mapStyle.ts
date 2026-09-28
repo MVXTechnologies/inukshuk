@@ -50,7 +50,8 @@ const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium
  */
 const OFM_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
-const OFM_BASE_ATTRIBUTION = '© OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
+/** The vector base map's data: OSM via our Protomaps extract. */
+const PROTOMAPS_ATTRIBUTION = '© OpenStreetMap contributors · Protomaps';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
 export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
@@ -276,8 +277,8 @@ export interface OsmStyleOptions {
   /**
    * The vector Stone & Paper base (`@core/map/stoneStyle`) — used in place of
    * the OSM raster ONLY while `VECTOR_BASEMAP_ENABLED` is on and the basemap
-   * is `map`; ignored otherwise. `tiles` are the resolved OpenFreeMap
-   * templates (see `useOverlayLabelTiles` — native drops a TileJSON `url`).
+   * is `map`; ignored otherwise. `tiles` are XYZ templates on our own
+   * Protomaps (schema v4) host — see `@data/basemapTiles`.
    * Callers leave it unset for offline packs and offline-only mode, which
    * stay raster.
    */
@@ -497,8 +498,9 @@ export function buildOsmStyle(
       type: 'vector',
       tiles: [...options.vectorBasemap.tiles],
       minzoom: 0,
-      maxzoom: 14,
-      attribution: OFM_BASE_ATTRIBUTION,
+      // Protomaps builds go to z15; MapLibre overzooms past that.
+      maxzoom: 15,
+      attribution: PROTOMAPS_ATTRIBUTION,
     };
     style.glyphs = OFM_GLYPHS_URL;
     style.layers = [

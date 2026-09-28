@@ -10,8 +10,9 @@ import { palette, schemeTokens, type SchemeTokens } from '@ui/tokens';
  * - land: paper (light) / the stone-night surface, the board's #1B2126;
  * - woods: sage (light) / sageDeep (night), washed by the style;
  * - water and shore: river; water labels: the info blue (#8CC4F0 on night);
- * - roads: white-paper ribbon in an outline casing (light), a stone ribbon
- *   in a near-black casing (night);
+ * - roads: white-paper ribbon in an outline casing (light); on night a
+ *   graniteDeep ribbon in a near-black casing — the board's #4A535C is under
+ *   2:1 on the night ground, graniteDeep clears the 3:1 non-text minimum;
  * - trails: graniteDeep (light, the board's exact path colour) / the night
  *   secondary ink;
  * - contours: ochre, the closest token to the board's brown isolines.
@@ -26,7 +27,7 @@ export function stoneSchemeFromTokens(tokens: SchemeTokens, dark: boolean): Ston
     water: palette.river,
     waterLine: palette.river,
     waterInk: tokens.data.info,
-    roadFill: dark ? tokens.outlineVariant : tokens.surface,
+    roadFill: dark ? palette.graniteDeep : tokens.surface,
     roadCasing: dark ? tokens.background : tokens.outlineVariant,
     path: dark ? tokens.inkVariant : palette.graniteDeep,
     lineMuted: tokens.outline,

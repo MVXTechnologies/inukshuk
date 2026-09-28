@@ -253,6 +253,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // site (/catalog/v1/manifest.json). E2E builds point it at a loopback
     // fixture server (see .maestro/store.yaml) so CI never depends on NRCan.
     catalogManifestUrl: process.env.CATALOG_MANIFEST_URL,
+    // Vector base-map tiles (src/data/basemapTiles). Unset = our Cloudflare
+    // host; dev points it at a loopback `pmtiles serve`.
+    vectorTilesUrl: process.env.VECTOR_TILES_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

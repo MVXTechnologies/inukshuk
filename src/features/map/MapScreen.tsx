@@ -70,6 +70,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
+import { vectorTilesUrl } from '@data/basemapTiles';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -506,12 +507,12 @@ export function MapScreen() {
     // bounded frame map can never evict one out from under a live slot.
     weatherSlotsRef.current = weatherFade.slots;
   }, [weatherFade.slots]);
-  // The reference labels ride weather/marine; the (flag-gated) vector base
-  // map reuses the same resolved OpenFreeMap templates. Offline-only stays
-  // raster, so neither fetches there.
+  // The reference labels ride weather/marine (OpenFreeMap). The flag-gated
+  // vector base map reads our own tile host. Offline-only stays raster, so
+  // neither fetches there.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
-  const vectorBasemap = VECTOR_BASEMAP_ENABLED && basemap === 'map';
-  const overlayTiles = useOverlayLabelTiles((referenceOverlay || vectorBasemap) && !offlineOnly);
+  const vectorBasemap = VECTOR_BASEMAP_ENABLED && basemap === 'map' && !offlineOnly;
+  const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
   // memo below already depends on it through the marine chart.
@@ -557,9 +558,7 @@ export function MapScreen() {
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
-      ...(overlayTiles !== null && vectorBasemap
-        ? { vectorBasemap: { tiles: overlayTiles, dark: theme.dark } }
-        : {}),
+      ...(vectorBasemap ? { vectorBasemap: { tiles: [vectorTilesUrl()], dark: theme.dark } } : {}),
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
