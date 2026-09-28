@@ -1,3 +1,4 @@
+import { HeaderContours } from '@ui/components/ContourTexture';
 import { filterCatalogItems } from '@core/catalog/filterCatalog';
 import { indexInstallStatus } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters } from '@core/catalog/nearest';
@@ -475,7 +476,8 @@ export function StoreScreen() {
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
-      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+      <HeaderContours />
+      <Appbar.Header style={{ backgroundColor: 'transparent' }}>
         {browsing && <Appbar.BackAction onPress={leaveList} />}
         <Appbar.Content
           title={

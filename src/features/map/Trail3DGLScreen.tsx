@@ -36,12 +36,12 @@ import {
   Snackbar,
   Surface,
   Text,
-  TextInput,
   useTheme,
 } from 'react-native-paper';
 import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
+import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
@@ -1220,7 +1220,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
           <Dialog.Title>{editing?.mode === 'edit' ? 'Edit note' : 'New note'}</Dialog.Title>
           <Dialog.Content>
             <KeyboardDismissArea>
-              <TextInput
+              <EndCaretTextInput
                 label="Note"
                 value={draft}
                 onChangeText={setDraft}
