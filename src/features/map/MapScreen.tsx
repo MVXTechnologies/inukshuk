@@ -2280,7 +2280,8 @@ export function MapScreen() {
               <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
             )}
           </View>
-          <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
+          {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
+          <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
             {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
           </View>
         </View>
