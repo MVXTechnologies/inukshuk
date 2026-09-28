@@ -8,6 +8,9 @@ import {
   OFFLINE_PACK_FALLBACK_MAX_ZOOM,
   NATIVE_MAX_ZOOM,
   packZoomRange,
+  sourceMaxZoom,
+  needsRedownload,
+  VECTOR_MAX_ZOOM,
   estimateRegionDownload,
   sourceTileZoom,
   viewportTileCount,
@@ -181,5 +184,43 @@ describe('live-viewport DEM tile load (#230)', () => {
     // Camera z15 and z14 both resolve to DEM z15 with 256-px tiles, so the
     // sweep pays for that level once (at its largest viewport set), not twice.
     expect(zoomOutTileLoad(15, 14, PHONE, 256, DEM_MAX_ZOOM, 0)).toBe(15);
+  });
+});
+
+describe('vector packs (our Protomaps base map)', () => {
+  const box = { minLat: 46.79, minLng: -71.25, maxLat: 46.82, maxLng: -71.2 };
+
+  it('caps only the map basemap at the vector max zoom', () => {
+    expect(sourceMaxZoom('map', 'vector')).toBe(VECTOR_MAX_ZOOM);
+    expect(sourceMaxZoom('map')).toBe(NATIVE_MAX_ZOOM.map);
+    expect(sourceMaxZoom('relief', 'vector')).toBe(NATIVE_MAX_ZOOM.relief);
+    expect(sourceMaxZoom('satellite', 'vector')).toBe(NATIVE_MAX_ZOOM.satellite);
+  });
+
+  it('clamps a deep request to z15 for a vector map pack', () => {
+    expect(packZoomRange('map', 10, 17, 'vector')).toEqual({ minZoom: 10, maxZoom: 15 });
+    expect(packZoomRange('map', 10, 17)).toEqual({ minZoom: 10, maxZoom: 17 });
+  });
+
+  it('estimates a vector map pack from its own zooms and tile size', () => {
+    const raster = estimateRegionDownload(box, 10, 17, ['map']);
+    const vector = estimateRegionDownload(box, 10, 17, ['map'], 'vector');
+    expect(vector.tiles).toBe(tileCountForRegion(box, 10, 15));
+    expect(vector.tiles).toBeLessThan(raster.tiles);
+    expect(vector.bytes).toBeLessThan(raster.bytes);
+    // Satellite in the same call is unaffected by the map's format.
+    expect(estimateRegionDownload(box, 10, 17, ['satellite'], 'vector')).toEqual(
+      estimateRegionDownload(box, 10, 17, ['satellite']),
+    );
+  });
+});
+
+describe('needsRedownload', () => {
+  it('flags raster map packs only once the map is vector', () => {
+    expect(needsRedownload({ basemap: 'map', format: 'raster' }, 'vector')).toBe(true);
+    expect(needsRedownload({ basemap: 'map', format: 'vector' }, 'vector')).toBe(false);
+    expect(needsRedownload({ basemap: 'map', format: 'raster' }, 'raster')).toBe(false);
+    expect(needsRedownload({ basemap: 'satellite', format: 'raster' }, 'vector')).toBe(false);
+    expect(needsRedownload({ basemap: 'relief', format: 'raster' }, 'vector')).toBe(false);
   });
 });

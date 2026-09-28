@@ -1,0 +1,20 @@
+{
+  "name": "inukshuk-tiles-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pmtiles": "4.5.0",
+    "maplibre-contour": "0.1.1",
+    "fast-png": "^7.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260928.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.142.0"
+  }
+}

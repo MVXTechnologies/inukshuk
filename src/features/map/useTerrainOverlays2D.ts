@@ -60,14 +60,21 @@ export function useTerrainOverlays2D({
   mapRef,
   boundsVersion,
   active,
+  contoursFromTiles = false,
 }: {
   mapRef: RefObject<MapRef | null>;
   boundsVersion: number;
   /** False while the 3D view (or anything else) makes 2D overlays moot. */
   active: boolean;
+  /**
+   * The base map draws contours from served vector tiles (the Stone & Paper
+   * map): don't also compute them here. Slope shading is unaffected.
+   */
+  contoursFromTiles?: boolean;
 }): TerrainOverlays2D {
   const slopeOn = useSettingsStore((s) => s.terrainSlope);
-  const contoursOn = useSettingsStore((s) => s.terrainContours);
+  const contoursSetting = useSettingsStore((s) => s.terrainContours);
+  const contoursOn = contoursSetting && !contoursFromTiles;
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);

@@ -1,0 +1,17 @@
+# Monthly vector base-map refresh on the NAS:
+#   docker compose -f ~/inukshuk-tiles/infra/nas/compose.yaml up -d
+# The home folder is mounted at the SAME path so the paths refresh.sh hands to
+# `docker run -v` (through the host's Docker socket) resolve on the host.
+services:
+  tiles-refresh:
+    image: docker:27-cli
+    container_name: inukshuk-tiles-refresh
+    restart: unless-stopped
+    environment:
+      HOME: /home/pythagorasv02
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/pythagorasv02/inukshuk-tiles:/home/pythagorasv02/inukshuk-tiles
+    entrypoint: ['/bin/sh', '/home/pythagorasv02/inukshuk-tiles/infra/nas/scheduler.sh']
+    logging:
+      options: { max-size: '1m', max-file: '3' }

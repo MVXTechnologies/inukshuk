@@ -1,4 +1,4 @@
-import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { MARINE_DISCLAIMER, OPENSEAMAP_ATTRIBUTION } from '@core/geo/marineLayers';
 import { MARINE_SOURCES, NOAA_ENC_ATTRIBUTION } from '@core/geo/marineSources';
 import { ECCC_ATTRIBUTION } from '@core/geo/weatherLayers';
@@ -33,6 +33,9 @@ function withoutDisclaimer(line: string): string {
  */
 const PARTS: readonly string[] = [
   '© OpenStreetMap contributors',
+  ...(VECTOR_BASEMAP_ENABLED
+    ? ['Vector map: Protomaps', 'Map font: Atkinson Hyperlegible Next']
+    : []),
   'Esri/ArcGIS basemaps',
   'AWS Terrain Tiles',
   'MapLibre',

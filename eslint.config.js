@@ -110,6 +110,8 @@ module.exports = [
       // at any depth.
       '**/dist/**',
       '**/node_modules/**',
+      // Standalone Cloudflare Worker with its own tsconfig/types (infra/tiles/worker).
+      'infra/**',
       '.expo/*',
       'assets/pdfjs/*',
       'coverage/*',

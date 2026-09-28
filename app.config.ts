@@ -253,6 +253,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // site (/catalog/v1/manifest.json). E2E builds point it at a loopback
     // fixture server (see .maestro/store.yaml) so CI never depends on NRCan.
     catalogManifestUrl: process.env.CATALOG_MANIFEST_URL,
+    // Vector base-map tiles and label glyphs (src/data/basemapTiles). Unset =
+    // our Cloudflare Worker; dev points them at a local `wrangler dev`, and
+    // VECTOR_GLYPHS_URL=none falls back to OpenFreeMap's Noto.
+    vectorTilesUrl: process.env.VECTOR_TILES_URL,
+    vectorGlyphsUrl: process.env.VECTOR_GLYPHS_URL,
+    vectorContoursUrl: process.env.VECTOR_CONTOURS_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

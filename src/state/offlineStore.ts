@@ -6,7 +6,7 @@ import {
   type OfflineRegion,
 } from '@data/offline';
 import { deleteRegionName, readRegionNames, saveRegionNames } from '@data/regionNames';
-import type { Basemap } from '@core/geo/tiles';
+import type { Basemap, PackFormat } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
@@ -18,6 +18,8 @@ import { create } from 'zustand';
  */
 export interface DownloadLayer {
   basemap: Basemap;
+  /** Default raster; `vector` for our Stone & Paper base map. */
+  format?: PackFormat;
   styleJSON: string;
   minZoom: number;
   maxZoom: number;
@@ -98,6 +100,7 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
               id: `${args.baseId}-${layer.basemap}`,
               label: args.label,
               basemap: layer.basemap,
+              ...(layer.format ? { format: layer.format } : {}),
               styleJSON: layer.styleJSON,
               bounds: args.bounds,
               minZoom: layer.minZoom,

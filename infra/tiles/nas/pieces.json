@@ -1,0 +1,12 @@
+{
+  "pieces": [
+    { "name": "basemap-na-east-north", "bbox": [-90, 40, -52, 84] },
+    { "name": "basemap-na-east-south", "bbox": [-90, 18, -52, 40] },
+    { "name": "basemap-na-central", "bbox": [-115, 18, -90, 84] },
+    { "name": "basemap-na-west", "bbox": [-180, 18, -115, 84] },
+    { "name": "basemap-eu-nw", "bbox": [-32, 50, 10, 72] },
+    { "name": "basemap-eu-sw", "bbox": [-32, 34, 10, 50] },
+    { "name": "basemap-eu-ne", "bbox": [10, 50, 45, 72] },
+    { "name": "basemap-eu-se", "bbox": [10, 34, 45, 50] }
+  ]
+}

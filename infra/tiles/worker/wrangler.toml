@@ -1,0 +1,15 @@
+# Cloudflare Worker serving the vector base map from R2 (see ../README.md).
+name = "inukshuk-tiles"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Bind to tiles.mvxtechnologies.com once the zone is on Cloudflare:
+# routes = [{ pattern = "tiles.mvxtechnologies.com", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "inukshuk-tiles"
+
+[vars]
+ALLOWED_ORIGINS = "*"
+CACHE_CONTROL = "public, max-age=86400"

@@ -17,6 +17,9 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
+import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
+import { vectorBasemapOption } from '@data/basemapTiles';
+import { useTheme } from 'react-native-paper';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
@@ -46,9 +49,21 @@ export function Trail2DView({
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const mainBasemap = useMapStore((s) => s.basemap);
   const bm = basemap ?? mainBasemap;
+  const theme = useTheme();
+  const contours = useSettingsStore((s) => s.terrainContours);
+  // The Stone & Paper vector map here too (flag-gated), with served contours.
   const style = useMemo(
-    () => buildOsmStyle(tileUrl, false, bm, showHillshade),
-    [tileUrl, bm, showHillshade],
+    () =>
+      buildOsmStyle(
+        tileUrl,
+        false,
+        bm,
+        showHillshade,
+        VECTOR_BASEMAP_ENABLED && bm === 'map'
+          ? { vectorBasemap: vectorBasemapOption(theme.dark, contours) }
+          : {},
+      ),
+    [tileUrl, bm, showHillshade, theme.dark, contours],
   );
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);

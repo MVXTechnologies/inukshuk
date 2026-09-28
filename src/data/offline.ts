@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { packZoomRange } from '@core/geo/tiles';
+import { packZoomRange, type PackFormat } from '@core/geo/tiles';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import type { BoundingBox } from '@core/models';
@@ -56,6 +56,11 @@ export interface OfflineRegion {
    * (`OFFLINE_PACK_FALLBACK_MAX_ZOOM`) so overzoom stays safe.
    */
   maxZoom?: number;
+  /**
+   * Raster image tiles or our vector base map. Packs from before the vector
+   * map carry no format and are raster.
+   */
+  format: PackFormat;
 }
 
 // MapLibre LngLatBounds is [west, south, east, north].
@@ -77,6 +82,8 @@ interface PackMeta {
   // Top downloaded zoom — lets the live map overscale past the pack instead of
   // requesting tiles that were never stored. Absent on pre-existing packs.
   maxZoom?: number;
+  // 'vector' for our Protomaps base map; absent (= raster) on older packs.
+  format?: PackFormat;
 }
 
 function regionFromPack(
@@ -98,6 +105,7 @@ function regionFromPack(
     // tile-size field of the first status read was 0 — #127).
     sizeBytes: status ? status.completedTileSize || status.completedResourceSize : 0,
     complete: (status?.percentage ?? 0) >= 100,
+    format: meta.format === 'vector' ? 'vector' : 'raster',
     // Only trust a sane recorded number; legacy packs simply omit it.
     ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
       ? { maxZoom: meta.maxZoom }
@@ -138,6 +146,8 @@ export async function createRegionPack(
     id: string;
     label: string;
     basemap: OfflineRegion['basemap'];
+    /** Default raster; `vector` for a Stone & Paper `map` pack. */
+    format?: PackFormat;
     styleJSON: string;
     bounds: BoundingBox;
     minZoom: number;
@@ -149,7 +159,8 @@ export async function createRegionPack(
   // basemap's tile source actually serves (relief: z15) and MapLibre rejects an
   // inverted range outright. Clamping here means no caller can create a pack
   // that is doomed before the first tile is fetched.
-  const { minZoom, maxZoom } = packZoomRange(args.basemap, args.minZoom, args.maxZoom);
+  const format = args.format ?? 'raster';
+  const { minZoom, maxZoom } = packZoomRange(args.basemap, args.minZoom, args.maxZoom, format);
 
   // OfflinePackCreateOptions has no `name` field — the native layer assigns a UUID.
   // We embed our app-level id in metadata so we can recover it in listRegionPacks().
@@ -160,6 +171,7 @@ export async function createRegionPack(
     label: args.label,
     basemap: args.basemap,
     maxZoom,
+    format,
   };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can

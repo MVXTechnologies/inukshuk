@@ -6,7 +6,7 @@ import {
   unprojectablePins,
   type ProjectedPin,
 } from '@core/geo/pinHitTest';
-import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { pdfOverlayMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
@@ -70,6 +70,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
+import { vectorBasemapOption } from '@data/basemapTiles';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -310,11 +311,23 @@ export function MapScreen() {
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
-  // Stable per basemap so the contour sources' memo can hold (see the hoisted
-  // layer constants above).
-  const contourLayerSet = basemap === 'satellite' ? CONTOUR_LAYERS.satellite : CONTOUR_LAYERS.plain;
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  // Stable per basemap so the contour sources' memo can hold (see the hoisted
+  // layer constants above). The vector Stone & Paper base gets the board's
+  // ochre isolines. Offline-only draws it too: new `map` packs are vector
+  // (older raster ones are flagged for re-download in Settings).
+  const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
+  // Contours on the vector map are served tiles, part of the style.
+  const terrainContours = useSettingsStore((s) => s.terrainContours);
+  const contourLayerSet =
+    basemap === 'satellite'
+      ? CONTOUR_LAYERS.satellite
+      : stoneBase
+        ? theme.dark
+          ? CONTOUR_LAYERS.stoneDark
+          : CONTOUR_LAYERS.stoneLight
+        : CONTOUR_LAYERS.plain;
   const offlineRegions = useOfflineStore((s) => s.regions);
   // 2D base style with shaded-relief hillshade for the outdoor/topo look;
   // hillshade-3D was replaced by the real 3D terrain surface.
@@ -506,9 +519,11 @@ export function MapScreen() {
     // bounded frame map can never evict one out from under a live slot.
     weatherSlotsRef.current = weatherFade.slots;
   }, [weatherFade.slots]);
-  const overlayTiles = useOverlayLabelTiles(
-    (weatherLayer !== null || marineLayers.length > 0) && !offlineOnly,
-  );
+  // The reference labels ride weather/marine (OpenFreeMap; not offline). The
+  // flag-gated vector base map reads our own tile host, offline from packs.
+  const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
+  const vectorBasemap = stoneBase;
+  const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
   // memo below already depends on it through the marine chart.
@@ -554,7 +569,12 @@ export function MapScreen() {
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
-      ...(overlayTiles !== null
+      ...(vectorBasemap
+        ? {
+            vectorBasemap: vectorBasemapOption(theme.dark, terrainContours),
+          }
+        : {}),
+      ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
               dark: theme.dark,
@@ -614,6 +634,7 @@ export function MapScreen() {
     };
     return buildOsmStyle(tileUrl, false, basemap, showHillshade, options);
   }, [
+    terrainContours,
     tileUrl,
     basemap,
     showHillshade,
@@ -632,6 +653,8 @@ export function MapScreen() {
     marineChart.rasterUrl,
     weatherLayer,
     overlayTiles,
+    referenceOverlay,
+    vectorBasemap,
   ]);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
@@ -818,6 +841,7 @@ export function MapScreen() {
     // mapLoaded: the pipeline opens with getViewState — see the state's
     // declaration comment (native crash if called before the map loads).
     active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
+    contoursFromTiles: stoneBase,
   });
 
   // Wind particle overlay (weather M3): Windy-style streaks over the wind
@@ -2273,8 +2297,9 @@ export function MapScreen() {
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
               )}
             </View>
-            <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
-              {!terrain3d && <AttributionChip basemap={basemap} />}
+            {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
+            <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
+              {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
             </View>
           </View>
         )}
@@ -2579,7 +2604,7 @@ export function MapScreen() {
       </Snackbar>
       {downloadProgress !== null && (
         <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
-          {`Downloading ${downloadProgress.label}… ${downloadProgress.pct}%`}
+          {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
         </Snackbar>
       )}
     </View>

@@ -71,6 +71,17 @@ export const WEATHER_ENABLED: boolean = false;
 export const MARINE_ENABLED: boolean = false;
 
 /**
+ * Vector "Stone & Paper" base map (`@core/map/stoneStyle`) for the `map`
+ * basemap, from our own Protomaps tiles on Cloudflare (`@data/basemapTiles`,
+ * `infra/tiles/`): Atkinson labels, served contour lines, vector offline
+ * packs. Relief and satellite stay raster.
+ *
+ * ON since 2.0.0 (owner go, 2026-09-28). Flipping it off returns the OSM
+ * raster (and raster offline packs, which the OSM tile policy forbids).
+ */
+export const VECTOR_BASEMAP_ENABLED: boolean = true;
+
+/**
  * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
  * constant so the menu copy and the e2e matchers can never drift apart.
  */

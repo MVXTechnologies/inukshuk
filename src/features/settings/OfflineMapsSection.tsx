@@ -1,3 +1,5 @@
+import { needsRedownload } from '@core/geo/tiles';
+import { MAP_PACK_FORMAT } from '@features/map/mapStyle';
 import { formatBytes } from '@core/format';
 import { useOfflineStore } from '@state/offlineStore';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
@@ -62,7 +64,11 @@ export function OfflineMapsSection() {
             <List.Item
               key={region.id}
               title={region.label}
-              description={`${region.basemap} · ${formatBytes(region.sizeBytes)}`}
+              description={
+                needsRedownload(region, MAP_PACK_FORMAT)
+                  ? `Old map style · download again · ${formatBytes(region.sizeBytes)}`
+                  : `${region.basemap} · ${formatBytes(region.sizeBytes)}`
+              }
               right={(p) => (
                 <View style={{ flexDirection: 'row' }}>
                   <IconButton {...p} icon="pencil-outline" onPress={() => beginRename(region)} />

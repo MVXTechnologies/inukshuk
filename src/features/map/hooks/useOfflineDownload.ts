@@ -11,6 +11,7 @@ import {
   overviewZoomFor,
   packZoomRange,
   type Basemap,
+  type PackFormat,
 } from '@core/geo/tiles';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
 import { setOfflineOnly } from '@data/offline';
@@ -20,7 +21,8 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { buildOsmStyle } from '../mapStyle';
+import { vectorBasemapOption } from '@data/basemapTiles';
+import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
 import { resolveRegionName } from '../regionNaming';
 
 /**
@@ -216,7 +218,13 @@ export function useOfflineDownload({
       // the same way the download sheet does (#111) and compare it to the live
       // free-disk figure BEFORE a single tile is fetched: block outright if it
       // can't fit, warn-but-allow if it would eat into the last of the space.
-      const { bytes: estimatedBytes } = estimateRegionDownload(bounds, minZoom, maxZoom, basemaps);
+      const { bytes: estimatedBytes } = estimateRegionDownload(
+        bounds,
+        minZoom,
+        maxZoom,
+        basemaps,
+        MAP_PACK_FORMAT,
+      );
       const budget = assessFreeSpaceForWrite(estimatedBytes);
       if (budget?.verdict === 'block') {
         showSnack(budget.message ?? 'Not enough free space for this download');
@@ -259,11 +267,15 @@ export function useOfflineDownload({
           bounds,
           // Each basemap's tile service tops out at a different zoom, so each
           // layer downloads its own clamped range (relief can't go past z15).
-          layers: basemaps.map((bm) => ({
-            basemap: bm,
-            styleJSON: JSON.stringify(buildOsmStyle(tileUrl, false, bm)),
-            ...packZoomRange(bm, minZoom, maxZoom),
-          })),
+          layers: basemaps.map((bm) => {
+            const format = bm === 'map' ? MAP_PACK_FORMAT : 'raster';
+            return {
+              basemap: bm,
+              format,
+              styleJSON: JSON.stringify(packStyle(tileUrl, bm, format)),
+              ...packZoomRange(bm, minZoom, maxZoom, format),
+            };
+          }),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -285,4 +297,18 @@ export function useOfflineDownload({
     prepareRegionGeometry,
     resolveRegionRect,
   };
+}
+
+/**
+ * The style a pack downloads through: MapLibre stores every tile and glyph
+ * range the style references inside the box. A vector `map` pack therefore
+ * references our vector tiles (and glyphs), not the OSM raster.
+ */
+function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat) {
+  if (format !== 'vector') return buildOsmStyle(tileUrl, false, basemap);
+  // Packs always keep the contours, so they work offline whichever way the
+  // Contours toggle is set later.
+  return buildOsmStyle(tileUrl, false, basemap, false, {
+    vectorBasemap: vectorBasemapOption(false, true),
+  });
 }

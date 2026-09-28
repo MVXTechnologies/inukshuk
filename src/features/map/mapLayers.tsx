@@ -1,4 +1,5 @@
 import { mapColors } from '@ui/theme';
+import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 import { heatRadiusExpression } from '@core/heat/heatRadius';
@@ -185,9 +186,43 @@ function contourLayers(satellite: boolean) {
   } as const;
 }
 
+/**
+ * Contours over the vector Stone & Paper base: the board's warm ochre
+ * isolines, no halo (the paper and the night ground are calm enough), major
+ * lines stronger. Night keeps the hue and drops the opacity.
+ */
+function stoneContourLayers(dark: boolean) {
+  return {
+    minor: [
+      <Layer
+        key="line"
+        id="contours2d-minor-line"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        type="line"
+        paint={{
+          'line-color': palette.ochre,
+          'line-opacity': dark ? 0.4 : 0.55,
+          'line-width': 0.8,
+        }}
+      />,
+    ],
+    major: [
+      <Layer
+        key="line"
+        id="contours2d-major-line"
+        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        type="line"
+        paint={{ 'line-color': palette.ochre, 'line-opacity': dark ? 0.6 : 0.8, 'line-width': 1.4 }}
+      />,
+    ],
+  } as const;
+}
+
 export const CONTOUR_LAYERS = {
   satellite: contourLayers(true),
   plain: contourLayers(false),
+  stoneLight: stoneContourLayers(false),
+  stoneDark: stoneContourLayers(true),
 } as const;
 
 /** PDF overview raster (#332): below the terrain overlays, trails and the puck. */

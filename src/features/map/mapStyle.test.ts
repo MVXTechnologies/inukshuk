@@ -705,6 +705,11 @@ describe('basemapAttribution', () => {
   ])('credits the %s basemap', (basemap, credit) => {
     expect(basemapAttribution(basemap)).toBe(credit);
   });
+
+  it('credits Protomaps on the vector base map only', () => {
+    expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
+    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar');
+  });
 });
 
 describe('night red raster (decision 4)', () => {
@@ -719,5 +724,116 @@ describe('night red raster (decision 4)', () => {
 
   it('keeps the normal paint otherwise', () => {
     expect(osmPaint(false)?.['raster-brightness-max']).not.toBe(0.35);
+  });
+});
+
+describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
+  const VECTOR_TILES = ['https://vector.example/{z}/{x}/{y}.pbf'];
+  const vectorBasemap = { tiles: VECTOR_TILES, dark: false };
+
+  /** buildOsmStyle from a fresh module graph with the flag forced. */
+  function withFlag(enabled: boolean): typeof buildOsmStyle {
+    let build: typeof buildOsmStyle = buildOsmStyle;
+    jest.isolateModules(() => {
+      jest.doMock('@core/features/flags', () => ({
+        ...jest.requireActual<object>('@core/features/flags'),
+        VECTOR_BASEMAP_ENABLED: enabled,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      build = (require('./mapStyle') as typeof import('./mapStyle')).buildOsmStyle;
+    });
+    return build;
+  }
+
+  it('flag off: the option is ignored and the map stays the OSM raster', () => {
+    const s = withFlag(false)(TILE, false, 'map', false, { vectorBasemap });
+    expect(baseSource(s).tiles).toEqual([TILE]);
+    expect(s.sources['basemap-vector']).toBeUndefined();
+    expect(s.glyphs).toBeUndefined();
+    expect(layerIds(s).some((id) => id.startsWith('stone-'))).toBe(false);
+  });
+
+  it('flag off: identical to a style built without the option', () => {
+    const build = withFlag(false);
+    expect(build(TILE, false, 'map', true, { vectorBasemap })).toEqual(
+      build(TILE, false, 'map', true),
+    );
+  });
+
+  it('flag on + map: swaps the raster for the vector source and stone layers', () => {
+    const s = withFlag(true)(TILE, false, 'map', true, { vectorBasemap });
+    expect(s.sources.osm).toBeUndefined();
+    expect(s.sources['basemap-vector']).toMatchObject({ type: 'vector', tiles: VECTOR_TILES });
+    expect(s.glyphs).toMatch(/\{fontstack\}.*\{range\}/);
+    const ids = layerIds(s);
+    expect(ids).not.toContain('osm');
+    expect(ids).not.toContain('background');
+    expect(ids[0]).toBe('stone-background');
+    // Body under the hillshade, labels over it, all under the overlay anchors.
+    const at = (id: string) => ids.indexOf(id);
+    expect(at('stone-water')).toBeLessThan(at('hillshade-2d'));
+    expect(at('stone-place-town')).toBeGreaterThan(at('hillshade-2d'));
+    expect(at('stone-place-town')).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
+    // Every vector layer reads the declared source.
+    for (const l of s.layers) {
+      if ('source' in l && l.id.startsWith('stone-')) expect(l.source).toBe('basemap-vector');
+    }
+  });
+
+  it('flag on: Noto from OpenFreeMap by default, Atkinson from our glyph host when set', () => {
+    const build = withFlag(true);
+    const fontsOf = (st: ReturnType<typeof build>) =>
+      st.layers.flatMap((l) =>
+        l.type === 'symbol' && l.id.startsWith('stone-')
+          ? [JSON.stringify((l.layout as Record<string, unknown>)['text-font'])]
+          : [],
+      );
+    const noto = build(TILE, false, 'map', false, { vectorBasemap });
+    expect(noto.glyphs).toContain('openfreemap');
+    expect(fontsOf(noto).every((f) => f.includes('Noto Sans'))).toBe(true);
+    const ours = 'https://tiles.example/fonts/{fontstack}/{range}.pbf';
+    const atkinson = build(TILE, false, 'map', false, {
+      vectorBasemap: { ...vectorBasemap, glyphs: ours },
+    });
+    expect(atkinson.glyphs).toBe(ours);
+    expect(fontsOf(atkinson).every((f) => f.includes('Atkinson Hyperlegible Next'))).toBe(true);
+  });
+
+  it('flag on: adds served contour tiles only when asked', () => {
+    const build = withFlag(true);
+    const without = build(TILE, false, 'map', false, { vectorBasemap });
+    expect(without.sources['basemap-contours']).toBeUndefined();
+    const withContours = build(TILE, false, 'map', false, {
+      vectorBasemap: {
+        ...vectorBasemap,
+        contours: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
+      },
+    });
+    expect(withContours.sources['basemap-contours']).toMatchObject({ type: 'vector', maxzoom: 14 });
+    const ids = layerIds(withContours);
+    expect(ids).toContain('stone-contour-major');
+    expect(ids).toContain('stone-contour-minor');
+  });
+
+  it('flag on: the dark scheme yields a different stone style', () => {
+    const build = withFlag(true);
+    const light = build(TILE, false, 'map', false, { vectorBasemap });
+    const dark = build(TILE, false, 'map', false, {
+      vectorBasemap: { ...vectorBasemap, dark: true },
+    });
+    expect(JSON.stringify(dark.layers)).not.toEqual(JSON.stringify(light.layers));
+  });
+
+  it.each(['relief', 'satellite'] as const)('flag on: %s stays raster', (basemap) => {
+    const build = withFlag(true);
+    expect(build(TILE, false, basemap, false, { vectorBasemap })).toEqual(
+      build(TILE, false, basemap, false),
+    );
+  });
+
+  it('flag on: offline packs (no option) stay raster', () => {
+    const s = withFlag(true)(TILE, false, 'map');
+    expect(baseSource(s).tiles).toEqual([TILE]);
+    expect(s.sources['basemap-vector']).toBeUndefined();
   });
 });
