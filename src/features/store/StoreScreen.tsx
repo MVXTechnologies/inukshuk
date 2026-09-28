@@ -49,7 +49,7 @@ import {
 } from './downloadCatalogItem';
 
 /**
- * The Maps tab — a free-map store over the world catalog (revamp
+ * The Explore tab ("Maps" before 2.0.0) — a free-map store over the world catalog (revamp
  * `After-Maps.html`, spec §6).
  *
  * Lands on **"Near you · Canadian sources first"**: the nearest Canadian
@@ -483,7 +483,7 @@ export function StoreScreen() {
               ? CATALOG_CATEGORY_LABELS[category]
               : browsing
                 ? 'All maps'
-                : 'Maps'
+                : 'Explore'
           }
           titleStyle={browsing ? undefined : styles.screenTitle}
         />

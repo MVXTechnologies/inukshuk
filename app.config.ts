@@ -126,6 +126,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    // Android: the system navigation bar starts hidden (swipe up to reveal);
+    // src/ui/useAndroidImmersive keeps it that way.
+    ['expo-navigation-bar', { hidden: true }],
     // Atkinson Hyperlegible Next, embedded natively so text is in the brand
     // face from the first frame (no load gate). Families and weights are
     // mirrored in src/ui/fonts.ts. Embedding changes the native fingerprint:
