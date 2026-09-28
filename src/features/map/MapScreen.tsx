@@ -2588,7 +2588,7 @@ export function MapScreen() {
       </Snackbar>
       {downloadProgress !== null && (
         <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
-          {`Downloading ${downloadProgress.label}… ${downloadProgress.pct}%`}
+          {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
         </Snackbar>
       )}
     </View>
