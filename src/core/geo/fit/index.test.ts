@@ -227,7 +227,9 @@ describe('decodeFit', () => {
     it('never hangs or crashes on random garbage behind a valid header', () => {
       let seed = 42;
       const rand = () => {
-        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        seed ^= seed << 13;
+        seed ^= seed >>> 17;
+        seed ^= seed << 5;
         return seed & 0xff;
       };
       for (let i = 0; i < 300; i++) {
