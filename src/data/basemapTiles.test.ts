@@ -3,6 +3,7 @@ import {
   DEFAULT_VECTOR_CONTOURS_URL,
   DEFAULT_VECTOR_GLYPHS_URL,
   DEFAULT_VECTOR_TILES_URL,
+  vectorBasemapOption,
   vectorContoursUrl,
   vectorGlyphsUrl,
   vectorTilesUrl,
@@ -41,4 +42,16 @@ it('reads contour tiles from our Worker unless overridden', () => {
   expect(DEFAULT_VECTOR_CONTOURS_URL).toMatch(/\/contours\/\{z\}\/\{x\}\/\{y\}\.mvt$/);
   extra().vectorContoursUrl = 'http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt';
   expect(vectorContoursUrl()).toBe('http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt');
+});
+
+it('builds the style option from our hosts, contours only when asked', () => {
+  delete extra().vectorTilesUrl;
+  delete extra().vectorGlyphsUrl;
+  delete extra().vectorContoursUrl;
+  expect(vectorBasemapOption(true, false)).toEqual({
+    tiles: [DEFAULT_VECTOR_TILES_URL],
+    dark: true,
+    glyphs: DEFAULT_VECTOR_GLYPHS_URL,
+  });
+  expect(vectorBasemapOption(false, true).contours).toBe(DEFAULT_VECTOR_CONTOURS_URL);
 });

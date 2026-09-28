@@ -21,7 +21,7 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { vectorContoursUrl, vectorGlyphsUrl, vectorTilesUrl } from '@data/basemapTiles';
+import { vectorBasemapOption } from '@data/basemapTiles';
 import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
 import { resolveRegionName } from '../regionNaming';
 
@@ -306,15 +306,9 @@ export function useOfflineDownload({
  */
 function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat) {
   if (format !== 'vector') return buildOsmStyle(tileUrl, false, basemap);
-  const glyphs = vectorGlyphsUrl();
+  // Packs always keep the contours, so they work offline whichever way the
+  // Contours toggle is set later.
   return buildOsmStyle(tileUrl, false, basemap, false, {
-    vectorBasemap: {
-      tiles: [vectorTilesUrl()],
-      dark: false,
-      ...(glyphs !== null ? { glyphs } : {}),
-      // Packs always keep the contours, so they work offline whichever way
-      // the Contours toggle is set later.
-      contours: vectorContoursUrl(),
-    },
+    vectorBasemap: vectorBasemapOption(false, true),
   });
 }

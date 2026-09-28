@@ -42,3 +42,21 @@ export function vectorContoursUrl(): string {
   const value: unknown = Constants.expoConfig?.extra?.vectorContoursUrl;
   return typeof value === 'string' && value !== '' ? value : DEFAULT_VECTOR_CONTOURS_URL;
 }
+
+/**
+ * The `vectorBasemap` style option for our host (tiles, Atkinson glyphs and,
+ * when `withContours`, the served contour tiles) — one place for the main
+ * map, the trail viewer and offline packs.
+ */
+export function vectorBasemapOption(
+  dark: boolean,
+  withContours: boolean,
+): { tiles: string[]; dark: boolean; glyphs?: string; contours?: string } {
+  const glyphs = vectorGlyphsUrl();
+  return {
+    tiles: [vectorTilesUrl()],
+    dark,
+    ...(glyphs !== null ? { glyphs } : {}),
+    ...(withContours ? { contours: vectorContoursUrl() } : {}),
+  };
+}
