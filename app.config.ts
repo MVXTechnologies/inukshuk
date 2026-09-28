@@ -102,6 +102,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'ACCESS_BACKGROUND_LOCATION',
       'RECEIVE_BOOT_COMPLETED',
       'POST_NOTIFICATIONS',
+      // Health Connect import (#435), read-only: exercise sessions, their GPS
+      // routes (READ_EXERCISE_ROUTES = "all routes"; without it each route
+      // from another app asks per session), distance totals, and history
+      // older than 30 days. Play requires a Health apps declaration for these.
+      'android.permission.health.READ_EXERCISE',
+      'android.permission.health.READ_EXERCISE_ROUTES',
+      'android.permission.health.READ_DISTANCE',
+      'android.permission.health.READ_HEALTH_DATA_HISTORY',
     ],
     // Let users open a .gpx with Inukshuk from a file manager / browser. File
     // managers are inconsistent about GPX's MIME type, so match by MIME AND by
@@ -219,6 +227,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Allow cleartext to loopback only, for the in-app HTTP server that serves the
     // MapLibre style during an offline-region download (see src/data/offline.ts).
     './plugins/withLocalhostCleartext',
+    // Apple Health import (#435): the HealthKit entitlement + read usage text.
+    // Read-only — no update description, no background delivery.
+    [
+      '@kingstinct/react-native-healthkit',
+      {
+        NSHealthShareUsageDescription:
+          'Inukshuk reads your workouts and their routes so you can see them on your maps. It never writes to Health.',
+        NSHealthUpdateUsageDescription: false,
+        background: false,
+      },
+    ],
+    // Health Connect import (#435): the permissions-rationale intent filter and
+    // the Android 14+ VIEW_PERMISSION_USAGE activity-alias. The permissions
+    // themselves are listed under android.permissions above.
+    'react-native-health-connect',
+    // Health Connect's client library needs minSdk 26 (was React Native's 24).
+    ['expo-build-properties', { android: { minSdkVersion: 26 } }],
   ],
   experiments: {
     typedRoutes: true,
