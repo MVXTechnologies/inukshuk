@@ -257,11 +257,10 @@ export interface OpenedImport {
 export async function openImportedUri(uri: string): Promise<OpenedImport> {
   const noop = () => {};
   try {
-    return {
-      uri,
-      format: sniffActivityFormat(storage.readFileHead(uri, 4096), uri),
-      dispose: noop,
-    };
+    const head = storage.readFileHead(uri, 4096);
+    // An empty head means the provider reported no size to the handle
+    // (some content:// providers): copy it to find out what it is.
+    if (head.length > 0) return { uri, format: sniffActivityFormat(head, uri), dispose: noop };
   } catch {
     // Fall through to a cache copy.
   }

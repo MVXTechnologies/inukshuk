@@ -180,6 +180,12 @@ describe('opened uris', () => {
     copied.dispose();
     expect(files.has(copied.uri)).toBe(false);
 
+    // A provider that reports no size reads as empty in place: copy instead.
+    jest.mocked(storage.readFileHead).mockImplementationOnce(() => new Uint8Array(0));
+    const sizeless = await openImportedUri('content://x/1');
+    expect(sizeless.uri).toMatch(/^file:\/\/\/cache\/imports\//);
+    expect(sizeless.format).toBe('fit');
+
     const unreadable = await openImportedUri('content://missing');
     expect(unreadable.format).toBe('unknown');
 
