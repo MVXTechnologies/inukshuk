@@ -65,7 +65,9 @@ function stripComments(jsx: string): string {
 function fieldsIn(file: string): Field[] {
   const src = readFileSync(file, 'utf8');
   const found: Field[] = [];
-  const opener = /<(TextInput|Searchbar)(\s|\n|\/|>)/g;
+  // EndCaretTextInput is a Paper TextInput whose call sites carry the exit
+  // props; the wrapper itself (a pure pass-through) is skipped below.
+  const opener = /<(TextInput|Searchbar|EndCaretTextInput)(\s|\n|\/|>)/g;
   let m: RegExpExecArray | null;
   while ((m = opener.exec(src)) !== null) {
     const tag = m[1] ?? '';
@@ -90,7 +92,12 @@ function fieldsIn(file: string): Field[] {
   return found;
 }
 
-const fields = ROOTS.flatMap((r) => sourceFiles(r)).flatMap(fieldsIn);
+/** Pass-through wrappers: their fields' exits are checked at each call site. */
+const WRAPPERS = new Set(['src/ui/components/EndCaretTextInput.tsx']);
+
+const fields = ROOTS.flatMap((r) => sourceFiles(r))
+  .filter((f) => !WRAPPERS.has(f.slice(REPO_ROOT.length + 1)))
+  .flatMap(fieldsIn);
 
 describe('every text field can be escaped on iOS (#235)', () => {
   it('finds the app’s text fields at all (guards the scanner itself)', () => {

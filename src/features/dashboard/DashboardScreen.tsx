@@ -1,3 +1,4 @@
+import { HeaderContours } from '@ui/components/ContourTexture';
 import {
   calendarIndex,
   matchesCategoryFilter,
@@ -126,7 +127,7 @@ export function DashboardScreen() {
   // Logbook header (the old Dashboard): Settings left the tab bar, so its
   // gear lives here and in the Library header (revamp decision 6).
   const header = (
-    <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+    <Appbar.Header style={{ backgroundColor: 'transparent' }}>
       <Appbar.Content title="Logbook" titleStyle={styles.screenTitle} />
       <Appbar.Action
         icon="cog-outline"
@@ -139,6 +140,7 @@ export function DashboardScreen() {
   if (!hasAnyActivity) {
     return (
       <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
+        <HeaderContours />
         {header}
         <View style={styles.empty}>
           <Icon source="chart-line-variant" size={48} color={dim} />
@@ -155,6 +157,7 @@ export function DashboardScreen() {
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
+      <HeaderContours />
       {header}
       <ScrollView style={styles.fill} contentContainerStyle={styles.content}>
         <View style={styles.top}>

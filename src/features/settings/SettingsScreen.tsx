@@ -1,3 +1,4 @@
+import { HeaderContours } from '@ui/components/ContourTexture';
 import { describeDataArchive, planDataArchive } from '@core/export/archivePlan';
 import { MARINE_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { LIBRARY_SCHEMA_VERSION } from '@core/library/migrations';
@@ -247,8 +248,9 @@ export function SettingsScreen() {
   };
 
   return (
-    <View style={styles.fill}>
-      <Appbar.Header>
+    <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
+      <HeaderContours />
+      <Appbar.Header style={{ backgroundColor: 'transparent' }}>
         {router.canGoBack() && <Appbar.BackAction onPress={() => router.back()} />}
         <Appbar.Content title="Settings" />
       </Appbar.Header>

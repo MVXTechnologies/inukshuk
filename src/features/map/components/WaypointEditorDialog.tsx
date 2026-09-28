@@ -1,3 +1,4 @@
+import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
 import * as storage from '@data/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
@@ -161,7 +162,7 @@ function WaypointEditorContent({
               blurOnSubmit
               onSubmitEditing={() => Keyboard.dismiss()}
             />
-            <TextInput
+            <EndCaretTextInput
               label="Note"
               value={draft}
               onChangeText={onChangeDraft}
