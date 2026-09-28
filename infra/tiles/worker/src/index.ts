@@ -32,6 +32,47 @@ export interface Env {
    * UPLOAD_TOKEN`). Unset = uploads disabled (404).
    */
   UPLOAD_TOKEN?: string;
+  /** Strava API app id (public; `[vars]`). Unset = the token proxy answers 404. */
+  STRAVA_CLIENT_ID?: string;
+  /** Strava API app secret (`wrangler secret put STRAVA_CLIENT_SECRET`). */
+  STRAVA_CLIENT_SECRET?: string;
+}
+
+const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
+/** Longest code / refresh token we forward (Strava's are 40 hex chars). */
+const STRAVA_MAX_TOKEN_LENGTH = 256;
+
+/**
+ * Strava token proxy: `POST /strava/token {code}` and
+ * `POST /strava/refresh {refresh_token}`. Strava has no PKCE, and its API
+ * agreement forbids shipping the client secret in an app, so the app sends
+ * only the code or refresh token and we add the id + secret here. Strava's
+ * answer (status + JSON) goes back untouched; nothing is stored or cached.
+ */
+async function stravaToken(request: Request, env: Env, kind: string): Promise<Response> {
+  if (!env.STRAVA_CLIENT_ID || !env.STRAVA_CLIENT_SECRET)
+    return new Response('not found', { status: 404 });
+  if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const field = kind === 'token' ? 'code' : 'refresh_token';
+  const value = body?.[field];
+  if (typeof value !== 'string' || value === '' || value.length > STRAVA_MAX_TOKEN_LENGTH)
+    return Response.json({ message: `${field} required` }, { status: 400 });
+
+  const form = new URLSearchParams({
+    client_id: env.STRAVA_CLIENT_ID,
+    client_secret: env.STRAVA_CLIENT_SECRET,
+    [field]: value,
+    grant_type: kind === 'token' ? 'authorization_code' : 'refresh_token',
+  });
+  const upstream = await fetch(STRAVA_TOKEN_URL, { method: 'POST', body: form });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json',
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 /**
@@ -48,6 +89,7 @@ const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
 const CONTOUR_PATH = /^\/contours\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
 const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json))$/;
+const STRAVA_PATH = /^\/strava\/(token|refresh)$/;
 
 /** Directories and headers, shared across requests handled by this isolate. */
 const CACHE = new ResolvedValueCache(25, undefined, decompress);
@@ -298,6 +340,14 @@ export default {
         return await upload(request, env, url, uploadKey);
       } catch (e) {
         return new Response(`upload error: ${(e as Error).message}`, { status: 500 });
+      }
+    }
+    const [, stravaKind] = STRAVA_PATH.exec(url.pathname) ?? [];
+    if (stravaKind !== undefined) {
+      try {
+        return await stravaToken(request, env, stravaKind);
+      } catch {
+        return Response.json({ message: 'Strava unreachable' }, { status: 502 });
       }
     }
     if (request.method === 'OPTIONS') {

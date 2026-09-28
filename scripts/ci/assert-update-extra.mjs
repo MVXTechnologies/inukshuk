@@ -17,7 +17,7 @@
  *
  * Usage:
  *   node scripts/ci/assert-update-extra.mjs \
- *     --require stravaClientId,stravaClientSecret \
+ *     --require stravaClientId \
  *     --any-of errorReportEndpoint,errorReportToken
  *
  *   --require   keys that must be non-empty strings; `none` (or empty)

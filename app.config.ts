@@ -242,16 +242,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // See docs/DEPLOYMENT.md § Error reporting.
     errorReportToken: process.env.ERROR_REPORT_TOKEN,
     errorReportEndpoint: process.env.ERROR_REPORT_ENDPOINT,
-    // Strava integration (src/lib/strava). Strava's token exchange has NO PKCE
-    // and requires the client secret, so — like ERROR_REPORT_TOKEN above — the
-    // secret is baked into the binary at build time (EAS secrets:
-    // `eas env:create --name STRAVA_CLIENT_ID ...` / STRAVA_CLIENT_SECRET).
-    // Strava's own mobile guidance tolerates this for personal apps; the
-    // mitigation is the app's narrow scope (activity:write only) and per-app
-    // rate limits. With neither set (local dev, forks) the Settings row shows
-    // "not configured in this build". See docs/DEPLOYMENT.md § Strava.
+    // Strava integration (src/lib/strava): only the PUBLIC client id ships.
+    // Strava has no PKCE, so the code exchange and refreshes go through our
+    // token proxy (infra/tiles/worker), which holds the client secret — the
+    // June-2026 API agreement forbids baking it into a binary. Unset (local
+    // dev, forks): the Settings row shows "not configured in this build".
+    // See docs/DEPLOYMENT.md § Strava.
     stravaClientId: process.env.STRAVA_CLIENT_ID,
-    stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
     // Map-store catalog manifest (src/data/catalogCache). Unset = the Pages
     // site (/catalog/v1/manifest.json). E2E builds point it at a loopback
     // fixture server (see .maestro/store.yaml) so CI never depends on NRCan.

@@ -18,28 +18,29 @@ describe('formEncode', () => {
 });
 
 describe('buildAuthorizeUrl', () => {
-  it('targets the mobile authorize endpoint with the write scope and state', () => {
+  it('targets the mobile authorize endpoint with both activity scopes and state', () => {
     const url = buildAuthorizeUrl({ clientId: '123', state: 'nonce9' });
     expect(url.startsWith('https://www.strava.com/oauth/mobile/authorize?')).toBe(true);
     expect(url).toContain('client_id=123');
     expect(url).toContain('response_type=code');
-    expect(url).toContain('scope=activity%3Awrite');
+    expect(url).toContain('scope=activity%3Awrite%2Cactivity%3Aread_all');
     expect(url).toContain('state=nonce9');
     expect(url).toContain(`redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}`);
   });
 });
 
-describe('token bodies', () => {
-  it('builds the authorization-code exchange body', () => {
-    expect(buildTokenExchangeBody({ clientId: '1', clientSecret: 's', code: 'c' })).toBe(
-      'client_id=1&client_secret=s&code=c&grant_type=authorization_code',
-    );
+describe('token-proxy bodies', () => {
+  it('sends only the code — the proxy adds the client id and secret', () => {
+    expect(JSON.parse(buildTokenExchangeBody('c'))).toEqual({ code: 'c' });
   });
 
-  it('builds the refresh body', () => {
-    expect(buildTokenRefreshBody({ clientId: '1', clientSecret: 's', refreshToken: 'r' })).toBe(
-      'client_id=1&client_secret=s&refresh_token=r&grant_type=refresh_token',
-    );
+  it('sends only the refresh token', () => {
+    expect(JSON.parse(buildTokenRefreshBody('r'))).toEqual({ refresh_token: 'r' });
+  });
+
+  it('never carries a secret', () => {
+    expect(buildTokenExchangeBody('c')).not.toContain('secret');
+    expect(buildTokenRefreshBody('r')).not.toContain('secret');
   });
 });
 
@@ -82,15 +83,32 @@ describe('parseRedirectParams', () => {
 describe('authRedirectOutcome', () => {
   const url = (query: string) => `inukshuk://localhost/strava-auth?${query}`;
 
-  it('accepts a matching-state grant with the write scope', () => {
+  it('accepts a full grant', () => {
+    expect(
+      authRedirectOutcome(
+        url('state=s1&code=abc&scope=read,activity:write,activity:read_all'),
+        's1',
+      ),
+    ).toEqual({ ok: true, code: 'abc', scopes: ['activity:write', 'activity:read_all'] });
+  });
+
+  it('accepts a partial grant and reports what it allows', () => {
     expect(authRedirectOutcome(url('state=s1&code=abc&scope=read,activity:write'), 's1')).toEqual({
       ok: true,
       code: 'abc',
+      scopes: ['activity:write'],
     });
+    expect(
+      authRedirectOutcome(url('state=s1&code=abc&scope=read,activity:read_all'), 's1'),
+    ).toEqual({ ok: true, code: 'abc', scopes: ['activity:read_all'] });
   });
 
-  it('accepts when Strava omits the scope param', () => {
-    expect(authRedirectOutcome(url('state=s1&code=abc'), 's1')).toEqual({ ok: true, code: 'abc' });
+  it('takes a redirect without the scope param as the full request', () => {
+    expect(authRedirectOutcome(url('state=s1&code=abc'), 's1')).toEqual({
+      ok: true,
+      code: 'abc',
+      scopes: ['activity:write', 'activity:read_all'],
+    });
   });
 
   it('rejects a denial', () => {
@@ -107,7 +125,7 @@ describe('authRedirectOutcome', () => {
     });
   });
 
-  it('rejects a grant missing activity:write', () => {
+  it('rejects a grant with neither activity scope', () => {
     expect(authRedirectOutcome(url('state=s1&code=abc&scope=read'), 's1')).toEqual({
       ok: false,
       reason: 'missing-scope',

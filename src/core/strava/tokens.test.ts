@@ -1,4 +1,11 @@
-import { TOKEN_EXPIRY_SKEW_S, isTokenFresh, parseTokenResponse, sanitizeStravaDoc } from './tokens';
+import {
+  TOKEN_EXPIRY_SKEW_S,
+  canImport,
+  canUpload,
+  isTokenFresh,
+  parseTokenResponse,
+  sanitizeStravaDoc,
+} from './tokens';
 
 describe('isTokenFresh', () => {
   const expiresAtS = 1_000_000; // epoch seconds
@@ -79,6 +86,7 @@ describe('sanitizeStravaDoc', () => {
     expiresAt: 1_700_000_000,
     athleteId: 42,
     athleteName: 'Jane Doe',
+    scopes: ['activity:write', 'activity:read_all'],
   };
 
   it('round-trips a valid document', () => {
@@ -96,7 +104,16 @@ describe('sanitizeStravaDoc', () => {
       expiresAt: 5,
       athleteId: null,
       athleteName: '',
+      // Saved before #432: only upload-scoped connections existed.
+      scopes: ['activity:write'],
     });
+  });
+
+  it('drops non-string scopes', () => {
+    expect(
+      sanitizeStravaDoc({ schemaVersion: 1, connection: { ...connection, scopes: [1, 'x'] } })
+        ?.scopes,
+    ).toEqual(['x']);
   });
 
   it.each([
@@ -111,5 +128,23 @@ describe('sanitizeStravaDoc', () => {
     ],
   ])('returns null (disconnected) for %s', (_name, input) => {
     expect(sanitizeStravaDoc(input)).toBeNull();
+  });
+});
+
+describe('canImport / canUpload', () => {
+  const base = {
+    accessToken: 'a',
+    refreshToken: 'r',
+    expiresAt: 1,
+    athleteId: null,
+    athleteName: '',
+  };
+
+  it('follow the granted scopes', () => {
+    const upload = { ...base, scopes: ['activity:write'] };
+    const read = { ...base, scopes: ['activity:read_all'] };
+    expect([canUpload(upload), canImport(upload)]).toEqual([true, false]);
+    expect([canUpload(read), canImport(read)]).toEqual([false, true]);
+    expect([canUpload(null), canImport(null)]).toEqual([false, false]);
   });
 });
