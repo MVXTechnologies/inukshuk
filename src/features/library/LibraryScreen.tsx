@@ -1,3 +1,4 @@
+import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
 import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
@@ -339,6 +340,10 @@ export function LibraryScreen() {
 
   const openMap = (id: string) => {
     setActiveMap(id);
+    // Fly to it, like a trail: the map may be far from where the camera is.
+    const doc = maps.find((m) => m.id === id);
+    const bbox = doc ? mapDocumentBounds(doc) : null;
+    if (bbox) setFocusBounds(bbox);
     router.navigate('/');
   };
 
