@@ -1,11 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FONT_FAMILY } from '@ui/fonts';
-import { buildTabBarOptions, TAB_PILL, tabLabelStyle } from '@ui/tabBarStyle';
+import { buildTabBarOptions, TAB_PILL, tabBarBottomInset, tabLabelStyle } from '@ui/tabBarStyle';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecorderStore } from '@state/recorderStore';
 import { palette } from '@ui/tokens';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -38,6 +38,7 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const bottomInset = tabBarBottomInset(insets.bottom, Platform.OS);
   const recording = useRecorderStore((s) => s.status !== 'idle');
 
   const icon = (name: IconName) => {
@@ -84,6 +85,7 @@ export default function TabsLayout() {
   return (
     <View style={styles.fill}>
       <Tabs
+        safeAreaInsets={{ bottom: bottomInset }}
         screenOptions={({ route }) => ({
           headerShown: false,
           // Theme the scene background too, else it defaults to light and shows
@@ -131,7 +133,7 @@ export default function TabsLayout() {
         />
       </Tabs>
       {recording && !onMap && (
-        <View style={[styles.returnDock, { bottom: insets.bottom + 64 }]} pointerEvents="box-none">
+        <View style={[styles.returnDock, { bottom: bottomInset + 64 }]} pointerEvents="box-none">
           <Pressable
             onPress={() => router.navigate('/')}
             accessibilityRole="button"
