@@ -6,6 +6,24 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
+- **UI revamp follow-ups (from the PR 9 store-screenshot pass, 2026-09-27).**
+  - **Bug — map maker stuck on "Calculating…" at Mont-Sainte-Anne**
+    (47.0755, −70.9075, iOS 26 sim, Release). Reproducible: Next never
+    enables, even after Cancel and reopening on a settled map; the same
+    flow works around the Plains of Abraham. The box converts through
+    `useOfflineDownload`'s cached flat bounds, and only a region change
+    re-reads them, so one failed read with an idle map waits forever.
+    Find why the read fails there, and have the overlay's retry re-read
+    the bounds rather than only re-convert the cache.
+  - Trail inspect panel still draws descent in red (spec forbids red for
+    data) and the route in the old red, not route orange.
+  - Night: the heat glow and category colours are still orange/green.
+  - Trail 3D view renders blank in the iOS simulator (fine on device?).
+  - Maps tab "Near you" from Québec City lists New Brunswick CanTopo
+    sheets 300+ km away (CanTopo has no Québec City sheet).
+  - Refresh the marketing site's `docs/assets/screens/*.webp` and the Play
+    store phone/tablet sets from the new UI (needs a local Android build).
+
 - **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** ~~M1~~ SHIPPED
   (PR #195, OTA'd 1.5.0 + 1.4.0, 2026-08-09): thumbnail layer picker, dark
   translucent chrome, floating time scrubber (radar past / forecast to
