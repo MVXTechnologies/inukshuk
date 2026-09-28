@@ -1113,7 +1113,7 @@ export function LibraryScreen() {
     >
       <Menu.Item
         leadingIcon="map-marker-path"
-        title="Import GPX trail"
+        title="Import trails (GPX, FIT, TCX, zip)"
         onPress={() => {
           setImportOpen(false);
           void onImportGpx();
