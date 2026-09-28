@@ -6,8 +6,27 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
+- **Road navigation mode + real place search (owner request, 2026-09-28).**
+  - Want: type any place into "Search places" and find it the way Google does (businesses,
+    addresses, trailheads, lakes). Then a **2D turn-by-turn navigation mode**: route line,
+    next-maneuver banner ("In 300 m, turn left onto Rue Saint-Jean"), distance and ETA,
+    re-routing when off route, and voice later.
+  - Today the "Search places" pill only accepts coordinates (revamp phase 1).
+  - **Google's place index can't be used as-is.** Google Maps Platform terms forbid showing
+    Places/Geocoding results on a non-Google map, and ours is MapLibre with our own tiles. Using
+    Google would mean a Google map for that screen (cost, look, and not offline).
+  - Options to weigh:
+    - **Search:** Photon or Pelias (OSM geocoders), self-hostable on the NAS next to the tiles.
+      Or a paid API that allows any map (Mapbox Search, HERE, Stadia/Pelias hosted). Check
+      coverage of Québec POIs and French names.
+    - **Routing and turn-by-turn:** Valhalla (car, bike, foot profiles, turn-by-turn narrative,
+      can run offline on-device from tiles), GraphHopper or OSRM. Self-host on the NAS or a
+      small VM behind the Cloudflare Worker. `maplibre-navigation` has the UI patterns.
+  - Fits the new vector base map (road classes are already styled). Needs a design pass: a
+    driving HUD next to the existing recording panel.
 - **UI revamp follow-ups (from the PR 9 store-screenshot pass, 2026-09-27).**
-  - **Bug — map maker stuck on "Calculating…" at Mont-Sainte-Anne**
+  - ~~**Bug — map maker stuck on "Calculating…" at Mont-Sainte-Anne**~~ FIXED in #423
+    (onDidFinishLoadingMap never fired, so `mapLoaded` stayed false).
     (47.0755, −70.9075, iOS 26 sim, Release). Reproducible: Next never
     enables, even after Cancel and reopening on a settled map; the same
     flow works around the Plains of Abraham. The box converts through

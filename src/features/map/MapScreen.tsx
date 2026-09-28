@@ -1644,6 +1644,9 @@ export function MapScreen() {
           // to keep getViewState() off an uninitialised native view, and
           // only an unmounted <Map> can put us back in that state — which
           // the effect above re-arms.
+          // The style is parsed and the native view exists: safe for
+          // getViewState(). Same reasoning as the region-change hook below.
+          onDidFinishLoadingStyle={() => setMapLoaded(true)}
           onDidFinishLoadingMap={() => {
             setMapLoaded(true);
             // Seed the scale bar: onRegionDidChange is not guaranteed to fire
@@ -1668,6 +1671,12 @@ export function MapScreen() {
           // otherwise — the map stays byte-identical to a windless one).
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
+            // A settled camera is proof the native map is up: in some sessions
+            // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
+            // never fires, which left every mapLoaded-gated feature dead — the
+            // offline/map-maker selectors stuck on "Calculating…", no slope or
+            // contour overlays. React bails out when it is already true.
+            setMapLoaded(true);
             setRegionVersion((v) => v + 1);
             // Settled bounds for the marine chart's re-anchor check (the
             // wind layer keeps its own copy behind the windEnabled gate).
@@ -2048,6 +2057,7 @@ export function MapScreen() {
         <RegionSelectOverlay
           toGeo={toGeo}
           boundsVersion={boundsVersion}
+          refreshBounds={refreshBounds}
           activeBasemap={basemap}
           tileUrl={tileUrl}
           onCancel={cancelRegionSelect}
@@ -2061,6 +2071,7 @@ export function MapScreen() {
           variant="makeMap"
           toGeo={toGeo}
           boundsVersion={boundsVersion}
+          refreshBounds={refreshBounds}
           activeBasemap={basemap}
           tileUrl={tileUrl}
           onCancel={() => setMakeMapState(null)}
