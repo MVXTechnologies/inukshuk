@@ -2,6 +2,7 @@ import { buildGpx, parseGpx, type GpxWaypoint } from '@core/geo/gpx';
 import { buildImportedTrack, snapWaypointsToNotes } from '@core/geo/track';
 import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
+import { openImportedUri } from '@features/library/importActivities';
 import { importGpxFromUri } from '@features/library/importGpx';
 import { useLibraryStore } from '@state/libraryStore';
 
@@ -14,6 +15,11 @@ jest.mock('@state/importFeedbackStore', () => ({
 }));
 jest.mock('@state/libraryStore', () => ({ useLibraryStore: { getState: jest.fn() } }));
 jest.mock('@features/library/importGpx', () => ({ importGpxFromUri: jest.fn() }));
+jest.mock('@features/library/importActivities', () => ({
+  openImportedUri: jest.fn(),
+  importActivitiesFromUri: jest.fn(),
+  activityImportMessage: jest.fn(),
+}));
 jest.mock('@data/storage', () => ({ readFileText: jest.fn(), deleteFileAt: jest.fn() }));
 
 const points: TrackPoint[] = [0, 1].map((i) => ({
@@ -29,6 +35,10 @@ let saved: TrackSummary;
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // A GPX "Open with" keeps the GPX path (FIT/TCX/zip: nativeIntentActivities.test).
+  jest
+    .mocked(openImportedUri)
+    .mockImplementation(async (uri) => ({ uri, format: 'gpx', dispose: () => {} }));
   files.clear();
   const track = buildImportedTrack({
     id: 'saved',

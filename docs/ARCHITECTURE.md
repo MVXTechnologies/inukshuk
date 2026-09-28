@@ -21,8 +21,8 @@ a thin shell around it.**
   lives in `@core/format`; `src/state/formatters.ts` binds it to the user's
   chosen units.
 - `app/**` — expo-router routes only; each file just renders a feature screen.
-  `+native-intent.tsx` intercepts "Open with" file intents (GPX import) before
-  routing.
+  `+native-intent.tsx` intercepts "Open with" file intents (GPX, and FIT /
+  TCX / gzip / zip activity exports sniffed by content) before routing.
 
 Path aliases (`@core`, `@data`, `@features`, `@state`, `@ui`, `@lib`, `@/`) are
 declared once in `tsconfig.json` and mirrored in `jest.config.js`.
@@ -111,6 +111,19 @@ four stages:
   (optionally with photos) on the saved track. Waypoints dropped outside a
   recording (map "+" speed-dial) are standalone: they keep their coordinate
   and persist in the library index (`waypoints`).
+
+## Activity-file import (Strava / Garmin exports)
+
+`core/geo/activityFiles` imports FIT (own decoder in `core/geo/fit`), TCX
+(`core/geo/tcx`) and GPX files — gzipped or not, loose or in zip archives,
+including Garmin's zips-inside-zips — and every activity is stored as GPX
+through the same pipeline as a GPX import. Archives are read through a
+random-access ZIP reader (central directory first, one entry inflated at a
+time, nested zips spilled to the cache), so a multi-GB export is never held
+in memory; decompression caps (`limits.ts`) are enforced on the bytes actually
+inflated. Activities with the same start (±60 s) and distance (±2 %) as a
+library track are skipped as duplicates. `features/library/importActivities`
+is the file-system shell (picker, "Open with", UI yielding).
 
 ## Offline maps
 

@@ -63,7 +63,7 @@ import {
   TypeFilterChips,
 } from './components/LibraryChrome';
 import { MapRow, OnMapChip, RowDivider, TrailRow, WaypointRow } from './components/LibraryRows';
-import { pickAndImportGpxFiles } from './importGpx';
+import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
 import { NameDialog } from './NameDialog';
@@ -323,16 +323,22 @@ export function LibraryScreen() {
     }
   };
 
+  // GPX, FIT, TCX and Strava/Garmin export archives (#431). A bulk archive can
+  // hold thousands of activities: the header spinner shows it's working, and
+  // the snackbar counts progress (throttled) until the final summary.
   const onImportGpx = async () => {
     setBusy(true);
-    const result = await pickAndImportGpxFiles();
+    let lastProgressAt = 0;
+    const result = await pickAndImportActivityFiles(tracks, (done, total) => {
+      const now = Date.now();
+      if (total < 10 || now - lastProgressAt < 1000) return;
+      lastProgressAt = now;
+      showSnack(`Importing activities… ${done} of ${total}`);
+    });
     setBusy(false);
     if (result.kind === 'imported') {
       addTracks(result.items);
-      const n = result.items.length;
-      showSnack(
-        `Imported ${n} trail${n === 1 ? '' : 's'}${result.failed ? `, ${result.failed} failed` : ''}`,
-      );
+      showSnack(activityImportMessage(result));
     } else if (result.kind === 'error') {
       showSnack(`Import failed: ${result.message}`);
     }

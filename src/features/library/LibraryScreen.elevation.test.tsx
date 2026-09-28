@@ -63,7 +63,10 @@ jest.mock('@data/storage', () => ({
   documentDirUri: () => 'file:///Documents',
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
-jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));
+jest.mock('@features/library/importActivities', () => ({
+  pickAndImportActivityFiles: jest.fn(),
+  activityImportMessage: jest.fn(),
+}));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 // Row thumbnails read the GPX too; keep them out of the read counts below.
 jest.mock('./useRouteThumbnail', () => ({ useRouteThumbnail: () => undefined }));
