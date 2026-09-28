@@ -22,6 +22,7 @@
 import {
   formatDistance as formatDistanceIn,
   formatElevation as formatElevationIn,
+  formatElevationChange as formatElevationChangeIn,
   formatPace as formatPaceIn,
   formatSpeed as formatSpeedIn,
   type Units,
@@ -39,6 +40,10 @@ export const formatDistance = (meters: number): string => formatDistanceIn(meter
 /** Metres -> "1234 m" / "4049 ft" (elevation, no decimals). */
 export const formatElevation = (meters: number): string =>
   formatElevationIn(meters, currentUnits());
+
+/** A climb or a drop: "+120 m" / "−85 m"; zero is plain "0 m". */
+export const formatElevationChange = (meters: number, direction: 'up' | 'down'): string =>
+  formatElevationChangeIn(meters, direction, currentUnits());
 
 /** m/s -> "4.2 km/h" / "2.6 mph". */
 export const formatSpeed = (mps: number): string => formatSpeedIn(mps, currentUnits());

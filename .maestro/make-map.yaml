@@ -46,6 +46,10 @@ appId: com.inukshuk.app
     visible: 'Make a map — choose the area'
     timeout: 10000
 - assertNotVisible: 'Standard'
+# The sheet owns the bottom edge: the scale bar and the basemap credit must
+# not draw over its buttons (store-screenshot review, 2026-09-27).
+- assertNotVisible: 'Scale .*'
+- assertNotVisible: '.*OpenStreetMap.*'
 # Next enables once the flatten settles and the box geometry lands.
 - extendedWaitUntil:
     visible: 'Next'

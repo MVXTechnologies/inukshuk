@@ -193,18 +193,29 @@ is `true`, so the binary is universal — a **13-inch iPad** set as well.
 
 Upload, in this order, from `store/screenshots/ios/6.9-inch/` (1320 × 2868):
 
-| #   | File                           | Shows                                                                  |
-| --- | ------------------------------ | ---------------------------------------------------------------------- |
-| 1   | `01-map-live-trail.png`        | Your live position on a recorded loop, with the repeat-visit heat glow |
-| 2   | `02-trail-elevation-notes.png` | Trail focus: route, numbered notes, interactive elevation profile      |
-| 3   | `03-library-folders.png`       | Library — folders, activity categories, per-outing stats               |
-| 4   | `04-offline-download.png`      | Download offline area — basemap, detail level, tile count              |
-| 5   | `05-map-maker.png`             | Make a map — a printable georeferenced topo PDF with contours          |
-| 6   | `06-map-store.png`             | The free catalogue of official topo sheets                             |
+| #   | File                                  | Shows                                                                     |
+| --- | ------------------------------------- | ------------------------------------------------------------------------- |
+| 1   | `01-mountain-map-contours.png`        | The Stone & Paper map in Charlevoix: the UTHC course, contour lines       |
+| 2   | `02-recording-trail-run.png`          | Recording a trail run on that course: time, distance, speed               |
+| 3   | `03-trail-elevation-aid-stations.png` | Trail focus: 63 km course, +1840 m, elevation profile, the 6 aid stations |
+| 4   | `04-pdf-map-nord-utm.png`             | A georeferenced PDF (1:20 000 Nord UTM orienteering map) on the map       |
+| 5   | `05-library.png`                      | Library: the course with its route thumbnail, the PDF map "On map"        |
+| 6   | `06-offline-download.png`             | Download offline area over the mountains                                  |
+| 7   | `07-night-mode.png`                   | Night red display mode while recording                                    |
 
-Then the iPad tab, from `store/screenshots/ipad/13-inch/` (2064 × 2752):
-`01-map-live-trail.png`, `02-trail-elevation-notes.png`, `03-library-folders.png`,
-`04-offline-download.png`.
+**These show the vector base map (#415) and the fixes in #423 — upload them only with the release
+that turns `VECTOR_BASEMAP_ENABLED` on.** Content is real: the 2026 UTHC 65 km course (GPX with
+aid stations) and the Mini-Bouloutière Nord UTM GeoPDF, both imported through the app's Import menu.
+
+`store/screenshots/ios/6.5-inch/` holds the same set at 1284 × 2778 for the
+6.5-inch slot (scaled to width 1284, then centre-cropped 12 px; never
+resampled straight to 1284 × 2778, which would stretch every shot).
+
+Then the iPad tab, from `store/screenshots/ipad/13-inch/` (2064 × 2752), same names and order
+(01–05).
+
+The demo data in the new shots (20 Québec City runs and rides, routed along
+real paths with real elevation) comes from `scripts/store/gen-demo-runs.py`.
 
 The old 6.1-inch set is kept, unused, in `store/screenshots/ios/legacy-6.1-inch/`
 — **do not upload it**, Apple no longer accepts 1170 × 2532 as a primary size.

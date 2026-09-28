@@ -1,4 +1,5 @@
 import {
+  formatElevationChange,
   createFormatters,
   formatBytes,
   formatDistance,
@@ -72,6 +73,20 @@ describe('formatDuration', () => {
   it('guards negatives', () => {
     expect(formatDuration(-10)).toBe('0:00');
     expect(formatDuration(NaN)).toBe('0:00');
+  });
+});
+
+describe('formatElevationChange', () => {
+  it('signs a climb and a drop', () => {
+    expect(formatElevationChange(120.4, 'up', 'metric')).toBe('+120 m');
+    expect(formatElevationChange(85, 'down', 'metric')).toBe('−85 m');
+    expect(formatElevationChange(100, 'down', 'imperial')).toBe('−328 ft');
+  });
+
+  it('never signs zero', () => {
+    expect(formatElevationChange(0, 'up', 'metric')).toBe('0 m');
+    expect(formatElevationChange(0.4, 'down', 'metric')).toBe('0 m');
+    expect(formatElevationChange(NaN, 'down', 'imperial')).toBe('0 ft');
   });
 });
 
