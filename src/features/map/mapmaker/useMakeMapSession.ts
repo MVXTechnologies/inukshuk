@@ -1,15 +1,18 @@
 import type { BoundingBox } from '@core/models';
 import { useCallback, useRef, useState } from 'react';
 import type { ComposeHandle, MakeMapOptions } from './composeMapPdf';
-import type { MakeMapProgress } from './MakeMapSheet';
+import type { MakeMapProgress } from './MapMakerEditor';
 import { makeMap } from './makeMap';
 
-/** The map maker's UI state: region box → options sheet → compose → Library. */
+/**
+ * The map maker's UI state: editor → compose → Library.
+ *
+ * There is no region-selection phase any more (#349). The editor IS the
+ * selection — a sheet framed over the live map — so the bbox is read off the
+ * camera at the moment Create is tapped rather than carried through the state.
+ */
 export type MakeMapState =
-  | null
-  | { phase: 'select' }
-  | { phase: 'options'; bbox: BoundingBox }
-  | { phase: 'generating'; bbox: BoundingBox; progress: MakeMapProgress };
+  null | { phase: 'editing' } | { phase: 'generating'; progress: MakeMapProgress };
 
 /**
  * Owns one map-maker session at a time (#309). Every callback of a running
@@ -27,7 +30,7 @@ export function useMakeMapSession({ showSnack }: { showSnack: (message: string) 
       const handle: ComposeHandle = { aborted: false };
       handleRef.current = handle;
       const isCurrent = () => handleRef.current === handle && !handle.aborted;
-      setMakeMapState({ phase: 'generating', bbox, progress: { phase: 'tiles', frac: 0 } });
+      setMakeMapState({ phase: 'generating', progress: { phase: 'tiles', frac: 0 } });
       void makeMap(
         bbox,
         options,
@@ -45,7 +48,8 @@ export function useMakeMapSession({ showSnack }: { showSnack: (message: string) 
         })
         .catch((err: unknown) => {
           if (!isCurrent()) return;
-          setMakeMapState({ phase: 'options', bbox });
+          // Back to the editor with the frame intact, so a retry is one tap.
+          setMakeMapState({ phase: 'editing' });
           const message = err instanceof Error ? err.message : 'unknown error';
           showSnack(`Couldn't make the map: ${message}`);
         });
