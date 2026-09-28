@@ -26,11 +26,17 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   /** Edge + client cache lifetime for tiles and glyphs. */
   CACHE_CONTROL?: string;
+  /**
+   * Bearer token for the archive upload endpoint (`wrangler secret put
+   * UPLOAD_TOKEN`). Unset = uploads disabled (404).
+   */
+  UPLOAD_TOKEN?: string;
 }
 
 const TILE_PATH = /^\/([a-z0-9_-]+)\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
+const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.pmtiles)$/;
 
 /** Directories and headers, shared across requests handled by this isolate. */
 const CACHE = new ResolvedValueCache(25, undefined, decompress);
@@ -144,8 +150,73 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
   return new Response('not found', { status: 404, headers: cors });
 }
 
+/** Constant-time string comparison for the upload token. */
+function sameToken(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Archive upload, so the NAS can publish a multi-GB PMTiles file through R2's
+ * multipart API without S3 credentials (`../nas/upload.py`):
+ *
+ *   POST /_upload/{key}?action=create                    → { uploadId }
+ *   PUT  /_upload/{key}?uploadId=…&part=N  (≤ 95 MB)     → { partNumber, etag }
+ *   POST /_upload/{key}?action=complete&uploadId=…  { parts: [{ partNumber, etag }] }
+ *   POST /_upload/{key}?action=abort&uploadId=…
+ *
+ * Bearer-token protected; the object replaces the old one only on `complete`.
+ */
+async function upload(request: Request, env: Env, url: URL, key: string): Promise<Response> {
+  const auth = request.headers.get('Authorization') ?? '';
+  if (!env.UPLOAD_TOKEN) return new Response('not found', { status: 404 });
+  if (!sameToken(auth, `Bearer ${env.UPLOAD_TOKEN}`))
+    return new Response('forbidden', { status: 403 });
+
+  const action = url.searchParams.get('action');
+  const uploadId = url.searchParams.get('uploadId');
+  if (request.method === 'POST' && action === 'create') {
+    const mpu = await env.BUCKET.createMultipartUpload(key, {
+      httpMetadata: { contentType: 'application/octet-stream' },
+    });
+    return Response.json({ uploadId: mpu.uploadId });
+  }
+  if (uploadId === null) return new Response('uploadId required', { status: 400 });
+  const mpu = env.BUCKET.resumeMultipartUpload(key, uploadId);
+
+  if (request.method === 'PUT') {
+    const part = Number(url.searchParams.get('part'));
+    if (!Number.isInteger(part) || part < 1 || part > 10_000 || request.body === null) {
+      return new Response('bad part', { status: 400 });
+    }
+    const uploaded = await mpu.uploadPart(part, request.body);
+    return Response.json({ partNumber: uploaded.partNumber, etag: uploaded.etag });
+  }
+  if (request.method === 'POST' && action === 'complete') {
+    const { parts } = await request.json<{ parts: R2UploadedPart[] }>();
+    const object = await mpu.complete(parts);
+    return Response.json({ key: object.key, size: object.size, etag: object.etag });
+  }
+  if (request.method === 'POST' && action === 'abort') {
+    await mpu.abort();
+    return Response.json({ aborted: true });
+  }
+  return new Response('bad request', { status: 400 });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const [, uploadKey] = UPLOAD_PATH.exec(url.pathname) ?? [];
+    if (uploadKey !== undefined) {
+      try {
+        return await upload(request, env, url, uploadKey);
+      } catch (e) {
+        return new Response(`upload error: ${(e as Error).message}`, { status: 500 });
+      }
+    }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: { ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET' },
@@ -153,7 +224,6 @@ export default {
     }
     if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
 
-    const url = new URL(request.url);
     const cache = caches.default;
     const hit = await cache.match(request);
     if (hit) return hit;
