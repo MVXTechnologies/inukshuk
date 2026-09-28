@@ -23,12 +23,21 @@ for style in Regular Bold Italic; do
   curl -fsSL -o "$WORK/ttf/AtkinsonHyperlegibleNext-$style.ttf" "$SRC/AtkinsonHyperlegibleNext-$style.ttf"
 done
 
-# build_pbf_glyphs names each stack "<family> <style>" from the font's own tables.
 docker run --rm -v "$WORK:/work" rust:1 sh -c \
   'cargo install --quiet build_pbf_glyphs && build_pbf_glyphs /work/ttf /work/out'
-ls "$WORK/out"
 
-docker run --rm -v "$WORK/out:/glyphs:ro" \
+# build_pbf_glyphs names each folder after the FILE (AtkinsonHyperlegibleNext-Regular);
+# the style asks for "Atkinson Hyperlegible Next Regular". Keep only ranges that hold
+# glyphs (~10 per font) — the Worker answers any other range with an empty message.
+mkdir -p "$WORK/upload"
+for style in Regular Bold Italic; do
+  dest="$WORK/upload/Atkinson Hyperlegible Next $style"
+  mkdir -p "$dest"
+  find "$WORK/out/AtkinsonHyperlegibleNext-$style" -name '*.pbf' -size +100c -exec cp {} "$dest/" \;
+done
+ls "$WORK/upload"
+
+docker run --rm -v "$WORK/upload:/glyphs:ro" \
   -e RCLONE_CONFIG_R2_TYPE=s3 -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
   -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \

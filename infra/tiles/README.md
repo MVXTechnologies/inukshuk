@@ -7,7 +7,7 @@ vector tiles in the **Protomaps v4 schema** from our own host. Why self-host, an
 ```
 Protomaps daily planet ──(nas/refresh.sh: extract our regions)──▶ basemap.pmtiles
                                                                         │ upload
-phones ──▶ tiles.mvxtechnologies.com (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
+phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
 ```
 
 | Path                             | What                                               |
@@ -18,6 +18,17 @@ phones ──▶ tiles.mvxtechnologies.com (worker/, edge-cached) ──▶ R2 b
 
 Coverage (`nas/region.geojson`): Canada, the United States (with Alaska and Hawaii), Greenland
 and Europe, about 70 GB. The rest of the world later is one more polygon (~120 GB total).
+
+## Live state (2026-09-27)
+
+- Worker `inukshuk-tiles` deployed on the free **workers.dev** host (account
+  `6da1749801bb30ce789cc1243b5b658f`), bound to R2 bucket `inukshuk-tiles`.
+- `basemap.pmtiles` = a **Québec City region extract** (−73.0…−69.5, 46.0…48.6; 180 MB),
+  uploaded from a Mac with `wrangler r2 object put` (limit ~300 MB). The full Canada + US +
+  Europe archive needs `nas/refresh.sh` (S3 keys, multipart upload).
+- Atkinson glyphs uploaded (10 ranges × Regular/Bold/Italic).
+- Custom domain `tiles.mvxtechnologies.com` waits for the zone to move from Namecheap DNS to
+  Cloudflare; the app's default host is `TILE_HOST` in `src/data/basemapTiles.ts`.
 
 ## One-time setup (owner)
 
@@ -45,9 +56,9 @@ and Europe, about 70 GB. The rest of the world later is one more polygon (~120 G
 ## Check it
 
 ```sh
-curl -sI https://tiles.mvxtechnologies.com/basemap/14/4950/5775.mvt   # 200, gzip
-curl -s  https://tiles.mvxtechnologies.com/basemap.json | head -c 200
-curl -sI "https://tiles.mvxtechnologies.com/fonts/Atkinson%20Hyperlegible%20Next%20Regular/0-255.pbf"
+curl -sI https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap/14/4950/5775.mvt   # 200, gzip
+curl -s  https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap.json | head -c 200
+curl -sI "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/fonts/Atkinson%20Hyperlegible%20Next%20Regular/0-255.pbf"
 ```
 
 Then in the app: `VECTOR_BASEMAP_ENABLED = true` (`src/core/features/flags.ts`) and, once the

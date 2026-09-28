@@ -1,5 +1,10 @@
 import Constants from 'expo-constants';
-import { DEFAULT_VECTOR_TILES_URL, vectorGlyphsUrl, vectorTilesUrl } from './basemapTiles';
+import {
+  DEFAULT_VECTOR_GLYPHS_URL,
+  DEFAULT_VECTOR_TILES_URL,
+  vectorGlyphsUrl,
+  vectorTilesUrl,
+} from './basemapTiles';
 
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: {} } } }));
 
@@ -18,9 +23,12 @@ it('honours a build-time override, ignoring an empty one', () => {
   expect(vectorTilesUrl()).toBe(DEFAULT_VECTOR_TILES_URL);
 });
 
-it('has no glyph host until one is configured', () => {
+it('serves Atkinson glyphs from our host unless turned off', () => {
   delete extra().vectorGlyphsUrl;
-  expect(vectorGlyphsUrl()).toBeNull();
+  expect(vectorGlyphsUrl()).toBe(DEFAULT_VECTOR_GLYPHS_URL);
+  expect(DEFAULT_VECTOR_GLYPHS_URL).toMatch(/\{fontstack\}\/\{range\}\.pbf$/);
   extra().vectorGlyphsUrl = 'https://tiles.example/fonts/{fontstack}/{range}.pbf';
   expect(vectorGlyphsUrl()).toBe('https://tiles.example/fonts/{fontstack}/{range}.pbf');
+  extra().vectorGlyphsUrl = 'none';
+  expect(vectorGlyphsUrl()).toBeNull();
 });

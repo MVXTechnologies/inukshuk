@@ -132,8 +132,11 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     // One font per stack: MapLibre asks for a comma-joined stack only when a
     // style mixes fonts, which ours never does.
     const object = await env.BUCKET.get(`fonts/${decodeURIComponent(stack)}/${range}.pbf`);
-    if (object === null) return new Response('no such glyphs', { status: 404, headers: cors });
-    return new Response(object.body, {
+    // Only ranges the font covers are stored (Latin, punctuation, arrows…).
+    // Any other range is answered with an EMPTY glyph message — valid
+    // protobuf — so MapLibre skips those characters instead of logging a
+    // failed request for every label that contains one.
+    return new Response(object === null ? new Uint8Array(0) : object.body, {
       headers: { ...cors, 'Content-Type': 'application/x-protobuf', 'Cache-Control': cacheControl },
     });
   }
