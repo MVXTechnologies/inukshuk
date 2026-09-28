@@ -318,8 +318,9 @@ export function MapScreen() {
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   // Stable per basemap so the contour sources' memo can hold (see the hoisted
   // layer constants above). The vector Stone & Paper base gets the board's
-  // ochre isolines.
-  const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map' && !offlineOnly;
+  // ochre isolines. Offline-only draws it too: new `map` packs are vector
+  // (older raster ones are flagged for re-download in Settings).
+  const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -519,9 +520,8 @@ export function MapScreen() {
     // bounded frame map can never evict one out from under a live slot.
     weatherSlotsRef.current = weatherFade.slots;
   }, [weatherFade.slots]);
-  // The reference labels ride weather/marine (OpenFreeMap). The flag-gated
-  // vector base map reads our own tile host. Offline-only stays raster, so
-  // neither fetches there.
+  // The reference labels ride weather/marine (OpenFreeMap; not offline). The
+  // flag-gated vector base map reads our own tile host, offline from packs.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
   const vectorBasemap = stoneBase;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);

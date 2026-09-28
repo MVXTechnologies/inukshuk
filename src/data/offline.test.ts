@@ -1,6 +1,6 @@
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
-import { createRegionPack, setOfflineOnly } from './offline';
+import { createRegionPack, listRegionPacks, setOfflineOnly } from './offline';
 import * as storage from './storage';
 
 jest.mock('./storage', () => ({
@@ -255,6 +255,48 @@ describe('createRegionPack', () => {
 
     emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 10 });
     await pending;
+  });
+});
+
+describe('pack format', () => {
+  it('records a vector map pack and clamps it to the vector max zoom', async () => {
+    mockCreatePack();
+    const pending = createRegionPack({ ...packArgs, format: 'vector', maxZoom: 17 }, jest.fn());
+    await flushMicrotasks();
+    const options = (OfflineManager.createPack as jest.Mock).mock.calls.at(-1)?.[0] as {
+      maxZoom: number;
+      metadata: Record<string, unknown>;
+    };
+    expect(options.maxZoom).toBe(15);
+    expect(options.metadata).toMatchObject({ format: 'vector', maxZoom: 15 });
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 10 });
+    await pending;
+  });
+
+  it('defaults to raster, and reads packs without a format as raster', async () => {
+    mockCreatePack();
+    const pending = createRegionPack(packArgs, jest.fn());
+    await flushMicrotasks();
+    const options = (OfflineManager.createPack as jest.Mock).mock.calls.at(-1)?.[0] as {
+      metadata: Record<string, unknown>;
+    };
+    expect(options.metadata).toMatchObject({ format: 'raster' });
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 10 });
+    await pending;
+
+    const legacy = {
+      id: 'native-old',
+      bounds: [-72, 46, -71, 47],
+      metadata: { appId: 'old', label: 'Before vector', basemap: 'map' },
+      status: jest.fn(async () => ({
+        percentage: 100,
+        completedTileSize: 5,
+        completedResourceSize: 5,
+      })),
+    };
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([legacy]);
+    const [region] = await listRegionPacks();
+    expect(region?.format).toBe('raster');
   });
 });
 

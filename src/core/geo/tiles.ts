@@ -73,6 +73,37 @@ export type Basemap = 'map' | 'satellite' | 'relief';
 export const NATIVE_MAX_ZOOM: Record<Basemap, number> = { map: 19, satellite: 17, relief: 15 };
 
 /**
+ * What an offline pack stores. `raster` = the historical OSM/Esri image
+ * tiles; `vector` = our Protomaps base map (the Stone & Paper `map`), which
+ * the OSM tile policy requires for offline use of the street map.
+ */
+export type PackFormat = 'raster' | 'vector';
+
+/** Our vector base-map extract stops at z15; MapLibre overzooms past it. */
+export const VECTOR_MAX_ZOOM = 15;
+
+/**
+ * The deepest zoom a basemap's source serves in a given pack format — only
+ * the `map` basemap has a vector form; satellite and relief are always raster.
+ */
+export function sourceMaxZoom(basemap: Basemap, format: PackFormat = 'raster'): number {
+  return format === 'vector' && basemap === 'map' ? VECTOR_MAX_ZOOM : NATIVE_MAX_ZOOM[basemap];
+}
+
+/**
+ * A downloaded `map` pack of the OLD raster kind once the app draws the map
+ * from vector tiles: the live map can no longer show it offline, so the user
+ * should download the area again (the OSM tile policy forbids raster packs
+ * anyway). Satellite and relief packs are raster by design and never stale.
+ */
+export function needsRedownload(
+  pack: { basemap: Basemap; format: PackFormat },
+  mapFormat: PackFormat,
+): boolean {
+  return pack.basemap === 'map' && mapFormat === 'vector' && pack.format === 'raster';
+}
+
+/**
  * The zoom range an offline pack of `basemap` should actually be created with,
  * given the requested overview (min) and quality (max) zooms:
  *
@@ -85,8 +116,9 @@ export function packZoomRange(
   basemap: Basemap,
   minZoom: number,
   maxZoom: number,
+  format: PackFormat = 'raster',
 ): { minZoom: number; maxZoom: number } {
-  const top = Math.min(Math.round(maxZoom), NATIVE_MAX_ZOOM[basemap]);
+  const top = Math.min(Math.round(maxZoom), sourceMaxZoom(basemap, format));
   const bottom = Math.max(0, Math.min(Math.round(minZoom), top));
   return { minZoom: bottom, maxZoom: top };
 }
@@ -122,8 +154,21 @@ export function offlinePackMaxZoom(
 // heavier than OSM/street PNG tiles. Used only for a pre-download size estimate.
 const AVG_BYTES: Record<Basemap, number> = { map: 18_000, satellite: 30_000, relief: 28_000 };
 
-export function estimateBytes(tileCount: number, basemap: Basemap): number {
-  return tileCount * AVG_BYTES[basemap];
+/**
+ * Average gzip vector tile, measured on a Québec City + Laurentides extract
+ * (2026-09-27): ~16–60 KB in the city at z12–15, 1–5 KB in forest. Dense
+ * areas dominate what people download, so this errs high.
+ */
+const VECTOR_AVG_BYTES = 12_000;
+
+export function estimateBytes(
+  tileCount: number,
+  basemap: Basemap,
+  format: PackFormat = 'raster',
+): number {
+  return (
+    tileCount * (format === 'vector' && basemap === 'map' ? VECTOR_AVG_BYTES : AVG_BYTES[basemap])
+  );
 }
 
 /**
@@ -146,14 +191,15 @@ export function estimateRegionDownload(
   minZoom: number,
   maxZoom: number,
   basemaps: readonly Basemap[],
+  format: PackFormat = 'raster',
 ): { tiles: number; bytes: number } {
   let tiles = 0;
   let bytes = 0;
   for (const basemap of basemaps) {
-    const range = packZoomRange(basemap, minZoom, maxZoom);
+    const range = packZoomRange(basemap, minZoom, maxZoom, format);
     const count = tileCountForRegion(bounds, range.minZoom, range.maxZoom);
     tiles += count;
-    bytes += estimateBytes(count, basemap);
+    bytes += estimateBytes(count, basemap, format);
   }
   return { tiles, bytes };
 }

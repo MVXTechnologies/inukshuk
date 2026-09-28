@@ -12,12 +12,13 @@ import { cornersToBounds, type ScreenRect } from '@core/geo/screenBounds';
 import {
   overviewZoomFor,
   estimateRegionDownload,
-  NATIVE_MAX_ZOOM,
+  sourceMaxZoom,
   type Basemap,
 } from '@core/geo/tiles';
 import { layoutMadeMap } from '@core/mapmaker/layout';
 import type { BoundingBox } from '@core/models';
 import { formatBytes } from '@core/format';
+import { MAP_PACK_FORMAT } from './mapStyle';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, View } from 'react-native';
@@ -214,14 +215,18 @@ export function RegionSelectOverlay({
   const regionMinZoom = geo?.minZoom ?? 0;
   const crossesSeam = geo !== null && geo.bbox === null;
   const estimate = region
-    ? estimateRegionDownload(region, regionMinZoom, maxZoom, selectedBasemaps)
+    ? estimateRegionDownload(region, regionMinZoom, maxZoom, selectedBasemaps, MAP_PACK_FORMAT)
     : { tiles: 0, bytes: 0 };
   const totalTiles = estimate.tiles;
   const totalBytes = estimate.bytes;
   // Basemaps whose source can't reach the chosen quality — worth saying out loud,
-  // otherwise "Max" quality silently downloads a coarser relief layer.
+  // otherwise "Max" quality silently downloads a coarser relief layer. A vector
+  // map stops at z15 too but stays sharp beyond it, so it is never "capped".
   const cappedLayers = LAYERS.filter(
-    (l) => selected[l.key] && NATIVE_MAX_ZOOM[l.key] < maxZoom,
+    (l) =>
+      selected[l.key] &&
+      !(l.key === 'map' && MAP_PACK_FORMAT === 'vector') &&
+      sourceMaxZoom(l.key) < maxZoom,
   ).map((l) => l.label);
   const noneSelected = selectedBasemaps.length === 0;
   const tooLarge = totalTiles > MAX_TILES;
@@ -236,8 +241,13 @@ export function RegionSelectOverlay({
           .reverse()
           .find(
             (q) =>
-              estimateRegionDownload(region, regionMinZoom, QUALITY_ZOOM[q], selectedBasemaps)
-                .tiles <= MAX_TILES,
+              estimateRegionDownload(
+                region,
+                regionMinZoom,
+                QUALITY_ZOOM[q],
+                selectedBasemaps,
+                MAP_PACK_FORMAT,
+              ).tiles <= MAX_TILES,
           )
       : undefined;
 
@@ -416,9 +426,7 @@ export function RegionSelectOverlay({
   const capNote =
     cappedLayers.length > 0 && !noneSelected
       ? `${cappedLayers.join(' & ')} tops out at z${Math.min(
-          ...LAYERS.filter((l) => cappedLayers.includes(l.label)).map(
-            (l) => NATIVE_MAX_ZOOM[l.key],
-          ),
+          ...LAYERS.filter((l) => cappedLayers.includes(l.label)).map((l) => sourceMaxZoom(l.key)),
         )}`
       : null;
 

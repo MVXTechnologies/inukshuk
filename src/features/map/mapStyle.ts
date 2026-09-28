@@ -1,5 +1,5 @@
 import { NIGHT_MAP } from '@ui/tokens';
-import { NATIVE_MAX_ZOOM } from '@core/geo/tiles';
+import { NATIVE_MAX_ZOOM, type PackFormat } from '@core/geo/tiles';
 import type {
   FilterSpecification,
   LayerSpecification,
@@ -50,6 +50,13 @@ const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium
  */
 const OFM_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (© OpenMapTiles)';
+/**
+ * What a new offline pack of the `map` basemap stores: our vector base map once
+ * `VECTOR_BASEMAP_ENABLED` is on (the OSM tile policy forbids offline packs of
+ * its raster tiles), the OSM raster until then. Satellite and relief stay raster.
+ */
+export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : 'raster';
+
 /** The vector base map's data: OSM via our Protomaps extract. */
 const PROTOMAPS_ATTRIBUTION = '© OpenStreetMap contributors · Protomaps';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
