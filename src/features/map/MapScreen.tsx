@@ -70,7 +70,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
-import { vectorTilesUrl } from '@data/basemapTiles';
+import { vectorGlyphsUrl, vectorTilesUrl } from '@data/basemapTiles';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -169,6 +169,9 @@ const INSPECT_PANEL_H_ESTIMATE = 300;
  * "Search places" pill: its 8 dp top margin + 48 dp height + an 8 dp gap.
  */
 const TOP_CHIP_OFFSET = 8 + 48 + 8;
+/** The vector base map's tile and glyph hosts (build-time config, see @data/basemapTiles). */
+const VECTOR_TILES = [vectorTilesUrl()];
+const VECTOR_GLYPHS = vectorGlyphsUrl();
 
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
@@ -567,7 +570,15 @@ export function MapScreen() {
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
-      ...(vectorBasemap ? { vectorBasemap: { tiles: [vectorTilesUrl()], dark: theme.dark } } : {}),
+      ...(vectorBasemap
+        ? {
+            vectorBasemap: {
+              tiles: VECTOR_TILES,
+              dark: theme.dark,
+              ...(VECTOR_GLYPHS !== null ? { glyphs: VECTOR_GLYPHS } : {}),
+            },
+          }
+        : {}),
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {

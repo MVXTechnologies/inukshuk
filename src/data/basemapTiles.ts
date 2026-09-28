@@ -13,3 +13,13 @@ export function vectorTilesUrl(): string {
   const value: unknown = Constants.expoConfig?.extra?.vectorTilesUrl;
   return typeof value === 'string' && value !== '' ? value : DEFAULT_VECTOR_TILES_URL;
 }
+
+/**
+ * Our glyph host for the base map's labels (Atkinson Hyperlegible Next), or
+ * null until the glyphs are uploaded (`infra/tiles/fonts/`) — the map then
+ * keeps OpenFreeMap's Noto fallback.
+ */
+export function vectorGlyphsUrl(): string | null {
+  const value: unknown = Constants.expoConfig?.extra?.vectorGlyphsUrl;
+  return typeof value === 'string' && value !== '' ? value : null;
+}

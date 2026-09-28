@@ -780,6 +780,25 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     }
   });
 
+  it('flag on: Noto from OpenFreeMap by default, Atkinson from our glyph host when set', () => {
+    const build = withFlag(true);
+    const fontsOf = (st: ReturnType<typeof build>) =>
+      st.layers.flatMap((l) =>
+        l.type === 'symbol' && l.id.startsWith('stone-')
+          ? [JSON.stringify((l.layout as Record<string, unknown>)['text-font'])]
+          : [],
+      );
+    const noto = build(TILE, false, 'map', false, { vectorBasemap });
+    expect(noto.glyphs).toContain('openfreemap');
+    expect(fontsOf(noto).every((f) => f.includes('Noto Sans'))).toBe(true);
+    const ours = 'https://tiles.example/fonts/{fontstack}/{range}.pbf';
+    const atkinson = build(TILE, false, 'map', false, {
+      vectorBasemap: { ...vectorBasemap, glyphs: ours },
+    });
+    expect(atkinson.glyphs).toBe(ours);
+    expect(fontsOf(atkinson).every((f) => f.includes('Atkinson Hyperlegible Next'))).toBe(true);
+  });
+
   it('flag on: the dark scheme yields a different stone style', () => {
     const build = withFlag(true);
     const light = build(TILE, false, 'map', false, { vectorBasemap });

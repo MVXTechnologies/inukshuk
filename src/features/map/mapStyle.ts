@@ -25,7 +25,7 @@ import {
 } from '@core/weather/weatherLook';
 import type { Feature, Polygon } from 'geojson';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
-import { buildStoneLayers, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
+import { buildStoneLayers, STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
 import { stoneScheme } from './stoneScheme';
 
 /**
@@ -283,7 +283,15 @@ export interface OsmStyleOptions {
    * Callers leave it unset for offline packs and offline-only mode, which
    * stay raster.
    */
-  vectorBasemap?: { tiles: readonly string[]; dark: boolean };
+  vectorBasemap?: {
+    tiles: readonly string[];
+    dark: boolean;
+    /**
+     * Our glyph host, serving Atkinson Hyperlegible Next. Unset = the
+     * OpenFreeMap Noto fallback (whole-stack swap, see `STONE_FONTS_NOTO`).
+     */
+    glyphs?: string;
+  };
   marineChart?: {
     wmsFallback: boolean;
     /**
@@ -489,8 +497,8 @@ export function buildOsmStyle(
     VECTOR_BASEMAP_ENABLED && basemap === 'map' && options.vectorBasemap
       ? buildStoneLayers(stoneScheme(options.vectorBasemap.dark), {
           source: VECTOR_BASEMAP_SOURCE,
-          // Atkinson glyphs aren't hosted yet — OpenFreeMap's Noto fallback.
-          fonts: STONE_FONTS_NOTO,
+          // Atkinson from our host when configured, else OpenFreeMap's Noto.
+          fonts: options.vectorBasemap.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -503,7 +511,7 @@ export function buildOsmStyle(
       maxzoom: 15,
       attribution: PROTOMAPS_ATTRIBUTION,
     };
-    style.glyphs = OFM_GLYPHS_URL;
+    style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     style.layers = [
       ...stone.base,
       ...style.layers.filter((l) => l.id !== 'background' && l.id !== 'osm'),

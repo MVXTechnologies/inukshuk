@@ -256,6 +256,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Vector base-map tiles (src/data/basemapTiles). Unset = our Cloudflare
     // host; dev points it at a loopback `pmtiles serve`.
     vectorTilesUrl: process.env.VECTOR_TILES_URL,
+    // Its label glyphs (Atkinson). Unset = OpenFreeMap's Noto fallback.
+    vectorGlyphsUrl: process.env.VECTOR_GLYPHS_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

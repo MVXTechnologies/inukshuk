@@ -1,6 +1,13 @@
 # Vector base map: decision note
 
-Status: **proposal, flag OFF** (`VECTOR_BASEMAP_ENABLED` in `src/core/features/flags.ts`).
+Status: **decided 2026-09-27, flag OFF until the tiles are hosted** (`VECTOR_BASEMAP_ENABLED` in
+`src/core/features/flags.ts`).
+
+**Decision (owner, 2026-09-27):** self-host on **Cloudflare** — one Protomaps v4 PMTiles
+extract (Canada, US, Europe; the rest of the world later) in R2, served as XYZ by a Worker at
+`tiles.mvxtechnologies.com`, refreshed monthly from the NAS. `stoneStyle` now targets the
+Protomaps schema. Runbook, Worker and scripts: `infra/tiles/`. The analysis below is kept as the
+record of why.
 Researched 2026-09-27. Owner decisions are marked **DECIDE**.
 
 ## Why vector
