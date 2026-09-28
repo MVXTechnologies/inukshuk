@@ -273,6 +273,7 @@ export function WaypointRow({
   detail,
   caption,
   photoUri,
+  glyph,
   accessibilityLabel,
   onPress,
   onLongPress,
@@ -283,6 +284,8 @@ export function WaypointRow({
   detail: string;
   caption: string;
   photoUri?: string;
+  /** The waypoint's chosen pin icon (MaterialCommunityIcons), when it has one. */
+  glyph?: string | null;
   accessibilityLabel: string;
   onPress: () => void;
   onLongPress: () => void;
@@ -310,6 +313,8 @@ export function WaypointRow({
           >
             {photoUri !== undefined ? (
               <Image source={{ uri: photoUri }} style={styles.photo} resizeMethod="resize" />
+            ) : glyph ? (
+              <Icon source={glyph} size={28} color={t.ink} />
             ) : (
               <InukshukIcon size={30} color={t.ink} />
             )}
