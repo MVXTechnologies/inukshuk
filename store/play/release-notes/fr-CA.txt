@@ -1,8 +1,8 @@
-Les cartes, corrigées.
+Une nouvelle carte, pensée pour le plein air.
 
-• Les grandes cartes faites d'une seule photo s'affichent au lieu d'échouer.
-• Une carte importée avant un correctif est corrigée au lancement, même à l'envers. Pas de réimportation.
-• Votre position reste au-dessus de vos cartes.
-• Importer une très grande carte ne manque plus de mémoire.
-• Les cartes se préparent dès l'importation.
-• Une pause n'ajoute plus la distance parcourue pendant la pause.
+• Nouvelle carte aux couleurs de l'app : bois, eau et sentiers bien visibles. Canada, É.-U., Europe.
+• Les courbes de niveau se chargent avec la carte et suivent vos téléchargements.
+• Modes Nuit rouge et Plein soleil.
+• Aperçus des tracés; Bibliothèque, Cartes et Journal repensés.
+• Sentiers plus faciles à toucher.
+• Corrigé : zone de téléchargement bloquée sur « Calcul… ».

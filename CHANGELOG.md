@@ -11,6 +11,49 @@ the app version before that); native changes require a new store build. See
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-28
+
+A new map, and the rest of the "Stone & Paper" redesign.
+
+### Added
+
+- **A new map, drawn for the outdoors.** The street map is now a vector map
+  in the app's own colours: paper land, sage woods, blue water, and trails
+  as clear dashed lines above the roads, with city sidewalks kept quiet.
+  Labels use Atkinson Hyperlegible Next. It works in light and dark, and
+  covers Canada, the United States and Europe. It is served from our own
+  servers, refreshed every month from OpenStreetMap.
+- **Contour lines load with the map.** They are part of the map now, so
+  they are already there around you when you pan, in denser lines as you
+  zoom in, and they are saved in offline downloads.
+- **Display modes.** Sunlight (maximum contrast) and Night red, switched on
+  by you or automatically at sunset / while recording.
+- **Route thumbnails** in the Library and Logbook, with the activity badge.
+
+### Changed
+
+- **Offline downloads of the map save the new map** (smaller than before).
+  Areas downloaded before 2.0 show "Old map style · download again" in
+  Settings.
+- **Library, Maps and Logbook** are restyled: rows with thumbnails, filter
+  chips, an Organize mode, and a clearer map store.
+- **The big Record button is gone.** Start a recording from "+" → Record
+  track.
+- Trails and the heat glow are much easier to tap.
+- The map credit is a small ⓘ on the map; the full credits are in
+  Settings › System info.
+
+### Fixed
+
+- The offline-download and map-maker area selectors could stay on
+  "Calculating…" forever.
+- Opening a map from the Library now moves the map to it.
+- Night mode showed a blue position dot; it is red now.
+- The recording panel no longer shows "−0 m" or "+0 m".
+- Logbook totals' units were unreadable on the dark card.
+- The scale bar and credit no longer cover the download and map-maker
+  buttons.
+
 ## [1.7.0] - 2026-09-27
 
 The first half of the UI revamp ("Stone & Paper", spec in

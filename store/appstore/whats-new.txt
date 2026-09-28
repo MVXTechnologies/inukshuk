@@ -1,8 +1,8 @@
-Maps, fixed.
+A new map, drawn for the outdoors.
 
-• Large maps whose page is one big photo now render instead of failing with "Load failed". They also render far faster.
-• A map imported before an earlier fix is corrected automatically on launch, including sheets that drew upside down — no need to re-import.
-• Your position marker always stays on top of your maps.
-• Importing a very large map no longer runs out of memory.
-• Maps prepare themselves right after import, so the Map tab opens with them ready.
-• Pauses in a recording no longer add the distance you travelled while paused, and time the app spent closed while paused is no longer counted.
+• A new map in the app's own colours: woods, water and trails that stand out, city clutter kept quiet. Canada, the United States and Europe.
+• Contour lines load with the map, and come with your offline downloads.
+• Night red and Sunlight display modes.
+• Route thumbnails in the Library and Logbook, and a restyled Library, Maps and Logbook.
+• Trails and the heat glow are easier to tap.
+• Fixed: the download area could stay on "Calculating…"; opening a map now moves to it.
