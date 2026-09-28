@@ -1,12 +1,84 @@
 {
   "pieces": [
-    { "name": "basemap-na-east-north", "bbox": [-90, 40, -52, 84] },
-    { "name": "basemap-na-east-south", "bbox": [-90, 18, -52, 40] },
-    { "name": "basemap-na-central", "bbox": [-115, 18, -90, 84] },
-    { "name": "basemap-na-west", "bbox": [-180, 18, -115, 84] },
-    { "name": "basemap-eu-nw", "bbox": [-32, 50, 10, 72] },
-    { "name": "basemap-eu-sw", "bbox": [-32, 34, 10, 50] },
-    { "name": "basemap-eu-ne", "bbox": [10, 50, 45, 72] },
-    { "name": "basemap-eu-se", "bbox": [10, 34, 45, 50] }
+    {
+      "name": "basemap-na-east-north",
+      "bbox": [-90, 40, -52, 84]
+    },
+    {
+      "name": "basemap-na-east-south",
+      "bbox": [-90, 18, -52, 40]
+    },
+    {
+      "name": "basemap-na-central",
+      "bbox": [-115, 18, -90, 84]
+    },
+    {
+      "name": "basemap-na-west",
+      "bbox": [-180, 18, -115, 84]
+    },
+    {
+      "name": "basemap-eu-nw",
+      "bbox": [-32, 50, 10, 72]
+    },
+    {
+      "name": "basemap-eu-sw",
+      "bbox": [-32, 34, 10, 50]
+    },
+    {
+      "name": "basemap-eu-ne",
+      "bbox": [10, 50, 45, 72]
+    },
+    {
+      "name": "basemap-eu-se",
+      "bbox": [10, 34, 45, 50]
+    },
+    {
+      "name": "basemap-latam-north",
+      "bbox": [-120, -10, -32, 18]
+    },
+    {
+      "name": "basemap-samerica-south",
+      "bbox": [-90, -60, -32, -10]
+    },
+    {
+      "name": "basemap-africa-north",
+      "bbox": [-32, 0, 60, 34]
+    },
+    {
+      "name": "basemap-africa-south",
+      "bbox": [-32, -60, 60, 0]
+    },
+    {
+      "name": "basemap-asia-west",
+      "bbox": [45, 34, 100, 84]
+    },
+    {
+      "name": "basemap-asia-east",
+      "bbox": [100, 34, 180, 84]
+    },
+    {
+      "name": "basemap-asia-south",
+      "bbox": [60, 0, 100, 34]
+    },
+    {
+      "name": "basemap-asia-southeast",
+      "bbox": [100, 0, 180, 34]
+    },
+    {
+      "name": "basemap-oceania",
+      "bbox": [60, -60, 180, 0]
+    },
+    {
+      "name": "basemap-pacific-east",
+      "bbox": [-180, -60, -120, 18]
+    },
+    {
+      "name": "basemap-atlantic-north",
+      "bbox": [-52, 34, -32, 84]
+    },
+    {
+      "name": "basemap-arctic-europe",
+      "bbox": [-32, 72, 45, 84]
+    }
   ]
 }

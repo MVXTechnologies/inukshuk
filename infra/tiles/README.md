@@ -16,10 +16,11 @@ phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ 
 | `/basemap.json`                  | TileJSON                                           |
 | `/fonts/{fontstack}/{range}.pbf` | MapLibre glyphs (Atkinson Hyperlegible Next)       |
 
-Coverage (`nas/pieces.json`): Canada, the United States (with Alaska and Hawaii), Greenland and
-Europe, about 70 GB, as **8 regional archives** plus `basemap.index.json`. One extract of the
-whole area needs more RAM than the NAS has (its directory alone was OOM-killed), so the Worker
-routes each tile to the piece whose bbox touches it. The rest of the world later = more pieces.
+Coverage (`nas/pieces.json`): **the whole world** (land between 60° S and 84° N) as 20 regional
+archives plus `basemap.index.json` — Canada/US/Greenland and Europe first (2026-09-28 morning),
+the rest the same afternoon (~140 GB in R2). One extract of a large area needs more RAM than the
+NAS has (its directory alone was OOM-killed), so the Worker routes each tile to the piece whose
+bbox touches it; pieces never overlap.
 
 ## Live state (2026-09-27)
 
