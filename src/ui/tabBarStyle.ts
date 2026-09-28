@@ -51,3 +51,16 @@ export function buildTabBarOptions({ colors }: { colors: TabBarColors }): TabBar
     tabBarIconStyle: { width: TAB_PILL.width, height: TAB_PILL.height },
   };
 }
+
+/**
+ * Bottom inset the tab bar pads by. On Android the system navigation bar is
+ * hidden (immersive, 2.0.0), so the reported inset drops to 0 and the labels
+ * sat on the screen edge, clipped by rounded corners (owner report,
+ * 2026-09-28): keep at least `ANDROID_MIN_BOTTOM` dp there. iOS keeps its
+ * home-indicator inset as is.
+ */
+export const ANDROID_MIN_BOTTOM = 12;
+
+export function tabBarBottomInset(reported: number, os: string): number {
+  return os === 'android' ? Math.max(reported, ANDROID_MIN_BOTTOM) : reported;
+}

@@ -1,4 +1,11 @@
-import { buildTabBarOptions, TAB_PILL, tabLabelStyle, type TabBarColors } from './tabBarStyle';
+import {
+  ANDROID_MIN_BOTTOM,
+  buildTabBarOptions,
+  TAB_PILL,
+  tabBarBottomInset,
+  tabLabelStyle,
+  type TabBarColors,
+} from './tabBarStyle';
 
 const colors: TabBarColors = {
   surface: '#101010',
@@ -35,5 +42,17 @@ describe('tabLabelStyle', () => {
       fontWeight: '800',
     });
     expect(tabLabelStyle(false, 'Brand').fontWeight).toBe('700');
+  });
+});
+
+describe('tabBarBottomInset', () => {
+  it('keeps the labels off the screen edge on Android when the nav bar is hidden', () => {
+    expect(tabBarBottomInset(0, 'android')).toBe(ANDROID_MIN_BOTTOM);
+    expect(tabBarBottomInset(24, 'android')).toBe(24);
+  });
+
+  it('leaves iOS home-indicator insets alone', () => {
+    expect(tabBarBottomInset(34, 'ios')).toBe(34);
+    expect(tabBarBottomInset(0, 'ios')).toBe(0);
   });
 });
