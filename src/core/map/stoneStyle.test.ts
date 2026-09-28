@@ -262,6 +262,22 @@ describe('buildStoneLayers', () => {
     }
   });
 
+  it('reads major lines from a level field when the tiles carry one', () => {
+    const { base } = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      contours: { source: 'contours', sourceLayer: 'contours', field: 'ele', levelField: 'level' },
+    });
+    const major = base.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-major`);
+    const minor = base.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-minor`);
+    expect((major as { filter?: unknown }).filter).toEqual([
+      '==',
+      ['to-number', ['get', 'level'], 0],
+      1,
+    ]);
+    expect(major?.minzoom).toBe(9);
+    expect(minor?.minzoom).toBe(11);
+  });
+
   it.each([
     ['fr', 'name:fr'],
     ['en', 'name:en'],

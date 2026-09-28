@@ -104,15 +104,18 @@ export type StoneLabelLanguage = 'fr' | 'en' | 'local';
 
 /**
  * An optional contour-line source (the basemap carries none). `field` is the
- * numeric elevation attribute in metres; every `majorEvery`-th line on a
- * `intervalM` grid is drawn bold.
+ * numeric elevation attribute in metres. Major lines come either from a
+ * `levelField` the tiles carry (1 = major, as our Worker's contour tiles do,
+ * whose interval already tightens with zoom) or, without one, from every
+ * `majorEvery`-th line on an `intervalM` grid.
  */
 export interface StoneContourSource {
   source: string;
   sourceLayer: string;
   field: string;
-  intervalM: number;
-  majorEvery: number;
+  levelField?: string;
+  intervalM?: number;
+  majorEvery?: number;
 }
 
 export interface StoneStyleOptions {
@@ -456,18 +459,20 @@ export function buildStoneLayers(
 
   if (options.contours) {
     const c = options.contours;
-    const isMajor: ExpressionSpecification = [
-      '==',
-      ['%', ['to-number', ['get', c.field], 0], c.intervalM * c.majorEvery],
-      0,
-    ];
+    const isMajor: ExpressionSpecification = c.levelField
+      ? ['==', ['to-number', ['get', c.levelField], 0], 1]
+      : [
+          '==',
+          ['%', ['to-number', ['get', c.field], 0], (c.intervalM ?? 10) * (c.majorEvery ?? 5)],
+          0,
+        ];
     base.push(
       {
         id: id('contour-minor'),
         type: 'line',
         source: c.source,
         'source-layer': c.sourceLayer,
-        minzoom: 12,
+        minzoom: c.levelField ? 11 : 12,
         filter: ['!', isMajor],
         paint: {
           'line-color': scheme.contour,
@@ -480,7 +485,7 @@ export function buildStoneLayers(
         type: 'line',
         source: c.source,
         'source-layer': c.sourceLayer,
-        minzoom: 10,
+        minzoom: c.levelField ? 9 : 10,
         filter: isMajor,
         paint: {
           'line-color': scheme.contour,

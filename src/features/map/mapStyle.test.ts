@@ -799,6 +799,22 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     expect(fontsOf(atkinson).every((f) => f.includes('Atkinson Hyperlegible Next'))).toBe(true);
   });
 
+  it('flag on: adds served contour tiles only when asked', () => {
+    const build = withFlag(true);
+    const without = build(TILE, false, 'map', false, { vectorBasemap });
+    expect(without.sources['basemap-contours']).toBeUndefined();
+    const withContours = build(TILE, false, 'map', false, {
+      vectorBasemap: {
+        ...vectorBasemap,
+        contours: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
+      },
+    });
+    expect(withContours.sources['basemap-contours']).toMatchObject({ type: 'vector', maxzoom: 14 });
+    const ids = layerIds(withContours);
+    expect(ids).toContain('stone-contour-major');
+    expect(ids).toContain('stone-contour-minor');
+  });
+
   it('flag on: the dark scheme yields a different stone style', () => {
     const build = withFlag(true);
     const light = build(TILE, false, 'map', false, { vectorBasemap });

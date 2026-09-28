@@ -70,7 +70,7 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
-import { vectorGlyphsUrl, vectorTilesUrl } from '@data/basemapTiles';
+import { vectorContoursUrl, vectorGlyphsUrl, vectorTilesUrl } from '@data/basemapTiles';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -172,6 +172,7 @@ const TOP_CHIP_OFFSET = 8 + 48 + 8;
 /** The vector base map's tile and glyph hosts (build-time config, see @data/basemapTiles). */
 const VECTOR_TILES = [vectorTilesUrl()];
 const VECTOR_GLYPHS = vectorGlyphsUrl();
+const VECTOR_CONTOURS = vectorContoursUrl();
 
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
@@ -321,6 +322,8 @@ export function MapScreen() {
   // ochre isolines. Offline-only draws it too: new `map` packs are vector
   // (older raster ones are flagged for re-download in Settings).
   const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
+  // Contours on the vector map are served tiles, part of the style.
+  const terrainContours = useSettingsStore((s) => s.terrainContours);
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -576,6 +579,7 @@ export function MapScreen() {
               tiles: VECTOR_TILES,
               dark: theme.dark,
               ...(VECTOR_GLYPHS !== null ? { glyphs: VECTOR_GLYPHS } : {}),
+              ...(terrainContours ? { contours: VECTOR_CONTOURS } : {}),
             },
           }
         : {}),
@@ -639,6 +643,7 @@ export function MapScreen() {
     };
     return buildOsmStyle(tileUrl, false, basemap, showHillshade, options);
   }, [
+    terrainContours,
     tileUrl,
     basemap,
     showHillshade,
@@ -845,6 +850,7 @@ export function MapScreen() {
     // mapLoaded: the pipeline opens with getViewState — see the state's
     // declaration comment (native crash if called before the map loads).
     active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
+    contoursFromTiles: stoneBase,
   });
 
   // Wind particle overlay (weather M3): Windy-style streaks over the wind

@@ -258,6 +258,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // VECTOR_GLYPHS_URL=none falls back to OpenFreeMap's Noto.
     vectorTilesUrl: process.env.VECTOR_TILES_URL,
     vectorGlyphsUrl: process.env.VECTOR_GLYPHS_URL,
+    vectorContoursUrl: process.env.VECTOR_CONTOURS_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

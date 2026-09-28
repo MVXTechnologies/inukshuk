@@ -59,6 +59,8 @@ export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : '
 
 /** The vector base map's data: OSM via our Protomaps extract. */
 const PROTOMAPS_ATTRIBUTION = '© OpenStreetMap contributors · Protomaps';
+/** Source id of the served contour tiles on the vector base map. */
+export const VECTOR_CONTOURS_SOURCE = 'basemap-contours';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
 export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
@@ -298,6 +300,8 @@ export interface OsmStyleOptions {
      * OpenFreeMap Noto fallback (whole-stack swap, see `STONE_FONTS_NOTO`).
      */
     glyphs?: string;
+    /** Contour-line vector tiles (our Worker); unset = no contour layers. */
+    contours?: string;
   };
   marineChart?: {
     wmsFallback: boolean;
@@ -506,6 +510,16 @@ export function buildOsmStyle(
           source: VECTOR_BASEMAP_SOURCE,
           // Atkinson from our host when configured, else OpenFreeMap's Noto.
           fonts: options.vectorBasemap.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
+          ...(options.vectorBasemap.contours
+            ? {
+                contours: {
+                  source: VECTOR_CONTOURS_SOURCE,
+                  sourceLayer: 'contours',
+                  field: 'ele',
+                  levelField: 'level',
+                },
+              }
+            : {}),
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -518,6 +532,16 @@ export function buildOsmStyle(
       maxzoom: 15,
       attribution: PROTOMAPS_ATTRIBUTION,
     };
+    if (options.vectorBasemap.contours) {
+      style.sources[VECTOR_CONTOURS_SOURCE] = {
+        type: 'vector',
+        tiles: [options.vectorBasemap.contours],
+        minzoom: 0,
+        // Generated to z14; the lines overzoom cleanly past it.
+        maxzoom: 14,
+        attribution: 'Elevation: Mapzen Terrain Tiles',
+      };
+    }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     style.layers = [
       ...stone.base,

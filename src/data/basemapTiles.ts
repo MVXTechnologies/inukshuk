@@ -33,3 +33,12 @@ export function vectorGlyphsUrl(): string | null {
   if (value === 'none') return null;
   return typeof value === 'string' && value !== '' ? value : DEFAULT_VECTOR_GLYPHS_URL;
 }
+
+/** Contour-line vector tiles, generated on demand by the same Worker. */
+export const DEFAULT_VECTOR_CONTOURS_URL = `${TILE_HOST}/contours/{z}/{x}/{y}.mvt`;
+
+/** The contour tile template this build reads (build-time override or ours). */
+export function vectorContoursUrl(): string {
+  const value: unknown = Constants.expoConfig?.extra?.vectorContoursUrl;
+  return typeof value === 'string' && value !== '' ? value : DEFAULT_VECTOR_CONTOURS_URL;
+}

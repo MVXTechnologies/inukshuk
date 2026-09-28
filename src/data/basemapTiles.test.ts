@@ -1,7 +1,9 @@
 import Constants from 'expo-constants';
 import {
+  DEFAULT_VECTOR_CONTOURS_URL,
   DEFAULT_VECTOR_GLYPHS_URL,
   DEFAULT_VECTOR_TILES_URL,
+  vectorContoursUrl,
   vectorGlyphsUrl,
   vectorTilesUrl,
 } from './basemapTiles';
@@ -31,4 +33,12 @@ it('serves Atkinson glyphs from our host unless turned off', () => {
   expect(vectorGlyphsUrl()).toBe('https://tiles.example/fonts/{fontstack}/{range}.pbf');
   extra().vectorGlyphsUrl = 'none';
   expect(vectorGlyphsUrl()).toBeNull();
+});
+
+it('reads contour tiles from our Worker unless overridden', () => {
+  delete extra().vectorContoursUrl;
+  expect(vectorContoursUrl()).toBe(DEFAULT_VECTOR_CONTOURS_URL);
+  expect(DEFAULT_VECTOR_CONTOURS_URL).toMatch(/\/contours\/\{z\}\/\{x\}\/\{y\}\.mvt$/);
+  extra().vectorContoursUrl = 'http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt';
+  expect(vectorContoursUrl()).toBe('http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt');
 });

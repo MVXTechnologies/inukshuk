@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pmtiles": "4.5.0"
+    "pmtiles": "4.5.0",
+    "maplibre-contour": "0.1.1",
+    "fast-png": "^7.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260928.1",

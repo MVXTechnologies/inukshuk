@@ -19,6 +19,7 @@ import {
   type RangeResponse,
   type Source,
 } from 'pmtiles';
+import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
 
 export interface Env {
   BUCKET: R2Bucket;
@@ -35,6 +36,7 @@ export interface Env {
 
 const TILE_PATH = /^\/([a-z0-9_-]+)\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
+const CONTOUR_PATH = /^\/contours\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
 const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json))$/;
 
@@ -136,6 +138,27 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
 async function serve(request: Request, env: Env, url: URL): Promise<Response> {
   const cacheControl = env.CACHE_CONTROL ?? 'public, max-age=86400';
   const cors = corsHeaders(request, env);
+
+  const [, cz, cx, cy] = CONTOUR_PATH.exec(url.pathname) ?? [];
+  if (cz !== undefined && cx !== undefined && cy !== undefined) {
+    const [z, x, y] = [Number(cz), Number(cx), Number(cy)];
+    if (z > CONTOUR_MAX_ZOOM || x >= 2 ** z || y >= 2 ** z)
+      return new Response('bad tile', { status: 400, headers: cors });
+    const mvt = await contourTile(z, x, y);
+    const gzipped = await new Response(
+      new Response(mvt).body!.pipeThrough(new CompressionStream('gzip')),
+    ).arrayBuffer();
+    return new Response(gzipped, {
+      headers: {
+        ...cors,
+        'Content-Type': 'application/x-protobuf',
+        'Content-Encoding': 'gzip',
+        // Terrain doesn't change: cache contour tiles for 30 days.
+        'Cache-Control': 'public, max-age=2592000',
+      },
+      encodeBody: 'manual',
+    });
+  }
 
   const tile = TILE_PATH.exec(url.pathname);
   const [, archive, zs, xs, ys] = tile ?? [];
