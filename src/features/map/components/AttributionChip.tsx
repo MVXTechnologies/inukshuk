@@ -10,13 +10,13 @@ import { basemapAttribution } from '../mapStyle';
  * MapLibre's own attribution button stays off (it crowded the map); the full
  * credits roll is in Settings › System info.
  */
-export function AttributionChip({ basemap }: { basemap: MapBasemap }) {
+export function AttributionChip({ basemap, vector }: { basemap: MapBasemap; vector: boolean }) {
   const tokens = useSchemeTokens();
   const outline = useChromeOutline();
   return (
     <View style={[styles.chip, { backgroundColor: tokens.map.chip }, outline]} pointerEvents="none">
       <Text style={[styles.label, { color: tokens.map.chipInkMuted }]}>
-        {basemapAttribution(basemap)}
+        {basemapAttribution(basemap, vector)}
       </Text>
     </View>
   );

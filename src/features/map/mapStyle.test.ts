@@ -705,6 +705,11 @@ describe('basemapAttribution', () => {
   ])('credits the %s basemap', (basemap, credit) => {
     expect(basemapAttribution(basemap)).toBe(credit);
   });
+
+  it('credits Protomaps on the vector base map only', () => {
+    expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
+    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar');
+  });
 });
 
 describe('night red raster (decision 4)', () => {

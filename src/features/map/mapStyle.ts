@@ -89,14 +89,15 @@ function baseSource(
  * the map, revamp `Main.html`). MapLibre's own attribution button stays off
  * (it crowded the map); Settings › System info carries the full credits roll.
  */
-export function basemapAttribution(basemap: MapBasemap): string {
+export function basemapAttribution(basemap: MapBasemap, vector = false): string {
   switch (basemap) {
     case 'satellite':
       return '© Esri, Maxar';
     case 'relief':
       return '© Esri, USGS';
     default:
-      return '© OpenStreetMap';
+      // The vector base is OSM data cut by Protomaps' pipeline.
+      return vector ? '© OpenStreetMap · Protomaps' : '© OpenStreetMap';
   }
 }
 

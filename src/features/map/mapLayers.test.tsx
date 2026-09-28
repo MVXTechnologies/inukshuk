@@ -81,6 +81,10 @@ describe('hoisted map layers', () => {
       CONTOUR_LAYERS.satellite.major,
       ['contours2d-major-halo', 'contours2d-major-line'],
     ],
+    ['CONTOUR_LAYERS.stoneLight.minor', CONTOUR_LAYERS.stoneLight.minor, ['contours2d-minor-line']],
+    ['CONTOUR_LAYERS.stoneLight.major', CONTOUR_LAYERS.stoneLight.major, ['contours2d-major-line']],
+    ['CONTOUR_LAYERS.stoneDark.minor', CONTOUR_LAYERS.stoneDark.minor, ['contours2d-minor-line']],
+    ['CONTOUR_LAYERS.stoneDark.major', CONTOUR_LAYERS.stoneDark.major, ['contours2d-major-line']],
   ])('%s: every layer receives the source id', async (_name, children, expectedIds) => {
     const injected = await injectedSources(children as ReactNode);
     expect(injected.map(([id]) => id)).toEqual(expectedIds);

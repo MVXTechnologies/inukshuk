@@ -311,11 +311,20 @@ export function MapScreen() {
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
-  // Stable per basemap so the contour sources' memo can hold (see the hoisted
-  // layer constants above).
-  const contourLayerSet = basemap === 'satellite' ? CONTOUR_LAYERS.satellite : CONTOUR_LAYERS.plain;
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  // Stable per basemap so the contour sources' memo can hold (see the hoisted
+  // layer constants above). The vector Stone & Paper base gets the board's
+  // ochre isolines.
+  const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map' && !offlineOnly;
+  const contourLayerSet =
+    basemap === 'satellite'
+      ? CONTOUR_LAYERS.satellite
+      : stoneBase
+        ? theme.dark
+          ? CONTOUR_LAYERS.stoneDark
+          : CONTOUR_LAYERS.stoneLight
+        : CONTOUR_LAYERS.plain;
   const offlineRegions = useOfflineStore((s) => s.regions);
   // 2D base style with shaded-relief hillshade for the outdoor/topo look;
   // hillshade-3D was replaced by the real 3D terrain surface.
@@ -511,7 +520,7 @@ export function MapScreen() {
   // vector base map reads our own tile host. Offline-only stays raster, so
   // neither fetches there.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
-  const vectorBasemap = VECTOR_BASEMAP_ENABLED && basemap === 'map' && !offlineOnly;
+  const vectorBasemap = stoneBase;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
@@ -2264,7 +2273,7 @@ export function MapScreen() {
             )}
           </View>
           <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="none">
-            {!terrain3d && <AttributionChip basemap={basemap} />}
+            {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
           </View>
         </View>
         {/* Depth legend (marine wave D §D2): the chart's quantized band
