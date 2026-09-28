@@ -73,3 +73,35 @@ export function cameraChanged(
     Math.abs(a.zoom - b.zoom) > epsZoom
   );
 }
+
+/** Canonical tile size the zoom scale is defined against. */
+const CANONICAL_TILE_PX = 512;
+
+/**
+ * The deepest camera zoom at which a raster source still has REAL tiles.
+ *
+ * A source declared at `tileSize` is fetched `log2(512 / tileSize)` levels
+ * below the camera, capped at the service's own maximum. Past that the map
+ * overscales the deepest tiles it has — which looks exactly like a rendering
+ * bug unless the UI says otherwise.
+ */
+export function maxSharpCameraZoom(sourceMaxZoom: number, tileSize: number): number {
+  return sourceMaxZoom + 1 - Math.log2(CANONICAL_TILE_PX / tileSize);
+}
+
+/**
+ * The smallest (most detailed) print scale a source can serve honestly, in
+ * denominator terms — below this the sheet is showing overscaled tiles.
+ * Returns 0 when the source can serve anything the editor can ask for.
+ */
+export function sharpestScaleDenom(
+  sourceMaxZoom: number,
+  tileSize: number,
+  spanPx: number,
+  latitude: number,
+  mapRectPt: number,
+): number {
+  const zoom = maxSharpCameraZoom(sourceMaxZoom, tileSize);
+  if (!Number.isFinite(zoom)) return 0;
+  return scaleDenomForZoom(zoom, spanPx, latitude, mapRectPt);
+}
