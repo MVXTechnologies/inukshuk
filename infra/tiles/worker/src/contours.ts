@@ -16,9 +16,9 @@ const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}
 
 /** [minor, major] contour interval (m) by tile zoom — denser as you zoom in. */
 export function contourLevels(z: number): [number, number] {
-  if (z <= 9) return [200, 1000];
-  if (z === 10) return [100, 500];
-  if (z === 11) return [50, 250];
+  if (z <= 9) return [100, 500];
+  if (z === 10) return [50, 250];
+  if (z === 11) return [25, 100];
   if (z === 12) return [20, 100];
   return [10, 50];
 }

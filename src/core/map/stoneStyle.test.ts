@@ -270,12 +270,12 @@ describe('buildStoneLayers', () => {
     const major = base.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-major`);
     const minor = base.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-minor`);
     expect((major as { filter?: unknown }).filter).toEqual([
-      '==',
-      ['to-number', ['get', 'level'], 0],
-      1,
+      'all',
+      ['>', ['to-number', ['get', 'ele'], 0], 0],
+      ['==', ['to-number', ['get', 'level'], 0], 1],
     ]);
-    expect(major?.minzoom).toBe(9);
-    expect(minor?.minzoom).toBe(11);
+    expect(major?.minzoom).toBe(8);
+    expect(minor?.minzoom).toBe(10);
   });
 
   it.each([

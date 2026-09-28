@@ -35,7 +35,9 @@ export function vectorGlyphsUrl(): string | null {
 }
 
 /** Contour-line vector tiles, generated on demand by the same Worker. */
-export const DEFAULT_VECTOR_CONTOURS_URL = `${TILE_HOST}/contours/{z}/{x}/{y}.mvt`;
+// `v` versions the contour recipe: bump it when levels change, so the 30-day
+// edge and device caches fetch fresh tiles.
+export const DEFAULT_VECTOR_CONTOURS_URL = `${TILE_HOST}/contours/{z}/{x}/{y}.mvt?v=2`;
 
 /** The contour tile template this build reads (build-time override or ours). */
 export function vectorContoursUrl(): string {

@@ -459,6 +459,9 @@ export function buildStoneLayers(
 
   if (options.contours) {
     const c = options.contours;
+    // Terrarium carries bathymetry: never draw sea-level or underwater lines
+    // (they read as stray orange rings in the St. Lawrence).
+    const aboveSea: ExpressionSpecification = ['>', ['to-number', ['get', c.field], 0], 0];
     const isMajor: ExpressionSpecification = c.levelField
       ? ['==', ['to-number', ['get', c.levelField], 0], 1]
       : [
@@ -472,8 +475,8 @@ export function buildStoneLayers(
         type: 'line',
         source: c.source,
         'source-layer': c.sourceLayer,
-        minzoom: c.levelField ? 11 : 12,
-        filter: ['!', isMajor],
+        minzoom: c.levelField ? 10 : 12,
+        filter: ['all', aboveSea, ['!', isMajor]],
         paint: {
           'line-color': scheme.contour,
           'line-opacity': dark ? 0.5 : 0.55,
@@ -485,8 +488,8 @@ export function buildStoneLayers(
         type: 'line',
         source: c.source,
         'source-layer': c.sourceLayer,
-        minzoom: c.levelField ? 9 : 10,
-        filter: isMajor,
+        minzoom: c.levelField ? 8 : 10,
+        filter: ['all', aboveSea, isMajor],
         paint: {
           'line-color': scheme.contour,
           'line-opacity': dark ? 0.7 : 0.75,

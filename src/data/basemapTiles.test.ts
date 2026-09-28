@@ -39,7 +39,7 @@ it('serves Atkinson glyphs from our host unless turned off', () => {
 it('reads contour tiles from our Worker unless overridden', () => {
   delete extra().vectorContoursUrl;
   expect(vectorContoursUrl()).toBe(DEFAULT_VECTOR_CONTOURS_URL);
-  expect(DEFAULT_VECTOR_CONTOURS_URL).toMatch(/\/contours\/\{z\}\/\{x\}\/\{y\}\.mvt$/);
+  expect(DEFAULT_VECTOR_CONTOURS_URL).toMatch(/\/contours\/\{z\}\/\{x\}\/\{y\}\.mvt\?v=\d+$/);
   extra().vectorContoursUrl = 'http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt';
   expect(vectorContoursUrl()).toBe('http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt');
 });
