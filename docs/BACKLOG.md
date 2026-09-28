@@ -6,6 +6,25 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
+- **Road navigation mode + real place search (owner request, 2026-09-28).**
+  - Want: type any place into "Search places" and find it the way Google does (businesses,
+    addresses, trailheads, lakes). Then a **2D turn-by-turn navigation mode**: route line,
+    next-maneuver banner ("In 300 m, turn left onto Rue Saint-Jean"), distance and ETA,
+    re-routing when off route, and voice later.
+  - Today the "Search places" pill only accepts coordinates (revamp phase 1).
+  - **Google's place index can't be used as-is.** Google Maps Platform terms forbid showing
+    Places/Geocoding results on a non-Google map, and ours is MapLibre with our own tiles. Using
+    Google would mean a Google map for that screen (cost, look, and not offline).
+  - Options to weigh:
+    - **Search:** Photon or Pelias (OSM geocoders), self-hostable on the NAS next to the tiles.
+      Or a paid API that allows any map (Mapbox Search, HERE, Stadia/Pelias hosted). Check
+      coverage of Québec POIs and French names.
+    - **Routing and turn-by-turn:** Valhalla (car, bike, foot profiles, turn-by-turn narrative,
+      can run offline on-device from tiles), GraphHopper or OSRM. Self-host on the NAS or a
+      small VM behind the Cloudflare Worker. `maplibre-navigation` has the UI patterns.
+  - Fits the new vector base map (road classes are already styled). Needs a design pass: a
+    driving HUD next to the existing recording panel.
+
 - **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** ~~M1~~ SHIPPED
   (PR #195, OTA'd 1.5.0 + 1.4.0, 2026-08-09): thumbnail layer picker, dark
   translucent chrome, floating time scrubber (radar past / forecast to
