@@ -34,6 +34,15 @@ export interface Env {
   UPLOAD_TOKEN?: string;
 }
 
+/**
+ * Bump when cached answers must stop being reused (e.g. a region that used to
+ * answer 204 now has data): the edge cache is keyed on this, so old entries are
+ * simply never read again. workers.dev has no zone to purge.
+ */
+const CACHE_GENERATION = '2';
+/** "No data here" can change when coverage grows: don't hold it for a day. */
+const EMPTY_CACHE_CONTROL = 'public, max-age=3600';
+
 const TILE_PATH = /^\/([a-z0-9_-]+)\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
 const CONTOUR_PATH = /^\/contours\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
@@ -170,7 +179,7 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     if (source === null)
       return new Response(null, {
         status: 204,
-        headers: { ...cors, 'Cache-Control': cacheControl },
+        headers: { ...cors, 'Cache-Control': EMPTY_CACHE_CONTROL },
       });
     const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${source}.pmtiles`), CACHE, decompress);
     const header = await pmtiles.getHeader();
@@ -181,7 +190,7 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     if (found === undefined)
       return new Response(null, {
         status: 204,
-        headers: { ...cors, 'Cache-Control': cacheControl },
+        headers: { ...cors, 'Cache-Control': EMPTY_CACHE_CONTROL },
       });
     // The library hands back the tile DEcompressed; gzip it again (vector
     // tiles shrink ~30-40 %) and say so, sending the bytes as they are.
@@ -299,7 +308,10 @@ export default {
     if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
 
     const cache = caches.default;
-    const hit = await cache.match(request);
+    const keyUrl = new URL(url);
+    keyUrl.searchParams.set('__g', CACHE_GENERATION);
+    const cacheKey = new Request(keyUrl.toString(), request);
+    const hit = await cache.match(cacheKey);
     // Our tiles are stored ALREADY gzipped (Content-Encoding: gzip). Handing
     // the cached Response straight back lets Cloudflare gzip it a SECOND time
     // — every cache HIT reached clients double-compressed and MapLibre saw
@@ -320,7 +332,7 @@ export default {
       return new Response(`tile error: ${(e as Error).message}`, { status: 502 });
     }
     if (response.status === 200 || response.status === 204)
-      ctx.waitUntil(cache.put(request, response.clone()));
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
     return response;
   },
 };
