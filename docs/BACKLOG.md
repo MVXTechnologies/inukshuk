@@ -6,6 +6,12 @@ Ordered roughly by priority (top = next).
 
 ## In progress
 
+- **System info should show the installed app version (next store build).** "Version" reads
+  `Constants.expoConfig.version` — the running bundle's config — so a 1.7.0 install running an
+  OTA reads 1.7.0 even after the owner expected 2.0.0 (2026-09-28). Show the binary's version
+  and build too (e.g. "2.0.0 (57)"). Needs `expo-application` (native) — ship it with the next
+  store build, not over the air (it changes the fingerprint and would cut 2.0.0 off from OTAs).
+
 - **Road navigation mode + real place search (owner request, 2026-09-28).**
   - Want: type any place into "Search places" and find it the way Google does (businesses,
     addresses, trailheads, lakes). Then a **2D turn-by-turn navigation mode**: route line,
