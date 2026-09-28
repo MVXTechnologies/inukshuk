@@ -45,6 +45,11 @@ interface Props {
    * the geometry is recomputed even though the box itself didn't move.
    */
   boundsVersion: number;
+  /**
+   * Re-read the map's flat bounds. Called while no estimate has landed yet, so
+   * a first read that was refused (camera not settled) is retried.
+   */
+  refreshBounds?: () => Promise<void>;
   /** The currently-active basemap — pre-checked in the layer picker. */
   activeBasemap: Basemap;
   /** OSM tile URL (from settings) used to build the preview thumbnails. */
@@ -107,6 +112,7 @@ const LAYERS: { key: Basemap; label: string }[] = [
 export function RegionSelectOverlay({
   toGeo,
   boundsVersion,
+  refreshBounds,
   activeBasemap,
   tileUrl,
   onConfirm,
@@ -176,6 +182,11 @@ export function RegionSelectOverlay({
     [toGeo],
   );
 
+  const refreshBoundsRef = useRef(refreshBounds);
+  useEffect(() => {
+    refreshBoundsRef.current = refreshBounds;
+  }, [refreshBounds]);
+
   // A stable ref so the once-memoised PanResponders always call the latest version.
   const recomputeCallbackRef = useRef(recomputeGeo);
   useEffect(() => {
@@ -192,9 +203,16 @@ export function RegionSelectOverlay({
 
   // If the bounds cache wasn't ready when the overlay opened, keep retrying until
   // the first estimate lands (then stop).
+  // Re-READ the bounds too (every ~1 s): converting a cache that nothing will
+  // ever fill again — the map idle, the first read refused — waited forever.
   useEffect(() => {
     if (geo !== null || box.w === 0) return;
-    const id = setInterval(() => recomputeCallbackRef.current(boxRef.current), 150);
+    let ticks = 0;
+    const id = setInterval(() => {
+      ticks += 1;
+      if (ticks % 7 === 0) void refreshBoundsRef.current?.();
+      recomputeCallbackRef.current(boxRef.current);
+    }, 150);
     return () => clearInterval(id);
   }, [geo, box.w]);
 
@@ -432,6 +450,7 @@ export function RegionSelectOverlay({
 
   return (
     <View
+      testID="region-select-overlay"
       style={styles.overlay}
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
