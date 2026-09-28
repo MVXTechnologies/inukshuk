@@ -300,7 +300,18 @@ export default {
 
     const cache = caches.default;
     const hit = await cache.match(request);
-    if (hit) return hit;
+    // Our tiles are stored ALREADY gzipped (Content-Encoding: gzip). Handing
+    // the cached Response straight back lets Cloudflare gzip it a SECOND time
+    // — every cache HIT reached clients double-compressed and MapLibre saw
+    // garbage (first load fine, later loads blank). Re-wrap with
+    // encodeBody 'manual' so the stored bytes go out as they are.
+    if (hit) {
+      return new Response(hit.body, {
+        status: hit.status,
+        headers: hit.headers,
+        encodeBody: hit.headers.get('Content-Encoding') === 'gzip' ? 'manual' : 'automatic',
+      });
+    }
 
     let response: Response;
     try {
