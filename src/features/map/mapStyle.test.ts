@@ -745,8 +745,8 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     return build;
   }
 
-  it('ships OFF: the option is ignored and the map stays the OSM raster', () => {
-    const s = buildOsmStyle(TILE, false, 'map', false, { vectorBasemap });
+  it('flag off: the option is ignored and the map stays the OSM raster', () => {
+    const s = withFlag(false)(TILE, false, 'map', false, { vectorBasemap });
     expect(baseSource(s).tiles).toEqual([TILE]);
     expect(s.sources['basemap-vector']).toBeUndefined();
     expect(s.glyphs).toBeUndefined();
