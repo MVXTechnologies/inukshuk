@@ -16,11 +16,12 @@ import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '
 import { StoreScreen } from '@features/store/StoreScreen';
 import { useCatalogStore } from '@state/catalogStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ navigate: jest.fn() }) }));
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ navigate: jest.fn(), push: mockPush }) }));
 jest.mock('@features/store/downloadCatalogItem', () => ({
   CatalogDownloadCanceled: class extends Error {},
   cancelCatalogDownload: jest.fn(),
@@ -223,4 +224,11 @@ it('lands on Canadian sheets first from Québec City, Maine quads after (the ran
   expect(view.getByText('USGS US Topo · Maine')).toBeTruthy();
   expect(view.getByText(/^24 MB · 1\d\d km away$/)).toBeTruthy();
   expect(view.getByText('US Topo covers the United States only.')).toBeTruthy();
+});
+
+it('has the same Settings gear as the Library and Logbook headers', async () => {
+  const view = await mount();
+  await flush();
+  await fireEvent.press(view.getByLabelText('Settings'));
+  expect(mockPush).toHaveBeenCalledWith('/settings');
 });
