@@ -44,6 +44,20 @@ export function formatElevation(meters: number, units: Units): string {
   return `${Math.round(meters)} m`;
 }
 
+/**
+ * A climb or a drop: "+120 m" / "−85 m". Zero (after rounding) carries no
+ * sign — "0 m", never "+0 m" or "−0 m".
+ */
+export function formatElevationChange(
+  meters: number,
+  direction: 'up' | 'down',
+  units: Units,
+): string {
+  const text = formatElevation(Math.abs(meters), units);
+  if (/^0 /.test(text)) return text;
+  return `${direction === 'up' ? '+' : '−'}${text}`;
+}
+
 /** Seconds -> "H:MM:SS" or "M:SS". Unit-system independent. */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;

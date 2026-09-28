@@ -3,13 +3,20 @@ import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { MD3LightTheme, PaperProvider } from 'react-native-paper';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DashboardScreen } from './DashboardScreen';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@data/storage', () => ({}));
+jest.mock('../library/useRouteThumbnail', () => ({
+  useRouteThumbnail: (t: { id: string }) => ({
+    path: `M4 4L50 ${t.id.length}`,
+    start: { x: 4, y: 4 },
+  }),
+}));
 
 function track(id: string, name: string, daysAgo: number, category: string): TrackSummary {
   const startedAt = new Date(2026, 8, 23 - daysAgo, 10).getTime();
@@ -99,4 +106,19 @@ it('switches the chart to months', async () => {
   await fireEvent.press(screen.getByText('Month'));
   expect(screen.getByText('Distance per month')).toBeTruthy();
   expect(screen.getByText(/^Last 12 months · /)).toBeTruthy();
+});
+
+it('draws the lifetime units in the card ink, not the page ink', async () => {
+  await show([track('a', 'Mont Albert', 1, 'hike')]);
+  // The innermost match is the unit span nested in the value ("11 km").
+  const unit = screen
+    .getAllByText(/km$/)
+    .find((t) => JSON.stringify(t.props.children) === JSON.stringify([' ', 'km']));
+  expect(unit).toBeDefined();
+  expect(StyleSheet.flatten(unit?.props.style).color).toBe(MD3LightTheme.colors.inverseOnSurface);
+});
+
+it('shows each recent activity with its route thumbnail', async () => {
+  await show([track('abc', 'Mont Albert', 1, 'hike')]);
+  expect(JSON.stringify(screen.toJSON())).toContain('M4 4L50 3');
 });
