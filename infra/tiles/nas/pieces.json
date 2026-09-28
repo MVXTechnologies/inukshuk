@@ -79,6 +79,22 @@
     {
       "name": "basemap-arctic-europe",
       "bbox": [-32, 72, 45, 84]
+    },
+    {
+      "name": "basemap-antarctica",
+      "bbox": [-180, -85.06, 180, -60]
+    },
+    {
+      "name": "basemap-arctic-cap",
+      "bbox": [-180, 84, 180, 85.06]
+    },
+    {
+      "name": "basemap-pacific-southeast",
+      "bbox": [-120, -60, -90, -10]
+    },
+    {
+      "name": "basemap-atlantic-subtropical",
+      "bbox": [-52, 18, -32, 34]
     }
   ]
 }
