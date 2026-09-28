@@ -489,6 +489,12 @@ export function StoreScreen() {
           }
           titleStyle={browsing ? undefined : styles.screenTitle}
         />
+        {/* Same gear as the Library and Logbook headers (Settings is not a tab). */}
+        <Appbar.Action
+          icon="cog-outline"
+          onPress={() => router.push('/settings')}
+          accessibilityLabel="Settings"
+        />
       </Appbar.Header>
 
       <View
