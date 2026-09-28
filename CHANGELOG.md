@@ -37,6 +37,11 @@ A new map, and the rest of the "Stone & Paper" redesign.
   Settings.
 - **Library, Maps and Logbook** are restyled: rows with thumbnails, filter
   chips, an Organize mode, and a clearer map store.
+- **The Maps tab is now Explore**, with a magnifying-glass icon ("Map" and
+  "Maps" side by side read as the same word).
+- **Android: the system navigation bar is hidden**, so the app's tabs sit at
+  the bottom of the screen. Swipe up from the bottom edge to bring Back and
+  Home back for a moment.
 - **The big Record button is gone.** Start a recording from "+" → Record
   track.
 - Trails and the heat glow are much easier to tap.
