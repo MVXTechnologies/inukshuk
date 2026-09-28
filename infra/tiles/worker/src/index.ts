@@ -36,10 +36,58 @@ export interface Env {
 const TILE_PATH = /^\/([a-z0-9_-]+)\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
-const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.pmtiles)$/;
+const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json))$/;
 
 /** Directories and headers, shared across requests handled by this isolate. */
 const CACHE = new ResolvedValueCache(25, undefined, decompress);
+
+/**
+ * A large base map is published as several regional archives (the NAS can't
+ * extract Canada + US + Europe in one go — the directory doesn't fit in its
+ * RAM), listed in `{archive}.index.json`:
+ *   { "pieces": [{ "name": "basemap-na-west", "bbox": [w, s, e, n] }, …] }
+ * A tile is served from the first piece whose bbox touches it. Without an
+ * index, `{archive}.pmtiles` itself is served. Uploading the index LAST makes
+ * a refresh switch over atomically.
+ */
+interface Piece {
+  name: string;
+  bbox: [number, number, number, number];
+}
+const INDEX_TTL_MS = 5 * 60_000;
+const indexes = new Map<string, { at: number; pieces: Piece[] | null }>();
+
+async function piecesOf(env: Env, archive: string): Promise<Piece[] | null> {
+  const cached = indexes.get(archive);
+  if (cached && Date.now() - cached.at < INDEX_TTL_MS) return cached.pieces;
+  const object = await env.BUCKET.get(`${archive}.index.json`);
+  const pieces = object === null ? null : ((await object.json()) as { pieces: Piece[] }).pieces;
+  indexes.set(archive, { at: Date.now(), pieces });
+  return pieces;
+}
+
+/** Tile bounds in degrees: [west, south, east, north]. */
+function tileBounds(z: number, x: number, y: number): [number, number, number, number] {
+  const n = 2 ** z;
+  const lon = (i: number) => (i / n) * 360 - 180;
+  const lat = (j: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * j) / n))) * 180) / Math.PI;
+  return [lon(x), lat(y + 1), lon(x + 1), lat(y)];
+}
+
+/** The archive a tile comes from: its piece, the archive itself, or null (no data). */
+async function archiveFor(
+  env: Env,
+  archive: string,
+  z: number,
+  x: number,
+  y: number,
+): Promise<string | null> {
+  const pieces = await piecesOf(env, archive);
+  if (pieces === null) return archive;
+  const [w, s, e, n] = tileBounds(z, x, y);
+  const hit = pieces.find(({ bbox: [pw, ps, pe, pn] }) => w < pe && e > pw && s < pn && n > ps);
+  return hit?.name ?? null;
+}
 
 class R2Source implements Source {
   constructor(
@@ -95,7 +143,13 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     const [z, x, y] = [Number(zs), Number(xs), Number(ys)];
     if (z > 22 || x >= 2 ** z || y >= 2 ** z)
       return new Response('bad tile', { status: 400, headers: cors });
-    const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${archive}.pmtiles`), CACHE, decompress);
+    const source = await archiveFor(env, archive, z, x, y);
+    if (source === null)
+      return new Response(null, {
+        status: 204,
+        headers: { ...cors, 'Cache-Control': cacheControl },
+      });
+    const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${source}.pmtiles`), CACHE, decompress);
     const header = await pmtiles.getHeader();
     if (header.tileType !== TileType.Mvt)
       return new Response('not a vector archive', { status: 500 });
@@ -124,11 +178,8 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
 
   const [, jsonArchive] = TILEJSON_PATH.exec(url.pathname) ?? [];
   if (jsonArchive !== undefined) {
-    const pmtiles = new PMTiles(
-      new R2Source(env.BUCKET, `${jsonArchive}.pmtiles`),
-      CACHE,
-      decompress,
-    );
+    const first = (await piecesOf(env, jsonArchive))?.[0]?.name ?? jsonArchive;
+    const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${first}.pmtiles`), CACHE, decompress);
     const json = await pmtiles.getTileJson(`${url.origin}/${jsonArchive}`);
     return Response.json(json, { headers: { ...cors, 'Cache-Control': cacheControl } });
   }
