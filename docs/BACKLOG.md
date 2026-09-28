@@ -231,6 +231,17 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
   the usual free tile/API options for weather overlays. Scope TBD; not
   started.
 
+- **CI verifies store uploads** (from closed PR #283, 2026-09-28) — make
+  release.yml wait for each EAS build and store submission and fail loudly
+  when an upload doesn't land (today it reports success once EAS work is
+  scheduled; iOS submit fails for lack of an ASC secret and Android
+  auto-submit never lands). Needs the App Store Connect API key and the Play
+  service account as GitHub secrets first. #283 also carried ideas worth
+  re-deriving on the current workflows: retry a failed submit by build ID,
+  check build-number history before submit, check production-channel binary
+  history before an OTA publish, keep Maestro diagnostics after a green
+  retry. Until then, releases are verified directly against the store APIs.
+
 ## On ice
 
 - **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
