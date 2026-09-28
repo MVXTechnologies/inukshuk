@@ -25,7 +25,8 @@ function tabA11yLabel(title: string, position: number): string {
 }
 
 /**
- * Map · Library · Maps · Logbook (revamp decision 6). Settings is not a tab:
+ * Map · Library · Explore · Logbook (revamp decision 6; the store tab was
+ * "Maps" until 2.0.0 — renamed next to "Map", owner call). Settings is not a tab:
  * it is a stack route reached from the Library and Logbook headers and the
  * map's "+" sheet. Maps is the old "Search" (the store); Logbook the old
  * Dashboard.
@@ -115,9 +116,9 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="maps"
           options={{
-            title: 'Maps',
-            tabBarIcon: icon('view-grid-plus-outline'),
-            tabBarAccessibilityLabel: tabA11yLabel('Maps', 3),
+            title: 'Explore',
+            tabBarIcon: icon('magnify'),
+            tabBarAccessibilityLabel: tabA11yLabel('Explore', 3),
           }}
         />
         <Tabs.Screen

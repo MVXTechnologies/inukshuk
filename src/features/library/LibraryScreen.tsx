@@ -362,7 +362,7 @@ export function LibraryScreen() {
   };
 
   // Empty state: "Record a trail" hands the map a one-shot request to open
-  // its record-start sheet; "Browse maps near you" opens the Maps tab.
+  // its record-start sheet; "Browse maps near you" opens the Explore tab.
   const recordFromEmpty = () => {
     setRecordRequested(true);
     router.navigate('/');
@@ -1019,7 +1019,7 @@ export function LibraryScreen() {
           {collapsed.maps
             ? null
             : maps.length === 0
-              ? emptyRow('No maps yet', 'Import a PDF map with +, or get one from the Maps tab')
+              ? emptyRow('No maps yet', 'Import a PDF map with +, or find one in Explore')
               : withDividers(maps.map(renderMapRow))}
         </View>,
       );

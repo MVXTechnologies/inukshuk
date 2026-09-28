@@ -11,11 +11,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 1.7.0: UI revamp, first half (docs/design/ui-revamp): Stone & Paper
-  // tokens, Atkinson Hyperlegible Next embedded natively (new fingerprint:
-  // store build only), one app style, tabs Map · Library · Maps · Logbook,
-  // 48 dp map chrome, the three-state recording panel with hold-to-stop.
-  version: '1.7.0',
+  // 2.0.0: the vector Stone & Paper base map on our own Protomaps tiles
+  // (Cloudflare; infra/tiles), served contour lines, vector offline packs,
+  // and the rest of the UI revamp (display modes, Library, Maps, Logbook).
+  // 1.7.0 was the first half of the revamp (Atkinson embedded natively).
+  version: '2.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '10',
+    buildNumber: '11',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -64,8 +64,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // Play build 56 ships 1.7.0 (see the version note above).
-    versionCode: 56,
+    // Play build 57 ships 2.0.0 (see the version note above).
+    versionCode: 57,
     // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
     // is the background, the stone figure + contact shadow the foreground (inside
     // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed
@@ -126,10 +126,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    // Android: the system navigation bar starts hidden (swipe up to reveal);
+    // src/ui/useAndroidImmersive keeps it that way.
+    ['expo-navigation-bar', { hidden: true }],
     // Atkinson Hyperlegible Next, embedded natively so text is in the brand
     // face from the first frame (no load gate). Families and weights are
     // mirrored in src/ui/fonts.ts. Embedding changes the native fingerprint:
-    // from here on, OTA updates from main target the 1.7.0 runtime only.
+    // since 1.7.0, OTA updates from main target the current store runtime only.
     [
       'expo-font',
       {

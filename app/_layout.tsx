@@ -18,6 +18,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
+import { useAndroidImmersive } from '@ui/useAndroidImmersive';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -71,6 +72,8 @@ export default function RootLayout() {
     });
     return () => subscription.remove();
   }, [hydrateLibrary, hydrateSettings]);
+
+  useAndroidImmersive();
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
   // (redirectSystemPath), which intercepts the URI before expo-router routes it.

@@ -6,7 +6,7 @@ import { sortCatalogItems } from './nearest';
 import type { CatalogItem } from './schema';
 
 /**
- * The Maps tab landing (revamp `After-Maps.html`, spec §6): **Canadian sources
+ * The Explore tab landing (revamp `After-Maps.html`, spec §6): **Canadian sources
  * first**, then the nearest US quads "across the border", each group sorted by
  * distance.
  *
