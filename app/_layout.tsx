@@ -13,6 +13,7 @@ import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
+import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
@@ -41,6 +42,7 @@ export default function RootLayout() {
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const hydrateStrava = useStravaStore((s) => s.hydrate);
+  const hydrateImports = useImportStore((s) => s.hydrate);
 
   useEffect(() => {
     // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
@@ -53,7 +55,8 @@ export default function RootLayout() {
     hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
-  }, [hydrateLibrary, hydrateSettings, hydrateStrava]);
+    hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
+  }, [hydrateLibrary, hydrateSettings, hydrateStrava, hydrateImports]);
 
   // A launch hydration that fails (an I/O error — a corrupt file hydrates
   // empty instead) leaves the library refusing every write, and settings
