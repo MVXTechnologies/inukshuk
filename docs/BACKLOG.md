@@ -262,6 +262,21 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
 - **Android developer verification**: Play Console requires registering the
   apps by 2026-09-30 (owner, identity step).
 
+- **Screenshots for 2.0.1** (owner, 2026-09-29) — retake the App Store
+  set on the iPhone simulator in light mode: the tab is "Explore" now (the
+  current set still says "Maps"), and add an **Explore** shot (popular near
+  you, by activity / terrain). Put the Explore shot in the website carousel
+  too (`docs/assets/screens/`, EN + FR captions).
+- **Privacy decisions before the 2.0.1 store reviews** — (1) trails imported
+  from Apple Health / Health Connect can still be shared as GPX or sent to
+  Strava by the user; hide those actions for health-imported trails if the
+  policy should say health data never leaves the phone. (2) App files are not
+  excluded from device backups; consider excluding imported trails (Apple
+  5.1.3: no health data in iCloud).
+- **Release tag**: `v2.0.1` points at `07f8696`, but the shipped 2.0.1 builds
+  (iOS 14, Play vc59) are from `9b28be7` (Expo patch rebuild). Move the tag
+  only if a rerun of release.yml is intended (it would start builds).
+
 ## On ice
 
 - **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
