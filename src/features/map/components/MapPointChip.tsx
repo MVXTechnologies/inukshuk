@@ -1,3 +1,4 @@
+import type { PointChipHit } from '@core/map/mapTap';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -128,6 +129,26 @@ export function hitMapPointChipAction(dx: number, dy: number): 'navigate' | 'way
   if (dx <= -half && dx >= -(half + buttonWidth)) return 'navigate';
   if (dx >= half && dx <= half + buttonWidth) return 'waypoint';
   return null;
+}
+
+/**
+ * The chip's tap-to-copy circle: the chip floats above its anchor dot
+ * (bottom-anchored marker), so the circle centres a little above the
+ * coordinate — the same idiom as the waypoint pins' badge offset.
+ */
+export const MAP_POINT_COPY_HIT = { offsetY: 20, radius: 44 } as const;
+
+/**
+ * What a map tap at (`dx`, `dy`) px from the chip's coordinate does to the
+ * open chip: one of its two buttons, the copy/dismiss circle around it, or
+ * `null` (not on the chip). The row is checked first — the circle overlaps it
+ * and would swallow it.
+ */
+export function hitMapPointChip(dx: number, dy: number): PointChipHit | null {
+  const action = hitMapPointChipAction(dx, dy);
+  if (action !== null) return action;
+  const { offsetY, radius } = MAP_POINT_COPY_HIT;
+  return Math.hypot(dx, dy + offsetY) < radius ? 'copy' : null;
 }
 
 /**

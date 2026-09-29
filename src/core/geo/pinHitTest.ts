@@ -12,6 +12,14 @@ import type { LngLat } from '@core/models';
  * map tap, permanently, until the app was reinstalled.
  */
 
+/**
+ * The waypoint pins' tap target, in screen px: a finger-sized disc centred on
+ * the pin's badge, which draws `badgeOffsetPx` above the bottom-anchored
+ * coordinate. Generous on purpose — it is why the open point chip has to be
+ * asked BEFORE the pins (see @core/map/mapTap).
+ */
+export const WAYPOINT_PIN_HIT = { radiusPx: 60, badgeOffsetPx: 45 } as const;
+
 /** A pin as the hit-test needs it: an id, where it is, and where it drew. */
 export interface PinCandidate {
   longitude: number;

@@ -4,8 +4,15 @@ import {
   nearestPinAt,
   projectablePins,
   unprojectablePins,
+  WAYPOINT_PIN_HIT,
   type ProjectedPin,
 } from '@core/geo/pinHitTest';
+import {
+  chipSurvivesHit,
+  pointChipAfterBareTap,
+  routeMapTap,
+  type PointChipHit,
+} from '@core/map/mapTap';
 import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
@@ -126,7 +133,7 @@ import { MarinePackBanner } from './marine/MarinePackBanner';
 import { DepthPointLine } from './marine/DepthPointLine';
 import { MarineLegend } from './marine/MarineLegend';
 import { marineChartSource, useMarineChart } from './marine/useMarineChart';
-import { MapPointChip, MapPointLine, runMapPointChipAction } from './components/MapPointChip';
+import { MapPointChip, MapPointLine, hitMapPointChip } from './components/MapPointChip';
 import { ForecastCard } from './weather/ForecastCard';
 import { WindParticleLayer } from './weather/wind/WindParticleLayer';
 import { useWeatherCrossfade } from './weather/useWeatherCrossfade';
@@ -1308,6 +1315,31 @@ export function MapScreen() {
     [savedWaypoints],
   );
 
+  /**
+   * Run one of the open point chip's actions — shared by the chip's own
+   * responders (iOS) and onMapPress's hit-test (Android, where the marker's
+   * children may never see the touch), so both paths close the chip alike.
+   * "Add waypoint here" closes it: the new pin takes that exact spot, and a
+   * chip left on top of its own pin is the stale, dead bubble of 2026-09-28
+   * (see @core/map/mapTap).
+   */
+  const runPointChipHit = useCallback(
+    (hit: PointChipHit, at: LatLng) => {
+      if (!chipSurvivesHit(hit)) setPointAt(null);
+      if (hit === 'navigate') {
+        void openGoToCoordinates(at);
+      } else if (hit === 'waypoint') {
+        composeWaypointAt(at);
+      } else {
+        void Clipboard.setStringAsync(formatLatLng(at.latitude, at.longitude));
+        showSnack('Coordinates copied');
+        setViewWp(null);
+        setForecastAt(null);
+      }
+    },
+    [openGoToCoordinates, composeWaypointAt, showSnack],
+  );
+
   // "+" actions menu → Add waypoint: compose a standalone waypoint at the
   // current GPS position (created on Done, see composeWaypointAt).
   const onAddWaypoint = useCallback(() => {
@@ -1337,18 +1369,10 @@ export function MapScreen() {
   // gives the tap's pixel point; we project each waypoint to pixels (via the
   // cached bounds) and open the nearest one within tolerance. The pin is anchored
   // at its bottom tip, so its badge sits ~BADGE_OFFSET px above the coordinate.
-  const WAYPOINT_BADGE_OFFSET = 45;
-  const WAYPOINT_HIT_PX = 60;
   // Item 4: tapping the user's own position dot re-enables follow mode —
   // same screen-projection hit-test idiom as the waypoint pins below, just
   // against the single live location instead of a list of pins.
   const USER_LOCATION_HIT_PX = 40;
-  // Point chip (wave A item 7, unified by wave D): the chip floats above its
-  // anchor dot (bottom-anchored marker), so the dismiss hit-test centres a
-  // little above the coordinate — same idiom as the waypoint pins' badge
-  // offset.
-  const POINT_CHIP_OFFSET = 20;
-  const POINT_CHIP_HIT_PX = 44;
   // Trails and heat spots: a thin trace needs a finger-sized tolerance in
   // SCREEN space (≈ a 44 dp target). The heat grid alone is a fixed ~25–50 m
   // on the ground, a couple of pixels once zoomed out to a whole run.
@@ -1357,8 +1381,11 @@ export function MapScreen() {
   // handler quiet (#232) — long enough to cover the recognizer that fires
   // just after it, short enough that the next deliberate tap goes through.
   const CHIP_ACTION_TOUCH_MS = 600;
-  // Tap-routing priority (this handler, in order): waypoint pin hit → the
-  // existing viewer-card behaviour below; else a heat-spot lookup — a "hot"
+  // Tap-routing priority (this handler, in order): the OPEN point chip — its
+  // Navigate / Waypoint buttons and its tap-to-copy circle — because it draws
+  // above everything else (see @core/map/mapTap for the stale-bubble bug that
+  // ordering fixes); else a waypoint pin hit → the existing viewer-card
+  // behaviour below; else a heat-spot lookup — a "hot"
   // spot (2+ trails, overlapping) opens the carousel, a single cold trail
   // opens the inspect panel; else the user-location dot (re-engage follow,
   // item 4 — deliberately last among the selection routes, see
@@ -1383,6 +1410,24 @@ export function MapScreen() {
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
       const [px, py] = point;
+
+      // The open chip, measured up front: routeMapTap puts it ahead of the
+      // pins because it is drawn over every one of them. It used to be asked
+      // after the pin hit-test, so a pin under the chip (and "Add waypoint
+      // here" plants one exactly there) swallowed every tap on the bubble:
+      // it stayed up and nothing on it worked (2026-09-28). The row is inert
+      // Views (a Pressable in a MapLibre marker stops the whole marker from
+      // drawing on iOS — see MapPointChip), so its press handling is this
+      // hit-test, the same idiom the waypoint pins use.
+      let chipHit: PointChipHit | null = null;
+      if (pointAt !== null) {
+        try {
+          const p = await map.project([pointAt.longitude, pointAt.latitude]);
+          if (p != null) chipHit = hitMapPointChip(px - p[0], py - p[1]);
+        } catch {
+          // projection unavailable mid-teardown — not a chip tap
+        }
+      }
 
       // Item 4, demoted to the LOWEST tap priority (2026-08-06 field
       // regression): the user-location dot re-engages follow ONLY when the
@@ -1446,17 +1491,23 @@ export function MapScreen() {
           visiblePins,
           projected,
           [px, py],
-          WAYPOINT_HIT_PX,
-          WAYPOINT_BADGE_OFFSET,
+          WAYPOINT_PIN_HIT.radiusPx,
+          WAYPOINT_PIN_HIT.badgeOffsetPx,
         );
       }
-      if (best) {
+      const route = routeMapTap(chipHit, best);
+      if (route.kind === 'chip' && pointAt !== null) {
+        runPointChipHit(route.hit, pointAt);
+        return;
+      }
+      if (route.kind === 'pin') {
+        const { pin } = route;
         // Pin tap opens the read-only viewer; a second tap on the same pin
         // (or the card's ✕) closes it. Editing is the card's explicit step.
         setViewWp((cur) =>
-          cur?.id === best.id && cur.source === best.source
+          cur?.id === pin.id && cur.source === pin.source
             ? null
-            : { source: best.source, id: best.id },
+            : { source: pin.source, id: pin.id },
         );
         return;
       }
@@ -1511,60 +1562,23 @@ export function MapScreen() {
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
         // drops the readout chip at the tapped spot; a tap ON the chip (or
-        // its anchor dot) dismisses it and copies; a bare tap anywhere else
-        // while a chip is open just closes it (#258) — same screen-projection hit-test
-        // idiom as the waypoint pins. On the plain map (no weather, no
+        // its anchor dot) was already routed at the top of this handler and
+        // dismissed it with a copy; a bare tap anywhere else while a chip is
+        // open just closes it (#258). On the plain map (no weather, no
         // marine) the chip shows the coordinates and dismissing it copies
         // them, which is the only affordance a pointerEvents-none chip can
         // offer. #97 widened the copy to EVERY mode, since the chip now
         // always carries a coordinates line.
         if (lngLatArr) {
-          if (pointAt !== null) {
-            try {
-              const p = await map.project([pointAt.longitude, pointAt.latitude]);
-              // #232 — the chip's action row FIRST. The row is inert Views
-              // (a Pressable in a MapLibre marker stops the whole marker from
-              // drawing on iOS — see MapPointChip), so its press handling is
-              // this hit-test, the same idiom the waypoint pins use. Checked
-              // before the dismiss circle below, which would swallow the row.
-              if (
-                p != null &&
-                runMapPointChipAction(
-                  {
-                    onNavigate: () => void openGoToCoordinates(pointAt),
-                    onAddWaypoint: () => composeWaypointAt(pointAt),
-                  },
-                  px - p[0],
-                  py - p[1],
-                )
-              ) {
-                return;
-              }
-              if (
-                p != null &&
-                Math.hypot(px - p[0], py - (p[1] - POINT_CHIP_OFFSET)) < POINT_CHIP_HIT_PX
-              ) {
-                void Clipboard.setStringAsync(formatLatLng(pointAt.latitude, pointAt.longitude));
-                showSnack('Coordinates copied');
-                setPointAt(null);
-                setViewWp(null);
-                setForecastAt(null);
-                return;
-              }
-            } catch {
-              // projection unavailable mid-teardown — treat as a fresh drop
-            }
-          }
           // #258 — a chip is open and the tap landed on neither its action row
-          // nor its dismiss circle: close it and do nothing else. Re-dropping
-          // the chip at the new spot (the pre-#258 behaviour) made it follow
-          // the finger around the map with no obvious way to be rid of it.
-          // The NEXT tap, on a clean map, drops a fresh chip as before.
-          if (pointAt !== null) {
-            setPointAt(null);
-          } else {
-            setPointAt({ latitude: lngLatArr[1], longitude: lngLatArr[0] });
-          }
+          // nor its copy circle (both handled at the top): close it and do
+          // nothing else. Re-dropping the chip at the new spot (the pre-#258
+          // behaviour) made it follow the finger around the map with no
+          // obvious way to be rid of it. The NEXT tap, on a clean map, drops
+          // a fresh chip as before.
+          setPointAt(
+            pointChipAfterBareTap(pointAt, { latitude: lngLatArr[1], longitude: lngLatArr[0] }),
+          );
         }
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
@@ -1581,9 +1595,7 @@ export function MapScreen() {
       location,
       setFollowUser,
       pointAt,
-      showSnack,
-      openGoToCoordinates,
-      composeWaypointAt,
+      runPointChipHit,
     ],
   );
 
@@ -2117,8 +2129,8 @@ export function MapScreen() {
               <MapPointChip
                 accessibilityLabel="Map point readout"
                 actions={{
-                  onNavigate: () => void openGoToCoordinates(pointAt),
-                  onAddWaypoint: () => composeWaypointAt(pointAt),
+                  onNavigate: () => runPointChipHit('navigate', pointAt),
+                  onAddWaypoint: () => runPointChipHit('waypoint', pointAt),
                   onClaimTouch: () => {
                     chipTouchAtRef.current = Date.now();
                   },

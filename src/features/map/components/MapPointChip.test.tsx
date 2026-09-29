@@ -4,8 +4,10 @@ import { PaperProvider } from 'react-native-paper';
 import {
   MAP_POINT_ACTION_LABELS,
   MAP_POINT_ACTION_LAYOUT,
+  MAP_POINT_COPY_HIT,
   MapPointChip,
   MapPointLine,
+  hitMapPointChip,
   hitMapPointChipAction,
   runMapPointChipAction,
 } from './MapPointChip';
@@ -147,5 +149,25 @@ describe('the action row’s map-level press handling', () => {
   it('claims the row edges themselves', () => {
     expect(hitMapPointChipAction(-gap / 2, midY)).toBe('navigate');
     expect(hitMapPointChipAction(gap / 2, -bottomOffset)).toBe('waypoint');
+  });
+});
+
+describe('hitMapPointChip', () => {
+  const { buttonWidth, buttonHeight, gap, bottomOffset } = MAP_POINT_ACTION_LAYOUT;
+  const midY = -(bottomOffset + buttonHeight / 2);
+
+  it('names the button a tap lands on, ahead of the copy circle around it', () => {
+    expect(hitMapPointChip(-(gap / 2 + buttonWidth / 2), midY)).toBe('navigate');
+    expect(hitMapPointChip(gap / 2 + buttonWidth / 2, midY)).toBe('waypoint');
+  });
+
+  it('reads a tap on the readout or the anchor dot as copy', () => {
+    expect(hitMapPointChip(0, -MAP_POINT_COPY_HIT.offsetY)).toBe('copy');
+    expect(hitMapPointChip(0, 0)).toBe('copy');
+  });
+
+  it('is not a chip tap anywhere else', () => {
+    expect(hitMapPointChip(0, MAP_POINT_COPY_HIT.radius)).toBeNull();
+    expect(hitMapPointChip(200, 0)).toBeNull();
   });
 });
