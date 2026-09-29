@@ -166,7 +166,6 @@ def overpass(bbox, endpoint, log):
 def _overpass(bbox, endpoint, log, depth):
     body = urllib.parse.urlencode({'data': query_for(bbox)}).encode()
     last = None
-    too_big = 0
     for attempt in range(RETRIES):
         req = urllib.request.Request(
             endpoint, data=body, method='POST', headers={'User-Agent': USER_AGENT}
@@ -179,10 +178,9 @@ def _overpass(bbox, endpoint, log, depth):
             remark = (data.get('remark') or '').strip()
             if 'error' in remark.lower():
                 last = remark[:200]
-                too_big += 1
-                if too_big >= 2:
-                    break
-                wait = 60
+                # Deterministic: the same box times out again. Split now
+                # rather than burn ~4 x 3 min on retries (2026-09-29 run).
+                break
             else:
                 time.sleep(PAUSE_S)
                 return data.get('elements', [])
@@ -194,6 +192,8 @@ def _overpass(bbox, endpoint, log, depth):
             wait = (120 if e.code == 429 else 60) * 2**attempt
         except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as e:
             last = str(e)[:200]
+            if 'timed out' in last:
+                break  # our read timeout: the box is too big for one answer
             wait = 60 * 2**attempt
         log(f'  {bbox}: {last}; retry {attempt + 1}/{RETRIES} in {wait}s')
         time.sleep(wait)
