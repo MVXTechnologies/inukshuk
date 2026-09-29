@@ -10,6 +10,7 @@ import { MapReparseWorker } from '@features/library/MapReparseWorker';
 import { PdfPrerenderWorker } from '@features/map/PdfPrerenderWorker';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
+import { installStravaAutoImport } from '@features/import/autoImport';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
@@ -75,6 +76,10 @@ export default function RootLayout() {
     });
     return () => subscription.remove();
   }, [hydrateLibrary, hydrateSettings]);
+
+  // Strava auto-import (#432): quietly fetch new activities on launch and on
+  // each return to the foreground (at most every 15 minutes).
+  useEffect(() => installStravaAutoImport(), []);
 
   useAndroidImmersive();
 

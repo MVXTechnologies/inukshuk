@@ -32,6 +32,7 @@ describe('newImportJob', () => {
 describe('sanitizeImportJob', () => {
   it('round-trips a finished job', () => {
     const job = base({
+      quiet: true,
       status: 'done',
       listing: false,
       total: 3,
@@ -118,16 +119,23 @@ describe('sanitizeImportDoc', () => {
       job: base({ status: 'done' }),
       lastImportAt: { strava: 10, 'apple-health': 20 },
       healthAllowed: true,
+      autoImportStrava: false,
     };
     expect(sanitizeImportDoc(JSON.parse(JSON.stringify(doc)))).toEqual({
       job: doc.job,
       lastImportAt: doc.lastImportAt,
       healthAllowed: true,
+      autoImportStrava: false,
     });
   });
 
   it('defaults junk', () => {
-    expect(sanitizeImportDoc(null)).toEqual({ job: null, lastImportAt: {}, healthAllowed: false });
+    expect(sanitizeImportDoc(null)).toEqual({
+      job: null,
+      lastImportAt: {},
+      healthAllowed: false,
+      autoImportStrava: true,
+    });
     expect(
       sanitizeImportDoc({ lastImportAt: { strava: -1, garmin: 5, 'health-connect': 7 } })
         .lastImportAt,

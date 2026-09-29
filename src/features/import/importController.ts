@@ -1,3 +1,4 @@
+import { quietImportMessage } from '@core/import/auto';
 import { isResumable, newImportJob, type ImportJob } from '@core/import/job';
 import { sourceLabel } from '@core/import/origin';
 import {
@@ -11,6 +12,7 @@ import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { healthSource } from '@lib/health';
 import { createStravaSource } from '@lib/stravaSource';
+import { useImportFeedbackStore } from '@state/importFeedbackStore';
 import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { AppState, type NativeEventSubscription } from 'react-native';
@@ -96,9 +98,21 @@ async function run(job: ImportJob, listed?: readonly RemoteActivity[]): Promise<
       controller.signal,
       { listed, interruption: () => current.reason },
     );
-    if (final.status === 'done')
-      useImportStore.getState().markImported(final.source, final.startedAt);
-    if (final.status === 'error' && final.errorKind === 'other') {
+    const imports = useImportStore.getState();
+    if (final.status === 'done') imports.markImported(final.source, final.startedAt);
+    const otherError = final.status === 'error' && final.errorKind === 'other';
+    if (final.quiet && (final.status === 'done' || otherError)) {
+      // An automatic import ends with a line, not a card — and one that
+      // failed (offline, most likely) says nothing: the next check retries.
+      imports.setJob(null);
+      if (final.status === 'done' && final.imported > 0) {
+        useImportFeedbackStore
+          .getState()
+          .show(quietImportMessage(final.imported, sourceLabel(final.source)));
+      }
+      return;
+    }
+    if (otherError) {
       reportError(new Error(final.message ?? 'import failed'), `import-${final.source}`);
     }
   } catch (err) {
@@ -118,6 +132,8 @@ export async function startSourceImport(args: {
   source: ActivitySourceId;
   range: ImportRange;
   listed?: readonly RemoteActivity[];
+  /** An automatic import: no card unless there is something new. */
+  quiet?: boolean;
 }): Promise<void> {
   if (active) return;
   const now = Date.now();
@@ -126,6 +142,7 @@ export async function startSourceImport(args: {
     range: args.range,
     since: rangeStart(args.range, now),
     now,
+    quiet: args.quiet,
   });
   await run(job, args.listed);
 }

@@ -21,6 +21,8 @@ interface ImportState {
   job: ImportJob | null;
   lastImportAt: Partial<Record<ActivitySourceId, number>>;
   healthAllowed: boolean;
+  /** Settings' "Import new activities automatically" (Strava; default on). */
+  autoImportStrava: boolean;
   /**
    * A request to open the Library's Import sheet on a source (Settings ›
    * Connections → "Import activities"). Session-only; the Library consumes it.
@@ -36,16 +38,22 @@ interface ImportState {
   /** Record a finished import of `source` that began at `at`. */
   markImported: (source: ActivitySourceId, at: number) => void;
   setHealthAllowed: (allowed: boolean) => void;
+  setAutoImportStrava: (on: boolean) => void;
+  /** Forget a source's last import (after deleting what came from it). */
+  forgetSource: (source: ActivitySourceId) => void;
   requestSheet: (source: ImportSheetSource | null) => void;
   clearSheetRequest: () => void;
 }
 
-function persist(state: Pick<ImportState, 'job' | 'lastImportAt' | 'healthAllowed'>): void {
+function persist(
+  state: Pick<ImportState, 'job' | 'lastImportAt' | 'healthAllowed' | 'autoImportStrava'>,
+): void {
   storage.writeJson(IMPORTS_FILE, {
     schemaVersion: IMPORT_SCHEMA_VERSION,
     job: state.job,
     lastImportAt: state.lastImportAt,
     healthAllowed: state.healthAllowed,
+    autoImportStrava: state.autoImportStrava,
   });
 }
 
@@ -54,6 +62,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   job: null,
   lastImportAt: {},
   healthAllowed: false,
+  autoImportStrava: true,
   sheetRequest: null,
 
   hydrate: async () => {
@@ -78,6 +87,17 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setHealthAllowed: (allowed) => {
     set({ healthAllowed: allowed });
     persist({ ...get(), healthAllowed: allowed });
+  },
+
+  setAutoImportStrava: (on) => {
+    set({ autoImportStrava: on });
+    persist({ ...get(), autoImportStrava: on });
+  },
+
+  forgetSource: (source) => {
+    const { [source]: _dropped, ...lastImportAt } = get().lastImportAt;
+    set({ lastImportAt });
+    persist({ ...get(), lastImportAt });
   },
 
   requestSheet: (source) => set({ sheetRequest: { source } }),

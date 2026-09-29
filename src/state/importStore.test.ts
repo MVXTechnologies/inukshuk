@@ -19,6 +19,7 @@ const reset = () =>
     job: null,
     lastImportAt: {},
     healthAllowed: false,
+    autoImportStrava: true,
     sheetRequest: null,
   });
 
@@ -52,6 +53,9 @@ it('round-trips a paused job, last imports and Health access', async () => {
   s.setJob(job);
   s.markImported('apple-health', 123);
   s.setHealthAllowed(true);
+  s.setAutoImportStrava(false);
+  s.markImported('strava', 7);
+  s.forgetSource('strava');
 
   reset();
   await useImportStore.getState().hydrate();
@@ -59,6 +63,7 @@ it('round-trips a paused job, last imports and Health access', async () => {
     job,
     lastImportAt: { 'apple-health': 123 },
     healthAllowed: true,
+    autoImportStrava: false,
   });
 });
 

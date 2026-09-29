@@ -91,6 +91,8 @@ export function ImportJobCard() {
   }, [resumeAt]);
 
   if (!job) return null;
+  // An automatic import stays out of sight until it has something to import.
+  if (job.quiet && (job.listing || job.total === 0)) return null;
   const label = sourceLabel(job.source);
   const progressLabel = `${job.done} of ${job.total} activities`;
 

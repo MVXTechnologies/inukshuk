@@ -176,7 +176,9 @@ it('sends an auth failure to Settings, and retries other failures', async () => 
   ).toBeOnTheScreen();
   await press(view.getByText('Open Settings'));
   expect(mockPush).toHaveBeenCalledWith('/settings');
+});
 
+it('retries a failure that is not about access', async () => {
   const other = await show(job({ status: 'error', errorKind: 'other', message: null }));
   await press(other.getAllByText('Try again')[0]!);
   expect(mockResume).toHaveBeenCalled();
@@ -193,11 +195,11 @@ it('waits out the daily limit and resumes by itself', async () => {
       view.getByText(/Strava’s daily limit reached\. The import picks up again after/),
     ).toBeOnTheScreen();
     expect(view.queryByLabelText('Resume import')).toBeNull();
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(59_000);
     });
     expect(mockResume).not.toHaveBeenCalled();
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(3_000);
     });
     expect(mockResume).toHaveBeenCalledTimes(1);

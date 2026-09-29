@@ -5,6 +5,7 @@
  */
 import { newImportJob } from '@core/import/job';
 import type { ActivityRoute, ActivitySource, RemoteActivity } from '@core/import/sources';
+import { useImportFeedbackStore } from '@state/importFeedbackStore';
 import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -193,4 +194,31 @@ it('ignores resume and dismiss when there is nothing to do', async () => {
   // Sources are typed as ActivitySource.
   const s: ActivitySource | null = sourceFor('strava');
   expect(s).not.toBeNull();
+});
+
+describe('quiet (automatic) imports', () => {
+  beforeEach(() => useImportFeedbackStore.getState().clear());
+
+  it('end with a one-line message instead of the summary card', async () => {
+    mockStrava.list.mockResolvedValue([remote('strava', '1'), remote('strava', '2')]);
+    await startSourceImport({ source: 'strava', range: { kind: 'everything' }, quiet: true });
+    expect(useImportStore.getState().job).toBeNull();
+    expect(useImportStore.getState().lastImportAt.strava).toEqual(expect.any(Number));
+    expect(useImportFeedbackStore.getState().message).toBe('2 new activities from Strava');
+    expect(useLibraryStore.getState().tracks).toHaveLength(2);
+  });
+
+  it('say nothing when there is nothing new', async () => {
+    mockStrava.list.mockResolvedValue([]);
+    await startSourceImport({ source: 'strava', range: { kind: 'everything' }, quiet: true });
+    expect(useImportStore.getState().job).toBeNull();
+    expect(useImportFeedbackStore.getState().message).toBeNull();
+  });
+
+  it('fail silently when Strava can’t be reached', async () => {
+    mockStrava.list.mockRejectedValue(new Error('could not reach Strava'));
+    await startSourceImport({ source: 'strava', range: { kind: 'everything' }, quiet: true });
+    expect(useImportStore.getState().job).toBeNull();
+    expect(useImportFeedbackStore.getState().message).toBeNull();
+  });
 });

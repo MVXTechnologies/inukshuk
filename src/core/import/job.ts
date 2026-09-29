@@ -55,6 +55,11 @@ export interface ImportJob {
   remaining: string[];
   /** Library ids of the trails this job imported (the done card's heatmap focus). */
   importedTrackIds: string[];
+  /**
+   * Started automatically (Strava auto-import): no card until there is
+   * something to import, and a one-line message instead of the summary.
+   */
+  quiet: boolean;
 }
 
 /** A fresh job, listing. */
@@ -63,6 +68,7 @@ export function newImportJob(args: {
   range: ImportRange;
   since: number;
   now: number;
+  quiet?: boolean;
 }): ImportJob {
   return {
     source: args.source,
@@ -86,6 +92,7 @@ export function newImportJob(args: {
     errorKind: null,
     remaining: [],
     importedTrackIds: [],
+    quiet: args.quiet ?? false,
   };
 }
 
@@ -111,6 +118,8 @@ export interface ImportDoc {
   lastImportAt: Partial<Record<ActivitySourceId, number>>;
   /** The Health read permission was asked for and answered (not denied). */
   healthAllowed: boolean;
+  /** Settings' "Import new activities automatically" for Strava (default on). */
+  autoImportStrava: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,6 +194,7 @@ export function sanitizeImportJob(raw: unknown): ImportJob | null {
     errorKind: raw.errorKind === 'auth' || raw.errorKind === 'other' ? raw.errorKind : null,
     remaining: strings(raw.remaining),
     importedTrackIds: strings(raw.importedTrackIds),
+    quiet: raw.quiet === true,
   };
   if (job.status === 'running' || (job.status === 'paused' && job.pausedReason !== 'daily-limit')) {
     return { ...job, status: 'paused', pausedReason: 'interrupted' };
@@ -209,5 +219,6 @@ export function sanitizeImportDoc(raw: unknown): Omit<ImportDoc, 'schemaVersion'
     job: sanitizeImportJob(doc.job),
     lastImportAt,
     healthAllowed: doc.healthAllowed === true,
+    autoImportStrava: doc.autoImportStrava !== false,
   };
 }
