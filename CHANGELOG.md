@@ -11,6 +11,44 @@ the app version before that); native changes require a new store build. See
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-29
+
+Bring your activities in.
+
+### Added
+
+- **Import from Strava.** Connect Strava in Settings › Connections, then
+  import your activities, or only the new ones, with their routes. New
+  activities can come in by themselves when you open the app. Imports pause
+  and resume on their own when Strava asks us to slow down. Garmin, COROS,
+  Polar and Suunto users can link their watch to Strava and import from there.
+- **Import from Apple Health and Health Connect.** Workouts that were saved
+  with a route (Apple Watch, Strava recordings, Polar on Android) import as
+  trails. Read-only: Inukshuk never writes to Health.
+- **Import activity files:** FIT, TCX and GPX, and the full account exports
+  from Strava and Garmin (zip). Activities you already have are skipped.
+  FIT and TCX files also open straight into Inukshuk from other apps.
+- **Imported trails show where they came from**, with a "From Strava" filter.
+- **Map maker:** make a printable map by framing it over the live map, with
+  a scale, page shape and print style, and pick which of your trails and
+  waypoints go on the sheet.
+- **Waypoint icons:** choose the pin's icon (camp, water, viewpoint, …).
+- **The map now covers the whole world**, poles included.
+
+### Changed
+
+- Library, Explore and Logbook share one header: the Settings gear stays
+  in the same place on every page. Explore has the gear too.
+- Page titles sit over the contour texture on every tab.
+- Android 8.0 or later is now required (Health Connect needs it).
+- MapLibre 11.4.
+
+### Fixed
+
+- The tab labels no longer touch the bottom edge on Android.
+- Editing a note puts the cursor at the end of the text.
+- Opening a map from the Library moves the map to it.
+
 ## [2.0.0] - 2026-09-28
 
 A new map, and the rest of the "Stone & Paper" redesign.

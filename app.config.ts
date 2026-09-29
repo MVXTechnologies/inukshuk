@@ -11,11 +11,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'Inukshuk',
   slug: 'inukshuk',
   owner: 'pythagorasv02',
-  // 2.0.0: the vector Stone & Paper base map on our own Protomaps tiles
-  // (Cloudflare; infra/tiles), served contour lines, vector offline packs,
-  // and the rest of the UI revamp (display modes, Library, Maps, Logbook).
-  // 1.7.0 was the first half of the revamp (Atkinson embedded natively).
-  version: '2.0.0',
+  // 2.0.1: activity import — Strava (token proxy on the tile Worker),
+  // Apple Health / Health Connect (native: HealthKit entitlement, Health
+  // Connect permissions, minSdk 26), FIT/TCX "Open with"; MapLibre 11.4.
+  // 2.0.0 was the vector Stone & Paper base map and the rest of the revamp.
+  version: '2.0.1',
   orientation: 'portrait',
   icon: './assets/icon.png',
   scheme: 'inukshuk',
@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '11',
+    buildNumber: '12',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -94,8 +94,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.inukshuk.app',
-    // Play build 57 ships 2.0.0 (see the version note above).
-    versionCode: 57,
+    // Play build 58 ships 2.0.1 (see the version note above).
+    versionCode: 58,
     // Brand icon split into layers (scripts/brand/build-icons.py): the landscape
     // is the background, the stone figure + contact shadow the foreground (inside
     // the 66 dp safe zone), and a one-colour silhouette for Android 13+ themed

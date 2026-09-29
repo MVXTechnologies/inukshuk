@@ -1,8 +1,9 @@
-A new map, drawn for the outdoors.
+Bring your activities in.
 
-• A new map in the app's own colours: woods, water and trails that stand out, city clutter kept quiet. Canada, the United States and Europe.
-• Contour lines load with the map, and come with your offline downloads.
-• Night red and Sunlight display modes.
-• Route thumbnails in the Library and Logbook, and a restyled Library, Maps and Logbook.
-• Trails and the heat glow are easier to tap.
-• Fixed: the download area could stay on "Calculating…"; opening a map now moves to it.
+• Import from Strava: your activities with their routes, and new ones automatically. Garmin, COROS and Polar watches linked to Strava come along.
+• Import workouts with routes from Apple Health.
+• Import FIT, TCX and GPX files, and full Strava or Garmin exports. Duplicates are skipped.
+• Map maker: frame a printable map over the live map.
+• Choose an icon for each waypoint.
+• The map now covers the whole world.
+• The Settings gear stays in the same place on every page.

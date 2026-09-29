@@ -1,8 +1,8 @@
-Une nouvelle carte, pensée pour le plein air.
+Importez vos activités.
 
-• Nouvelle carte aux couleurs de l'app : bois, eau et sentiers bien visibles. Canada, É.-U., Europe.
-• Les courbes de niveau se chargent avec la carte et suivent vos téléchargements.
-• Modes Nuit rouge et Plein soleil.
-• Aperçus des tracés; Bibliothèque, Cartes et Journal repensés.
-• Sentiers plus faciles à toucher.
-• Corrigé : zone de téléchargement bloquée sur « Calcul… ».
+• Import depuis Strava, les nouvelles activités automatiquement.
+• Import des entraînements avec tracé depuis Santé Connect.
+• Import de fichiers FIT, TCX, GPX et des exports Strava/Garmin.
+• Créateur de cartes : cadrez une carte à imprimer.
+• Icônes de repères. La carte couvre le monde entier.
+• Android 8.0 ou plus récent requis.
