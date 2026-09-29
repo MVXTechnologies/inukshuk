@@ -110,7 +110,7 @@
       ><a href="../fr/privacy/" lang="fr" hreflang="fr">FR</a>
     </div>
     <h1>Inukshuk — Privacy Policy</h1>
-    <p class="updated">Last updated: 11 September 2026</p>
+    <p class="updated">Last updated: 29 September 2026</p>
 
     <p>
       Inukshuk is a free, open-source app for offline trail navigation: it displays georeferenced
@@ -142,12 +142,21 @@
         position is handled on your device.
       </li>
       <li>
-        <strong>Files you import and create.</strong> PDF maps you import and the GPX tracks you
-        record are stored <strong>locally on your device</strong>, inside the app's private storage.
-        We never upload them, and the only way one leaves your device is if you choose to share or
-        export it yourself — or upload an outing to Strava, if you have connected an account. You
-        can delete any map or track inside the app at any time, and uninstalling the app removes all
-        of them.
+        <strong>Files you import and create.</strong> PDF maps you import, the GPX tracks you
+        record, and the activity files you import (FIT, TCX, GPX, or a Strava or Garmin export zip)
+        are stored <strong>locally on your device</strong>, inside the app's private storage.
+        Imported files are read and converted into trails on your device; nothing about them is sent
+        anywhere. We never upload them, and the only way one leaves your device is if you choose to
+        share or export it yourself — or upload an outing to Strava, if you have connected an
+        account. You can delete any map or track inside the app at any time, and uninstalling the
+        app removes all of them.
+      </li>
+      <li>
+        <strong>Activities you import from Strava, Apple Health or Health Connect.</strong> If you
+        connect Strava or allow access to Apple Health (iOS) or Health Connect (Android), the app
+        can import your past activities as trails. What is read, and how, is described under
+        "Strava" and "Apple Health and Health Connect" below. The imported trails are stored only on
+        your device and shown only to you.
       </li>
     </ul>
 
@@ -155,8 +164,15 @@
     <p>
       <strong>The app collects no personal data.</strong> Inukshuk has no user accounts, no
       analytics, and no advertising. Your maps, trails, waypoints and photos never leave your device
-      through us. The one thing the app does send on its own is a technical error report, described
+      through us, and neither do the activities you import or any health data: they stay on your
+      device. The one thing the app does send on its own is a technical error report, described
       next.
+    </p>
+    <p>
+      The only requests that reach servers of ours are map tile requests (see "Our tile server"
+      below), the Explore map catalogue downloaded from our website, and, if you connect Strava, the
+      sign-in tokens that pass through our tile server on their way to Strava. None of them carry
+      your identity or your position, and the tokens are not stored.
     </p>
     <p>
       The one place we do ask for anything is the Android beta signup on our website, which is
@@ -201,22 +217,33 @@
 
     <h2>Network connections</h2>
     <p>
-      Inukshuk works offline, but a few features fetch data directly from third-party servers over
-      HTTPS. In each case that server receives your device's IP address and the map area or tile
-      coordinates being requested — the normal information any web request carries. None of these
-      providers are operated by us, none receive an account or identity (the app has none), and the
-      PDF maps you import are rendered entirely offline with no network connection.
+      Inukshuk works offline, but a few features fetch data over HTTPS — from our own tile server
+      and directly from third-party servers. In each case that server receives your device's IP
+      address and the map area or tile coordinates being requested — the normal information any web
+      request carries. None of them receive an account or identity (the app has none), and the PDF
+      maps you import are rendered entirely offline with no network connection.
     </p>
     <ul>
       <li>
-        <strong>Base map tiles.</strong> The 2D map and the draped 3D terrain load image tiles from
-        <a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy">OpenStreetMap</a> and from
-        <a href="https://www.esri.com/en-us/privacy/overview">Esri / ArcGIS Online</a>, depending on
-        the basemap you choose.
+        <strong>Our tile server.</strong> The default base map, its contour lines, named peaks and
+        the map's label font come from our own tile server, which runs on
+        <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a>. The map data is from
+        OpenStreetMap (built by Protomaps), and the contour lines are drawn from the open "Terrain
+        Tiles" elevation dataset. A request carries only the tile being asked for and your IP
+        address: no identity, and no location beyond the map area on your screen. Our server keeps
+        no logs of its own and stores nothing about you; it only caches the map tiles themselves.
+        The requests are processed by Cloudflare, which hosts the server, under Cloudflare's privacy
+        policy.
       </li>
       <li>
-        <strong>Elevation data.</strong> The 3D terrain view downloads public elevation tiles hosted
-        on Amazon Web Services (the open "Terrain Tiles" dataset) to build the relief mesh.
+        <strong>Other base maps.</strong> The satellite and relief base maps, the map draped over
+        the 3D terrain view, and the maps you make for printing load image tiles from
+        <a href="https://www.esri.com/en-us/privacy/overview">Esri / ArcGIS Online</a>.
+      </li>
+      <li>
+        <strong>Elevation data.</strong> The shaded relief on the map and the 3D terrain view
+        download public elevation tiles hosted on Amazon Web Services (the open "Terrain Tiles"
+        dataset).
       </li>
       <li>
         <strong>Naming a downloaded map area.</strong> When you download an offline map area, the
@@ -241,25 +268,23 @@
         the outing by time of day instead.
       </li>
       <li>
-        <strong>Marked trails and map labels.</strong> Turning on the marked-trail overlay loads
-        route tiles from <a href="https://waymarkedtrails.org/">Waymarked Trails</a>, and place
-        labels and coastlines are drawn from vector tiles and fonts served by
-        <a href="https://openfreemap.org/">OpenFreeMap</a>.
+        <strong>Marked trails.</strong> Turning on the marked-trail overlay loads route tiles from
+        <a href="https://waymarkedtrails.org/">Waymarked Trails</a>.
       </li>
       <li>
-        <strong>The map store.</strong> The Search tab downloads a catalogue of free public maps
-        from our own site (<code>inukshuk.mvxtechnologies.com</code>). That request carries no
-        location and no identity. When you then download a map, the file comes directly from the
-        publisher that hosts it — the U.S. Geological Survey, Natural Resources Canada or Geoscience
-        Australia — and that publisher's server sees your IP address and which map sheet you asked
-        for.
+        <strong>Explore (the map catalogue).</strong> The Explore tab downloads a catalogue of free
+        public maps, and the lists of activities, terrain and collections it is sorted by, from our
+        own site (<code>inukshuk.mvxtechnologies.com</code>). That request carries no location and
+        no identity; maps "near you" are picked on your device. When you then download a map, the
+        file comes directly from the publisher that hosts it — the U.S. Geological Survey, Natural
+        Resources Canada, the U.S. Forest Service or Geoscience Australia — and that publisher's
+        server sees your IP address and which map sheet you asked for. The Parcs Québec collection
+        opens the park's page on <a href="https://www.sepaq.com/">sepaq.com</a> in your browser,
+        where Sépaq's own privacy policy applies.
       </li>
       <li>
-        <strong>Strava (only if you connect it).</strong> Inukshuk can upload a saved outing to
-        <a href="https://www.strava.com/legal/privacy">Strava</a>, and this happens only after you
-        explicitly sign in to Strava and only for outings you choose to upload. Doing so sends that
-        outing's route and statistics to Strava under your Strava account. If you never connect a
-        Strava account, the app never contacts Strava.
+        <strong>Strava (only if you connect it).</strong> Described in its own section below. If you
+        never connect a Strava account, the app never contacts Strava.
       </li>
       <li>
         <strong>App updates.</strong> On launch the app asks
@@ -271,6 +296,81 @@
         <strong>Error reports.</strong> If automatic error reporting is on, technical error reports
         are sent to GitHub as described above. They are queued on your device while you are offline
         and sent when a connection returns.
+      </li>
+    </ul>
+
+    <h2>Strava</h2>
+    <p>
+      Connecting <a href="https://www.strava.com/legal/privacy">Strava</a> is optional, from
+      <em>Settings → Connections</em>. It opens Strava's own sign-in page in your browser, where you
+      choose what to allow: uploading activities, reading your activities, or both. We never see
+      your Strava password.
+    </p>
+    <ul>
+      <li>
+        <strong>Sign-in tokens.</strong> Strava requires the app's secret key to complete a sign-in,
+        and that key must not be built into the app. So the one-time authorization code from the
+        sign-in, and later the refresh token used to renew access, pass
+        <strong>through our tile server</strong>, which adds the key and forwards the request to
+        Strava. Strava's answer goes straight back to the app. Our server does not store or cache
+        any of it. The resulting tokens are stored on your device only.
+      </li>
+      <li>
+        <strong>Importing your activities.</strong> If you allow reading your activities, the app
+        reads your Strava activity list and, for each activity it imports, its recorded streams —
+        position, time, altitude and heart rate — to save it as a trail on your device. You can run
+        an import yourself, and by default the app also imports new activities automatically when
+        you open it (at most every 15 minutes); you can turn that off with
+        <em>Import new activities automatically</em>. Imported Strava data is stored only on your
+        device and shown only to you. It is never sent to us or to anyone else.
+      </li>
+      <li>
+        <strong>Uploading outings.</strong> If you allow uploads, you can send an outing you choose
+        to Strava. Doing so sends that outing's route and statistics to Strava under your Strava
+        account. Nothing is uploaded unless you ask for it.
+      </li>
+      <li>
+        <strong>Disconnecting.</strong> <em>Disconnect</em> revokes the app's access on Strava's
+        side, deletes the tokens from your device, and can also delete every trail that was imported
+        from Strava. You can also remove Inukshuk from your Strava settings at any time.
+      </li>
+    </ul>
+    <p>
+      What Strava does with your data on its side is governed by Strava's privacy policy. Inukshuk
+      does not connect to Garmin: the Connections screen only explains how to link Garmin Connect to
+      Strava, so your Garmin activities can reach Inukshuk through Strava.
+    </p>
+
+    <h2>Apple Health and Health Connect</h2>
+    <p>
+      On iOS, Inukshuk can read from Apple Health; on Android, from Health Connect. Both are
+      optional, and the app reads nothing until you allow it in the system's own permission screen.
+    </p>
+    <ul>
+      <li>
+        <strong>What is read.</strong> Apple Health: your workouts and their routes. Health Connect:
+        your exercise sessions, their exercise routes, and distance, plus access to that history
+        beyond the last 30 days so older workouts can be imported. Nothing else — no heart rate,
+        sleep, body measurements or any other health data.
+      </li>
+      <li>
+        <strong>Why.</strong> Only to import those workouts as trails on your device, so you can see
+        them on your maps. The access is read-only: Inukshuk never writes to Apple Health or Health
+        Connect.
+      </li>
+      <li>
+        <strong>Where it goes.</strong> Nowhere. Health data and the trails imported from it stay on
+        your device. They are never sent to us or to any third party, and never used for
+        advertising, marketing, data mining or any purpose other than showing you your own trails.
+        The app does not store health data in iCloud; like the rest of the app's data on your phone,
+        imported trails can be part of your device's own backup if you have turned device backups
+        on. An imported trail leaves your device only if you yourself share or export it, or send it
+        to Strava.
+      </li>
+      <li>
+        <strong>Stopping it.</strong> You can revoke access at any time — in the Health app or
+        <em>Settings → Health → Data Access &amp; Devices</em> on iOS, or in Health Connect's
+        settings on Android — and delete imported trails in the app.
       </li>
     </ul>
 
@@ -288,6 +388,16 @@
         on your device and nowhere else. If you decline this permission, recording still works while
         the app is open on screen.
       </li>
+      <li>
+        <strong>Apple Health (iOS, optional):</strong> read access to workouts and workout routes,
+        to import them as trails on your device. Inukshuk asks for no write access and never saves
+        anything to Health.
+      </li>
+      <li>
+        <strong>Health Connect (Android, optional):</strong> read exercise sessions, read exercise
+        routes, read distance, and read data older than 30 days — to import your workouts, with
+        their routes, as trails on your device. All four are read-only.
+      </li>
     </ul>
 
     <h2>Children</h2>
@@ -296,8 +406,10 @@
     <h2>Your control and rights</h2>
     <p>
       Because all of your maps and tracks live only on your device, you are in full control: delete
-      individual items in the app, revoke the location permission in your device settings, turn off
-      automatic error reporting in Settings, export a copy of everything from
+      individual items in the app, revoke the location permission in your device settings, revoke
+      Apple Health or Health Connect access in the Health app or Health Connect settings, disconnect
+      Strava in <em>Settings → Connections</em> (optionally deleting the trails imported from it),
+      turn off automatic error reporting in Settings, export a copy of everything from
       <em>Settings → Your data → Download your data</em>, or uninstall the app to erase everything.
       Apart from the technical error reports described above, there is no server-side copy for us to
       delete.
