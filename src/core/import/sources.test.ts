@@ -1,4 +1,4 @@
-import { rangeStart } from './sources';
+import { SourceStopError, rangeStart } from './sources';
 
 describe('rangeStart', () => {
   const now = Date.parse('2026-09-28T12:00:00Z');
@@ -16,5 +16,14 @@ describe('rangeStart', () => {
 
   it('takes everything from the beginning', () => {
     expect(rangeStart({ kind: 'everything' }, now)).toBe(0);
+  });
+});
+
+describe('SourceStopError', () => {
+  it('carries its kind and resume time', () => {
+    const err = new SourceStopError('limit', 'daily-limit', 42);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toMatchObject({ name: 'SourceStopError', kind: 'daily-limit', resumeAt: 42 });
+    expect(new SourceStopError('auth', 'auth').resumeAt).toBeNull();
   });
 });

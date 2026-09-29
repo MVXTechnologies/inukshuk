@@ -10,6 +10,7 @@
  * `key_by_type=true` so each stream arrives keyed by name.
  */
 
+import type { RemoteActivity } from '@core/import/sources';
 import type { TrackPoint } from '@core/models';
 
 export const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
@@ -222,4 +223,57 @@ export function rateLimitDelayMs(state: RateLimitState | null, now: number): num
   if (state.shortUsed < state.shortLimit - 2) return 0;
   const quarter = 15 * 60_000;
   return quarter - (now % quarter) + 1_000;
+}
+
+/** Strava resets the daily read budget at midnight UTC: the next one after `now`. */
+export function nextUtcMidnight(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+}
+
+/** Human label for a `sport_type`: "TrailRun" → "Trail Run", "EBikeRide" → "E-Bike Ride". */
+export function sportTypeLabel(sportType: string): string {
+  const special: Record<string, string> = {
+    EBikeRide: 'E-Bike Ride',
+    EMountainBikeRide: 'E-Mountain Bike Ride',
+    StandUpPaddling: 'Stand Up Paddle',
+    Workout: 'Workout',
+  };
+  const known = special[sportType];
+  if (known) return known;
+  const spaced = sportType.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  return spaced === '' ? 'Activity' : spaced;
+}
+
+/** A listed Strava activity as a connected-source activity (`@core/import/sources`). */
+export function stravaSummaryToRemote(summary: StravaActivitySummary): RemoteActivity {
+  return {
+    origin: { source: 'strava', externalId: String(summary.id) },
+    name: summary.name,
+    category: categoryForSportType(summary.sportType),
+    sportLabel: sportTypeLabel(summary.sportType),
+    startedAt: summary.startTime,
+    distanceM: summary.distanceM,
+    hasRoute: summary.hasTrack,
+  };
+}
+
+/**
+ * Enough of a summary to fetch an activity's streams again from its listed
+ * form (only the id and start time are read), or null when the id isn't a
+ * Strava id.
+ */
+export function remoteToStravaSummary(activity: RemoteActivity): StravaActivitySummary | null {
+  const id = Number(activity.origin.externalId);
+  if (activity.origin.source !== 'strava' || !Number.isSafeInteger(id) || id <= 0) return null;
+  return {
+    id,
+    name: activity.name ?? '',
+    sportType: '',
+    startTime: activity.startedAt,
+    distanceM: activity.distanceM,
+    movingTimeS: 0,
+    elapsedTimeS: 0,
+    hasTrack: activity.hasRoute,
+  };
 }

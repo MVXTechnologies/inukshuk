@@ -75,9 +75,14 @@ export interface ActivitySource {
   id: ActivitySourceId;
   /**
    * Every activity that started at or after `since`, newest first. May take
-   * several pages; implementations handle their own paging.
+   * several pages; implementations handle their own paging (and report a
+   * rate-limit wait between pages through `onPause`, when given).
    */
-  list(since: number, signal: AbortSignal): Promise<RemoteActivity[]>;
+  list(
+    since: number,
+    signal: AbortSignal,
+    onPause?: (pause: ImportPause) => void,
+  ): Promise<RemoteActivity[]>;
   /**
    * The activity's GPS route (empty points = nothing to draw after all).
    * `onPause` reports a rate-limit wait the implementation is sitting out.
@@ -87,4 +92,21 @@ export interface ActivitySource {
     signal: AbortSignal,
     onPause: (pause: ImportPause) => void,
   ): Promise<ActivityRoute>;
+}
+
+/**
+ * A source telling the importer to stop rather than skip one activity:
+ * `daily-limit` pauses the job until `resumeAt` (Strava's daily read budget),
+ * `auth` stops it with a "reconnect" message.
+ */
+export class SourceStopError extends Error {
+  constructor(
+    message: string,
+    readonly kind: 'daily-limit' | 'auth',
+    /** Epoch ms when the source can be read again (`daily-limit`). */
+    readonly resumeAt: number | null = null,
+  ) {
+    super(message);
+    this.name = 'SourceStopError';
+  }
 }

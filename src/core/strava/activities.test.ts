@@ -5,7 +5,11 @@ import {
   categoryForSportType,
   parseActivitiesPage,
   parseRateLimit,
+  nextUtcMidnight,
   rateLimitDelayMs,
+  remoteToStravaSummary,
+  sportTypeLabel,
+  stravaSummaryToRemote,
   streamsToPoints,
 } from './activities';
 
@@ -206,5 +210,50 @@ describe('rate limits', () => {
     expect(
       rateLimitDelayMs({ shortUsed: 0, shortLimit: 100, dailyUsed: 999, dailyLimit: 1000 }, 0),
     ).toBeNull();
+  });
+});
+
+describe('import-source mapping', () => {
+  it('labels sport types for fallback names', () => {
+    expect(sportTypeLabel('TrailRun')).toBe('Trail Run');
+    expect(sportTypeLabel('Run')).toBe('Run');
+    expect(sportTypeLabel('EBikeRide')).toBe('E-Bike Ride');
+    expect(sportTypeLabel('')).toBe('Activity');
+  });
+
+  it('maps a listed activity to a remote activity and back', () => {
+    const [summary] = parseActivitiesPage([row()]);
+    const remote = stravaSummaryToRemote(summary!);
+    expect(remote).toEqual({
+      origin: { source: 'strava', externalId: '123' },
+      name: 'Morning Run',
+      category: 'trail-run',
+      sportLabel: 'Trail Run',
+      startedAt: START,
+      distanceM: 12345.6,
+      hasRoute: true,
+    });
+    expect(remoteToStravaSummary(remote)).toMatchObject({ id: 123, startTime: START });
+  });
+
+  it('refuses ids that are not Strava ids', () => {
+    const [summary] = parseActivitiesPage([row()]);
+    const remote = stravaSummaryToRemote(summary!);
+    expect(
+      remoteToStravaSummary({ ...remote, origin: { source: 'strava', externalId: 'x' } }),
+    ).toBeNull();
+    expect(
+      remoteToStravaSummary({ ...remote, origin: { source: 'apple-health', externalId: '123' } }),
+    ).toBeNull();
+    expect(remoteToStravaSummary({ ...remote, name: undefined })?.name).toBe('');
+  });
+
+  it('finds the next UTC midnight', () => {
+    expect(nextUtcMidnight(Date.parse('2026-09-12T23:59:00Z'))).toBe(
+      Date.parse('2026-09-13T00:00:00Z'),
+    );
+    expect(nextUtcMidnight(Date.parse('2026-12-31T00:00:00Z'))).toBe(
+      Date.parse('2027-01-01T00:00:00Z'),
+    );
   });
 });
