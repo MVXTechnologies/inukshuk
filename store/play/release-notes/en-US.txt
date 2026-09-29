@@ -1,8 +1,8 @@
-A new map, drawn for the outdoors.
+Bring your activities in.
 
-• New map in the app's colours: woods, water and trails stand out. Canada, US, Europe.
-• Contour lines load with the map and come with offline downloads.
-• Night red and Sunlight display modes.
-• Route thumbnails; restyled Library, Maps and Logbook.
-• Trails are easier to tap.
-• Fixed: download area stuck on "Calculating…".
+• Import from Strava, new activities automatically.
+• Import workouts with routes from Health Connect.
+• Import FIT, TCX, GPX and Strava/Garmin exports.
+• Map maker: frame a printable map.
+• Waypoint icons. The map covers the whole world.
+• Needs Android 8.0 or later.
