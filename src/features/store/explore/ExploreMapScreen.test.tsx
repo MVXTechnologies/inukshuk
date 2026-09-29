@@ -10,6 +10,7 @@ import type { CatalogShardRef } from '@core/catalog/schema';
 import { loadCatalogShard } from '@data/catalogCache';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { ExploreMapScreen } from './ExploreMapScreen';
 import {
@@ -174,4 +175,29 @@ it('filter chips narrow the points; the list toggle keeps the filter', async () 
   expect(mockCaptured.source?.data.features).toHaveLength(1);
   await fireEvent.press(view.getByLabelText('Show as a list'));
   expect(mockReplace).toHaveBeenCalledWith('/explore/list?kind=nautical');
+});
+
+it('keeps the list sheet one height whether it lists maps or none (#459 flicker)', async () => {
+  const view = await mapScreen();
+  const sheetHeight = () =>
+    (StyleSheet.flatten(view.getByTestId('explore-map-sheet').props.style) as { height?: number })
+      .height;
+  expect(view.getByText('2 MAPS IN THIS AREA')).toBeTruthy();
+  const withMaps = sheetHeight();
+  expect(withMaps).toBeGreaterThan(0);
+
+  // Empty ground: the sheet must not collapse (that uncovered the map, brought
+  // clusters into view, regrew the sheet, and looped).
+  await act(async () => {
+    mockCaptured.map?.onRegionDidChange?.({
+      nativeEvent: { bounds: [-60, 30, -58, 32], zoom: 7, center: [-59, 31] },
+    } as never);
+  });
+  expect(view.getByText('0 MAPS IN THIS AREA')).toBeTruthy();
+  expect(view.getByText('Move the map to find maps in another area.')).toBeTruthy();
+  expect(sheetHeight()).toBe(withMaps);
+
+  // A layout pass never changes the count: nothing measures the sheet any more.
+  await settle();
+  expect(view.getByText('0 MAPS IN THIS AREA')).toBeTruthy();
 });

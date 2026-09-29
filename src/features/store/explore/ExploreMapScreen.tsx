@@ -10,10 +10,10 @@ import {
   clusterIdOf,
   clusterTapZoom,
   EXPLORE_MAP_START_ZOOM,
+  EXPLORE_SHEET_FRACTION,
   footprintFeature,
-  itemsInBounds,
+  itemsInSheetView,
   nearestItemsView,
-  trimBoundsBottom,
   normalizeBounds,
   pendingShardCountInBounds,
   pointItemIdOf,
@@ -72,14 +72,17 @@ import { itemFacets } from './facetsAdapter';
  * stays up while the view still has unloaded shards.
  *
  * The sheet is a plain themed View, not a paper Surface: an absolutely
- * positioned Surface collapses its flex column on iOS.
+ * positioned Surface collapses its flex column on iOS. In list mode it has a
+ * fixed height (`EXPLORE_SHEET_FRACTION` of the screen) whatever it lists —
+ * "in this area" is trimmed by that height, so a content-sized sheet made the
+ * count feed back into itself and flicker (#459).
  */
 
 const SOURCE_ID = 'explore-catalog';
 /** Rows the sheet lists — enough to scan, never a 5 000-row FlatList in a sheet. */
 const SHEET_ROWS = 50;
-/** Share of the screen the bottom sheet covers (its maxHeight). */
-const SHEET_FRACTION = 0.42;
+/** Share of the screen the list sheet covers (fixed: see EXPLORE_SHEET_FRACTION). */
+const SHEET_FRACTION = EXPLORE_SHEET_FRACTION;
 
 function itemMeta(item: CatalogItem, sourceName: string | undefined): string {
   const kind = itemFacets(item).kind;
@@ -121,9 +124,6 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
   const framed = useRef(false);
   // The native map ignores camera commands until it has loaded.
   const [mapReady, setMapReady] = useState(false);
-  // The sheet's real height: it shrinks when it has nothing to list, and
-  // only the map it covers is off-screen for "in this area".
-  const [sheetHeight, setSheetHeight] = useState(0);
 
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
@@ -155,16 +155,12 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
   );
   const points = useMemo(() => catalogPointCollection(filtered), [filtered]);
   // Only what the sheet leaves visible counts as "in this area" — the maps
-  // under the sheet are not on screen (emulator check, 2026-09-29).
+  // under the sheet are not on screen (emulator check, 2026-09-29). The trim is
+  // the sheet's FIXED share, never its measured height: that height followed
+  // this very list and looped it into a flicker (#459).
   const inView = useMemo(
-    () =>
-      bounds === null
-        ? []
-        : itemsInBounds(
-            filtered,
-            trimBoundsBottom(bounds, screenHeight > 0 ? sheetHeight / screenHeight : 0),
-          ),
-    [filtered, bounds, sheetHeight, screenHeight],
+    () => (bounds === null ? [] : itemsInSheetView(filtered, bounds, SHEET_FRACTION)),
+    [filtered, bounds],
   );
 
   // Open framed on you and the nearest maps (once, when they first load):
@@ -418,14 +414,18 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
 
       {/* Bottom sheet: the selected map, or the maps in view. */}
       <View
-        onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
+        testID="explore-map-sheet"
         style={[
           styles.sheet,
           {
             backgroundColor: t.surface,
             paddingBottom: insets.bottom + space.md,
-            maxHeight: screenHeight * SHEET_FRACTION,
           },
+          // The list sheet keeps one height whatever it lists (#459); the
+          // selected-map card sizes to itself — it shows no "in this area".
+          selected !== undefined
+            ? { maxHeight: screenHeight * SHEET_FRACTION }
+            : { height: screenHeight * SHEET_FRACTION },
         ]}
       >
         <View style={[styles.handle, { backgroundColor: t.outlineVariant }]} />
@@ -482,6 +482,7 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
                   } in this area`.toUpperCase()}
             </Text>
             <FlatList
+              style={styles.fill}
               data={sheetRows}
               keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
@@ -510,6 +511,13 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
                   </View>
                 </Pressable>
               )}
+              ListEmptyComponent={
+                bounds === null ? null : (
+                  <Text style={[styles.empty, { color: t.inkMuted }]}>
+                    Move the map to find maps in another area.
+                  </Text>
+                )
+              }
               initialNumToRender={6}
               windowSize={5}
             />
@@ -579,6 +587,7 @@ const styles = StyleSheet.create({
   },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2 },
   count: { fontSize: 13, lineHeight: 18, fontWeight: '700', letterSpacing: 0.3 },
+  empty: { fontSize: 14, lineHeight: 20, paddingVertical: space.sm },
   selected: { gap: space.md },
   selectedRow: { flexDirection: 'row', gap: space.md, alignItems: 'center' },
   selectedActions: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
