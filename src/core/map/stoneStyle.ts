@@ -22,7 +22,11 @@
  * The only import is a type-only one of the style-spec types (erased at
  * runtime), so the output is type-checked against the real MapLibre spec.
  */
-import type { LayerSpecification, LineLayerSpecification } from '@maplibre/maplibre-react-native';
+import type {
+  LayerSpecification,
+  LineLayerSpecification,
+  SymbolLayerSpecification,
+} from '@maplibre/maplibre-react-native';
 
 /**
  * The style-spec expression type. Not re-exported by the RN package, so it is
@@ -118,12 +122,27 @@ export interface StoneContourSource {
   majorEvery?: number;
 }
 
+/**
+ * Our worldwide named-summits tileset (`infra/tiles/nas/peaks.sh`): one point
+ * per OSM natural=peak|volcano with a name, carrying `name` (+ `name:en` /
+ * `name:fr`), `ele` (integer metres, when known) and `kind`. Each summit is
+ * in the tiles only from the zoom its height earns (≥ 4000 m from z5
+ * … unknown height at z12), so the layer needs no zoom filter of its own.
+ * Protomaps only ships peaks from z13; without this source the map falls back
+ * to those.
+ */
+export interface StonePeaksSource {
+  source: string;
+  sourceLayer: string;
+}
+
 export interface StoneStyleOptions {
   /** Id of the Protomaps vector source in the style. */
   source: string;
   fonts?: StoneFonts;
   language?: StoneLabelLanguage;
   contours?: StoneContourSource;
+  peaks?: StonePeaksSource;
 }
 
 /**
@@ -181,6 +200,36 @@ function nameField(language: StoneLabelLanguage): ExpressionSpecification {
     default:
       return ['coalesce', ['get', 'name'], ''];
   }
+}
+
+/** A number 0–999 as three digits: 7 → "007". */
+function pad3(n: ExpressionSpecification): ExpressionSpecification {
+  return [
+    'case',
+    ['<', n, 10],
+    ['concat', '00', ['to-string', n]],
+    ['<', n, 100],
+    ['concat', '0', ['to-string', n]],
+    ['to-string', n],
+  ];
+}
+
+/**
+ * A summit height in whole metres, thousands set off by a thin space the way
+ * the topo sheets print them: "808 m", "1 234 m", "8 849 m"; empty when the
+ * feature has none. Built from plain arithmetic rather than `number-format`,
+ * whose locale support differs between the native renderers.
+ */
+export function elevationLabel(field: string): ExpressionSpecification {
+  const m: ExpressionSpecification = ['round', ['to-number', ['get', field], 0]];
+  return [
+    'case',
+    ['!', ['has', field]],
+    '',
+    ['>=', m, 1000],
+    ['concat', ['to-string', ['floor', ['/', m, 1000]]], '\u2009', pad3(['%', m, 1000]), ' m'],
+    ['concat', ['to-string', m], ' m'],
+  ];
 }
 
 /** Land-use kinds by how they are washed. */
@@ -322,6 +371,48 @@ export function buildStoneLayers(
     extra,
     notTunnel,
   ];
+
+  /**
+   * Summits: bold name over its height, higher peaks winning collisions
+   * (`symbol-sort-key`). Drawn BELOW the place labels, so a town keeps its
+   * name where a minor peak would crowd it. Text only: the style has no
+   * sprite and Atkinson carries no ▲ (U+25B2) to draw a marker with.
+   * Metres only — the style builder doesn't know the units setting.
+   */
+  const peakLayer = (): SymbolLayerSpecification => {
+    const ours = options.peaks;
+    const ele = ours ? 'ele' : 'elevation';
+    const from: Pick<SymbolLayerSpecification, 'source' | 'source-layer' | 'minzoom' | 'filter'> =
+      ours
+        ? // Every feature is a named summit, tiled from the zoom it earns.
+          { source: ours.source, 'source-layer': ours.sourceLayer, minzoom: 5 }
+        : {
+            source,
+            'source-layer': 'pois',
+            minzoom: 11,
+            filter: isIn('kind', ['peak', 'volcano']),
+          };
+    return {
+      id: id('peak'),
+      type: 'symbol',
+      ...from,
+      layout: {
+        'text-field': [
+          'format',
+          name,
+          { 'text-font': ['literal', fonts.bold] },
+          // The height on its own line — no dangling line break without one.
+          ['case', ['has', ele], ['concat', '\n', elevationLabel(ele)], ''],
+          { 'font-scale': 0.85 },
+        ],
+        'text-font': fonts.regular,
+        'text-size': ramp([5, 10.5], [10, 12], [14, 13]),
+        'text-max-width': 8,
+        'symbol-sort-key': ['-', 0, ['to-number', ['coalesce', ['get', ele], 0], 0]],
+      },
+      paint: { 'text-color': scheme.ink, ...halo },
+    };
+  };
 
   const base: LayerSpecification[] = [
     { id: id('background'), type: 'background', paint: { 'background-color': scheme.land } },
@@ -770,35 +861,7 @@ export function buildStoneLayers(
       },
       paint: { 'text-color': scheme.inkMuted, ...halo },
     },
-    {
-      id: id('peak'),
-      type: 'symbol',
-      source,
-      'source-layer': 'pois',
-      minzoom: 11,
-      filter: isIn('kind', ['peak', 'volcano']),
-      layout: {
-        'text-field': [
-          'format',
-          name,
-          { 'text-font': ['literal', fonts.bold] },
-          '\n',
-          {},
-          [
-            'case',
-            ['has', 'elevation'],
-            ['concat', ['to-string', ['round', ['to-number', ['get', 'elevation'], 0]]], ' m'],
-            '',
-          ],
-          { 'font-scale': 0.85 },
-        ],
-        'text-font': fonts.regular,
-        'text-size': 12,
-        'text-max-width': 8,
-        'symbol-sort-key': ['-', 0, ['to-number', ['coalesce', ['get', 'elevation'], 0], 0]],
-      },
-      paint: { 'text-color': scheme.ink, ...halo },
-    },
+    peakLayer(),
     {
       id: id('place-village'),
       type: 'symbol',

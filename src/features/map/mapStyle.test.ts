@@ -815,6 +815,32 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     expect(ids).toContain('stone-contour-minor');
   });
 
+  it('flag on: labels peaks from our summit tiles when given, else from Protomaps', () => {
+    const build = withFlag(true);
+    const without = build(TILE, false, 'map', false, { vectorBasemap });
+    expect(without.sources['basemap-peaks']).toBeUndefined();
+    expect(without.layers.find((l) => l.id === 'stone-peak')).toMatchObject({
+      'source-layer': 'pois',
+    });
+    const peaks = 'https://tiles.example/peaks/{z}/{x}/{y}.mvt';
+    const withPeaks = build(TILE, false, 'map', false, {
+      vectorBasemap: { ...vectorBasemap, peaks },
+    });
+    expect(withPeaks.sources['basemap-peaks']).toEqual({
+      type: 'vector',
+      tiles: [peaks],
+      minzoom: 5,
+      maxzoom: 12,
+    });
+    expect(withPeaks.layers.filter((l) => l.id.includes('peak'))).toEqual([
+      expect.objectContaining({
+        id: 'stone-peak',
+        source: 'basemap-peaks',
+        'source-layer': 'peaks',
+      }),
+    ]);
+  });
+
   it('flag on: the dark scheme yields a different stone style', () => {
     const build = withFlag(true);
     const light = build(TILE, false, 'map', false, { vectorBasemap });
