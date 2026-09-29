@@ -44,7 +44,14 @@ export function useMakeMapSession({ showSnack }: { showSnack: (message: string) 
       )
         .then((doc) => {
           if (isCurrent()) setMakeMapState(null);
-          showSnack(`"${doc.name}" saved to the library`);
+          // A few base tiles that never arrived print as blank paper (#460);
+          // the user should know before they trust the sheet on a trail.
+          const missing = handle.missingTiles ?? 0;
+          showSnack(
+            missing > 0
+              ? `"${doc.name}" saved — ${missing} map ${missing === 1 ? 'tile' : 'tiles'} couldn't be downloaded and ${missing === 1 ? 'is' : 'are'} blank`
+              : `"${doc.name}" saved to the library`,
+          );
         })
         .catch((err: unknown) => {
           if (!isCurrent()) return;
