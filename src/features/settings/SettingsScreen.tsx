@@ -44,7 +44,7 @@ import { exportAllData } from './exportAllData';
 import { MAP_DATA_CREDITS } from './mapDataCredits';
 import { MarinePacksSection } from './MarinePacksSection';
 import { OfflineMapsSection } from './OfflineMapsSection';
-import { StravaSection } from './StravaSection';
+import { ConnectionsSection } from './ConnectionsSection';
 
 const DISPLACEMENT_OPTIONS = [
   { value: '2', label: '2 m' },
@@ -512,13 +512,13 @@ export function SettingsScreen() {
           <List.Accordion
             id="thirdparty"
             title="Third party"
-            description="Strava and other connections"
+            description="Strava, Health and other connections"
             left={(p) => <List.Icon {...p} icon="link-variant" />}
             style={accordionHeaderStyle}
             titleStyle={accordionTitleStyle}
           >
             <View style={styles.accordionBody}>
-              <StravaSection showSnack={showSnack} />
+              <ConnectionsSection showSnack={showSnack} />
             </View>
           </List.Accordion>
 
