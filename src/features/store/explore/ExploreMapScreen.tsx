@@ -119,6 +119,11 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const autoSearched = useRef(false);
   const framed = useRef(false);
+  // The native map ignores camera commands until it has loaded.
+  const [mapReady, setMapReady] = useState(false);
+  // The sheet's real height: it shrinks when it has nothing to list, and
+  // only the map it covers is off-screen for "in this area".
+  const [sheetHeight, setSheetHeight] = useState(0);
 
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
@@ -153,15 +158,20 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
   // under the sheet are not on screen (emulator check, 2026-09-29).
   const inView = useMemo(
     () =>
-      bounds === null ? [] : itemsInBounds(filtered, trimBoundsBottom(bounds, SHEET_FRACTION)),
-    [filtered, bounds],
+      bounds === null
+        ? []
+        : itemsInBounds(
+            filtered,
+            trimBoundsBottom(bounds, screenHeight > 0 ? sheetHeight / screenHeight : 0),
+          ),
+    [filtered, bounds, sheetHeight, screenHeight],
   );
 
   // Open framed on you and the nearest maps (once, when they first load):
   // centring on the user alone often left every nearby sheet off-screen or
   // under the sheet — Québec City's nearest sheets are in Maine.
   useEffect(() => {
-    if (framed.current) return;
+    if (framed.current || !mapReady) return;
     const view = nearestItemsView(position, filtered);
     if (view === null) return;
     framed.current = true;
@@ -174,7 +184,7 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
       },
       duration: 0,
     });
-  }, [position, filtered, insets.top, screenHeight]);
+  }, [mapReady, position, filtered, insets.top, screenHeight]);
   const sheetRows = useMemo(
     () =>
       sortCatalogItems(inView, bounds === null ? position : boundsCenter(bounds)).slice(
@@ -282,7 +292,10 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
         style={styles.fill}
         mapStyle={style}
         compass={false}
-        onDidFinishLoadingMap={readView}
+        onDidFinishLoadingMap={() => {
+          setMapReady(true);
+          readView();
+        }}
         onRegionDidChange={(e) => {
           setBounds(normalizeBounds(e.nativeEvent.bounds));
           setZoom(e.nativeEvent.zoom);
@@ -405,6 +418,7 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
 
       {/* Bottom sheet: the selected map, or the maps in view. */}
       <View
+        onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}
         style={[
           styles.sheet,
           {
