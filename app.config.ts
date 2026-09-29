@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: 'com.inukshuk.app',
     // Increase for every App Store Connect upload.
-    buildNumber: '12',
+    buildNumber: '13',
     infoPlist: {
       // Trail recording keeps running with the screen off / app backgrounded.
       // The expo-location plugin (isIosBackgroundLocationEnabled) also adds
@@ -266,13 +266,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // MapLibre style during an offline-region download (see src/data/offline.ts).
     './plugins/withLocalhostCleartext',
     // Apple Health import (#435): the HealthKit entitlement + read usage text.
-    // Read-only — no update description, no background delivery.
+    // Read-only access, no background delivery.
     [
       '@kingstinct/react-native-healthkit',
       {
         NSHealthShareUsageDescription:
           'Inukshuk reads your workouts and their routes so you can see them on your maps. It never writes to Health.',
-        NSHealthUpdateUsageDescription: false,
+        // Apple requires this string whenever the HealthKit library is
+        // linked — it references the write APIs even though Inukshuk never
+        // asks for write access (ITMS-90683 rejected 2.0.1 build 12 without
+        // it). Truthful: the app only reads.
+        NSHealthUpdateUsageDescription:
+          'Inukshuk only reads your workouts and their routes. It never saves anything to Health.',
         background: false,
       },
     ],
