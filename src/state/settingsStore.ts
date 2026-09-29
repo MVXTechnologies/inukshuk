@@ -7,6 +7,14 @@ import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks'
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
+import {
+  DEFAULT_HILLSHADE_STRENGTH,
+  DEFAULT_PEAK_DENSITY,
+  isHillshadeStrength,
+  isPeakDensity,
+  type HillshadeStrength,
+  type PeakDensity,
+} from '@core/map/terrainOptions';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
@@ -152,6 +160,14 @@ export interface Settings {
    * {@link DEFAULT_SHOW_HILLSHADE} and #230.
    */
   showHillshade: boolean;
+  /**
+   * How strong the shaded relief is when {@link showHillshade} is on (#461).
+   * The map menu's "Shading: None / Light / Medium / Heavy" is the pair:
+   * None = showHillshade off, so the #230 platform default keeps working.
+   */
+  hillshadeStrength: HillshadeStrength;
+  /** How early named summits appear on the vector map (#461). */
+  peakDensity: PeakDensity;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -217,6 +233,8 @@ const DEFAULTS: Settings = {
   showPdfOverlay: true,
   showScaleBar: true,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
+  hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
+  peakDensity: DEFAULT_PEAK_DENSITY,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -287,6 +305,8 @@ function snapshot(s: SettingsState): Settings {
     showPdfOverlay,
     showScaleBar,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -324,6 +344,8 @@ function snapshot(s: SettingsState): Settings {
     showPdfOverlay,
     showScaleBar,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -369,6 +391,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // retired by a later build would survive as an unmatched switch case.
       if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
       if (!isDisplayCondition(next.displayCondition)) next.displayCondition = 'normal';
+      if (!isHillshadeStrength(next.hillshadeStrength)) {
+        next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;
+      }
+      if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

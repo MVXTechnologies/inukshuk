@@ -422,6 +422,9 @@ export function MapScreen() {
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
   /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
   const showHillshade = useSettingsStore((s) => s.showHillshade);
+  /** Its strength and the summits' density — the Topology menu's #461 rows. */
+  const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
+  const peakDensity = useSettingsStore((s) => s.peakDensity);
   /**
    * Non-null while the map maker is open: the print style whose raster the
    * live map must render so the framed preview matches the sheet (#349).
@@ -593,9 +596,13 @@ export function MapScreen() {
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
       ...(vectorBasemap
         ? {
-            vectorBasemap: vectorBasemapOption(theme.dark, terrainContours),
+            vectorBasemap: {
+              ...vectorBasemapOption(theme.dark, terrainContours),
+              peakDensity,
+            },
           }
         : {}),
+      hillshadeStrength,
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
@@ -678,6 +685,8 @@ export function MapScreen() {
     editorStyle,
     basemap,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
     offlineOnly,
     offlineRegions,
     theme.dark,

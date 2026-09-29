@@ -3,10 +3,17 @@ import type { LayerSpecification } from '@maplibre/maplibre-react-native';
 // The reference validator ships with maplibre-react-native (its style-spec
 // dependency). It rejects what the TS types can't see, e.g. two zoom curves
 // in one expression — which the native renderer drops silently.
-import { createExpression, validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
+import {
+  createExpression,
+  featureFilter,
+  validateStyleMin,
+} from '@maplibre/maplibre-gl-style-spec';
+import type { FilterSpecification } from '@maplibre/maplibre-gl-style-spec';
+import { PEAK_DENSITIES, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 import {
   buildStoneLayers,
   elevationLabel,
+  peakDueFilter,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
   STONE_LAYER_PREFIX,
@@ -342,8 +349,8 @@ describe('buildStoneLayers', () => {
     const { labels } = buildStoneLayers(LIGHT, { source: SOURCE, peaks: PEAKS });
     const peak = peakOf(labels);
     expect(peak).toMatchObject({ source: 'peaks', 'source-layer': 'peaks', minzoom: 5 });
-    // The tiles hold only named summits, each from the zoom its height earns.
-    expect(peak?.filter).toBeUndefined();
+    // The tiles hold only named summits; the filter picks how early (#461).
+    expect(peak?.filter).toEqual(peakDueFilter(PEAK_LEAD.normal));
     // Higher summits win collisions.
     expect(peak?.layout['symbol-sort-key']).toEqual([
       '-',
@@ -382,6 +389,92 @@ describe('buildStoneLayers', () => {
   });
 });
 
+describe('peak density (#461)', () => {
+  const peakFilter = (density?: PeakDensity) => {
+    const peak = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      peaks: PEAKS,
+      ...(density ? { peakDensity: density } : {}),
+    }).labels.find((l) => l.id === `${STONE_LAYER_PREFIX}peak`) as { filter?: unknown };
+    const f = featureFilter(peak.filter as FilterSpecification, 'filter');
+    return (zoom: number, properties: Record<string, unknown>) =>
+      f.filter({ zoom }, {
+        type: 1,
+        properties,
+        geometry: [],
+      } as unknown as Parameters<typeof f.filter>[1]);
+  };
+
+  // Mont Sainte-Anne (808 m): rank z10 on the elevation ladder.
+  const msa = { name: 'Mont Sainte-Anne', ele: 808, rank: 10 };
+
+  it.each([
+    ['fewer', 10],
+    ['normal', 9],
+    ['more', 8],
+  ] as const)('%s draws a rank-10 summit from z%i', (density, first) => {
+    const due = peakFilter(density);
+    expect(due(first - 1, msa)).toBe(false);
+    expect(due(first, msa)).toBe(true);
+    expect(due(first + 3, msa)).toBe(true);
+  });
+
+  it('defaults to normal — one zoom earlier than the old ladder', () => {
+    const due = peakFilter();
+    expect(due(9, msa)).toBe(true);
+    expect(due(8, msa)).toBe(false);
+  });
+
+  it('draws every summit of pre-#461 tiles (no rank: already tiled from its zoom)', () => {
+    for (const d of PEAK_DENSITIES) expect(peakFilter(d)(5, { name: 'Old', ele: 808 })).toBe(true);
+  });
+
+  it('orders the densities: more ⊇ normal ⊇ fewer at every zoom', () => {
+    for (let rank = 5; rank <= 12; rank++) {
+      for (let zoom = 5; zoom <= 14; zoom++) {
+        const f = { name: 'X', rank };
+        const [fewer, normal, more] = PEAK_DENSITIES.map((d) => peakFilter(d)(zoom, f));
+        if (fewer) expect(normal).toBe(true);
+        if (normal) expect(more).toBe(true);
+      }
+    }
+  });
+
+  it('keeps collisions sane: higher summits win and labels get extra padding', () => {
+    for (const d of PEAK_DENSITIES) {
+      const peak = buildStoneLayers(DARK, {
+        source: SOURCE,
+        peaks: PEAKS,
+        peakDensity: d,
+      }).labels.find((l) => l.id === `${STONE_LAYER_PREFIX}peak`) as {
+        layout: Record<string, unknown>;
+      };
+      expect(peak.layout['text-padding']).toBe(6);
+      expect(peak.layout['symbol-sort-key']).toBeDefined();
+    }
+  });
+
+  it('passes the style-spec validator for every density', () => {
+    for (const d of PEAK_DENSITIES) {
+      const { base, labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        peaks: PEAKS,
+        peakDensity: d,
+      });
+      const errors = validateStyleMin({
+        version: 8,
+        glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+        sources: {
+          [SOURCE]: { type: 'vector', tiles: ['https://t.example/{z}/{x}/{y}.pbf'] },
+          peaks: { type: 'vector', tiles: ['https://peaks.example/{z}/{x}/{y}.pbf'] },
+        },
+        layers: [...base, ...labels],
+      } as Parameters<typeof validateStyleMin>[0]);
+      expect(errors).toEqual([]);
+    }
+  });
+});
+
 describe('elevationLabel', () => {
   const evaluate = (properties: Record<string, unknown>): unknown => {
     const parsed = createExpression(elevationLabel('ele'), 'layers[0].layout.text-field');
@@ -393,19 +486,27 @@ describe('elevationLabel', () => {
   };
 
   it.each([
-    [808, '808 m'],
-    [4, '4 m'],
-    [1000, '1\u2009000 m'],
-    [1005, '1\u2009005 m'],
-    [1234, '1\u2009234 m'],
-    [1299.6, '1\u2009300 m'],
-    [8849, '8\u2009849 m'],
-    [-12, '-12 m'],
+    [808, '808\u00a0m'],
+    [4, '4\u00a0m'],
+    [1000, '1\u2009000\u00a0m'],
+    [1005, '1\u2009005\u00a0m'],
+    [1234, '1\u2009234\u00a0m'],
+    [1299.6, '1\u2009300\u00a0m'],
+    [8849, '8\u2009849\u00a0m'],
+    [-12, '-12\u00a0m'],
   ])('%s → %j', (ele, text) => {
     expect(evaluate({ ele })).toBe(text);
   });
 
   it('is empty without a height', () => {
     expect(evaluate({})).toBe('');
+  });
+
+  it('never offers a line break inside the height (#461)', () => {
+    // MapLibre wraps point labels at these characters (its `breakable` table).
+    const breakable = /[ \n&()+\-/\u00ad\u00b7\u200b\u2010\u2013\u2027]/;
+    for (const ele of [4, 808, 1234, 8849]) {
+      expect(evaluate({ ele })).not.toMatch(breakable);
+    }
   });
 });

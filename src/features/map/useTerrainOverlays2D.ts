@@ -1,14 +1,14 @@
 import { bytesToBase64 } from '@core/encoding/base64';
 import { contourFeatures, type ContourFeatures } from '@core/geo/contours';
 import { coverageScaleChanged, padBounds, viewStillCovered } from '@core/geo/overlayCoverage';
-import { slopeOverlayRgba } from '@core/geo/terrainAnalysis';
+import { slopeOverlayMercator } from '@core/geo/terrainAnalysis';
 import * as storage from '@data/storage';
 import type { MapRef } from '@maplibre/maplibre-react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import UPNG from 'upng-js';
 import type { BoundingBox } from '@core/models';
-import { fetchHeightmap, prefetchDemTiles } from './dem';
+import { fetchDemMosaic, heightmapFromMosaic, prefetchDemTiles } from './dem';
 
 /**
  * The 2D map's terrain overlays: a slope-band raster (PNG draped via
@@ -43,10 +43,19 @@ export interface TerrainOverlays2D {
  */
 const PAD = 0.5;
 /**
- * Grid resolution for the analysis. The area is ~1.5× wider than the old
- * 15 %-padded one, so the grid grows to match and keeps the same detail.
+ * Grid resolution for the contour analysis. The area is ~1.5× wider than the
+ * old 15 %-padded one, so the grid grows to match and keeps the same detail.
  */
 const GRID = 384;
+/**
+ * Longest side of the slope image. The slope itself is computed on every DEM
+ * pixel (up to 8 × 256 = 2048 a side); the result is block-averaged down to
+ * at most this so the PNG encode stays quick. The viewport shows half the
+ * image's width, so ~500 image pixels span the screen — smooth once the
+ * layer resamples linearly (see SLOPE_LAYER) and the band edges blend
+ * (`slopeOverlayColor`).
+ */
+const SLOPE_MAX_PX = 1024;
 /** DEM tiles per side for the bigger area (6 would drop a zoom level). */
 const MAX_TILES = 8;
 /** Recompute once the view gets within this fraction of its size of the covered edge. */
@@ -135,29 +144,33 @@ export function useTerrainOverlays2D({
         };
 
         try {
-          const hm = await fetchHeightmap(bounds, GRID, MAX_TILES);
+          const dem = await fetchDemMosaic(bounds, MAX_TILES);
           if (reqId !== reqIdRef.current) return;
 
           let slope: TerrainOverlays2D['slope'] = null;
           if (slopeOn) {
-            const midLat = (hm.bbox.minLat + hm.bbox.maxLat) / 2;
-            const mPerDegLat = 111320;
-            const mPerDegLng = 111320 * Math.cos((midLat * Math.PI) / 180);
-            const cellXm = ((hm.bbox.maxLng - hm.bbox.minLng) * mPerDegLng) / (GRID - 1);
-            const cellZm = ((hm.bbox.maxLat - hm.bbox.minLat) * mPerDegLat) / (GRID - 1);
             if (await stale()) return;
-            const rgba = slopeOverlayRgba(hm.data, GRID, cellXm, cellZm, slopeMinDeg, slopeMaxDeg);
+            const img = slopeOverlayMercator(
+              dem.data,
+              dem.width,
+              dem.height,
+              dem.range.z,
+              dem.range.minY * 256,
+              slopeMinDeg,
+              slopeMaxDeg,
+              Math.ceil(Math.max(dem.width, dem.height) / SLOPE_MAX_PX),
+            );
             if (await stale()) return;
             const png = new Uint8Array(
               UPNG.encode(
                 [
-                  rgba.buffer.slice(
-                    rgba.byteOffset,
-                    rgba.byteOffset + rgba.byteLength,
+                  img.rgba.buffer.slice(
+                    img.rgba.byteOffset,
+                    img.rgba.byteOffset + img.rgba.byteLength,
                   ) as ArrayBuffer,
                 ],
-                GRID,
-                GRID,
+                img.width,
+                img.height,
                 0,
               ),
             );
@@ -167,21 +180,23 @@ export function useTerrainOverlays2D({
             slope = {
               uri,
               coordinates: [
-                [hm.bbox.minLng, hm.bbox.maxLat],
-                [hm.bbox.maxLng, hm.bbox.maxLat],
-                [hm.bbox.maxLng, hm.bbox.minLat],
-                [hm.bbox.minLng, hm.bbox.minLat],
+                [dem.bbox.minLng, dem.bbox.maxLat],
+                [dem.bbox.maxLng, dem.bbox.maxLat],
+                [dem.bbox.maxLng, dem.bbox.minLat],
+                [dem.bbox.minLng, dem.bbox.minLat],
               ],
             };
           }
 
           if (await stale()) return;
-          const contours = contoursOn ? contourFeatures(hm, intervalM) : null;
+          const contours = contoursOn
+            ? contourFeatures(heightmapFromMosaic(dem, GRID), intervalM)
+            : null;
           if (reqId !== reqIdRef.current) return;
-          coveredRef.current = { bbox: hm.bbox, knobs };
+          coveredRef.current = { bbox: dem.bbox, knobs };
           setState({ slope, contours, error: null });
           // Head start for the next pan: cache the DEM tiles one ring out.
-          void prefetchDemTiles(padBounds(viewport, PREFETCH_PAD), hm.range.z);
+          void prefetchDemTiles(padBounds(viewport, PREFETCH_PAD), dem.range.z);
         } catch (err) {
           if (reqId !== reqIdRef.current) return;
           coveredRef.current = null;
