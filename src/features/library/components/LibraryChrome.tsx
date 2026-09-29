@@ -203,7 +203,7 @@ export function LibraryEmptyState({
             ]}
           >
             <Icon source="tray-arrow-down" size={18} color={t.ink} />
-            <Text style={[styles.bigButtonLabel, { color: t.ink }]}>Import GPX</Text>
+            <Text style={[styles.bigButtonLabel, { color: t.ink }]}>Import trails</Text>
           </Pressable>
         </View>
         <Pressable onPress={onBrowseMaps} accessibilityRole="link" style={styles.link}>

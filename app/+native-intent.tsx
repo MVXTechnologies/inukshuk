@@ -1,5 +1,10 @@
 import { findDuplicateTrack } from '@features/share/findDuplicateTrack';
 import { importGpxFromUri } from '@features/library/importGpx';
+import {
+  activityImportMessage,
+  importActivitiesFromUri,
+  openImportedUri,
+} from '@features/library/importActivities';
 import * as storage from '@data/storage';
 import { addBreadcrumb, reportError } from '@lib/errorReporting';
 import { handleStravaAuthRedirect } from '@lib/strava';
@@ -40,6 +45,17 @@ export async function redirectSystemPath({
       // adding a track before the on-disk index is loaded would persist an
       // index built from the empty initial state and wipe the library.
       await useLibraryStore.getState().hydrate();
+      // FIT / TCX / gzip / zip (Strava & Garmin exports, #431) are sniffed by
+      // content; plain GPX (and anything unrecognized) keeps the GPX path below.
+      const opened = await openImportedUri(path);
+      if (opened.format !== 'gpx' && opened.format !== 'unknown') {
+        try {
+          return await importOpenedActivities(opened.uri);
+        } finally {
+          opened.dispose();
+        }
+      }
+      opened.dispose();
       const incoming = await importGpxFromUri(path, 'Imported trail');
       const { track, fileUri, notes } = incoming;
       const existing = await findDuplicateTrack(incoming, useLibraryStore.getState().tracks);
@@ -61,4 +77,35 @@ export async function redirectSystemPath({
     }
   }
   return path;
+}
+
+/**
+ * Import an opened FIT / TCX / gzip / zip file: one activity goes straight to
+ * its trail view (like a GPX); an export archive lands on the Library with a
+ * summary. Throws when nothing could be read, for the caller's error path.
+ */
+async function importOpenedActivities(uri: string): Promise<string> {
+  const feedback = useImportFeedbackStore.getState();
+  let lastProgressAt = 0;
+  const summary = await importActivitiesFromUri(
+    uri,
+    'Imported activity',
+    useLibraryStore.getState().tracks,
+    (done, total) => {
+      const now = Date.now();
+      if (total < 10 || now - lastProgressAt < 1000) return;
+      lastProgressAt = now;
+      feedback.show(`Importing activities… ${done} of ${total}`);
+    },
+  );
+  const { items, duplicates } = summary;
+  if (items.length === 0 && duplicates === 0) throw new Error('No activities found');
+  useLibraryStore.getState().addTracks(items);
+  const [only] = items;
+  if (only && items.length === 1 && duplicates === 0 && summary.failed === 0) {
+    feedback.show(`Imported ${only.track.name}`);
+    return `/trail3d/${only.track.id}`;
+  }
+  feedback.show(items.length === 0 ? 'Already in your library' : activityImportMessage(summary));
+  return '/(tabs)/library';
 }

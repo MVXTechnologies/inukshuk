@@ -775,7 +775,11 @@ export interface CacheFileWriter {
  * once the share sheet resolves.
  */
 export function createCacheFileWriter(name: string): CacheFileWriter {
-  const dir = new Directory(Paths.cache, 'exports');
+  return openCacheFileWriter('exports', name);
+}
+
+function openCacheFileWriter(subdir: string, name: string): CacheFileWriter {
+  const dir = new Directory(Paths.cache, subdir);
   if (!dir.exists) dir.create({ intermediates: true });
   const file = new File(dir, name);
   if (file.exists) file.delete();
@@ -791,4 +795,53 @@ export function createCacheFileWriter(name: string): CacheFileWriter {
       handle.close();
     },
   };
+}
+
+// --- Activity-file imports (Strava / Garmin exports, #431) -----------------
+
+/** Cache staging area for activity imports: copied intents and nested-zip spills. */
+const IMPORTS_CACHE_DIR = 'imports';
+
+/**
+ * The first `length` bytes of a file — enough to sniff its format (FIT, gzip,
+ * zip, XML root) without reading a multi-GB archive.
+ */
+export function readFileHead(uri: string, length: number): Uint8Array {
+  return withFileByteSource(uri, (src) => src.read(0, Math.min(length, src.size)));
+}
+
+/**
+ * Copy a readable uri (an Android `content://` "Open with" intent, a picked
+ * file) into the imports cache so it can be opened for random access. Callers
+ * {@link deleteFileAt} the copy once the import finishes.
+ */
+export async function copyToImportCache(sourceUri: string, name: string): Promise<string> {
+  const dir = new Directory(Paths.cache, IMPORTS_CACHE_DIR);
+  if (!dir.exists) dir.create({ intermediates: true });
+  const dest = new File(dir, name);
+  if (dest.exists) dest.delete();
+  const source = new File(resolveDocumentPath(sourceUri));
+  try {
+    await source.copy(dest);
+  } catch (err) {
+    discardFile(dest);
+    const message = err instanceof Error ? err.message : String(err);
+    if (isOutOfSpaceMessage(message)) throw new StorageFullError(message);
+    throw err;
+  }
+  return dest.uri;
+}
+
+/** Is `uri` inside the app's cache directory (a picker copy, an import spill)? */
+export function isCacheUri(uri: string): boolean {
+  const cache = new Directory(Paths.cache).uri;
+  return uri.startsWith(cache.endsWith('/') ? cache : `${cache}/`);
+}
+
+/**
+ * Sequential writer for a nested archive decompressed out of an import (a
+ * Garmin `UploadedFiles_*.zip`), so it is walked from disk instead of memory.
+ */
+export function createImportSpillWriter(name: string): CacheFileWriter {
+  return openCacheFileWriter(IMPORTS_CACHE_DIR, name);
 }

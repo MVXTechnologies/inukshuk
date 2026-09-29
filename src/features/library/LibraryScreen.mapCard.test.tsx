@@ -63,7 +63,10 @@ jest.mock('@data/storage', () => ({
   fileSizeAt: () => 0,
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
-jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));
+jest.mock('@features/library/importActivities', () => ({
+  pickAndImportActivityFiles: jest.fn(),
+  activityImportMessage: jest.fn(),
+}));
 
 const geo = (pageIndex: number, size = 600): GeoReference => ({
   pageIndex,

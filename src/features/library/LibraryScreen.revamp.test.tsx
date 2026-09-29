@@ -27,7 +27,10 @@ jest.mock('@data/storage', () => ({
   fileSizeAt: () => 0,
 }));
 jest.mock('@features/library/importMap', () => ({ pickAndImportMaps: jest.fn() }));
-jest.mock('@features/library/importGpx', () => ({ pickAndImportGpxFiles: jest.fn() }));
+jest.mock('@features/library/importActivities', () => ({
+  pickAndImportActivityFiles: jest.fn(),
+  activityImportMessage: jest.fn(),
+}));
 jest.mock('./useRouteThumbnail', () => ({ useRouteThumbnail: () => undefined }));
 
 const track = (over: Partial<TrackSummary> = {}): TrackSummary => ({
