@@ -11,6 +11,8 @@
       hreflang="x-default"
       href="https://inukshuk.mvxtechnologies.com/privacy/"
     />
+    <link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32.png" />
+    <link rel="apple-touch-icon" href="../../apple-touch-icon.png" />
     <style>
       :root {
         color-scheme: light dark;
@@ -108,7 +110,7 @@
       ><a href="./" lang="fr" hreflang="fr" aria-current="page">FR</a>
     </div>
     <h1>Inukshuk — Politique de confidentialité</h1>
-    <p class="updated">Dernière mise à jour : 11 septembre 2026</p>
+    <p class="updated">Dernière mise à jour : 29 septembre 2026</p>
 
     <p>
       Inukshuk est une application gratuite et libre de navigation de sentiers hors ligne : elle
@@ -143,14 +145,23 @@
         votre appareil.
       </li>
       <li>
-        <strong>Fichiers que vous importez et créez.</strong> Les cartes PDF que vous importez et
-        les traces GPX que vous enregistrez sont stockées
-        <strong>localement sur votre appareil</strong>, dans l'espace privé de l'application. Nous
-        ne les téléversons jamais, et la seule façon pour l'une d'elles de quitter votre appareil
-        est que vous choisissiez de la partager ou de l'exporter vous-même — ou de téléverser une
-        sortie vers Strava, si vous avez connecté un compte. Vous pouvez supprimer n'importe quelle
-        carte ou trace dans l'application à tout moment, et désinstaller l'application les efface
-        toutes.
+        <strong>Fichiers que vous importez et créez.</strong> Les cartes PDF que vous importez, les
+        traces GPX que vous enregistrez et les fichiers d'activité que vous importez (FIT, TCX, GPX,
+        ou une archive zip d'exportation Strava ou Garmin) sont stockés
+        <strong>localement sur votre appareil</strong>, dans l'espace privé de l'application. Les
+        fichiers importés sont lus et convertis en sentiers sur votre appareil ; rien à leur sujet
+        n'est envoyé ailleurs. Nous ne les téléversons jamais, et la seule façon pour l'une d'elles
+        de quitter votre appareil est que vous choisissiez de la partager ou de l'exporter vous-même
+        — ou de téléverser une sortie vers Strava, si vous avez connecté un compte. Vous pouvez
+        supprimer n'importe quelle carte ou trace dans l'application à tout moment, et désinstaller
+        l'application les efface toutes.
+      </li>
+      <li>
+        <strong>Activités importées de Strava, d'Apple Santé ou de Santé Connect.</strong> Si vous
+        connectez Strava ou autorisez l'accès à Apple Santé (iOS) ou à Santé Connect (Android),
+        l'application peut importer vos activités passées sous forme de sentiers. Ce qui est lu, et
+        comment, est décrit sous « Strava » et « Apple Santé et Santé Connect » ci-dessous. Les
+        sentiers importés sont stockés uniquement sur votre appareil et ne sont montrés qu'à vous.
       </li>
     </ul>
 
@@ -158,8 +169,16 @@
     <p>
       <strong>L'application ne recueille aucune donnée personnelle.</strong> Inukshuk n'a ni compte
       utilisateur, ni outil d'analyse, ni publicité. Vos cartes, sentiers, points de repère et
-      photos ne quittent jamais votre appareil par notre entremise. La seule chose que l'application
-      envoie d'elle-même est un rapport d'erreur technique, décrit ci-après.
+      photos ne quittent jamais votre appareil par notre entremise, pas plus que les activités que
+      vous importez ni aucune donnée de santé : elles restent sur votre appareil. La seule chose que
+      l'application envoie d'elle-même est un rapport d'erreur technique, décrit ci-après.
+    </p>
+    <p>
+      Les seules requêtes qui atteignent nos serveurs sont les demandes de tuiles de carte (voir «
+      Notre serveur de tuiles » ci-dessous), le catalogue de cartes d'Explorer téléchargé depuis
+      notre site web et, si vous connectez Strava, les jetons de connexion qui transitent par notre
+      serveur de tuiles en route vers Strava. Aucune ne porte votre identité ni votre position, et
+      les jetons ne sont pas conservés.
     </p>
 
     <p>
@@ -214,25 +233,36 @@
 
     <h2>Connexions réseau</h2>
     <p>
-      Inukshuk fonctionne hors ligne, mais quelques fonctions récupèrent des données directement
-      depuis des serveurs tiers en HTTPS. Dans chaque cas, ce serveur reçoit l'adresse IP de votre
-      appareil ainsi que la zone de carte ou les coordonnées de tuile demandées — les informations
-      normales que porte toute requête web. Aucun de ces fournisseurs n'est exploité par nous, aucun
+      Inukshuk fonctionne hors ligne, mais quelques fonctions récupèrent des données en HTTPS —
+      depuis notre propre serveur de tuiles et directement depuis des serveurs tiers. Dans chaque
+      cas, ce serveur reçoit l'adresse IP de votre appareil ainsi que la zone de carte ou les
+      coordonnées de tuile demandées — les informations normales que porte toute requête web. Aucun
       ne reçoit de compte ni d'identité (l'application n'en a pas), et les cartes PDF que vous
       importez sont rendues entièrement hors ligne, sans connexion réseau.
     </p>
     <ul>
       <li>
-        <strong>Tuiles du fond de carte.</strong> La carte 2D et le relief 3D drapé chargent des
-        tuiles d'images depuis
-        <a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy">OpenStreetMap</a> et depuis
-        <a href="https://www.esri.com/en-us/privacy/overview">Esri / ArcGIS Online</a>, selon le
-        fond de carte que vous choisissez.
+        <strong>Notre serveur de tuiles.</strong> Le fond de carte par défaut, ses courbes de
+        niveau, les sommets nommés et la police des étiquettes proviennent de notre propre serveur
+        de tuiles, hébergé chez <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a>.
+        Les données cartographiques viennent d'OpenStreetMap (préparées par Protomaps), et les
+        courbes de niveau sont tracées à partir du jeu de données d'élévation ouvert « Terrain Tiles
+        ». Une requête ne porte que la tuile demandée et votre adresse IP : aucune identité, et
+        aucune position au-delà de la zone de carte affichée à l'écran. Notre serveur ne tient aucun
+        journal qui lui soit propre et ne conserve rien à votre sujet ; il met seulement les tuiles
+        de carte en cache. Les requêtes sont traitées par Cloudflare, qui héberge le serveur, selon
+        la politique de confidentialité de Cloudflare.
       </li>
       <li>
-        <strong>Données d'élévation.</strong> La vue 3D télécharge des tuiles d'élévation publiques
-        hébergées sur Amazon Web Services (le jeu de données ouvert « Terrain Tiles ») pour
-        construire le maillage du relief.
+        <strong>Autres fonds de carte.</strong> Les fonds satellite et relief, la carte drapée sur
+        la vue 3D du terrain et les cartes que vous créez pour l'impression chargent des tuiles
+        d'images depuis
+        <a href="https://www.esri.com/en-us/privacy/overview">Esri / ArcGIS Online</a>.
+      </li>
+      <li>
+        <strong>Données d'élévation.</strong> L'ombrage du relief sur la carte et la vue 3D du
+        terrain téléchargent des tuiles d'élévation publiques hébergées sur Amazon Web Services (le
+        jeu de données ouvert « Terrain Tiles »).
       </li>
       <li>
         <strong>Nommer une zone de carte téléchargée.</strong> Quand vous téléchargez une zone de
@@ -261,27 +291,26 @@
         nomme la sortie d'après le moment de la journée.
       </li>
       <li>
-        <strong>Sentiers balisés et étiquettes de carte.</strong> Activer la couche des sentiers
-        balisés charge des tuiles d'itinéraires depuis
-        <a href="https://waymarkedtrails.org/">Waymarked Trails</a>, et les noms de lieux et les
-        côtes sont dessinés à partir de tuiles vectorielles et de polices servies par
-        <a href="https://openfreemap.org/">OpenFreeMap</a>.
+        <strong>Sentiers balisés.</strong> Activer la couche des sentiers balisés charge des tuiles
+        d'itinéraires depuis <a href="https://waymarkedtrails.org/">Waymarked Trails</a>.
       </li>
       <li>
-        <strong>La boutique de cartes.</strong> L'onglet Recherche télécharge un catalogue de cartes
-        publiques gratuites depuis notre propre site (<code>inukshuk.mvxtechnologies.com</code>).
-        Cette requête ne porte ni position ni identité. Quand vous téléchargez ensuite une carte, le
-        fichier provient directement de l'éditeur qui l'héberge — le U.S. Geological Survey,
-        Ressources naturelles Canada ou Geoscience Australia — et le serveur de cet éditeur voit
-        votre adresse IP et la feuille de carte demandée.
+        <strong>Explorer (le catalogue de cartes).</strong> L'onglet Explorer télécharge un
+        catalogue de cartes publiques gratuites, ainsi que les listes d'activités, de terrains et de
+        collections qui servent à le trier, depuis notre propre site
+        (<code>inukshuk.mvxtechnologies.com</code>). Cette requête ne porte ni position ni identité
+        ; les cartes « près de vous » sont choisies sur votre appareil. Quand vous téléchargez
+        ensuite une carte, le fichier provient directement de l'éditeur qui l'héberge — le U.S.
+        Geological Survey, Ressources naturelles Canada, le U.S. Forest Service ou Geoscience
+        Australia — et le serveur de cet éditeur voit votre adresse IP et la feuille de carte
+        demandée. La collection Parcs Québec ouvre la page du parc sur
+        <a href="https://www.sepaq.com/">sepaq.com</a> dans votre navigateur, où s'applique la
+        politique de confidentialité de la Sépaq.
       </li>
       <li>
-        <strong>Strava (seulement si vous le connectez).</strong> Inukshuk peut téléverser une
-        sortie sauvegardée vers <a href="https://www.strava.com/legal/privacy">Strava</a>, et cela
-        n'arrive qu'après que vous vous êtes explicitement connecté à Strava, et seulement pour les
-        sorties que vous choisissez de téléverser. Cela envoie l'itinéraire et les statistiques de
-        cette sortie à Strava sous votre compte Strava. Si vous ne connectez jamais de compte
-        Strava, l'application ne contacte jamais Strava.
+        <strong>Strava (seulement si vous le connectez).</strong> Décrit dans sa propre section
+        ci-dessous. Si vous ne connectez jamais de compte Strava, l'application ne contacte jamais
+        Strava.
       </li>
       <li>
         <strong>Mises à jour de l'application.</strong> Au lancement, l'application demande au
@@ -294,6 +323,91 @@
         les rapports techniques sont envoyés à GitHub comme décrit ci-dessus. Ils sont mis en file
         d'attente sur votre appareil pendant que vous êtes hors ligne et envoyés au retour de la
         connexion.
+      </li>
+    </ul>
+
+    <h2>Strava</h2>
+    <p>
+      Connecter <a href="https://www.strava.com/legal/privacy">Strava</a> est facultatif et se fait
+      dans <em>Réglages → Connexions</em>. La connexion ouvre la page d'authentification de Strava
+      elle-même dans votre navigateur, où vous choisissez ce que vous autorisez : téléverser des
+      activités, lire vos activités, ou les deux. Nous ne voyons jamais votre mot de passe Strava.
+    </p>
+    <ul>
+      <li>
+        <strong>Jetons de connexion.</strong> Strava exige la clé secrète de l'application pour
+        terminer une connexion, et cette clé ne doit pas être intégrée à l'application. Le code
+        d'autorisation à usage unique issu de la connexion, puis le jeton d'actualisation qui sert à
+        renouveler l'accès, transitent donc <strong>par notre serveur de tuiles</strong>, qui ajoute
+        la clé et transmet la requête à Strava. La réponse de Strava revient directement à
+        l'application. Notre serveur n'en conserve ni n'en met en cache aucune partie. Les jetons
+        obtenus sont stockés uniquement sur votre appareil.
+      </li>
+      <li>
+        <strong>Importer vos activités.</strong> Si vous autorisez la lecture de vos activités,
+        l'application lit la liste de vos activités Strava et, pour chaque activité qu'elle importe,
+        ses données enregistrées — position, heure, altitude et fréquence cardiaque — afin de la
+        sauvegarder comme sentier sur votre appareil. Vous pouvez lancer une importation vous-même
+        et, par défaut, l'application importe aussi automatiquement les nouvelles activités quand
+        vous l'ouvrez (au plus toutes les 15 minutes) ; vous pouvez désactiver cette option avec
+        <em>Importer automatiquement les nouvelles activités</em>. Les données Strava importées sont
+        stockées uniquement sur votre appareil et ne sont montrées qu'à vous. Elles ne sont jamais
+        envoyées à nous ni à qui que ce soit.
+      </li>
+      <li>
+        <strong>Téléverser des sorties.</strong> Si vous autorisez le téléversement, vous pouvez
+        envoyer à Strava une sortie de votre choix. Cela envoie l'itinéraire et les statistiques de
+        cette sortie à Strava sous votre compte Strava. Rien n'est téléversé sans que vous le
+        demandiez.
+      </li>
+      <li>
+        <strong>Se déconnecter.</strong> <em>Déconnecter</em> révoque l'accès de l'application du
+        côté de Strava, efface les jetons de votre appareil et peut aussi supprimer tous les
+        sentiers importés de Strava. Vous pouvez également retirer Inukshuk de vos réglages Strava
+        en tout temps.
+      </li>
+    </ul>
+    <p>
+      Ce que Strava fait de vos données de son côté relève de la politique de confidentialité de
+      Strava. Inukshuk ne se connecte pas à Garmin : l'écran Connexions explique seulement comment
+      relier Garmin Connect à Strava, pour que vos activités Garmin parviennent à Inukshuk par
+      l'entremise de Strava.
+    </p>
+
+    <h2>Apple Santé et Santé Connect</h2>
+    <p>
+      Sur iOS, Inukshuk peut lire des données d'Apple Santé ; sur Android, de Santé Connect (Health
+      Connect). Les deux sont facultatifs, et l'application ne lit rien tant que vous ne l'avez pas
+      autorisée dans l'écran de permissions du système lui-même.
+    </p>
+    <ul>
+      <li>
+        <strong>Ce qui est lu.</strong> Apple Santé : vos entraînements et leurs itinéraires. Santé
+        Connect : vos séances d'exercice, leurs itinéraires d'exercice et la distance, ainsi que
+        l'accès à cet historique au-delà des 30 derniers jours pour importer des entraînements plus
+        anciens. Rien d'autre — ni fréquence cardiaque, ni sommeil, ni mensurations, ni aucune autre
+        donnée de santé.
+      </li>
+      <li>
+        <strong>Pourquoi.</strong> Uniquement pour importer ces entraînements sous forme de sentiers
+        sur votre appareil, afin que vous puissiez les voir sur vos cartes. L'accès est en lecture
+        seule : Inukshuk n'écrit jamais dans Apple Santé ni dans Santé Connect.
+      </li>
+      <li>
+        <strong>Où elles vont.</strong> Nulle part. Les données de santé et les sentiers qui en sont
+        importés restent sur votre appareil. Ils ne sont jamais envoyés à nous ni à un tiers, et ne
+        sont jamais utilisés à des fins de publicité, de marketing, d'exploration de données ni à
+        aucune autre fin que de vous montrer vos propres sentiers. L'application ne stocke pas de
+        données de santé dans iCloud ; comme le reste des données de l'application sur votre
+        téléphone, les sentiers importés peuvent faire partie de la sauvegarde de votre appareil si
+        vous avez activé les sauvegardes. Un sentier importé ne quitte votre appareil que si vous le
+        partagez ou l'exportez vous-même, ou l'envoyez à Strava.
+      </li>
+      <li>
+        <strong>Y mettre fin.</strong> Vous pouvez révoquer l'accès en tout temps — dans l'app Santé
+        ou dans <em>Réglages → Santé → Accès aux données et appareils</em> sur iOS, ou dans les
+        paramètres de Santé Connect sur Android — et supprimer les sentiers importés dans
+        l'application.
       </li>
     </ul>
 
@@ -313,6 +427,17 @@
         ailleurs. Si vous refusez cette permission, l'enregistrement fonctionne toujours pendant que
         l'application est ouverte à l'écran.
       </li>
+      <li>
+        <strong>Apple Santé (iOS, facultative) :</strong> accès en lecture aux entraînements et à
+        leurs itinéraires, pour les importer comme sentiers sur votre appareil. Inukshuk ne demande
+        aucun accès en écriture et n'enregistre jamais rien dans Santé.
+      </li>
+      <li>
+        <strong>Santé Connect (Android, facultative) :</strong> lire les séances d'exercice, lire
+        les itinéraires d'exercice, lire la distance et lire les données de plus de 30 jours — pour
+        importer vos entraînements, avec leurs itinéraires, comme sentiers sur votre appareil. Les
+        quatre sont en lecture seule.
+      </li>
     </ul>
 
     <h2>Enfants</h2>
@@ -324,11 +449,13 @@
     <p>
       Comme toutes vos cartes et traces ne vivent que sur votre appareil, vous en avez le plein
       contrôle : supprimez des éléments un à un dans l'application, révoquez la permission de
-      localisation dans les réglages de votre appareil, désactivez le signalement automatique des
-      erreurs dans les Réglages, exportez une copie de tout depuis
-      <em>Réglages → Vos données → Télécharger vos données</em>, ou désinstallez l'application pour
-      tout effacer. Hormis les rapports d'erreur techniques décrits ci-dessus, il n'existe aucune
-      copie côté serveur que nous pourrions supprimer.
+      localisation dans les réglages de votre appareil, révoquez l'accès à Apple Santé ou à Santé
+      Connect dans l'app Santé ou les paramètres de Santé Connect, déconnectez Strava dans
+      <em>Réglages → Connexions</em> (en supprimant au besoin les sentiers qui en ont été importés),
+      désactivez le signalement automatique des erreurs dans les Réglages, exportez une copie de
+      tout depuis <em>Réglages → Vos données → Télécharger vos données</em>, ou désinstallez
+      l'application pour tout effacer. Hormis les rapports d'erreur techniques décrits ci-dessus, il
+      n'existe aucune copie côté serveur que nous pourrions supprimer.
     </p>
 
     <h2>Modifications de cette politique</h2>

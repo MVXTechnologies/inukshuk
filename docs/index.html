@@ -6,16 +6,34 @@
     <title>Inukshuk — free, open-source offline trail navigation</title>
     <meta
       name="description"
-      content="Inukshuk is a free, open-source, community-driven trail navigation app. Bring your own georeferenced PDF maps, navigate offline with live GPS, and record your routes as GPX. No accounts, no ads, no tracking."
+      content="Inukshuk is a free, open-source trail navigation app: an outdoor map with contour lines that works offline, about 79,000 free official topo maps, your own georeferenced PDF maps, route recording and activity import. No account, no ads, no tracking."
     />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Inukshuk" />
+    <meta property="og:url" content="https://inukshuk.mvxtechnologies.com/" />
     <meta property="og:title" content="Inukshuk — free, open-source offline trail navigation" />
     <meta
       property="og:description"
-      content="Bring your own maps. Navigate offline. Free forever, open source, built by the community."
+      content="An outdoor map that works offline, free official topo maps and your own PDF maps. Free, open source, no account, no tracking."
     />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="./icon.png" />
-    <link rel="icon" href="./icon.png" />
+    <meta property="og:image" content="https://inukshuk.mvxtechnologies.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Inukshuk logo next to the tagline: Your maps. Your trails. Off the grid."
+    />
+    <meta property="og:locale" content="en_CA" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Inukshuk — free, open-source offline trail navigation" />
+    <meta
+      name="twitter:description"
+      content="An outdoor map that works offline, free official topo maps and your own PDF maps. Free, open source, no account, no tracking."
+    />
+    <meta name="twitter:image" content="https://inukshuk.mvxtechnologies.com/og-image.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="alternate" hreflang="en" href="https://inukshuk.mvxtechnologies.com/" />
     <link rel="alternate" hreflang="fr" href="https://inukshuk.mvxtechnologies.com/fr/" />
     <link rel="alternate" hreflang="x-default" href="https://inukshuk.mvxtechnologies.com/" />
@@ -94,7 +112,6 @@
       nav img {
         width: 34px;
         height: 34px;
-        border-radius: 9px;
       }
       nav .brand {
         font-weight: 800;
@@ -167,11 +184,12 @@
         padding: 4.5rem 0 3rem;
         text-align: center;
       }
+      /* The logo carries its own rounded corners on a transparent ground, so
+         the shadow follows its alpha rather than a CSS box. */
       .hero img.app-icon {
         width: 112px;
         height: 112px;
-        border-radius: 26px;
-        box-shadow: var(--shadow);
+        filter: drop-shadow(0 10px 22px rgba(45, 55, 64, 0.18));
       }
       .hero h1 {
         font-size: clamp(2.1rem, 6vw, 3.4rem);
@@ -903,7 +921,7 @@
     </div>
     <nav>
       <div class="wrap">
-        <img src="./icon.png" alt="Inukshuk icon" />
+        <img src="./assets/brand/logo-128.webp" alt="" width="34" height="34" />
         <span class="brand">Inukshuk</span>
         <span class="spacer"></span>
         <a class="navlink hide-sm" href="#features">Features</a>
@@ -919,7 +937,18 @@
 
     <header class="hero">
       <div class="wrap">
-        <img class="app-icon" src="./icon.png" alt="Inukshuk app icon" />
+        <img
+          class="app-icon"
+          src="./assets/brand/logo-256.webp"
+          srcset="
+            ./assets/brand/logo-128.webp 1x,
+            ./assets/brand/logo-256.webp 2x,
+            ./assets/brand/logo-384.webp 3x
+          "
+          alt="Inukshuk app icon"
+          width="112"
+          height="112"
+        />
         <h1>Your maps. Your trails.<br />Off the grid.</h1>
         <p class="tagline">
           A free, open-source trail companion that works where the signal doesn't.
@@ -972,7 +1001,7 @@
     >
       <div class="wrap">
         <h2>See it in the field</h2>
-        <p class="sub">Six screens from the app, on trails around Québec.</p>
+        <p class="sub">Seven screens from the app, on a 65 km mountain trail race in Québec.</p>
       </div>
       <div class="carousel">
         <button class="carousel-btn prev" type="button" aria-label="Previous screenshot">‹</button>
@@ -982,83 +1011,97 @@
               class="shot is-active"
               role="group"
               aria-roledescription="slide"
-              aria-label="1 of 6"
+              aria-label="1 of 7"
             >
               <div class="phone">
                 <img
-                  src="./assets/screens/01-map-live-trail.webp"
-                  alt="Your position on real terrain — with the trails you keep coming back to"
+                  src="./assets/screens/01-mountain-map-contours.webp"
+                  alt="The map screen on mountain terrain: dense contour lines, a dashed trail and a blue dot for your position"
                   width="600"
                   height="1304"
                 />
               </div>
               <figcaption>
-                Your position on real terrain — with the trails you keep coming back to
+                A map drawn for the outdoors, with contour lines on real mountain terrain
               </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="2 of 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="2 of 7">
               <div class="phone">
                 <img
-                  src="./assets/screens/02-trail-elevation-notes.webp"
-                  alt="Elevation profile, pace and heart rate, with notes pinned to the route"
+                  src="./assets/screens/02-recording-trail-run.webp"
+                  alt="Recording a trail run: the route drawn in orange behind the position dot, and a panel showing 5:04 time, 760 m distance and 10.8 km/h, with Pause and Mark buttons"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
-              <figcaption>
-                Elevation profile, pace and heart rate, with notes pinned to the route
-              </figcaption>
+              <figcaption>Record your outing, with time, distance and speed at a glance</figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="3 of 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="3 of 7">
               <div class="phone">
                 <img
-                  src="./assets/screens/03-library-folders.webp"
-                  alt="A library that groups your outings by place, with every stat in view"
+                  src="./assets/screens/03-trail-elevation-aid-stations.webp"
+                  alt="A 65 km trail race route with its elevation profile, 1,840 m of climb, and six numbered aid stations pinned along it as notes"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
               <figcaption>
-                A library that groups your outings by place, with every stat in view
+                The elevation profile of a 65 km race, with aid stations pinned along the route
               </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="4 of 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="4 of 7">
               <div class="phone">
                 <img
-                  src="./assets/screens/04-offline-download.webp"
-                  alt="Download an area before you leave the signal behind"
+                  src="./assets/screens/04-pdf-map-nord-utm.webp"
+                  alt="A georeferenced 1:20 000 PDF forest map laid over the base map, with lakes and a river around it"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
-              <figcaption>Download an area before you leave the signal behind</figcaption>
+              <figcaption>
+                Your own georeferenced PDF map, drawn right on top of the base map
+              </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="5 of 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="5 of 7">
               <div class="phone">
                 <img
-                  src="./assets/screens/05-map-maker.webp"
-                  alt="Compose your own georeferenced map at the scale you want"
+                  src="./assets/screens/05-library.webp"
+                  alt="The Library listing a PDF map shown on the map and a recorded 63 km trail with its route thumbnail"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
-              <figcaption>Compose your own georeferenced map at the scale you want</figcaption>
+              <figcaption>Your maps and recorded trails, together in one library</figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="6 of 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="6 of 7">
               <div class="phone">
                 <img
-                  src="./assets/screens/06-map-store.webp"
-                  alt="Thousands of free official topo sheets, a tap away"
+                  src="./assets/screens/06-offline-download.webp"
+                  alt="Framing an area on the map to download for offline use, with a choice of map, satellite or relief and three detail levels"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
-              <figcaption>Thousands of free official topo sheets, a tap away</figcaption>
+              <figcaption>
+                Frame an area and download it before you leave the signal behind
+              </figcaption>
+            </figure>
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="7 of 7">
+              <div class="phone">
+                <img
+                  src="./assets/screens/07-night-mode.webp"
+                  alt="The map in night red mode: dark red contours, the recorded route and a small recording pill showing 5:15 and 790 m"
+                  width="600"
+                  height="1304"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Night red mode keeps your eyes used to the dark</figcaption>
             </figure>
           </div>
         </div>
@@ -1071,55 +1114,81 @@
       <div class="wrap">
         <h2>Everything offline. Nothing tracked.</h2>
         <p class="sub">
-          Inukshuk turns your own georeferenced PDF maps into a live navigation tool — no data plan,
-          no account, no servers watching where you go.
+          A map made for the trail, the official topo maps you already trust and your own PDF maps,
+          all on your phone. No data plan, no account, no one watching where you go.
         </p>
         <div class="grid">
+          <div class="card">
+            <div class="ico">🏔️</div>
+            <h3>A map drawn for the outdoors</h3>
+            <p>
+              A clear map of the whole world with contour lines marked with their height and named
+              peaks with their elevation. Download an area and it all works with no signal.
+            </p>
+          </div>
           <div class="card">
             <div class="ico">🗺️</div>
             <h3>Bring your own maps</h3>
             <p>
-              Import georeferenced PDF maps and see your live GPS position right on them — park
-              maps, topo sheets, ski trails, anything.
+              Import georeferenced PDF maps and see your live GPS position right on them: park maps,
+              topo sheets, ski trails, anything.
             </p>
           </div>
           <div class="card">
-            <div class="ico">📡</div>
-            <h3>Works with no signal</h3>
+            <div class="ico">🧭</div>
+            <h3>Explore free topo maps</h3>
             <p>
-              Everything runs on-device. An OpenStreetMap base layer fills in when you wander off
-              the edge of your map.
+              About 79,000 free topographic maps from USGS, Natural Resources Canada, the US Forest
+              Service and Geoscience Australia. Browse them by activity or terrain, or see what
+              covers the area around you.
             </p>
           </div>
           <div class="card">
-            <div class="ico">⛰️</div>
-            <h3>Find your view</h3>
+            <div class="ico">🌲</div>
+            <h3>Parcs Québec</h3>
             <p>
-              Switch between maps, satellite imagery and topographic relief to explore the route
-              ahead.
+              In Explore, the Parcs Québec collection lists Québec’s national parks and wildlife
+              reserves, nearest first, and takes you to each one’s maps on
+              <a href="https://www.sepaq.com/">sepaq.com</a>.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">🔄</div>
+            <h3>Import your activities</h3>
+            <p>
+              Bring in your outings from Strava, Apple Health or Health Connect, or from FIT, GPX
+              and TCX files. Imported activities stay on your phone.
             </p>
           </div>
           <div class="card">
             <div class="ico">📍</div>
             <h3>Record your routes</h3>
             <p>
-              Track live time, distance and elevation gain/loss. Save and share every outing as a
-              standard GPX file.
+              Track live time, distance and elevation gain and loss. Save and share every outing as
+              a standard GPX file. A night red display saves your eyes after dark.
             </p>
           </div>
           <div class="card">
             <div class="ico">📈</div>
             <h3>Elevation profiles</h3>
             <p>
-              Every recorded trail gets a pace-and-grade profile you can scrub through, with notes
-              and photos along the way.
+              Every trail gets an elevation profile you can scrub through, with notes and photos
+              pinned along the way.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">🖨️</div>
+            <h3>Map maker</h3>
+            <p>
+              Frame any area, pick a scale and page shape, and choose which trails and waypoints go
+              on it. You get a map you can print or use in the app.
             </p>
           </div>
           <div class="card">
             <div class="ico">🔒</div>
             <h3>Private by design</h3>
             <p>
-              Your location never leaves your phone. No analytics, no ads, no account.
+              No account, no ads, no analytics. Your location never leaves your phone.
               <a href="./privacy/">Read the privacy policy →</a>
             </p>
           </div>
