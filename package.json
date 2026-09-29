@@ -3,11 +3,11 @@
   "version": "2.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@dr.pogodin/react-native-fs": "^2.40.2",
+    "@dr.pogodin/react-native-fs": "^2.40.3",
     "@dr.pogodin/react-native-static-server": "^0.28.0",
     "@expo/vector-icons": "^15.0.2",
     "@kingstinct/react-native-healthkit": "^16.0.0",
-    "@maplibre/maplibre-react-native": "^11.3.8",
+    "@maplibre/maplibre-react-native": "^11.4.0",
     "buffer": "^6.0.3",
     "expo": "~56.0.22",
     "expo-asset": "~56.0.24",
