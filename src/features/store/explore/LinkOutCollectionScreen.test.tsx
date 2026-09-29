@@ -42,7 +42,7 @@ it('lists every place nearest first, with the intro', async () => {
     'Réserve faunique des Laurentides',
     'Parc national de la Gaspésie',
   ]);
-  expect(view.getByText('National park · hiking, canoe & kayak')).toBeTruthy();
+  expect(view.getByText('National park · hiking, paddling')).toBeTruthy();
   expect(view.queryByText(/Download/)).toBeNull();
 });
 
