@@ -1,0 +1,98 @@
+# The point bubble keeps answering the map (owner report 2026-09-28):
+#   "When I click somewhere, I can't click elsewhere to make the bubble
+#    disappear (only can click waypoint) — when the waypoint is made I cannot
+#    click anywhere to make the bubble reappear."
+# Root cause: onMapPress read the tap's lngLat AFTER awaiting the camera
+# projection of the open bubble / the visible pins, by which time React Native
+# had recycled the event (nativeEvent === null) — every coordinate route was
+# dead whenever a bubble or a waypoint pin was on screen.
+#
+# ANDROID-ONLY, PIXEL-6-GEOMETRY flow (1080x2400 @ 420 dpi — the local
+# `inukshuk` AVD and CI's pixel_6 profile). Not in e2e-attempts.sh: it clears
+# app state, which the fixture flows after it depend on.
+#
+# The bubble itself is invisible to Maestro on Android (MapLibre marker
+# children carry no a11y nodes — see waypoint.yaml), so its presence is proven
+# by its Waypoint button: that button sits at a FIXED offset from the tapped
+# point (MAP_POINT_ACTION_LAYOUT: +55 dp, -31 dp = +13.4 %, -3.4 % here;
+# Maestro takes whole percentages only, and the 104x28 dp button absorbs the
+# rounding), and tapping it opens the waypoint editor ("Note"). Where no
+# bubble is open, the same tap just drops a fresh bubble and no editor appears.
+# Verified 2026-09-28: fails on the unfixed build at the (a) assert, passes
+# with the fix (animations off).
+#
+#   A = 28%,55%  -> its Waypoint button WA = 41%,52%
+#   C = 55%,35%  -> its Waypoint button WC = 68%,32%
+#   B = 55%,78%  -> a bare spot, used to close a bubble
+appId: com.inukshuk.app
+---
+- launchApp:
+    clearState: true
+    permissions:
+      location: allow
+# Android's one-time "Viewing full screen" hint can sit over the map.
+- tapOn:
+    text: 'Got it'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8139
+    longitude: -71.2082
+# Let the first fix land and the camera settle before tapping by position.
+- extendedWaitUntil:
+    visible: 'Scale.*'
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# (a) Open a bubble at A, then tap elsewhere: it must close.
+- tapOn:
+    point: '28%,55%'
+- tapOn:
+    point: '55%,78%'
+# Had it stayed open (the bug), WA is its Waypoint button and opens the editor.
+- tapOn:
+    point: '41%,52%'
+- extendedWaitUntil:
+    visible: 'Note'
+    timeout: 3000
+    optional: true
+- assertNotVisible: 'Note'
+# That tap dropped a fresh bubble at WA; close it again.
+- tapOn:
+    point: '55%,78%'
+
+# (b) Bubble at A -> its Waypoint button -> Done.
+- tapOn:
+    point: '28%,55%'
+- tapOn:
+    point: '41%,52%'
+- extendedWaitUntil:
+    visible: 'Note'
+    timeout: 10000
+- hideKeyboard
+- tapOn: 'Done'
+- extendedWaitUntil:
+    notVisible: 'Done'
+    timeout: 30000
+
+# With the new pin on screen, a tap at C must bring a bubble back: its
+# Waypoint button opens the editor again.
+- tapOn:
+    point: '55%,35%'
+- tapOn:
+    point: '68%,32%'
+- extendedWaitUntil:
+    visible: 'Note'
+    timeout: 10000
+# Discard that second, unsaved waypoint.
+- hideKeyboard
+- tapOn: 'Delete'
+- extendedWaitUntil:
+    notVisible: 'Delete'
+    timeout: 30000
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000

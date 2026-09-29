@@ -10,7 +10,10 @@ import {
 import {
   chipSurvivesHit,
   pointChipAfterBareTap,
+  readMapPress,
   routeMapTap,
+  type MapPress,
+  type MapPressEvent,
   type PointChipHit,
 } from '@core/map/mapTap';
 import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
@@ -1401,11 +1404,16 @@ export function MapScreen() {
   // `{ geometry: { coordinates } }` shape one might expect from a "feature
   // press" event. Confirmed against
   // node_modules/@maplibre/maplibre-react-native's PressEvent type.
-  const onMapPress = useCallback(
-    async (e: { nativeEvent?: { point?: [number, number]; lngLat?: [number, number] } }) => {
-      const point = e.nativeEvent?.point;
+  //
+  // The body takes a COPY of the event (readMapPress, @core/map/mapTap, in
+  // onMapPress below): React Native nulls `nativeEvent` as soon as the
+  // handler yields, and this one awaits the camera projection before it gets
+  // to `lngLat` — reading the event there killed every coordinate route while
+  // the bubble or any pin was on screen (2026-09-28).
+  const handleMapPress = useCallback(
+    async ({ point, lngLat: lngLatArr }: MapPress) => {
       const map = mapRef.current;
-      if (!point || !map) return;
+      if (!map) return;
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
@@ -1521,7 +1529,6 @@ export function MapScreen() {
       // opens the carousel (and a single non-hot tap opens inspect for a
       // shown trail) regardless of the current visibility mode/folder
       // filters/activeTrackIds; see useTrackHeat.
-      const lngLatArr = e.nativeEvent?.lngLat;
       const at =
         lngLatArr && showTrackOverlays
           ? trackHeat.heatAt(
@@ -1597,6 +1604,13 @@ export function MapScreen() {
       pointAt,
       runPointChipHit,
     ],
+  );
+  const onMapPress = useCallback(
+    (e: MapPressEvent) => {
+      const press = readMapPress(e); // synchronously, before anything awaits
+      if (press) void handleMapPress(press);
+    },
+    [handleMapPress],
   );
 
   const trailFeature = useThrottledLineFeature(points, segmentStarts);
