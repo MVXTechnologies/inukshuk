@@ -32,6 +32,9 @@ jest.mock('@data/catalogCache', () => ({
   loadCatalogShard: jest.fn(),
   loadCatalogSearchDigest: jest.fn(),
 }));
+jest.mock('@data/catalogCollections', () => ({
+  loadCatalogCollectionsRaw: jest.fn().mockResolvedValue(null),
+}));
 
 const item = (id: string, title: string, lat: number, lon: number): CatalogItem => ({
   id,
@@ -143,7 +146,7 @@ it('typing "Grand Canyon" fetches the far shard and shows the map', async () => 
 
   fetched.length = 0;
   await act(async () => {
-    view.getByPlaceholderText('Search maps').props.onChangeText('Grand Canyon');
+    view.getByLabelText('Search maps').props.onChangeText('Grand Canyon');
   });
   await flush();
 
@@ -158,7 +161,7 @@ it('never claims "no maps match" while the catalog is only partly searched', asy
   const view = await mount();
   await flush();
   await act(async () => {
-    view.getByPlaceholderText('Search maps').props.onChangeText('Grand Canyon');
+    view.getByLabelText('Search maps').props.onChangeText('Grand Canyon');
   });
   await flush();
 
@@ -171,14 +174,14 @@ it('still says "no maps match" when the catalog genuinely has none', async () =>
   const view = await mount();
   await flush();
   await act(async () => {
-    view.getByPlaceholderText('Search maps').props.onChangeText('kilimanjaro');
+    view.getByLabelText('Search maps').props.onChangeText('kilimanjaro');
   });
   await flush();
 
   expect(view.getByText('No maps match your search.')).toBeTruthy();
 });
 
-it('lands on Canadian sheets first from Québec City, Maine quads after (the ranking bug)', async () => {
+it('leads "Popular near you" with Canadian sheets from Québec City, Maine quads after', async () => {
   const maine: CatalogItem = {
     ...item('usgs-burntland', 'Burntland Pond — US Topo', 45.85, -70.3),
     sourceId: 'usgs-ustopo',
@@ -211,19 +214,11 @@ it('lands on Canadian sheets first from Québec City, Maine quads after (the ran
   const view = await mount();
   await flush();
 
-  const texts = view
-    .getAllByText(/Near you|NEAREST USGS|CanTopo 021G14|US Topo$/)
-    .map((node) => String(node.props.children));
-  expect(texts).toEqual([
-    'Near you · Canadian sources first',
-    'Canterbury — CanTopo 021G14',
-    'NEAREST USGS QUADS · ACROSS THE BORDER',
-    'Burntland Pond — US Topo',
-  ]);
-  expect(view.getByText('NRCan CanTopo')).toBeTruthy();
-  expect(view.getByText('USGS US Topo · Maine')).toBeTruthy();
-  expect(view.getByText(/^24 MB · 1\d\d km away$/)).toBeTruthy();
-  expect(view.getByText('US Topo covers the United States only.')).toBeTruthy();
+  expect(view.getByText('Popular near you')).toBeTruthy();
+  const titles = view.getAllByText(/ — /).map((node) => String(node.props.children));
+  expect(titles).toEqual(['Canterbury — CanTopo 021G14', 'Burntland Pond — US Topo']);
+  expect(view.getByText('Topographic · NRCan CanTopo · 31 MB')).toBeTruthy();
+  expect(view.getByText(/^1\d\d km$/)).toBeTruthy();
 });
 
 it('has the same Settings gear as the Library and Logbook headers', async () => {

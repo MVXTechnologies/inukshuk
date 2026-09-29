@@ -283,5 +283,5 @@ fetch their files. The first is **Parcs Québec (Sépaq)**: 37 places in
 - **Why Sépaq's files are not a source.** Sépaq distributes its georeferenced
   park PDFs through Avenza. Avenza's Map Store stopped accepting new maps
   after the Avenza–Blue Marble merger of 2026-04-07. A partnership proposal
-  is drafted in `docs/partners/sepaq-pitch-fr.md`, with an English version.
+  has been drafted for the owner (kept out of this public repo).
   Until Sépaq authorizes it in writing, we link out only.

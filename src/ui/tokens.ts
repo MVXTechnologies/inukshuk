@@ -166,6 +166,35 @@ export interface SchemeTokens {
     progress: string;
     progressTrack: string;
   };
+  /** The map explorer (#447, boards `Main/MapView/Detail/Collection.dc.html`). */
+  explore: {
+    /** "By terrain" tile grounds, and the ink on them. */
+    terrain: {
+      mountains: string;
+      water: string;
+      glacier: string;
+      coast: string;
+      forest: string;
+    };
+    terrainInk: string;
+    /** The link-out collection's badge (Parcs Québec) and its glyph. */
+    collectionBadge: string;
+    collectionBadgeInk: string;
+    /** Publisher badges, picked per source id, and their initials. */
+    sourceBadges: readonly [string, string, string, string];
+    sourceBadgeInk: string;
+    /** Explorer accent: activity glyphs and text links ("See on map"). */
+    accent: string;
+    /** Drawn map placeholder: ground and three contour inks. */
+    placeholder: string;
+    placeholderContours: readonly [string, string, string];
+    /** Explorer map: clusters (fill, ring, count), single points, the selected footprint. */
+    cluster: string;
+    clusterRing: string;
+    clusterInk: string;
+    point: string;
+    footprint: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -258,6 +287,28 @@ export const lightScheme: SchemeTokens = {
     noticeInk: '#5A2E06',
     progress: palette.sageDeep,
     progressTrack: '#E3DCCB',
+  },
+  explore: {
+    terrain: {
+      mountains: palette.sageDeep,
+      water: '#2E6E94',
+      glacier: '#4A6875',
+      coast: '#7A5C32',
+      forest: '#3F5025',
+    },
+    terrainInk: palette.surface,
+    collectionBadge: '#3F5025',
+    collectionBadgeInk: palette.sagePill,
+    sourceBadges: [palette.stone, '#3F5025', '#9B2C2C', '#8F4206'],
+    sourceBadgeInk: palette.surface,
+    accent: palette.sageDeep,
+    placeholder: '#E9E2D2',
+    placeholderContours: [palette.ochre, palette.sageDeep, palette.river],
+    cluster: palette.sageDeep,
+    clusterRing: palette.surface,
+    clusterInk: palette.surface,
+    point: palette.sageDeep,
+    footprint: palette.sageDeep,
   },
 };
 
@@ -355,6 +406,28 @@ export const darkScheme: SchemeTokens = {
     progress: '#B9C98A',
     progressTrack: '#2F3842',
   },
+  explore: {
+    terrain: {
+      mountains: '#3F5025',
+      water: '#1F4E6B',
+      glacier: '#34505C',
+      coast: '#5E4526',
+      forest: '#2E3A1F',
+    },
+    terrainInk: '#E9E4D8',
+    collectionBadge: '#2E3A1F',
+    collectionBadgeInk: palette.sagePill,
+    sourceBadges: ['#3E4852', '#2E3A1F', '#6E2020', '#6B3A10'],
+    sourceBadgeInk: '#E9E4D8',
+    accent: '#B9C98A',
+    placeholder: '#242B32',
+    placeholderContours: ['#9C7F5C', '#8A9A5B', '#3C5F78'],
+    cluster: '#4A5E2B',
+    clusterRing: '#E9E4D8',
+    clusterInk: '#F2ECE0',
+    point: '#B9C98A',
+    footprint: '#B9C98A',
+  },
 };
 
 /**
@@ -447,6 +520,28 @@ export const sunlightScheme: SchemeTokens = {
     noticeInk: palette.black,
     progress: palette.black,
     progressTrack: '#DDDDDD',
+  },
+  explore: {
+    terrain: {
+      mountains: palette.black,
+      water: palette.black,
+      glacier: palette.black,
+      coast: palette.black,
+      forest: palette.black,
+    },
+    terrainInk: palette.white,
+    collectionBadge: palette.black,
+    collectionBadgeInk: palette.white,
+    sourceBadges: [palette.black, palette.black, palette.black, palette.black],
+    sourceBadgeInk: palette.white,
+    accent: palette.black,
+    placeholder: '#F2F2F2',
+    placeholderContours: ['#8F6B3E', '#555555', '#6FA3C8'],
+    cluster: palette.black,
+    clusterRing: palette.white,
+    clusterInk: palette.white,
+    point: palette.black,
+    footprint: palette.black,
   },
 };
 
@@ -545,6 +640,28 @@ export const nightScheme: SchemeTokens = {
     noticeInk: NIGHT_INK,
     progress: NIGHT_INK,
     progressTrack: '#3A0B08',
+  },
+  explore: {
+    terrain: {
+      mountains: '#2A0503',
+      water: '#2A0503',
+      glacier: '#2A0503',
+      coast: '#2A0503',
+      forest: '#2A0503',
+    },
+    terrainInk: NIGHT_INK,
+    collectionBadge: '#3A0B08',
+    collectionBadgeInk: NIGHT_INK,
+    sourceBadges: ['#2A0503', '#2A0503', '#2A0503', '#2A0503'],
+    sourceBadgeInk: NIGHT_INK,
+    accent: NIGHT_INK,
+    placeholder: '#1A0000',
+    placeholderContours: ['#7A1C17', '#7A1C17', '#7A1C17'],
+    cluster: '#3A0B08',
+    clusterRing: NIGHT_INK,
+    clusterInk: NIGHT_INK,
+    point: NIGHT_INK,
+    footprint: NIGHT_INK,
   },
 };
 

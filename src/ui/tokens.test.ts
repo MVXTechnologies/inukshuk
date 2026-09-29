@@ -120,6 +120,24 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['pause notice icon', t.status.pausedInk, t.connect.notice, GRAPHIC],
     ['import progress on its track', t.connect.progress, t.connect.progressTrack, GRAPHIC],
     ['scope pill label', t.library.onMapInk, t.library.onMap, TEXT],
+    // Map explorer (#447).
+    ...Object.entries(t.explore.terrain).map(([name, ground]): [string, string, string, number] => [
+      `terrain tile label on ${name}`,
+      t.explore.terrainInk,
+      ground,
+      TEXT,
+    ]),
+    ['collection badge glyph', t.explore.collectionBadgeInk, t.explore.collectionBadge, GRAPHIC],
+    ...t.explore.sourceBadges.map((ground, i): [string, string, string, number] => [
+      `publisher badge initials ${i}`,
+      t.explore.sourceBadgeInk,
+      ground,
+      TEXT,
+    ]),
+    ['activity glyph on surface', t.explore.accent, t.surface, GRAPHIC],
+    ['explorer link on background', t.explore.accent, t.background, TEXT],
+    ['cluster count on cluster', t.explore.clusterInk, t.explore.cluster, TEXT],
+    ['cluster ring around cluster', t.explore.clusterRing, t.explore.cluster, GRAPHIC],
   ];
 }
 

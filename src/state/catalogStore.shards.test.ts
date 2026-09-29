@@ -552,3 +552,28 @@ it('keeps refreshed shard ownership when an old same-id load finishes', async ()
   expect(whileFresh.loadingShards).toBe(true);
   expect(useCatalogStore.getState().items.map((entry) => entry.id)).toEqual(['new']);
 });
+
+describe('ensureShardsInBounds (explorer "Search this area")', () => {
+  it('fetches only the shards reaching into the view, and reports them unavailable after', async () => {
+    await loadIndex();
+    loadShardMock.mockImplementation(async (shard) => ({
+      items: [item(`${shard.id}-a`, shard.category)],
+      fromCache: false,
+      warnings: [],
+    }));
+    // A view over Québec: both w080 shards reach in, the far-east one does not.
+    await useCatalogStore.getState().ensureShardsInBounds([-72, 46, -70, 48], null);
+    const fetchedIds = loadShardMock.mock.calls.map(([shard]) => shard.id).sort();
+    expect(fetchedIds).toEqual(['nautical-n40w080', 'topo-n40w080']);
+    expect(useCatalogStore.getState().unavailableShardIds()).toEqual(
+      new Set(['nautical-n40w080', 'topo-n40w080']),
+    );
+  });
+
+  it('respects the category', async () => {
+    await loadIndex();
+    loadShardMock.mockResolvedValue({ items: [], fromCache: false, warnings: [] });
+    await useCatalogStore.getState().ensureShardsInBounds([-72, 46, -70, 48], 'nautical');
+    expect(loadShardMock.mock.calls.map(([shard]) => shard.id)).toEqual(['nautical-n40w080']);
+  });
+});

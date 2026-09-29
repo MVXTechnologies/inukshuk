@@ -103,6 +103,11 @@ export default function RootLayout() {
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="trail3d/[id]" />
                   <Stack.Screen name="settings" />
+                  {/* The Explore tab's secondary screens (#447). */}
+                  <Stack.Screen name="explore/list" />
+                  <Stack.Screen name="explore/map" />
+                  <Stack.Screen name="explore/item/[id]" />
+                  <Stack.Screen name="explore/collection/[id]" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />
