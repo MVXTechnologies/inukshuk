@@ -16,19 +16,71 @@ import { Icon, Text, useTheme } from 'react-native-paper';
 
 export { ContourTexture };
 
-/** All · Trails · Maps · Waypoints, each with its count; `trailing` sits after the row. */
+/** One chip in the row: "Maps 2". */
+function Chip({
+  label,
+  count,
+  on,
+  onPress,
+}: {
+  label: string;
+  count: number;
+  on: boolean;
+  onPress: () => void;
+}) {
+  const t = useSchemeTokens();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: on }}
+      style={styles.chipHit}
+    >
+      <View
+        style={[
+          styles.chip,
+          on
+            ? { backgroundColor: t.library.chipOn, borderColor: t.library.chipOn }
+            : { backgroundColor: t.library.chip, borderColor: t.library.chipBorder },
+        ]}
+      >
+        {/* One Text (nested count), so the chip is ONE string: "Maps 2"
+            can never be mistaken for the "Maps" tab by a text match. */}
+        <Text style={[styles.chipLabel, { color: on ? t.library.chipOnInk : t.library.chipInk }]}>
+          {label}
+          <Text
+            style={[styles.chipCount, { color: on ? t.library.chipOnCount : t.library.chipCount }]}
+          >
+            {`\u2002${count}`}
+          </Text>
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * All · Trails · Maps · Waypoints, each with its count; `trailing` sits after
+ * the row. `extraChips` follow the type chips ("From Strava 39", #432) and
+ * select independently: while one is on, no type chip is.
+ */
 export function TypeFilterChips({
   value,
   counts,
   onChange,
   trailing,
+  extraChips = [],
+  extraValue = null,
+  onExtraChange,
 }: {
   value: LibraryTypeFilter;
   counts: Record<LibraryTypeFilter, number>;
   onChange: (next: LibraryTypeFilter) => void;
   trailing?: ReactNode;
+  extraChips?: readonly { id: string; label: string; count: number }[];
+  extraValue?: string | null;
+  onExtraChange?: (id: string) => void;
 }) {
-  const t = useSchemeTokens();
   return (
     <View style={styles.chipBar}>
       <ScrollView
@@ -39,46 +91,24 @@ export function TypeFilterChips({
         accessibilityLabel="Filter by type"
         style={styles.chipScroll}
       >
-        {LIBRARY_TYPE_FILTERS.map(({ id, label }) => {
-          const on = value === id;
-          return (
-            <Pressable
-              key={id}
-              onPress={() => onChange(id)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              style={styles.chipHit}
-            >
-              <View
-                style={[
-                  styles.chip,
-                  on
-                    ? { backgroundColor: t.library.chipOn, borderColor: t.library.chipOn }
-                    : { backgroundColor: t.library.chip, borderColor: t.library.chipBorder },
-                ]}
-              >
-                {/* One Text (nested count), so the chip is ONE string: "Maps 2"
-                    can never be mistaken for the "Maps" tab by a text match. */}
-                <Text
-                  style={[
-                    styles.chipLabel,
-                    { color: on ? t.library.chipOnInk : t.library.chipInk },
-                  ]}
-                >
-                  {label}
-                  <Text
-                    style={[
-                      styles.chipCount,
-                      { color: on ? t.library.chipOnCount : t.library.chipCount },
-                    ]}
-                  >
-                    {`\u2002${counts[id]}`}
-                  </Text>
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
+        {LIBRARY_TYPE_FILTERS.map(({ id, label }) => (
+          <Chip
+            key={id}
+            label={label}
+            count={counts[id]}
+            on={extraValue === null && value === id}
+            onPress={() => onChange(id)}
+          />
+        ))}
+        {extraChips.map(({ id, label, count }) => (
+          <Chip
+            key={id}
+            label={label}
+            count={count}
+            on={extraValue === id}
+            onPress={() => onExtraChange?.(id)}
+          />
+        ))}
       </ScrollView>
       {trailing}
     </View>

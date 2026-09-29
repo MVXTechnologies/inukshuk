@@ -151,6 +151,21 @@ export interface SchemeTokens {
     /** Contour-line texture behind the header and the empty state. */
     texture: string;
   };
+  /** Connected sources (Settings › Connections, the Import sheet and cards — #432/#435). */
+  connect: {
+    /** Strava's brand tile, and the glyph on it. */
+    brand: string;
+    onBrand: string;
+    /** The small "Strava" / "Apple Health" source mark on imported rows. */
+    mark: string;
+    markBorder: string;
+    /** The rate-limit pause notice on the progress card. */
+    notice: string;
+    noticeInk: string;
+    /** Import progress bar: fill and track. */
+    progress: string;
+    progressTrack: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -233,6 +248,16 @@ export const lightScheme: SchemeTokens = {
     onMapBorder: palette.sage,
     onMapInk: '#3D4D22',
     texture: 'rgba(45,55,64,0.07)',
+  },
+  connect: {
+    brand: '#FC4C02',
+    onBrand: palette.white,
+    mark: '#B03A00',
+    markBorder: '#F0B79A',
+    notice: '#F7EDDC',
+    noticeInk: '#5A2E06',
+    progress: palette.sageDeep,
+    progressTrack: '#E3DCCB',
   },
 };
 
@@ -320,6 +345,16 @@ export const darkScheme: SchemeTokens = {
     onMapInk: '#D6DEB8',
     texture: 'rgba(233,228,216,0.06)',
   },
+  connect: {
+    brand: '#FC4C02',
+    onBrand: palette.white,
+    mark: '#FFB08A',
+    markBorder: '#7A3A1C',
+    notice: '#33261A',
+    noticeInk: '#F2C79A',
+    progress: '#B9C98A',
+    progressTrack: '#2F3842',
+  },
 };
 
 /**
@@ -402,6 +437,16 @@ export const sunlightScheme: SchemeTokens = {
     onMapBorder: palette.black,
     onMapInk: palette.black,
     texture: 'rgba(0,0,0,0.05)',
+  },
+  connect: {
+    brand: '#FC4C02',
+    onBrand: palette.white,
+    mark: palette.black,
+    markBorder: palette.black,
+    notice: '#F2F2F2',
+    noticeInk: palette.black,
+    progress: palette.black,
+    progressTrack: '#DDDDDD',
   },
 };
 
@@ -490,6 +535,16 @@ export const nightScheme: SchemeTokens = {
     onMapBorder: NIGHT_INK,
     onMapInk: NIGHT_INK,
     texture: 'rgba(255,59,48,0.06)',
+  },
+  connect: {
+    brand: '#3A0B08',
+    onBrand: NIGHT_INK,
+    mark: NIGHT_INK,
+    markBorder: '#7A1C17',
+    notice: '#2A0503',
+    noticeInk: NIGHT_INK,
+    progress: NIGHT_INK,
+    progressTrack: '#3A0B08',
   },
 };
 

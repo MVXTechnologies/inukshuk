@@ -112,6 +112,14 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['on-map chip label', t.library.onMapInk, t.library.onMap, TEXT],
     ['muted on background (row captions)', t.inkMuted, t.background, TEXT],
     ['ink variant on background (row names)', t.inkVariant, t.background, TEXT],
+    // Connected sources (#432/#435).
+    ['Strava glyph on its tile', t.connect.onBrand, t.connect.brand, GRAPHIC],
+    ['source mark on surface', t.connect.mark, t.surface, TEXT],
+    ['source mark on background', t.connect.mark, t.background, TEXT],
+    ['pause notice text', t.connect.noticeInk, t.connect.notice, TEXT],
+    ['pause notice icon', t.status.pausedInk, t.connect.notice, GRAPHIC],
+    ['import progress on its track', t.connect.progress, t.connect.progressTrack, GRAPHIC],
+    ['scope pill label', t.library.onMapInk, t.library.onMap, TEXT],
   ];
 }
 
