@@ -466,6 +466,8 @@ export function buildStoneLayers(
     },
   ];
 
+  // Set with the contour lines below; the height labels ride the major ones.
+  let contourLabel: LayerSpecification | null = null;
   if (options.contours) {
     const c = options.contours;
     // Terrarium carries bathymetry: never draw sea-level or underwater lines
@@ -506,6 +508,28 @@ export function buildStoneLayers(
         },
       },
     );
+    // The height written along the major lines, the way a paper topo map
+    // does (owner, 2026-09-28): from z12, where the lines are far enough
+    // apart to read. First among the labels, so roads, water and place
+    // names win any collision; metres, as the contour interval is.
+    contourLabel = {
+      id: id('contour-label'),
+      type: 'symbol',
+      source: c.source,
+      'source-layer': c.sourceLayer,
+      minzoom: 12,
+      filter: ['all', aboveSea, isMajor],
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': 320,
+        'text-field': ['to-string', ['round', ['to-number', ['get', c.field], 0]]],
+        'text-font': fonts.regular,
+        'text-size': ramp([12, 10], [16, 12]),
+        'text-max-angle': 25,
+        'text-padding': 4,
+      },
+      paint: { 'text-color': scheme.contour, ...halo },
+    };
   }
 
   base.push(
@@ -680,6 +704,7 @@ export function buildStoneLayers(
   );
 
   const labels: LayerSpecification[] = [
+    ...(contourLabel ? [contourLabel] : []),
     {
       id: id('waterway-label'),
       type: 'symbol',

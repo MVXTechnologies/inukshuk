@@ -256,6 +256,7 @@ describe('buildStoneLayers', () => {
     expect(withContours.map((l) => l.id)).toEqual([
       `${STONE_LAYER_PREFIX}contour-minor`,
       `${STONE_LAYER_PREFIX}contour-major`,
+      `${STONE_LAYER_PREFIX}contour-label`,
     ]);
     for (const l of withContours) {
       expect(l).toMatchObject({ source: 'contours', 'source-layer': 'contour' });
@@ -297,5 +298,35 @@ describe('buildStoneLayers', () => {
       ['get', 'name'],
       '',
     ]);
+  });
+
+  it('writes the height along major contours only, under the other labels', () => {
+    const { labels } = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      contours: { source: 'contours', sourceLayer: 'contours', field: 'ele', levelField: 'level' },
+    });
+    const label = labels[0] as {
+      id: string;
+      minzoom?: number;
+      filter?: unknown;
+      layout?: Record<string, unknown>;
+    };
+    expect(label.id).toBe(`${STONE_LAYER_PREFIX}contour-label`);
+    expect(label.minzoom).toBe(12);
+    expect(label.filter).toEqual([
+      'all',
+      ['>', ['to-number', ['get', 'ele'], 0], 0],
+      ['==', ['to-number', ['get', 'level'], 0], 1],
+    ]);
+    expect(label.layout?.['symbol-placement']).toBe('line');
+    expect(label.layout?.['text-field']).toEqual([
+      'to-string',
+      ['round', ['to-number', ['get', 'ele'], 0]],
+    ]);
+  });
+
+  it('adds no contour label without contours', () => {
+    const { labels } = buildStoneLayers(LIGHT, { source: SOURCE });
+    expect(labels.some((l) => l.id.includes('contour'))).toBe(false);
   });
 });
