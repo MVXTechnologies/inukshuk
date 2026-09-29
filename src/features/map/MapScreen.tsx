@@ -1888,7 +1888,11 @@ export function MapScreen() {
             onTrackUserLocationChange={(e) => {
               if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
             }}
-            minZoom={1}
+            // 0, the lowest MapLibre allows: at z1 the world is ~1,000 pt wide,
+            // so a phone could never show more than part of it ("half of the
+            // world isn't visible when fully zoomed out", owner 2026-09-28).
+            // At z0 it is ~512 pt: the whole globe top to bottom.
+            minZoom={0}
             // Camera cap; the raster SOURCES cap their tile-fetch zoom lower
             // (see NATIVE_MAX_ZOOM in mapStyle.ts) so zooming past each
             // service's real data — or past an offline pack's deepest stored
