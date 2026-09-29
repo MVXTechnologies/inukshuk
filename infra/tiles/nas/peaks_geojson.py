@@ -33,8 +33,12 @@ import urllib.request
 
 USER_AGENT = 'inukshuk-tiles/1.0 (+https://inukshuk.mvxtechnologies.com)'
 DEFAULT_ENDPOINT = 'https://overpass-api.de/api/interpreter'
-QUERY_TIMEOUT_S = 900
-QUERY_MAXSIZE = 1024 * 1024 * 1024
+# Modest on purpose: public Overpass instances refuse (HTTP 504) a query
+# that asks to reserve 900 s / 1 GiB before running it — even over a tiny
+# bbox (measured 2026-09-29). Big pieces are split in four on failure
+# instead, so a small reservation always wins.
+QUERY_TIMEOUT_S = 180
+QUERY_MAXSIZE = 256 * 1024 * 1024
 PAUSE_S = float(os.environ.get('OVERPASS_PAUSE_S', '30'))
 RETRIES = 4
 MAX_SPLIT_DEPTH = 4
