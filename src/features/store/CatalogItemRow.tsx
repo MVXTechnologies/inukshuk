@@ -42,6 +42,11 @@ export interface CatalogItemRowProps {
   distanceMeters?: number | null | undefined;
   units: Units;
   onToggleExpand: () => void;
+  /**
+   * Explorer (#447): when set, tapping the row opens the map's detail screen
+   * instead of expanding the licence/coverage lines in place.
+   */
+  onOpenDetails?: (() => void) | undefined;
   onDownload: () => void;
   onUpdate: () => void;
   onOpen: () => void;
@@ -58,6 +63,7 @@ export function CatalogItemRow({
   distanceMeters,
   units,
   onToggleExpand,
+  onOpenDetails,
   onDownload,
   onUpdate,
   onOpen,
@@ -131,10 +137,14 @@ export function CatalogItemRow({
   return (
     <View>
       <Pressable
-        onPress={onToggleExpand}
+        onPress={onOpenDetails ?? onToggleExpand}
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityHint="Shows the licence and coverage"
+        {...(onOpenDetails !== undefined
+          ? { accessibilityHint: "Opens the map's details" }
+          : {
+              accessibilityState: { expanded },
+              accessibilityHint: 'Shows the licence and coverage',
+            })}
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       >
         <View

@@ -5,6 +5,7 @@ import type {
   CatalogItem,
   CatalogShardRef,
 } from '@core/catalog/schema';
+import { selectShardsInBounds, type ExploreBounds } from '@core/catalog/exploreMap';
 import { selectShards } from '@core/catalog/shard';
 import type { LatLng } from '@core/models';
 import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '@data/catalogCache';
@@ -101,6 +102,15 @@ interface CatalogState {
    * null), skipping any already loaded. Resolves once they have merged.
    */
   ensureShardsNear: (origin: LatLng | null, category: CatalogCategory | null) => Promise<void>;
+  /**
+   * The explorer map's "Search this area" (#447): fetch the shards reaching
+   * into `bounds` (all categories when `category` is null), nearest the view's
+   * centre first, under the same count and byte budgets as every other load.
+   * Call again for the next batch while the view still has unloaded shards.
+   */
+  ensureShardsInBounds: (bounds: ExploreBounds, category: CatalogCategory | null) => Promise<void>;
+  /** Shard ids the next selection must skip: loaded, in flight or cooling down. */
+  unavailableShardIds: () => Set<string>;
   /**
    * Fetch the shards that could answer `query`, nearest to `origin` first.
    * Consults the search digest (fetching it once, lazily) so a query reaches
@@ -316,6 +326,27 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
       byteBudget: SHARD_BYTE_BUDGET,
     });
     await fetchShards(set, get, wanted, generation);
+  },
+
+  ensureShardsInBounds: async (bounds, category) => {
+    const generation = catalogGeneration;
+    if (get().status === 'loading') return;
+    const { index } = get();
+    if (index === null || index.shards.length === 0) return;
+    const wanted = selectShardsInBounds(selectableShards(get()), bounds, {
+      category,
+      limit: SHARD_FETCH_LIMIT,
+      byteBudget: SHARD_BYTE_BUDGET,
+    });
+    await fetchShards(set, get, wanted, generation);
+  },
+
+  unavailableShardIds: () => {
+    const state = get();
+    const selectable = new Set(selectableShards(state).map((shard) => shard.id));
+    return new Set(
+      (state.index?.shards ?? []).filter((s) => !selectable.has(s.id)).map((s) => s.id),
+    );
   },
 
   ensureShardsForQuery: async (query, origin) => {
