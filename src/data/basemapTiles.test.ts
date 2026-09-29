@@ -2,10 +2,12 @@ import Constants from 'expo-constants';
 import {
   DEFAULT_VECTOR_CONTOURS_URL,
   DEFAULT_VECTOR_GLYPHS_URL,
+  DEFAULT_VECTOR_PEAKS_URL,
   DEFAULT_VECTOR_TILES_URL,
   vectorBasemapOption,
   vectorContoursUrl,
   vectorGlyphsUrl,
+  vectorPeaksUrl,
   vectorTilesUrl,
 } from './basemapTiles';
 
@@ -44,14 +46,26 @@ it('reads contour tiles from our Worker unless overridden', () => {
   expect(vectorContoursUrl()).toBe('http://127.0.0.1:8787/contours/{z}/{x}/{y}.mvt');
 });
 
-it('builds the style option from our hosts, contours only when asked', () => {
+it('reads summit tiles from our Worker unless overridden', () => {
+  delete extra().vectorPeaksUrl;
+  expect(vectorPeaksUrl()).toBe(DEFAULT_VECTOR_PEAKS_URL);
+  expect(DEFAULT_VECTOR_PEAKS_URL).toMatch(/\/peaks\/\{z\}\/\{x\}\/\{y\}\.mvt$/);
+  extra().vectorPeaksUrl = 'http://127.0.0.1:8787/peaks/{z}/{x}/{y}.mvt';
+  expect(vectorPeaksUrl()).toBe('http://127.0.0.1:8787/peaks/{z}/{x}/{y}.mvt');
+  extra().vectorPeaksUrl = '';
+  expect(vectorPeaksUrl()).toBe(DEFAULT_VECTOR_PEAKS_URL);
+});
+
+it('builds the style option from our hosts, summits always, contours only when asked', () => {
   delete extra().vectorTilesUrl;
   delete extra().vectorGlyphsUrl;
   delete extra().vectorContoursUrl;
+  delete extra().vectorPeaksUrl;
   expect(vectorBasemapOption(true, false)).toEqual({
     tiles: [DEFAULT_VECTOR_TILES_URL],
     dark: true,
     glyphs: DEFAULT_VECTOR_GLYPHS_URL,
+    peaks: DEFAULT_VECTOR_PEAKS_URL,
   });
   expect(vectorBasemapOption(false, true).contours).toBe(DEFAULT_VECTOR_CONTOURS_URL);
 });

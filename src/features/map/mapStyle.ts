@@ -61,6 +61,8 @@ export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : '
 const PROTOMAPS_ATTRIBUTION = '© OpenStreetMap contributors · Protomaps';
 /** Source id of the served contour tiles on the vector base map. */
 export const VECTOR_CONTOURS_SOURCE = 'basemap-contours';
+/** Source id of our worldwide named-summits tiles on the vector base map. */
+export const VECTOR_PEAKS_SOURCE = 'basemap-peaks';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
 export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
@@ -316,6 +318,11 @@ export interface OsmStyleOptions {
     glyphs?: string;
     /** Contour-line vector tiles (our Worker); unset = no contour layers. */
     contours?: string;
+    /**
+     * Named-summit vector tiles (our Worker, `infra/tiles/nas/peaks.sh`);
+     * unset = Protomaps' own peaks, which only appear from z13.
+     */
+    peaks?: string;
   };
   marineChart?: {
     wmsFallback: boolean;
@@ -534,6 +541,9 @@ export function buildOsmStyle(
                 },
               }
             : {}),
+          ...(options.vectorBasemap.peaks
+            ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
+            : {}),
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -554,6 +564,18 @@ export function buildOsmStyle(
         // Generated to z14; the lines overzoom cleanly past it.
         maxzoom: 14,
         attribution: 'Elevation: Mapzen Terrain Tiles',
+      };
+    }
+    if (options.vectorBasemap.peaks) {
+      // OSM data, already credited by the base map's attribution.
+      style.sources[VECTOR_PEAKS_SOURCE] = {
+        type: 'vector',
+        tiles: [options.vectorBasemap.peaks],
+        // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
+        // z12 (the ladder's last rung), so deeper tiles would be copies —
+        // MapLibre overzooms z12 instead, and packs store fewer tiles.
+        minzoom: 5,
+        maxzoom: 12,
       };
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;

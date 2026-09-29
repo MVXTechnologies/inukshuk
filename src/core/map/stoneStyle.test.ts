@@ -3,9 +3,10 @@ import type { LayerSpecification } from '@maplibre/maplibre-react-native';
 // The reference validator ships with maplibre-react-native (its style-spec
 // dependency). It rejects what the TS types can't see, e.g. two zoom curves
 // in one expression — which the native renderer drops silently.
-import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
+import { createExpression, validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import {
   buildStoneLayers,
+  elevationLabel,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
   STONE_LAYER_PREFIX,
@@ -52,6 +53,7 @@ const DARK: StoneBasemapScheme = {
 };
 
 const SOURCE = 'protomaps';
+const PEAKS = { source: 'peaks', sourceLayer: 'peaks' };
 const CONTOURS = {
   source: 'contours',
   sourceLayer: 'contour',
@@ -119,6 +121,7 @@ describe('buildStoneLayers', () => {
       source: SOURCE,
       language: 'fr',
       contours: CONTOURS,
+      peaks: PEAKS,
     });
     const errors = validateStyleMin({
       version: 8,
@@ -126,6 +129,7 @@ describe('buildStoneLayers', () => {
       sources: {
         [SOURCE]: { type: 'vector', tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
         contours: { type: 'vector', tiles: ['https://contours.example/{z}/{x}/{y}.pbf'] },
+        peaks: { type: 'vector', tiles: ['https://peaks.example/{z}/{x}/{y}.pbf'] },
       },
       layers: [...base, ...labels],
     });
@@ -328,5 +332,80 @@ describe('buildStoneLayers', () => {
   it('adds no contour label without contours', () => {
     const { labels } = buildStoneLayers(LIGHT, { source: SOURCE });
     expect(labels.some((l) => l.id.includes('contour'))).toBe(false);
+  });
+
+  const peakOf = (layers: LayerSpecification[]) =>
+    layers.find((l) => l.id === `${STONE_LAYER_PREFIX}peak`) as
+      (LayerSpecification & { layout: Record<string, unknown>; filter?: unknown }) | undefined;
+
+  it('labels peaks from our summit tiles from z5 when a peaks source is configured', () => {
+    const { labels } = buildStoneLayers(LIGHT, { source: SOURCE, peaks: PEAKS });
+    const peak = peakOf(labels);
+    expect(peak).toMatchObject({ source: 'peaks', 'source-layer': 'peaks', minzoom: 5 });
+    // The tiles hold only named summits, each from the zoom its height earns.
+    expect(peak?.filter).toBeUndefined();
+    // Higher summits win collisions.
+    expect(peak?.layout['symbol-sort-key']).toEqual([
+      '-',
+      0,
+      ['to-number', ['coalesce', ['get', 'ele'], 0], 0],
+    ]);
+    // Exactly one peak layer: Protomaps' own peaks would duplicate ours at z13+.
+    expect(
+      labels.filter((l) => (l as { 'source-layer'?: string })['source-layer'] === 'pois'),
+    ).toHaveLength(1);
+    expect(labels.filter((l) => l.id.includes('peak'))).toHaveLength(1);
+  });
+
+  it("falls back to Protomaps' peaks (z13+ data) without a peaks source", () => {
+    const peak = peakOf(buildStoneLayers(LIGHT, { source: SOURCE }).labels);
+    expect(peak).toMatchObject({ source: SOURCE, 'source-layer': 'pois', minzoom: 11 });
+    expect(JSON.stringify(peak?.layout['text-field'])).toContain('"elevation"');
+  });
+
+  it('draws peaks under the place labels, so towns keep their names', () => {
+    const ids = buildStoneLayers(LIGHT, { source: SOURCE, peaks: PEAKS }).labels.map((l) => l.id);
+    const peak = ids.indexOf(`${STONE_LAYER_PREFIX}peak`);
+    for (const place of ['place-village', 'place-town', 'place-city']) {
+      expect(ids.indexOf(`${STONE_LAYER_PREFIX}${place}`)).toBeGreaterThan(peak);
+    }
+  });
+
+  it('sets the name in bold over the height, in the scheme ink', () => {
+    const peak = peakOf(buildStoneLayers(DARK, { source: SOURCE, peaks: PEAKS }).labels);
+    const field = peak?.layout['text-field'] as unknown[];
+    expect(field[0]).toBe('format');
+    expect(field[2]).toEqual({ 'text-font': ['literal', STONE_FONTS_ATKINSON.bold] });
+    expect(field[3]).toEqual(['case', ['has', 'ele'], ['concat', '\n', elevationLabel('ele')], '']);
+    expect(field[4]).toEqual({ 'font-scale': 0.85 });
+    expect((peak?.paint as Record<string, unknown>)['text-color']).toBe(DARK.ink);
+  });
+});
+
+describe('elevationLabel', () => {
+  const evaluate = (properties: Record<string, unknown>): unknown => {
+    const parsed = createExpression(elevationLabel('ele'), 'layers[0].layout.text-field');
+    if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+    return parsed.value.evaluate({ zoom: 10 }, {
+      type: 'Point',
+      properties,
+    } as unknown as Parameters<typeof parsed.value.evaluate>[1]);
+  };
+
+  it.each([
+    [808, '808 m'],
+    [4, '4 m'],
+    [1000, '1\u2009000 m'],
+    [1005, '1\u2009005 m'],
+    [1234, '1\u2009234 m'],
+    [1299.6, '1\u2009300 m'],
+    [8849, '8\u2009849 m'],
+    [-12, '-12 m'],
+  ])('%s → %j', (ele, text) => {
+    expect(evaluate({ ele })).toBe(text);
+  });
+
+  it('is empty without a height', () => {
+    expect(evaluate({})).toBe('');
   });
 });

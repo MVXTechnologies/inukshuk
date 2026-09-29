@@ -14,6 +14,8 @@ phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ 
 | -------------------------------- | -------------------------------------------------- |
 | `/basemap/{z}/{x}/{y}.mvt`       | vector tile (gzip), z0–15; 204 where there is none |
 | `/basemap.json`                  | TileJSON                                           |
+| `/peaks/{z}/{x}/{y}.mvt`         | named summits (gzip), z5–12, from `peaks.pmtiles`  |
+| `/contours/{z}/{x}/{y}.mvt`      | contour lines, generated on demand from DEM tiles  |
 | `/fonts/{fontstack}/{range}.pbf` | MapLibre glyphs (Atkinson Hyperlegible Next)       |
 
 Coverage (`nas/pieces.json`): **the whole world** (land between 60° S and 84° N) as 20 regional
@@ -59,12 +61,65 @@ bbox touches it; pieces never overlap.
    Uploads go through the Worker (`nas/upload.py`, token in `~/inukshuk-tiles/.upload-token`),
    so no R2 S3 keys are needed.
 
+## Peaks (named summits)
+
+Protomaps only puts peaks in its `pois` layer from **z13** (Mont Sainte-Anne, 808 m, first appears
+in z13 tiles), so the big summits were nameless at the zooms where you plan a trip. `nas/peaks.sh`
+builds our own worldwide `peaks.pmtiles` from OpenStreetMap and the app's `stone-peak` layer reads
+it (source `basemap-peaks`, `src/features/map/mapStyle.ts`), labelled "Name / 1 234 m".
+
+1. **Overpass**: `node["natural"~"^(peak|volcano)$"]["name"](s,w,n,e); out qt;` once per
+   `pieces.json` bbox (24 queries), `[out:json][timeout:900][maxsize:1 GiB]`.
+2. **`nas/peaks_geojson.py`** (stdlib): GeoJSONSeq with `name` (+ `name:en`/`name:fr` when they
+   differ), `ele` (integer metres parsed from "1234", "1,234 m", "4000ft", "~1200" …; garbage
+   dropped), `kind`, deduplicated by OSM id, and a per-feature `tippecanoe.minzoom`:
+
+   | elevation  | ≥ 4000 m | ≥ 3000 | ≥ 2000 | ≥ 1500 | ≥ 1000 | ≥ 500 | > 0 | unknown |
+   | ---------- | -------- | ------ | ------ | ------ | ------ | ----- | --- | ------- |
+   | first zoom | 5        | 6      | 7      | 8      | 9      | 10    | 11  | 12      |
+
+   An OSM `prominence` ≥ 500 m moves a peak one zoom earlier, ≥ 1500 m two (never before z5).
+   Tests: `python3 -m unittest infra/tiles/nas/test_peaks_geojson.py`.
+
+3. **tippecanoe** 2.79.0 (felt), built once on the NAS from its checksum-pinned release tarball
+   (felt publishes no image): `-Z5 -z12 -r1 --no-feature-limit --no-tile-size-limit`, so every
+   summit is in every tile from its own minzoom and nothing is thinned or shed from a crowded tile
+   (the Alps at z7, the densest tile, is ~75 KB gzipped). z12 is the last rung of the ladder, so
+   deeper tiles would only be copies; MapLibre overzooms z12.
+4. **Upload** as `peaks.pmtiles` with `upload.py` — only if the count is ≥ `PEAKS_MIN_FEATURES`
+   (400,000; OSM has ~700k named summits) and not more than 30 % below the last run's
+   (`work/peaks/count`).
+
+Run by hand (after the basemap refresh, or on its own):
+
+```sh
+~/inukshuk-tiles/infra/nas/peaks.sh                 # ~1–2 h, nearly all of it Overpass
+PEAKS_RESUME=1 ~/inukshuk-tiles/infra/nas/peaks.sh  # keep the pieces an interrupted run fetched
+OVERPASS_URL=https://overpass.private.coffee/api/interpreter ~/inukshuk-tiles/infra/nas/peaks.sh
+```
+
+Disk: < 1 GB in `work/peaks/` at peak (raw Overpass JSON ~150 MB, GeoJSONSeq ~130 MB, the archive
+~80–150 MB — a Swiss sample of 14.7k summits made 1.9 MB); the first run also builds tippecanoe
+(~5 min, ~0.5 GB of image and build cache). The monthly
+`scheduler.sh` runs it after `refresh.sh`; either can fail without stopping the other, and the
+previous month's archive stays live.
+
+**Overpass etiquette**: one query at a time, a descriptive User-Agent
+(`inukshuk-tiles/1.0 (+https://inukshuk.mvxtechnologies.com)`), 30 s between queries, exponential
+backoff on 429/504, and a bbox Overpass can't answer (timeout / out of memory) is split in four,
+up to four times. Once a month is well within the public instance's fair use.
+
+**Attribution**: summits are OSM data (ODbL), covered by the base map's existing
+"© OpenStreetMap contributors" credit; the archive carries the same attribution.
+
 ## Check it
 
 ```sh
 curl -sI https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap/14/4950/5775.mvt   # 200, gzip
 curl -s  https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/basemap.json | head -c 200
 curl -sI "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/fonts/Atkinson%20Hyperlegible%20Next%20Regular/0-255.pbf"
+curl -sI https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/peaks/7/66/45.mvt        # 200, gzip (the Alps)
+curl -s  https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/peaks.json | head -c 300
 ```
 
 Then in the app: `VECTOR_BASEMAP_ENABLED = true` (`src/core/features/flags.ts`) and, once the
@@ -93,5 +148,5 @@ npx wrangler dev --port 8787
 
 ## Licences
 
-Map data © OpenStreetMap contributors (ODbL), processed by Protomaps (the app credits
+Map data (base map and summits) © OpenStreetMap contributors (ODbL), processed by Protomaps (the app credits
 "© OpenStreetMap · Protomaps"). Atkinson Hyperlegible Next: SIL OFL 1.1.

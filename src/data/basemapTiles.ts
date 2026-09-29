@@ -46,18 +46,33 @@ export function vectorContoursUrl(): string {
 }
 
 /**
- * The `vectorBasemap` style option for our host (tiles, Atkinson glyphs and,
- * when `withContours`, the served contour tiles) — one place for the main
- * map, the trail viewer and offline packs.
+ * Named summits (OSM natural=peak|volcano), one worldwide archive built
+ * monthly on the NAS (`infra/tiles/nas/peaks.sh`) and served by the same
+ * Worker — Protomaps only carries peaks from z13.
+ */
+export const DEFAULT_VECTOR_PEAKS_URL = `${TILE_HOST}/peaks/{z}/{x}/{y}.mvt`;
+
+/** The summit tile template this build reads (build-time override or ours). */
+export function vectorPeaksUrl(): string {
+  const value: unknown = Constants.expoConfig?.extra?.vectorPeaksUrl;
+  return typeof value === 'string' && value !== '' ? value : DEFAULT_VECTOR_PEAKS_URL;
+}
+
+/**
+ * The `vectorBasemap` style option for our host (tiles, Atkinson glyphs, the
+ * named summits and, when `withContours`, the served contour tiles) — one
+ * place for the main map, the trail viewer and offline packs (a pack stores
+ * every source of the style it downloads through, so the summits come along).
  */
 export function vectorBasemapOption(
   dark: boolean,
   withContours: boolean,
-): { tiles: string[]; dark: boolean; glyphs?: string; contours?: string } {
+): { tiles: string[]; dark: boolean; glyphs?: string; contours?: string; peaks: string } {
   const glyphs = vectorGlyphsUrl();
   return {
     tiles: [vectorTilesUrl()],
     dark,
+    peaks: vectorPeaksUrl(),
     ...(glyphs !== null ? { glyphs } : {}),
     ...(withContours ? { contours: vectorContoursUrl() } : {}),
   };

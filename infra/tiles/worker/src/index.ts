@@ -2,6 +2,8 @@
  * Inukshuk tile server: a Cloudflare Worker in front of an R2 bucket.
  *
  *   GET /{archive}/{z}/{x}/{y}.mvt        vector tile from {archive}.pmtiles
+ *                                         (/basemap/… via basemap.index.json pieces,
+ *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
  *   GET /fonts/{fontstack}/{range}.pbf    MapLibre glyphs (static objects)
  *
