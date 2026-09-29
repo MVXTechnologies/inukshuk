@@ -11,6 +11,10 @@ the app version before that); native changes require a new store build. See
 
 ## [Unreleased]
 
+### Changed
+
+- New app icon: the redrawn Inukshuk logo.
+
 ## [2.0.1] - 2026-09-29
 
 Bring your activities in.

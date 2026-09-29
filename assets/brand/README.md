@@ -1,28 +1,34 @@
 # Brand masters
 
-Source artwork for the Inukshuk icon, splash and loader. Marc approved it (the
-compact faceted granite figure standing on his landscape). **Don't edit the
-derived PNGs in `assets/` by hand.** Change a master here, then run
-`python3 scripts/brand/build-icons.py --preview /tmp/icons.png`, look at the
-preview sheet, and commit the regenerated files.
+The app icon and splash come from the redrawn Inukshuk logo in
+`assets/branding/` (vector source, see its README). Marc approved
+`inukshuk-logo-square.png` as the icon. **Don't edit the derived PNGs in
+`assets/` by hand.** Change the SVGs in `assets/branding/`, then run:
 
-| File                                                    | What it is                                                                                                                   |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `figure-compact.svg`                                    | The figure as vector art, in a 784 × 870 frame: five stones, each clipped to its outline, with flat facet fills.             |
-| `stone-compact-{head,arm,torso,leg-left,leg-right}.svg` | Each stone alone, in its own box. The loader's path data (`src/ui/components/inukshukStones.ts`) is copied from these files. |
-| `stones-compact.json`                                   | Each stone's `x, y, w, h` inside the 784 × 870 figure frame.                                                                 |
-| `figure-compact@2x.png`                                 | A 1568 × 1740 RGBA raster of `figure-compact.svg`. The icon script composites this.                                          |
-| `landscape-1024.png`                                    | The landscape on its own, 1024², corners filled because the OS masks them.                                                   |
+```sh
+scripts/brand/render-masters.sh                               # SVG -> PNG masters (headless Chrome)
+python3 scripts/brand/build-icons.py --preview /tmp/icons.png # every icon/splash output
+```
+
+Look at the preview sheet, then commit the regenerated files.
+
+| File                                                    | What it is                                                                                                                                  |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `background-1024.png`                                   | `inukshuk-background.svg` (the landscape alone) rendered at 1024², full-bleed. Used for the Android adaptive background.                    |
+| `mark@2x.png`                                           | `inukshuk-mark.svg` (the charcoal inukshuk alone) rendered at 2x its 506 × 582.5 box, 1012 × 1165 RGBA. Used for the foreground and splash. |
+| `figure-compact.svg`                                    | The previous compact faceted figure. It is no longer in the icon, but it is still the source of the in-app loader.                          |
+| `stone-compact-{head,arm,torso,leg-left,leg-right}.svg` | Each stone of that figure alone. The loader's path data (`src/ui/components/inukshukStones.ts`) is copied from these files.                 |
+| `stones-compact.json`                                   | Each stone's `x, y, w, h` inside the 784 × 870 figure frame (loader layout).                                                                |
 
 ## How each output is derived (`scripts/brand/build-icons.py`, PIL + numpy)
 
-- **`assets/icon.png`**: the landscape, a soft contact shadow, then the figure at 500 px tall, centred with its box centre at y = 556. It is flattened to RGB because the App Store rejects icons with alpha. It matches the approved `icon-compact-v3.png` to within resampling noise.
-- **`android-icon-background.png`**: the landscape scaled to 72/108 of the canvas. That way the launcher's visible viewport shows the same picture as the iOS icon. The 18 dp parallax margin is filled with mirrored landscape.
-- **`android-icon-foreground.png`**: the figure plus contact shadow, scaled by the same 72/108, on transparency. The script asserts that it stays inside the 66 dp safe circle.
+- **`assets/icon.png`**: `assets/branding/inukshuk-logo-square.png` itself, flattened to RGB because the App Store rejects icons with alpha. iOS masks the corners.
+- **`android-icon-background.png`**: the landscape scaled to 72/108 of the canvas. That way the launcher's visible viewport shows the same picture as the iOS icon under any mask (circle, squircle). The 18 dp parallax margin is filled with mirrored landscape.
+- **`android-icon-foreground.png`**: the mark at the same 72/108 scale and at its exact position in the logo, on transparency. The script asserts that it stays inside the 66 dp safe circle.
 - **`android-icon-monochrome.png`**: the same silhouette in one opaque colour, for Android 13+ themed icons. The launcher tints it.
-- **`splash-icon.png` / `splash-icon-dark.png`**: the figure alone on transparency, sized so it clears Android 12's circular splash mask when `imageWidth` is 200. The dark variant lifts the stones to the _night tone_: each channel becomes 60 + 1.05·c, which turns #273037 into #656E76. It sits on `#13171B`. `InukshukLoader` uses the same transform on dark surfaces.
+- **`splash-icon.png` / `splash-icon-dark.png`**: the mark alone on transparency, sized so it clears Android 12's circular splash mask when `imageWidth` is 200. The dark variant lifts the stones to the _night tone_: each channel becomes 60 + 1.05·c, which turns #283337 into #667276. It sits on `#13171B`.
 - **`favicon.png`** (48²) and **`store/play/icon-512.png`** (512², RGB) are downscaled from `icon.png`.
 
-`figure-compact@2x.png` is the only step that PIL can't do. To regenerate it after editing the SVG, render it headless: with Playwright + Chromium, set the viewport and the SVG `width`/`height` to 1568 × 1740 and take a screenshot with `omitBackground: true`.
+`render-masters.sh` is the only step that PIL can't do. It renders each SVG in headless Chrome on a transparent page at an exact pixel size.
 
-`assets/icon-source.png` is the previous painted logo. It stays because `src/ui/theme.ts` documents its palette as sampled from that file.
+`assets/icon-source.png` is the older painted logo. It stays because `src/ui/theme.ts` documents its palette as sampled from that file.
