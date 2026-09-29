@@ -52,6 +52,7 @@ import { notePreview, sortWaypointsNewestFirst } from '@core/library/waypoints';
 import { space, target } from '@ui/tokens';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { waypointIconGlyph } from '@core/library/waypointIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ElevationProfile } from '../common/components/ElevationProfile';
@@ -1169,17 +1170,7 @@ export function LibraryScreen() {
       />
     </View>
   ) : (
-    <View style={styles.header}>
-      <Text
-        accessibilityRole="header"
-        numberOfLines={1}
-        // 360 dp phones: shrink a little rather than truncate "Library".
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
-        style={[styles.title, { color: tokens.ink }]}
-      >
-        Library
-      </Text>
+    <ScreenHeader title="Library">
       {!libraryEmpty && (
         <Pressable
           onPress={() => setOrganizing((o) => !o)}
@@ -1213,16 +1204,7 @@ export function LibraryScreen() {
       )}
       {/* Import is a header "+" menu: nothing floats over the list. */}
       {importMenu}
-      {/* Settings left the tab bar (revamp decision 6): a gear here and in
-          the Logbook header, plus a row in the map's "+" sheet. */}
-      <IconButton
-        icon="cog-outline"
-        iconColor={tokens.ink}
-        style={styles.headerButton}
-        onPress={() => router.push('/settings')}
-        accessibilityLabel="Settings"
-      />
-    </View>
+    </ScreenHeader>
   );
 
   return (

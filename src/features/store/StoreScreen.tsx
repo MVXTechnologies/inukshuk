@@ -26,7 +26,6 @@ import {
 } from 'react-native';
 import {
   ActivityIndicator,
-  Appbar,
   Button,
   Chip,
   Icon,
@@ -36,6 +35,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { radius, space, target } from '@ui/tokens';
@@ -477,9 +477,9 @@ export function StoreScreen() {
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
       <HeaderContours />
-      <Appbar.Header style={{ backgroundColor: 'transparent' }}>
-        {browsing && <Appbar.BackAction onPress={leaveList} />}
-        <Appbar.Content
+      {/* The shared tab header: same title and gear position as Library and Logbook. */}
+      <View style={{ paddingTop: insets.top }}>
+        <ScreenHeader
           title={
             browsing && category !== null
               ? CATALOG_CATEGORY_LABELS[category]
@@ -487,15 +487,9 @@ export function StoreScreen() {
                 ? 'All maps'
                 : 'Explore'
           }
-          titleStyle={browsing ? undefined : styles.screenTitle}
+          onBack={browsing ? leaveList : undefined}
         />
-        {/* Same gear as the Library and Logbook headers (Settings is not a tab). */}
-        <Appbar.Action
-          icon="cog-outline"
-          onPress={() => router.push('/settings')}
-          accessibilityLabel="Settings"
-        />
-      </Appbar.Header>
+      </View>
 
       <View
         style={[
@@ -641,7 +635,6 @@ export function StoreScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
   search: {
     marginHorizontal: space.lg,
     marginTop: 2,

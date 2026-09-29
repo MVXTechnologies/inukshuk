@@ -18,7 +18,9 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Appbar, Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text, useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { ActivityTypeChips } from './ActivityTypeChips';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
 import { DistanceChart } from './DistanceChart';
@@ -42,6 +44,7 @@ export function DashboardScreen() {
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const tracks = useLibraryStore((s) => s.tracks);
   const customCategories = useLibraryStore((s) => s.customCategories);
   const units = useSettingsStore((s) => s.units);
@@ -124,17 +127,12 @@ export function DashboardScreen() {
     return tracks.filter((t) => ids.has(t.id));
   }, [dayPick, tracks]);
 
-  // Logbook header (the old Dashboard): Settings left the tab bar, so its
-  // gear lives here and in the Library header (revamp decision 6).
+  // Logbook header (the old Dashboard): the shared tab header, so its title
+  // and Settings gear sit exactly where the Library's and Explore's do.
   const header = (
-    <Appbar.Header style={{ backgroundColor: 'transparent' }}>
-      <Appbar.Content title="Logbook" titleStyle={styles.screenTitle} />
-      <Appbar.Action
-        icon="cog-outline"
-        onPress={() => router.push('/settings')}
-        accessibilityLabel="Settings"
-      />
-    </Appbar.Header>
+    <View style={{ paddingTop: insets.top }}>
+      <ScreenHeader title="Logbook" />
+    </View>
   );
 
   if (!hasAnyActivity) {
@@ -238,7 +236,6 @@ export function DashboardScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.3 },
   content: { paddingTop: 2, paddingBottom: space.xl },
   top: { paddingHorizontal: space.lg, gap: 10 },
   caps: { fontSize: 12, lineHeight: 16, fontWeight: '800', letterSpacing: 1, marginTop: 4 },
