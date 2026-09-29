@@ -13,6 +13,8 @@ import {
   pointItemIdOf,
   selectShardsInBounds,
   shardsInBounds,
+  EXPLORE_SHEET_FRACTION,
+  itemsInSheetView,
   trimBoundsBottom,
 } from './exploreMap';
 import type { CatalogBbox, CatalogItem, CatalogShardRef } from './schema';
@@ -138,6 +140,48 @@ describe('trimBoundsBottom', () => {
   it('drops the part of the view under the sheet', () => {
     expect(trimBoundsBottom([-72, 46, -70, 48], 0.25)).toEqual([-72, 46.5, -70, 48]);
     expect(trimBoundsBottom([-72, 46, -70, 48], 0)).toEqual([-72, 46, -70, 48]);
+  });
+});
+
+describe('itemsInSheetView (#459 flicker)', () => {
+  // A still camera straddling the edge of the mapped ground: the only maps are
+  // in the bottom strip of the view, which the full sheet covers.
+  const bounds: CatalogBbox = [-72, 46, -70, 48];
+  const low = [
+    item('low-1', [-71.1, 46.2, -70.9, 46.4]),
+    item('low-2', [-71.6, 46.3, -71.4, 46.5]),
+  ];
+  const high = item('high', [-71.1, 47.6, -70.9, 47.8]);
+
+  // The old sheet: sized by its content (header only when empty, up to the
+  // max share with rows), and "in this area" trimmed by that measured size.
+  const contentSizedFraction = (count: number) => (count === 0 ? 0.08 : EXPLORE_SHEET_FRACTION);
+
+  it('the content-sized sheet fed its count back into itself and oscillated', () => {
+    let fraction = EXPLORE_SHEET_FRACTION;
+    const counts: number[] = [];
+    for (let frame = 0; frame < 6; frame += 1) {
+      const count = itemsInBounds(low, trimBoundsBottom(bounds, fraction)).length;
+      counts.push(count);
+      fraction = contentSizedFraction(count);
+    }
+    expect(counts).toEqual([0, 2, 0, 2, 0, 2]);
+  });
+
+  it('is a fixed point for a still camera: re-rendering never changes the answer', () => {
+    for (const items of [low, [...low, high], [high], []]) {
+      const first = itemsInSheetView(items, bounds).map((i) => i.id);
+      for (let frame = 0; frame < 6; frame += 1) {
+        expect(itemsInSheetView(items, bounds).map((i) => i.id)).toEqual(first);
+      }
+    }
+  });
+
+  it('counts only what the fixed sheet leaves visible', () => {
+    expect(itemsInSheetView(low, bounds)).toEqual([]);
+    expect(itemsInSheetView([...low, high], bounds).map((i) => i.id)).toEqual(['high']);
+    // A caller may pass a fraction, but it is a constant, not the result's size.
+    expect(itemsInSheetView(low, bounds, 0).map((i) => i.id)).toEqual(['low-1', 'low-2']);
   });
 });
 

@@ -233,6 +233,31 @@ export function trimBoundsBottom(bounds: ExploreBounds, fraction: number): Explo
 }
 
 /**
+ * Share of the screen the map view's list sheet covers. It is a constant on
+ * purpose (#459): the sheet used to size itself to its content and "in this
+ * area" was trimmed by that measured height — but the content IS the in-view
+ * list, so the count fed back into its own input. With the view straddling
+ * mapped and empty ground, 0 maps collapsed the sheet, the uncovered strip
+ * brought clusters into view, the grown sheet hid them again, and the sheet
+ * flickered between the two every few frames with the camera still.
+ */
+export const EXPLORE_SHEET_FRACTION = 0.42;
+
+/**
+ * The maps "in this area" of the map view: loaded items whose footprint centre
+ * is on screen above the list sheet. The trim is the sheet's fixed share of
+ * the screen, never anything derived from the result, so the answer for a
+ * given camera is a fixed point — it cannot oscillate.
+ */
+export function itemsInSheetView(
+  items: readonly CatalogItem[],
+  bounds: ExploreBounds,
+  sheetFraction: number = EXPLORE_SHEET_FRACTION,
+): CatalogItem[] {
+  return itemsInBounds(items, trimBoundsBottom(bounds, sheetFraction));
+}
+
+/**
  * Where the map view should open: a box around the user and the `count`
  * nearest maps (by footprint centre), so the first screen shows clusters
  * instead of an empty map with the nearest sheets just off-screen. Null when
