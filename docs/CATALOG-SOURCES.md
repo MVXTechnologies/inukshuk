@@ -1,6 +1,6 @@
 # World catalog — sources and licence verdicts
 
-Verified live on **2026-08-10**; CanTopo re-crawled **2026-09-02**. The test every source must pass:
+Verified live on **2026-08-10**; CanTopo re-crawled **2026-09-02**; FSTopo added **2026-09-29**. The test every source must pass:
 
 > We never rehost. The manifest points at the publisher's own download URL and
 > the phone fetches from them directly. So: does the licence permit a
@@ -19,8 +19,10 @@ turns out to be the binding constraint on marine charts (§2).
 | **USGS US Topo**                      | topo     | 65,240 | GeoPDF, 11–51 MB       | Public domain (US Gov) | see §1.1 |
 | **NRCan CanTopo 50k**                 | topo     | 2,234  | GeoPDF (zipped), ~5 MB | OGL-Canada-2.0         | see §1.3 |
 | **Geoscience Australia AUSTopo 250k** | topo     | 509    | GeoPDF, 3.4–51 MB      | CC BY 4.0              | see §1.2 |
+| **USDA Forest Service FSTopo**        | forest   | 11,485 | GeoPDF, ~2–5 MB        | Public domain (US Gov) | see §1.4 |
 
-**67,983 items** total.
+**79,468 items** total. Every item is `kind: topo`; FSTopo uses the legacy
+`forest` category so its shards don't split the US Topo ones (see §1.4).
 
 ### 1.1 USGS US Topo — INCLUDE
 
@@ -120,6 +122,58 @@ Licence"`.
   033 seventeen, while 026 (Baffin) has 225. The nearest CanTopo sheet to
   Québec City is 021G14 Canterbury, **318 km** away in New Brunswick.
 
+### 1.4 USDA Forest Service FSTopo — INCLUDE (2026-09-29)
+
+- **What.** The Forest Service's own 7.5′ topographic series covering every
+  National Forest: 1:24 000 in the lower 48 and Puerto Rico, 1:25 000 in
+  Alaska. Maps show Forest Service roads, trails and ownership. Files are
+  ~2–5 MB, a tenth of a US Topo quad.
+- **Licence.** Public domain (US Government work). The access and use
+  constraints are "None". Attribution "USDA Forest Service" is a courtesy.
+- **Enumeration.** The old rastergateway directory listing now answers 403.
+  The Forest Service map portal
+  (`data.fs.usda.gov/geodata/vector/index.php`) is an ArcGIS Experience app.
+  Its "24K FSTopo" page reads a **public, key-free feature layer**:
+  `services1.arcgis.com/gGHDlz6USftL5Pau/arcgis/rest/services/FSTopo_Index_GTAC/FeatureServer/0`.
+  - It holds **18,188 cells**: 16,428 at 1:24k, 1,756 at 1:25k and 4 with
+    no scale.
+  - Each cell carries the quad polygon, name, state and a `secoord` id.
+  - We page it 1,000 at a time.
+- **Download URL.** The portal's popup links
+  `data.fs.usda.gov/geodata/rastergateway/downloadMap.php?mapID={secoord}&mapType=pdf&seriesType=FSTopo`.
+  That link answers:
+  - **302** to the static file, e.g. `.../data3/37108/fstopo/FSTopo%20South%20Mountain%20374510822.pdf`,
+    when a PDF exists;
+  - **204** when it does not.
+
+  We follow the redirect by hand, HEAD the file for size and date, and
+  publish the static URL. Both requests are cached for 30 days under
+  `scripts/catalog/.cache/fstopo-heads.json`.
+
+- **Result, 2026-09-29:**
+  - **11,485 sheets** published.
+  - 6,448 cells answer 204 (no PDF). A random sample was re-checked by hand.
+  - 254 cells answer a deterministic **HTTP 500** on every attempt, the GET
+    included. They are excluded and retried on each run.
+  - The earlier estimate of "21,445 PDFs" counted the retired _FSTopo Legacy_
+    series on the old directory tree. That series is not included.
+- **Politeness.** 6 in flight, custom User-Agent, 3 retries with backoff. The
+  full crawl took ~40 min against one Forest Service host. Re-runs reuse the
+  cache.
+- **Parse check.** Three sheets were downloaded and parsed with our own
+  `parseGeoPdf` + `primaryGeoreferenceForPage`: South Mountain CO, Bear Creek
+  TX and South Mountain CA.
+  - Each yields 3 georeferences, 0 warnings, a 1566 × 1944 pt page, and a
+    primary viewport framing the quad. For example, South Mountain CO spans
+    −108.513…−108.362, 37.740…37.882, around the 0.125° cell.
+  - It is the same three-viewport layout as US Topo, handled by the
+    largest-viewport rule.
+- **Category.** A US Topo 2.5° cell holds exactly 400 quads, the shard
+  split threshold. Adding FSTopo to `topo` split most western cells a level
+  deeper: 281 → 550 shards, and the cold-start index doubled to 134 KB.
+  As `forest` (National Forest maps, a category old apps already label), the
+  plan is 281 topo + 71 forest shards and an 87 KB index.
+
 ## 2. Marine charts — nothing shippable, and the reason is format
 
 **This is the headline negative result.** Every openly-licensed chart source is
@@ -173,11 +227,9 @@ All of these pass the licence test and fail on format. None ship.
 
 ## 4. Other US sources — verified, not yet shipped
 
-- **USFS FSTopo** — 21,445 georeferenced PDFs, ~1–4 MB, public domain, access
-  constraints "None". Verified: `data.fs.usda.gov/geodata/rastergateway/data3/30095/fstopo/Bear_Creek_302209507_FSTopo.pdf`
-  → 200, 1,791,052 bytes; geo dict confirmed inside compressed object streams.
-  Bbox is derivable from the filename's 9-digit SW-corner code. Cost is a
-  498-page HTML scrape — a good next source, deferred only on time.
+- **USFS FSTopo** — shipped 2026-09-29, see §1.4. The retired _FSTopo Legacy_
+  series (e.g. `.../data3/30095/fstopo/Bear_Creek_302209507_FSTopo.pdf`) is not
+  included.
 - **USFS MVUM** — georeferenced PDFs, high user value, but **no national
   index**; every regional page is a JS ArcGIS app. Needs a hand-curated list and
   an annual January refresh.
@@ -209,3 +261,27 @@ several of these without a source and later retracted:
 - Estonia, Czechia, Poland GUGiK, Finland NLS, Sweden Lantmäteriet, Japan GSI,
   Portugal CIGeoE.
 - Every European/Asian hydrographic office (see §2).
+
+## 6. Link-out collections (not downloadable sources)
+
+Some publishers' maps are copyrighted and served only from their own site. We
+list those places and **link out** to the publisher's page; we never list or
+fetch their files. The first is **Parcs Québec (Sépaq)**: 37 places in
+`scripts/catalog/collections/sepaq.json`.
+
+- **URL provenance.** Each sepaq.com code (`/pq/jac/`, `/rf/lau/`, …) was
+  taken from a public source. Each place's `evidence` field says which one:
+  an OSM `website` tag, a Wikidata "official website" (P856), or both.
+  sepaq.com answers scripts with 403 and a CAPTCHA, so it was never fetched.
+  - OSM and Wikidata agreed on the code wherever both had one.
+  - Two Wikidata links pointed elsewhere, so OSM's sepaq.com URL was used:
+    Aiguebelle (to wdpa.org) and Lac-Témiscouata (to an old mddep page).
+- **Coordinates.** OSM boundary centre (`out center`), i.e. the middle of the
+  bounding box.
+  - Mont-Orford and Opémican differ from Wikidata's point by ~5–10 km.
+  - Both are still inside or next to the park.
+- **Why Sépaq's files are not a source.** Sépaq distributes its georeferenced
+  park PDFs through Avenza. Avenza's Map Store stopped accepting new maps
+  after the Avenza–Blue Marble merger of 2026-04-07. A partnership proposal
+  is drafted in `docs/partners/sepaq-pitch-fr.md`, with an English version.
+  Until Sépaq authorizes it in writing, we link out only.

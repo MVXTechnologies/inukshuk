@@ -26,6 +26,18 @@
  * one-by-one with a warning each, so one bad row can never blank the store.
  */
 
+import {
+  CATALOG_ACTIVITIES,
+  CATALOG_KINDS,
+  CATALOG_TERRAINS,
+  isCatalogActivity,
+  isCatalogKind,
+  isCatalogTerrain,
+  type CatalogActivity,
+  type CatalogKind,
+  type CatalogTerrain,
+} from './taxonomy';
+
 /** The legacy flat-manifest schema. Breaking changes bump the /vN/ path. */
 export const CATALOG_SCHEMA_VERSION = 1;
 
@@ -104,6 +116,17 @@ export interface CatalogItem {
   /** Source-side revision date (ISO date); drives the "Update" flow. */
   updatedAt?: string;
   lang?: 'fr' | 'en' | 'bilingual';
+  /**
+   * Explorer taxonomy (see `./taxonomy`). All optional and additive: an old
+   * app never reads them, and a new app treats their absence as "unknown".
+   * Unknown values are dropped on parse, never a reason to drop the item.
+   */
+  kind?: CatalogKind;
+  /** Evidence-based only (title/tags) — see `./classify` for the rule. */
+  activities?: CatalogActivity[];
+  terrain?: CatalogTerrain[];
+  /** Map scale denominator, e.g. 24000 for a 1:24 000 quad. */
+  scale?: number;
 }
 
 export interface CatalogManifest {
@@ -191,6 +214,13 @@ function parseItem(raw: unknown, sourceIds: ReadonlySet<string>): CatalogItem | 
   const updatedAt = optionalString(raw.updatedAt);
   const lang =
     raw.lang === 'fr' || raw.lang === 'en' || raw.lang === 'bilingual' ? raw.lang : undefined;
+  const kind = isCatalogKind(raw.kind) ? raw.kind : undefined;
+  const activities = parseFacetList(raw.activities, isCatalogActivity, CATALOG_ACTIVITIES);
+  const terrain = parseFacetList(raw.terrain, isCatalogTerrain, CATALOG_TERRAINS);
+  const scale =
+    typeof raw.scale === 'number' && Number.isFinite(raw.scale) && raw.scale >= 1
+      ? Math.round(raw.scale)
+      : undefined;
   return {
     id,
     sourceId: raw.sourceId,
@@ -206,7 +236,26 @@ function parseItem(raw: unknown, sourceIds: ReadonlySet<string>): CatalogItem | 
     ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
     ...(updatedAt !== undefined ? { updatedAt } : {}),
     ...(lang !== undefined ? { lang } : {}),
+    ...(kind !== undefined ? { kind } : {}),
+    ...(activities !== undefined ? { activities } : {}),
+    ...(terrain !== undefined ? { terrain } : {}),
+    ...(scale !== undefined ? { scale } : {}),
   };
+}
+
+/**
+ * A facet list (activities, terrain): keep only known values, de-duplicated
+ * and in vocabulary order so equal sets serialize identically. Empty → absent.
+ */
+function parseFacetList<T extends string>(
+  value: unknown,
+  isKnown: (v: unknown) => v is T,
+  vocabulary: readonly T[],
+): T[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const present = new Set<T>(value.filter(isKnown));
+  const list = vocabulary.filter((v) => present.has(v));
+  return list.length > 0 ? list : undefined;
 }
 
 /**
@@ -326,6 +375,26 @@ export interface CatalogIndex {
    * grid shows real counts without fetching a single shard.
    */
   categoryCounts: Partial<Record<CatalogCategory, number>>;
+  /** Items per kind (explorer "by map type"). Absent on older indexes. */
+  kindCounts?: Partial<Record<CatalogKind, number>>;
+  /**
+   * Items per activity **as the explorer browses them** — explicit activities
+   * plus the terrain affinity for items with none (`itemActivities` in
+   * `./classify`), so a count always equals what tapping the tile lists.
+   */
+  activityCounts?: Partial<Record<CatalogActivity, number>>;
+  /** Items per terrain. */
+  terrainCounts?: Partial<Record<CatalogTerrain, number>>;
+  /** Where the per-shard facet digest lives (`./facets`), when published. */
+  facets?: CatalogDocumentRef;
+  /** Where the link-out collections live (`./collections`), when published. */
+  collections?: CatalogDocumentRef;
+}
+
+/** A pointer to a side document of the index (same path rules as a shard). */
+export interface CatalogDocumentRef {
+  path: string;
+  byteSize?: number;
 }
 
 export interface CatalogIndexParseResult {
@@ -404,6 +473,13 @@ function parseSearchRef(raw: unknown): CatalogSearchRef | undefined {
   };
 }
 
+/** A side-document pointer: the search-ref path rules, minus the token count. */
+function parseDocumentRef(raw: unknown): CatalogDocumentRef | undefined {
+  const ref = parseSearchRef(raw);
+  if (ref === undefined) return undefined;
+  return { path: ref.path, ...(ref.byteSize !== undefined ? { byteSize: ref.byteSize } : {}) };
+}
+
 /** Per-category totals, ignoring unknown keys and non-positive numbers. */
 function parseCategoryCounts(raw: unknown): Partial<Record<CatalogCategory, number>> {
   const counts: Partial<Record<CatalogCategory, number>> = {};
@@ -412,6 +488,22 @@ function parseCategoryCounts(raw: unknown): Partial<Record<CatalogCategory, numb
     const value = raw[category];
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
       counts[category] = Math.round(value);
+    }
+  }
+  return counts;
+}
+
+/** Counts keyed by a fixed vocabulary; unknown keys and non-positive values dropped. */
+export function parseFacetCounts<K extends string>(
+  raw: unknown,
+  vocabulary: readonly K[],
+): Partial<Record<K, number>> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const counts: Partial<Record<K, number>> = {};
+  for (const key of vocabulary) {
+    const value = raw[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      counts[key] = Math.round(value);
     }
   }
   return counts;
@@ -501,6 +593,11 @@ export function parseCatalogIndex(raw: unknown): CatalogIndexParseResult {
   }
 
   const search = parseSearchRef(raw.search);
+  const facets = parseDocumentRef(raw.facets);
+  const collections = parseDocumentRef(raw.collections);
+  const kindCounts = parseFacetCounts(raw.kindCounts, CATALOG_KINDS);
+  const activityCounts = parseFacetCounts(raw.activityCounts, CATALOG_ACTIVITIES);
+  const terrainCounts = parseFacetCounts(raw.terrainCounts, CATALOG_TERRAINS);
   const declared = parseCategoryCounts(raw.categoryCounts);
   // A shardless index states its own totals badly at most once; fall back to
   // what the inline items actually contain so the grid never shows "0 maps".
@@ -515,6 +612,11 @@ export function parseCatalogIndex(raw: unknown): CatalogIndexParseResult {
       ...(search !== undefined ? { search } : {}),
       items,
       categoryCounts,
+      ...(kindCounts !== undefined ? { kindCounts } : {}),
+      ...(activityCounts !== undefined ? { activityCounts } : {}),
+      ...(terrainCounts !== undefined ? { terrainCounts } : {}),
+      ...(facets !== undefined ? { facets } : {}),
+      ...(collections !== undefined ? { collections } : {}),
     },
     warnings,
   };
