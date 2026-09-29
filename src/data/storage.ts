@@ -554,6 +554,40 @@ export async function readFileText(uri: string): Promise<string> {
   return readableFile(uri).text();
 }
 
+// ---- simplified trail geometry cache (#465) --------------------------------
+//
+// Drawing a 400-trail library must not re-parse 400 GPX files (≈1 MB of XML
+// each) on every launch. The simplified geometry of each trail is cached here
+// as small JSON, keyed inside the file by the trail's revision; the cache
+// directory may be purged by the OS at any time, which only costs a re-parse.
+
+const TRACK_GEOMETRY_DIR = 'track-geometry';
+
+function trackGeometryFile(id: string): File {
+  return new File(
+    new Directory(Paths.cache, TRACK_GEOMETRY_DIR),
+    `${id.replace(/[^A-Za-z0-9_-]/g, '_')}.json`,
+  );
+}
+
+/** The cached simplified-geometry JSON for a trail, or null when absent. */
+export async function readTrackGeometryCache(id: string): Promise<string | null> {
+  const file = trackGeometryFile(id);
+  return file.exists ? file.text() : null;
+}
+
+/** Cache a trail's simplified-geometry JSON (overwrites). */
+export function writeTrackGeometryCache(id: string, text: string): void {
+  const dir = new Directory(Paths.cache, TRACK_GEOMETRY_DIR);
+  if (!dir.exists) dir.create({ intermediates: true });
+  const file = trackGeometryFile(id);
+  guardWrite(() => {
+    if (file.exists) file.delete();
+    file.create();
+    file.write(text);
+  });
+}
+
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
 export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
   ensureStorage();
