@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-02T15:32:56.905Z",
+  "generatedAt": "2026-09-29T04:34:18.005Z",
   "sources": [
     {
       "id": "ga-austopo",
@@ -17,6 +17,13 @@
       "homepage": "https://natural-resources.canada.ca/science-and-data/science-and-research/earth-sciences/geography/topographic-information/maps/canada-topographic-maps"
     },
     {
+      "id": "usfs-fstopo",
+      "name": "USDA Forest Service FSTopo",
+      "licence": "Public domain (US Government)",
+      "attribution": "USDA Forest Service",
+      "homepage": "https://data.fs.usda.gov/geodata/vector/index.php"
+    },
+    {
       "id": "usgs-ustopo",
       "name": "USGS US Topo",
       "licence": "Public domain (US Government)",
@@ -25,6 +32,929 @@
     }
   ],
   "shards": [
+    {
+      "id": "forest-n10w070",
+      "category": "forest",
+      "path": "shards/forest-n10w070.json",
+      "itemCount": 6,
+      "bbox": [
+        -66,
+        18.125,
+        -65.625,
+        18.375
+      ],
+      "byteSize": 2550
+    },
+    {
+      "id": "forest-n20w090",
+      "category": "forest",
+      "path": "shards/forest-n20w090.json",
+      "itemCount": 24,
+      "bbox": [
+        -85.125,
+        28.875,
+        -81.375,
+        30
+      ],
+      "byteSize": 9878
+    },
+    {
+      "id": "forest-n30w080",
+      "category": "forest",
+      "path": "shards/forest-n30w080.json",
+      "itemCount": 185,
+      "bbox": [
+        -80,
+        32.875,
+        -76.625,
+        39.375
+      ],
+      "byteSize": 78355
+    },
+    {
+      "id": "forest-n30w090-0",
+      "category": "forest",
+      "path": "shards/forest-n30w090-0.json",
+      "itemCount": 210,
+      "bbox": [
+        -90,
+        30,
+        -85,
+        35
+      ],
+      "byteSize": 84479
+    },
+    {
+      "id": "forest-n30w090-1",
+      "category": "forest",
+      "path": "shards/forest-n30w090-1.json",
+      "itemCount": 184,
+      "bbox": [
+        -85,
+        30,
+        -81.25,
+        35
+      ],
+      "byteSize": 75782
+    },
+    {
+      "id": "forest-n30w090-2",
+      "category": "forest",
+      "path": "shards/forest-n30w090-2.json",
+      "itemCount": 108,
+      "bbox": [
+        -89.75,
+        36.375,
+        -86,
+        39.125
+      ],
+      "byteSize": 43803
+    },
+    {
+      "id": "forest-n30w090-30",
+      "category": "forest",
+      "path": "shards/forest-n30w090-30.json",
+      "itemCount": 184,
+      "bbox": [
+        -85,
+        35,
+        -82.5,
+        37.5
+      ],
+      "byteSize": 76807
+    },
+    {
+      "id": "forest-n30w090-31",
+      "category": "forest",
+      "path": "shards/forest-n30w090-31.json",
+      "itemCount": 128,
+      "bbox": [
+        -82.5,
+        35.25,
+        -80,
+        37.5
+      ],
+      "byteSize": 54443
+    },
+    {
+      "id": "forest-n30w090-32",
+      "category": "forest",
+      "path": "shards/forest-n30w090-32.json",
+      "itemCount": 42,
+      "bbox": [
+        -84.25,
+        37.5,
+        -82.5,
+        39.5
+      ],
+      "byteSize": 16866
+    },
+    {
+      "id": "forest-n30w090-33",
+      "category": "forest",
+      "path": "shards/forest-n30w090-33.json",
+      "itemCount": 83,
+      "bbox": [
+        -82.5,
+        37.5,
+        -80,
+        39.875
+      ],
+      "byteSize": 34164
+    },
+    {
+      "id": "forest-n30w100-0",
+      "category": "forest",
+      "path": "shards/forest-n30w100-0.json",
+      "itemCount": 58,
+      "bbox": [
+        -97.875,
+        30.25,
+        -95,
+        33.875
+      ],
+      "byteSize": 23169
+    },
+    {
+      "id": "forest-n30w100-1",
+      "category": "forest",
+      "path": "shards/forest-n30w100-1.json",
+      "itemCount": 260,
+      "bbox": [
+        -95,
+        30.375,
+        -90.5,
+        35
+      ],
+      "byteSize": 105557
+    },
+    {
+      "id": "forest-n30w100-2",
+      "category": "forest",
+      "path": "shards/forest-n30w100-2.json",
+      "itemCount": 12,
+      "bbox": [
+        -100,
+        35.5,
+        -99.5,
+        35.875
+      ],
+      "byteSize": 4959
+    },
+    {
+      "id": "forest-n30w100-3",
+      "category": "forest",
+      "path": "shards/forest-n30w100-3.json",
+      "itemCount": 271,
+      "bbox": [
+        -94.5,
+        35,
+        -90,
+        39.125
+      ],
+      "byteSize": 109249
+    },
+    {
+      "id": "forest-n30w110-0",
+      "category": "forest",
+      "path": "shards/forest-n30w110-0.json",
+      "itemCount": 353,
+      "bbox": [
+        -110,
+        31.375,
+        -105,
+        35
+      ],
+      "byteSize": 151554
+    },
+    {
+      "id": "forest-n30w110-1",
+      "category": "forest",
+      "path": "shards/forest-n30w110-1.json",
+      "itemCount": 15,
+      "bbox": [
+        -105,
+        31.875,
+        -104.5,
+        32.625
+      ],
+      "byteSize": 6354
+    },
+    {
+      "id": "forest-n30w110-20",
+      "category": "forest",
+      "path": "shards/forest-n30w110-20.json",
+      "itemCount": 47,
+      "bbox": [
+        -108.75,
+        35,
+        -107.5,
+        37.5
+      ],
+      "byteSize": 20196
+    },
+    {
+      "id": "forest-n30w110-21",
+      "category": "forest",
+      "path": "shards/forest-n30w110-21.json",
+      "itemCount": 235,
+      "bbox": [
+        -107.5,
+        35,
+        -105,
+        37.5
+      ],
+      "byteSize": 100857
+    },
+    {
+      "id": "forest-n30w110-22",
+      "category": "forest",
+      "path": "shards/forest-n30w110-22.json",
+      "itemCount": 160,
+      "bbox": [
+        -110,
+        37.5,
+        -107.5,
+        40
+      ],
+      "byteSize": 68863
+    },
+    {
+      "id": "forest-n30w110-23",
+      "category": "forest",
+      "path": "shards/forest-n30w110-23.json",
+      "itemCount": 325,
+      "bbox": [
+        -107.5,
+        37.5,
+        -105,
+        40
+      ],
+      "byteSize": 139819
+    },
+    {
+      "id": "forest-n30w110-3",
+      "category": "forest",
+      "path": "shards/forest-n30w110-3.json",
+      "itemCount": 144,
+      "bbox": [
+        -105,
+        35.125,
+        -100,
+        39.375
+      ],
+      "byteSize": 59094
+    },
+    {
+      "id": "forest-n30w120-0",
+      "category": "forest",
+      "path": "shards/forest-n30w120-0.json",
+      "itemCount": 169,
+      "bbox": [
+        -120,
+        32.625,
+        -116.125,
+        35
+      ],
+      "byteSize": 72867
+    },
+    {
+      "id": "forest-n30w120-1",
+      "category": "forest",
+      "path": "shards/forest-n30w120-1.json",
+      "itemCount": 303,
+      "bbox": [
+        -113.125,
+        31.25,
+        -110,
+        35
+      ],
+      "byteSize": 129189
+    },
+    {
+      "id": "forest-n30w120-20",
+      "category": "forest",
+      "path": "shards/forest-n30w120-20.json",
+      "itemCount": 151,
+      "bbox": [
+        -120,
+        35,
+        -117.875,
+        37.5
+      ],
+      "byteSize": 65583
+    },
+    {
+      "id": "forest-n30w120-21",
+      "category": "forest",
+      "path": "shards/forest-n30w120-21.json",
+      "itemCount": 19,
+      "bbox": [
+        -116.125,
+        35.875,
+        -115.375,
+        36.625
+      ],
+      "byteSize": 8182
+    },
+    {
+      "id": "forest-n30w120-22",
+      "category": "forest",
+      "path": "shards/forest-n30w120-22.json",
+      "itemCount": 163,
+      "bbox": [
+        -120,
+        37.5,
+        -117.5,
+        39.75
+      ],
+      "byteSize": 70317
+    },
+    {
+      "id": "forest-n30w120-23",
+      "category": "forest",
+      "path": "shards/forest-n30w120-23.json",
+      "itemCount": 133,
+      "bbox": [
+        -117.5,
+        37.875,
+        -115,
+        39.625
+      ],
+      "byteSize": 57218
+    },
+    {
+      "id": "forest-n30w120-3",
+      "category": "forest",
+      "path": "shards/forest-n30w120-3.json",
+      "itemCount": 388,
+      "bbox": [
+        -115,
+        35,
+        -110,
+        40
+      ],
+      "byteSize": 165337
+    },
+    {
+      "id": "forest-n30w130",
+      "category": "forest",
+      "path": "shards/forest-n30w130.json",
+      "itemCount": 226,
+      "bbox": [
+        -123.25,
+        34.375,
+        -120,
+        40
+      ],
+      "byteSize": 98011
+    },
+    {
+      "id": "forest-n40w080",
+      "category": "forest",
+      "path": "shards/forest-n40w080.json",
+      "itemCount": 149,
+      "bbox": [
+        -79.5,
+        41.25,
+        -70.75,
+        45
+      ],
+      "byteSize": 62436
+    },
+    {
+      "id": "forest-n40w090",
+      "category": "forest",
+      "path": "shards/forest-n40w090.json",
+      "itemCount": 310,
+      "bbox": [
+        -90,
+        41.25,
+        -83.25,
+        48.125
+      ],
+      "byteSize": 126046
+    },
+    {
+      "id": "forest-n40w100",
+      "category": "forest",
+      "path": "shards/forest-n40w100.json",
+      "itemCount": 309,
+      "bbox": [
+        -97.5,
+        45,
+        -90,
+        48.625
+      ],
+      "byteSize": 127467
+    },
+    {
+      "id": "forest-n40w110-00",
+      "category": "forest",
+      "path": "shards/forest-n40w110-00.json",
+      "itemCount": 40,
+      "bbox": [
+        -110,
+        40,
+        -107.5,
+        42.5
+      ],
+      "byteSize": 17312
+    },
+    {
+      "id": "forest-n40w110-01",
+      "category": "forest",
+      "path": "shards/forest-n40w110-01.json",
+      "itemCount": 189,
+      "bbox": [
+        -107.5,
+        40,
+        -105.125,
+        42.5
+      ],
+      "byteSize": 81257
+    },
+    {
+      "id": "forest-n40w110-02",
+      "category": "forest",
+      "path": "shards/forest-n40w110-02.json",
+      "itemCount": 141,
+      "bbox": [
+        -110,
+        42.5,
+        -107.5,
+        45
+      ],
+      "byteSize": 60898
+    },
+    {
+      "id": "forest-n40w110-03",
+      "category": "forest",
+      "path": "shards/forest-n40w110-03.json",
+      "itemCount": 83,
+      "bbox": [
+        -107.5,
+        42.5,
+        -105,
+        45
+      ],
+      "byteSize": 34760
+    },
+    {
+      "id": "forest-n40w110-1",
+      "category": "forest",
+      "path": "shards/forest-n40w110-1.json",
+      "itemCount": 267,
+      "bbox": [
+        -105,
+        40.5,
+        -100,
+        44.875
+      ],
+      "byteSize": 110284
+    },
+    {
+      "id": "forest-n40w110-2",
+      "category": "forest",
+      "path": "shards/forest-n40w110-2.json",
+      "itemCount": 81,
+      "bbox": [
+        -110,
+        45,
+        -105.75,
+        47
+      ],
+      "byteSize": 34092
+    },
+    {
+      "id": "forest-n40w110-3",
+      "category": "forest",
+      "path": "shards/forest-n40w110-3.json",
+      "itemCount": 180,
+      "bbox": [
+        -104.75,
+        45.25,
+        -100.375,
+        48.5
+      ],
+      "byteSize": 74769
+    },
+    {
+      "id": "forest-n40w120-00",
+      "category": "forest",
+      "path": "shards/forest-n40w120-00.json",
+      "itemCount": 10,
+      "bbox": [
+        -117.875,
+        41.375,
+        -117.5,
+        42
+      ],
+      "byteSize": 4357
+    },
+    {
+      "id": "forest-n40w120-01",
+      "category": "forest",
+      "path": "shards/forest-n40w120-01.json",
+      "itemCount": 71,
+      "bbox": [
+        -117.5,
+        40,
+        -115,
+        42
+      ],
+      "byteSize": 30654
+    },
+    {
+      "id": "forest-n40w120-02",
+      "category": "forest",
+      "path": "shards/forest-n40w120-02.json",
+      "itemCount": 161,
+      "bbox": [
+        -120,
+        43.5,
+        -117.5,
+        45
+      ],
+      "byteSize": 68101
+    },
+    {
+      "id": "forest-n40w120-03",
+      "category": "forest",
+      "path": "shards/forest-n40w120-03.json",
+      "itemCount": 171,
+      "bbox": [
+        -117.5,
+        43.125,
+        -115,
+        45
+      ],
+      "byteSize": 73390
+    },
+    {
+      "id": "forest-n40w120-10",
+      "category": "forest",
+      "path": "shards/forest-n40w120-10.json",
+      "itemCount": 62,
+      "bbox": [
+        -115,
+        40,
+        -112.5,
+        42.5
+      ],
+      "byteSize": 26135
+    },
+    {
+      "id": "forest-n40w120-11",
+      "category": "forest",
+      "path": "shards/forest-n40w120-11.json",
+      "itemCount": 183,
+      "bbox": [
+        -112.5,
+        40,
+        -110,
+        42.5
+      ],
+      "byteSize": 78160
+    },
+    {
+      "id": "forest-n40w120-12",
+      "category": "forest",
+      "path": "shards/forest-n40w120-12.json",
+      "itemCount": 216,
+      "bbox": [
+        -115,
+        42.5,
+        -112.5,
+        45
+      ],
+      "byteSize": 92682
+    },
+    {
+      "id": "forest-n40w120-13",
+      "category": "forest",
+      "path": "shards/forest-n40w120-13.json",
+      "itemCount": 250,
+      "bbox": [
+        -112.5,
+        42.5,
+        -110,
+        45
+      ],
+      "byteSize": 107137
+    },
+    {
+      "id": "forest-n40w120-20",
+      "category": "forest",
+      "path": "shards/forest-n40w120-20.json",
+      "itemCount": 96,
+      "bbox": [
+        -120,
+        45,
+        -117.5,
+        46.375
+      ],
+      "byteSize": 40825
+    },
+    {
+      "id": "forest-n40w120-21",
+      "category": "forest",
+      "path": "shards/forest-n40w120-21.json",
+      "itemCount": 322,
+      "bbox": [
+        -117.5,
+        45,
+        -115,
+        47.5
+      ],
+      "byteSize": 137662
+    },
+    {
+      "id": "forest-n40w120-22",
+      "category": "forest",
+      "path": "shards/forest-n40w120-22.json",
+      "itemCount": 90,
+      "bbox": [
+        -120,
+        47.75,
+        -117.5,
+        49
+      ],
+      "byteSize": 38888
+    },
+    {
+      "id": "forest-n40w120-23",
+      "category": "forest",
+      "path": "shards/forest-n40w120-23.json",
+      "itemCount": 220,
+      "bbox": [
+        -117.5,
+        47.5,
+        -115,
+        49
+      ],
+      "byteSize": 94484
+    },
+    {
+      "id": "forest-n40w120-30",
+      "category": "forest",
+      "path": "shards/forest-n40w120-30.json",
+      "itemCount": 363,
+      "bbox": [
+        -115,
+        45,
+        -112.5,
+        47.5
+      ],
+      "byteSize": 156090
+    },
+    {
+      "id": "forest-n40w120-31",
+      "category": "forest",
+      "path": "shards/forest-n40w120-31.json",
+      "itemCount": 265,
+      "bbox": [
+        -112.5,
+        45,
+        -110,
+        47.5
+      ],
+      "byteSize": 113511
+    },
+    {
+      "id": "forest-n40w120-32",
+      "category": "forest",
+      "path": "shards/forest-n40w120-32.json",
+      "itemCount": 161,
+      "bbox": [
+        -115,
+        47.5,
+        -112.5,
+        49
+      ],
+      "byteSize": 69279
+    },
+    {
+      "id": "forest-n40w120-33",
+      "category": "forest",
+      "path": "shards/forest-n40w120-33.json",
+      "itemCount": 2,
+      "bbox": [
+        -110.625,
+        47.5,
+        -110.375,
+        47.625
+      ],
+      "byteSize": 901
+    },
+    {
+      "id": "forest-n40w130-10",
+      "category": "forest",
+      "path": "shards/forest-n40w130-10.json",
+      "itemCount": 216,
+      "bbox": [
+        -124.5,
+        40,
+        -122.5,
+        42.5
+      ],
+      "byteSize": 93568
+    },
+    {
+      "id": "forest-n40w130-11",
+      "category": "forest",
+      "path": "shards/forest-n40w130-11.json",
+      "itemCount": 318,
+      "bbox": [
+        -122.5,
+        40,
+        -120,
+        42.5
+      ],
+      "byteSize": 136437
+    },
+    {
+      "id": "forest-n40w130-12",
+      "category": "forest",
+      "path": "shards/forest-n40w130-12.json",
+      "itemCount": 134,
+      "bbox": [
+        -124.625,
+        42.5,
+        -122.5,
+        45
+      ],
+      "byteSize": 57249
+    },
+    {
+      "id": "forest-n40w130-13",
+      "category": "forest",
+      "path": "shards/forest-n40w130-13.json",
+      "itemCount": 270,
+      "bbox": [
+        -122.5,
+        42.5,
+        -120,
+        45
+      ],
+      "byteSize": 114944
+    },
+    {
+      "id": "forest-n40w130-30",
+      "category": "forest",
+      "path": "shards/forest-n40w130-30.json",
+      "itemCount": 32,
+      "bbox": [
+        -124.125,
+        45,
+        -122.5,
+        47.5
+      ],
+      "byteSize": 13722
+    },
+    {
+      "id": "forest-n40w130-31",
+      "category": "forest",
+      "path": "shards/forest-n40w130-31.json",
+      "itemCount": 208,
+      "bbox": [
+        -122.5,
+        45,
+        -120.125,
+        47.5
+      ],
+      "byteSize": 89822
+    },
+    {
+      "id": "forest-n40w130-32",
+      "category": "forest",
+      "path": "shards/forest-n40w130-32.json",
+      "itemCount": 47,
+      "bbox": [
+        -124.5,
+        47.5,
+        -122.875,
+        48.25
+      ],
+      "byteSize": 20240
+    },
+    {
+      "id": "forest-n40w130-33",
+      "category": "forest",
+      "path": "shards/forest-n40w130-33.json",
+      "itemCount": 178,
+      "bbox": [
+        -122.25,
+        47.5,
+        -120,
+        49
+      ],
+      "byteSize": 77316
+    },
+    {
+      "id": "forest-n50w130",
+      "category": "forest",
+      "path": "shards/forest-n50w130.json",
+      "itemCount": 1,
+      "bbox": [
+        -130,
+        55.25,
+        -129.833375,
+        55.375
+      ],
+      "byteSize": 494
+    },
+    {
+      "id": "forest-n50w140-1",
+      "category": "forest",
+      "path": "shards/forest-n50w140-1.json",
+      "itemCount": 38,
+      "bbox": [
+        -133.666625,
+        54.625,
+        -130.166625,
+        55
+      ],
+      "byteSize": 17318
+    },
+    {
+      "id": "forest-n50w140-2",
+      "category": "forest",
+      "path": "shards/forest-n50w140-2.json",
+      "itemCount": 185,
+      "bbox": [
+        -139.875,
+        56.375,
+        -135,
+        60
+      ],
+      "byteSize": 82024
+    },
+    {
+      "id": "forest-n50w140-30",
+      "category": "forest",
+      "path": "shards/forest-n50w140-30.json",
+      "itemCount": 236,
+      "bbox": [
+        -135,
+        55,
+        -132.5,
+        57.5
+      ],
+      "byteSize": 104640
+    },
+    {
+      "id": "forest-n50w140-31",
+      "category": "forest",
+      "path": "shards/forest-n50w140-31.json",
+      "itemCount": 198,
+      "bbox": [
+        -132.5,
+        55,
+        -130,
+        57.5
+      ],
+      "byteSize": 89133
+    },
+    {
+      "id": "forest-n50w140-32",
+      "category": "forest",
+      "path": "shards/forest-n50w140-32.json",
+      "itemCount": 140,
+      "bbox": [
+        -135,
+        57.5,
+        -132.5,
+        59.5
+      ],
+      "byteSize": 62350
+    },
+    {
+      "id": "forest-n50w150",
+      "category": "forest",
+      "path": "shards/forest-n50w150.json",
+      "itemCount": 20,
+      "bbox": [
+        -149.4375,
+        59.75,
+        -143.8125,
+        60
+      ],
+      "byteSize": 9080
+    },
+    {
+      "id": "forest-n60w150",
+      "category": "forest",
+      "path": "shards/forest-n60w150.json",
+      "itemCount": 286,
+      "bbox": [
+        -150,
+        60,
+        -143.625,
+        61.75
+      ],
+      "byteSize": 126263
+    },
     {
       "id": "topo-n10w070",
       "category": "topo",
@@ -36,7 +966,7 @@
         -64.5,
         18.625
       ],
-      "byteSize": 35932
+      "byteSize": 39202
     },
     {
       "id": "topo-n10w160",
@@ -49,7 +979,7 @@
         -154.75,
         20
       ],
-      "byteSize": 25077
+      "byteSize": 28665
     },
     {
       "id": "topo-n20w090-1",
@@ -62,7 +992,7 @@
         -80.5,
         25
       ],
-      "byteSize": 11999
+      "byteSize": 13235
     },
     {
       "id": "topo-n20w090-2",
@@ -75,7 +1005,7 @@
         -85,
         30
       ],
-      "byteSize": 28956
+      "byteSize": 32504
     },
     {
       "id": "topo-n20w090-30",
@@ -88,7 +1018,7 @@
         -82.5,
         27.5
       ],
-      "byteSize": 1869
+      "byteSize": 2109
     },
     {
       "id": "topo-n20w090-31",
@@ -101,7 +1031,7 @@
         -80,
         27.5
       ],
-      "byteSize": 110151
+      "byteSize": 120911
     },
     {
       "id": "topo-n20w090-32",
@@ -114,7 +1044,7 @@
         -82.5,
         30
       ],
-      "byteSize": 39377
+      "byteSize": 43689
     },
     {
       "id": "topo-n20w090-33",
@@ -127,7 +1057,7 @@
         -80.25,
         30
       ],
-      "byteSize": 105379
+      "byteSize": 116039
     },
     {
       "id": "topo-n20w100-20",
@@ -140,7 +1070,7 @@
         -97.5,
         27.5
       ],
-      "byteSize": 61863
+      "byteSize": 67515
     },
     {
       "id": "topo-n20w100-21",
@@ -153,7 +1083,7 @@
         -97.125,
         27.5
       ],
-      "byteSize": 12588
+      "byteSize": 14128
     },
     {
       "id": "topo-n20w100-22",
@@ -166,7 +1096,7 @@
         -97.5,
         30
       ],
-      "byteSize": 143850
+      "byteSize": 157586
     },
     {
       "id": "topo-n20w100-23",
@@ -179,7 +1109,7 @@
         -95,
         30
       ],
-      "byteSize": 98549
+      "byteSize": 108617
     },
     {
       "id": "topo-n20w100-3",
@@ -192,7 +1122,7 @@
         -90,
         30
       ],
-      "byteSize": 72929
+      "byteSize": 81441
     },
     {
       "id": "topo-n20w110",
@@ -205,7 +1135,7 @@
         -100,
         30
       ],
-      "byteSize": 86902
+      "byteSize": 96454
     },
     {
       "id": "topo-n20w160",
@@ -218,7 +1148,7 @@
         -155.25,
         22.2416667
       ],
-      "byteSize": 31041
+      "byteSize": 35581
     },
     {
       "id": "topo-n20w170",
@@ -231,7 +1161,7 @@
         -160,
         22.125
       ],
-      "byteSize": 2657
+      "byteSize": 2945
     },
     {
       "id": "topo-n30w080-0",
@@ -244,7 +1174,7 @@
         -76.125,
         35
       ],
-      "byteSize": 104334
+      "byteSize": 115378
     },
     {
       "id": "topo-n30w080-20",
@@ -257,7 +1187,7 @@
         -77.5,
         37.5
       ],
-      "byteSize": 146388
+      "byteSize": 160988
     },
     {
       "id": "topo-n30w080-21",
@@ -270,7 +1200,7 @@
         -75.375,
         37.5
       ],
-      "byteSize": 106373
+      "byteSize": 118385
     },
     {
       "id": "topo-n30w080-22",
@@ -283,7 +1213,7 @@
         -77.5,
         40
       ],
-      "byteSize": 146410
+      "byteSize": 164678
     },
     {
       "id": "topo-n30w080-23",
@@ -296,7 +1226,7 @@
         -75,
         40
       ],
-      "byteSize": 139462
+      "byteSize": 154478
     },
     {
       "id": "topo-n30w080-3",
@@ -309,7 +1239,7 @@
         -74,
         40
       ],
-      "byteSize": 18789
+      "byteSize": 20849
     },
     {
       "id": "topo-n30w090-00",
@@ -322,7 +1252,7 @@
         -87.5,
         32.5
       ],
-      "byteSize": 140898
+      "byteSize": 154842
     },
     {
       "id": "topo-n30w090-01",
@@ -335,7 +1265,7 @@
         -85,
         32.5
       ],
-      "byteSize": 133756
+      "byteSize": 147276
     },
     {
       "id": "topo-n30w090-02",
@@ -348,7 +1278,7 @@
         -87.5,
         35
       ],
-      "byteSize": 144945
+      "byteSize": 159517
     },
     {
       "id": "topo-n30w090-03",
@@ -361,7 +1291,7 @@
         -85,
         35
       ],
-      "byteSize": 144625
+      "byteSize": 159189
     },
     {
       "id": "topo-n30w090-10",
@@ -374,7 +1304,7 @@
         -82.5,
         32.5
       ],
-      "byteSize": 144269
+      "byteSize": 158425
     },
     {
       "id": "topo-n30w090-11",
@@ -387,7 +1317,7 @@
         -80.25,
         32.5
       ],
-      "byteSize": 83059
+      "byteSize": 91719
     },
     {
       "id": "topo-n30w090-12",
@@ -400,7 +1330,7 @@
         -82.5,
         35
       ],
-      "byteSize": 144969
+      "byteSize": 160169
     },
     {
       "id": "topo-n30w090-13",
@@ -413,7 +1343,7 @@
         -80,
         35
       ],
-      "byteSize": 147316
+      "byteSize": 161648
     },
     {
       "id": "topo-n30w090-20",
@@ -426,7 +1356,7 @@
         -87.5,
         37.5
       ],
-      "byteSize": 144538
+      "byteSize": 158598
     },
     {
       "id": "topo-n30w090-21",
@@ -439,7 +1369,7 @@
         -85,
         37.5
       ],
-      "byteSize": 145496
+      "byteSize": 159672
     },
     {
       "id": "topo-n30w090-22",
@@ -452,7 +1382,7 @@
         -87.5,
         40
       ],
-      "byteSize": 144551
+      "byteSize": 158539
     },
     {
       "id": "topo-n30w090-23",
@@ -465,7 +1395,7 @@
         -85,
         40
       ],
-      "byteSize": 144205
+      "byteSize": 158237
     },
     {
       "id": "topo-n30w090-30",
@@ -478,7 +1408,7 @@
         -82.5,
         37.5
       ],
-      "byteSize": 145196
+      "byteSize": 163664
     },
     {
       "id": "topo-n30w090-31",
@@ -491,7 +1421,7 @@
         -80,
         37.5
       ],
-      "byteSize": 146850
+      "byteSize": 164286
     },
     {
       "id": "topo-n30w090-32",
@@ -504,7 +1434,7 @@
         -82.5,
         40
       ],
-      "byteSize": 144091
+      "byteSize": 158231
     },
     {
       "id": "topo-n30w090-33",
@@ -517,7 +1447,7 @@
         -80,
         40
       ],
-      "byteSize": 145209
+      "byteSize": 160653
     },
     {
       "id": "topo-n30w100-00",
@@ -530,7 +1460,7 @@
         -97.5,
         32.5
       ],
-      "byteSize": 144346
+      "byteSize": 157718
     },
     {
       "id": "topo-n30w100-01",
@@ -543,7 +1473,7 @@
         -95,
         32.5
       ],
-      "byteSize": 142860
+      "byteSize": 156688
     },
     {
       "id": "topo-n30w100-02",
@@ -556,7 +1486,7 @@
         -97.5,
         35
       ],
-      "byteSize": 144323
+      "byteSize": 158123
     },
     {
       "id": "topo-n30w100-03",
@@ -569,7 +1499,7 @@
         -95,
         35
       ],
-      "byteSize": 143322
+      "byteSize": 157750
     },
     {
       "id": "topo-n30w100-10",
@@ -582,7 +1512,7 @@
         -92.5,
         32.5
       ],
-      "byteSize": 144335
+      "byteSize": 158343
     },
     {
       "id": "topo-n30w100-11",
@@ -595,7 +1525,7 @@
         -90,
         32.5
       ],
-      "byteSize": 145203
+      "byteSize": 159631
     },
     {
       "id": "topo-n30w100-12",
@@ -608,7 +1538,7 @@
         -92.5,
         35
       ],
-      "byteSize": 144371
+      "byteSize": 158647
     },
     {
       "id": "topo-n30w100-13",
@@ -621,7 +1551,7 @@
         -90,
         35
       ],
-      "byteSize": 144557
+      "byteSize": 159301
     },
     {
       "id": "topo-n30w100-20",
@@ -634,7 +1564,7 @@
         -97.5,
         37.5
       ],
-      "byteSize": 144301
+      "byteSize": 158949
     },
     {
       "id": "topo-n30w100-21",
@@ -647,7 +1577,7 @@
         -95,
         37.5
       ],
-      "byteSize": 143960
+      "byteSize": 158324
     },
     {
       "id": "topo-n30w100-22",
@@ -660,7 +1590,7 @@
         -97.5,
         40
       ],
-      "byteSize": 143658
+      "byteSize": 157482
     },
     {
       "id": "topo-n30w100-23",
@@ -673,7 +1603,7 @@
         -95,
         40
       ],
-      "byteSize": 143165
+      "byteSize": 157089
     },
     {
       "id": "topo-n30w100-30",
@@ -686,7 +1616,7 @@
         -92.5,
         37.5
       ],
-      "byteSize": 143736
+      "byteSize": 157992
     },
     {
       "id": "topo-n30w100-31",
@@ -699,7 +1629,7 @@
         -90,
         37.5
       ],
-      "byteSize": 144373
+      "byteSize": 158641
     },
     {
       "id": "topo-n30w100-32",
@@ -712,7 +1642,7 @@
         -92.5,
         40
       ],
-      "byteSize": 144500
+      "byteSize": 158556
     },
     {
       "id": "topo-n30w100-33",
@@ -725,7 +1655,7 @@
         -90,
         40
       ],
-      "byteSize": 144670
+      "byteSize": 158730
     },
     {
       "id": "topo-n30w110-00",
@@ -738,7 +1668,7 @@
         -107.5,
         32.5
       ],
-      "byteSize": 67337
+      "byteSize": 74281
     },
     {
       "id": "topo-n30w110-01",
@@ -751,7 +1681,7 @@
         -105,
         32.5
       ],
-      "byteSize": 69112
+      "byteSize": 75600
     },
     {
       "id": "topo-n30w110-02",
@@ -764,7 +1694,7 @@
         -107.5,
         35
       ],
-      "byteSize": 149914
+      "byteSize": 168862
     },
     {
       "id": "topo-n30w110-03",
@@ -777,7 +1707,7 @@
         -105,
         35
       ],
-      "byteSize": 149785
+      "byteSize": 165789
     },
     {
       "id": "topo-n30w110-10",
@@ -790,7 +1720,7 @@
         -102.5,
         32.5
       ],
-      "byteSize": 146355
+      "byteSize": 159627
     },
     {
       "id": "topo-n30w110-11",
@@ -803,7 +1733,7 @@
         -100,
         32.5
       ],
-      "byteSize": 147797
+      "byteSize": 160297
     },
     {
       "id": "topo-n30w110-12",
@@ -816,7 +1746,7 @@
         -102.5,
         35
       ],
-      "byteSize": 147794
+      "byteSize": 160194
     },
     {
       "id": "topo-n30w110-13",
@@ -829,7 +1759,7 @@
         -100,
         35
       ],
-      "byteSize": 145195
+      "byteSize": 158779
     },
     {
       "id": "topo-n30w110-20",
@@ -842,7 +1772,7 @@
         -107.5,
         37.5
       ],
-      "byteSize": 149578
+      "byteSize": 166722
     },
     {
       "id": "topo-n30w110-21",
@@ -855,7 +1785,7 @@
         -105,
         37.5
       ],
-      "byteSize": 148725
+      "byteSize": 168037
     },
     {
       "id": "topo-n30w110-22",
@@ -868,7 +1798,7 @@
         -107.5,
         40
       ],
-      "byteSize": 148656
+      "byteSize": 169100
     },
     {
       "id": "topo-n30w110-23",
@@ -881,7 +1811,7 @@
         -105,
         40
       ],
-      "byteSize": 148640
+      "byteSize": 169488
     },
     {
       "id": "topo-n30w110-30",
@@ -894,7 +1824,7 @@
         -102.5,
         37.5
       ],
-      "byteSize": 148205
+      "byteSize": 163445
     },
     {
       "id": "topo-n30w110-31",
@@ -907,7 +1837,7 @@
         -100,
         37.5
       ],
-      "byteSize": 145604
+      "byteSize": 158944
     },
     {
       "id": "topo-n30w110-32",
@@ -920,7 +1850,7 @@
         -102.5,
         40
       ],
-      "byteSize": 147629
+      "byteSize": 161001
     },
     {
       "id": "topo-n30w110-33",
@@ -933,7 +1863,7 @@
         -100,
         40
       ],
-      "byteSize": 147487
+      "byteSize": 160427
     },
     {
       "id": "topo-n30w120-02",
@@ -946,7 +1876,7 @@
         -117.5,
         35
       ],
-      "byteSize": 77947
+      "byteSize": 87407
     },
     {
       "id": "topo-n30w120-03",
@@ -959,7 +1889,7 @@
         -115,
         35
       ],
-      "byteSize": 144680
+      "byteSize": 162228
     },
     {
       "id": "topo-n30w120-10",
@@ -972,7 +1902,7 @@
         -112.5,
         32.5
       ],
-      "byteSize": 25043
+      "byteSize": 27715
     },
     {
       "id": "topo-n30w120-11",
@@ -985,7 +1915,7 @@
         -110,
         32.5
       ],
-      "byteSize": 66472
+      "byteSize": 74332
     },
     {
       "id": "topo-n30w120-12",
@@ -998,7 +1928,7 @@
         -112.5,
         35
       ],
-      "byteSize": 148840
+      "byteSize": 165604
     },
     {
       "id": "topo-n30w120-13",
@@ -1011,7 +1941,7 @@
         -110,
         35
       ],
-      "byteSize": 149152
+      "byteSize": 167460
     },
     {
       "id": "topo-n30w120-20",
@@ -1024,7 +1954,7 @@
         -117.5,
         37.5
       ],
-      "byteSize": 149372
+      "byteSize": 167712
     },
     {
       "id": "topo-n30w120-21",
@@ -1037,7 +1967,7 @@
         -115,
         37.5
       ],
-      "byteSize": 114436
+      "byteSize": 129024
     },
     {
       "id": "topo-n30w120-22",
@@ -1050,7 +1980,7 @@
         -117.5,
         40
       ],
-      "byteSize": 149130
+      "byteSize": 168938
     },
     {
       "id": "topo-n30w120-23",
@@ -1063,7 +1993,7 @@
         -115,
         40
       ],
-      "byteSize": 136775
+      "byteSize": 154507
     },
     {
       "id": "topo-n30w120-30",
@@ -1076,7 +2006,7 @@
         -112.5,
         37.5
       ],
-      "byteSize": 149548
+      "byteSize": 168792
     },
     {
       "id": "topo-n30w120-31",
@@ -1089,7 +2019,7 @@
         -110,
         37.5
       ],
-      "byteSize": 149628
+      "byteSize": 166936
     },
     {
       "id": "topo-n30w120-32",
@@ -1102,7 +2032,7 @@
         -112.5,
         40
       ],
-      "byteSize": 148792
+      "byteSize": 167224
     },
     {
       "id": "topo-n30w120-33",
@@ -1115,7 +2045,7 @@
         -110,
         40
       ],
-      "byteSize": 147388
+      "byteSize": 167476
     },
     {
       "id": "topo-n30w130-1",
@@ -1128,7 +2058,7 @@
         -120,
         35
       ],
-      "byteSize": 12820
+      "byteSize": 14456
     },
     {
       "id": "topo-n30w130-31",
@@ -1141,7 +2071,7 @@
         -120,
         37.5
       ],
-      "byteSize": 105248
+      "byteSize": 118252
     },
     {
       "id": "topo-n30w130-32",
@@ -1154,7 +2084,7 @@
         -122.5,
         40
       ],
-      "byteSize": 58976
+      "byteSize": 67100
     },
     {
       "id": "topo-n30w130-33",
@@ -1167,7 +2097,7 @@
         -120,
         40
       ],
-      "byteSize": 147710
+      "byteSize": 166414
     },
     {
       "id": "topo-n40w060",
@@ -1180,7 +2110,7 @@
         -52.5,
         49.75
       ],
-      "byteSize": 5931
+      "byteSize": 6879
     },
     {
       "id": "topo-n40w070-0",
@@ -1193,7 +2123,7 @@
         -65.5,
         45
       ],
-      "byteSize": 71970
+      "byteSize": 79762
     },
     {
       "id": "topo-n40w070-1",
@@ -1206,7 +2136,7 @@
         -62.5,
         45
       ],
-      "byteSize": 2817
+      "byteSize": 3217
     },
     {
       "id": "topo-n40w070-2",
@@ -1219,7 +2149,7 @@
         -65,
         47.5
       ],
-      "byteSize": 135748
+      "byteSize": 150552
     },
     {
       "id": "topo-n40w070-3",
@@ -1232,7 +2162,7 @@
         -60,
         46.75
       ],
-      "byteSize": 9060
+      "byteSize": 10292
     },
     {
       "id": "topo-n40w080-00",
@@ -1245,7 +2175,7 @@
         -77.5,
         42.5
       ],
-      "byteSize": 145007
+      "byteSize": 159523
     },
     {
       "id": "topo-n40w080-01",
@@ -1258,7 +2188,7 @@
         -75,
         42.5
       ],
-      "byteSize": 146180
+      "byteSize": 161248
     },
     {
       "id": "topo-n40w080-02",
@@ -1271,7 +2201,7 @@
         -77.5,
         45
       ],
-      "byteSize": 37854
+      "byteSize": 42114
     },
     {
       "id": "topo-n40w080-03",
@@ -1284,7 +2214,7 @@
         -75,
         45
       ],
-      "byteSize": 99095
+      "byteSize": 109475
     },
     {
       "id": "topo-n40w080-10",
@@ -1297,7 +2227,7 @@
         -72.5,
         42.5
       ],
-      "byteSize": 125446
+      "byteSize": 139022
     },
     {
       "id": "topo-n40w080-11",
@@ -1310,7 +2240,7 @@
         -70,
         42.5
       ],
-      "byteSize": 70110
+      "byteSize": 77714
     },
     {
       "id": "topo-n40w080-12",
@@ -1323,7 +2253,7 @@
         -72.5,
         45
       ],
-      "byteSize": 146654
+      "byteSize": 164002
     },
     {
       "id": "topo-n40w080-13",
@@ -1336,7 +2266,7 @@
         -70,
         45
       ],
-      "byteSize": 134985
+      "byteSize": 151041
     },
     {
       "id": "topo-n40w080-2",
@@ -1349,7 +2279,7 @@
         -76,
         47.25
       ],
-      "byteSize": 9059
+      "byteSize": 10247
     },
     {
       "id": "topo-n40w080-3",
@@ -1362,7 +2292,7 @@
         -70,
         46.75
       ],
-      "byteSize": 36099
+      "byteSize": 40395
     },
     {
       "id": "topo-n40w090-00",
@@ -1375,7 +2305,7 @@
         -87.5,
         42.5
       ],
-      "byteSize": 142320
+      "byteSize": 155680
     },
     {
       "id": "topo-n40w090-01",
@@ -1388,7 +2318,7 @@
         -85,
         42.5
       ],
-      "byteSize": 128288
+      "byteSize": 140788
     },
     {
       "id": "topo-n40w090-02",
@@ -1401,7 +2331,7 @@
         -87.5,
         45
       ],
-      "byteSize": 137911
+      "byteSize": 151431
     },
     {
       "id": "topo-n40w090-03",
@@ -1414,7 +2344,7 @@
         -85,
         45
       ],
-      "byteSize": 84463
+      "byteSize": 92987
     },
     {
       "id": "topo-n40w090-10",
@@ -1427,7 +2357,7 @@
         -82.5,
         42.5
       ],
-      "byteSize": 133522
+      "byteSize": 146650
     },
     {
       "id": "topo-n40w090-11",
@@ -1440,7 +2370,7 @@
         -80,
         42.25
       ],
-      "byteSize": 105812
+      "byteSize": 116376
     },
     {
       "id": "topo-n40w090-12",
@@ -1453,7 +2383,7 @@
         -82.5,
         45
       ],
-      "byteSize": 126015
+      "byteSize": 138015
     },
     {
       "id": "topo-n40w090-13",
@@ -1466,7 +2396,7 @@
         -80,
         44.75
       ],
-      "byteSize": 2555
+      "byteSize": 2891
     },
     {
       "id": "topo-n40w090-20",
@@ -1479,7 +2409,7 @@
         -87.5,
         47.5
       ],
-      "byteSize": 124387
+      "byteSize": 137119
     },
     {
       "id": "topo-n40w090-21",
@@ -1492,7 +2422,7 @@
         -85,
         46.875
       ],
-      "byteSize": 77703
+      "byteSize": 86291
     },
     {
       "id": "topo-n40w090-22",
@@ -1505,7 +2435,7 @@
         -88.25,
         48.5
       ],
-      "byteSize": 12033
+      "byteSize": 13581
     },
     {
       "id": "topo-n40w090-3",
@@ -1518,7 +2448,7 @@
         -80,
         48.5
       ],
-      "byteSize": 60062
+      "byteSize": 67158
     },
     {
       "id": "topo-n40w100-00",
@@ -1531,7 +2461,7 @@
         -97.5,
         42.5
       ],
-      "byteSize": 144788
+      "byteSize": 158972
     },
     {
       "id": "topo-n40w100-01",
@@ -1544,7 +2474,7 @@
         -95,
         42.5
       ],
-      "byteSize": 143264
+      "byteSize": 157292
     },
     {
       "id": "topo-n40w100-02",
@@ -1557,7 +2487,7 @@
         -97.5,
         45
       ],
-      "byteSize": 147107
+      "byteSize": 160243
     },
     {
       "id": "topo-n40w100-03",
@@ -1570,7 +2500,7 @@
         -95,
         45
       ],
-      "byteSize": 145025
+      "byteSize": 158581
     },
     {
       "id": "topo-n40w100-10",
@@ -1583,7 +2513,7 @@
         -92.5,
         42.5
       ],
-      "byteSize": 142937
+      "byteSize": 157009
     },
     {
       "id": "topo-n40w100-11",
@@ -1596,7 +2526,7 @@
         -90,
         42.5
       ],
-      "byteSize": 143532
+      "byteSize": 157816
     },
     {
       "id": "topo-n40w100-12",
@@ -1609,7 +2539,7 @@
         -92.5,
         45
       ],
-      "byteSize": 144217
+      "byteSize": 157541
     },
     {
       "id": "topo-n40w100-13",
@@ -1622,7 +2552,7 @@
         -90,
         45
       ],
-      "byteSize": 144453
+      "byteSize": 157969
     },
     {
       "id": "topo-n40w100-20",
@@ -1635,7 +2565,7 @@
         -97.5,
         47.5
       ],
-      "byteSize": 146673
+      "byteSize": 159049
     },
     {
       "id": "topo-n40w100-21",
@@ -1648,7 +2578,7 @@
         -95,
         47.5
       ],
-      "byteSize": 145886
+      "byteSize": 158922
     },
     {
       "id": "topo-n40w100-22",
@@ -1661,7 +2591,7 @@
         -97.5,
         50
       ],
-      "byteSize": 93396
+      "byteSize": 101980
     },
     {
       "id": "topo-n40w100-23",
@@ -1674,7 +2604,7 @@
         -95,
         50
       ],
-      "byteSize": 94261
+      "byteSize": 103053
     },
     {
       "id": "topo-n40w100-30",
@@ -1687,7 +2617,7 @@
         -92.5,
         47.5
       ],
-      "byteSize": 145479
+      "byteSize": 159799
     },
     {
       "id": "topo-n40w100-31",
@@ -1700,7 +2630,7 @@
         -90,
         47.5
       ],
-      "byteSize": 129420
+      "byteSize": 142668
     },
     {
       "id": "topo-n40w100-32",
@@ -1713,7 +2643,7 @@
         -92.5,
         50
       ],
-      "byteSize": 78548
+      "byteSize": 86336
     },
     {
       "id": "topo-n40w100-33",
@@ -1726,7 +2656,7 @@
         -90,
         49.5
       ],
-      "byteSize": 43182
+      "byteSize": 48014
     },
     {
       "id": "topo-n40w110-00",
@@ -1739,7 +2669,7 @@
         -107.5,
         42.5
       ],
-      "byteSize": 149679
+      "byteSize": 166919
     },
     {
       "id": "topo-n40w110-01",
@@ -1752,7 +2682,7 @@
         -105,
         42.5
       ],
-      "byteSize": 148463
+      "byteSize": 167867
     },
     {
       "id": "topo-n40w110-02",
@@ -1765,7 +2695,7 @@
         -107.5,
         45
       ],
-      "byteSize": 149018
+      "byteSize": 167318
     },
     {
       "id": "topo-n40w110-03",
@@ -1778,7 +2708,7 @@
         -105,
         45
       ],
-      "byteSize": 148318
+      "byteSize": 163522
     },
     {
       "id": "topo-n40w110-10",
@@ -1791,7 +2721,7 @@
         -102.5,
         42.5
       ],
-      "byteSize": 147664
+      "byteSize": 160840
     },
     {
       "id": "topo-n40w110-11",
@@ -1804,7 +2734,7 @@
         -100,
         42.5
       ],
-      "byteSize": 147422
+      "byteSize": 160718
     },
     {
       "id": "topo-n40w110-12",
@@ -1817,7 +2747,7 @@
         -102.5,
         45
       ],
-      "byteSize": 148767
+      "byteSize": 162779
     },
     {
       "id": "topo-n40w110-13",
@@ -1830,7 +2760,7 @@
         -100,
         45
       ],
-      "byteSize": 149155
+      "byteSize": 162671
     },
     {
       "id": "topo-n40w110-20",
@@ -1843,7 +2773,7 @@
         -107.5,
         47.5
       ],
-      "byteSize": 148509
+      "byteSize": 162825
     },
     {
       "id": "topo-n40w110-21",
@@ -1856,7 +2786,7 @@
         -105,
         47.5
       ],
-      "byteSize": 149290
+      "byteSize": 162154
     },
     {
       "id": "topo-n40w110-22",
@@ -1869,7 +2799,7 @@
         -107.5,
         49.125
       ],
-      "byteSize": 91167
+      "byteSize": 99615
     },
     {
       "id": "topo-n40w110-23",
@@ -1882,7 +2812,7 @@
         -105,
         49.125
       ],
-      "byteSize": 90468
+      "byteSize": 98748
     },
     {
       "id": "topo-n40w110-30",
@@ -1895,7 +2825,7 @@
         -102.5,
         47.5
       ],
-      "byteSize": 149578
+      "byteSize": 162650
     },
     {
       "id": "topo-n40w110-31",
@@ -1908,7 +2838,7 @@
         -100,
         47.5
       ],
-      "byteSize": 148992
+      "byteSize": 162968
     },
     {
       "id": "topo-n40w110-32",
@@ -1921,7 +2851,7 @@
         -102.5,
         49.5
       ],
-      "byteSize": 89315
+      "byteSize": 97611
     },
     {
       "id": "topo-n40w110-33",
@@ -1934,7 +2864,7 @@
         -100,
         49.5
       ],
-      "byteSize": 88825
+      "byteSize": 96861
     },
     {
       "id": "topo-n40w120-00",
@@ -1947,7 +2877,7 @@
         -117.5,
         42.5
       ],
-      "byteSize": 150105
+      "byteSize": 168673
     },
     {
       "id": "topo-n40w120-01",
@@ -1960,7 +2890,7 @@
         -115,
         42.5
       ],
-      "byteSize": 149703
+      "byteSize": 167595
     },
     {
       "id": "topo-n40w120-02",
@@ -1973,7 +2903,7 @@
         -117.5,
         45
       ],
-      "byteSize": 149157
+      "byteSize": 166017
     },
     {
       "id": "topo-n40w120-03",
@@ -1986,7 +2916,7 @@
         -115,
         45
       ],
-      "byteSize": 148301
+      "byteSize": 166837
     },
     {
       "id": "topo-n40w120-10",
@@ -1999,7 +2929,7 @@
         -112.5,
         42.5
       ],
-      "byteSize": 148757
+      "byteSize": 165813
     },
     {
       "id": "topo-n40w120-11",
@@ -2012,7 +2942,7 @@
         -110,
         42.5
       ],
-      "byteSize": 147388
+      "byteSize": 167756
     },
     {
       "id": "topo-n40w120-12",
@@ -2025,7 +2955,7 @@
         -112.5,
         45
       ],
-      "byteSize": 147941
+      "byteSize": 166437
     },
     {
       "id": "topo-n40w120-13",
@@ -2038,7 +2968,7 @@
         -110,
         45
       ],
-      "byteSize": 147977
+      "byteSize": 167433
     },
     {
       "id": "topo-n40w120-20",
@@ -2051,7 +2981,7 @@
         -117.5,
         47.5
       ],
-      "byteSize": 147136
+      "byteSize": 163088
     },
     {
       "id": "topo-n40w120-21",
@@ -2064,7 +2994,7 @@
         -115,
         47.5
       ],
-      "byteSize": 147253
+      "byteSize": 167953
     },
     {
       "id": "topo-n40w120-22",
@@ -2077,7 +3007,7 @@
         -117.5,
         49.125
       ],
-      "byteSize": 96574
+      "byteSize": 109446
     },
     {
       "id": "topo-n40w120-23",
@@ -2090,7 +3020,7 @@
         -115,
         50
       ],
-      "byteSize": 96114
+      "byteSize": 110142
     },
     {
       "id": "topo-n40w120-30",
@@ -2103,7 +3033,7 @@
         -112.5,
         47.5
       ],
-      "byteSize": 148570
+      "byteSize": 170062
     },
     {
       "id": "topo-n40w120-31",
@@ -2116,7 +3046,7 @@
         -110,
         47.5
       ],
-      "byteSize": 148312
+      "byteSize": 167816
     },
     {
       "id": "topo-n40w120-32",
@@ -2129,7 +3059,7 @@
         -112.5,
         49.25
       ],
-      "byteSize": 92172
+      "byteSize": 104856
     },
     {
       "id": "topo-n40w120-33",
@@ -2142,7 +3072,7 @@
         -110,
         49
       ],
-      "byteSize": 89157
+      "byteSize": 97329
     },
     {
       "id": "topo-n40w130-10",
@@ -2155,7 +3085,7 @@
         -122.5,
         42.5
       ],
-      "byteSize": 109034
+      "byteSize": 124730
     },
     {
       "id": "topo-n40w130-11",
@@ -2168,7 +3098,7 @@
         -120,
         42.5
       ],
-      "byteSize": 149732
+      "byteSize": 169152
     },
     {
       "id": "topo-n40w130-12",
@@ -2181,7 +3111,7 @@
         -122.5,
         45
       ],
-      "byteSize": 107751
+      "byteSize": 122379
     },
     {
       "id": "topo-n40w130-13",
@@ -2194,7 +3124,7 @@
         -120,
         45
       ],
-      "byteSize": 148994
+      "byteSize": 167170
     },
     {
       "id": "topo-n40w130-2",
@@ -2207,7 +3137,7 @@
         -125,
         50
       ],
-      "byteSize": 1801
+      "byteSize": 2093
     },
     {
       "id": "topo-n40w130-30",
@@ -2220,7 +3150,7 @@
         -122.5,
         47.5
       ],
-      "byteSize": 95766
+      "byteSize": 107874
     },
     {
       "id": "topo-n40w130-31",
@@ -2233,7 +3163,7 @@
         -120,
         47.5
       ],
-      "byteSize": 148554
+      "byteSize": 168714
     },
     {
       "id": "topo-n40w130-32",
@@ -2246,7 +3176,7 @@
         -122.5,
         50
       ],
-      "byteSize": 60853
+      "byteSize": 69329
     },
     {
       "id": "topo-n40w130-33",
@@ -2259,7 +3189,7 @@
         -120,
         50
       ],
-      "byteSize": 99529
+      "byteSize": 113909
     },
     {
       "id": "topo-n50e170",
@@ -2272,7 +3202,7 @@
         180,
         53.125
       ],
-      "byteSize": 28568
+      "byteSize": 32000
     },
     {
       "id": "topo-n50w060",
@@ -2285,7 +3215,7 @@
         -56.5,
         56
       ],
-      "byteSize": 1024
+      "byteSize": 1108
     },
     {
       "id": "topo-n50w070",
@@ -2298,7 +3228,7 @@
         -60,
         59.5
       ],
-      "byteSize": 1762
+      "byteSize": 1950
     },
     {
       "id": "topo-n50w080",
@@ -2311,7 +3241,7 @@
         -77,
         60
       ],
-      "byteSize": 15415
+      "byteSize": 17055
     },
     {
       "id": "topo-n50w090",
@@ -2324,7 +3254,7 @@
         -80,
         60
       ],
-      "byteSize": 7572
+      "byteSize": 8368
     },
     {
       "id": "topo-n50w100",
@@ -2337,7 +3267,7 @@
         -94,
         51.75
       ],
-      "byteSize": 3181
+      "byteSize": 3573
     },
     {
       "id": "topo-n50w110",
@@ -2350,7 +3280,7 @@
         -100,
         56
       ],
-      "byteSize": 18251
+      "byteSize": 20587
     },
     {
       "id": "topo-n50w120",
@@ -2363,7 +3293,7 @@
         -115,
         52
       ],
-      "byteSize": 3908
+      "byteSize": 4614
     },
     {
       "id": "topo-n50w130",
@@ -2376,7 +3306,7 @@
         -121,
         55.375
       ],
-      "byteSize": 10613
+      "byteSize": 12541
     },
     {
       "id": "topo-n50w140-1",
@@ -2389,7 +3319,7 @@
         -130.1666667,
         55
       ],
-      "byteSize": 19328
+      "byteSize": 21768
     },
     {
       "id": "topo-n50w140-2",
@@ -2402,7 +3332,7 @@
         -135,
         60
       ],
-      "byteSize": 125994
+      "byteSize": 145616
     },
     {
       "id": "topo-n50w140-30",
@@ -2415,7 +3345,7 @@
         -132.5,
         57.5
       ],
-      "byteSize": 92355
+      "byteSize": 105803
     },
     {
       "id": "topo-n50w140-31",
@@ -2428,7 +3358,7 @@
         -130,
         57.5
       ],
-      "byteSize": 76882
+      "byteSize": 88616
     },
     {
       "id": "topo-n50w140-32",
@@ -2441,7 +3371,7 @@
         -132.5,
         59.5
       ],
-      "byteSize": 53217
+      "byteSize": 61845
     },
     {
       "id": "topo-n50w150",
@@ -2454,7 +3384,7 @@
         -140.0625,
         60
       ],
-      "byteSize": 24139
+      "byteSize": 27411
     },
     {
       "id": "topo-n50w160-0",
@@ -2467,7 +3397,7 @@
         -159.1666667,
         55
       ],
-      "byteSize": 2469
+      "byteSize": 2717
     },
     {
       "id": "topo-n50w160-20",
@@ -2480,7 +3410,7 @@
         -157.5,
         57.5
       ],
-      "byteSize": 61337
+      "byteSize": 69001
     },
     {
       "id": "topo-n50w160-21",
@@ -2493,7 +3423,7 @@
         -155.5,
         57.5
       ],
-      "byteSize": 22699
+      "byteSize": 25573
     },
     {
       "id": "topo-n50w160-22",
@@ -2506,7 +3436,7 @@
         -157.5,
         60
       ],
-      "byteSize": 65998
+      "byteSize": 74028
     },
     {
       "id": "topo-n50w160-23",
@@ -2519,7 +3449,7 @@
         -155,
         60
       ],
-      "byteSize": 105578
+      "byteSize": 117768
     },
     {
       "id": "topo-n50w160-30",
@@ -2532,7 +3462,7 @@
         -152.5,
         57.5
       ],
-      "byteSize": 31251
+      "byteSize": 35499
     },
     {
       "id": "topo-n50w160-31",
@@ -2545,7 +3475,7 @@
         -152.1666667,
         57.5
       ],
-      "byteSize": 795
+      "byteSize": 903
     },
     {
       "id": "topo-n50w160-32",
@@ -2558,7 +3488,7 @@
         -152.5,
         60
       ],
-      "byteSize": 82451
+      "byteSize": 94265
     },
     {
       "id": "topo-n50w160-33",
@@ -2571,7 +3501,7 @@
         -150,
         60
       ],
-      "byteSize": 39316
+      "byteSize": 44786
     },
     {
       "id": "topo-n50w170-0",
@@ -2584,7 +3514,7 @@
         -165,
         54.375
       ],
-      "byteSize": 38053
+      "byteSize": 43369
     },
     {
       "id": "topo-n50w170-1",
@@ -2597,7 +3527,7 @@
         -160,
         55
       ],
-      "byteSize": 33328
+      "byteSize": 37324
     },
     {
       "id": "topo-n50w170-2",
@@ -2610,7 +3540,7 @@
         -165.375,
         60
       ],
-      "byteSize": 8910
+      "byteSize": 9826
     },
     {
       "id": "topo-n50w170-3",
@@ -2623,7 +3553,7 @@
         -159.9375,
         60
       ],
-      "byteSize": 118932
+      "byteSize": 133388
     },
     {
       "id": "topo-n50w180",
@@ -2636,7 +3566,7 @@
         -170,
         57.275
       ],
-      "byteSize": 46477
+      "byteSize": 52661
     },
     {
       "id": "topo-n60w070",
@@ -2649,7 +3579,7 @@
         -61,
         70
       ],
-      "byteSize": 110669
+      "byteSize": 128261
     },
     {
       "id": "topo-n60w080",
@@ -2662,7 +3592,7 @@
         -70,
         70
       ],
-      "byteSize": 99971
+      "byteSize": 113177
     },
     {
       "id": "topo-n60w090",
@@ -2675,7 +3605,7 @@
         -80,
         70
       ],
-      "byteSize": 78303
+      "byteSize": 88819
     },
     {
       "id": "topo-n60w100",
@@ -2688,7 +3618,7 @@
         -90,
         70
       ],
-      "byteSize": 5907
+      "byteSize": 6691
     },
     {
       "id": "topo-n60w110",
@@ -2701,7 +3631,7 @@
         -105,
         69.25
       ],
-      "byteSize": 381
+      "byteSize": 429
     },
     {
       "id": "topo-n60w120",
@@ -2714,7 +3644,7 @@
         -112,
         68
       ],
-      "byteSize": 3883
+      "byteSize": 4419
     },
     {
       "id": "topo-n60w130",
@@ -2727,7 +3657,7 @@
         -120.5,
         66.5
       ],
-      "byteSize": 719
+      "byteSize": 815
     },
     {
       "id": "topo-n60w140",
@@ -2740,7 +3670,7 @@
         -134.5,
         62
       ],
-      "byteSize": 12603
+      "byteSize": 14649
     },
     {
       "id": "topo-n60w150-00",
@@ -2753,7 +3683,7 @@
         -147.5,
         62.5
       ],
-      "byteSize": 95385
+      "byteSize": 109863
     },
     {
       "id": "topo-n60w150-01",
@@ -2766,7 +3696,7 @@
         -144.9375,
         62.5
       ],
-      "byteSize": 94455
+      "byteSize": 107573
     },
     {
       "id": "topo-n60w150-02",
@@ -2779,7 +3709,7 @@
         -147.5,
         65
       ],
-      "byteSize": 76274
+      "byteSize": 86116
     },
     {
       "id": "topo-n60w150-03",
@@ -2792,7 +3722,7 @@
         -145,
         65
       ],
-      "byteSize": 76268
+      "byteSize": 86102
     },
     {
       "id": "topo-n60w150-10",
@@ -2805,7 +3735,7 @@
         -142.5,
         62.5
       ],
-      "byteSize": 95002
+      "byteSize": 109446
     },
     {
       "id": "topo-n60w150-11",
@@ -2818,7 +3748,7 @@
         -140.0625,
         62.5
       ],
-      "byteSize": 65062
+      "byteSize": 75256
     },
     {
       "id": "topo-n60w150-12",
@@ -2831,7 +3761,7 @@
         -142.5,
         65
       ],
-      "byteSize": 75411
+      "byteSize": 85931
     },
     {
       "id": "topo-n60w150-13",
@@ -2844,7 +3774,7 @@
         -141,
         65
       ],
-      "byteSize": 44903
+      "byteSize": 50695
     },
     {
       "id": "topo-n60w150-20",
@@ -2857,7 +3787,7 @@
         -147.5,
         67.5
       ],
-      "byteSize": 75315
+      "byteSize": 83707
     },
     {
       "id": "topo-n60w150-21",
@@ -2870,7 +3800,7 @@
         -145,
         67.5
       ],
-      "byteSize": 75507
+      "byteSize": 84123
     },
     {
       "id": "topo-n60w150-22",
@@ -2883,7 +3813,7 @@
         -147.5,
         70
       ],
-      "byteSize": 67107
+      "byteSize": 75147
     },
     {
       "id": "topo-n60w150-23",
@@ -2896,7 +3826,7 @@
         -144.9,
         70
       ],
-      "byteSize": 71211
+      "byteSize": 80009
     },
     {
       "id": "topo-n60w150-30",
@@ -2909,7 +3839,7 @@
         -142.5,
         67.5
       ],
-      "byteSize": 76491
+      "byteSize": 84351
     },
     {
       "id": "topo-n60w150-31",
@@ -2922,7 +3852,7 @@
         -141,
         67.5
       ],
-      "byteSize": 46283
+      "byteSize": 51279
     },
     {
       "id": "topo-n60w150-32",
@@ -2935,7 +3865,7 @@
         -142.5,
         70
       ],
-      "byteSize": 65371
+      "byteSize": 73129
     },
     {
       "id": "topo-n60w150-33",
@@ -2948,7 +3878,7 @@
         -141,
         70
       ],
-      "byteSize": 39273
+      "byteSize": 43589
     },
     {
       "id": "topo-n60w160-00",
@@ -2961,7 +3891,7 @@
         -157.5,
         62.5
       ],
-      "byteSize": 96771
+      "byteSize": 106947
     },
     {
       "id": "topo-n60w160-01",
@@ -2974,7 +3904,7 @@
         -155,
         62.5
       ],
-      "byteSize": 96507
+      "byteSize": 106031
     },
     {
       "id": "topo-n60w160-02",
@@ -2987,7 +3917,7 @@
         -157.5,
         65
       ],
-      "byteSize": 75195
+      "byteSize": 82691
     },
     {
       "id": "topo-n60w160-03",
@@ -3000,7 +3930,7 @@
         -155,
         65
       ],
-      "byteSize": 74089
+      "byteSize": 81525
     },
     {
       "id": "topo-n60w160-10",
@@ -3013,7 +3943,7 @@
         -152.4375,
         62.5
       ],
-      "byteSize": 101083
+      "byteSize": 116227
     },
     {
       "id": "topo-n60w160-11",
@@ -3026,7 +3956,7 @@
         -150,
         62.5
       ],
-      "byteSize": 86617
+      "byteSize": 97435
     },
     {
       "id": "topo-n60w160-12",
@@ -3039,7 +3969,7 @@
         -152.5,
         65
       ],
-      "byteSize": 74451
+      "byteSize": 82247
     },
     {
       "id": "topo-n60w160-13",
@@ -3052,7 +3982,7 @@
         -150,
         65
       ],
-      "byteSize": 76755
+      "byteSize": 85839
     },
     {
       "id": "topo-n60w160-20",
@@ -3065,7 +3995,7 @@
         -157.5,
         67.5
       ],
-      "byteSize": 76266
+      "byteSize": 83786
     },
     {
       "id": "topo-n60w160-21",
@@ -3078,7 +4008,7 @@
         -155,
         67.5
       ],
-      "byteSize": 76329
+      "byteSize": 84837
     },
     {
       "id": "topo-n60w160-22",
@@ -3091,7 +4021,7 @@
         -157.5,
         70
       ],
-      "byteSize": 65783
+      "byteSize": 72379
     },
     {
       "id": "topo-n60w160-23",
@@ -3104,7 +4034,7 @@
         -155,
         70
       ],
-      "byteSize": 65405
+      "byteSize": 72517
     },
     {
       "id": "topo-n60w160-30",
@@ -3117,7 +4047,7 @@
         -152.5,
         67.5
       ],
-      "byteSize": 75357
+      "byteSize": 84273
     },
     {
       "id": "topo-n60w160-31",
@@ -3130,7 +4060,7 @@
         -150,
         67.5
       ],
-      "byteSize": 74579
+      "byteSize": 83283
     },
     {
       "id": "topo-n60w160-32",
@@ -3143,7 +4073,7 @@
         -152.4,
         70
       ],
-      "byteSize": 71360
+      "byteSize": 79104
     },
     {
       "id": "topo-n60w160-33",
@@ -3156,7 +4086,7 @@
         -150,
         70
       ],
-      "byteSize": 63594
+      "byteSize": 71342
     },
     {
       "id": "topo-n60w170-0",
@@ -3169,7 +4099,7 @@
         -165,
         65
       ],
-      "byteSize": 58278
+      "byteSize": 64806
     },
     {
       "id": "topo-n60w170-10",
@@ -3182,7 +4112,7 @@
         -162.5,
         62.5
       ],
-      "byteSize": 93538
+      "byteSize": 102958
     },
     {
       "id": "topo-n60w170-11",
@@ -3195,7 +4125,7 @@
         -159.9375,
         62.5
       ],
-      "byteSize": 102139
+      "byteSize": 111987
     },
     {
       "id": "topo-n60w170-12",
@@ -3208,7 +4138,7 @@
         -162.5,
         65
       ],
-      "byteSize": 41875
+      "byteSize": 46407
     },
     {
       "id": "topo-n60w170-13",
@@ -3221,7 +4151,7 @@
         -160,
         65
       ],
-      "byteSize": 60909
+      "byteSize": 67397
     },
     {
       "id": "topo-n60w170-2",
@@ -3234,7 +4164,7 @@
         -165,
         69
       ],
-      "byteSize": 56464
+      "byteSize": 62668
     },
     {
       "id": "topo-n60w170-30",
@@ -3247,7 +4177,7 @@
         -162.5,
         67.5
       ],
-      "byteSize": 53143
+      "byteSize": 58539
     },
     {
       "id": "topo-n60w170-31",
@@ -3260,7 +4190,7 @@
         -160,
         67.5
       ],
-      "byteSize": 72120
+      "byteSize": 80072
     },
     {
       "id": "topo-n60w170-32",
@@ -3273,7 +4203,7 @@
         -162.5,
         70
       ],
-      "byteSize": 47203
+      "byteSize": 52103
     },
     {
       "id": "topo-n60w170-33",
@@ -3286,7 +4216,7 @@
         -159.9,
         70
       ],
-      "byteSize": 72599
+      "byteSize": 80779
     },
     {
       "id": "topo-n60w180",
@@ -3299,7 +4229,7 @@
         -170,
         63.875
       ],
-      "byteSize": 18646
+      "byteSize": 20806
     },
     {
       "id": "topo-n70w070",
@@ -3312,7 +4242,7 @@
         -67,
         71
       ],
-      "byteSize": 1679
+      "byteSize": 1975
     },
     {
       "id": "topo-n70w080",
@@ -3325,7 +4255,7 @@
         -70,
         80
       ],
-      "byteSize": 47977
+      "byteSize": 57255
     },
     {
       "id": "topo-n70w090",
@@ -3338,7 +4268,7 @@
         -80,
         80
       ],
-      "byteSize": 89025
+      "byteSize": 104121
     },
     {
       "id": "topo-n70w100",
@@ -3351,7 +4281,7 @@
         -90,
         80
       ],
-      "byteSize": 57478
+      "byteSize": 66028
     },
     {
       "id": "topo-n70w110",
@@ -3364,7 +4294,7 @@
         -100,
         79.5
       ],
-      "byteSize": 21231
+      "byteSize": 24183
     },
     {
       "id": "topo-n70w120",
@@ -3377,7 +4307,7 @@
         -110,
         79
       ],
-      "byteSize": 49306
+      "byteSize": 56090
     },
     {
       "id": "topo-n70w130",
@@ -3390,7 +4320,7 @@
         -120,
         77.25
       ],
-      "byteSize": 5527
+      "byteSize": 6299
     },
     {
       "id": "topo-n70w140",
@@ -3403,7 +4333,7 @@
         -131,
         70.25
       ],
-      "byteSize": 362
+      "byteSize": 410
     },
     {
       "id": "topo-n70w150",
@@ -3416,7 +4346,7 @@
         -142.5,
         70.625
       ],
-      "byteSize": 26684
+      "byteSize": 29468
     },
     {
       "id": "topo-n70w160",
@@ -3429,7 +4359,7 @@
         -150,
         71.5
       ],
-      "byteSize": 98385
+      "byteSize": 107961
     },
     {
       "id": "topo-n70w170",
@@ -3442,7 +4372,7 @@
         -159.9,
         70.75
       ],
-      "byteSize": 13413
+      "byteSize": 14821
     },
     {
       "id": "topo-n80w070",
@@ -3455,7 +4385,7 @@
         -60,
         83
       ],
-      "byteSize": 5429
+      "byteSize": 6457
     },
     {
       "id": "topo-n80w080",
@@ -3468,7 +4398,7 @@
         -70,
         83
       ],
-      "byteSize": 12721
+      "byteSize": 15183
     },
     {
       "id": "topo-n80w090",
@@ -3481,7 +4411,7 @@
         -80,
         83
       ],
-      "byteSize": 16565
+      "byteSize": 19705
     },
     {
       "id": "topo-n80w100",
@@ -3494,7 +4424,7 @@
         -90,
         82
       ],
-      "byteSize": 7915
+      "byteSize": 9331
     },
     {
       "id": "topo-s10e140",
@@ -3507,7 +4437,7 @@
         145.5,
         -9
       ],
-      "byteSize": 900
+      "byteSize": 1039
     },
     {
       "id": "topo-s20e120",
@@ -3520,7 +4450,7 @@
         130.5,
         -13
       ],
-      "byteSize": 10419
+      "byteSize": 12286
     },
     {
       "id": "topo-s20e130",
@@ -3533,7 +4463,7 @@
         139.91,
         -10.95
       ],
-      "byteSize": 13838
+      "byteSize": 16216
     },
     {
       "id": "topo-s20e140",
@@ -3546,7 +4476,7 @@
         148.5,
         -10
       ],
-      "byteSize": 9815
+      "byteSize": 11712
     },
     {
       "id": "topo-s30e110",
@@ -3559,7 +4489,7 @@
         120,
         -19.5
       ],
-      "byteSize": 12492
+      "byteSize": 14730
     },
     {
       "id": "topo-s30e120",
@@ -3572,7 +4502,7 @@
         130.5,
         -20
       ],
-      "byteSize": 20583
+      "byteSize": 23609
     },
     {
       "id": "topo-s30e130",
@@ -3585,7 +4515,7 @@
         139.5,
         -20
       ],
-      "byteSize": 17822
+      "byteSize": 20686
     },
     {
       "id": "topo-s30e140",
@@ -3598,7 +4528,7 @@
         150,
         -20
       ],
-      "byteSize": 20685
+      "byteSize": 24195
     },
     {
       "id": "topo-s30e150",
@@ -3611,7 +4541,7 @@
         154,
         -21
       ],
-      "byteSize": 5670
+      "byteSize": 6825
     },
     {
       "id": "topo-s40e110",
@@ -3624,7 +4554,7 @@
         120,
         -30
       ],
-      "byteSize": 5088
+      "byteSize": 6033
     },
     {
       "id": "topo-s40e120",
@@ -3637,7 +4567,7 @@
         130.5,
         -30
       ],
-      "byteSize": 6258
+      "byteSize": 7259
     },
     {
       "id": "topo-s40e130",
@@ -3650,7 +4580,7 @@
         139.5,
         -30
       ],
-      "byteSize": 7719
+      "byteSize": 9165
     },
     {
       "id": "topo-s40e140",
@@ -3663,7 +4593,7 @@
         150.25,
         -30
       ],
-      "byteSize": 17488
+      "byteSize": 20607
     },
     {
       "id": "topo-s40e150",
@@ -3676,15 +4606,39 @@
         153.28,
         -30
       ],
-      "byteSize": 2418
+      "byteSize": 2946
     }
   ],
   "search": {
     "path": "search.json",
-    "byteSize": 485387,
-    "tokenCount": 23273
+    "byteSize": 741381,
+    "tokenCount": 34764
+  },
+  "facets": {
+    "path": "facets.json",
+    "byteSize": 47842
+  },
+  "collections": {
+    "path": "collections.json",
+    "byteSize": 11813
   },
   "categoryCounts": {
-    "topo": 67983
+    "topo": 67983,
+    "forest": 11485
+  },
+  "kindCounts": {
+    "topo": 79468
+  },
+  "activityCounts": {
+    "hiking": 27849,
+    "paddling": 27881,
+    "fishing": 21859,
+    "climbing": 2163
+  },
+  "terrainCounts": {
+    "mountains": 27849,
+    "coast": 6515,
+    "water": 21859,
+    "glacier": 2163
   }
 }

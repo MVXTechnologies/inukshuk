@@ -1,0 +1,454 @@
+{
+  "_comment": "Hand-curated (2026-09-28). Codes/URLs come only from public sources (OSM website tags and/or Wikidata P856 official website); sepaq.com itself refuses scripted requests and was never fetched. Coordinates: OSM boundary centre (out center). Activities are assigned by type in build-manifest (see docs/CATALOG.md). Excluded: Nunavik parks (Kativik/Nunavik Parks), Nibiischii and Cree-run reserves, reserves run by other operators, federal parks, and Sépaq tourist sites (e.g. Chute-Montmorency).",
+  "id": "sepaq",
+  "name": "Parcs Québec",
+  "publisher": "Sépaq",
+  "blurb": "Maps on sepaq.com",
+  "homepage": "https://www.sepaq.com/",
+  "places": [
+    {
+      "id": "sepaq-pq-aig",
+      "name": "Parc national d'Aiguebelle",
+      "type": "National park",
+      "latitude": 48.5134,
+      "longitude": -78.7454,
+      "url": "https://www.sepaq.com/pq/aig/",
+      "evidence": {
+        "url": "OSM way 669213368 website=https://www.sepaq.com/pq/aig/ (Wikidata Q1327757 P856 points to wdpa.org instead)",
+        "coordinates": "OSM way 669213368 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-pan",
+      "name": "Parc national d'Anticosti",
+      "type": "National park",
+      "latitude": 49.5167,
+      "longitude": -62.7247,
+      "url": "https://www.sepaq.com/pq/pan/",
+      "evidence": {
+        "url": "OSM relation 7745542 website=https://www.sepaq.com/pq/pan; Wikidata Q2052003 P856 sepaq.com/pq/pan/fr/",
+        "coordinates": "OSM relation 7745542 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-oka",
+      "name": "Parc national d'Oka",
+      "type": "National park",
+      "latitude": 45.4788,
+      "longitude": -74.0322,
+      "url": "https://www.sepaq.com/pq/oka/",
+      "evidence": {
+        "url": "OSM way 213216039 website=https://www.sepaq.com/pq/oka/; Wikidata Q2052005 P856 sepaq.com/pq/oka/fr/",
+        "coordinates": "OSM way 213216039 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-ope",
+      "name": "Parc national d'Opémican",
+      "type": "National park",
+      "latitude": 46.9615,
+      "longitude": -79.1975,
+      "url": "https://www.sepaq.com/pq/ope/",
+      "evidence": {
+        "url": "Wikidata Q15395907 P856 https://www.sepaq.com/pq/ope/index.dot (OSM relation 12156482 has no website tag)",
+        "coordinates": "OSM relation 12156482 center (Wikidata P625 gives 46.885,-79.1025)"
+      }
+    },
+    {
+      "id": "sepaq-pq-fro",
+      "name": "Parc national de Frontenac",
+      "type": "National park",
+      "latitude": 45.8604,
+      "longitude": -71.1904,
+      "url": "https://www.sepaq.com/pq/fro/",
+      "evidence": {
+        "url": "OSM relation 6175298 website=https://www.sepaq.com/pq/fro/; Wikidata Q1625209 P856 sepaq.com/pq/fro/",
+        "coordinates": "OSM relation 6175298 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-mig",
+      "name": "Parc national de Miguasha",
+      "type": "National park",
+      "latitude": 48.1002,
+      "longitude": -66.3704,
+      "url": "https://www.sepaq.com/pq/mig/",
+      "evidence": {
+        "url": "OSM relation 6989317 website=https://sepaq.com/pq/mig; Wikidata Q631128 P856 sepaq.com/pq/mig/fr/",
+        "coordinates": "OSM relation 6989317 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-pla",
+      "name": "Parc national de Plaisance",
+      "type": "National park",
+      "latitude": 45.6115,
+      "longitude": -75.133,
+      "url": "https://www.sepaq.com/pq/pla/",
+      "evidence": {
+        "url": "OSM relation 21158122 website=https://www.sepaq.com/pq/pla/; Wikidata Q1630760 P856 sepaq.com/pq/pla/index.dot",
+        "coordinates": "OSM relation 21158122 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-bon",
+      "name": "Parc national de l'Île-Bonaventure-et-du-Rocher-Percé",
+      "type": "National park",
+      "latitude": 48.5045,
+      "longitude": -64.1752,
+      "url": "https://www.sepaq.com/pq/bon/",
+      "evidence": {
+        "url": "OSM relation 6989318 website=https://sepaq.com/pq/bon; Wikidata Q745054 P856 sepaq.com/pq/bon/",
+        "coordinates": "OSM relation 6989318 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-gas",
+      "name": "Parc national de la Gaspésie",
+      "type": "National park",
+      "latitude": 48.9718,
+      "longitude": -66.2671,
+      "url": "https://www.sepaq.com/pq/gas/",
+      "evidence": {
+        "url": "OSM relation 7485827 website=https://www.sepaq.com/pq/gas; Wikidata Q2051988 P856 sepaq.com/pq/gas/fr/",
+        "coordinates": "OSM relation 7485827 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-jac",
+      "name": "Parc national de la Jacques-Cartier",
+      "type": "National park",
+      "latitude": 47.2922,
+      "longitude": -71.3485,
+      "url": "https://www.sepaq.com/pq/jac/",
+      "evidence": {
+        "url": "OSM relation 15421717 website=https://www.sepaq.com/pq/jac/; Wikidata Q1631583 P856 sepaq.com/pq/jac/fr/",
+        "coordinates": "OSM relation 15421717 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-pta",
+      "name": "Parc national de la Pointe-Taillon",
+      "type": "National park",
+      "latitude": 48.6507,
+      "longitude": -71.9287,
+      "url": "https://www.sepaq.com/pq/pta/",
+      "evidence": {
+        "url": "Wikidata Q2051991 P856 http://www.sepaq.com/pq/pta/fr/ (OSM relation 7295219 has no website tag)",
+        "coordinates": "OSM relation 7295219 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-yam",
+      "name": "Parc national de la Yamaska",
+      "type": "National park",
+      "latitude": 45.4254,
+      "longitude": -72.5905,
+      "url": "https://www.sepaq.com/pq/yam/",
+      "evidence": {
+        "url": "OSM way 349671263 website=https://www.sepaq.com/pq/yam/; Wikidata Q1329151 P856 sepaq.com/pq/yam/fr/",
+        "coordinates": "OSM way 349671263 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-grj",
+      "name": "Parc national des Grands-Jardins",
+      "type": "National park",
+      "latitude": 47.6872,
+      "longitude": -70.7957,
+      "url": "https://www.sepaq.com/pq/grj/",
+      "evidence": {
+        "url": "OSM relation 7745631 website=https://www.sepaq.com/pq/grj; Wikidata Q1553329 P856 sepaq.com/pq/grj/fr/",
+        "coordinates": "OSM relation 7745631 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-hgo",
+      "name": "Parc national des Hautes-Gorges-de-la-Rivière-Malbaie",
+      "type": "National park",
+      "latitude": 47.9183,
+      "longitude": -70.4974,
+      "url": "https://www.sepaq.com/pq/hgo/",
+      "evidence": {
+        "url": "OSM relation 8280000 website=https://www.sepaq.com/pq/hgo/; Wikidata Q1145575 P856 sepaq.com/pq/hgo/fr/",
+        "coordinates": "OSM relation 8280000 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-mva",
+      "name": "Parc national des Monts-Valin",
+      "type": "National park",
+      "latitude": 48.5901,
+      "longitude": -70.792,
+      "url": "https://www.sepaq.com/pq/mva/",
+      "evidence": {
+        "url": "OSM relation 8388316 website=https://www.sepaq.com/pq/mva/; Wikidata Q1395482 P856 sepaq.com/pq/mva/",
+        "coordinates": "OSM relation 8388316 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-bou",
+      "name": "Parc national des Îles-de-Boucherville",
+      "type": "National park",
+      "latitude": 45.6133,
+      "longitude": -73.4715,
+      "url": "https://www.sepaq.com/pq/bou/",
+      "evidence": {
+        "url": "Wikidata Q1327997 P856 http://www.sepaq.com/pq/bou/ (OSM relation 8057847 has no website tag)",
+        "coordinates": "OSM relation 8057847 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-bic",
+      "name": "Parc national du Bic",
+      "type": "National park",
+      "latitude": 48.3446,
+      "longitude": -68.7899,
+      "url": "https://www.sepaq.com/pq/bic/",
+      "evidence": {
+        "url": "OSM relation 5212364 website=https://www.sepaq.com/pq/bic/; Wikidata Q170269 P856 sepaq.com/pq/bic/",
+        "coordinates": "OSM relation 5212364 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-sag",
+      "name": "Parc national du Fjord-du-Saguenay",
+      "type": "National park",
+      "latitude": 48.2631,
+      "longitude": -70.1989,
+      "url": "https://www.sepaq.com/pq/sag/",
+      "evidence": {
+        "url": "OSM relation 8388140 website=https://www.sepaq.com/pq/sag; Wikidata Q3364513 P856 sepaq.com/pq/sag/fr/",
+        "coordinates": "OSM relation 8388140 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-tem",
+      "name": "Parc national du Lac-Témiscouata",
+      "type": "National park",
+      "latitude": 47.7131,
+      "longitude": -68.7713,
+      "url": "https://www.sepaq.com/pq/tem/",
+      "evidence": {
+        "url": "OSM relation 7011274 website=https://sepaq.com/pq/tem (Wikidata Q1748065 P856 is an old mddep.gouv.qc.ca page)",
+        "coordinates": "OSM relation 7011274 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-mme",
+      "name": "Parc national du Mont-Mégantic",
+      "type": "National park",
+      "latitude": 45.4479,
+      "longitude": -71.1569,
+      "url": "https://www.sepaq.com/pq/mme/",
+      "evidence": {
+        "url": "OSM relation 4775777 website=https://www.sepaq.com/pq/mme/; Wikidata Q1751092 P856 sepaq.com/pq/mme/fr/",
+        "coordinates": "OSM relation 4775777 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-mor",
+      "name": "Parc national du Mont-Orford",
+      "type": "National park",
+      "latitude": 45.4132,
+      "longitude": -72.1807,
+      "url": "https://www.sepaq.com/pq/mor/",
+      "evidence": {
+        "url": "Wikidata Q1147629 P856 http://www.sepaq.com/pq/mor/fr/; also OSM relation 9916501 (MTB Orford, operator SEPAQ Parc National du Mont-Orford) website=https://www.sepaq.com/pq/mor/. Park boundary relation 12116831 has no website tag",
+        "coordinates": "OSM relation 12116831 center (Wikidata P625 gives 45.3333,-72.2167)"
+      }
+    },
+    {
+      "id": "sepaq-pq-msb",
+      "name": "Parc national du Mont-Saint-Bruno",
+      "type": "National park",
+      "latitude": 45.55,
+      "longitude": -73.3328,
+      "url": "https://www.sepaq.com/pq/msb/",
+      "evidence": {
+        "url": "OSM relation 6991391 website=https://sepaq.com/pq/msb (Wikidata Q2051996 has no P856)",
+        "coordinates": "OSM relation 6991391 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-mot",
+      "name": "Parc national du Mont-Tremblant",
+      "type": "National park",
+      "latitude": 46.4152,
+      "longitude": -74.2759,
+      "url": "https://www.sepaq.com/pq/mot/",
+      "evidence": {
+        "url": "OSM relation 8008857 website=https://www.sepaq.com/pq/mot; Wikidata Q252793 P856 sepaq.com/pq/mot/fr/",
+        "coordinates": "OSM relation 8008857 center"
+      }
+    },
+    {
+      "id": "sepaq-pq-ssl",
+      "name": "Parc marin du Saguenay–Saint-Laurent",
+      "type": "Marine park",
+      "latitude": 48.0173,
+      "longitude": -69.9969,
+      "url": "https://www.sepaq.com/pq/ssl/",
+      "evidence": {
+        "url": "OSM relation 8388138 website=https://www.sepaq.com/pq/ssl (operator tag Sépaq). Note: a marine park co-managed by Parks Canada and Sépaq, not a 'parc national' by name",
+        "coordinates": "OSM relation 8388138 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-ash",
+      "name": "Réserve faunique Ashuapmushuan",
+      "type": "Wildlife reserve",
+      "latitude": 49.1347,
+      "longitude": -73.468,
+      "url": "https://www.sepaq.com/rf/ash/",
+      "evidence": {
+        "url": "OSM relation 8388139 website=https://www.sepaq.com/rf/ash; Wikidata Q3457195 P856 sepaq.com/rf/ash/",
+        "coordinates": "OSM relation 8388139 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-lvy",
+      "name": "Réserve faunique La Vérendrye",
+      "type": "Wildlife reserve",
+      "latitude": 47.3272,
+      "longitude": -77.0016,
+      "url": "https://www.sepaq.com/rf/lvy/",
+      "evidence": {
+        "url": "OSM relation 7981031 website=https://www.sepaq.com/rf/lvy/; Wikidata Q3457199 P856 sepaq.com/rf/lvy/",
+        "coordinates": "OSM relation 7981031 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-mas",
+      "name": "Réserve faunique Mastigouche",
+      "type": "Wildlife reserve",
+      "latitude": 46.6952,
+      "longitude": -73.3805,
+      "url": "https://www.sepaq.com/rf/mas/",
+      "evidence": {
+        "url": "Wikidata Q3457200 P856 http://www.sepaq.com/rf/mas/fr/ (OSM relation 8008865 has no website tag)",
+        "coordinates": "OSM relation 8008865 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-rom",
+      "name": "Réserve faunique Rouge-Matawin",
+      "type": "Wildlife reserve",
+      "latitude": 46.7114,
+      "longitude": -74.4331,
+      "url": "https://www.sepaq.com/rf/rom/",
+      "evidence": {
+        "url": "OSM relation 8008856 website=https://www.sepaq.com/rf/rom/; Wikidata Q3457203 P856 sepaq.com/rf/rom/fr/",
+        "coordinates": "OSM relation 8008856 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-mat",
+      "name": "Réserve faunique de Matane",
+      "type": "Wildlife reserve",
+      "latitude": 48.7258,
+      "longitude": -66.8825,
+      "url": "https://www.sepaq.com/rf/mat/",
+      "evidence": {
+        "url": "OSM relation 7485828 website=https://www.sepaq.com/rf/mat; Wikidata Q3457205 P856 sepaq.com/rf/mat/fr/",
+        "coordinates": "OSM relation 7485828 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-pal",
+      "name": "Réserve faunique de Papineau-Labelle",
+      "type": "Wildlife reserve",
+      "latitude": 46.0869,
+      "longitude": -75.2208,
+      "url": "https://www.sepaq.com/rf/pal/",
+      "evidence": {
+        "url": "OSM way 558634613 website=https://www.sepaq.com/rf/pal/index.dot; Wikidata Q3457207 P856 sepaq.com/rf/pal/fr/",
+        "coordinates": "OSM way 558634613 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-spc",
+      "name": "Réserve faunique de Port-Cartier–Sept-Îles",
+      "type": "Wildlife reserve",
+      "latitude": 50.4953,
+      "longitude": -67.2775,
+      "url": "https://www.sepaq.com/rf/spc/",
+      "evidence": {
+        "url": "OSM relation 7953146 website=https://www.sepaq.com/rf/spc/; Wikidata Q28709825 P856 sepaq.com/rf/spc/",
+        "coordinates": "OSM relation 7953146 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-pod",
+      "name": "Réserve faunique de Port-Daniel",
+      "type": "Wildlife reserve",
+      "latitude": 48.288,
+      "longitude": -65.0081,
+      "url": "https://www.sepaq.com/rf/pod/",
+      "evidence": {
+        "url": "OSM relation 8271777 website=https://sepaq.com/rf/pod; Wikidata Q65103806 P856 sepaq.com/rf/pod/",
+        "coordinates": "OSM relation 8271777 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-por",
+      "name": "Réserve faunique de Portneuf",
+      "type": "Wildlife reserve",
+      "latitude": 47.201,
+      "longitude": -72.261,
+      "url": "https://www.sepaq.com/rf/por/",
+      "evidence": {
+        "url": "OSM relation 8008866 website=https://www.sepaq.com/rf/por/ (Wikidata Q3457206 has no P856)",
+        "coordinates": "OSM relation 8008866 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-rim",
+      "name": "Réserve faunique de Rimouski",
+      "type": "Wildlife reserve",
+      "latitude": 48.0599,
+      "longitude": -68.2328,
+      "url": "https://www.sepaq.com/rf/rim/",
+      "evidence": {
+        "url": "OSM relation 7745588 website=https://www.sepaq.com/rf/rim; Wikidata Q3457209 P856 sepaq.com/rf/rim/",
+        "coordinates": "OSM relation 7745588 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-chc",
+      "name": "Réserve faunique des Chic-Chocs",
+      "type": "Wildlife reserve",
+      "latitude": 48.9542,
+      "longitude": -65.85,
+      "url": "https://www.sepaq.com/rf/chc/",
+      "evidence": {
+        "url": "OSM relation 7062309 website=https://www.sepaq.com/rf/chc/; Wikidata Q3457211 P856 sepaq.com/rf/chc/fr/",
+        "coordinates": "OSM relation 7062309 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-lau",
+      "name": "Réserve faunique des Laurentides",
+      "type": "Wildlife reserve",
+      "latitude": 47.696,
+      "longitude": -71.3803,
+      "url": "https://www.sepaq.com/rf/lau/",
+      "evidence": {
+        "url": "OSM relation 7263453 website=https://www.sepaq.com/rf/lau; Wikidata Q3457213 P856 sepaq.com/rf/lau/fr/",
+        "coordinates": "OSM relation 7263453 center"
+      }
+    },
+    {
+      "id": "sepaq-rf-stm",
+      "name": "Réserve faunique du Saint-Maurice",
+      "type": "Wildlife reserve",
+      "latitude": 47.0575,
+      "longitude": -73.1547,
+      "url": "https://www.sepaq.com/rf/stm/",
+      "evidence": {
+        "url": "OSM relation 8008864 website=https://www.sepaq.com/rf/stm; Wikidata Q3457215 P856 sepaq.com/rf/stm/fr/",
+        "coordinates": "OSM relation 8008864 center"
+      }
+    }
+  ]
+}

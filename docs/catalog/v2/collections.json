@@ -1,0 +1,454 @@
+[
+  {
+    "id": "sepaq",
+    "name": "Parcs Québec",
+    "publisher": "Sépaq",
+    "blurb": "Maps on sepaq.com",
+    "homepage": "https://www.sepaq.com/",
+    "places": [
+      {
+        "id": "sepaq-pq-aig",
+        "name": "Parc national d'Aiguebelle",
+        "type": "National park",
+        "latitude": 48.5134,
+        "longitude": -78.7454,
+        "url": "https://www.sepaq.com/pq/aig/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-pan",
+        "name": "Parc national d'Anticosti",
+        "type": "National park",
+        "latitude": 49.5167,
+        "longitude": -62.7247,
+        "url": "https://www.sepaq.com/pq/pan/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-oka",
+        "name": "Parc national d'Oka",
+        "type": "National park",
+        "latitude": 45.4788,
+        "longitude": -74.0322,
+        "url": "https://www.sepaq.com/pq/oka/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-ope",
+        "name": "Parc national d'Opémican",
+        "type": "National park",
+        "latitude": 46.9615,
+        "longitude": -79.1975,
+        "url": "https://www.sepaq.com/pq/ope/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-fro",
+        "name": "Parc national de Frontenac",
+        "type": "National park",
+        "latitude": 45.8604,
+        "longitude": -71.1904,
+        "url": "https://www.sepaq.com/pq/fro/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-mig",
+        "name": "Parc national de Miguasha",
+        "type": "National park",
+        "latitude": 48.1002,
+        "longitude": -66.3704,
+        "url": "https://www.sepaq.com/pq/mig/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-pla",
+        "name": "Parc national de Plaisance",
+        "type": "National park",
+        "latitude": 45.6115,
+        "longitude": -75.133,
+        "url": "https://www.sepaq.com/pq/pla/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-bon",
+        "name": "Parc national de l'Île-Bonaventure-et-du-Rocher-Percé",
+        "type": "National park",
+        "latitude": 48.5045,
+        "longitude": -64.1752,
+        "url": "https://www.sepaq.com/pq/bon/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-gas",
+        "name": "Parc national de la Gaspésie",
+        "type": "National park",
+        "latitude": 48.9718,
+        "longitude": -66.2671,
+        "url": "https://www.sepaq.com/pq/gas/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-jac",
+        "name": "Parc national de la Jacques-Cartier",
+        "type": "National park",
+        "latitude": 47.2922,
+        "longitude": -71.3485,
+        "url": "https://www.sepaq.com/pq/jac/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-pta",
+        "name": "Parc national de la Pointe-Taillon",
+        "type": "National park",
+        "latitude": 48.6507,
+        "longitude": -71.9287,
+        "url": "https://www.sepaq.com/pq/pta/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-yam",
+        "name": "Parc national de la Yamaska",
+        "type": "National park",
+        "latitude": 45.4254,
+        "longitude": -72.5905,
+        "url": "https://www.sepaq.com/pq/yam/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-grj",
+        "name": "Parc national des Grands-Jardins",
+        "type": "National park",
+        "latitude": 47.6872,
+        "longitude": -70.7957,
+        "url": "https://www.sepaq.com/pq/grj/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-hgo",
+        "name": "Parc national des Hautes-Gorges-de-la-Rivière-Malbaie",
+        "type": "National park",
+        "latitude": 47.9183,
+        "longitude": -70.4974,
+        "url": "https://www.sepaq.com/pq/hgo/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-mva",
+        "name": "Parc national des Monts-Valin",
+        "type": "National park",
+        "latitude": 48.5901,
+        "longitude": -70.792,
+        "url": "https://www.sepaq.com/pq/mva/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-bou",
+        "name": "Parc national des Îles-de-Boucherville",
+        "type": "National park",
+        "latitude": 45.6133,
+        "longitude": -73.4715,
+        "url": "https://www.sepaq.com/pq/bou/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-bic",
+        "name": "Parc national du Bic",
+        "type": "National park",
+        "latitude": 48.3446,
+        "longitude": -68.7899,
+        "url": "https://www.sepaq.com/pq/bic/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-sag",
+        "name": "Parc national du Fjord-du-Saguenay",
+        "type": "National park",
+        "latitude": 48.2631,
+        "longitude": -70.1989,
+        "url": "https://www.sepaq.com/pq/sag/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-tem",
+        "name": "Parc national du Lac-Témiscouata",
+        "type": "National park",
+        "latitude": 47.7131,
+        "longitude": -68.7713,
+        "url": "https://www.sepaq.com/pq/tem/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-mme",
+        "name": "Parc national du Mont-Mégantic",
+        "type": "National park",
+        "latitude": 45.4479,
+        "longitude": -71.1569,
+        "url": "https://www.sepaq.com/pq/mme/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-mor",
+        "name": "Parc national du Mont-Orford",
+        "type": "National park",
+        "latitude": 45.4132,
+        "longitude": -72.1807,
+        "url": "https://www.sepaq.com/pq/mor/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-msb",
+        "name": "Parc national du Mont-Saint-Bruno",
+        "type": "National park",
+        "latitude": 45.55,
+        "longitude": -73.3328,
+        "url": "https://www.sepaq.com/pq/msb/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-mot",
+        "name": "Parc national du Mont-Tremblant",
+        "type": "National park",
+        "latitude": 46.4152,
+        "longitude": -74.2759,
+        "url": "https://www.sepaq.com/pq/mot/",
+        "activities": [
+          "hiking",
+          "camping"
+        ]
+      },
+      {
+        "id": "sepaq-pq-ssl",
+        "name": "Parc marin du Saguenay–Saint-Laurent",
+        "type": "Marine park",
+        "latitude": 48.0173,
+        "longitude": -69.9969,
+        "url": "https://www.sepaq.com/pq/ssl/",
+        "activities": [
+          "paddling"
+        ]
+      },
+      {
+        "id": "sepaq-rf-ash",
+        "name": "Réserve faunique Ashuapmushuan",
+        "type": "Wildlife reserve",
+        "latitude": 49.1347,
+        "longitude": -73.468,
+        "url": "https://www.sepaq.com/rf/ash/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-lvy",
+        "name": "Réserve faunique La Vérendrye",
+        "type": "Wildlife reserve",
+        "latitude": 47.3272,
+        "longitude": -77.0016,
+        "url": "https://www.sepaq.com/rf/lvy/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-mas",
+        "name": "Réserve faunique Mastigouche",
+        "type": "Wildlife reserve",
+        "latitude": 46.6952,
+        "longitude": -73.3805,
+        "url": "https://www.sepaq.com/rf/mas/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-rom",
+        "name": "Réserve faunique Rouge-Matawin",
+        "type": "Wildlife reserve",
+        "latitude": 46.7114,
+        "longitude": -74.4331,
+        "url": "https://www.sepaq.com/rf/rom/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-mat",
+        "name": "Réserve faunique de Matane",
+        "type": "Wildlife reserve",
+        "latitude": 48.7258,
+        "longitude": -66.8825,
+        "url": "https://www.sepaq.com/rf/mat/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-pal",
+        "name": "Réserve faunique de Papineau-Labelle",
+        "type": "Wildlife reserve",
+        "latitude": 46.0869,
+        "longitude": -75.2208,
+        "url": "https://www.sepaq.com/rf/pal/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-spc",
+        "name": "Réserve faunique de Port-Cartier–Sept-Îles",
+        "type": "Wildlife reserve",
+        "latitude": 50.4953,
+        "longitude": -67.2775,
+        "url": "https://www.sepaq.com/rf/spc/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-pod",
+        "name": "Réserve faunique de Port-Daniel",
+        "type": "Wildlife reserve",
+        "latitude": 48.288,
+        "longitude": -65.0081,
+        "url": "https://www.sepaq.com/rf/pod/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-por",
+        "name": "Réserve faunique de Portneuf",
+        "type": "Wildlife reserve",
+        "latitude": 47.201,
+        "longitude": -72.261,
+        "url": "https://www.sepaq.com/rf/por/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-rim",
+        "name": "Réserve faunique de Rimouski",
+        "type": "Wildlife reserve",
+        "latitude": 48.0599,
+        "longitude": -68.2328,
+        "url": "https://www.sepaq.com/rf/rim/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-chc",
+        "name": "Réserve faunique des Chic-Chocs",
+        "type": "Wildlife reserve",
+        "latitude": 48.9542,
+        "longitude": -65.85,
+        "url": "https://www.sepaq.com/rf/chc/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-lau",
+        "name": "Réserve faunique des Laurentides",
+        "type": "Wildlife reserve",
+        "latitude": 47.696,
+        "longitude": -71.3803,
+        "url": "https://www.sepaq.com/rf/lau/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      },
+      {
+        "id": "sepaq-rf-stm",
+        "name": "Réserve faunique du Saint-Maurice",
+        "type": "Wildlife reserve",
+        "latitude": 47.0575,
+        "longitude": -73.1547,
+        "url": "https://www.sepaq.com/rf/stm/",
+        "activities": [
+          "hunting",
+          "fishing"
+        ]
+      }
+    ]
+  }
+]
