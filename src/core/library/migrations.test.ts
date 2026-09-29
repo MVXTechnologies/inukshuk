@@ -734,6 +734,37 @@ describe('malformed nested library records', () => {
       expect(index.waypoints[0]).not.toHaveProperty('icon');
     }
   });
+
+  it('upgrades a v9 index: trails have no origin (#432)', () => {
+    const index = migrateLibraryIndex({ schemaVersion: 9, tracks: [track('t1')] });
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.tracks[0]).not.toHaveProperty('origin');
+  });
+
+  it('carries a valid trail origin through hydration (#432)', () => {
+    const origin = { source: 'strava', externalId: '1234' };
+    const index = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      tracks: [{ ...track('t1'), origin }],
+    });
+    expect(index.tracks[0]?.origin).toEqual(origin);
+  });
+
+  it('drops a junk trail origin but keeps the trail (#432)', () => {
+    for (const origin of [
+      null,
+      'strava',
+      { source: 'garmin', externalId: '1' },
+      { source: 'strava' },
+    ]) {
+      const index = migrateLibraryIndex({
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        tracks: [{ ...track('t1'), origin }],
+      });
+      expect(index.tracks).toHaveLength(1);
+      expect(index.tracks[0]).not.toHaveProperty('origin');
+    }
+  });
 });
 
 it('retains known interrupted-page errors and keeps their pages off during normalization', () => {

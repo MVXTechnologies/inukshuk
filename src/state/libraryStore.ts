@@ -104,6 +104,12 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
    */
   renameTrack: (id: string, name: string) => void;
   removeTrack: (id: string) => void;
+  /**
+   * Remove several trails (and their GPX files, note photos and overlay
+   * entries) in ONE index write — "also delete what came from Strava" on
+   * disconnect can be thousands of trails.
+   */
+  removeTracks: (ids: readonly string[]) => void;
   // Trail overlays — which saved trails are drawn on the main map. Persisted
   // (like maps' activePages) so the selection survives an app restart.
   /** Toggle whether a saved trail is drawn as an overlay on the main map. */
@@ -298,6 +304,7 @@ function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
     fileUri,
     ...(seeded ? { notes: seeded } : {}),
     ...(track.category ? { category: track.category } : {}),
+    ...(track.origin ? { origin: track.origin } : {}),
   };
 }
 
@@ -565,6 +572,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         activeTrackIds: s.activeTrackIds.filter((x) => x !== id),
       };
       persistAndDelete(next, [t?.fileUri, ...(t?.notes?.map((n) => n.photoUri) ?? [])]);
+      return next;
+    }),
+
+  removeTracks: (ids) =>
+    set((s) => {
+      const doomed = new Set(ids);
+      const removed = s.tracks.filter((x) => doomed.has(x.id));
+      if (removed.length === 0) return s;
+      const next = {
+        ...s,
+        tracks: s.tracks.filter((x) => !doomed.has(x.id)),
+        activeTrackIds: s.activeTrackIds.filter((x) => !doomed.has(x)),
+      };
+      persistAndDelete(
+        next,
+        removed.flatMap((t) => [t.fileUri, ...(t.notes?.map((n) => n.photoUri) ?? [])]),
+      );
       return next;
     }),
 
