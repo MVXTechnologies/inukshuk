@@ -85,6 +85,49 @@ describe('useMakeMapSession (#309)', () => {
     expect(showSnack).toHaveBeenLastCalledWith('"Sheet" saved to the library');
   });
 
+  it('a sheet saved with a few blank tiles says so (#460)', async () => {
+    const run = armMakeMap();
+    const { view, showSnack } = await setup();
+    await act(async () => view.result.current.startMakeMap(bboxA, options));
+    await act(async () => {
+      if (run.run.handle) run.run.handle.missingTiles = 3;
+      run.resolve(doc);
+    });
+    expect(showSnack).toHaveBeenCalledWith(
+      '"Sheet" saved — 3 map tiles couldn\'t be downloaded and are blank',
+    );
+  });
+
+  it('one blank tile reads in the singular', async () => {
+    const run = armMakeMap();
+    const { view, showSnack } = await setup();
+    await act(async () => view.result.current.startMakeMap(bboxA, options));
+    await act(async () => {
+      if (run.run.handle) run.run.handle.missingTiles = 1;
+      run.resolve(doc);
+    });
+    expect(showSnack).toHaveBeenCalledWith(
+      '"Sheet" saved — 1 map tile couldn\'t be downloaded and is blank',
+    );
+  });
+
+  it('a tile failure names its cause in the snack instead of a bare download error (#460)', async () => {
+    const run = armMakeMap();
+    const { view, state, showSnack } = await setup();
+    await act(async () => view.result.current.startMakeMap(bboxA, options));
+    await act(async () => {
+      run.reject(
+        new Error(
+          "couldn't download 40 of 204 map tiles (Unable to download a file: timeout). Check your connection and try again.",
+        ),
+      );
+    });
+    expect(state()).toEqual({ phase: 'editing' });
+    expect(showSnack).toHaveBeenCalledWith(
+      "Couldn't make the map: couldn't download 40 of 204 map tiles (Unable to download a file: timeout). Check your connection and try again.",
+    );
+  });
+
   it('a genuine failure of the current run reopens the editor with the message', async () => {
     const run = armMakeMap();
     const { view, state, showSnack } = await setup();

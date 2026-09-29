@@ -1,8 +1,14 @@
 import { slopeOverlayRgba } from '@core/geo/terrainAnalysis';
 import { contourFeatures } from '@core/geo/contours';
 import { attachGeoViewport } from '@core/geo/geopdf/write';
-import { clampTileRange, tileRangeForBbox } from '@core/geo/terrain';
 import { layoutMadeMap, RASTER_LONG_EDGE_PX, type PageFormat } from '@core/mapmaker/layout';
+import { printTileSource } from '@core/mapmaker/printSources';
+import {
+  assessTileFailures,
+  frameIsPrintable,
+  maxTilesPerSideFor,
+  planTiles,
+} from '@core/mapmaker/tilePlan';
 import { pageProjector, projectLines, type PagePoint } from '@core/mapmaker/pageSpace';
 import { cropRasterToBbox } from '@core/mapmaker/cropRaster';
 import { formatGratLabel, graticuleForBbox } from '@core/mapmaker/graticule';
@@ -27,7 +33,7 @@ import {
   LineCapStyle,
 } from 'pdf-lib';
 import UPNG from 'upng-js';
-import { fetchBasemapTexture, fetchHeightmap, fetchTrailsTexture, type DrapeSource } from '../dem';
+import { fetchHeightmap, fetchPrintBasemap, fetchTrailsTexture, type DrapeSource } from '../dem';
 
 // jpeg-js's ENCODER returns `Buffer.from(...)` whenever `module` is defined
 // (always, under Metro) — Hermes has no Buffer global, so provide one before
@@ -97,7 +103,20 @@ export type ComposePhase = 'tiles' | 'terrain' | 'compose';
 
 export interface ComposeHandle {
   aborted: boolean;
+  /**
+   * Set by the composer: base-map tiles that never arrived even after
+   * retries and printed as blank paper (#460). Few enough to be worth a map;
+   * the caller tells the user.
+   */
+  missingTiles?: number;
 }
+
+/**
+ * Share of a sheet's base-map tiles that may be missing before the make is
+ * refused (#460). A handful of blank squares on a 200-tile sheet is still a
+ * usable map; a third of it blank is not.
+ */
+export const MAX_MISSING_BASE_TILE_FRACTION = 0.05;
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -129,25 +148,48 @@ export async function composeMapPdf(
   const layout = layoutMadeMap(bbox, options.format, { scaleDenom: options.scaleDenom });
   const { mapRect, drawBbox } = layout;
 
+  // A frame zoomed out past the Mercator world (min zoom 0, #442) has no
+  // tiles to print; say so instead of failing deep in the pixel math.
+  if (!frameIsPrintable(drawBbox)) {
+    throw new Error('the sheet covers more than the map can print — zoom in and try again');
+  }
+
   // --- basemap raster ------------------------------------------------------
+  // Planned with one tile of slack per side: a 4096-px window straddles 17
+  // tiles, and the old 16-tile cap cropped an edge row off and stretched the
+  // rest over the frame, misregistered (#460).
   onProgress('tiles', 0);
-  const range = clampTileRange(
-    tileRangeForBbox(drawBbox, layout.rasterZoom),
-    RASTER_LONG_EDGE_PX / 256,
+  const plan = planTiles(
+    drawBbox,
+    layout.rasterZoom,
+    printTileSource(options.basemap),
+    maxTilesPerSideFor(RASTER_LONG_EDGE_PX),
   );
-  const texture = await fetchBasemapTexture(range, options.basemap);
+  const aborted = () => handle.aborted;
+  const { texture, failures } = await fetchPrintBasemap(plan, options.basemap, {
+    isAborted: aborted,
+    onSettled: (done, total) => onProgress('tiles', 0.7 * (done / total)),
+  });
   if (handle.aborted) throw new Error('aborted');
+  // One tile lost out of two hundred used to kill the whole make; now a few
+  // holes print as paper and too many say why (offline-only, or the network).
+  handle.missingTiles = assessTileFailures(
+    'map',
+    plan.tiles.length,
+    failures,
+    MAX_MISSING_BASE_TILE_FRACTION,
+  );
   onProgress('tiles', 0.7);
   await nextTask();
-  const baseRaster = cropRasterToBbox(texture, range, drawBbox);
+  const baseRaster = cropRasterToBbox(texture, plan.range, drawBbox);
   for (const network of options.markedTrailsNetworks) {
     // Each checked trail database composited straight into the basemap
     // raster: the routes become part of the printed base image, under the
     // vector layers.
-    const trails = await fetchTrailsTexture(range, network);
+    const trails = await fetchTrailsTexture(plan, network, { isAborted: aborted });
     if (handle.aborted) throw new Error('aborted');
     await nextTask();
-    const trailsCrop = cropRasterToBbox(trails, range, drawBbox);
+    const trailsCrop = cropRasterToBbox(trails, plan.range, drawBbox);
     if (trailsCrop.width === baseRaster.width && trailsCrop.height === baseRaster.height) {
       blendRgbaOver(baseRaster.data, trailsCrop.data, options.markedTrailsOpacity);
     }
