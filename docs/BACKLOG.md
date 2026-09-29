@@ -286,17 +286,19 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
   errors queue invisibly — resume = ask the 4 diagnostic questions, then
   TestFlight build 5 (rotated token + FPS overlay). Probe parked on branch
   `ios-perf-probe`.
-- **Garmin Connect sync + third-party hub** — the official Connect
-  Developer Program answered negatively (upgrade, no timeline). New plan
-  (2026-09-27): sync through an unofficial Garmin Connect API library from
-  GitHub (username/password login, same endpoints as the web app) instead.
-  To assess before building: pick a maintained library (licence, activity
-  upload support), where the login runs (on device vs. our backend — never
-  store the user's Garmin password), rate limits / breakage risk when
-  Garmin changes its web API, and store-review wording. Reuse the hub UI
-  parked on PR #171 (branch `third-party-sync`).
-- **Strava — parked (2026-09-27).** Strava's API now needs a premium
-  (subscriber) account for users, so it isn't worth pursuing for now. OTA
-  updates no longer require the Strava keys (repo variable
-  `OTA_REQUIRED_EXTRA=none`); installs that take an update show the Strava
-  row disabled ("not configured in this build").
+- **Garmin Connect, official program** — Garmin's Connect Developer
+  Program answered negatively in August 2026 (program being upgraded, no
+  timeline; ticket 219136 with connect-support@developer.garmin.com). The
+  unofficial-API route was declined on 2026-09-28: it only works by
+  impersonating Garmin's own app and evading its Cloudflare block. Garmin
+  users are covered today by Garmin → Strava auto-sync and FIT / account
+  export import (2.0.1). **Monthly follow-up with Garmin** (owner,
+  2026-09-29): a calendar reminder on the 1st of each month with a draft
+  reply in the ticket thread; the owner sends it. When Garmin reopens:
+  apply from marc-andre.vigneault@mvxtechnologies.com, then build OAuth
+  linking in Settings › Connections, a webhook receiver on the tile
+  Worker, Activity API → import (dedupe by Garmin activity id). The
+  research specs live on branch `third-party-sync` (PR #171, closed).
+- ~~**Strava — parked (2026-09-27).**~~ Shipped in 2.0.1 (#432/#438):
+  the owner took the developer subscription; client id 283079, secret on
+  the tile Worker's token proxy, athlete cap 10 until Strava's review.
