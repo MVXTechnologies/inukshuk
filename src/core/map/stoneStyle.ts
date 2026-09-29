@@ -157,6 +157,15 @@ const isPoint: ExpressionSpecification = ['==', ['geometry-type'], 'Point'];
 const notTunnel: ExpressionSpecification = ['!', ['to-boolean', ['get', 'is_tunnel']]];
 /** A feature is due once the map reaches its `min_zoom` (Protomaps' own ranking). */
 const dueAtZoom: ExpressionSpecification = ['<=', ['coalesce', ['get', 'min_zoom'], 0], ['zoom']];
+/**
+ * Due `lead` zoom levels BEFORE its `min_zoom`. Protomaps ranks villages and
+ * towns for a dense city basemap; on a trail map they are the landmarks you
+ * navigate by, and the owner found them appearing too late (2026-09-28).
+ * Collision + the sort key still keep the biggest places when space is short.
+ */
+function dueWithin(lead: number): ExpressionSpecification {
+  return ['<=', ['-', ['coalesce', ['get', 'min_zoom'], 0], lead], ['zoom']];
+}
 
 /** Rivers and canals draw wider than streams, drains and ditches. */
 function byWaterwayKind(river: number, stream: number): ExpressionSpecification {
@@ -770,7 +779,7 @@ export function buildStoneLayers(
       type: 'symbol',
       source,
       'source-layer': 'places',
-      minzoom: 11,
+      minzoom: 10,
       filter: [
         'all',
         [
@@ -782,12 +791,12 @@ export function buildStoneLayers(
             isIn('kind_detail', ['village', 'hamlet', 'locality', 'isolated_dwelling']),
           ],
         ],
-        dueAtZoom,
+        dueWithin(1.5),
       ],
       layout: {
         'text-field': name,
         'text-font': fonts.regular,
-        'text-size': ramp([11, 11.5], [15, 14]),
+        'text-size': ramp([10, 11], [15, 14]),
         'text-max-width': 8,
         'symbol-sort-key': ['coalesce', ['get', 'min_zoom'], 99],
       },
@@ -803,7 +812,7 @@ export function buildStoneLayers(
         'all',
         ['==', ['get', 'kind'], 'locality'],
         ['==', ['get', 'kind_detail'], 'town'],
-        dueAtZoom,
+        dueWithin(1),
       ],
       layout: {
         'text-field': name,
