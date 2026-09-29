@@ -6,19 +6,40 @@
     <title>Inukshuk — navigation de sentiers hors ligne, gratuite et libre</title>
     <meta
       name="description"
-      content="Inukshuk est une application de navigation de sentiers gratuite, libre et communautaire. Apportez vos propres cartes PDF géoréférencées, naviguez hors ligne avec le GPS en direct et enregistrez vos parcours en GPX. Sans compte, sans publicité, sans pistage."
+      content="Inukshuk est une application de navigation de sentiers gratuite et libre : une carte de plein air avec courbes de niveau qui fonctionne hors ligne, environ 79 000 cartes topographiques officielles gratuites, vos propres cartes PDF géoréférencées, l’enregistrement de parcours et l’importation d’activités. Sans compte, sans publicité, sans pistage."
     />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Inukshuk" />
+    <meta property="og:url" content="https://inukshuk.mvxtechnologies.com/fr/" />
     <meta
       property="og:title"
       content="Inukshuk — navigation de sentiers hors ligne, gratuite et libre"
     />
     <meta
       property="og:description"
-      content="Apportez vos cartes. Naviguez hors ligne. Gratuit pour toujours, libre, bâti par la communauté."
+      content="Une carte de plein air qui fonctionne hors ligne, des cartes topo officielles gratuites et vos propres cartes PDF. Gratuit, libre, sans compte, sans pistage."
     />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="../icon.png" />
-    <link rel="icon" href="../icon.png" />
+    <meta property="og:image" content="https://inukshuk.mvxtechnologies.com/og-image-fr.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Le logo d’Inukshuk à côté du slogan : Vos cartes. Vos sentiers. Loin du réseau."
+    />
+    <meta property="og:locale" content="fr_CA" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Inukshuk — navigation de sentiers hors ligne, gratuite et libre"
+    />
+    <meta
+      name="twitter:description"
+      content="Une carte de plein air qui fonctionne hors ligne, des cartes topo officielles gratuites et vos propres cartes PDF. Gratuit, libre, sans compte, sans pistage."
+    />
+    <meta name="twitter:image" content="https://inukshuk.mvxtechnologies.com/og-image-fr.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="../icon.png" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <link rel="alternate" hreflang="en" href="https://inukshuk.mvxtechnologies.com/" />
     <link rel="alternate" hreflang="fr" href="https://inukshuk.mvxtechnologies.com/fr/" />
     <link rel="alternate" hreflang="x-default" href="https://inukshuk.mvxtechnologies.com/" />
@@ -97,7 +118,6 @@
       nav img {
         width: 34px;
         height: 34px;
-        border-radius: 9px;
       }
       nav .brand {
         font-weight: 800;
@@ -170,11 +190,12 @@
         padding: 4.5rem 0 3rem;
         text-align: center;
       }
+      /* The logo carries its own rounded corners on a transparent ground, so
+         the shadow follows its alpha rather than a CSS box. */
       .hero img.app-icon {
         width: 112px;
         height: 112px;
-        border-radius: 26px;
-        box-shadow: var(--shadow);
+        filter: drop-shadow(0 10px 22px rgba(45, 55, 64, 0.18));
       }
       .hero h1 {
         font-size: clamp(2.1rem, 6vw, 3.4rem);
@@ -906,7 +927,7 @@
     </div>
     <nav>
       <div class="wrap">
-        <img src="../icon.png" alt="Icône d'Inukshuk" />
+        <img src="../assets/brand/logo-128.webp" alt="" width="34" height="34" />
         <span class="brand">Inukshuk</span>
         <span class="spacer"></span>
         <a class="navlink hide-sm" href="#features">Fonctionnalités</a>
@@ -922,7 +943,18 @@
 
     <header class="hero">
       <div class="wrap">
-        <img class="app-icon" src="../icon.png" alt="Icône de l'application Inukshuk" />
+        <img
+          class="app-icon"
+          src="../assets/brand/logo-256.webp"
+          srcset="
+            ../assets/brand/logo-128.webp 1x,
+            ../assets/brand/logo-256.webp 2x,
+            ../assets/brand/logo-384.webp 3x
+          "
+          alt="Icône de l’application Inukshuk"
+          width="112"
+          height="112"
+        />
         <h1>Vos cartes. Vos sentiers.<br />Loin du réseau.</h1>
         <p class="tagline">
           Un compagnon de sentier gratuit et libre qui fonctionne là où le signal s'arrête.
@@ -975,7 +1007,9 @@
     >
       <div class="wrap">
         <h2>Sur le terrain</h2>
-        <p class="sub">Six écrans de l’application, sur des sentiers autour de Québec.</p>
+        <p class="sub">
+          Sept écrans de l’application, sur un ultra-trail de 65 km en montagne au Québec.
+        </p>
       </div>
       <div class="carousel">
         <button class="carousel-btn prev" type="button" aria-label="Capture précédente">‹</button>
@@ -985,87 +1019,101 @@
               class="shot is-active"
               role="group"
               aria-roledescription="slide"
-              aria-label="1 de 6"
+              aria-label="1 de 7"
             >
               <div class="phone">
                 <img
-                  src="../assets/screens/01-map-live-trail.webp"
-                  alt="Votre position sur le vrai relief — avec les sentiers où vous revenez sans cesse"
+                  src="../assets/screens/01-mountain-map-contours.webp"
+                  alt="L’écran de carte en terrain montagneux : courbes de niveau serrées, un sentier en pointillé et un point bleu pour votre position"
                   width="600"
                   height="1304"
                 />
               </div>
               <figcaption>
-                Votre position sur le vrai relief — avec les sentiers où vous revenez sans cesse
+                Une carte dessinée pour le plein air, avec les courbes de niveau d’un vrai relief de
+                montagne
               </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="2 de 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="2 de 7">
               <div class="phone">
                 <img
-                  src="../assets/screens/02-trail-elevation-notes.webp"
-                  alt="Profil d'élévation, allure et fréquence cardiaque, avec des notes épinglées au parcours"
+                  src="../assets/screens/02-recording-trail-run.webp"
+                  alt="L’enregistrement d’une course en sentier : le tracé en orange derrière le point de position, et un panneau affichant 5:04 de temps, 760 m de distance et 10,8 km/h, avec les boutons Pause et Repère"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
               <figcaption>
-                Profil d'élévation, allure et fréquence cardiaque, avec des notes épinglées au
+                Enregistrez votre sortie : temps, distance et vitesse d’un coup d’œil
+              </figcaption>
+            </figure>
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="3 de 7">
+              <div class="phone">
+                <img
+                  src="../assets/screens/03-trail-elevation-aid-stations.webp"
+                  alt="Le parcours d’une course de 65 km avec son profil d’élévation, 1 840 m de dénivelé positif, et six ravitaillements numérotés épinglés en notes"
+                  width="600"
+                  height="1304"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>
+                Le profil d’élévation d’une course de 65 km, avec les ravitos épinglés sur le
                 parcours
               </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="3 de 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="4 de 7">
               <div class="phone">
                 <img
-                  src="../assets/screens/03-library-folders.webp"
-                  alt="Une bibliothèque qui regroupe vos sorties par lieu, toutes les statistiques sous les yeux"
+                  src="../assets/screens/04-pdf-map-nord-utm.webp"
+                  alt="Une carte forestière PDF géoréférencée au 1:20 000 superposée au fond de carte, entourée de lacs et d’une rivière"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
               <figcaption>
-                Une bibliothèque qui regroupe vos sorties par lieu, toutes les statistiques sous les
-                yeux
+                Votre propre carte PDF géoréférencée, affichée par-dessus le fond de carte
               </figcaption>
             </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="4 de 6">
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="5 de 7">
               <div class="phone">
                 <img
-                  src="../assets/screens/04-offline-download.webp"
-                  alt="Téléchargez une zone avant de perdre le signal"
-                  width="600"
-                  height="1304"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>Téléchargez une zone avant de perdre le signal</figcaption>
-            </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="5 de 6">
-              <div class="phone">
-                <img
-                  src="../assets/screens/05-map-maker.webp"
-                  alt="Composez votre propre carte géoréférencée à l'échelle voulue"
-                  width="600"
-                  height="1304"
-                  loading="lazy"
-                />
-              </div>
-              <figcaption>Composez votre propre carte géoréférencée à l'échelle voulue</figcaption>
-            </figure>
-            <figure class="shot" role="group" aria-roledescription="slide" aria-label="6 de 6">
-              <div class="phone">
-                <img
-                  src="../assets/screens/06-map-store.webp"
-                  alt="Des milliers de feuilles topographiques officielles gratuites, à portée de doigt"
+                  src="../assets/screens/05-library.webp"
+                  alt="La bibliothèque, avec une carte PDF affichée sur la carte et un sentier enregistré de 63 km avec sa miniature"
                   width="600"
                   height="1304"
                   loading="lazy"
                 />
               </div>
               <figcaption>
-                Des milliers de feuilles topographiques officielles gratuites, à portée de doigt
+                Vos cartes et vos sentiers enregistrés, réunis dans une seule bibliothèque
               </figcaption>
+            </figure>
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="6 de 7">
+              <div class="phone">
+                <img
+                  src="../assets/screens/06-offline-download.webp"
+                  alt="Une zone encadrée sur la carte pour le téléchargement hors ligne, avec le choix entre carte, satellite ou relief et trois niveaux de détail"
+                  width="600"
+                  height="1304"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Encadrez une zone et téléchargez-la avant de perdre le signal</figcaption>
+            </figure>
+            <figure class="shot" role="group" aria-roledescription="slide" aria-label="7 de 7">
+              <div class="phone">
+                <img
+                  src="../assets/screens/07-night-mode.webp"
+                  alt="La carte en mode nuit rouge : courbes de niveau rouge foncé, le parcours enregistré et une petite pastille d’enregistrement affichant 5:15 et 790 m"
+                  width="600"
+                  height="1304"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>Le mode nuit rouge préserve votre vision dans le noir</figcaption>
             </figure>
           </div>
         </div>
@@ -1078,32 +1126,52 @@
       <div class="wrap">
         <h2>Tout hors ligne. Rien de pisté.</h2>
         <p class="sub">
-          Inukshuk transforme vos propres cartes PDF géoréférencées en outil de navigation en direct
-          — sans forfait de données, sans compte, sans serveur qui surveille où vous allez.
+          Une carte pensée pour le sentier, les cartes topo officielles auxquelles vous faites déjà
+          confiance et vos propres cartes PDF, le tout dans votre téléphone. Sans forfait de
+          données, sans compte, sans personne qui surveille où vous allez.
         </p>
         <div class="grid">
+          <div class="card">
+            <div class="ico">🏔️</div>
+            <h3>Une carte dessinée pour le plein air</h3>
+            <p>
+              Une carte claire du monde entier, avec l’altitude inscrite sur les courbes de niveau
+              et les sommets nommés avec leur hauteur. Téléchargez une zone et tout fonctionne sans
+              signal.
+            </p>
+          </div>
           <div class="card">
             <div class="ico">🗺️</div>
             <h3>Apportez vos propres cartes</h3>
             <p>
               Importez des cartes PDF géoréférencées et voyez votre position GPS directement dessus
-              — cartes de parcs, feuilles topographiques, pistes de ski, n'importe quoi.
+              : cartes de parcs, feuillets topographiques, pistes de ski, n’importe quoi.
             </p>
           </div>
           <div class="card">
-            <div class="ico">📡</div>
-            <h3>Fonctionne sans signal</h3>
+            <div class="ico">🧭</div>
+            <h3>Explorez des cartes topo gratuites</h3>
             <p>
-              Tout s'exécute sur l'appareil. Un fond de carte OpenStreetMap prend le relais quand
-              vous dépassez le bord de votre carte.
+              Environ 79 000 cartes topographiques gratuites de l’USGS, de Ressources naturelles
+              Canada, du Service des forêts des États-Unis et de Geoscience Australia. Parcourez-les
+              par activité ou par type de terrain, ou voyez celles qui couvrent votre coin.
             </p>
           </div>
           <div class="card">
-            <div class="ico">⛰️</div>
-            <h3>Choisissez votre vue</h3>
+            <div class="ico">🌲</div>
+            <h3>Parcs Québec</h3>
             <p>
-              Basculez entre carte, imagerie satellite et relief topographique pour explorer
-              l’itinéraire qui vous attend.
+              Dans l’onglet Explore, la collection Parcs Québec présente les parcs nationaux et les
+              réserves fauniques du Québec, du plus proche au plus loin, et vous mène aux cartes de
+              chacun sur <a href="https://www.sepaq.com/">sepaq.com</a>.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">🔄</div>
+            <h3>Importez vos activités</h3>
+            <p>
+              Ramenez vos sorties de Strava, d’Apple Santé ou de Health Connect, ou de fichiers FIT,
+              GPX et TCX. Les activités importées restent dans votre téléphone.
             </p>
           </div>
           <div class="card">
@@ -1111,23 +1179,33 @@
             <h3>Enregistrez vos parcours</h3>
             <p>
               Suivez en direct le temps, la distance et le dénivelé positif et négatif. Sauvegardez
-              et partagez chaque sortie en fichier GPX standard.
+              et partagez chaque sortie en fichier GPX standard. L’affichage nuit rouge ménage vos
+              yeux après le coucher du soleil.
             </p>
           </div>
           <div class="card">
             <div class="ico">📈</div>
-            <h3>Profils d'élévation</h3>
+            <h3>Profils d’élévation</h3>
             <p>
-              Chaque sentier enregistré obtient un profil d'allure et de pente que vous pouvez
-              parcourir, avec des notes et des photos en chemin.
+              Chaque sentier a son profil d’élévation, que vous pouvez parcourir du doigt, avec des
+              notes et des photos épinglées en chemin.
+            </p>
+          </div>
+          <div class="card">
+            <div class="ico">🖨️</div>
+            <h3>Créateur de cartes</h3>
+            <p>
+              Encadrez n’importe quelle zone, choisissez l’échelle et le format de page, et les
+              sentiers et points d’intérêt à y inclure. Vous obtenez une carte à imprimer ou à
+              utiliser dans l’application.
             </p>
           </div>
           <div class="card">
             <div class="ico">🔒</div>
             <h3>Privé par conception</h3>
             <p>
-              Votre position ne quitte jamais votre téléphone. Aucune analyse, aucune publicité,
-              aucun compte.
+              Sans compte, sans publicité, sans analyse. Votre position ne quitte jamais votre
+              téléphone.
               <a href="./privacy/">Lire la politique de confidentialité →</a>
             </p>
           </div>
