@@ -242,6 +242,26 @@ owner: SÉPAQ / Canot Kayak Québec outreach (drafts on request).
   history before an OTA publish, keep Maestro diagnostics after a green
   retry. Until then, releases are verified directly against the store APIs.
 
+- **Map explorer, next steps** (after #447/#449/#450, 2026-09-29) —
+  1. **GeoTIFF import**: unlocks Québec topo 1:20 000 (Données Québec BDTQ,
+     CC-BY, 2,765 sheets whose PDFs are not georeferenced), NRCan CanMatrix
+     (covers Québec City), swisstopo, Norway N50, NZ Topo50, Spain MTN25.
+  2. **Sépaq partnership**: Avenza's Map Store takes no new maps since the
+     April 2026 merger; Sépaq publishes ~2,200 free maps there. A pitch is
+     drafted for the owner (kept out of this public repo). Until Sépaq
+     agrees in writing, Parcs Québec stays link-out.
+  3. **Paid maps**: in-app purchase per map via our backend + reseller deals
+     (Avenza's split was 50/50 of net). Only once a publisher signs; outside
+     purchase links are forbidden on the Canadian App Store.
+  4. **More brands**: Polar AccessLink (self-serve, FIT/GPX) first, then COROS
+     (new self-serve MCP access, 50 FIT/day — confirm app use with
+     api@coros.com), Wahoo by request. Garmin direct stays declined
+     (unofficial access means impersonating Garmin's app).
+  5. **Strava review**: after 2.0.1 is on phones, apply to lift the
+     10-athlete cap (screenshots + brand guidelines).
+- **Android developer verification**: Play Console requires registering the
+  apps by 2026-09-30 (owner, identity step).
+
 ## On ice
 
 - **iOS map performance** — paused 2026-08-08 (owner has no iPhone access for
