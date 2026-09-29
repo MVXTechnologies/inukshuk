@@ -33,13 +33,15 @@ Bring your activities in.
   a scale, page shape and print style, and pick which of your trails and
   waypoints go on the sheet.
 - **Waypoint icons:** choose the pin's icon (camp, water, viewpoint, …).
-- **The map now covers the whole world**, poles included.
+- **The map now covers the whole world**, poles included, and zooms out far
+  enough to see all of it.
 
 ### Changed
 
 - Library, Explore and Logbook share one header: the Settings gear stays
   in the same place on every page. Explore has the gear too.
 - Page titles sit over the contour texture on every tab.
+- Village and town names appear sooner as you zoom in.
 - Android 8.0 or later is now required (Health Connect needs it).
 - MapLibre 11.4.
 
