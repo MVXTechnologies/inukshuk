@@ -3,10 +3,12 @@
  * parsing of the authorization redirect. No fetch, no platform APIs — the
  * network half lives in `src/lib/strava.ts`.
  *
- * Strava has NO PKCE: the authorization-code exchange requires the client
- * secret, so the secret ships in the binary (documented tradeoff — see
- * docs/DEPLOYMENT.md § Strava). The mobile authorize endpoint is used so the
- * Strava app can service the request when installed.
+ * Strava has NO PKCE: the authorization-code exchange and every refresh need
+ * the client secret, and the June-2026 API agreement forbids shipping it in a
+ * binary. So both go through our token proxy (the tile Worker, which holds the
+ * secret — see infra/tiles/README.md § Strava); the app only knows the public
+ * client id. The mobile authorize endpoint is used so the Strava app can
+ * service the request when installed.
  */
 
 /** Strava's mobile-optimized authorize endpoint (app-links into the Strava app). */
@@ -15,8 +17,16 @@ export const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 export const STRAVA_DEAUTHORIZE_URL = 'https://www.strava.com/oauth/deauthorize';
 export const STRAVA_UPLOADS_URL = 'https://www.strava.com/api/v3/uploads';
 
-/** The one scope this integration needs: uploading activities. */
+/** Uploading a finished trail as a Strava activity. */
 export const STRAVA_SCOPE = 'activity:write';
+/** Importing the athlete's activities, private ones included (#432). */
+export const STRAVA_READ_SCOPE = 'activity:read_all';
+/** What the consent screen asks for; the athlete may untick either. */
+export const STRAVA_REQUESTED_SCOPES = [STRAVA_SCOPE, STRAVA_READ_SCOPE] as const;
+
+/** Token-proxy paths, relative to the tile host (see infra/tiles/worker). */
+export const STRAVA_PROXY_TOKEN_PATH = '/strava/token';
+export const STRAVA_PROXY_REFRESH_PATH = '/strava/refresh';
 
 /**
  * The redirect Strava sends the browser back to after authorization.
@@ -54,36 +64,20 @@ export function buildAuthorizeUrl(options: {
     redirect_uri: options.redirectUri ?? STRAVA_REDIRECT_URI,
     response_type: 'code',
     approval_prompt: 'auto',
-    scope: STRAVA_SCOPE,
+    scope: STRAVA_REQUESTED_SCOPES.join(','),
     state: options.state,
   });
   return `${STRAVA_AUTHORIZE_URL}?${query}`;
 }
 
-export function buildTokenExchangeBody(options: {
-  clientId: string;
-  clientSecret: string;
-  code: string;
-}): string {
-  return formEncode({
-    client_id: options.clientId,
-    client_secret: options.clientSecret,
-    code: options.code,
-    grant_type: 'authorization_code',
-  });
+/** JSON body for the proxy's code exchange; the proxy adds id + secret. */
+export function buildTokenExchangeBody(code: string): string {
+  return JSON.stringify({ code });
 }
 
-export function buildTokenRefreshBody(options: {
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-}): string {
-  return formEncode({
-    client_id: options.clientId,
-    client_secret: options.clientSecret,
-    refresh_token: options.refreshToken,
-    grant_type: 'refresh_token',
-  });
+/** JSON body for the proxy's refresh; the proxy adds id + secret. */
+export function buildTokenRefreshBody(refreshToken: string): string {
+  return JSON.stringify({ refresh_token: refreshToken });
 }
 
 /**
@@ -114,14 +108,16 @@ function safeDecode(text: string): string {
 
 /** Outcome of interpreting the authorization redirect. */
 export type AuthRedirectOutcome =
-  | { ok: true; code: string }
+  | { ok: true; code: string; scopes: string[] }
   | { ok: false; reason: 'denied' | 'state-mismatch' | 'missing-scope' | 'malformed' };
 
 /**
  * Interpret the Strava redirect: reject denials, a state that doesn't match
- * ours (a spoofed/stale redirect), and grants missing `activity:write` (the
- * consent screen lets the athlete untick scopes — a connection that can never
- * upload would be a lie in Settings).
+ * ours (a spoofed/stale redirect), and grants with NEITHER activity scope (the
+ * consent screen lets the athlete untick scopes — a connection that can
+ * neither upload nor import would be a lie in Settings). A partial grant is
+ * fine: `scopes` says which features the connection can drive. A redirect
+ * without the scope param is taken as the full request (older behaviour).
  */
 export function authRedirectOutcome(url: string, expectedState: string): AuthRedirectOutcome {
   const params = parseRedirectParams(url);
@@ -130,8 +126,10 @@ export function authRedirectOutcome(url: string, expectedState: string): AuthRed
   const code = params.code;
   if (code === undefined || code === '') return { ok: false, reason: 'malformed' };
   const scope = params.scope;
-  if (scope !== undefined && !scope.split(',').includes(STRAVA_SCOPE)) {
-    return { ok: false, reason: 'missing-scope' };
-  }
-  return { ok: true, code };
+  const granted =
+    scope === undefined
+      ? [...STRAVA_REQUESTED_SCOPES]
+      : STRAVA_REQUESTED_SCOPES.filter((s) => scope.split(',').includes(s));
+  if (granted.length === 0) return { ok: false, reason: 'missing-scope' };
+  return { ok: true, code, scopes: granted };
 }

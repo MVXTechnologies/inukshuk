@@ -194,9 +194,8 @@ turns into "not configured in this build".
 - `eas update` runs with `--environment production`, which loads the EAS
   production variables with **plain text** or **sensitive** visibility.
 - **Secret**-visibility EAS variables never leave EAS's servers, so they
-  cannot reach an update. `STRAVA_CLIENT_SECRET` and `ERROR_REPORT_TOKEN`
-  must therefore also exist as **GitHub Actions secrets**, with the same
-  values as in EAS. `STRAVA_CLIENT_ID` and `ERROR_REPORT_ENDPOINT` go in
+  cannot reach an update. `ERROR_REPORT_TOKEN` must therefore also exist as
+  a **GitHub Actions secret**, with the same value as in EAS. `STRAVA_CLIENT_ID` and `ERROR_REPORT_ENDPOINT` go in
   GitHub **variables** (or stay EAS-only, but then the check below cannot
   see them).
 - Before publishing, `scripts/ci/assert-update-extra.mjs` evaluates the same
@@ -270,8 +269,9 @@ flush — diagnostics only; it never interrupts anyone.
 ## Strava (one-time, optional)
 
 The Strava integration (Settings → Connections → Connect Strava; "Push to
-Strava?" after saving a recording; "Send to Strava" in the Library ⋮ menu) needs
-a Strava API application. Without the credentials the feature stays visible but
+Strava?" after saving a recording; "Send to Strava" in the Library ⋮ menu;
+importing Strava activities into the Library) needs a Strava API application,
+and the token proxy on the tile Worker. Without the credentials the feature stays visible but
 disabled ("Strava is not configured in this build") — nothing else changes.
 
 ### 1. Create the API app
@@ -288,42 +288,48 @@ app), create an application:
 
 Note the **Client ID** and **Client Secret** it shows.
 
-### 2. Register the credentials as EAS env vars
+Since 2026-06-01 a Standard-tier Strava API app needs the **developer's**
+Strava subscription (athletes who connect need none). New apps start with an
+athlete cap of 1; raise it to 10 yourself in the API settings, and ask Strava
+for a review beyond that (screenshots, brand-guideline compliance).
+
+### 2. Put the secret on the token proxy, the id in the app
+
+Strava's token endpoint needs the client secret and supports no PKCE, and the
+June-2026 API agreement forbids shipping the secret in a binary. The tile
+Worker (`infra/tiles/worker`, routes `POST /strava/token` and
+`POST /strava/refresh`) adds it server-side:
+
+```sh
+cd infra/tiles/worker
+npx wrangler secret put STRAVA_CLIENT_SECRET   # paste the secret
+# STRAVA_CLIENT_ID goes in wrangler.toml [vars]; then:
+npx wrangler deploy
+```
+
+The app only needs the public client id:
 
 ```sh
 eas env:create --name STRAVA_CLIENT_ID \
   --value <client id> \
   --environment production --visibility plaintext
-
-eas env:create --name STRAVA_CLIENT_SECRET \
-  --value <client secret> \
-  --environment production --visibility secret
 ```
 
-OTA updates need the same two values on GitHub (`STRAVA_CLIENT_ID` as a
-repo variable, `STRAVA_CLIENT_SECRET` as a secret): a secret EAS variable
-never reaches the runner that publishes updates — see _Credentials in an
-update_ under _Field updates_.
-
-`app.config.ts` reads both into `extra.stravaClientId/stravaClientSecret`, so —
-like `ERROR_REPORT_TOKEN` — **the client secret is baked into the shipped
-binary**. This is unavoidable: Strava's token endpoint requires the client
-secret and supports no PKCE. Strava's own mobile guidance tolerates this for
-personal/small apps; the mitigations are the narrow requested scope
-(`activity:write` only), Strava's per-app rate limits, and the ability to
-regenerate the secret at any time (regenerating invalidates old binaries'
-ability to _connect new accounts_; existing connections keep working until
-their refresh token is rejected, at which point the app asks the user to
-reconnect).
-
-New Strava API apps start with an athlete cap of 1 (just the owner); request a
-higher cap from Strava if others should connect.
+plus the same value as the GitHub repo **variable** `STRAVA_CLIENT_ID` (OTA
+updates evaluate `app.config.ts` on the runner — see _Credentials in an
+update_). Regenerating the secret on Strava only needs a new
+`wrangler secret put`; no app release.
 
 ### 3. Token & data handling (already implemented)
 
-- Tokens (access + rotating refresh token + expiry) and the athlete name are
-  stored on-device in `strava.json` (`src/state/stravaStore.ts`); refresh
-  happens automatically, always keeping the rotated refresh token.
+- Tokens (access + rotating refresh token + expiry), the granted scopes and
+  the athlete name are stored on-device in `strava.json`
+  (`src/state/stravaStore.ts`); refresh happens automatically through the
+  proxy, always keeping the rotated refresh token. The proxy stores nothing.
+- Requested scopes: `activity:write` (upload) and `activity:read_all`
+  (import). The athlete may untick either; the app offers what was granted.
+- Imported activity data is shown only to the athlete who imported it, as the
+  API agreement requires.
 - Nothing is uploaded without an explicit user action, and _Disconnect_ in
   Settings also revokes the grant via `/oauth/deauthorize`.
 
@@ -334,7 +340,6 @@ higher cap from Strava if others should connect.
 | `EXPO_TOKEN`                  | all EAS workflows                                 |
 | `ASC_API_KEY_P8`              | iOS submit                                        |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Android submit                                    |
-| `STRAVA_CLIENT_SECRET`        | OTA updates (same value as the EAS variable)      |
 | `ERROR_REPORT_TOKEN`          | OTA updates, if that channel is used (same value) |
 
 Repo **variables** (not secrets): `STRAVA_CLIENT_ID`, `ERROR_REPORT_ENDPOINT`
@@ -343,6 +348,6 @@ update_ above.
 
 And in `app.config.ts` env: `EAS_PROJECT_ID`, `EAS_UPDATE_URL`. Store builds
 take `ERROR_REPORT_TOKEN` **or** `ERROR_REPORT_ENDPOINT` — see _Error
-reporting_ above — and the optional `STRAVA_CLIENT_ID` /
-`STRAVA_CLIENT_SECRET` — see _Strava_ above — from the EAS environment; OTA
+reporting_ above — and the optional `STRAVA_CLIENT_ID` — see _Strava_ above
+— from the EAS environment (the Strava secret is a Worker secret only); OTA
 updates need the GitHub copies listed here as well.

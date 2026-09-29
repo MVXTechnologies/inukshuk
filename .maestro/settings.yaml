@@ -10,9 +10,9 @@
 #
 # Deliberately does NOT tap "Download your data": it opens the OS share
 # sheet, which on Android can trap Maestro outside the app. Presence-only.
-# Same for the Strava row: without client credentials in the build it is
-# disabled with subtitle "Strava is not configured in this build" — both the
-# configured and unconfigured subtitles are accepted.
+# Same for the Strava card: without client credentials in the build its
+# Connect button is disabled and it reads "Strava is not configured in this
+# build" — the configured, unconfigured and connected lines are all accepted.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -96,8 +96,8 @@ appId: com.inukshuk.app
     element:
       text: 'Download your data.*'
     direction: DOWN
-# --- Third party: the Strava row exists; unconfigured builds show a
-# disabled "Connect Strava" with the not-configured subtitle ---
+# --- Third party: the Strava card exists; unconfigured builds show a
+# disabled "Connect Strava" with the not-configured line ---
 - scrollUntilVisible:
     element:
       text: 'Third party.*'
@@ -118,7 +118,7 @@ appId: com.inukshuk.app
     element:
       text: '(Connect )?Strava.*'
     direction: DOWN
-- assertVisible: '.*(Strava is not configured in this build|Ask to push saved trails to Strava|Connected).*'
+- assertVisible: '.*(Strava is not configured in this build|Import your activities and push saved trails to Strava|Connected).*'
 # --- System settings: error reporting toggle + queue row (subtitle is
 # dynamic — count or "No pending reports", suffixed with channel/last-attempt
 # info). Scroll until the QUEUE row itself is visible: scrolling to a title

@@ -24,7 +24,7 @@ Ready-made copy lives in [`store/appstore/`](../store/appstore); screenshots in
 | Privacy policy is live | open <https://inukshuk.mvxtechnologies.com/privacy/>                                                  | ASC rejects a 404 policy URL                                          |
 | Support URL is live    | open <https://github.com/MVXTechnologies/inukshuk/issues>                                             | same                                                                  |
 | Error-report channel   | `eas env:list --environment production` — is `ERROR_REPORT_TOKEN` **or** `ERROR_REPORT_ENDPOINT` set? | decides the **Diagnostics** answers in §4                             |
-| Strava                 | same command — are `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` set?                                   | if set, the app can upload a GPX track to Strava, which changes §4    |
+| Strava                 | same command — is `STRAVA_CLIENT_ID` set?                                                             | if set, the app uploads to and imports from Strava, which changes §4  |
 | Map catalogue          | open <https://inukshuk.mvxtechnologies.com/catalog/v2/index.json>                                     | the Search tab is empty (and looks broken to a reviewer) if this 404s |
 
 **Pre-flight was run on 2026-09-02 — results, so you do not have to repeat it:**

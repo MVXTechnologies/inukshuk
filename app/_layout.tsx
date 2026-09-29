@@ -10,9 +10,11 @@ import { MapReparseWorker } from '@features/library/MapReparseWorker';
 import { PdfPrerenderWorker } from '@features/map/PdfPrerenderWorker';
 import { PdfRasterizerProvider } from '@features/map/PdfRasterizer';
 import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
+import { installStravaAutoImport } from '@features/import/autoImport';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
+import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
@@ -41,6 +43,7 @@ export default function RootLayout() {
   const hydrateLibrary = useLibraryStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const hydrateStrava = useStravaStore((s) => s.hydrate);
+  const hydrateImports = useImportStore((s) => s.hydrate);
 
   useEffect(() => {
     // Global "no silent fails" hooks: fatal/non-fatal JS errors, unhandled
@@ -53,7 +56,8 @@ export default function RootLayout() {
     hydrateLibrary().catch((err) => reportError(err, 'library-hydrate'));
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
-  }, [hydrateLibrary, hydrateSettings, hydrateStrava]);
+    hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
+  }, [hydrateLibrary, hydrateSettings, hydrateStrava, hydrateImports]);
 
   // A launch hydration that fails (an I/O error — a corrupt file hydrates
   // empty instead) leaves the library refusing every write, and settings
@@ -72,6 +76,10 @@ export default function RootLayout() {
     });
     return () => subscription.remove();
   }, [hydrateLibrary, hydrateSettings]);
+
+  // Strava auto-import (#432): quietly fetch new activities on launch and on
+  // each return to the foreground (at most every 15 minutes).
+  useEffect(() => installStravaAutoImport(), []);
 
   useAndroidImmersive();
 

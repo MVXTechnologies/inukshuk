@@ -1,6 +1,17 @@
 import {
+  buildActivitiesUrl,
+  buildStreamsUrl,
+  parseActivitiesPage,
+  parseRateLimit,
+  streamsToPoints,
+  type RateLimitState,
+  type StravaActivitySummary,
+} from '@core/strava/activities';
+import type { TrackPoint } from '@core/models';
+import {
   STRAVA_DEAUTHORIZE_URL,
-  STRAVA_TOKEN_URL,
+  STRAVA_PROXY_REFRESH_PATH,
+  STRAVA_PROXY_TOKEN_PATH,
   STRAVA_UPLOADS_URL,
   authRedirectOutcome,
   buildAuthorizeUrl,
@@ -16,6 +27,7 @@ import {
   nextPollDelayMs,
   type UploadOutcome,
 } from '@core/strava/upload';
+import { TILE_HOST } from '@data/basemapTiles';
 import { reportError } from '@lib/errorReporting';
 import { useStravaStore } from '@state/stravaStore';
 import Constants from 'expo-constants';
@@ -26,8 +38,9 @@ import { AppState } from 'react-native';
 /**
  * Platform/network half of the Strava integration: the OAuth connect flow
  * (browser round-trip via the app scheme — no expo-web-browser/expo-auth-session
- * native dependency, so this stays OTA-able), token refresh with rotation,
- * the GPX upload + status polling, and deauthorization. All the decision logic
+ * native dependency, so this stays OTA-able), token exchange + refresh with
+ * rotation through our token proxy (the client secret lives only there), the
+ * GPX upload + status polling, the activity import reads, and deauthorization. All the decision logic
  * (URL/body building, response classification, expiry math) is pure and tested
  * in `@core/strava/*`.
  */
@@ -35,25 +48,27 @@ import { AppState } from 'react-native';
 // --- configuration -----------------------------------------------------------
 
 export interface StravaConfig {
+  /** The public client id; the secret stays on the token proxy. */
   clientId: string;
-  clientSecret: string;
-}
-
-function extraString(key: 'stravaClientId' | 'stravaClientSecret'): string | undefined {
-  const value: unknown = Constants.expoConfig?.extra?.[key];
-  return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
 /**
- * Strava API credentials baked into this build (`extra.stravaClientId/Secret`
- * from the STRAVA_CLIENT_ID/STRAVA_CLIENT_SECRET env — see docs/DEPLOYMENT.md
- * § Strava), or null when this build was made without them.
+ * The Strava client id baked into this build (`extra.stravaClientId` from the
+ * STRAVA_CLIENT_ID env — see docs/DEPLOYMENT.md § Strava), or null when this
+ * build was made without it.
  */
 export function getStravaConfig(): StravaConfig | null {
-  const clientId = extraString('stravaClientId');
-  const clientSecret = extraString('stravaClientSecret');
-  if (clientId === undefined || clientSecret === undefined) return null;
-  return { clientId, clientSecret };
+  const value: unknown = Constants.expoConfig?.extra?.stravaClientId;
+  return typeof value === 'string' && value !== '' ? { clientId: value } : null;
+}
+
+/** POST a JSON body to the token proxy (Strava's token endpoint + our secret). */
+function proxyPost(path: string, body: string): Promise<Response> {
+  return fetch(`${TILE_HOST}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
 }
 
 export function isStravaConfigured(): boolean {
@@ -92,14 +107,14 @@ const CONNECT_TIMEOUT_MS = 4 * 60_000;
 const REDIRECT_FAILURES: Record<string, string> = {
   denied: 'Strava access was declined',
   'state-mismatch': 'Strava sign-in could not be verified — try again',
-  'missing-scope': 'Inukshuk needs the "Upload your activities" permission on Strava',
+  'missing-scope': 'Inukshuk needs permission to upload or to read your activities on Strava',
   malformed: 'Strava sent back an unusable response — try again',
 };
 
 /**
  * Run the full connect flow: open the system browser on Strava's authorize
  * page, wait for the `inukshuk://` redirect, exchange the code for tokens
- * (client secret — Strava has no PKCE) and store the connection. Resolves with
+ * through the proxy (Strava has no PKCE) and store the connection. Resolves with
  * a user-presentable outcome; never throws.
  */
 export async function connectStrava(): Promise<ConnectOutcome> {
@@ -155,15 +170,7 @@ export async function connectStrava(): Promise<ConnectOutcome> {
   }
 
   try {
-    const response = await fetch(STRAVA_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: buildTokenExchangeBody({
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-        code: outcome.code,
-      }),
-    });
+    const response = await proxyPost(STRAVA_PROXY_TOKEN_PATH, buildTokenExchangeBody(outcome.code));
     const json: unknown = await response.json().catch(() => null);
     const parsed = response.ok ? parseTokenResponse(json) : null;
     if (!parsed) {
@@ -173,6 +180,7 @@ export async function connectStrava(): Promise<ConnectOutcome> {
       ...parsed.tokens,
       athleteId: parsed.athlete?.id ?? null,
       athleteName: parsed.athlete?.name ?? '',
+      scopes: outcome.scopes,
     });
     return { ok: true, athleteName: parsed.athlete?.name ?? '' };
   } catch (err) {
@@ -204,15 +212,10 @@ async function freshAccessToken(): Promise<string> {
   refreshInFlight ??= (async () => {
     let response: Response;
     try {
-      response = await fetch(STRAVA_TOKEN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: buildTokenRefreshBody({
-          clientId: config.clientId,
-          clientSecret: config.clientSecret,
-          refreshToken: connection.refreshToken,
-        }),
-      });
+      response = await proxyPost(
+        STRAVA_PROXY_REFRESH_PATH,
+        buildTokenRefreshBody(connection.refreshToken),
+      );
     } catch {
       throw new Error('could not reach Strava — check your connection');
     }
@@ -309,6 +312,55 @@ export async function uploadTrackToStrava(track: UploadableTrack): Promise<Uploa
     reportError(err, 'strava-upload');
     return { kind: 'error', message: 'could not reach Strava — check your connection' };
   }
+}
+
+// --- import reads ------------------------------------------------------------
+
+/** A Strava read that failed in a way the importer handles differently. */
+export class StravaReadError extends Error {
+  constructor(
+    message: string,
+    /** `rate-limited`: back off and resume later; `auth`: reconnect; `other`: skip. */
+    readonly kind: 'rate-limited' | 'auth' | 'other',
+  ) {
+    super(message);
+  }
+}
+
+async function authedGet(url: string): Promise<{ json: unknown; rate: RateLimitState | null }> {
+  const token = await freshAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new StravaReadError('could not reach Strava — check your connection', 'other');
+  }
+  const rate = parseRateLimit((name) => response.headers.get(name));
+  if (response.status === 429) {
+    throw new StravaReadError('Strava asks us to slow down — try again later', 'rate-limited');
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new StravaReadError('Strava refused access — reconnect in Settings', 'auth');
+  }
+  if (!response.ok) throw new StravaReadError(`Strava error (HTTP ${response.status})`, 'other');
+  return { json: await response.json().catch(() => null), rate };
+}
+
+/** One page of the athlete's activities, newest first, plus the read budget left. */
+export async function listStravaActivities(
+  page: number,
+  after?: number,
+): Promise<{ activities: StravaActivitySummary[]; rate: RateLimitState | null }> {
+  const { json, rate } = await authedGet(buildActivitiesUrl({ page, after }));
+  return { activities: parseActivitiesPage(json), rate };
+}
+
+/** An activity's GPS track, rebuilt from its streams (empty when it has none). */
+export async function fetchStravaActivityPoints(
+  activity: StravaActivitySummary,
+): Promise<{ points: TrackPoint[]; rate: RateLimitState | null }> {
+  const { json, rate } = await authedGet(buildStreamsUrl(activity.id));
+  return { points: streamsToPoints(json, activity.startTime), rate };
 }
 
 // --- disconnect --------------------------------------------------------------

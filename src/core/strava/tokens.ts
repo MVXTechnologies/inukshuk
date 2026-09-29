@@ -25,6 +25,22 @@ export interface StravaConnection extends StravaTokens {
   athleteId: number | null;
   /** Display name shown in Settings ("Jane Doe"), possibly empty. */
   athleteName: string;
+  /**
+   * Activity scopes the athlete granted (`activity:write` to upload,
+   * `activity:read_all` to import). Connections saved before #432 could only
+   * have been made with `activity:write`, so that is what they hydrate with.
+   */
+  scopes: string[];
+}
+
+/** Whether a connection may import activities (`activity:read_all`). */
+export function canImport(connection: StravaConnection | null): boolean {
+  return connection?.scopes.includes('activity:read_all') ?? false;
+}
+
+/** Whether a connection may upload trails (`activity:write`). */
+export function canUpload(connection: StravaConnection | null): boolean {
+  return connection?.scopes.includes('activity:write') ?? false;
 }
 
 /**
@@ -110,5 +126,8 @@ export function sanitizeStravaDoc(json: unknown): StravaConnection | null {
     expiresAt,
     athleteId: asFiniteNumber(conn.athleteId),
     athleteName: asString(conn.athleteName) ?? '',
+    scopes: Array.isArray(conn.scopes)
+      ? conn.scopes.filter((v): v is string => typeof v === 'string')
+      : ['activity:write'],
   };
 }

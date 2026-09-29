@@ -10,6 +10,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 import { Icon, Text, useTheme } from 'react-native-paper';
 import { useMapThumbnail } from '../useMapThumbnail';
 import { useRouteThumbnail } from '../useRouteThumbnail';
+import { SourceMark } from '../../import/importParts';
 import { MapThumbnail, THUMB_SIZE, TrailThumbnail } from './Thumbnails';
 
 /**
@@ -65,6 +66,7 @@ export function TrailRow({
   onLongPress,
   selecting,
   selected,
+  sourceMark,
   leading,
   trailing,
   children,
@@ -78,6 +80,8 @@ export function TrailRow({
   onLongPress: () => void;
   selecting: boolean;
   selected: boolean;
+  /** "Strava" — where an imported trail came from (#432/#435). */
+  sourceMark?: string;
   leading?: ReactNode;
   trailing?: ReactNode;
   children?: ReactNode;
@@ -112,9 +116,12 @@ export function TrailRow({
         >
           <TrailThumbnail trackId={track.id} thumb={thumb} category={category} />
           <View style={styles.text}>
-            <Text numberOfLines={1} style={[styles.name, { color: t.ink }]}>
-              {track.name}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text numberOfLines={1} style={[styles.name, styles.nameShrink, { color: t.ink }]}>
+                {track.name}
+              </Text>
+              {sourceMark ? <SourceMark label={sourceMark} /> : null}
+            </View>
             {/* Never truncated: the three stats are the point of the row. */}
             <Text style={[styles.stats, { color: t.ink }]}>{stats}</Text>
             <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
@@ -355,6 +362,8 @@ const styles = StyleSheet.create({
   },
   text: { flex: 1, minWidth: 0, gap: 2, paddingRight: space.xs },
   name: { fontSize: 16, lineHeight: 21, fontWeight: '700' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  nameShrink: { flexShrink: 1 },
   stats: { fontSize: 14, lineHeight: 19, fontWeight: '600', ...tabularNums },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
   divider: { height: 1, marginLeft: space.lg + THUMB_SIZE + space.md },

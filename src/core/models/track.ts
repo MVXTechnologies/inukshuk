@@ -1,3 +1,5 @@
+import type { TrackOrigin } from '@core/import/sources';
+
 import type { BoundingBox } from './geo';
 
 /** A single recorded GPS fix. */
@@ -67,6 +69,8 @@ export interface Track {
   stats: TrackStats;
   /** Activity category id (see `@core/library/categories`); absent = uncategorized. */
   category?: string;
+  /** The connected source it was imported from (#432/#435); absent for everything else. */
+  origin?: TrackOrigin;
 }
 
 /**
@@ -90,4 +94,12 @@ export interface TrackSummary {
    * this field existed (or imported GPX) need no migration.
    */
   category?: string;
+  /**
+   * The connected source (Strava, Apple Health, Health Connect) and its id
+   * for the activity, when the trail was imported from one (#432/#435).
+   * Drives the Library's source mark and filter chip, the importer's "already
+   * here" check, and the "delete what came from Strava" disconnect option.
+   * Absent for recordings and file imports.
+   */
+  origin?: TrackOrigin;
 }

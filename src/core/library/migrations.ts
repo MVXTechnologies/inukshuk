@@ -6,6 +6,7 @@ import type {
   TrackNote,
   Waypoint,
 } from '@core/models';
+import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 import { isWaypointIcon } from './waypointIcons';
@@ -23,7 +24,7 @@ import { isWaypointIcon } from './waypointIcons';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 9;
+export const LIBRARY_SCHEMA_VERSION = 10;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -311,6 +312,11 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // is nothing to synthesize and nothing to lose; a pure version stamp. The
   // sanitize pass below validates the field wherever it IS present.
   8: (doc) => ({ ...doc, schemaVersion: 9 }),
+  // v9 → v10: trails gained the optional `origin` (the connected source and
+  // its activity id, #432/#435). Absent on every pre-v10 trail by definition
+  // (nothing imported from a source before), so a pure version stamp; the
+  // sanitize pass below validates the field wherever it IS present.
+  9: (doc) => ({ ...doc, schemaVersion: 10 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -368,10 +374,16 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
   const maps = asArray(doc.maps).filter(isRecord).filter(hasFilePath).map(normalizeMapDoc);
   const tracks = recordsWithId<TrackSummary>(doc.tracks)
     .filter((track) => typeof track.fileUri === 'string' && track.fileUri.trim() !== '')
-    .map((track) => ({
-      ...track,
-      ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
-    }));
+    .map((track) => {
+      const { origin: rawOrigin, ...rest } = track;
+      const origin = rawOrigin === undefined ? undefined : sanitizeTrackOrigin(rawOrigin);
+      return {
+        ...rest,
+        ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
+        // A junk origin is dropped, never the trail: it just loses its source mark.
+        ...(origin ? { origin } : {}),
+      };
+    });
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
   const index: LibraryIndex = {
     schemaVersion: LIBRARY_SCHEMA_VERSION,

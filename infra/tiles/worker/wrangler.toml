@@ -13,3 +13,5 @@ bucket_name = "inukshuk-tiles"
 [vars]
 ALLOWED_ORIGINS = "*"
 CACHE_CONTROL = "public, max-age=86400"
+# Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
+STRAVA_CLIENT_ID = "283079"

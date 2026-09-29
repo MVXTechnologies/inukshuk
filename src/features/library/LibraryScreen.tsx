@@ -4,6 +4,7 @@ import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/mo
 import { describeUploadOutcome } from '@core/strava/upload';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
+import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
@@ -29,6 +30,8 @@ import {
   Text,
   useTheme,
 } from 'react-native-paper';
+import { countBySource, sourceLabel } from '@core/import/origin';
+import type { ActivitySourceId } from '@core/import/sources';
 import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import {
@@ -65,6 +68,8 @@ import {
   TypeFilterChips,
 } from './components/LibraryChrome';
 import { MapRow, OnMapChip, RowDivider, TrailRow, WaypointRow } from './components/LibraryRows';
+import { ImportJobCard } from '../import/ImportJobCard';
+import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
 import { mergeLibraryTracks } from './mergeTracks';
@@ -190,6 +195,20 @@ export function LibraryScreen() {
   const [organizing, setOrganizing] = useState(false);
   // All · Trails · Maps · Waypoints. A view, not a preference: session-only.
   const [typeFilter, setTypeFilter] = useState<LibraryTypeFilter>('all');
+  // "From Strava" (etc.) chips: trails imported from one connected source.
+  // Session-only like the type chips; a source with no trails left drops out.
+  const [sourceFilter, setSourceFilter] = useState<ActivitySourceId | null>(null);
+  const sourceCounts = useMemo(() => countBySource(tracks), [tracks]);
+  const activeSource = sourceFilter !== null && sourceCounts[sourceFilter] ? sourceFilter : null;
+  // The Import activities sheet: opened from the "+" menu here, or asked for
+  // from Settings › Connections (a store request, so it survives the tab switch).
+  const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const sheetRequest = useImportStore((s) => s.sheetRequest);
+  const clearSheetRequest = useImportStore((s) => s.clearSheetRequest);
+  const closeImportSheet = () => {
+    setImportSheetOpen(false);
+    clearSheetRequest();
+  };
   const [newFolderVisible, setNewFolderVisible] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<{ id: string; name: string } | null>(null);
   const [renamingTrack, setRenamingTrack] = useState<{ id: string; name: string } | null>(null);
@@ -233,7 +252,7 @@ export function LibraryScreen() {
   };
   // Either narrowing in effect: both hide trails, so both switch the section
   // header to its "(visible/total)" form and stand the Maps section down.
-  const narrowed = activeFilterCount > 0 || searching;
+  const narrowed = activeFilterCount > 0 || searching || activeSource !== null;
   // Derived once per data change, not per render: this screen re-renders on
   // every card-menu open, every section collapse, every selection tap and every
   // drag-hover, and both of these walk (and re-allocate) the whole library.
@@ -242,8 +261,14 @@ export function LibraryScreen() {
   // BEFORE grouping is what orders trails inside each folder while leaving the
   // folders themselves in their user-defined order.
   const visibleTracks = useMemo(
-    () => sortTracks(filterTracks(searchTracks(tracks, searchQuery, folders), filter), sortKey),
-    [tracks, searchQuery, folders, filter, sortKey],
+    () =>
+      sortTracks(
+        filterTracks(searchTracks(tracks, searchQuery, folders), filter).filter(
+          (t) => activeSource === null || t.origin?.source === activeSource,
+        ),
+        sortKey,
+      ),
+    [tracks, searchQuery, folders, filter, sortKey, activeSource],
   );
 
   const grouped = useMemo(
@@ -271,9 +296,16 @@ export function LibraryScreen() {
     maps: maps.length,
     waypoints: waypoints.length,
   });
-  const showMaps = showsKind(typeFilter, 'maps') && !narrowed;
-  const showTrails = showsKind(typeFilter, 'trails');
-  const showWaypoints = showsKind(typeFilter, 'waypoints');
+  // A source chip shows that source's trails only (like the Trails chip).
+  const effectiveType: LibraryTypeFilter = activeSource ? 'trails' : typeFilter;
+  const showMaps = showsKind(effectiveType, 'maps') && !narrowed;
+  const showTrails = showsKind(effectiveType, 'trails');
+  const showWaypoints = showsKind(effectiveType, 'waypoints');
+  const sourceChips = (Object.keys(sourceCounts) as ActivitySourceId[]).map((id) => ({
+    id,
+    label: `From ${sourceLabel(id)}`,
+    count: sourceCounts[id] ?? 0,
+  }));
 
   // Drag-and-drop moves (Organize mode): each row's grip drags a ghost chip
   // onto a folder (or Ungrouped) header. The ⋮ move-to-folder menu remains
@@ -840,7 +872,13 @@ export function LibraryScreen() {
     const category = found && night ? { ...found, color: tokens.ink } : found;
     const stats = trailStatsLine(t.stats, units);
     const caption = trailCaption(t.startedAt, category?.name ?? null, nowMs);
-    const spoken = [t.name, category?.name, shortDate(t.startedAt, nowMs), stats]
+    const spoken = [
+      t.name,
+      category?.name,
+      shortDate(t.startedAt, nowMs),
+      stats,
+      t.origin ? `from ${sourceLabel(t.origin.source)}` : undefined,
+    ]
       .filter((part): part is string => typeof part === 'string' && part.length > 0)
       .join(', ');
     return (
@@ -863,6 +901,7 @@ export function LibraryScreen() {
         onLongPress={() => toggleTrackSelected(t.id)}
         selecting={selectionMode}
         selected={selected}
+        sourceMark={t.origin ? sourceLabel(t.origin.source) : undefined}
         leading={dragHandle({ kind: 'track', id: t.id, label: t.name })}
         trailing={trackMenu(t)}
       >
@@ -962,9 +1001,9 @@ export function LibraryScreen() {
           ? (sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointRow)
           : []),
       ];
-      const count = typeFilter === 'all' ? folderItemCount(g) : rows.length;
+      const count = effectiveType === 'all' ? folderItemCount(g) : rows.length;
       // Under a type chip, a folder holding none of that type steps aside.
-      if (typeFilter !== 'all' && rows.length === 0 && !organizing) return [];
+      if (effectiveType !== 'all' && rows.length === 0 && !organizing) return [];
       return [
         <View key={key}>
           {sectionHeader({
@@ -1073,7 +1112,7 @@ export function LibraryScreen() {
     }
     // Standalone waypoints (map "+" sheet). Hidden entirely while there are
     // none, unless the Waypoints chip asked for them.
-    if (showWaypoints && (waypoints.length > 0 || typeFilter === 'waypoints')) {
+    if (showWaypoints && (waypoints.length > 0 || effectiveType === 'waypoints')) {
       sections.push(
         <View key="waypoints">
           {sectionHeader({
@@ -1119,6 +1158,14 @@ export function LibraryScreen() {
         )
       }
     >
+      <Menu.Item
+        leadingIcon="cloud-download-outline"
+        title="Import activities…"
+        onPress={() => {
+          setImportOpen(false);
+          setImportSheetOpen(true);
+        }}
+      />
       <Menu.Item
         leadingIcon="map-marker-path"
         title="Import trails (GPX, FIT, TCX, zip)"
@@ -1235,7 +1282,15 @@ export function LibraryScreen() {
             <TypeFilterChips
               value={typeFilter}
               counts={chipCounts}
-              onChange={setTypeFilter}
+              onChange={(next) => {
+                setTypeFilter(next);
+                setSourceFilter(null);
+              }}
+              extraChips={sourceChips}
+              extraValue={activeSource}
+              onExtraChange={(id) =>
+                setSourceFilter((current) => (current === id ? null : (id as ActivitySourceId)))
+              }
               trailing={
                 // Search is a collapsible field, not a permanent row: collapsed
                 // it costs one icon at the end of the chips.
@@ -1252,12 +1307,15 @@ export function LibraryScreen() {
       </View>
 
       {libraryEmpty ? (
-        <LibraryEmptyState
-          busy={busy}
-          onRecord={recordFromEmpty}
-          onImportGpx={() => void onImportGpx()}
-          onBrowseMaps={() => router.navigate('/maps')}
-        />
+        <>
+          <ImportJobCard />
+          <LibraryEmptyState
+            busy={busy}
+            onRecord={recordFromEmpty}
+            onImportGpx={() => void onImportGpx()}
+            onBrowseMaps={() => router.navigate('/maps')}
+          />
+        </>
       ) : (
         <ScrollView
           ref={dragScrollRef}
@@ -1269,6 +1327,7 @@ export function LibraryScreen() {
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
         >
+          <ImportJobCard />
           {organizing && !hasFolders && (
             <Text style={[styles.hint, { color: tokens.inkMuted }]}>
               Create a folder with + to group trails, maps and waypoints. Grips, rename and delete
@@ -1413,6 +1472,13 @@ export function LibraryScreen() {
         onDismiss={() => setFilterOpen(false)}
         sortKey={sortKey}
         onApply={applyFilterAndSort}
+      />
+
+      <ImportSheet
+        visible={importSheetOpen || sheetRequest !== null}
+        initialSource={sheetRequest?.source ?? null}
+        onClose={closeImportSheet}
+        onImportFiles={() => void onImportGpx()}
       />
 
       <Snackbar

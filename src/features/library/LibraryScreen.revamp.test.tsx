@@ -5,6 +5,7 @@
  */
 import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 import { LibraryScreen } from '@features/library/LibraryScreen';
+import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
@@ -187,5 +188,47 @@ describe('Organize mode', () => {
 
     await press(view, view.getByText('Done'));
     expect(view.queryByLabelText('Delete folder')).toBeNull();
+  });
+});
+
+describe('imported trails (#432)', () => {
+  const imported = track({
+    id: 's1',
+    name: 'Crête',
+    origin: { source: 'strava', externalId: '1' },
+  });
+
+  it('carry a source mark and get a "From Strava" chip that narrows to them', async () => {
+    const view = await show({ tracks: [imported, track()], maps: [map] });
+    expect(view.getByLabelText('Imported from Strava')).toBeOnTheScreen();
+    expect(view.getByLabelText(/^Crête, .*, from Strava — open 3D view/)).toBeOnTheScreen();
+
+    await press(view, view.getByText('From Strava 1'));
+    expect(view.getByText('Recorded trails (1/2)')).toBeOnTheScreen();
+    expect(view.queryByText('Les Loups')).toBeNull();
+    expect(view.queryByText('Maps (1)')).toBeNull();
+
+    // Tapping it again (or a type chip) goes back.
+    await press(view, view.getByText('From Strava 1'));
+    expect(view.getByText('Recorded trails (2)')).toBeOnTheScreen();
+    await press(view, view.getByText('From Strava 1'));
+    await press(view, view.getByText('All 3'));
+    expect(view.getByText('Maps (1)')).toBeOnTheScreen();
+  });
+
+  it('shows no source chip or mark without imported trails', async () => {
+    const view = await show({ tracks: [track()] });
+    expect(view.queryByText(/^From /)).toBeNull();
+    expect(view.queryByLabelText(/^Imported from/)).toBeNull();
+  });
+
+  it('opens the Import sheet when Settings asks for it, and closes it', async () => {
+    useImportStore.setState({ sheetRequest: { source: 'files' } });
+    const view = await show({ tracks: [track()] });
+    expect(view.getByRole('header', { name: 'Import activities' })).toBeOnTheScreen();
+    expect(view.getByText('FIT · GPX · TCX · export zip')).toBeOnTheScreen();
+    await press(view, view.getByText('Cancel'));
+    expect(useImportStore.getState().sheetRequest).toBeNull();
+    expect(view.queryByRole('header', { name: 'Import activities' })).toBeNull();
   });
 });

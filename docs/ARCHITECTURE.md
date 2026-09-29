@@ -125,6 +125,26 @@ inflated. Activities with the same start (±60 s) and distance (±2 %) as a
 library track are skipped as duplicates. `features/library/importActivities`
 is the file-system shell (picker, "Open with", UI yielding).
 
+## Connected-source import (Strava, Apple Health / Health Connect)
+
+Every connected source implements one contract (`core/import/sources`):
+list cheaply (start, distance, name, "has a route" — no GPS), then fetch
+routes one by one. `core/import/plan` drops what is already in the Library
+(same source + activity id, or same start ±60 s and distance ±2 %) and what
+has no route before anything is fetched; imported trails carry their
+`origin` in the library index (schema v10), which drives the source mark,
+the "From Strava" chip, and "delete what came from Strava" on disconnect.
+`features/import/runSourceImport` is the loop (batched Library writes, the
+job persisted right after each batch); `importController` owns the one
+running job (`state/importStore`, `imports.json`). Strava's read limits are
+handled in `lib/stravaSource`: a spent 15-minute window is waited out in
+place, a spent daily budget pauses the job until midnight UTC. A paused or
+interrupted job resumes by re-listing — planning makes that idempotent.
+Health imports run in the foreground only (paused on background). Strava
+auto-import (`features/import/autoImport`, rules in `core/import/auto`)
+quietly imports "since last import" on launch/foreground at most every
+15 minutes, once a first import was made by hand.
+
 ## Offline maps
 
 - 2D basemap tiles for a user-drawn region are downloaded into MapLibre

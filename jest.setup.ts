@@ -30,3 +30,10 @@ jest.mock('react-native-reanimated', () => ({
   useReducedMotion: jest.fn(() => false),
   cancelAnimation: jest.fn(),
 }));
+
+// Apple Health / Health Connect are Nitro native modules that do not exist
+// under Jest, and Jest resolves `@lib/health/platform` with the iOS extension.
+// Screens that offer Health import (Library, Settings) get an inert platform
+// ("no health store on this device"); tests that exercise Health mock
+// `@lib/health` (or `./platform`) themselves, which overrides this.
+jest.mock('@lib/health/platform', () => ({ healthPlatform: null }));
