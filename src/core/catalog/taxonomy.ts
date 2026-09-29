@@ -57,7 +57,7 @@ export const CATALOG_ACTIVITY_LABELS: Record<CatalogActivity, string> = {
   hiking: 'Hiking',
   ski: 'Ski',
   snowshoe: 'Snowshoe',
-  paddling: 'Canoe & kayak',
+  paddling: 'Paddling',
   cycling: 'Cycling',
   hunting: 'Hunting',
   fishing: 'Fishing',

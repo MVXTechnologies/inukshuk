@@ -69,7 +69,7 @@ it('renders every section from the index counts and loaded maps', async () => {
   // By activity: counted activities only; zero and absent ones hidden.
   expect(view.getByText('By activity')).toBeTruthy();
   expect(view.getByLabelText('Hiking, 1204 maps')).toBeTruthy();
-  expect(view.getByText('Canoe & kayak')).toBeTruthy();
+  expect(view.getByText('Paddling')).toBeTruthy();
   expect(view.queryByText('Ski')).toBeNull();
   expect(view.queryByText('Fishing')).toBeNull();
   // By terrain, with whole-catalog counts.
