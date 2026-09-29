@@ -87,6 +87,12 @@ async function show(tracks: TrackSummary[], folders: Folder[] = []): Promise<Ren
 const trailRows = (view: RenderResult) => view.queryAllByLabelText(/open 3D view/).length;
 
 beforeEach(() => mockThumbnailCalls.mockClear());
+// Newly mounted rows start paper Menu animations; let them end inside act.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 400));
+  });
+});
 
 it('mounts one page of rows (and thumbnails) for 400 trails, more on demand', async () => {
   const view = await show(library(400));
