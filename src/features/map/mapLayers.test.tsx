@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYER,
-  HEATMAP_LAYERS,
+  HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   SLOPE_LAYER,
@@ -55,7 +55,10 @@ describe('hoisted map layers', () => {
   // is invisible on device; this test is the only thing that would catch a
   // regression before a MapLibre bump stops backfilling.
   it.each([
-    ['HEATMAP_LAYERS', HEATMAP_LAYERS, ['tracks-heatmap']],
+    ['HEAT_LAYERS.light.glow', HEAT_LAYERS.light.glow, ['tracks-heat-glow']],
+    ['HEAT_LAYERS.light.lines', HEAT_LAYERS.light.lines, ['tracks-heat-lines']],
+    ['HEAT_LAYERS.dark.glow', HEAT_LAYERS.dark.glow, ['tracks-heat-glow']],
+    ['HEAT_LAYERS.dark.lines', HEAT_LAYERS.dark.lines, ['tracks-heat-lines']],
     ['TRACKS_LINES_LAYER.shown', TRACKS_LINES_LAYER.shown, ['tracks-lines-layer']],
     ['TRACKS_LINES_LAYER.hidden', TRACKS_LINES_LAYER.hidden, ['tracks-lines-layer']],
     ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, ['focused-trail-line-layer']],
@@ -132,7 +135,8 @@ async function injectedBeforeIds(children: ReactNode): Promise<[string, unknown]
 
 describe('overlay layers sit below the position puck (#332)', () => {
   it.each([
-    ['HEATMAP_LAYERS', HEATMAP_LAYERS, TRAILS_ANCHOR],
+    ['HEAT_LAYERS.light.glow', HEAT_LAYERS.light.glow, TRAILS_ANCHOR],
+    ['HEAT_LAYERS.dark.lines', HEAT_LAYERS.dark.lines, TRAILS_ANCHOR],
     ['TRACKS_LINES_LAYER.shown', TRACKS_LINES_LAYER.shown, TRAILS_ANCHOR],
     ['TRACKS_LINES_LAYER.hidden', TRACKS_LINES_LAYER.hidden, TRAILS_ANCHOR],
     ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, TRAILS_ANCHOR],

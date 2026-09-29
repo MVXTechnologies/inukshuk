@@ -93,7 +93,7 @@ import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { metersPerPixel } from '@core/geo/scaleBar';
-import { heatRadiusPx } from '@core/heat/heatRadius';
+import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
@@ -119,7 +119,7 @@ import {
   SLOPE_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
-  HEATMAP_LAYERS,
+  HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYER,
@@ -319,6 +319,7 @@ export function MapScreen() {
   // a 400-trail source used to be re-serialized and re-parsed natively on
   // every tap. A string that keeps its identity is passed through untouched.
   const linesJson = useGeoJsonString(trackHeat.lines);
+  const heatLinesJson = useGeoJsonString(trackHeat.heatLines);
   const heatGlowJson = useGeoJsonString(trackHeat.heatGlow);
   const router = useRouter();
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
@@ -344,6 +345,8 @@ export function MapScreen() {
   const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
   // Contours on the vector map are served tiles, part of the style.
   const terrainContours = useSettingsStore((s) => s.terrainContours);
+  // Heat tone follows the basemap: dark theme and satellite imagery are dark.
+  const heatLayerSet = theme.dark || basemap === 'satellite' ? HEAT_LAYERS.dark : HEAT_LAYERS.light;
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -1547,7 +1550,7 @@ export function MapScreen() {
               { lng: lngLatArr[0], lat: lngLatArr[1] },
               // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
               // visible heat glow when the heatmap is on.
-              Math.max(TRAIL_HIT_PX, heatOn ? heatRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+              Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
                 (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
               heatOn,
             )
@@ -2012,17 +2015,24 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {/* Heatmap density: a native MapLibre `heatmap` layer under the
-              trail lines, over EVERY qualifying trail in the library while
-              the toggle is on (independent of visibility mode/folder
-              filters/activeTrackIds — see qualifiesForHeat): one point per
-              occupied coarse pass-grid cell (useTrackHeat.heatGlow), so the
-              feature count is bounded by the ground covered, serialized once
-              per data change. Drawn BEFORE the lines below so it sits
+          {/* The personal heatmap (#470), over EVERY qualifying trail in the
+              library while the toggle is on (independent of visibility
+              mode/folder filters/activeTrackIds — see qualifiesForHeat):
+              a soft glow from the coarse pass grid when zoomed out, fading
+              into crisp pass-count lines that follow the streets actually
+              travelled (one pass a clearly visible warm line, many passes
+              hot). Both sources are bounded by the ground covered, not by
+              how many trails or fixes there are, and are serialized once per
+              data change. Drawn BEFORE the trail lines below so they sit
               beneath them. */}
           {heatOn && heatGlowJson && (
-            <GeoJSONSource id="tracks-heat-points" data={heatGlowJson}>
-              {HEATMAP_LAYERS}
+            <GeoJSONSource id="tracks-heat-glow-points" data={heatGlowJson}>
+              {heatLayerSet.glow}
+            </GeoJSONSource>
+          )}
+          {heatOn && heatLinesJson && (
+            <GeoJSONSource id="tracks-heat-lines-source" data={heatLinesJson}>
+              {heatLayerSet.lines}
             </GeoJSONSource>
           )}
 
