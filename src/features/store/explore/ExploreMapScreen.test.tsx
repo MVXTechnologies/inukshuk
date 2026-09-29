@@ -28,6 +28,7 @@ interface Captured {
 }
 const mockCaptured: Captured = {};
 const mockEaseTo = jest.fn();
+const mockFitBounds = jest.fn();
 type MockProps = { children?: import('react').ReactNode; id?: string } & Record<string, unknown>;
 const mockView = { bounds: [-72, 46, -70, 48], zoom: 7, center: [-71, 47] };
 
@@ -41,7 +42,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
       return <View>{props.children}</View>;
     }),
     Camera: React.forwardRef(function MockCamera(_props: MockProps, ref) {
-      React.useImperativeHandle(ref, () => ({ easeTo: mockEaseTo }));
+      React.useImperativeHandle(ref, () => ({ easeTo: mockEaseTo, fitBounds: mockFitBounds }));
       return null;
     }),
     GeoJSONSource: React.forwardRef(function MockSource(props: MockProps, ref) {

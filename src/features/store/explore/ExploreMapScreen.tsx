@@ -12,6 +12,8 @@ import {
   EXPLORE_MAP_START_ZOOM,
   footprintFeature,
   itemsInBounds,
+  nearestItemsView,
+  trimBoundsBottom,
   normalizeBounds,
   pendingShardCountInBounds,
   pointItemIdOf,
@@ -76,6 +78,8 @@ import { itemFacets } from './facetsAdapter';
 const SOURCE_ID = 'explore-catalog';
 /** Rows the sheet lists — enough to scan, never a 5 000-row FlatList in a sheet. */
 const SHEET_ROWS = 50;
+/** Share of the screen the bottom sheet covers (its maxHeight). */
+const SHEET_FRACTION = 0.42;
 
 function itemMeta(item: CatalogItem, sourceName: string | undefined): string {
   const kind = itemFacets(item).kind;
@@ -114,6 +118,7 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
   const [zoom, setZoom] = useState(EXPLORE_MAP_START_ZOOM);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const autoSearched = useRef(false);
+  const framed = useRef(false);
 
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
@@ -144,10 +149,32 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
     [items, fullFilter],
   );
   const points = useMemo(() => catalogPointCollection(filtered), [filtered]);
+  // Only what the sheet leaves visible counts as "in this area" — the maps
+  // under the sheet are not on screen (emulator check, 2026-09-29).
   const inView = useMemo(
-    () => (bounds === null ? [] : itemsInBounds(filtered, bounds)),
+    () =>
+      bounds === null ? [] : itemsInBounds(filtered, trimBoundsBottom(bounds, SHEET_FRACTION)),
     [filtered, bounds],
   );
+
+  // Open framed on you and the nearest maps (once, when they first load):
+  // centring on the user alone often left every nearby sheet off-screen or
+  // under the sheet — Québec City's nearest sheets are in Maine.
+  useEffect(() => {
+    if (framed.current) return;
+    const view = nearestItemsView(position, filtered);
+    if (view === null) return;
+    framed.current = true;
+    cameraRef.current?.fitBounds(view, {
+      padding: {
+        top: insets.top + 130,
+        bottom: screenHeight * SHEET_FRACTION + 24,
+        left: 32,
+        right: 32,
+      },
+      duration: 0,
+    });
+  }, [position, filtered, insets.top, screenHeight]);
   const sheetRows = useMemo(
     () =>
       sortCatalogItems(inView, bounds === null ? position : boundsCenter(bounds)).slice(
@@ -383,7 +410,7 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
           {
             backgroundColor: t.surface,
             paddingBottom: insets.bottom + space.md,
-            maxHeight: screenHeight * 0.42,
+            maxHeight: screenHeight * SHEET_FRACTION,
           },
         ]}
       >

@@ -218,3 +218,55 @@ export function pointItemIdOf(feature: {
 
 /** A camera start around a position: roughly a region's width (zoom 7). */
 export const EXPLORE_MAP_START_ZOOM = 7;
+
+/**
+ * The part of a view the map sheet leaves visible: MapLibre reports the whole
+ * viewport, but the bottom `fraction` of the screen sits under the sheet, so
+ * maps listed as "in this area" there would be ones the user cannot see
+ * (emulator check, 2026-09-29). Latitude is trimmed linearly — close enough
+ * at the zooms where the sheet lists maps.
+ */
+export function trimBoundsBottom(bounds: ExploreBounds, fraction: number): ExploreBounds {
+  const [w, s, e, n] = bounds;
+  const f = Math.min(0.9, Math.max(0, fraction));
+  return [w, s + (n - s) * f, e, n];
+}
+
+/**
+ * Where the map view should open: a box around the user and the `count`
+ * nearest maps (by footprint centre), so the first screen shows clusters
+ * instead of an empty map with the nearest sheets just off-screen. Null when
+ * there is nothing to frame.
+ */
+export function nearestItemsView(
+  position: LatLng | null,
+  items: readonly CatalogItem[],
+  count = 24,
+): ExploreBounds | null {
+  if (position === null) return null;
+  const centres = items
+    .filter((i): i is CatalogItem & { bbox: CatalogBbox } => i.bbox !== undefined)
+    .map((i) => ({
+      latitude: (i.bbox[1] + i.bbox[3]) / 2,
+      longitude: (i.bbox[0] + i.bbox[2]) / 2,
+    }))
+    .map((c) => ({
+      c,
+      d: Math.hypot(
+        (c.latitude - position.latitude) * 111,
+        (c.longitude - position.longitude) * 111 * Math.cos((position.latitude * Math.PI) / 180),
+      ),
+    }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, count)
+    .map((x) => x.c);
+  if (centres.length === 0) return null;
+  let [w, s, e, n] = [position.longitude, position.latitude, position.longitude, position.latitude];
+  for (const c of centres) {
+    w = Math.min(w, c.longitude);
+    e = Math.max(e, c.longitude);
+    s = Math.min(s, c.latitude);
+    n = Math.max(n, c.latitude);
+  }
+  return [w, s, e, n];
+}

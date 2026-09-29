@@ -7,11 +7,13 @@ import {
   clusterTapZoom,
   footprintFeature,
   itemsInBounds,
+  nearestItemsView,
   normalizeBounds,
   pendingShardCountInBounds,
   pointItemIdOf,
   selectShardsInBounds,
   shardsInBounds,
+  trimBoundsBottom,
 } from './exploreMap';
 import type { CatalogBbox, CatalogItem, CatalogShardRef } from './schema';
 
@@ -129,5 +131,31 @@ describe('cluster taps', () => {
     expect(pointItemIdOf({ properties: { id: 'a' } })).toBe('a');
     expect(pointItemIdOf({ properties: { cluster: true, cluster_id: 1 } })).toBeNull();
     expect(pointItemIdOf({ properties: null })).toBeNull();
+  });
+});
+
+describe('trimBoundsBottom', () => {
+  it('drops the part of the view under the sheet', () => {
+    expect(trimBoundsBottom([-72, 46, -70, 48], 0.25)).toEqual([-72, 46.5, -70, 48]);
+    expect(trimBoundsBottom([-72, 46, -70, 48], 0)).toEqual([-72, 46, -70, 48]);
+  });
+});
+
+describe('nearestItemsView', () => {
+  const at = (id: string, lon: number, lat: number) =>
+    ({ id, bbox: [lon - 0.1, lat - 0.1, lon + 0.1, lat + 0.1] }) as CatalogItem;
+
+  it('frames the user and the nearest maps', () => {
+    const view = nearestItemsView(
+      { latitude: 46.8, longitude: -71.2 },
+      [at('far', -120, 50), at('a', -70, 46), at('b', -69.5, 47)],
+      2,
+    );
+    expect(view).toEqual([-71.2, 46, -69.5, 47]);
+  });
+
+  it('is null without a position or maps', () => {
+    expect(nearestItemsView(null, [at('a', -70, 46)])).toBeNull();
+    expect(nearestItemsView({ latitude: 46.8, longitude: -71.2 }, [])).toBeNull();
   });
 });
