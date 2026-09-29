@@ -13,6 +13,7 @@
  */
 
 import { NATIVE_MAX_ZOOM, type Basemap } from '@core/geo/tiles';
+import type { TileSourceSpec } from './tilePlan';
 
 /** The drape sources the composer can stitch (see `features/map/dem`). */
 export type PrintDrapeSource = Exclude<Basemap, 'relief'>;
@@ -75,4 +76,14 @@ export const EDITOR_RASTER_TILE_SIZE = 128;
 
 export function printStyleById(id: PrintStyleId): PrintStyle {
   return PRINT_STYLES.find((s) => s.id === id) ?? PRINT_STYLES[0]!;
+}
+
+/**
+ * The tile service the COMPOSER stitches for a drape (#460) — the very
+ * template the live editor shows, so preview and print cannot drift apart
+ * again, bounded by the zooms the service really serves.
+ */
+export function printTileSource(drape: PrintDrapeSource): TileSourceSpec {
+  const style = PRINT_STYLES.find((s) => s.drape === drape) ?? PRINT_STYLES[0]!;
+  return { template: style.tileUrl, minZoom: 0, maxZoom: NATIVE_MAX_ZOOM[style.drape] };
 }
