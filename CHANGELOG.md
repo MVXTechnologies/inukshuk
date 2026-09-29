@@ -45,6 +45,8 @@ Bring your activities in.
 
 ### Fixed
 
+- After adding a waypoint from the map's point bubble, the bubble closes;
+  before, it stayed open over the new pin and ignored every tap.
 - The tab labels no longer touch the bottom edge on Android.
 - Editing a note puts the cursor at the end of the text.
 - Opening a map from the Library moves the map to it.
