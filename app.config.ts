@@ -43,13 +43,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSAppTransportSecurity: {
         NSAllowsLocalNetworking: true,
       },
-      // Let Inukshuk appear in iOS "Open in…" for .gpx files (declared now so iOS
-      // is ready; iOS isn't being built yet).
+      // Let Inukshuk appear in iOS "Open in…" for .gpx, and for the activity
+      // files watches and Strava export (.fit, .tcx — #431). Zip archives are
+      // left out on purpose: claiming every zip would be noise; export
+      // archives import from the Library's picker.
       CFBundleDocumentTypes: [
         {
           CFBundleTypeName: 'GPS Exchange Format',
           LSHandlerRank: 'Alternate',
           LSItemContentTypes: ['com.topografix.gpx'],
+        },
+        {
+          CFBundleTypeName: 'FIT activity',
+          LSHandlerRank: 'Alternate',
+          LSItemContentTypes: ['com.garmin.fit'],
+        },
+        {
+          CFBundleTypeName: 'Training Center XML',
+          LSHandlerRank: 'Alternate',
+          LSItemContentTypes: ['com.garmin.tcx'],
         },
       ],
       UTImportedTypeDeclarations: [
@@ -58,6 +70,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           UTTypeConformsTo: ['public.xml'],
           UTTypeDescription: 'GPS Exchange Format',
           UTTypeTagSpecification: { 'public.filename-extension': ['gpx'] },
+        },
+        {
+          UTTypeIdentifier: 'com.garmin.fit',
+          UTTypeConformsTo: ['public.data'],
+          UTTypeDescription: 'FIT activity',
+          UTTypeTagSpecification: {
+            'public.filename-extension': ['fit'],
+            'public.mime-type': ['application/vnd.ant.fit'],
+          },
+        },
+        {
+          UTTypeIdentifier: 'com.garmin.tcx',
+          UTTypeConformsTo: ['public.xml'],
+          UTTypeDescription: 'Training Center XML',
+          UTTypeTagSpecification: {
+            'public.filename-extension': ['tcx'],
+            'public.mime-type': ['application/vnd.garmin.tcx+xml'],
+          },
         },
       ],
     },
@@ -120,10 +150,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         category: ['DEFAULT', 'BROWSABLE'],
         data: [
           { scheme: 'content', mimeType: 'application/gpx+xml' },
+          // Activity files (#431): FIT from watches and Strava, TCX.
+          { scheme: 'content', mimeType: 'application/vnd.ant.fit' },
+          { scheme: 'content', mimeType: 'application/fit' },
+          { scheme: 'content', mimeType: 'application/vnd.garmin.tcx+xml' },
           { scheme: 'content', mimeType: 'application/xml' },
           { scheme: 'content', mimeType: 'application/octet-stream' },
           { scheme: 'content', pathPattern: '.*\\.gpx' },
+          { scheme: 'content', pathPattern: '.*\\.fit' },
+          { scheme: 'content', pathPattern: '.*\\.tcx' },
           { scheme: 'file', pathPattern: '.*\\.gpx' },
+          { scheme: 'file', pathPattern: '.*\\.fit' },
+          { scheme: 'file', pathPattern: '.*\\.tcx' },
         ],
       },
     ],
