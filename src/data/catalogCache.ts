@@ -1,8 +1,10 @@
 import Constants from 'expo-constants';
 
+import { parseCatalogFacets, type CatalogFacets } from '@core/catalog/facets';
 import {
   parseCatalogIndex,
   parseCatalogShard,
+  type CatalogDocumentRef,
   type CatalogIndex,
   type CatalogItem,
   type CatalogSearchRef,
@@ -44,6 +46,7 @@ import * as storage from './storage';
 const DEFAULT_INDEX_URL = 'https://inukshuk.mvxtechnologies.com/catalog/v2/index.json';
 const CACHE_FILE = 'catalog.json';
 const SEARCH_CACHE_FILE = 'catalog-search.json';
+const FACETS_CACHE_FILE = 'catalog-facets.json';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Shards change far less often than the index; keep them a week. */
 const SHARD_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -79,6 +82,12 @@ export interface CatalogShardLoadResult {
 
 export interface CatalogSearchDigestLoadResult {
   digest: CatalogSearchDigest;
+  fromCache: boolean;
+  warnings: string[];
+}
+
+export interface CatalogFacetsLoadResult {
+  facets: CatalogFacets;
   fromCache: boolean;
   warnings: string[];
 }
@@ -221,6 +230,44 @@ export async function loadCatalogSearchDigest(
       if (fallback === null) continue;
       const { digest, warnings } = parseCatalogSearchDigest(fallback.raw);
       if (digest !== null) return { digest, fromCache: true, warnings };
+    }
+    return null;
+  }
+}
+
+/**
+ * Load the per-shard facet digest (`facets.json`) the index points at — what
+ * lets the explorer's "Hiking" or "Glaciers" list fetch only the shards that
+ * hold such maps instead of every ring around the user. Same cache policy as
+ * the search digest; null when reachable from neither (the list then falls
+ * back to nearest-first rings).
+ */
+export async function loadCatalogFacets(
+  ref: CatalogDocumentRef,
+  options?: { force?: boolean },
+): Promise<CatalogFacetsLoadResult | null> {
+  const url = resolveCatalogUrl(catalogManifestUrl(), ref.path);
+  if (url === null) return null;
+
+  const { current, superseded } = await readCached(FACETS_CACHE_FILE, url);
+  const cacheFresh = current !== null && Date.now() - current.fetchedAt < SHARD_CACHE_TTL_MS;
+
+  if (current !== null && cacheFresh && options?.force !== true) {
+    const { facets, warnings } = parseCatalogFacets(current.raw);
+    if (facets !== null) return { facets, fromCache: true, warnings };
+  }
+
+  try {
+    const raw = await fetchJson(url);
+    const { facets, warnings } = parseCatalogFacets(raw);
+    if (facets === null) throw new Error(warnings[0] ?? 'unusable facets digest');
+    writeCached(FACETS_CACHE_FILE, url, raw);
+    return { facets, fromCache: false, warnings };
+  } catch {
+    for (const fallback of [current, superseded]) {
+      if (fallback === null) continue;
+      const { facets, warnings } = parseCatalogFacets(fallback.raw);
+      if (facets !== null) return { facets, fromCache: true, warnings };
     }
     return null;
   }

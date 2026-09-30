@@ -4,7 +4,12 @@ import {
   type CatalogShardRef,
 } from '@core/catalog/schema';
 import Constants from 'expo-constants';
-import { catalogManifestUrl, loadCatalogManifest, loadCatalogShard } from './catalogCache';
+import {
+  catalogManifestUrl,
+  loadCatalogFacets,
+  loadCatalogManifest,
+  loadCatalogShard,
+} from './catalogCache';
 import * as storage from './storage';
 
 jest.mock('./storage', () => ({
@@ -316,5 +321,47 @@ describe('loadCatalogShard', () => {
   it('refuses a shard path that would leave the catalog directory', async () => {
     expect(await loadCatalogShard({ ...shard, path: '../../secrets.json' }, sourceIds)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('loadCatalogFacets (#474)', () => {
+  const ref = { path: 'facets.json', byteSize: 100 };
+  const body = {
+    schemaVersion: 1,
+    shards: { 'topo-n40w080': { kinds: { topo: 3 }, activities: { hiking: 2 } } },
+  };
+
+  it('fetches, parses and caches the per-shard digest', async () => {
+    fetchMock.mockResolvedValue(okResponse(body));
+    const result = await loadCatalogFacets(ref);
+    expect(fetchMock).toHaveBeenCalledWith('https://test.example/facets.json', expect.anything());
+    expect(result?.facets.shards['topo-n40w080']?.activities).toEqual({ hiking: 2 });
+    expect(writeJson).toHaveBeenCalledWith(
+      'catalog-facets.json',
+      expect.objectContaining({ url: 'https://test.example/facets.json' }),
+    );
+  });
+
+  it('serves a fresh cache offline and falls back to a stale one', async () => {
+    readJson.mockResolvedValue({
+      fetchedAt: Date.now() - 1000,
+      url: 'https://test.example/facets.json',
+      raw: body,
+    });
+    expect((await loadCatalogFacets(ref))?.fromCache).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    readJson.mockResolvedValue({
+      fetchedAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+      url: 'https://test.example/facets.json',
+      raw: body,
+    });
+    fetchMock.mockRejectedValue(new Error('offline'));
+    expect((await loadCatalogFacets(ref))?.fromCache).toBe(true);
+  });
+
+  it('returns null when unusable and uncached', async () => {
+    fetchMock.mockResolvedValue(okResponse({ schemaVersion: 99, shards: {} }));
+    expect(await loadCatalogFacets(ref)).toBeNull();
   });
 });

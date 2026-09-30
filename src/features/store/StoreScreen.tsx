@@ -4,7 +4,7 @@ import { sortCatalogItemsCanadianFirst } from '@core/catalog/nearbySections';
 import { useCatalogStore } from '@state/catalogStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useRouter } from 'expo-router';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,11 +68,19 @@ export function StoreScreen() {
   }, [status, load]);
 
   // The landing's "Popular near you" and facet presence come from the shards
-  // nearest the user, across all categories.
-  useEffect(() => {
-    if (status !== 'ready') return;
+  // nearest the user, across all categories. Keyed on a ~10 km cell, not the
+  // raw fix: the persisted position moves every minute on a run, and each
+  // move pulled another ring and flashed every explorer list's spinner (#474).
+  const nearCell =
+    lastKnownPosition === null
+      ? null
+      : `${Math.round(lastKnownPosition.latitude * 10)}:${Math.round(lastKnownPosition.longitude * 10)}`;
+  const loadNear = useEffectEvent(() => {
     void ensureShardsNear(lastKnownPosition, null);
-  }, [status, lastKnownPosition, ensureShardsNear]);
+  });
+  useEffect(() => {
+    if (status === 'ready') loadNear();
+  }, [status, nearCell]);
 
   // …and the shards a *query* needs, which geography alone would never reach
   // (a user in Montréal searching "Grand Canyon"). Debounced so a word costs

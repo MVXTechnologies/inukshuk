@@ -18,6 +18,7 @@ import {
   seedCatalog,
   sepaqRaw,
   settle,
+  usTopo,
 } from './exploreTestUtils';
 import { resetLinkOutCollectionsCache } from './useLinkOutCollections';
 
@@ -110,6 +111,26 @@ it('routes each tile to its stack screen', async () => {
   expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
   await fireEvent.press(view.getByLabelText('Show on a map'));
   expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
+});
+
+it('has an explicit, labelled "Browse on the map" button — even with no position (#474)', async () => {
+  useSettingsStore.setState({ lastKnownPosition: null });
+  seedCatalog(fixtureIndex());
+  const view = await landing();
+  expect(view.getByText('Browse on the map')).toBeTruthy();
+  await fireEvent.press(view.getByLabelText('Browse all maps on the map'));
+  expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
+});
+
+it('lists US Topo sheets (terrain only, no stored activities) under Hiking when loaded', async () => {
+  // Before #474 the landing's own fallback count ignored the terrain affinity,
+  // so a catalog without index counts showed no "By activity" at all.
+  seedCatalog(
+    fixtureIndex({ items: [usTopo('cupertino', 37.31, -122.06, ['mountains'])], shards: [] }),
+  );
+  const view = await landing();
+  expect(view.getByText('By activity')).toBeTruthy();
+  expect(view.getByLabelText('Hiking')).toBeTruthy();
 });
 
 it('without index counts, shows only what loaded maps carry — and no totals', async () => {

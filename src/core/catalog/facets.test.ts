@@ -4,6 +4,7 @@ import {
   countFacets,
   parseCatalogFacets,
   serializeCatalogFacets,
+  shardIdsForFacetFilter,
   shardIdsWithFacet,
 } from './facets';
 import type { CatalogItem } from './schema';
@@ -53,6 +54,29 @@ describe('facets digest', () => {
     expect(shardIdsWithFacet(facets, 'activities', 'climbing')).toEqual(['topo-n40w080']);
     expect(shardIdsWithFacet(facets, 'kinds', 'topo')).toEqual(['topo-n40w080', 'topo-n30w090']);
     expect(shardIdsWithFacet(facets, 'terrain', 'coast')).toEqual([]);
+  });
+
+  it('intersects the set facets for a filter, and is null when none is set (#474)', () => {
+    const three = buildCatalogFacets([
+      { id: 'glacier', items: [item('a', { terrain: ['mountains', 'glacier'] })] },
+      { id: 'hills', items: [item('b', { terrain: ['mountains'] })] },
+      { id: 'park', items: [item('c', { kind: 'park', terrain: ['mountains'] })] },
+    ]);
+    expect(shardIdsForFacetFilter(three, {})).toBeNull();
+    expect(shardIdsForFacetFilter(three, { kind: null, activity: null })).toBeNull();
+    // Hiking counts the terrain affinity, like the index's activityCounts.
+    expect([...(shardIdsForFacetFilter(three, { activity: 'hiking' }) ?? [])]).toEqual([
+      'glacier',
+      'hills',
+      'park',
+    ]);
+    expect([
+      ...(shardIdsForFacetFilter(three, { activity: 'hiking', terrain: 'glacier' }) ?? []),
+    ]).toEqual(['glacier']);
+    expect([
+      ...(shardIdsForFacetFilter(three, { kind: 'park', terrain: 'mountains' }) ?? []),
+    ]).toEqual(['park']);
+    expect(shardIdsForFacetFilter(three, { terrain: 'coast' })?.size).toBe(0);
   });
 
   it('rejects unusable documents and drops malformed entries', () => {

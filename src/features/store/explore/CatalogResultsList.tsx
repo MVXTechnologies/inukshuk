@@ -32,12 +32,15 @@ export function CatalogResultsList({
   ListEmptyComponent,
   ListFooterComponent,
   onEndReached,
+  bottomInset = 0,
 }: {
   data: readonly CatalogItem[];
   flow: CatalogDownloadFlow;
   ListEmptyComponent?: ReactElement | null;
   ListFooterComponent?: ReactElement | null;
   onEndReached?: () => void;
+  /** Extra room under the last row (a floating control over the list). */
+  bottomInset?: number;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -88,10 +91,14 @@ export function CatalogResultsList({
     ],
   );
 
-  const contentStyle = useMemo(() => ({ paddingBottom: insets.bottom + 24 }), [insets.bottom]);
+  const contentStyle = useMemo(
+    () => ({ paddingBottom: insets.bottom + 24 + bottomInset }),
+    [insets.bottom, bottomInset],
+  );
 
   return (
     <FlatList
+      testID="explore-results"
       data={data}
       keyExtractor={keyExtractor}
       renderItem={renderItem}

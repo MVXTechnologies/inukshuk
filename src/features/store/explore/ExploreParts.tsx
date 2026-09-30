@@ -1,7 +1,7 @@
 import { badgeIndex, sourceAbbreviation } from '@core/catalog/exploreFormat';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { tabularNums } from '@ui/fonts';
-import { radius, space, target } from '@ui/tokens';
+import { palette, radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { memo, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
@@ -193,6 +193,42 @@ export function FilterChip({
         <Text style={[styles.chipLabel, { color: ink }]}>{label}</Text>
         {icon !== undefined && <Icon source={icon} size={16} color={ink} />}
       </View>
+    </Pressable>
+  );
+}
+
+/**
+ * The explicit, labelled way into the explorer's map view (#474) — the
+ * header's map glyph alone was not discoverable. A stone pill (the chips' "on"
+ * tokens, so it reads as the primary action in both themes) with the map
+ * glyph. `floating` lifts it over a list (shadow, no layout of its own).
+ */
+export function BrowseOnMapButton({
+  onPress,
+  label = 'Browse on the map',
+  accessibilityLabel,
+  floating = false,
+}: {
+  onPress: () => void;
+  label?: string;
+  accessibilityLabel?: string;
+  floating?: boolean;
+}) {
+  const t = useSchemeTokens();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={({ pressed }) => [
+        styles.browse,
+        { backgroundColor: t.library.chipOn },
+        floating && styles.browseFloating,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Icon source="map-outline" size={20} color={t.library.chipOnInk} />
+      <Text style={[styles.browseLabel, { color: t.library.chipOnInk }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -412,6 +448,25 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   chipLabel: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
+  browse: {
+    alignSelf: 'flex-start',
+    minHeight: target.min,
+    paddingLeft: 14,
+    paddingRight: 18,
+    borderRadius: target.min / 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  browseFloating: {
+    alignSelf: 'center',
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  browseLabel: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
   activity: {
     minHeight: 80,
     paddingVertical: space.md,

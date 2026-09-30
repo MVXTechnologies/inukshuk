@@ -8,17 +8,24 @@
  */
 import type { CatalogShardRef } from '@core/catalog/schema';
 import { loadCatalogShard } from '@data/catalogCache';
+import { useCatalogStore } from '@state/catalogStore';
+import type { ExploreFilter } from '@core/catalog/exploreFacets';
+import { useExploreHandoffStore } from '@state/exploreHandoffStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { ExploreMapScreen } from './ExploreMapScreen';
 import {
+  CUPERTINO,
+  cupertinoIndex,
+  cupertinoSheets,
   fixtureIndex,
   lacBeauport,
   mountWithProviders,
   QUEBEC,
   seedCatalog,
+  serveCupertinoShard,
   settle,
 } from './exploreTestUtils';
 
@@ -61,13 +68,15 @@ jest.mock('@data/basemapTiles', () => ({
 }));
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ navigate: jest.fn(), push: mockPush, back: jest.fn(), replace: mockReplace }),
+  useRouter: () => ({ navigate: jest.fn(), push: mockPush, back: mockBack, replace: mockReplace }),
 }));
 jest.mock('@data/catalogCache', () => ({
   loadCatalogManifest: jest.fn(),
   loadCatalogShard: jest.fn(),
   loadCatalogSearchDigest: jest.fn(),
+  loadCatalogFacets: jest.fn(),
 }));
 
 const shardMock = loadCatalogShard as jest.Mock;
@@ -83,6 +92,10 @@ const HERE = shard('topo-here', [-71.5, 46.5, -71, 47]);
 const EAST = shard('topo-east', [-66, 48, -65, 49]);
 
 beforeEach(() => {
+  mockPush.mockReset();
+  mockReplace.mockReset();
+  mockBack.mockReset();
+  useExploreHandoffStore.getState().clear();
   delete mockCaptured.source;
   delete mockCaptured.footprint;
   seedCatalog(fixtureIndex({ shards: [HERE, EAST] }));
@@ -90,8 +103,10 @@ beforeEach(() => {
   useSettingsStore.setState({ lastKnownPosition: QUEBEC, units: 'metric' });
 });
 
-async function mapScreen() {
-  const view = await mountWithProviders(<ExploreMapScreen initialFilter={{}} />);
+async function mapScreen(initialFilter: ExploreFilter = {}, fromList = false) {
+  const view = await mountWithProviders(
+    <ExploreMapScreen initialFilter={initialFilter} fromList={fromList} />,
+  );
   await act(async () => {
     mockCaptured.map?.onDidFinishLoadingMap?.();
   });
@@ -200,4 +215,65 @@ it('keeps the list sheet one height whether it lists maps or none (#459 flicker)
   // A layout pass never changes the count: nothing measures the sheet any more.
   await settle();
   expect(view.getByText('0 MAPS IN THIS AREA')).toBeTruthy();
+});
+
+describe('navigation and the Activity filter (#474)', () => {
+  it('has a back arrow that returns where the user came from', async () => {
+    const view = await mapScreen();
+    await fireEvent.press(view.getByLabelText('Back'));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    // Opened from the landing: the list toggle swaps in place.
+    await fireEvent.press(view.getByLabelText('Show as a list'));
+    expect(mockReplace).toHaveBeenCalledWith('/explore/list');
+    // Nothing is handed to a list that is not there.
+    expect(useExploreHandoffStore.getState().listFilter).toBeNull();
+  });
+
+  it('over a list: hands its filter back, and both back and the list toggle pop to it', async () => {
+    const view = await mapScreen({ activity: 'hiking' }, true);
+    expect(useExploreHandoffStore.getState().listFilter).toEqual({ activity: 'hiking' });
+
+    await fireEvent.press(view.getByLabelText('Hiking, clear activity filter'));
+    await fireEvent.press(view.getByLabelText('Filter by terrain'));
+    await fireEvent.press(view.getByLabelText('Coast, 1 maps'));
+    expect(useExploreHandoffStore.getState().listFilter).toEqual({ terrain: 'coast' });
+
+    await fireEvent.press(view.getByLabelText('Show as a list'));
+    await fireEvent.press(view.getByLabelText('Back'));
+    expect(mockBack).toHaveBeenCalledTimes(2);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('offers Activity for real US Topo sheets (terrain only), and filters by it', async () => {
+    seedCatalog(cupertinoIndex({ shards: [] }), { items: cupertinoSheets });
+    useSettingsStore.setState({ lastKnownPosition: CUPERTINO });
+    const view = await mapScreen();
+    expect(mockCaptured.source?.data.features).toHaveLength(4);
+    await fireEvent.press(view.getByLabelText('Filter by activity'));
+    await fireEvent.press(view.getByLabelText('Hiking, 2 maps'));
+    expect(view.getByLabelText('Hiking, clear activity filter')).toBeTruthy();
+    expect(mockCaptured.source?.data.features).toHaveLength(2);
+  });
+
+  it('settles: a Hiking map loads its first view once, however often it re-renders', async () => {
+    seedCatalog(cupertinoIndex());
+    shardMock.mockImplementation(serveCupertinoShard);
+    useSettingsStore.setState({ lastKnownPosition: CUPERTINO });
+    const view = await mapScreen({ activity: 'hiking' });
+    const calls = shardMock.mock.calls.length;
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        mockCaptured.map?.onRegionDidChange?.({
+          nativeEvent: { bounds: [-72, 46, -70, 48], zoom: 7, center: [-71, 47] },
+        } as never);
+        useSettingsStore.setState({
+          lastKnownPosition: { latitude: CUPERTINO.latitude + i * 0.001, longitude: -122.03 },
+        });
+      });
+      await settle();
+    }
+    expect(shardMock.mock.calls.length).toBe(calls);
+    expect(useCatalogStore.getState().loadingShards).toBe(false);
+    expect(view.queryByText('Loading maps…')).toBeNull();
+  });
 });
