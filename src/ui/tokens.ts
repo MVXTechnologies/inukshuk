@@ -195,6 +195,23 @@ export interface SchemeTokens {
     point: string;
     footprint: string;
   };
+  /** Support Inukshuk (#476, boards `Main/Thanks/Entry.dc.html`). */
+  support: {
+    /** The Settings entry card and the Tip button, and the ink on them. */
+    accent: string;
+    onAccent: string;
+    /** Tier icons and the "full accounts" link. */
+    link: string;
+    /** The chosen tip tier: its ground and its border. */
+    selected: string;
+    selectedBorder: string;
+    /** The year's progress bar: fill and track. */
+    progress: string;
+    progressTrack: string;
+    /** The thank-you inukshuk: light and dark stones. */
+    stone: string;
+    stoneDeep: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -309,6 +326,17 @@ export const lightScheme: SchemeTokens = {
     clusterInk: palette.surface,
     point: palette.sageDeep,
     footprint: palette.sageDeep,
+  },
+  support: {
+    accent: palette.sageDeep,
+    onAccent: palette.surface,
+    link: '#3F5025',
+    selected: '#EEF1E4',
+    selectedBorder: palette.sageDeep,
+    progress: palette.sageDeep,
+    progressTrack: '#E2DBCB',
+    stone: '#3B444D',
+    stoneDeep: '#2D353D',
   },
 };
 
@@ -428,6 +456,20 @@ export const darkScheme: SchemeTokens = {
     point: '#B9C98A',
     footprint: '#B9C98A',
   },
+  support: {
+    // The board's #6F8A45 fill is only ~3.5:1 under paper ink; one step
+    // deeper (the explorer's cluster green) carries the button label at AA.
+    accent: '#4A5E2B',
+    onAccent: '#F2ECE0',
+    link: '#A9C07A',
+    selected: '#26301F',
+    selectedBorder: '#A9C07A',
+    progress: '#A9C07A',
+    progressTrack: '#2F3842',
+    // The light board's charcoal stones vanish on stone night: lift them.
+    stone: '#A7B0B8',
+    stoneDeep: '#77828E',
+  },
 };
 
 /**
@@ -542,6 +584,17 @@ export const sunlightScheme: SchemeTokens = {
     clusterInk: palette.white,
     point: palette.black,
     footprint: palette.black,
+  },
+  support: {
+    accent: palette.black,
+    onAccent: palette.white,
+    link: palette.black,
+    selected: '#F2F2F2',
+    selectedBorder: palette.black,
+    progress: palette.black,
+    progressTrack: '#DDDDDD',
+    stone: '#333333',
+    stoneDeep: palette.black,
   },
 };
 
@@ -662,6 +715,17 @@ export const nightScheme: SchemeTokens = {
     clusterInk: NIGHT_INK,
     point: NIGHT_INK,
     footprint: NIGHT_INK,
+  },
+  support: {
+    accent: '#3A0B08',
+    onAccent: NIGHT_INK,
+    link: NIGHT_INK,
+    selected: '#2A0503',
+    selectedBorder: NIGHT_INK,
+    progress: NIGHT_INK,
+    progressTrack: '#3A0B08',
+    stone: NIGHT_INK,
+    stoneDeep: '#CC2E24',
   },
 };
 

@@ -190,6 +190,12 @@ export interface Settings {
    * (see `useLocationTracking`) — never per-fix.
    */
   lastKnownPosition: LatLng | null;
+  /**
+   * When the Library's once-a-year support card was last answered (Support or
+   * Not now), epoch ms; 0 = never. Read only while `SUPPORT_NUDGE_ENABLED` is
+   * on (see `@core/support/nudge`).
+   */
+  supportNudgeAnsweredAt: number;
 }
 
 const DEFAULTS: Settings = {
@@ -228,6 +234,7 @@ const DEFAULTS: Settings = {
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   librarySortKey: DEFAULT_SORT,
   lastKnownPosition: null,
+  supportNudgeAnsweredAt: 0,
 };
 
 interface SettingsState extends Settings {
@@ -298,6 +305,7 @@ function snapshot(s: SettingsState): Settings {
     lastActivityCategory,
     librarySortKey,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
   } = s;
   return {
     tileUrl,
@@ -335,6 +343,7 @@ function snapshot(s: SettingsState): Settings {
     lastActivityCategory,
     librarySortKey,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
   };
 }
 

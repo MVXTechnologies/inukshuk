@@ -40,6 +40,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DisplaySheet } from '@features/display/DisplaySheet';
+import { SupportSettingsRow } from '@features/support/SupportSettingsRow';
 import { exportAllData } from './exportAllData';
 import { MAP_DATA_CREDITS } from './mapDataCredits';
 import { MarinePacksSection } from './MarinePacksSection';
@@ -260,6 +261,9 @@ export function SettingsScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
+        {/* Support Inukshuk (#476): first, above every category. */}
+        <SupportSettingsRow />
+
         {/* Five collapsible categories (owner's grouping, backlog item 4);
             AccordionGroup keeps one open at a time. Each body is a single
             View: Paper clones a paddingLeft onto direct accordion children

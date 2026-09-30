@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from './flags';
+import { MARINE_ENABLED, PARKED_LABEL, SUPPORT_NUDGE_ENABLED, WEATHER_ENABLED } from './flags';
 
 /**
  * The flags themselves have no logic, so what is worth testing is the
@@ -15,6 +15,11 @@ describe('feature flags', () => {
   it('ships with weather and marine parked', () => {
     expect(WEATHER_ENABLED).toBe(false);
     expect(MARINE_ENABLED).toBe(false);
+  });
+
+  it('ships with the Library support nudge off until the owner decides', () => {
+    expect(SUPPORT_NUDGE_ENABLED).toBe(false);
+    expect(source).toMatch(/export const SUPPORT_NUDGE_ENABLED: boolean = (true|false);/);
   });
 
   it('is a build-time constant, not runtime config', () => {

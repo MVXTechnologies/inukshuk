@@ -138,6 +138,17 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['explorer link on background', t.explore.accent, t.background, TEXT],
     ['cluster count on cluster', t.explore.clusterInk, t.explore.cluster, TEXT],
     ['cluster ring around cluster', t.explore.clusterRing, t.explore.cluster, GRAPHIC],
+    // Support Inukshuk (#476).
+    ['support card / Tip button label', t.support.onAccent, t.support.accent, TEXT],
+    ['support link on background', t.support.link, t.background, TEXT],
+    ['tip icon on a tier', t.support.link, t.surface, GRAPHIC],
+    ['tip icon on the chosen tier', t.support.link, t.support.selected, GRAPHIC],
+    ['tier name on the chosen tier', t.ink, t.support.selected, TEXT],
+    ['tier blurb on the chosen tier', t.inkMuted, t.support.selected, TEXT],
+    ['chosen tier border', t.support.selectedBorder, t.surface, GRAPHIC],
+    ['progress fill on its track', t.support.progress, t.support.progressTrack, GRAPHIC],
+    ['thank-you stones on background', t.support.stone, t.background, GRAPHIC],
+    ['thank-you deep stones on background', t.support.stoneDeep, t.background, GRAPHIC],
   ];
 }
 
