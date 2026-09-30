@@ -84,7 +84,7 @@ async function show(tracks: TrackSummary[], folders: Folder[] = []): Promise<Ren
   );
 }
 
-const trailRows = (view: RenderResult) => view.queryAllByLabelText(/open 3D view/).length;
+const trailRows = (view: RenderResult) => view.queryAllByLabelText(/open trail view/).length;
 
 beforeEach(() => mockThumbnailCalls.mockClear());
 // Newly mounted rows start paper Menu animations; let them end inside act.
