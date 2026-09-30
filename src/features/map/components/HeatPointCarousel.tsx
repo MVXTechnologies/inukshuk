@@ -55,9 +55,13 @@ export function HeatPointCarousel({
   const theme = useTheme();
   const customCategories = useLibraryStore((s) => s.customCategories);
 
-  const items = trackIds
-    .map((id) => tracks.find((t) => t.id === id))
-    .filter((t): t is TrackSummary => t !== undefined);
+  // A hot spot on a big library holds hundreds of trails: resolve ids through
+  // one Map per input change (this re-renders with every GPS tick of the
+  // host), not a `tracks.find` per id per render (#465).
+  const items = useMemo(() => {
+    const byId = new Map(tracks.map((t) => [t.id, t] as const));
+    return trackIds.map((id) => byId.get(id)).filter((t): t is TrackSummary => t !== undefined);
+  }, [trackIds, tracks]);
   const count = items.length;
   const clamped = Math.max(0, Math.min(focusedIdx, count - 1));
 
