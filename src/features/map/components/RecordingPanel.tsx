@@ -35,7 +35,7 @@ import { Icon, Switch, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { HoldButton } from './HoldButton';
-import { InukshukIcon } from './InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 
 interface Props {
   status: 'recording' | 'paused';
@@ -494,7 +494,7 @@ export function RecordingPanel(props: Props) {
                 paused && styles.disabled,
               ]}
             >
-              <InukshukIcon size={22} color={ink} />
+              <InukshukGlyph size={22} frame="square" tone="mono" color={ink} />
               <Text style={[styles.buttonText, { color: ink }]}>Mark</Text>
             </Pressable>
             <HoldButton

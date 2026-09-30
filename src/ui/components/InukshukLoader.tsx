@@ -34,9 +34,9 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import Svg, { ClipPath, Defs, G, Path } from 'react-native-svg';
+import Svg from 'react-native-svg';
+import { StoneArt } from './InukshukGlyph';
 import {
-  FACET_STROKE_WIDTH,
   FIGURE_H,
   FIGURE_W,
   nightTone,
@@ -250,7 +250,7 @@ const Stone = memo(function Stone({
       ],
     };
   });
-  const tint = night ? nightTone : (c: string) => c;
+  const tint = night ? nightTone : identity;
   return (
     <Animated.View
       style={[
@@ -260,28 +260,15 @@ const Stone = memo(function Stone({
       ]}
     >
       <Svg width={placed.w} height={placed.h} viewBox={`0 0 ${shape.w} ${shape.h}`}>
-        <Defs>
-          <ClipPath id={clipId}>
-            <Path d={shape.outline} />
-          </ClipPath>
-        </Defs>
-        <G clipPath={`url(#${clipId})`}>
-          <Path d={shape.outline} fill={tint(shape.base)} />
-          {shape.facets.map((f, i) => (
-            <Path
-              key={i}
-              d={f.d}
-              fill={tint(f.fill)}
-              stroke={tint(f.fill)}
-              strokeWidth={FACET_STROKE_WIDTH}
-              strokeLinejoin="bevel"
-            />
-          ))}
-        </G>
+        <StoneArt shape={shape} tint={tint} clipId={clipId} />
       </Svg>
     </Animated.View>
   );
 });
+
+function identity(c: string): string {
+  return c;
+}
 
 function DustSpeck({
   placed,

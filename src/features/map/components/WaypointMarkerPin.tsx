@@ -2,7 +2,7 @@ import type { WaypointIcon } from '@core/models';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { mapColors } from '@ui/theme';
 import { StyleSheet, View } from 'react-native';
-import { InukshukIcon } from './InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { mciGlyph } from './waypointGlyph';
 
 interface Props {
@@ -43,7 +43,7 @@ export function WaypointMarkerPin({ icon, hasPhoto, label, selected }: Props) {
     >
       <View style={[styles.badge, selected && styles.badgeSelected]}>
         {glyph === null ? (
-          <InukshukIcon size={20} color="#ffffff" />
+          <InukshukGlyph size={20} frame="square" tone="mono" color="#ffffff" />
         ) : (
           <MaterialCommunityIcons name={glyph} size={20} color="#ffffff" />
         )}
