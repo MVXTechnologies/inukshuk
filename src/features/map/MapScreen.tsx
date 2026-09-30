@@ -80,7 +80,7 @@ import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
-import { AttributionChip } from './components/AttributionChip';
+import { MapCreditText } from './components/MapCreditText';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
 import { vectorBasemapOption } from '@data/basemapTiles';
@@ -2408,7 +2408,12 @@ export function MapScreen() {
             dock instead of colliding with them; with none of those up it sits
             just above the tab bar, in the cartographic corner. 2D only; the
             3D view has no Mercator zoom. */}
-        {/* Scale bar (left) and the basemap credit (right) share one row.
+        {/* Scale bar + the basemap credit as quiet text (left) and the tip button
+            (right, Map only, #476) share one row. The ⓘ credit button is gone:
+            its corner holds the tip button, and the full roll is in Settings ›
+            System info. The short credit STAYS on the map as text because
+            OpenStreetMap's attribution guideline and Esri's terms expect it
+            on the map view itself.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
         {/* Not while the region selector or the map maker owns the bottom
@@ -2416,22 +2421,20 @@ export function MapScreen() {
             would draw over their Cancel / Download / Next buttons. */}
         {!selecting && makeMapState === null && (
           <View style={styles.bottomRow} pointerEvents="box-none">
-            <View style={styles.bottomSide} pointerEvents="none">
+            <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
               {showScaleBar && !terrain3d && scaleAt !== null && (
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
               )}
+              <MapCreditText basemap={basemap} vector={stoneBase} />
             </View>
-            {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
+            {/* The tip button hides itself while recording, while a destination is
+                followed, and while a trail sheet, heat carousel or the coordinate
+                dialog is up. */}
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-              {/* The tip jar (#476) stacks ABOVE the ⓘ credit in this corner, so the
-                  two never collide; it hides itself while recording, while a
-                  destination is followed, and while a trail sheet, heat carousel
-                  or the coordinate dialog is up. */}
               <TipButton
                 navigating={destination !== null}
                 blocked={inspectId !== null || heatSelection !== null || goToOpen}
               />
-              {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
             </View>
           </View>
         )}
@@ -2761,7 +2764,8 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
-  bottomSideEnd: { alignItems: 'flex-end', gap: 12 },
+  bottomSideStart: { gap: 4 },
+  bottomSideEnd: { alignItems: 'flex-end' },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).
