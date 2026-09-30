@@ -8,7 +8,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
-import { InukshukIcon } from './InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { mciGlyph } from './waypointGlyph';
 
 interface Props {
@@ -79,8 +79,10 @@ export function WaypointIconPicker({ value, onChange }: Props) {
         ]}
       >
         {glyph === null ? (
-          <InukshukIcon
+          <InukshukGlyph
             size={22}
+            frame="square"
+            tone="mono"
             color={selected ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant}
           />
         ) : (

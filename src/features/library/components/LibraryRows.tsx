@@ -1,7 +1,7 @@
 import type { CategoryDefinition } from '@core/library/categories';
 import { formatBytes } from '@core/format';
 import type { MapDocument, TrackSummary } from '@core/models';
-import { InukshukIcon } from '@features/map/components/InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { tabularNums } from '@ui/fonts';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -323,7 +323,7 @@ export function WaypointRow({
             ) : glyph ? (
               <Icon source={glyph} size={28} color={t.ink} />
             ) : (
-              <InukshukIcon size={30} color={t.ink} />
+              <InukshukGlyph size={30} frame="square" />
             )}
           </View>
           <View style={styles.text}>
