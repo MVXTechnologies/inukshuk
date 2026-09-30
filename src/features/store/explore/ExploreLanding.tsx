@@ -45,6 +45,7 @@ import {
   exploreListHref,
   exploreMapHref,
 } from './exploreRoutes';
+import { LongTrailsSection } from '../trails/LongTrailsSection';
 import { indexFacetCounts, itemFacets } from './facetsAdapter';
 import { useLinkOutCollections } from './useLinkOutCollections';
 
@@ -217,6 +218,9 @@ export function ExploreLanding({
           </Text>
         )
       )}
+
+      {/* Long-distance trails near you (#467): hidden until the trail index is in. */}
+      <LongTrailsSection />
 
       {activities.entries.length > 0 && (
         <>

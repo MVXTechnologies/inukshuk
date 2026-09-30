@@ -28,14 +28,7 @@ const noop = (): void => undefined;
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
 // populates `screen`, exactly as mapLayers.test.tsx does.
 async function renderMenu(): Promise<void> {
-  await render(
-    <OverlaysDrilldown
-      showHypso={false}
-      onSlopeEnabled={noop}
-      onOpenFolders={noop}
-      onOpenTrailNetworks={noop}
-    />,
-  );
+  await render(<OverlaysDrilldown showHypso={false} onSlopeEnabled={noop} onOpenFolders={noop} />);
 }
 
 describe('OverlaysDrilldown', () => {

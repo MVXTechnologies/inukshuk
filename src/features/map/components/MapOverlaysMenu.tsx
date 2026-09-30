@@ -18,7 +18,6 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
 import { DetentSlider } from './DetentSlider';
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { RangeSlider } from './RangeSlider';
-import { TrailNetworksDialog } from './TrailNetworksDialog';
 import { MapButton } from './MapButton';
 
 /**
@@ -34,14 +33,14 @@ import { MapButton } from './MapButton';
  * Plain themed Views throughout — never a Portal/Dialog (the invisible-
  * overlay soft-lock landmine) and never a Paper Surface (the absolutely-
  * positioned iOS flex collapse) — following WeatherModelSheet's pattern. The
- * folder picker and trail-networks dialogs it launches stay user-invoked
+ * folder picker dialog it launches stays a user-invoked
  * paper Dialogs (safe per [[paper-portal-touch-swallow]]).
  *
  * A11y/Maestro contract: the opener keeps the EXACT label 'Map overlays'.
  * Group rows carry the labels the flows key on — 'Topology',
  * 'Weather'/'Weather: <layer>', 'Marine' — and the sub-menus keep the row
  * labels the old dialogs had ('Rain radar', 'Temperature', …, 'None',
- * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Marked trails', 'Heatmap'). Sub-menu
+ * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Heatmap'). Sub-menu
  * titles render inside the back button (label 'Back to overlays'), so they
  * never echo group-row matchers. There is no 'Done' — closing is back/
  * outside tap.
@@ -185,26 +184,23 @@ function ItemRow({
  * Topology sub-menu: the terrain-analysis and content rows re-homed from the
  * old flat menu — Content picker, PDF maps (the master switch the #201
  * rework dropped, restored for #233), Slope (+ range), Contours (+ interval),
- * Elevation tint (3D only), Marked trails, Heatmap. Sliders render always
+ * Elevation tint (3D only), Heatmap. Sliders render always
  * (dimmed while off) and sit inline on the right, as before.
  */
 function TopologySubmenu({
   showHypso,
   onSlopeEnabled,
   onOpenFolders,
-  onOpenTrailNetworks,
   onBack,
 }: {
   showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
-  onOpenTrailNetworks: () => void;
   onBack: () => void;
 }) {
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const typeMode = mapVisibilityMode === 'type';
-  const networks = useSettingsStore((s) => s.markedTrailsNetworks);
   const slope = useSettingsStore((s) => s.terrainSlope);
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
@@ -334,13 +330,6 @@ function TopologySubmenu({
         ),
       })}
       {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
-      <ItemRow
-        icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
-        iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
-        title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
-        onPress={onOpenTrailNetworks}
-        chevron
-      />
       {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
     </View>
   );
@@ -448,17 +437,14 @@ export function OverlaysDrilldown({
   showHypso,
   onSlopeEnabled,
   onOpenFolders,
-  onOpenTrailNetworks,
 }: {
   /** Show the 3D-only Elevation tint row (when the 3D view is active). */
   showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
-  onOpenTrailNetworks: () => void;
 }) {
   const [group, setGroup] = useState<OverlayGroup | null>(null);
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
-  const networks = useSettingsStore((s) => s.markedTrailsNetworks);
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const marineLayers = useSettingsStore((s) => s.marineLayers);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
@@ -473,7 +459,6 @@ export function OverlaysDrilldown({
         showHypso={showHypso}
         onSlopeEnabled={onSlopeEnabled}
         onOpenFolders={onOpenFolders}
-        onOpenTrailNetworks={onOpenTrailNetworks}
         onBack={() => setGroup(null)}
       />
     );
@@ -483,7 +468,6 @@ export function OverlaysDrilldown({
   if (slope) topoParts.push('Slope');
   if (contours) topoParts.push('Contours');
   if (showHypso && hypso) topoParts.push('Elevation tint');
-  if (networks.length > 0) topoParts.push('Marked trails');
   if (showHeatmap) topoParts.push('Heatmap');
 
   // Marine chart mode is all-or-nothing (D-6 amendment): depth bands and
@@ -573,20 +557,15 @@ export function OverlaysDrilldown({
 export function OverlaysDialogs({
   foldersOpen,
   onFoldersDismiss,
-  networksOpen,
-  onNetworksDismiss,
   snackbar,
 }: {
   foldersOpen: boolean;
   onFoldersDismiss: () => void;
-  networksOpen: boolean;
-  onNetworksDismiss: () => void;
   snackbar: ReturnType<typeof useSlopeDisclaimer>['snackbar'];
 }) {
   return (
     <>
       <FolderPickerDialog visible={foldersOpen} onDismiss={onFoldersDismiss} />
-      <TrailNetworksDialog visible={networksOpen} onDismiss={onNetworksDismiss} />
       <DisclaimerSnackbar snackbar={snackbar} />
     </>
   );
@@ -611,7 +590,6 @@ export function MapOverlaysMenu({
   hideTrigger?: boolean;
 }) {
   const [foldersOpen, setFoldersOpen] = useState(false);
-  const [networksOpen, setNetworksOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
@@ -632,18 +610,12 @@ export function MapOverlaysMenu({
               onToggle(false);
               setFoldersOpen(true);
             }}
-            onOpenTrailNetworks={() => {
-              onToggle(false);
-              setNetworksOpen(true);
-            }}
           />
         </View>
       )}
       <OverlaysDialogs
         foldersOpen={foldersOpen}
         onFoldersDismiss={() => setFoldersOpen(false)}
-        networksOpen={networksOpen}
-        onNetworksDismiss={() => setNetworksOpen(false)}
         snackbar={snackbar}
       />
     </>

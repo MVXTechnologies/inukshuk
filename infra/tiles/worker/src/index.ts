@@ -6,6 +6,9 @@
  *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
  *   GET /fonts/{fontstack}/{range}.pbf    MapLibre glyphs (static objects)
+ *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
+ *   GET /trails/v1/d/{version}/{id}.json  one trail's detail, range-read from
+ *                                         trails-{version}.details.bin (../nas/trails.sh)
  *
  * Each archive is ONE PMTiles file in R2 (see ../nas/). The pmtiles library
  * reads only the byte ranges a tile needs, and every response is cached at
@@ -90,7 +93,10 @@ const TILE_PATH = /^\/([a-z0-9_-]+)\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const TILEJSON_PATH = /^\/([a-z0-9_-]+)\.json$/;
 const CONTOUR_PATH = /^\/contours\/(\d{1,2})\/(\d+)\/(\d+)\.mvt$/;
 const GLYPH_PATH = /^\/fonts\/([^/]+)\/(\d+-\d+)\.pbf$/;
-const UPLOAD_PATH = /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json))$/;
+const UPLOAD_PATH =
+  /^\/_upload\/([a-z0-9_-]+\.(?:pmtiles|index\.json|details\.bin|offsets\.json))$/;
+const TRAILS_INDEX_PATH = /^\/trails\/v1\/index\.json$/;
+const TRAILS_DETAIL_PATH = /^\/trails\/v1\/d\/([a-z0-9_-]{1,40})\/(r\d{1,12})\.json$/;
 const STRAVA_PATH = /^\/strava\/(token|refresh)$/;
 
 /** Directories and headers, shared across requests handled by this isolate. */
@@ -274,7 +280,68 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     });
   }
 
+  if (TRAILS_INDEX_PATH.test(url.pathname) || TRAILS_DETAIL_PATH.test(url.pathname)) {
+    return serveTrails(env, url, cors);
+  }
+
   return new Response('not found', { status: 404, headers: cors });
+}
+
+/**
+ * Long-distance trails (#467, built monthly by ../nas/trails.sh):
+ *
+ * - `/trails/v1/index.json` is the object `trails-v1.index.json`, replaced in
+ *   place each month (short cache: the app switches within hours);
+ * - `/trails/v1/d/{version}/{id}.json` is one trail's slice of
+ *   `trails-{version}.details.bin`, found through `trails-{version}.offsets.json`
+ *   ({id: [offset, length]}). The version is in the URL, so a detail never
+ *   changes once published and caches for a month.
+ *
+ * One details object instead of tens of thousands of small ones keeps the
+ * monthly upload to three files (the index goes up last, so the switch-over
+ * is atomic: the index never names a version whose files aren't there yet).
+ */
+const TRAILS_INDEX_CACHE = 'public, max-age=21600';
+const TRAILS_DETAIL_CACHE = 'public, max-age=2592000, immutable';
+const OFFSETS_TTL_MS = 60 * 60_000;
+const trailOffsets = new Map<string, { at: number; offsets: Record<string, [number, number]> }>();
+
+async function offsetsFor(
+  env: Env,
+  version: string,
+): Promise<Record<string, [number, number]> | null> {
+  const hit = trailOffsets.get(version);
+  if (hit && Date.now() - hit.at < OFFSETS_TTL_MS) return hit.offsets;
+  const object = await env.BUCKET.get(`trails-${version}.offsets.json`);
+  if (object === null) return null;
+  const offsets = await object.json<Record<string, [number, number]>>();
+  trailOffsets.set(version, { at: Date.now(), offsets });
+  return offsets;
+}
+
+async function serveTrails(env: Env, url: URL, cors: Record<string, string>): Promise<Response> {
+  const json = { ...cors, 'Content-Type': 'application/json; charset=utf-8' };
+  if (TRAILS_INDEX_PATH.test(url.pathname)) {
+    const object = await env.BUCKET.get('trails-v1.index.json');
+    if (object === null) return new Response('not found', { status: 404, headers: cors });
+    return new Response(object.body, {
+      headers: { ...json, 'Cache-Control': TRAILS_INDEX_CACHE, ETag: object.httpEtag },
+    });
+  }
+  const [, version, id] = TRAILS_DETAIL_PATH.exec(url.pathname) ?? [];
+  if (version === undefined || id === undefined) {
+    return new Response('not found', { status: 404, headers: cors });
+  }
+  const entry = (await offsetsFor(env, version))?.[id];
+  if (entry === undefined) return new Response('not found', { status: 404, headers: cors });
+  const [offset, length] = entry;
+  const object = await env.BUCKET.get(`trails-${version}.details.bin`, {
+    range: { offset, length },
+  });
+  if (object === null || !('body' in object)) {
+    return new Response('not found', { status: 404, headers: cors });
+  }
+  return new Response(object.body, { headers: { ...json, 'Cache-Control': TRAILS_DETAIL_CACHE } });
 }
 
 /** Constant-time string comparison for the upload token. */

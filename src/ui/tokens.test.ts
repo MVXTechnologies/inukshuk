@@ -138,6 +138,11 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['explorer link on background', t.explore.accent, t.background, TEXT],
     ['cluster count on cluster', t.explore.clusterInk, t.explore.cluster, TEXT],
     ['cluster ring around cluster', t.explore.clusterRing, t.explore.cluster, GRAPHIC],
+    // Long-distance trails (#467).
+    ['trail stage number on its disc', t.explore.trailBadgeInk, t.explore.trailBadge, TEXT],
+    ['trail line on its thumbnail', t.explore.trail, t.explore.trailThumb, GRAPHIC],
+    ['trail line on its halo', t.explore.trail, t.explore.trailHalo, GRAPHIC],
+    ['selected stage on its halo', t.explore.trailStage, t.explore.trailHalo, GRAPHIC],
   ];
 }
 

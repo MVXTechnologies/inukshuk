@@ -57,6 +57,7 @@ import {
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
+import { useLongTrailsStore } from '@state/longTrailsStore';
 import { useMapStore } from '@state/mapStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
@@ -89,6 +90,8 @@ import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { NIGHT_MAP } from '@ui/tokens';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
+import { ShownTrailPill, ShownTrailSheet } from './longTrail/ShownTrailChrome';
+import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
@@ -324,6 +327,8 @@ export function MapScreen() {
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
+  const shownTrail = useLongTrailsStore((s) => s.shown);
+  const [trailSheetHeight, setTrailSheetHeight] = useState(0);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   // Stable per basemap so the contour sources' memo can hold (see the hoisted
@@ -354,13 +359,11 @@ export function MapScreen() {
   // Compact map chrome: chevron-rail unfold state (the "+" actions button
   // lives in the rail too, so it folds away with the rest of the controls).
   const [compactControlsOpen, setCompactControlsOpen] = useState(false);
-  const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
   // transient play flag, and the scrubbable timeline that owns the drape's
-  // valid time (throttled inside the hook). Network-only like the marked
-  // trails: while offline-only is on the layer is dropped from the style
-  // entirely and the timeline hook is parked, so the map stays byte-identical
-  // to a weatherless one.
+  // valid time (throttled inside the hook). Network-only: while offline-only
+  // is on the layer is dropped from the style entirely and the timeline hook
+  // is parked, so the map stays byte-identical to a weatherless one.
   //
   // PARKED (2026-09, see `@core/features/flags`): while WEATHER_ENABLED is
   // false the persisted choice is READ BUT NOT USED — every weather surface
@@ -451,7 +454,7 @@ export function MapScreen() {
     weatherStagingRef,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
-  // network-only treatment as the marked trails. Any active layer also pins
+  // network-only treatment as the weather. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
   //
   // PARKED (2026-09, see `@core/features/flags`): same treatment as weather —
@@ -584,9 +587,7 @@ export function MapScreen() {
     const options = {
       // Night red (decision 4): greyscale, dimmed raster under the red veil.
       night: displayCondition === 'night',
-      // Marked-trail networks (network-only; hidden while offline-only).
-      markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
-      // Marine drapes ride the same offline-only rule.
+      // Marine drapes are network-only: hidden while offline-only.
       marineLayers: offlineOnly ? [] : marineLayers,
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
@@ -683,7 +684,6 @@ export function MapScreen() {
     theme.dark,
     theme.colors.background,
     displayCondition,
-    markedTrailsNetworks,
     marineLayers,
     marineActive,
     // Only the FALLBACK shape of the chart state restyles the map; the drape
@@ -1740,6 +1740,18 @@ export function MapScreen() {
     ]);
   }, [marinePackOfferState, marinePackSnoozes, setSetting]);
 
+  // A long-distance trail shown from Explore (#467): its sheet owns the
+  // bottom edge only while nothing else does (recording, region select, the
+  // map maker, a trail inspector, the heat carousel).
+  const trailSheetUp =
+    shownTrail !== null &&
+    status === 'idle' &&
+    !selecting &&
+    makeMapState === null &&
+    !inspectId &&
+    heatSelection === null &&
+    !terrain3d;
+
   return (
     <View style={styles.fill}>
       {terrain3d ? (
@@ -2050,6 +2062,9 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
+          {/* A long-distance trail shown from Explore (#467). */}
+          {shownTrail !== null && <ShownTrailLayers shown={shownTrail} />}
+
           {/* Ring marker at the tapped heat spot, shown only while the
               carousel is open — same one-feature GeoJSONSource + circle
               pattern as the inspect-marker dot below. */}
@@ -2253,7 +2268,12 @@ export function MapScreen() {
           starts right under it; 2D only, like the dialog's fly-to. */}
       {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          {/* A shown long-distance trail takes the pill's place (#467). */}
+          {shownTrail !== null ? (
+            <ShownTrailPill shown={shownTrail} />
+          ) : (
+            <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          )}
         </View>
       )}
 
@@ -2394,7 +2414,11 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View
-        style={[styles.bottom, recordingPanelUp && { bottom: panelHeight }]}
+        style={[
+          styles.bottom,
+          recordingPanelUp && { bottom: panelHeight },
+          trailSheetUp && { bottom: trailSheetHeight },
+        ]}
         pointerEvents="box-none"
       >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
@@ -2492,6 +2516,15 @@ export function MapScreen() {
           </View>
         )}
       </View>
+
+      {trailSheetUp && shownTrail !== null && (
+        <ShownTrailSheet
+          shown={shownTrail}
+          position={location ? [location.longitude, location.latitude] : null}
+          units={units}
+          onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
+        />
+      )}
 
       {inspectId && inspectPoints && inspectTrack && (
         <TrailInspectPanel

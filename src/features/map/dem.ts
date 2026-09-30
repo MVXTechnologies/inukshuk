@@ -8,7 +8,6 @@ import {
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
-import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
 import jpeg from 'jpeg-js';
@@ -127,6 +126,22 @@ export async function fetchHeightmap(
 }
 
 /**
+ * One Terrarium DEM tile decoded to metres (256 × 256, row 0 = north), from
+ * the same on-disk tile cache as the 3D view. The long-distance trail page
+ * samples its climb from these (#467).
+ */
+export async function fetchDemTile(z: number, x: number, y: number): Promise<Float32Array> {
+  const rgba = decodeTileRGBA(
+    await storage.downloadBytes(demUrl(z, x, y), `dem-${z}-${x}-${y}.png`),
+  );
+  const out = new Float32Array(TILE * TILE);
+  for (let i = 0; i < TILE * TILE; i++) {
+    out[i] = terrariumToMeters(rgba[i * 4]!, rgba[i * 4 + 1]!, rgba[i * 4 + 2]!);
+  }
+  return out;
+}
+
+/**
  * Warm the DEM tile cache for `bounds` at zoom `z` (no decoding): the tiles a
  * pan is about to need are then on disk before the next compute asks for them.
  * Capped at `maxTilesPerSide` around the centre; failures are ignored (it is
@@ -221,16 +236,6 @@ export async function fetchTileTexture(
   }
   await Promise.all(jobs);
   return { data: out, width: fullW, height: fullH };
-}
-
-/** The Waymarked Trails route overlay, in terms of {@link fetchTileTexture}. */
-export async function fetchTrailsTexture(
-  range: TileRange,
-  network: TrailNetworkId,
-): Promise<BasemapTexture> {
-  return fetchTileTexture(range, trailNetworkTileUrl(network), {
-    cacheKey: `wmt-${network}`,
-  });
 }
 
 /**

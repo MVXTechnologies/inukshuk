@@ -168,6 +168,31 @@ quietly imports "since last import" on launch/foreground at most every
   available" placeholder tiles past its data, so without the cap MapLibre
   renders grey placeholders instead of overscaling real tiles.
 
+## Long-distance trails (Explore)
+
+Explore's "Long-distance trails near you" (#467) comes from OpenStreetMap
+route relations (hiking, cycling, ski and canoe routes on international,
+national or regional networks, their superroutes, and long local routes),
+built monthly on the NAS by `infra/tiles/nas/trails.sh` and served by the tile
+Worker: a compact **index** (`/trails/v1/index.json`, every trail with a
+~40-point thumbnail line, cached on the device for a week) and one **detail**
+per trail (`/trails/v1/d/{version}/{id}.json`: geometry simplified at 10 m,
+stages, operator/website), fetched when a trail page opens and kept. Until the
+index is reachable the section simply isn't there (`@data/longTrails`,
+`state/longTrailsStore`).
+
+The logic is `src/core/trails`: parsing, the near-you ranking (popularity ×
+proximity — formula in `rank.ts`, popularity in the build script), grouping by
+country/continent, stage selection, the topo sheets a trail crosses
+(`catalogAlong`), the climb from our DEM tiles (`climb`, computed on the trail
+page — never estimated), and the **corridor download**: the trail cut into
+≤ 20 km chunks, each chunk's box grown by 3 km, one MapLibre pack per box
+through the region downloader (`offlineStore.downloadSeries`). "Show on map"
+puts the trail on the main map (`features/map/longTrail`: halo + orange line,
+selected stage, a name pill and a stage sheet); the Library's trails and the
+map's own overlays are unaffected. It replaced the old Waymarked Trails raster
+overlay ("Marked trails"), whose persisted setting is dropped on hydration.
+
 ## 3D terrain
 
 - Elevation comes from free Terrarium DEM tiles; drape textures from Esri tile
@@ -215,6 +240,7 @@ quietly imports "since last import" on launch/foreground at most every
 | `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                                                             |
 | `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                                                           |
 | `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                                                                                |
+| `longTrailsStore`     | no (files cached)     | long-distance trail index, opened trail details, the trail shown on the map and its selected stage                                                         |
 | Store                 | Persisted?            | Holds                                                                                                                                                      |
 | --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------                    |
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, standalone waypoints, active map, active trail overlays                    |
