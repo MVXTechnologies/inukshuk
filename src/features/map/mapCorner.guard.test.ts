@@ -41,3 +41,15 @@ describe('tip button is Map-only', () => {
     expect(read(path)).not.toMatch(/TipButton|TipJarButton|FloatingTipJar/);
   });
 });
+
+describe('tip button pause', () => {
+  const map = read('src/features/map/MapScreen.tsx');
+
+  it('pauses only for the person panning or zooming, not for follow-location moves', () => {
+    expect(map).toMatch(
+      /onRegionWillChange=\{\(e\) => \{\s*if \(e\.nativeEvent\.userInteraction\) setCameraMoving\(true\);/,
+    );
+    expect(map).toMatch(/onRegionDidChange=\{\(e\) => \{\s*setCameraMoving\(false\);/);
+    expect(map).toMatch(/paused=\{cameraMoving\}/);
+  });
+});

@@ -151,3 +151,27 @@ it('long-press offers Hide, which turns the setting off', async () => {
   expect(useSettingsStore.getState().showTipJar).toBe(false);
   view.unmount();
 });
+
+it('keeps its schedule through short pauses (small pans cannot postpone it forever)', async () => {
+  const onAnimate = jest.fn();
+  const view = await mount({ onAnimate });
+  const as = (paused: boolean) => (
+    <PaperProvider>
+      <TipButton intervalMs={PERIOD} onAnimate={onAnimate} paused={paused} />
+    </PaperProvider>
+  );
+  // Flip paused faster than the period for a while: ticks that land paused are
+  // skipped, but the timer is never restarted, so a quiet tick still comes.
+  for (let i = 0; i < 6; i++) {
+    await act(async () => {
+      await view.rerender(as(i % 2 === 0));
+    });
+    await wait(PERIOD / 2);
+  }
+  await act(async () => {
+    await view.rerender(as(false));
+  });
+  await wait(PERIOD * 3);
+  expect(onAnimate).toHaveBeenCalled();
+  view.unmount();
+});

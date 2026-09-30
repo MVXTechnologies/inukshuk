@@ -1828,8 +1828,12 @@ export function MapScreen() {
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
           // Once per camera move (not per frame): pauses the tip button's
-          // animation while the map is being panned or zoomed (#476).
-          onRegionWillChange={() => setCameraMoving(true)}
+          // animation while the PERSON pans or zooms (#476). Programmatic moves
+          // (follow-my-location nudges every fix) must not, or the 15 s
+          // schedule would never get a quiet moment.
+          onRegionWillChange={(e) => {
+            if (e.nativeEvent.userInteraction) setCameraMoving(true);
+          }}
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
             setCameraMoving(false);

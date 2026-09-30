@@ -26,7 +26,7 @@ export function MapCreditText({ basemap, vector }: { basemap: MapBasemap; vector
       accessibilityRole="text"
       accessibilityHint="Full map credits are in Settings, System info"
       numberOfLines={1}
-      style={[styles.credit, { color: t.map.chipInkMuted, textShadowColor: t.map.chip }]}
+      style={[styles.credit, { color: t.map.chipInkMuted, backgroundColor: t.map.chip }]}
       testID="map-credit"
     >
       {credit}
@@ -35,11 +35,15 @@ export function MapCreditText({ basemap, vector }: { basemap: MapBasemap; vector
 }
 
 const styles = StyleSheet.create({
-  // Readable over any tile: a soft halo in the chip colour rather than a box.
+  // Readable over any tile and any label: a faint caption backing in the
+  // map-chip colour (a text label, not a control — no border, no icon).
   credit: {
+    alignSelf: 'flex-start',
     fontSize: 12,
     lineHeight: 15,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
 });

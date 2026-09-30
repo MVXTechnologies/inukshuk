@@ -88,29 +88,42 @@ export function TipButton({
 
   const visible = tipJarVisible({ enabled, recording, navigating, blocked, restingUntil, now });
   const animates = visible && tipJarAnimates({ reduceMotion, hasTipped });
-  const running = animates && !paused && foreground;
+  const held = paused || !foreground;
+  const heldRef = useRef(held);
+  useEffect(() => {
+    heldRef.current = held;
+  }, [held]);
+
+  // Pausing (a pan or zoom, the background) stops a scene at once and puts
+  // the icon back at rest — without touching the 15 s schedule below, so a
+  // burst of short pans cannot keep postponing the next cycle forever.
+  useEffect(() => {
+    if (!held) return;
+    cancelAnimation(progress);
+    progress.set(rest);
+  }, [held, progress, rest]);
 
   // One JS timer per cycle (every 15 s); the scene itself runs on the UI
-  // thread. Pausing (a pan or zoom, the background) stops it at once and puts
-  // the icon back at rest; the next cycle starts on schedule after.
+  // thread. A tick that lands while held is simply skipped.
   useEffect(() => {
-    if (!running) {
+    if (!animates) {
       cancelAnimation(progress);
-      progress.value = rest;
+      progress.set(rest);
       return;
     }
     const timer = setInterval(() => {
+      if (heldRef.current) return;
       const [first, ...others] = steps.map((step) =>
         withTiming(step.to, {
           duration: step.ms,
           easing: step.easing === 'linear' ? Easing.linear : Easing.inOut(Easing.quad),
         }),
       );
-      if (first !== undefined) progress.value = withSequence(first, ...others);
+      if (first !== undefined) progress.set(withSequence(first, ...others));
       onAnimateRef.current?.();
     }, intervalMs);
     return () => clearInterval(timer);
-  }, [running, intervalMs, progress, rest, steps]);
+  }, [animates, intervalMs, progress, rest, steps]);
 
   useEffect(() => {
     if (!menuOpen) return;
