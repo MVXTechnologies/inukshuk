@@ -136,7 +136,7 @@ it('summarizes a finished import and shows it on the heatmap', async () => {
   expect(view.getByText('already here')).toBeOnTheScreen();
   expect(view.getByText('indoor, no GPS')).toBeOnTheScreen();
 
-  await press(view.getByText('Show on heatmap'));
+  await press(view.getByText('Show on personal heatmap'));
   expect(useSettingsStore.getState().showHeatmap).toBe(true);
   expect(useMapStore.getState().focusBounds).toEqual(bbox);
   expect(mockDismiss).toHaveBeenCalled();
@@ -151,7 +151,7 @@ it('has no heatmap button when nothing was imported', async () => {
   expect(view.getByText('0 activities imported')).toBeOnTheScreen();
   expect(view.getByText('from Apple Health')).toBeOnTheScreen();
   expect(view.getByText('no GPS')).toBeOnTheScreen();
-  expect(view.queryByText('Show on heatmap')).toBeNull();
+  expect(view.queryByText('Show on personal heatmap')).toBeNull();
 });
 
 it('lets a stopped import be resumed', async () => {

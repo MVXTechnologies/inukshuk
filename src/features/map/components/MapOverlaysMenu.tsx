@@ -41,7 +41,7 @@ import { MapButton } from './MapButton';
  * Group rows carry the labels the flows key on — 'Topology',
  * 'Weather'/'Weather: <layer>', 'Marine' — and the sub-menus keep the row
  * labels the old dialogs had ('Rain radar', 'Temperature', …, 'None',
- * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Marked trails', 'Heatmap'). Sub-menu
+ * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Marked trails', 'Personal heatmap'). Sub-menu
  * titles render inside the back button (label 'Back to overlays'), so they
  * never echo group-row matchers. There is no 'Done' — closing is back/
  * outside tap.
@@ -66,7 +66,7 @@ const SLIDER_PALETTE = {
 
 type OverlayGroup = 'topology' | 'weather';
 
-/** "Slope, Contours" / "Heatmap on" / "off" — the Topology group subtitle. */
+/** "Slope, Contours" / "Personal heatmap on" / "off" — the Topology group subtitle. */
 function topologySummary(parts: string[]): string {
   if (parts.length === 0) return 'off';
   if (parts.length === 1) return `${parts[0]} on`;
@@ -185,7 +185,7 @@ function ItemRow({
  * Topology sub-menu: the terrain-analysis and content rows re-homed from the
  * old flat menu — Content picker, PDF maps (the master switch the #201
  * rework dropped, restored for #233), Slope (+ range), Contours (+ interval),
- * Elevation tint (3D only), Marked trails, Heatmap. Sliders render always
+ * Elevation tint (3D only), Marked trails, Personal heatmap. Sliders render always
  * (dimmed while off) and sit inline on the right, as before.
  */
 function TopologySubmenu({
@@ -341,7 +341,7 @@ function TopologySubmenu({
         onPress={onOpenTrailNetworks}
         chevron
       />
-      {checkRow('Heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
+      {checkRow('Personal heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
     </View>
   );
 }
@@ -484,7 +484,7 @@ export function OverlaysDrilldown({
   if (contours) topoParts.push('Contours');
   if (showHypso && hypso) topoParts.push('Elevation tint');
   if (networks.length > 0) topoParts.push('Marked trails');
-  if (showHeatmap) topoParts.push('Heatmap');
+  if (showHeatmap) topoParts.push('Personal heatmap');
 
   // Marine chart mode is all-or-nothing (D-6 amendment): depth bands and
   // seamarks drape together as one iBoating-style mode. The store keeps the
