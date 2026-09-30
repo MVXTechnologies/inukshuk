@@ -36,6 +36,7 @@ import {
   type MapRef,
 } from '@maplibre/maplibre-react-native';
 import { useCatalogStore } from '@state/catalogStore';
+import { useExploreHandoffStore } from '@state/exploreHandoffStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { palette, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -61,7 +62,9 @@ import { itemFacets } from './facetsAdapter';
 
 /**
  * Explore on a map (#447, board `MapView.dc.html`): the loaded catalog as
- * clustered points on the app's own base style, filter chips on top, "Search
+ * clustered points on the app's own base style, a back arrow / filter field /
+ * list toggle row and the filter chips (Type, Activity, Terrain, Source) on
+ * top, "Search
  * this area" once the view reaches shards not loaded yet, and a bottom sheet
  * listing the maps in view — or, after a point tap, that map with "Details"
  * and its footprint drawn as a rectangle. Tapping a cluster zooms in.
@@ -96,7 +99,14 @@ function itemMeta(item: CatalogItem, sourceName: string | undefined): string {
     .join(' · ');
 }
 
-export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilter }) {
+export function ExploreMapScreen({
+  initialFilter,
+  fromList = false,
+}: {
+  initialFilter: ExploreFilter;
+  /** Pushed over a filtered list: back returns there, with this filter (#474). */
+  fromList?: boolean;
+}) {
   const t = useSchemeTokens();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -117,6 +127,15 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
 
   const [filter, setFilter] = useState<ExploreFilter>(initialFilter);
   const [text, setText] = useState('');
+
+  // Keep the list underneath in step: whichever way the user goes back (the
+  // arrow, the list toggle, Android's back), it shows this filter.
+  const handBack = useExploreHandoffStore((s) => s.handBack);
+  useEffect(() => {
+    if (fromList) handBack(filter);
+  }, [fromList, filter, handBack]);
+  const goBack = () => router.back();
+  const showList = () => (fromList ? router.back() : router.replace(exploreListHref(filter)));
   const [bounds, setBounds] = useState<ExploreBounds | null>(null);
   const [zoom, setZoom] = useState(EXPLORE_MAP_START_ZOOM);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -364,16 +383,16 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
         </GeoJSONSource>
       </Map>
 
-      {/* Top chrome: list toggle + filter field, then the filter chips. */}
+      {/* Top chrome: back, filter field, list toggle; then the filter chips. */}
       <View style={[styles.top, { top: insets.top + space.sm }]} pointerEvents="box-none">
         <View style={styles.topRow}>
           <Pressable
-            onPress={() => router.replace(exploreListHref(filter))}
+            onPress={goBack}
             accessibilityRole="button"
-            accessibilityLabel="Show as a list"
+            accessibilityLabel="Back"
             style={[styles.round, chrome]}
           >
-            <Icon source="format-list-bulleted" size={22} color={t.ink} />
+            <Icon source="arrow-left" size={22} color={t.ink} />
           </Pressable>
           <View style={[styles.field, chrome]}>
             <Icon source="magnify" size={18} color={t.inkMuted} />
@@ -389,6 +408,14 @@ export function ExploreMapScreen({ initialFilter }: { initialFilter: ExploreFilt
               style={[styles.input, { color: t.ink, fontFamily: theme.fonts.bodyLarge.fontFamily }]}
             />
           </View>
+          <Pressable
+            onPress={showList}
+            accessibilityRole="button"
+            accessibilityLabel="Show as a list"
+            style={[styles.round, chrome]}
+          >
+            <Icon source="format-list-bulleted" size={22} color={t.ink} />
+          </Pressable>
         </View>
         <ExploreFilterBar
           filter={filter}

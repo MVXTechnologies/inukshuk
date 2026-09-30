@@ -1,3 +1,4 @@
+import { itemActivities } from '@core/catalog/classify';
 import { kindFromCategory, type FacetCounts, type ItemFacets } from '@core/catalog/exploreFacets';
 import type { CatalogIndex, CatalogItem } from '@core/catalog/schema';
 import {
@@ -45,17 +46,28 @@ const facetCache = new WeakMap<CatalogItem, ItemFacets>();
 /**
  * An item's kind / activities / terrain. A missing or unknown `kind` falls
  * back to the legacy category's implied kind, so an old manifest still
- * fills the Type filter; activities and terrain have no such fallback.
+ * fills the Type filter.
+ *
+ * Activities are the ones the explorer BROWSES the item under
+ * (`itemActivities`): its stored evidence, else what its terrain implies. Topo
+ * sheets never store activities (a toponym is not evidence), so reading the raw
+ * field alone left "Hiking" empty on every US Topo / CanTopo sheet while the
+ * landing's tile — counted by the same rule at build time — promised 27 000
+ * (#474).
  */
 export function itemFacets(item: CatalogItem): ItemFacets {
   const cached = facetCache.get(item);
   if (cached !== undefined) return cached;
   const raw: unknown = item;
   const record = isRecord(raw) ? raw : {};
+  const terrain = stringList(record.terrain, isCatalogTerrain);
   const facets: ItemFacets = {
     kind: isCatalogKind(record.kind) ? record.kind : kindFromCategory(item.category),
-    activities: stringList(record.activities, isCatalogActivity),
-    terrain: stringList(record.terrain, isCatalogTerrain),
+    activities: itemActivities({
+      activities: stringList(record.activities, isCatalogActivity),
+      terrain,
+    }),
+    terrain,
   };
   facetCache.set(item, facets);
   return facets;

@@ -1,6 +1,12 @@
 import type { CatalogIndex, CatalogItem, CatalogShardRef } from '@core/catalog/schema';
 import { buildCatalogSearchDigest } from '@core/catalog/searchDigest';
-import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '@data/catalogCache';
+import { parseCatalogFacets } from '@core/catalog/facets';
+import {
+  loadCatalogFacets,
+  loadCatalogManifest,
+  loadCatalogSearchDigest,
+  loadCatalogShard,
+} from '@data/catalogCache';
 import { useCatalogStore } from './catalogStore';
 
 /**
@@ -15,6 +21,7 @@ jest.mock('@data/catalogCache', () => ({
   loadCatalogManifest: jest.fn(),
   loadCatalogShard: jest.fn(),
   loadCatalogSearchDigest: jest.fn(),
+  loadCatalogFacets: jest.fn(),
 }));
 
 const loadManifestMock = loadCatalogManifest as jest.MockedFunction<typeof loadCatalogManifest>;
@@ -22,6 +29,8 @@ const loadShardMock = loadCatalogShard as jest.MockedFunction<typeof loadCatalog
 const loadDigestMock = loadCatalogSearchDigest as jest.MockedFunction<
   typeof loadCatalogSearchDigest
 >;
+
+const loadFacetsMock = loadCatalogFacets as jest.MockedFunction<typeof loadCatalogFacets>;
 
 const QUEBEC = { latitude: 46.8, longitude: -71.2 };
 
@@ -85,9 +94,12 @@ beforeEach(() => {
     loadingSearch: false,
     searchScope: 'area-only',
     pendingQueryShardIds: [],
+    facets: null,
+    facetsTried: false,
   });
   loadShardMock.mockReset();
   loadDigestMock.mockReset();
+  loadFacetsMock.mockReset();
 });
 
 describe('catalogStore shard loading', () => {
@@ -575,5 +587,66 @@ describe('ensureShardsInBounds (explorer "Search this area")', () => {
     loadShardMock.mockResolvedValue({ items: [], fromCache: false, warnings: [] });
     await useCatalogStore.getState().ensureShardsInBounds([-72, 46, -70, 48], 'nautical');
     expect(loadShardMock.mock.calls.map(([shard]) => shard.id)).toEqual(['nautical-n40w080']);
+  });
+});
+
+describe('ensureShardsForFacets (explorer lists, #474)', () => {
+  // The near topo shard holds no glacier; only the far-east one does.
+  const facetsIndex: CatalogIndex = { ...index, facets: { path: 'facets.json' } };
+  const digest = parseCatalogFacets({
+    schemaVersion: 1,
+    shards: {
+      'topo-n40w080': { kinds: { topo: 5 }, activities: { hiking: 3 }, terrain: { mountains: 3 } },
+      'nautical-n40w080': { kinds: { nautical: 2 }, terrain: { coast: 2 } },
+      'topo-n40e170': {
+        kinds: { topo: 1 },
+        activities: { climbing: 1 },
+        terrain: { glacier: 1 },
+      },
+    },
+  }).facets;
+
+  async function loadFacetsIndex(): Promise<void> {
+    loadManifestMock.mockResolvedValue({ index: facetsIndex, fromCache: false, warnings: [] });
+    await useCatalogStore.getState().load();
+    loadShardMock.mockImplementation(async (shard) => ({
+      items: [item(`${shard.id}-a`, shard.category)],
+      fromCache: false,
+      warnings: [],
+    }));
+  }
+
+  it('pulls only the shards the digest says hold the facet, however far', async () => {
+    await loadFacetsIndex();
+    loadFacetsMock.mockResolvedValue({ facets: digest!, fromCache: false, warnings: [] });
+    const store = useCatalogStore.getState();
+    expect(store.remainingShardCount({ terrain: 'glacier' }, null)).toBe(3); // digest not in yet
+    await store.ensureShardsForFacets(QUEBEC, { terrain: 'glacier' }, null);
+    expect(loadShardMock.mock.calls.map(([shard]) => shard.id)).toEqual(['topo-n40e170']);
+    expect(useCatalogStore.getState().remainingShardCount({ terrain: 'glacier' }, null)).toBe(0);
+    // Other facets still see their own shards.
+    expect(useCatalogStore.getState().remainingShardCount({ activity: 'hiking' }, null)).toBe(1);
+    expect(loadFacetsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches the digest once, and not at all for an unfaceted filter', async () => {
+    await loadFacetsIndex();
+    loadFacetsMock.mockResolvedValue({ facets: digest!, fromCache: false, warnings: [] });
+    await useCatalogStore.getState().ensureShardsForFacets(QUEBEC, {}, null);
+    expect(loadFacetsMock).not.toHaveBeenCalled();
+    await useCatalogStore.getState().ensureShardsForFacets(QUEBEC, { activity: 'hiking' }, null);
+    await useCatalogStore.getState().ensureShardsForFacets(QUEBEC, { terrain: 'coast' }, null);
+    expect(loadFacetsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to nearest-first rings without a digest (offline, or a throw)', async () => {
+    await loadFacetsIndex();
+    loadFacetsMock.mockRejectedValue(new Error('offline'));
+    await useCatalogStore.getState().ensureShardsForFacets(QUEBEC, { terrain: 'glacier' }, 'topo');
+    expect(loadShardMock.mock.calls.map(([shard]) => shard.id).sort()).toEqual([
+      'topo-n40e170',
+      'topo-n40w080',
+    ]);
+    expect(useCatalogStore.getState().facetsTried).toBe(true);
   });
 });
