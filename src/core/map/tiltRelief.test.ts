@@ -3,6 +3,7 @@ import {
   DEFAULT_TILT_RELIEF,
   isTiltRelief,
   MAP_MAX_PITCH_DEG,
+  MAPLIBRE_DEFAULT_MAX_PITCH_DEG,
   pitchBucket,
   TILT_RELIEF_EXAGGERATION,
   TILT_RELIEF_FULL_DEG,
@@ -32,8 +33,14 @@ describe('the setting', () => {
 });
 
 describe('MAP_MAX_PITCH_DEG', () => {
-  it("is MapLibre Native's default cap, which the RN wrapper cannot raise", () => {
-    expect(MAP_MAX_PITCH_DEG).toBe(60);
+  it('asks for 80°, above MapLibre Native’s default 60° cap', () => {
+    expect(MAPLIBRE_DEFAULT_MAX_PITCH_DEG).toBe(60);
+    expect(MAP_MAX_PITCH_DEG).toBe(80);
+  });
+
+  it('reaches full relief before even the default cap (older binaries)', () => {
+    expect(TILT_RELIEF_FULL_DEG).toBeLessThan(MAPLIBRE_DEFAULT_MAX_PITCH_DEG);
+    expect(tiltAmount(MAPLIBRE_DEFAULT_MAX_PITCH_DEG)).toBe(1);
   });
 
   it('leaves room to reach full relief before the cap', () => {
@@ -81,6 +88,7 @@ describe('pitchBucket', () => {
   });
 
   it('never exceeds the cap and treats junk as flat', () => {
+    expect(pitchBucket(79)).toBe(80);
     expect(pitchBucket(85)).toBe(MAP_MAX_PITCH_DEG);
     expect(pitchBucket(-3)).toBe(0);
     expect(pitchBucket(Number.NaN)).toBe(0);

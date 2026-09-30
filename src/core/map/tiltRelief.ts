@@ -14,14 +14,24 @@
 import { hillshadeLook, type HillshadeLook } from './terrainOptions';
 
 /**
- * The main map's maximum pitch, in degrees: MapLibre Native's default
- * (`DEFAULT_PITCH_MAX = M_PI / 3` in core, `MapLibreConstants.MAXIMUM_PITCH`
- * on Android, `MLNMapView.maximumPitch` on iOS). The core would accept more
- * — `Transform::setMaxPitch` clamps only to `PITCH_MAX = M_PI` — but the
- * React Native wrapper exposes no max-pitch prop, and a Camera `pitch` above
- * this is clamped natively. Raising it needs native code (a store build).
+ * MapLibre Native's default maximum pitch, in degrees (`DEFAULT_PITCH_MAX =
+ * M_PI / 3` in core, `MapLibreConstants.MAXIMUM_PITCH` on Android,
+ * `MLNMapView.maximumPitch` on iOS). The React Native wrapper exposes no
+ * max-pitch prop, so this is the cap on any binary without the
+ * `InukshukMapPitch` native module (every build before 2.0.2).
  */
-export const MAP_MAX_PITCH_DEG = 60;
+export const MAPLIBRE_DEFAULT_MAX_PITCH_DEG = 60;
+
+/**
+ * The maximum pitch the maps ask for (#480, owner: "allow the user to go even
+ * lower angle"): set natively through the local `InukshukMapPitch` module
+ * once each map has loaded. The core accepts it — `Transform::setMaxPitch`
+ * clamps only to `PITCH_MAX = M_PI` — and 80° keeps a sliver of ground in
+ * the top of the screen instead of an all-horizon view. On an older binary
+ * the request is a no-op and the map stays at
+ * {@link MAPLIBRE_DEFAULT_MAX_PITCH_DEG}.
+ */
+export const MAP_MAX_PITCH_DEG = 80;
 
 /** How much the relief deepens when the map is tilted. */
 export type TiltRelief = 'off' | 'natural' | 'dramatic';

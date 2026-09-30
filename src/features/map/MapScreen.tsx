@@ -126,6 +126,7 @@ import {
 } from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
 import { useTiltRelief } from './hooks/useTiltRelief';
+import { raiseMapMaxPitch } from '@data/nativeMapPitch';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
@@ -1826,6 +1827,9 @@ export function MapScreen() {
           }}
           onDidFinishLoadingMap={() => {
             setMapLoaded(true);
+            // Let two fingers tilt past MapLibre's 60° (#480); a no-op on
+            // binaries without the native module.
+            void raiseMapMaxPitch();
             // Seed the scale bar: onRegionDidChange is not guaranteed to fire
             // before the user's first gesture, and a map with no scale on it
             // until you pan looks broken.

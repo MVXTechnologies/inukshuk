@@ -24,6 +24,7 @@ import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
 import { useTiltRelief } from './hooks/useTiltRelief';
+import { raiseMapMaxPitch } from '@data/nativeMapPitch';
 
 export function Trail2DView({
   points,
@@ -173,7 +174,11 @@ export function Trail2DView({
       // Two-finger tilt, as on the main map (#480). MapLibre's default, but
       // explicit: it is now the ONLY way into a 3D-ish view here.
       touchPitch
-      onDidFinishLoadingMap={fitToTrail}
+      onDidFinishLoadingMap={() => {
+        fitToTrail();
+        // The main map's lower angle too (#480); no-op without the module.
+        void raiseMapMaxPitch();
+      }}
       onDidFinishLoadingStyle={tilt.onStyleLoaded}
       onRegionDidChange={(e) => tilt.onSettledPitch(e.nativeEvent.pitch)}
       onPress={onMapPress}
