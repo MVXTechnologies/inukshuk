@@ -40,8 +40,20 @@ function query(filter: ExploreFilter): string {
 }
 
 export const exploreListHref = (filter: ExploreFilter): string => `/explore/list${query(filter)}`;
-export const exploreMapHref = (filter: ExploreFilter = {}): string =>
-  `/explore/map${query(filter)}`;
+
+/**
+ * The map view. `from: 'list'` when a filtered list pushes it over itself:
+ * the map's back arrow then returns to that list and hands its filter back
+ * (see `@state/exploreHandoffStore`).
+ */
+export function exploreMapHref(filter: ExploreFilter = {}, from?: 'list'): string {
+  const q = query(filter);
+  if (from === undefined) return `/explore/map${q}`;
+  return `/explore/map${q === '' ? '?' : `${q}&`}from=${from}`;
+}
+
+/** Whether the map was opened over a list (route param `from=list`). */
+export const openedFromList = (params: Params): boolean => first(params.from) === 'list';
 export const exploreItemHref = (id: string): string => `/explore/item/${encodeURIComponent(id)}`;
 export const exploreCollectionHref = (id: string): string =>
   `/explore/collection/${encodeURIComponent(id)}`;

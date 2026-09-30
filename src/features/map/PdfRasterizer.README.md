@@ -245,6 +245,50 @@ given WebView, the code falls back to pdf.js's **main-thread "fake worker"** by
 clearing `workerSrc`; rendering still succeeds, just on the UI thread of the
 WebView (which is fine because the WebView is hidden/offscreen).
 
+## PDF layers (optional content, #477)
+
+GeoPDFs carry their content in optional-content groups. A 2024 USGS US Topo
+sheet hides its **Orthoimage** (203 JPEG strips, ~107 Mpx) and **Shaded
+Relief** (one ~105 Mpx JPEG) by default, but pdf.js 3.11 only applies layer
+visibility when _painting_: its worker still fetched and decoded every hidden
+image while building the operator list. On a 58 MB sheet that was ~80 % of the
+render.
+
+- **Layer plan.** After the document opens, the page reads its layer config and
+  applies `__inkPlanLayers` (`@core/geo/pdfLayers`): document defaults, plus
+  aerial/orthoimagery forced **off** (older sheets ship it on). The config is
+  passed to `page.render` as `optionalContentConfigPromise`.
+- **Worker filter.** The bundled worker is patched at HTML-build time
+  (`@core/geo/pdfWorkerPatch`: four exact-text insertions into the minified
+  evaluator, all-or-nothing; the runtime is prepended). The page posts the final
+  visibility map to the worker on pdf.js' own port before the render asks for
+  the operator list, and the worker drops image/form XObjects, inline images and
+  shadings inside hidden sections (and images/forms whose own `/OC` is hidden)
+  before fetching or decoding them. Visibility uses pdf.js' own rules, and
+  anything unknown counts as visible, so the filter can only remove what pdf.js
+  would not have painted. If the patch doesn't apply (another pdf.js build),
+  the page logs it and renders unfiltered. `pdfWorkerPatch.test.ts` fails if
+  the shipped asset stops matching.
+- **Native handoff.** A page whose layer plan differs from the document
+  defaults is not handed to the native renderers (they draw the defaults), so
+  the overview and its detail tiles always show the same layers.
+
+Measured on `ME_Portland_West_20240805_TM_geo.pdf` (58.6 MB), 2048 px overview,
+through this page's own script in headless Chrome with the served range path:
+6.1–6.4 s → 1.27–1.30 s, byte-identical PNG. A detail crop: 6.1 s → 1.1 s.
+A scanned historical sheet with no layers is unchanged (3.0 s both ways).
+These are desktop numbers, not device numbers.
+
+Render time barely depends on the raster width (768 px 1.13 s, 4096 px 1.53 s
+for the sheet above). The cost is per operator (~580k here), not per pixel, so
+a low-resolution first pass would cost nearly as much as the real one.
+
+Not yet: a per-map "Show aerial imagery layer" switch (the plan already takes
+`showImagery`; the page passes `false`). Existing overview PNGs are keyed as
+before and are not re-rendered. A sheet whose imagery is on by default keeps
+its imagery overview until it is re-imported, while new detail tiles leave the
+imagery out.
+
 ## Why pdfjs-dist 3.11.174
 
 - It ships a **legacy UMD** build (`legacy/build/pdf.min.js` +

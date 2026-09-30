@@ -34,6 +34,16 @@ describe('itemFacets', () => {
     });
   });
 
+  it('browses a sheet with no stored activities under its terrain affinity (#474)', () => {
+    // A live US Topo sheet: terrain only. The index's activityCounts (and
+    // facets.json) count it under Hiking, so tapping Hiking must list it.
+    const sheet = withWire({ kind: 'topo', category: 'topo', terrain: ['mountains', 'water'] });
+    expect(itemFacets(sheet).activities).toEqual(['hiking', 'paddling', 'fishing']);
+    // Stored evidence wins over the affinity.
+    const park = withWire({ activities: ['ski'], terrain: ['mountains'] });
+    expect(itemFacets(park).activities).toEqual(['ski']);
+  });
+
   it('ignores an unknown kind', () => {
     expect(itemFacets(withWire({ kind: 'spaceport' })).kind).toBe('park');
   });

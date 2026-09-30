@@ -1,3 +1,8 @@
+import {
+  shardIdsForFacetFilter,
+  type CatalogFacets,
+  type FacetShardFilter,
+} from '@core/catalog/facets';
 import { shardIdsForQuery, type CatalogSearchDigest } from '@core/catalog/searchDigest';
 import type {
   CatalogCategory,
@@ -8,7 +13,12 @@ import type {
 import { selectShardsInBounds, type ExploreBounds } from '@core/catalog/exploreMap';
 import { selectShards } from '@core/catalog/shard';
 import type { LatLng } from '@core/models';
-import { loadCatalogManifest, loadCatalogSearchDigest, loadCatalogShard } from '@data/catalogCache';
+import {
+  loadCatalogFacets,
+  loadCatalogManifest,
+  loadCatalogSearchDigest,
+  loadCatalogShard,
+} from '@data/catalogCache';
 import { create } from 'zustand';
 
 /**
@@ -87,6 +97,10 @@ interface CatalogState {
   searchDigestTried: boolean;
   /** True while the digest is being fetched (first keystroke only). */
   loadingSearch: boolean;
+  /** The per-shard facet digest (`facets.json`), once a facet list needed it. */
+  facets: CatalogFacets | null;
+  /** True once a facets fetch has been attempted (successfully or not). */
+  facetsTried: boolean;
   /** How much of the catalog the last `ensureShardsForQuery` actually covered. */
   searchScope: SearchScope;
   /** Matching shards still unfetched for the current query. */
@@ -109,6 +123,25 @@ interface CatalogState {
    * Call again for the next batch while the view still has unloaded shards.
    */
   ensureShardsInBounds: (bounds: ExploreBounds, category: CatalogCategory | null) => Promise<void>;
+  /**
+   * The explorer's filtered lists (#474): like {@link ensureShardsNear}, but
+   * when `filter` sets a kind, activity or terrain and the catalog publishes a
+   * facet digest, only the shards that actually hold such maps are candidates
+   * — "Glaciers" near Cupertino pulls the Shasta shard in one go instead of
+   * every ring in between. Without a digest (older catalog, offline) it is
+   * exactly `ensureShardsNear`.
+   */
+  ensureShardsForFacets: (
+    origin: LatLng | null,
+    filter: FacetShardFilter,
+    category: CatalogCategory | null,
+  ) => Promise<void>;
+  /**
+   * How many shards a further {@link ensureShardsForFacets} call could still
+   * pull for this filter (not loaded, not in flight, not cooling down, and —
+   * when the digest is in — holding the facet). Zero means "nothing further".
+   */
+  remainingShardCount: (filter: FacetShardFilter, category: CatalogCategory | null) => number;
   /** Shard ids the next selection must skip: loaded, in flight or cooling down. */
   unavailableShardIds: () => Set<string>;
   /**
@@ -135,6 +168,7 @@ let queryGeneration = 0;
 let forceCatalogData = false;
 let digestRequest: { generation: number; promise: Promise<CatalogSearchDigest | null> } | null =
   null;
+let facetsRequest: { generation: number; promise: Promise<CatalogFacets | null> } | null = null;
 
 /** Merge new items in, keeping the first row for any duplicated id. */
 function mergeItems(existing: CatalogItem[], incoming: readonly CatalogItem[]): CatalogItem[] {
@@ -260,6 +294,53 @@ async function ensureSearchDigest(
   return promise;
 }
 
+/**
+ * The facet digest, fetched at most once per session-with-an-index (a failure
+ * is remembered like the search digest's; `load(force)` resets it). Never
+ * rejects: any failure reads as "no digest", which only costs precision.
+ */
+async function ensureFacets(
+  set: SetState,
+  get: GetState,
+  generation: number,
+): Promise<CatalogFacets | null> {
+  if (generation !== catalogGeneration) return null;
+  const state = get();
+  if (state.facets !== null) return state.facets;
+  if (facetsRequest?.generation === generation) return facetsRequest.promise;
+  const ref = state.index?.facets;
+  if (ref === undefined || state.facetsTried) return null;
+
+  const promise = (async () => {
+    let facets: CatalogFacets | null = null;
+    try {
+      const result = await loadCatalogFacets(ref, forceCatalogData ? { force: true } : undefined);
+      facets = result?.facets ?? null;
+    } catch {
+      facets = null;
+    }
+    if (generation !== catalogGeneration) return null;
+    facetsRequest = null;
+    set({ facets, facetsTried: true });
+    return facets;
+  })();
+  facetsRequest = { generation, promise };
+  return promise;
+}
+
+/** The shards worth pulling for a facet filter: category-scoped, digest-narrowed. */
+function facetCandidates(
+  state: CatalogState,
+  filter: FacetShardFilter,
+  category: CatalogCategory | null,
+): CatalogShardRef[] {
+  const scoped = selectableShards(state).filter(
+    (shard) => category === null || shard.category === category,
+  );
+  const ids = state.facets === null ? null : shardIdsForFacetFilter(state.facets, filter);
+  return ids === null ? scoped : scoped.filter((shard) => ids.has(shard.id));
+}
+
 export const useCatalogStore = create<CatalogState>((set, get) => ({
   status: 'idle',
   index: null,
@@ -271,6 +352,8 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   searchDigest: null,
   searchDigestTried: false,
   loadingSearch: false,
+  facets: null,
+  facetsTried: false,
   searchScope: 'area-only',
   pendingQueryShardIds: [],
   downloads: {},
@@ -282,11 +365,14 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     queryGeneration++;
     inFlight.clear();
     digestRequest = null;
+    facetsRequest = null;
     forceCatalogData = force === true;
     set({
       status: 'loading',
       searchDigest: null,
       searchDigestTried: false,
+      facets: null,
+      facetsTried: false,
       loadingSearch: false,
       loadingShards: false,
       pendingQueryShardIds: [],
@@ -340,6 +426,24 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     });
     await fetchShards(set, get, wanted, generation);
   },
+
+  ensureShardsForFacets: async (origin, filter, category) => {
+    const generation = catalogGeneration;
+    if (get().status === 'loading') return;
+    const { index } = get();
+    if (index === null || index.shards.length === 0) return;
+    const facetSet = filter.kind != null || filter.activity != null || filter.terrain != null;
+    if (facetSet) await ensureFacets(set, get, generation);
+    if (generation !== catalogGeneration) return;
+    const wanted = selectShards(facetCandidates(get(), filter, category), origin, {
+      category,
+      limit: SHARD_FETCH_LIMIT,
+      byteBudget: SHARD_BYTE_BUDGET,
+    });
+    await fetchShards(set, get, wanted, generation);
+  },
+
+  remainingShardCount: (filter, category) => facetCandidates(get(), filter, category).length,
 
   unavailableShardIds: () => {
     const state = get();

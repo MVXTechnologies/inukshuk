@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import { weatherChrome as wc } from '../weather/weatherChrome';
-import { InukshukIcon } from './InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { MapButton } from './MapButton';
 
 /**
@@ -72,7 +72,7 @@ export function MapActionsMenu({
     <TouchableRipple onPress={onPress} accessibilityLabel={label} style={styles.row} borderless>
       <View style={styles.rowInner}>
         {icon === null ? (
-          <InukshukIcon size={20} color={wc.ink} />
+          <InukshukGlyph size={20} frame="square" tone="mono" color={wc.ink} />
         ) : (
           <Icon source={icon} size={20} color={wc.ink} />
         )}

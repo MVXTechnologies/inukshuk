@@ -119,6 +119,33 @@ export function parseCatalogFacets(raw: unknown): CatalogFacetsParseResult {
  * only shards worth fetching to browse that facet. Order follows the digest;
  * rank them with `rankShardsByDistance` for "near me".
  */
+/** The facet constraints a shard pick can honour (publisher and text cannot). */
+export interface FacetShardFilter {
+  kind?: CatalogKind | null;
+  activity?: CatalogActivity | null;
+  terrain?: CatalogTerrain | null;
+}
+
+/**
+ * The shards that can hold an item matching EVERY set facet — the digest
+ * counts each facet separately, so this is their intersection (a superset of
+ * the exact answer, never a subset). Null when the filter sets no facet: then
+ * any shard may match and the caller should rank them all.
+ */
+export function shardIdsForFacetFilter(
+  facets: CatalogFacets,
+  filter: FacetShardFilter,
+): Set<string> | null {
+  const wanted: [FacetGroup, string][] = [];
+  if (filter.kind != null) wanted.push(['kinds', filter.kind]);
+  if (filter.activity != null) wanted.push(['activities', filter.activity]);
+  if (filter.terrain != null) wanted.push(['terrain', filter.terrain]);
+  if (wanted.length === 0) return null;
+  const sets = wanted.map(([group, value]) => new Set(shardIdsWithFacet(facets, group, value)));
+  const [first, ...rest] = sets;
+  return new Set([...(first ?? [])].filter((id) => rest.every((ids) => ids.has(id))));
+}
+
 export function shardIdsWithFacet(
   facets: CatalogFacets,
   group: FacetGroup,

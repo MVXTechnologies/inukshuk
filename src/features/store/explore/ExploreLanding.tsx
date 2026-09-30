@@ -32,6 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   ActivityTile,
+  BrowseOnMapButton,
   ChipRow,
   CollectionRow,
   FilterChip,
@@ -52,6 +53,7 @@ import { useLinkOutCollections } from './useLinkOutCollections';
 /**
  * The Explore tab's Discover landing (#447, board `Main.dc.html`):
  *
+ * 0. **Browse on the map** — a labelled pill into the map view;
  * 1. **Popular near you** — a carousel of the nearest maps, Canadian sources
  *    first, weighted by kind (`@core/catalog/popularNear`), with "See on map";
  * 2. **By activity** — the taxonomy's activities, 4 to a row;
@@ -182,6 +184,14 @@ export function ExploreLanding({
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       keyboardShouldPersistTaps="handled"
     >
+      {/* The explicit way into the map view (#474): the header glyph alone was missed. */}
+      <View style={styles.browse}>
+        <BrowseOnMapButton
+          onPress={() => router.push(exploreMapHref())}
+          accessibilityLabel="Browse all maps on the map"
+        />
+      </View>
+
       {popular.length > 0 ? (
         <>
           <SectionHeading
@@ -326,6 +336,7 @@ export function ExploreLanding({
 }
 
 const styles = StyleSheet.create({
+  browse: { paddingHorizontal: space.lg, paddingTop: space.md },
   carousel: { paddingHorizontal: space.lg, gap: space.md },
   hint: {
     paddingHorizontal: space.lg,

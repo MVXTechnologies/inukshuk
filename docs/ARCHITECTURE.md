@@ -53,7 +53,12 @@ four stages:
    are both served from the app's loopback server (`data/localServer.ts`,
    root = the document directory) so pdf.js range-fetches only the bytes the
    page needs — nothing crossing the bridge scales with file size, which is
-   what let 50–200 MB GeoPDFs render at all (#269). If the server cannot
+   what let 50–200 MB GeoPDFs render at all (#269). PDF layers (optional
+   content) are resolved per render: document defaults plus aerial imagery
+   off (`core/geo/pdfLayers`), and the bundled worker is patched
+   (`core/geo/pdfWorkerPatch`) to skip hidden images and forms instead of
+   decoding them. That hidden decoding was ~80 % of a US Topo sheet's render
+   (#477). If the server cannot
    start, PDFs under 16 MB fall back to the old base64-over-the-bridge path;
    bigger ones fail with a message instead of hanging. Requests are queued,
    with a watchdog that falls back to pdf.js's main-thread fake worker if the

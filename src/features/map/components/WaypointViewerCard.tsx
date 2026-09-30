@@ -3,7 +3,7 @@ import { waypointIconLabel } from '@core/library/waypointIcons';
 import type { WaypointIcon } from '@core/models';
 import { Image, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import { InukshukIcon } from './InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { mciGlyph } from './waypointGlyph';
 
 export interface ViewableWaypoint {
@@ -53,7 +53,12 @@ export function WaypointViewerCard({
           accessibilityLabel={`${waypointIconLabel(waypoint.icon)} icon`}
         >
           {glyph === null ? (
-            <InukshukIcon size={20} color={theme.colors.onSurfaceVariant} />
+            <InukshukGlyph
+              size={20}
+              frame="square"
+              tone="mono"
+              color={theme.colors.onSurfaceVariant}
+            />
           ) : (
             <Icon source={glyph} size={20} color={theme.colors.onSurfaceVariant} />
           )}

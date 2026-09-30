@@ -1,6 +1,6 @@
 import { ContourTexture } from '@ui/components/ContourTexture';
 import { LIBRARY_TYPE_FILTERS, type LibraryTypeFilter } from '@core/library/libraryRows';
-import { InukshukIcon } from '@features/map/components/InukshukIcon';
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { tabularNums } from '@ui/fonts';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -193,7 +193,7 @@ export function LibraryEmptyState({
         <View
           style={[styles.emptyBadge, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
         >
-          <InukshukIcon size={64} color={t.ink} />
+          <InukshukGlyph size={64} frame="square" />
         </View>
         <View style={styles.emptyText}>
           <Text accessibilityRole="header" style={[styles.emptyTitle, { color: t.ink }]}>

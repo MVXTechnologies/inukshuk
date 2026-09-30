@@ -1,5 +1,5 @@
 import { ExploreMapScreen } from '@features/store/explore/ExploreMapScreen';
-import { filterFromParams } from '@features/store/explore/exploreRoutes';
+import { filterFromParams, openedFromList } from '@features/store/explore/exploreRoutes';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 
@@ -7,5 +7,5 @@ import { useMemo } from 'react';
 export default function ExploreMapRoute() {
   const params = useLocalSearchParams();
   const filter = useMemo(() => filterFromParams(params), [params]);
-  return <ExploreMapScreen initialFilter={filter} />;
+  return <ExploreMapScreen initialFilter={filter} fromList={openedFromList(params)} />;
 }
