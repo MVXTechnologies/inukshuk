@@ -123,10 +123,9 @@ import {
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYER,
-  tiltReliefLayer,
 } from './mapLayers';
-import { buildOsmStyle, styleHasHillshade } from './mapStyle';
-import { pitchBucket, tiltReliefLook } from '@core/map/tiltRelief';
+import { buildOsmStyle } from './mapStyle';
+import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
@@ -430,13 +429,6 @@ export function MapScreen() {
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   /**
-   * The camera's last SETTLED pitch, in 5° steps (#480). Settle-driven like
-   * the scale bar: the relief pass follows the tilt once the fingers lift,
-   * never at gesture rate, and a follow-mode settle per GPS fix (same pitch)
-   * re-renders nothing.
-   */
-  const [settledPitch, setSettledPitch] = useState(0);
-  /**
    * Non-null while the map maker is open: the print style whose raster the
    * live map must render so the framed preview matches the sheet (#349).
    * Declared here, with the other style inputs, because the style memo below
@@ -614,6 +606,7 @@ export function MapScreen() {
           }
         : {}),
       hillshadeStrength,
+      tiltRelief,
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
@@ -698,6 +691,7 @@ export function MapScreen() {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    tiltRelief,
     offlineOnly,
     offlineRegions,
     theme.dark,
@@ -717,17 +711,10 @@ export function MapScreen() {
     vectorBasemap,
   ]);
 
-  // The tilted-map relief pass (#480): only over a style that draws the base
-  // shading (it deepens that, over the same DEM source), and only while the
-  // settled camera is tilted. Its palette follows the base's — dark only over
-  // the stone-night vector map, as in buildOsmStyle.
-  const tiltLook = useMemo(
-    () =>
-      styleHasHillshade(style)
-        ? tiltReliefLook(tiltRelief, settledPitch, vectorBasemap && theme.dark)
-        : null,
-    [style, tiltRelief, settledPitch, vectorBasemap, theme.dark],
-  );
+  // The tilted-map relief pass (#480): the style carries it hidden whenever
+  // it draws the shading and the setting is on; the hook switches it on from
+  // the settled pitch.
+  const tilt = useTiltRelief(style);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -1833,7 +1820,10 @@ export function MapScreen() {
           // the effect above re-arms.
           // The style is parsed and the native view exists: safe for
           // getViewState(). Same reasoning as the region-change hook below.
-          onDidFinishLoadingStyle={() => setMapLoaded(true)}
+          onDidFinishLoadingStyle={() => {
+            setMapLoaded(true);
+            tilt.onStyleLoaded();
+          }}
           onDidFinishLoadingMap={() => {
             setMapLoaded(true);
             // Seed the scale bar: onRegionDidChange is not guaranteed to fire
@@ -1844,7 +1834,7 @@ export function MapScreen() {
               .then((vs) => {
                 updateScaleAt(vs.zoom, vs.center[1]);
                 onSettleBearing(vs.bearing);
-                setSettledPitch(pitchBucket(vs.pitch));
+                tilt.onSettledPitch(vs.pitch);
               })
               .catch(() => undefined); // mid-teardown — the next settle seeds it
           }}
@@ -1877,7 +1867,7 @@ export function MapScreen() {
             // snap-back detent for a rotation too small to have been meant.
             onSettleBearing(e.nativeEvent.bearing);
             // Settled pitch → the tilted-map relief pass (#480).
-            setSettledPitch(pitchBucket(e.nativeEvent.pitch));
+            tilt.onSettledPitch(e.nativeEvent.pitch);
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1965,10 +1955,10 @@ export function MapScreen() {
               height that drape must occupy (see `@core/geo/mapLayerStack`).
               The PDF overlays and trails below carry no anchor at all, which
               is what keeps them on top of everything. */}
-          {/* The tilted-map relief pass (#480) names the base hillshade as
-              its afterId, so it lands right on top of it, under everything
-              else; mounted only while tilted over a shaded style. */}
-          {tiltLook !== null && tiltReliefLayer(tiltLook)}
+          {/* The tilted-map relief pass (#480): adopts the style's own hidden
+              layer of that id (right above the base hillshade) and sets its
+              visibility/exaggeration from the settled pitch. */}
+          {tilt.layer}
           {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
           {weatherLayer !== null && !offlineOnly && (
             <WeatherDrapeLayers

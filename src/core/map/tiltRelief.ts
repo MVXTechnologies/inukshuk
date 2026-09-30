@@ -97,3 +97,12 @@ export function tiltReliefLook(
     exaggeration: Math.round(TILT_RELIEF_EXAGGERATION[mode] * t * 100) / 100,
   };
 }
+
+/**
+ * Just the extra pass's exaggeration for a setting at a pitch — 0 means the
+ * pass is hidden. The pass's colours live in the style (see
+ * `features/map/mapStyle.ts`), so the map screens only need this number.
+ */
+export function tiltReliefExaggeration(mode: TiltRelief, pitchDeg: number): number {
+  return tiltReliefLook(mode, pitchDeg, false)?.exaggeration ?? 0;
+}

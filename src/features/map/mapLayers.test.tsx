@@ -11,11 +11,14 @@ import {
   TRACKS_LINES_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
-  TILT_RELIEF_LAYER_ID,
   tiltReliefLayer,
 } from './mapLayers';
-import { HILLSHADE_2D_LAYER_ID, HILLSHADE_2D_MIN_ZOOM, HILLSHADE_DEM_SOURCE_ID } from './mapStyle';
-import { tiltReliefLook } from '@core/map/tiltRelief';
+import {
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  TILT_RELIEF_LAYER_ID,
+} from './mapStyle';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
@@ -154,43 +157,41 @@ describe('overlay layers sit below the position puck (#332)', () => {
   });
 });
 
-// #480 — the tilted-map relief pass: a component hillshade stacked right on
-// the style's base shading, over the style's own DEM source.
+// #480 — the tilted-map relief pass: the style ships it hidden with its
+// colours; this same-id component layer adopts it and drives only visibility
+// and exaggeration.
 describe('tiltReliefLayer (#480)', () => {
-  async function rendered(dark: boolean) {
-    const look = tiltReliefLook('dramatic', 60, dark);
-    if (look === null) throw new Error('expected a look at full tilt');
-    const view = await render(tiltReliefLayer(look));
-    return { look, node: view.getByTestId('mlrn-hillshade-layer') };
+  type Styled = Record<string, { styletype: string; stylevalue: unknown }>;
+  async function rendered(exaggeration: number) {
+    const view = await render(tiltReliefLayer(exaggeration));
+    return view.getByTestId('mlrn-hillshade-layer');
   }
 
-  it('stacks on the base hillshade over the same DEM source', async () => {
-    const { node } = await rendered(false);
+  it('names the style layer it adopts, above the base, on the same DEM', async () => {
+    const node = await rendered(0.3);
     expect(node.props.id).toBe(TILT_RELIEF_LAYER_ID);
     expect(node.props.source).toBe(HILLSHADE_DEM_SOURCE_ID);
     expect(node.props.afterId).toBe(HILLSHADE_2D_LAYER_ID);
-    expect(node.props.beforeId).toBeUndefined();
-    // The base's zoom gate: no DEM traffic below it.
     expect(node.props.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
   });
 
-  it('paints the look it is given, in each theme', async () => {
-    type Painted = { stylevalue: { value: unknown } };
-    const paint = async (dark: boolean) => {
-      const { look, node } = await rendered(dark);
-      const rs = node.props.reactStyle as Record<string, Painted>;
-      return { look, rs };
-    };
-    const light = await paint(false);
-    const dark = await paint(true);
-    // Colours reach native as packed ints, so compare the themes to each
-    // other; the exaggeration rides the zoom ramp's last stop.
-    expect(light.rs.hillshadeShadowColor?.stylevalue.value).not.toEqual(
-      dark.rs.hillshadeShadowColor?.stylevalue.value,
+  it('is visible with the exaggeration when tilted, hidden when flat', async () => {
+    const tilted = (await rendered(0.45)).props.reactStyle as Styled;
+    expect(JSON.stringify(tilted.visibility?.stylevalue)).toContain('"visible"');
+    expect(JSON.stringify(tilted.hillshadeExaggeration)).toContain(
+      '{"type":"number","value":0.45}',
     );
-    expect(JSON.stringify(light.rs.hillshadeExaggeration)).toContain(
-      `{"type":"number","value":${light.look.exaggeration}}`,
-    );
-    expect(light.rs.hillshadeIlluminationDirection?.stylevalue.value).toBe(335);
+    const flat = (await rendered(0)).props.reactStyle as Styled;
+    expect(JSON.stringify(flat.visibility?.stylevalue)).toContain('"none"');
+  });
+
+  // Device-found (#480, Android emulator): the RN wrapper's hillshade setters
+  // read shadow/highlight colours as string ARRAYS and the light direction as
+  // a float array. A plain colour or a scalar direction threw "cannot be
+  // cast" and killed the React instance; expressions were rejected as not
+  // `array<color>`. Those stay in the style JSON — never on this component.
+  it('sets nothing but visibility and exaggeration', async () => {
+    const rs = (await rendered(0.6)).props.reactStyle as Styled;
+    expect(Object.keys(rs).sort()).toEqual(['hillshadeExaggeration', 'visibility']);
   });
 });

@@ -10,6 +10,7 @@ import {
   TILT_RELIEF_START_DEG,
   TILT_RELIEFS,
   tiltAmount,
+  tiltReliefExaggeration,
   tiltReliefLook,
 } from './tiltRelief';
 
@@ -137,5 +138,21 @@ describe('tiltReliefLook', () => {
   it('shades the dark map toward black and the light map toward umber', () => {
     expect(tiltReliefLook('natural', 60, true)!.shadowColor).toMatch(/^rgba\(0, 0, 0,/);
     expect(tiltReliefLook('natural', 60, false)!.shadowColor).toMatch(/^rgba\(74, 62, 45,/);
+  });
+});
+
+describe('tiltReliefExaggeration', () => {
+  it('is 0 (pass hidden) when off or flat', () => {
+    expect(tiltReliefExaggeration('off', 60)).toBe(0);
+    expect(tiltReliefExaggeration('natural', 0)).toBe(0);
+    expect(tiltReliefExaggeration('dramatic', TILT_RELIEF_START_DEG)).toBe(0);
+  });
+
+  it('matches the look’s exaggeration whatever the theme', () => {
+    for (const p of [15, 30, 45, 60]) {
+      for (const mode of ['natural', 'dramatic'] as const) {
+        expect(tiltReliefExaggeration(mode, p)).toBe(tiltReliefLook(mode, p, true)!.exaggeration);
+      }
+    }
   });
 });

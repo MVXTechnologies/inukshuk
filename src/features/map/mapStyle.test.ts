@@ -26,7 +26,10 @@ import {
   HILLSHADE_2D_MIN_ZOOM,
   HILLSHADE_DEM_SOURCE_ID,
   styleHasHillshade,
+  styleHasTiltRelief,
+  TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
+import { tiltReliefLook } from '@core/map/tiltRelief';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -1011,5 +1014,57 @@ describe('styleHasHillshade (#480)', () => {
     expect(styleHasHillshade(buildOsmStyle(TILE, false, 'map', true, { weatherMuted }))).toBe(
       false,
     );
+  });
+});
+
+// #480 — the tilted-map relief pass ships hidden in the style, carrying the
+// colours the RN component cannot set on Android.
+describe('tilted-map relief pass (#480)', () => {
+  const tiltLayer = (s: ReturnType<typeof buildOsmStyle>) =>
+    s.layers.find((l) => l.id === TILT_RELIEF_LAYER_ID);
+
+  it.each(['natural', 'dramatic'] as const)(
+    '%s: hidden, flat, right above the base shading, on its DEM',
+    (mode) => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { tiltRelief: mode });
+      expect(styleHasTiltRelief(s)).toBe(true);
+      const ids = layerIds(s);
+      expect(ids.indexOf(TILT_RELIEF_LAYER_ID)).toBe(ids.indexOf(HILLSHADE_2D_LAYER_ID) + 1);
+      const layer = tiltLayer(s);
+      expect(layer).toMatchObject({
+        type: 'hillshade',
+        source: HILLSHADE_DEM_SOURCE_ID,
+        minzoom: HILLSHADE_2D_MIN_ZOOM,
+        layout: { visibility: 'none' },
+      });
+      const look = tiltReliefLook(mode, 60, false)!;
+      expect(layer).toMatchObject({
+        paint: {
+          'hillshade-exaggeration': 0,
+          'hillshade-shadow-color': look.shadowColor,
+          'hillshade-highlight-color': look.highlightColor,
+          'hillshade-accent-color': look.accentColor,
+        },
+      });
+    },
+  );
+
+  it('is absent when the setting is off or unset', () => {
+    expect(
+      tiltLayer(buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'off' })),
+    ).toBeUndefined();
+    expect(tiltLayer(buildOsmStyle(TILE, false, 'map', true))).toBeUndefined();
+  });
+
+  it('is absent wherever the base shading is (none, satellite, weather dim)', () => {
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+    for (const s of [
+      buildOsmStyle(TILE, false, 'map', false, { tiltRelief: 'dramatic' }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic' }),
+      buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'dramatic', weatherMuted }),
+    ]) {
+      expect(tiltLayer(s)).toBeUndefined();
+      expect(styleHasTiltRelief(s)).toBe(false);
+    }
   });
 });

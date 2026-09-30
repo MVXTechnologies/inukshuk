@@ -32,6 +32,7 @@ import {
   type HillshadeStrength,
   type PeakDensity,
 } from '@core/map/terrainOptions';
+import { MAP_MAX_PITCH_DEG, tiltReliefLook, type TiltRelief } from '@core/map/tiltRelief';
 import { stoneScheme } from './stoneScheme';
 
 /**
@@ -173,6 +174,17 @@ export const HILLSHADE_2D_LAYER_ID = 'hillshade-2d';
 export const HILLSHADE_DEM_SOURCE_ID = 'dem';
 /** The shaded relief's light: from the north-north-west, as on paper maps. */
 export const HILLSHADE_ILLUMINATION_DIRECTION = 335;
+/**
+ * The tilted-map relief pass (#480): a second hillshade stacked right on the
+ * base shading. It ships HIDDEN in the style (visibility none, exaggeration
+ * 0) carrying its colours; MapScreen adopts it with a same-id component
+ * `<Layer>` that only switches it on and sets the exaggeration from the
+ * settled pitch — a paint change in place, where a style change would reload
+ * everything. The colours must live here: this MapLibre Native types the
+ * hillshade shadow/highlight colours `array<color>`, which no component prop
+ * can express on Android (see `tiltReliefLayer`).
+ */
+export const TILT_RELIEF_LAYER_ID = 'hillshade-tilt';
 
 /**
  * Whether a style draws the 2D shaded relief — i.e. has the DEM source and
@@ -186,6 +198,11 @@ export function styleHasHillshade(style: StyleSpecification): boolean {
     style.sources[HILLSHADE_DEM_SOURCE_ID] !== undefined &&
     style.layers.some((l) => l.id === HILLSHADE_2D_LAYER_ID)
   );
+}
+
+/** Whether a style carries the (hidden) tilted-map relief pass (#480). */
+export function styleHasTiltRelief(style: StyleSpecification): boolean {
+  return styleHasHillshade(style) && style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID);
 }
 
 /**
@@ -362,6 +379,12 @@ export interface OsmStyleOptions {
    * the raster basemaps are always light.
    */
   hillshadeStrength?: HillshadeStrength;
+  /**
+   * The "3D relief" setting (#480): unset or `off` = no tilted-map relief
+   * pass; otherwise a hidden pass in that mode's palette rides above the
+   * shaded relief, for the map screen to switch on as the map tilts.
+   */
+  tiltRelief?: TiltRelief;
   marineChart?: {
     wmsFallback: boolean;
     /**
@@ -683,6 +706,27 @@ export function buildOsmStyle(
         'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       },
     });
+    const tilt = tiltReliefLook(
+      options.tiltRelief ?? 'off',
+      MAP_MAX_PITCH_DEG,
+      stone !== null && options.vectorBasemap?.dark === true,
+    );
+    if (tilt !== null) {
+      style.layers.push({
+        id: TILT_RELIEF_LAYER_ID,
+        type: 'hillshade',
+        source: HILLSHADE_DEM_SOURCE_ID,
+        minzoom: HILLSHADE_2D_MIN_ZOOM,
+        layout: { visibility: 'none' },
+        paint: {
+          'hillshade-exaggeration': 0,
+          'hillshade-shadow-color': tilt.shadowColor,
+          'hillshade-highlight-color': tilt.highlightColor,
+          'hillshade-accent-color': tilt.accentColor,
+          'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+        },
+      });
+    }
   }
 
   if (terrain3d) {

@@ -3,12 +3,11 @@ import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 import { heatRadiusExpression } from '@core/heat/heatRadius';
-import type { HillshadeLook } from '@core/map/terrainOptions';
 import {
   HILLSHADE_2D_LAYER_ID,
   HILLSHADE_2D_MIN_ZOOM,
   HILLSHADE_DEM_SOURCE_ID,
-  HILLSHADE_ILLUMINATION_DIRECTION,
+  TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
 
 // ---------------------------------------------------------------------------
@@ -276,20 +275,24 @@ export const SLOPE_LAYER = (
   />
 );
 
-/** Id of the tilted-map relief pass (#480). */
-export const TILT_RELIEF_LAYER_ID = 'hillshade-tilt';
-
 /**
- * The tilted-map relief pass (#480): a second hillshade over the style's own
- * Terrarium DEM source, stacked directly above the base shading so the two
- * add up. A component layer rather than a style-JSON one on purpose: its
- * exaggeration follows the settled pitch, and a style-JSON change reloads the
- * whole style (every source, every layer) — a paint change on a component
- * layer is applied in place. Mounted only while the map is tilted and the
- * style has a hillshade ({@link styleHasHillshade}); flat, it costs nothing.
- * Same zoom gate and fade-in as the base (#230): no DEM traffic below z11.
+ * Drives the style's hidden tilted-map relief pass (#480): a component
+ * `<Layer>` with the SAME id as the style layer, which both native sides
+ * ADOPT rather than duplicate (MLRNLayer.addToMap / MLRNLayer.m look the id
+ * up first), then set only these properties on. Keep it mounted for as long
+ * as the style has the pass ({@link styleHasTiltRelief}): unmounting removes
+ * the style layer itself until the next style reload. Flat, it is hidden, so
+ * it costs no extra hillshade pass.
+ *
+ * ONLY visibility and exaggeration are set here, never colours or the light:
+ * the wrapper's Android setters read the shadow/highlight colours as string
+ * ARRAYS and the direction as a float array (this MapLibre Native's
+ * multidirectional hillshade). Found on the emulator: a plain colour or a
+ * scalar direction threw "cannot be cast" and killed the React instance, and
+ * no expression yields the `array<color>` type the core then demands. The
+ * style JSON carries those instead.
  */
-export function tiltReliefLayer(look: HillshadeLook) {
+export function tiltReliefLayer(exaggeration: number) {
   return (
     <Layer
       id={TILT_RELIEF_LAYER_ID}
@@ -297,7 +300,9 @@ export function tiltReliefLayer(look: HillshadeLook) {
       source={HILLSHADE_DEM_SOURCE_ID}
       afterId={HILLSHADE_2D_LAYER_ID}
       minzoom={HILLSHADE_2D_MIN_ZOOM}
+      layout={{ visibility: exaggeration > 0 ? 'visible' : 'none' }}
       paint={{
+        // The base's zoom fade-in (#230), up to the pitch's exaggeration.
         'hillshade-exaggeration': [
           'interpolate',
           ['linear'],
@@ -305,14 +310,8 @@ export function tiltReliefLayer(look: HillshadeLook) {
           HILLSHADE_2D_MIN_ZOOM,
           0,
           HILLSHADE_2D_MIN_ZOOM + 1,
-          look.exaggeration,
+          exaggeration,
         ],
-        'hillshade-shadow-color': look.shadowColor,
-        'hillshade-highlight-color': look.highlightColor,
-        'hillshade-accent-color': look.accentColor,
-        // The base shading's light, so the pass deepens it rather than
-        // adding a second, contradicting sun.
-        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       }}
     />
   );
