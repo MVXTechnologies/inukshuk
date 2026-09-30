@@ -48,11 +48,21 @@ describe('tip button pause', () => {
   const map = read('src/features/map/MapScreen.tsx');
 
   it('pauses only for the person panning or zooming, not for follow-location moves', () => {
+    expect(map).toMatch(/useState\(\(\) => createGesturePause\(setCameraMoving\)\)/);
     expect(map).toMatch(
-      /onRegionWillChange=\{\(e\) => \{\s*if \(e\.nativeEvent\.userInteraction\) setCameraMoving\(true\);/,
+      /onRegionWillChange=\{\(e\) => \{\s*gesturePause\.willChange\(e\.nativeEvent\.userInteraction === true\);/,
     );
-    expect(map).toMatch(/onRegionDidChange=\{\(e\) => \{\s*setCameraMoving\(false\);/);
+    expect(map).toMatch(/onRegionDidChange=\{\(e\) => \{\s*gesturePause\.didChange\(\);/);
     expect(map).toMatch(/paused=\{cameraMoving\}/);
+    // Nothing else may set the pause: only the controller (with its 3 s cap).
+    expect(map.match(/setCameraMoving\(/g) ?? []).toHaveLength(0);
+  });
+
+  it('never lets a tap pause the mug (the iOS will-without-did trap)', () => {
+    expect(map).toMatch(
+      /const onMapPress = useCallback\(\s*\(e: MapPressEvent\) => \{\s*gesturePause\.tap\(\);/,
+    );
+    expect(map).toMatch(/onLongPress=\{\([^)]*\) => \{\s*gesturePause\.tap\(\);/);
   });
 });
 

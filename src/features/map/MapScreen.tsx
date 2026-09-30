@@ -64,6 +64,7 @@ import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { createGesturePause } from '@core/support/gesturePause';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
@@ -516,8 +517,12 @@ export function MapScreen() {
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
   const [destination, setDestination] = useState<LatLng | null>(null);
-  // True between a camera move's start and its settle (tip button pauses, #476).
+  // True while the PERSON pans or zooms (tip button pauses, #476). Driven by
+  // createGesturePause: taps never pause, a settle or a tap ends it, and it
+  // clears itself after 3 s even when iOS drops the matching "did change".
   const [cameraMoving, setCameraMoving] = useState(false);
+  const [gesturePause] = useState(() => createGesturePause(setCameraMoving));
+  useEffect(() => () => gesturePause.dispose(), [gesturePause]);
   // A rail sheet (map type, overlays, "+" actions) is open: no mascot bubble (#476).
   const [railMenuOpen, setRailMenuOpen] = useState(false);
   // The bottom column's height and the row's top inside it, for the bubble.
@@ -1674,10 +1679,11 @@ export function MapScreen() {
   );
   const onMapPress = useCallback(
     (e: MapPressEvent) => {
+      gesturePause.tap();
       const press = readMapPress(e); // synchronously, before anything awaits
       if (press) void handleMapPress(press);
     },
-    [handleMapPress],
+    [gesturePause, handleMapPress],
   );
 
   const trailFeature = useThrottledLineFeature(points, segmentStarts);
@@ -1853,6 +1859,7 @@ export function MapScreen() {
           // OR marine layer (and online) so the map behaves exactly like
           // today when both are off.
           onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
+            gesturePause.tap();
             const lngLat = e.nativeEvent?.lngLat;
             if (!lngLat) return;
             const at = { longitude: lngLat[0], latitude: lngLat[1] };
@@ -1909,14 +1916,14 @@ export function MapScreen() {
           // otherwise — the map stays byte-identical to a windless one).
           // Once per camera move (not per frame): pauses the tip button's
           // animation while the PERSON pans or zooms (#476). Programmatic moves
-          // (follow-my-location nudges every fix) must not, or the 15 s
-          // schedule would never get a quiet moment.
+          // (follow-my-location nudges every fix) never do; see gesturePause
+          // for the iOS tap trap this guards against.
           onRegionWillChange={(e) => {
-            if (e.nativeEvent.userInteraction) setCameraMoving(true);
+            gesturePause.willChange(e.nativeEvent.userInteraction === true);
           }}
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
-            setCameraMoving(false);
+            gesturePause.didChange();
             // A settled camera is proof the native map is up: in some sessions
             // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
             // never fires, which left every mapLoaded-gated feature dead — the

@@ -67,7 +67,7 @@ beforeEach(() => {
   jest.mocked(useReducedMotion).mockReturnValue(false);
 });
 
-it('pops the first bubble one minute after the Map opens, with a fun fact', async () => {
+it('pops the first bubble two minutes after the Map opens, with a fun fact', async () => {
   const view = await mount();
   await at(BUBBLE_FIRST_DELAY_MS - 1_000);
   expect(screen.queryByTestId('tip-bubble')).toBeNull();

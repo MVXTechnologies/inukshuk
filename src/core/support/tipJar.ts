@@ -15,7 +15,7 @@
  *   for reduced motion or once the person has tipped, and paused while the
  *   person pans or zooms the map, while the Map tab is not in front and while
  *   the app is in the background;
- * - about once a minute the mug becomes a little character with a speech
+ * - about every two minutes the mug becomes a little character with a speech
  *   bubble and a fun fact — see {@link bubbleDue} for every guard.
  *
  * Pure: no React Native / Expo imports.
@@ -23,15 +23,21 @@
 
 export { TIP_JAR_REST_MS } from './verify';
 
-/** The mug's loop: one short scene every 7 s (owner, round 4; was 15 s). */
-export const MUG_LOOP_INTERVAL_MS = 7_000;
+/** The mug's loop: one short scene every 12 s (owner; was 7 s, and 15 s before that). */
+export const MUG_LOOP_INTERVAL_MS = 12_000;
 /** The same period for every variant (the four unused ones included). */
 export const TIP_JAR_WOBBLE_INTERVAL_MS = MUG_LOOP_INTERVAL_MS;
+/**
+ * After a pause (a pan, another tab, the background) that swallowed a loop
+ * tick, the scene plays again this soon after the map settles instead of
+ * waiting up to a whole loop.
+ */
+export const MUG_RESUME_DELAY_MS = 1_000;
 
-/** The mascot bubble: at most one a minute… */
-export const BUBBLE_INTERVAL_MS = 60_000;
-/** …and never in the first minute after the Map opens. */
-export const BUBBLE_FIRST_DELAY_MS = 60_000;
+/** The mascot bubble: at most one every two minutes (owner; was one a minute)… */
+export const BUBBLE_INTERVAL_MS = 120_000;
+/** …and never in the first two minutes after the Map opens. */
+export const BUBBLE_FIRST_DELAY_MS = 120_000;
 /** It folds away on its own after this long if nobody touches it. */
 export const BUBBLE_VISIBLE_MS = 8_000;
 /** The map must have been left alone this long since the person's last gesture. */
@@ -96,55 +102,96 @@ export const MASCOT_FACE_PHASES = {
 
 /**
  * Geometry of the coffee mug glyph (owner, round 4 fix), in dp inside the
- * 28 dp glyph box that the 48 dp button centres. The cup's BODY (not the
- * handle) sits on the button's vertical axis, and the smoke, the heart and
- * the mascot's eyes and smile all sit on that same axis. The handle hangs to
- * the right of it, the way a mug icon reads centred. The cup sits a little
- * low so the puffs and heart have room above the rim, inside the circle.
+ * glyph box that the 48 dp button centres. The cup's BODY (not the handle)
+ * sits on the button's vertical axis, and the smoke, the heart and the
+ * mascot's eyes and smile all sit on that same axis. The handle hangs to the
+ * right of it, the way a mug icon reads centred. The cup sits a little low so
+ * the puffs and heart have room above the rim, inside the circle.
+ *
+ * {@link MUG_SCALE}: the owner asked for a bigger cup (+20 %) in the same
+ * 48 dp button; every size scales with it, and the smoke and heart travel a
+ * little less so they still fit above the rim.
  */
-const GLYPH_BOX = 28;
-const CUP_WIDTH = 12;
+export const MUG_SCALE = 1.2;
+const S = MUG_SCALE;
+const GLYPH_BOX = 34;
 const AXIS = GLYPH_BOX / 2;
+const CUP_WIDTH = 12 * S;
+const CUP_TOP = 14.5;
+const CUP_BOTTOM = CUP_TOP + 9.5 * S;
+const PUFF = { width: 9 * S, height: 7 * S };
+const HEART = { width: 10 * S, height: 9 * S };
+const EYES_WIDTH = 6.2 * S;
 export const MUG_LAYOUT = {
   button: 48,
   box: GLYPH_BOX,
   /** The cup body's vertical axis: everything else is centred on it. */
   axis: AXIS,
-  cup: { left: AXIS - CUP_WIDTH / 2, right: AXIS + CUP_WIDTH / 2, top: 12.5, bottom: 22 },
+  cup: {
+    left: AXIS - CUP_WIDTH / 2,
+    right: AXIS + CUP_WIDTH / 2,
+    top: CUP_TOP,
+    bottom: CUP_BOTTOM,
+  },
   /** Bottom corner radius of the cup. */
-  cupRadius: 4.5,
+  cupRadius: 4.5 * S,
   /** The handle loop: from the cup's right wall out to `reach`. */
-  handle: { top: 14, bottom: 18.5, reach: AXIS + CUP_WIDTH / 2 + 3.5 },
-  stroke: 2,
+  handle: {
+    top: CUP_TOP + 1.5 * S,
+    bottom: CUP_TOP + 6 * S,
+    reach: AXIS + CUP_WIDTH / 2 + 3.5 * S,
+  },
+  stroke: 2 * S,
   /**
-   * Each puff is born on the axis and drifts `drift` dp out to one side as it
-   * rises (the first left, the second right), so the smoke stays centred on
-   * the cup even while only one puff is visible.
+   * Each puff is born on the axis, just over the rim, and rises `rise` dp
+   * while it drifts `drift` dp out to one side (the first left, the second
+   * right), so the smoke stays centred on the cup even while only one puff is
+   * visible.
    */
-  puff: { width: 9, height: 7, top: 4.5, left: AXIS - 4.5, drift: 2.5, wobble: 1.2 },
-  heart: { width: 10, height: 9, top: 3, left: AXIS - 5 },
+  puff: {
+    ...PUFF,
+    top: CUP_TOP - 1 - PUFF.height,
+    left: AXIS - PUFF.width / 2,
+    rise: 7.5,
+    drift: 2.5 * S,
+    wobble: 1.2 * S,
+  },
+  /** The heart rises out of the cup: its offset goes from `from` to `to` dp. */
+  heart: {
+    ...HEART,
+    top: CUP_TOP - 1 - HEART.height,
+    left: AXIS - HEART.width / 2,
+    from: 6,
+    to: -5,
+  },
   /** Two oval eyes on the cup body, and the smile under them. */
-  eyes: { width: 6.2, height: 3, top: 15, left: AXIS - 3.1 },
-  eye: { width: 1.9, height: 3 },
-  smileY: 19.4,
+  eyes: { width: EYES_WIDTH, height: 3 * S, top: CUP_TOP + 2.5 * S, left: AXIS - EYES_WIDTH / 2 },
+  eye: { width: 1.9 * S, height: 3 * S },
+  smileY: CUP_TOP + 6.9 * S,
 } as const;
+
+/** Two decimals, so the SVG paths stay short and free of float noise. */
+const n = (v: number) => Math.round(v * 100) / 100;
 
 /** The cup + handle path, and the mascot's happy arcs + smile, in glyph-box dp. */
 export function mugPaths(): { cup: string; face: string } {
-  const { cup, cupRadius: r, handle, eyes, eye, smileY, axis } = MUG_LAYOUT;
-  const w = cup.right - cup.left;
-  const loop = (handle.bottom - handle.top) / 2;
+  const { cup, handle, eyes, eye, smileY, axis } = MUG_LAYOUT;
+  const r = n(MUG_LAYOUT.cupRadius);
+  const w = n(cup.right - cup.left);
+  const loop = n((handle.bottom - handle.top) / 2);
   const cupPath =
-    `M${cup.left} ${cup.top}h${w}v${cup.bottom - cup.top - r}` +
-    `a${r} ${r} 0 01-${r} ${r}h-${w - 2 * r}a${r} ${r} 0 01-${r}-${r}z` +
-    `M${cup.right} ${handle.top}h${handle.reach - cup.right - loop}` +
-    `a${loop} ${loop} 0 010 ${2 * loop}H${cup.right}`;
+    `M${n(cup.left)} ${n(cup.top)}h${w}v${n(cup.bottom - cup.top - r)}` +
+    `a${r} ${r} 0 01-${r} ${r}h-${n(w - 2 * r)}a${r} ${r} 0 01-${r}-${r}z` +
+    `M${n(cup.right)} ${n(handle.top)}h${n(handle.reach - cup.right - loop)}` +
+    `a${loop} ${loop} 0 010 ${n(2 * loop)}H${n(cup.right)}`;
   // Happy arcs over each eye's centre, and a small smile under them.
-  const arcY = eyes.top + eyes.height - 0.4;
-  const lx = eyes.left + eye.width / 2 - 1;
-  const rx = eyes.left + eyes.width - eye.width / 2 - 1;
+  const arcY = n(eyes.top + eyes.height - 0.4 * S);
+  const arc = `q${n(S)}-${n(1.2 * S)} ${n(2 * S)} 0`;
+  const lx = n(eyes.left + eye.width / 2 - S);
+  const rx = n(eyes.left + eyes.width - eye.width / 2 - S);
   const face =
-    `M${lx} ${arcY}q1-1.2 2 0M${rx} ${arcY}q1-1.2 2 0` + `M${axis - 1.6} ${smileY}q1.6 1.3 3.2 0`;
+    `M${lx} ${arcY}${arc}M${rx} ${arcY}${arc}` +
+    `M${n(axis - 1.6 * S)} ${n(smileY)}q${n(1.6 * S)} ${n(1.3 * S)} ${n(3.2 * S)} 0`;
   return { cup: cupPath, face };
 }
 

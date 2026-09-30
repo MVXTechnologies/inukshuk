@@ -13,6 +13,7 @@ import {
   motionDurationMs,
   MUG_LAYOUT,
   MUG_LOOP_INTERVAL_MS,
+  MUG_SCALE,
   mugPaths,
   TIP_BUTTON_MOTION,
   TIP_BUTTON_VARIANTS,
@@ -24,11 +25,11 @@ import {
 } from './tipJar';
 
 describe('timings (named, owner-tunable)', () => {
-  it('loops the mug every 7 s and offers a bubble at most once a minute', () => {
-    expect(MUG_LOOP_INTERVAL_MS).toBe(7_000);
+  it('loops the mug every 12 s and offers a bubble at most every 2 min', () => {
+    expect(MUG_LOOP_INTERVAL_MS).toBe(12_000);
     expect(TIP_JAR_WOBBLE_INTERVAL_MS).toBe(MUG_LOOP_INTERVAL_MS);
-    expect(BUBBLE_INTERVAL_MS).toBe(60_000);
-    expect(BUBBLE_FIRST_DELAY_MS).toBe(60_000);
+    expect(BUBBLE_INTERVAL_MS).toBe(120_000);
+    expect(BUBBLE_FIRST_DELAY_MS).toBe(120_000);
     expect(BUBBLE_VISIBLE_MS).toBe(8_000);
     expect(BUBBLE_IDLE_MS).toBe(5_000);
     expect(BUBBLE_CHECK_MS).toBeLessThanOrEqual(BUBBLE_IDLE_MS);
@@ -63,28 +64,62 @@ describe('mug layout (centred composition)', () => {
     expect(L.eyes.left + L.eyes.width / 2).toBeCloseTo(L.axis, 5);
   });
 
+  it('draws the cup 20 % bigger than round 4, in the same 48 dp button', () => {
+    expect(MUG_SCALE).toBeCloseTo(1.2, 5);
+    expect(L.button).toBe(48);
+    expect(L.cup.right - L.cup.left).toBeCloseTo(12 * 1.2, 5);
+    expect(L.cup.bottom - L.cup.top).toBeCloseTo(9.5 * 1.2, 5);
+    expect(L.stroke).toBeCloseTo(2 * 1.2, 5);
+    // Smoke, heart and face scale with it.
+    expect(L.puff.width).toBeCloseTo(9 * 1.2, 5);
+    expect(L.heart.width).toBeCloseTo(10 * 1.2, 5);
+    expect(L.eyes.width).toBeCloseTo(6.2 * 1.2, 5);
+  });
+
+  it('keeps the whole mug, handle included, inside the circle', () => {
+    const off = (L.button - L.box) / 2;
+    const r = L.button / 2;
+    const half = L.stroke / 2;
+    const corners: [number, number][] = [
+      [L.cup.left - half, L.cup.top - half],
+      [L.handle.reach + half, L.handle.top - half],
+      [L.handle.reach + half, L.handle.bottom + half],
+      [L.cup.left - half, L.cup.bottom + half],
+      [L.cup.right + half, L.cup.bottom + half],
+    ];
+    for (const [x, y] of corners) {
+      expect(Math.hypot(off + x - r, off + y - r)).toBeLessThan(r - 2);
+    }
+  });
+
   it('keeps the smoke and heart above the rim and inside the circle', () => {
     const r = L.button / 2;
     const off = (L.button - L.box) / 2;
-    // Highest point of a puff: it rises 11 dp and swells to 1.3×.
-    const puffTop = off + L.puff.top - 11 - (L.puff.height * 0.3) / 2;
-    const heartTop = off + L.heart.top - 7;
+    // Highest point of a puff: it rises `rise` dp and swells to 1.3×.
+    const puffTop = off + L.puff.top - L.puff.rise - (L.puff.height * 0.3) / 2;
+    const heartTop = off + L.heart.top + L.heart.to;
     for (const top of [puffTop, heartTop]) {
-      // A point on the axis is inside the circle when it is below y = 0.
-      expect(top).toBeGreaterThan(0);
+      // Clear of the button's edge, above the rim.
+      expect(top).toBeGreaterThan(2);
       expect(top).toBeLessThan(off + L.cup.top);
     }
-    // The widest puff at its peak still sits inside the circle.
-    const halfW = (L.puff.width * 1.3) / 2 + L.puff.drift + L.puff.wobble;
-    const dy = r - puffTop;
-    expect(Math.hypot(halfW, dy)).toBeLessThan(r);
+    // The widest puff at its peak, and the heart at its peak, stay inside.
+    const puffHalfW = (L.puff.width * 1.3) / 2 + L.puff.drift + L.puff.wobble;
+    expect(Math.hypot(puffHalfW, r - puffTop)).toBeLessThan(r);
+    expect(Math.hypot(L.heart.width / 2, r - heartTop)).toBeLessThan(r);
+    // Each starts just over the rim, and the heart comes up out of the cup.
+    expect(L.puff.top + L.puff.height).toBeLessThanOrEqual(L.cup.top);
+    expect(L.heart.from).toBeGreaterThan(0);
   });
 
   it('draws the cup, handle and face from those numbers', () => {
     const { cup, face } = mugPaths();
-    expect(cup.startsWith(`M${L.cup.left} ${L.cup.top}`)).toBe(true);
-    expect(cup).toContain(`M${L.cup.right} ${L.handle.top}`);
-    expect(face).toContain(`M${L.axis - 1.6} ${L.smileY}`);
+    const n = (v: number) => Math.round(v * 100) / 100;
+    expect(cup.startsWith(`M${n(L.cup.left)} ${n(L.cup.top)}`)).toBe(true);
+    expect(cup).toContain(`M${n(L.cup.right)} ${n(L.handle.top)}`);
+    expect(face).toContain(`M${n(L.axis - 1.6 * MUG_SCALE)} ${n(L.smileY)}`);
+    // No float noise in the paths.
+    expect(`${cup}${face}`).not.toMatch(/\d\.\d{3,}/);
   });
 });
 
@@ -104,7 +139,7 @@ describe('tip button variants', () => {
     // The heart comes out once the first puff is gone, and ends the scene.
     expect(COFFEE_PHASES.heart[0]).toBeGreaterThanOrEqual(first?.[1] ?? 1);
     expect(COFFEE_PHASES.heart[1]).toBe(1);
-    // The scene fits well inside the 7 s loop, with a rest after it.
+    // The scene fits well inside the 12 s loop, with a rest after it.
     expect(COFFEE_CYCLE_MS).toBeLessThan(MUG_LOOP_INTERVAL_MS);
   });
 
@@ -170,7 +205,7 @@ describe('bubbleDue guards', () => {
     snoozed: false,
   };
 
-  it('offers the first bubble one minute after the Map opens, not sooner', () => {
+  it('offers the first bubble two minutes after the Map opens, not sooner', () => {
     expect(bubbleDue(ready)).toBe(true);
     expect(bubbleDue({ ...ready, now: T0 + BUBBLE_FIRST_DELAY_MS - 1 })).toBe(false);
   });
@@ -246,36 +281,36 @@ describe('bubble schedule over time (fake timers)', () => {
     return shown;
   }
 
-  it('shows the first bubble at 1 min, then one per minute', () => {
-    expect(run(4)).toEqual([60, 120, 180, 240]);
+  it('shows the first bubble at 2 min, then one every 2 min', () => {
+    expect(run(8)).toEqual([120, 240, 360, 480]);
   });
 
   it('never shows one during a recording, and resumes after', () => {
-    const shown = run(4, [
+    const shown = run(8, [
       { at: 30, do: () => ({ buttonVisible: false }) },
-      { at: 150, do: () => ({ buttonVisible: true }) },
+      { at: 300, do: () => ({ buttonVisible: true }) },
     ]);
-    expect(shown).toEqual([150, 210]);
+    expect(shown).toEqual([300, 420]);
   });
 
   it('holds off while the person moves the map, and for 5 s after', () => {
-    const shown = run(2, [
-      { at: 55, do: () => ({ gestureActive: true }) },
-      { at: 62, do: (s) => ({ gestureActive: false, lastGestureEndAt: s.now }) },
+    const shown = run(3, [
+      { at: 115, do: () => ({ gestureActive: true }) },
+      { at: 122, do: (s) => ({ gestureActive: false, lastGestureEndAt: s.now }) },
     ]);
-    expect(shown[0]).toBe(67);
+    expect(shown[0]).toBe(127);
   });
 
   it('stops for the rest of the session after (x)', () => {
-    const shown = run(5, [{ at: 61, do: () => ({ snoozed: true }) }]);
-    expect(shown).toEqual([60]);
+    const shown = run(10, [{ at: 121, do: () => ({ snoozed: true }) }]);
+    expect(shown).toEqual([120]);
   });
 
   it('waits while a sheet is open', () => {
-    const shown = run(2, [
-      { at: 50, do: () => ({ blocked: true }) },
-      { at: 90, do: () => ({ blocked: false }) },
+    const shown = run(3, [
+      { at: 100, do: () => ({ blocked: true }) },
+      { at: 150, do: () => ({ blocked: false }) },
     ]);
-    expect(shown[0]).toBe(90);
+    expect(shown[0]).toBe(150);
   });
 });

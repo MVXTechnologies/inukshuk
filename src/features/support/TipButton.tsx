@@ -7,6 +7,7 @@ import {
   MASCOT_FACE_MS,
   MASCOT_FACE_PHASES,
   MUG_LAYOUT,
+  MUG_RESUME_DELAY_MS,
   mugPaths,
   TIP_BUTTON_MOTION,
   TIP_JAR_WOBBLE_INTERVAL_MS,
@@ -47,11 +48,11 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
  * mug) lives in `@core/support/tipJar` with every timing, so choosing is a
  * one-line change.
  *
- * - The loop: one short scene every 7 s; none with the OS "reduce motion"
+ * - The loop: one short scene every 12 s; none with the OS "reduce motion"
  *   setting or after a tip; held (a tick is skipped, the schedule kept)
  *   while the person pans or zooms, while the Map tab is not in front and
  *   while the app is in the background.
- * - The mascot (round 4): about once a minute, when `bubbleDue` allows, the
+ * - The mascot (round 4): about every two minutes, when `bubbleDue` allows, the
  *   mug shows a face and the Map's `TipBubble` pops a fun fact. This
  *   component decides and animates the face; the bubble is drawn by the Map
  *   at its root (so it can be tapped on Android) from `tipMascotStore`.
@@ -68,6 +69,7 @@ export function TipButton({
   focused = true,
   onAnimate,
   intervalMs = TIP_JAR_WOBBLE_INTERVAL_MS,
+  resumeDelayMs = MUG_RESUME_DELAY_MS,
   bubbleCheckMs = BUBBLE_CHECK_MS,
   clock = Date.now,
 }: {
@@ -81,9 +83,10 @@ export function TipButton({
   paused?: boolean;
   /** The Map tab is in front. */
   focused?: boolean;
-  /** Test hooks: called at each loop scene; the loop and bubble-check periods; the clock. */
+  /** Test hooks: called at each loop scene; the loop, catch-up and bubble-check periods; the clock. */
   onAnimate?: () => void;
   intervalMs?: number;
+  resumeDelayMs?: number;
   bubbleCheckMs?: number;
   clock?: () => number;
 }) {
@@ -149,16 +152,25 @@ export function TipButton({
     progress.set(rest);
   }, [held, progress, rest]);
 
-  // The loop: one JS timer per scene (every 7 s); the scene itself runs on
-  // the UI thread. A tick that lands while held is simply skipped.
+  // The loop: one JS timer per scene (every 12 s); the scene itself runs on
+  // the UI thread. A tick that lands while held is skipped but remembered:
+  // once the hold ends, the scene plays after MUG_RESUME_DELAY_MS rather than
+  // waiting up to a whole loop — so after a pan it is back within ~1 s.
+  const missedTick = useRef(false);
+  const lastPlayAt = useRef(-Infinity);
+  const playRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     if (!animates) {
       cancelAnimation(progress);
       progress.set(rest);
+      playRef.current = () => undefined;
       return;
     }
-    const timer = setInterval(() => {
-      if (heldRef.current) return;
+    playRef.current = () => {
+      // Never two scenes on top of each other (a catch-up then the tick).
+      const now = clock();
+      if (now - lastPlayAt.current < intervalMs / 2) return;
+      lastPlayAt.current = now;
       const [first, ...others] = steps.map((step) =>
         withTiming(step.to, {
           duration: step.ms,
@@ -167,9 +179,27 @@ export function TipButton({
       );
       if (first !== undefined) progress.set(withSequence(first, ...others));
       onAnimateRef.current?.();
+    };
+    const timer = setInterval(() => {
+      if (heldRef.current) {
+        missedTick.current = true;
+        return;
+      }
+      playRef.current();
     }, intervalMs);
     return () => clearInterval(timer);
-  }, [animates, intervalMs, progress, rest, steps]);
+  }, [animates, intervalMs, progress, rest, steps, clock]);
+
+  // The catch-up after a hold that swallowed a tick.
+  useEffect(() => {
+    if (held || !missedTick.current) return;
+    const timer = setTimeout(() => {
+      if (heldRef.current) return;
+      missedTick.current = false;
+      playRef.current();
+    }, resumeDelayMs);
+    return () => clearTimeout(timer);
+  }, [held, resumeDelayMs]);
 
   // The mascot bubble: a cheap 1 s check against `bubbleDue`. Thanked people
   // (who have tipped before) are not nudged, so they get no bubble either.
@@ -397,7 +427,7 @@ function SmokePuff({
     return {
       opacity: 0.9 * interpolate(local, [0, 0.25, 0.7, 1], [0, 1, 0.7, 0], Extrapolation.CLAMP),
       transform: [
-        { translateY: 3 - local * 11 },
+        { translateY: 3 - local * (MUG_LAYOUT.puff.rise + 3) },
         {
           translateX:
             side *
@@ -427,7 +457,14 @@ function RisingHeart({ p, ink }: { p: SharedValue<number>; ink: string }) {
     return {
       opacity: interpolate(local, [0, 0.2, 0.75, 1], [0, 1, 1, 0], Extrapolation.CLAMP),
       transform: [
-        { translateY: interpolate(local, [0, 1], [5, -7], Extrapolation.CLAMP) },
+        {
+          translateY: interpolate(
+            local,
+            [0, 1],
+            [MUG_LAYOUT.heart.from, MUG_LAYOUT.heart.to],
+            Extrapolation.CLAMP,
+          ),
+        },
         { scale: interpolate(local, [0, 0.3], [0.5, 1], Extrapolation.CLAMP) },
       ],
     };

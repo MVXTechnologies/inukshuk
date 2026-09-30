@@ -152,6 +152,25 @@ it('long-press offers Hide, which turns the setting off', async () => {
   view.unmount();
 });
 
+it('plays again soon after a pan that swallowed a tick, not a whole loop later', async () => {
+  const onAnimate = jest.fn();
+  const LOOP = 300;
+  const as = (paused: boolean) => (
+    <PaperProvider>
+      <TipButton intervalMs={LOOP} resumeDelayMs={20} onAnimate={onAnimate} paused={paused} />
+    </PaperProvider>
+  );
+  const view = await render(as(true));
+  await wait(LOOP + 60); // a tick lands mid-pan: skipped
+  expect(onAnimate).not.toHaveBeenCalled();
+  await act(async () => {
+    await view.rerender(as(false)); // the map settles
+  });
+  await wait(90); // well before the next tick (at 2 × LOOP)
+  expect(onAnimate).toHaveBeenCalledTimes(1);
+  view.unmount();
+});
+
 it('keeps its schedule through short pauses (small pans cannot postpone it forever)', async () => {
   const onAnimate = jest.fn();
   const view = await mount({ onAnimate });
