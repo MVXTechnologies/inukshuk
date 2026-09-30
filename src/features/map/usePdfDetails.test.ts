@@ -880,3 +880,23 @@ describe("backoff for failures that are not the page's fault (#382)", () => {
     await view.unmount();
   });
 });
+
+it("renders tiles at the overview's see-through level and never shows them for another", async () => {
+  const keyed: PdfOverlay = { ...overview, imageUri: 'file://overview-full', whiteKey: 'full' };
+  const v = await renderHook(
+    ({ o }: { o: PdfOverlay }) => usePdfDetails([map], [o], bounds, 1200),
+    { initialProps: { o: keyed } },
+  );
+  await flush();
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 'full' });
+  expect(v.result.current).toHaveLength(1);
+
+  // The overview switches back to Off: the Full tile must not linger over it,
+  // and its replacement is rendered unkeyed.
+  await v.rerender({ o: { ...overview, whiteKey: 'off' } });
+  expect(v.result.current).toEqual([]);
+  await flush();
+  expect(mockRasterize.mock.calls.at(-1)?.[0]).toMatchObject({ whiteKey: 'off' });
+  expect(v.result.current).toHaveLength(1);
+  await v.unmount();
+});

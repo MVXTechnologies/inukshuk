@@ -286,6 +286,7 @@ export function MapScreen() {
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
   const showPdfOverlay = useSettingsStore((s) => s.showPdfOverlay);
+  const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const shownMaps = useMemo(
     () => pdfOverlayMaps(showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps),
     [showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps],
@@ -296,7 +297,7 @@ export function MapScreen() {
   );
   // `enabled` is passed as well as the (already empty) target list so a page
   // mid-render when the switch flips off is abandoned, not drawn late.
-  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay, pdfWhiteKey);
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.

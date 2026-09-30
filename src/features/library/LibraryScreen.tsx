@@ -1,5 +1,6 @@
 import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
+import { WHITE_KEY_LABEL, WHITE_KEY_LEVELS, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import { reportError } from '@lib/errorReporting';
@@ -139,6 +140,8 @@ export function LibraryScreen() {
   const addMaps = useLibraryStore((s) => s.addMaps);
   const removeMap = useLibraryStore((s) => s.removeMap);
   const renameMap = useLibraryStore((s) => s.renameMap);
+  const updateMap = useLibraryStore((s) => s.updateMap);
+  const globalWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const setActiveMap = useLibraryStore((s) => s.setActiveMap);
   const toggleMapPage = useLibraryStore((s) => s.toggleMapPage);
   const retryMapPage = useLibraryStore((s) => s.retryMapPage);
@@ -620,6 +623,47 @@ export function LibraryScreen() {
     />
   );
 
+  // This map's own "See-through white" level (#489): Default follows the
+  // Overlays menu's global level (named, so the choice is never a mystery);
+  // Off / Some / Full override it for this map only.
+  const seeThroughWhiteItems = (m: MapDocument) => {
+    const choices: { level: WhiteKeyLevel | undefined; title: string; name: string }[] = [
+      {
+        level: undefined,
+        title: `Default (${WHITE_KEY_LABEL[globalWhiteKey]})`,
+        name: 'Default',
+      },
+      ...WHITE_KEY_LEVELS.map((level) => ({
+        level,
+        title: WHITE_KEY_LABEL[level],
+        name: WHITE_KEY_LABEL[level],
+      })),
+    ];
+    return (
+      <>
+        <Divider />
+        <Menu.Item disabled title="See-through white" />
+        {choices.map(({ level, title, name }) => {
+          const on = m.whiteKey === level;
+          return (
+            <Menu.Item
+              key={name}
+              dense
+              leadingIcon={on ? 'radiobox-marked' : 'radiobox-blank'}
+              title={title}
+              accessibilityLabel={`See-through white: ${name}`}
+              accessibilityState={{ selected: on }}
+              onPress={() => {
+                setCardMenu(null);
+                updateMap(m.id, { whiteKey: level });
+              }}
+            />
+          );
+        })}
+      </>
+    );
+  };
+
   // A map's ⋮: rename, its page list, folders, delete. (The row itself opens
   // the map; the "On map" chip shows/hides it.)
   const mapMenu = (m: MapDocument, hasPages: boolean) => (
@@ -650,6 +694,7 @@ export function LibraryScreen() {
           }}
         />
       )}
+      {hasPages && seeThroughWhiteItems(m)}
       {moveToFolderItems('map', m.id, m.folderId)}
       <Divider />
       <Menu.Item

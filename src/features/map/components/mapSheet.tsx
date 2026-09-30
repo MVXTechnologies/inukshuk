@@ -235,7 +235,7 @@ export function LevelsRow<V extends string | number>({
   icon: string;
   label: string;
   hint?: string;
-  levels: readonly { value: V; label: string }[];
+  levels: readonly SegmentLevel<V>[];
   selected: V;
   onSelect: (value: V) => void;
   disabled?: boolean;
@@ -253,9 +253,21 @@ export function LevelsRow<V extends string | number>({
 }
 
 /**
+ * One segment: its value, its visible label, and — when that label alone
+ * would be ambiguous in the sheet (two rows both offering 'Off') — the
+ * accessible name to use instead.
+ */
+export interface SegmentLevel<V extends string | number> {
+  value: V;
+  label: string;
+  accessibilityLabel?: string;
+}
+
+/**
  * A segmented level picker: equal segments on a quiet track, the selection
  * filled with the accent. Each segment is its own accessible button named by
- * its level (the Maestro flows and tests key on 'Heavy', '50 m', 'Auto', …).
+ * its level (the Maestro flows and tests key on 'Heavy', '50 m', 'Auto', …),
+ * or by the level's own `accessibilityLabel` when it has one.
  */
 export function Segmented<V extends string | number>({
   levels,
@@ -263,7 +275,7 @@ export function Segmented<V extends string | number>({
   onSelect,
   disabled = false,
 }: {
-  levels: readonly { value: V; label: string }[];
+  levels: readonly SegmentLevel<V>[];
   selected: V;
   onSelect: (value: V) => void;
   disabled?: boolean;
@@ -287,7 +299,7 @@ export function Segmented<V extends string | number>({
             disabled={disabled}
             hitSlop={SEGMENT_SLOP}
             accessibilityRole="button"
-            accessibilityLabel={l.label}
+            accessibilityLabel={l.accessibilityLabel ?? l.label}
             accessibilityState={{ selected: on, disabled }}
             style={[styles.seg, on && { backgroundColor: accent }]}
           >

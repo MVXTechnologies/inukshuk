@@ -27,4 +27,15 @@ describe('raster identity', () => {
     expect(rasterFileName('m1', 2, 'r')).toBe(`m1_r_2_${OVERLAY_TARGET_WIDTH_PX}`);
     expect(rasterCacheKey('m1', 2, 'r')).toBe(`m1:r:2:${OVERLAY_TARGET_WIDTH_PX}`);
   });
+
+  it('keeps the plain name for Off and a distinct one per see-through level', () => {
+    expect(rasterFileName('m1', 2, 'r', 'off')).toBe(rasterFileName('m1', 2, 'r'));
+    expect(rasterCacheKey('m1', 2, 'r', 'off')).toBe(rasterCacheKey('m1', 2, 'r'));
+    const names = new Set(
+      (['off', 'some', 'full'] as const).map((level) => rasterFileName('m1', 2, 'r', level)),
+    );
+    expect(names.size).toBe(3);
+    expect(rasterFileName('m1', 2, 'r', 'full')).toBe(`m1_r_2_${OVERLAY_TARGET_WIDTH_PX}_wk-full`);
+    expect(rasterCacheKey('m1', 2, 'r', 'some')).toBe(`m1:r:2:${OVERLAY_TARGET_WIDTH_PX}_wk-some`);
+  });
 });

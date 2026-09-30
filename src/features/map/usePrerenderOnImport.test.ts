@@ -11,6 +11,7 @@ import type { GeoReference, MapDocument } from '@core/models';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import type { RasterizeArgs, RasterResult } from './PdfRasterizer';
@@ -135,6 +136,25 @@ describe('usePrerenderOnImport', () => {
       'picked:0': { phase: 'rendered' },
       'picked:1': { phase: 'rendered' },
     });
+    await view.unmount();
+  });
+
+  it('pre-renders at the see-through level the map will ask for', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 'some' });
+    const view = await renderHook(usePrerenderOnImport);
+    const plain = sheet('plain');
+    const own = { ...sheet('own'), whiteKey: 'full' as const };
+    await act(async () => {
+      useLibraryStore.getState().addMaps([plain, own]);
+    });
+    await settle();
+    expect(mockRasterize.mock.calls.map(([args]) => args.whiteKey)).toEqual(['some', 'full']);
+    const keyed = (map: MapDocument, level: 'some' | 'full') =>
+      `file://cache/${rasterFileName(map.id, 0, documentRevision(map), level)}.png`;
+    expect(mockFiles.has(keyed(plain, 'some'))).toBe(true);
+    expect(mockFiles.has(keyed(own, 'full'))).toBe(true);
+    expect(mockFiles.has(fileOf(plain, 0))).toBe(false);
+    useSettingsStore.getState().reset();
     await view.unmount();
   });
 

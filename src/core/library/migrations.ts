@@ -6,6 +6,7 @@ import type {
   TrackNote,
   Waypoint,
 } from '@core/models';
+import { isWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
@@ -24,7 +25,7 @@ import { isWaypointIcon } from './waypointIcons';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 10;
+export const LIBRARY_SCHEMA_VERSION = 11;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -258,6 +259,7 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     ...(typeof legacy.sourceUpdatedAt === 'string'
       ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
       : {}),
+    ...(isWhiteKeyLevel(legacy.whiteKey) ? { whiteKey: legacy.whiteKey } : {}),
   };
 }
 
@@ -317,6 +319,11 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // (nothing imported from a source before), so a pure version stamp; the
   // sanitize pass below validates the field wherever it IS present.
   9: (doc) => ({ ...doc, schemaVersion: 10 }),
+  // v10 → v11: maps gained the optional per-map "See-through white" override
+  // (`whiteKey`). Absent means "follow the global level" — what every pre-v11
+  // map did — so a pure version stamp; the sanitize pass validates the field
+  // wherever it IS present.
+  10: (doc) => ({ ...doc, schemaVersion: 11 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */

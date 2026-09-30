@@ -750,6 +750,28 @@ describe('malformed nested library records', () => {
     expect(index.tracks[0]?.origin).toEqual(origin);
   });
 
+  it('upgrades a v10 index: maps follow the global see-through white', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: 10,
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], activePages: [0] }],
+    });
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.maps[0]).not.toHaveProperty('whiteKey');
+  });
+
+  it("carries a map's see-through white override and drops junk", () => {
+    const withKey = (whiteKey: unknown) =>
+      migrateLibraryIndex({
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], whiteKey }],
+      }).maps[0];
+    expect(withKey('full')?.whiteKey).toBe('full');
+    expect(withKey('off')?.whiteKey).toBe('off');
+    for (const junk of ['half', '', 1, null, {}]) {
+      expect(withKey(junk)).not.toHaveProperty('whiteKey');
+    }
+  });
+
   it('drops a junk trail origin but keeps the trail (#432)', () => {
     for (const origin of [
       null,
