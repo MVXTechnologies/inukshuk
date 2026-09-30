@@ -159,7 +159,6 @@ function YearProgress({ costs }: { costs: CostsDocument }) {
       </Text>
       {funded.map((goal) => (
         <View key={goal.id} style={styles.fundedRow} testID={`goal-funded-${goal.id}`}>
-          <Icon source="check-circle" size={18} color={t.support.progress} />
           <Text style={[styles.fundedText, { color: t.inkMuted }]}>
             {goalFundedLabel(goal.label, costs.year)}
           </Text>
