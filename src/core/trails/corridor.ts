@@ -167,3 +167,14 @@ export function planCorridorDownload(
     tooBig: boxes.length === 0 || boxes.length > CORRIDOR_MAX_BOXES || bytes > CORRIDOR_MAX_BYTES,
   };
 }
+
+/**
+ * Downloads go stage by stage (owner call, #472). A trail without stages is
+ * offered as one download only when it is short — a long stage-less route is
+ * downloaded as an area from the map instead.
+ */
+export const WHOLE_TRAIL_MAX_KM = 60;
+
+export function canDownloadWholeTrail(lengthKm: number, plan: CorridorPlan): boolean {
+  return lengthKm <= WHOLE_TRAIL_MAX_KM && !plan.tooBig;
+}

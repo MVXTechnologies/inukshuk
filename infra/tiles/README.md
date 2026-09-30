@@ -162,9 +162,19 @@ raw = network (international 1.0 · national 0.75 · regional 0.5 · other 0.3)
 pop = raw / 1.70
 ```
 
-The app ranks "near you" as `0.55 · pop + 0.45 · 1 / (1 + km_away / 100)` over the trails within
-300 km (topped up with the nearest others to at least three; worldwide by popularity without a
-position) — `src/core/trails/rank.ts`.
+The app ranks "near you" as `(0.55 · pop + 0.45 · 1 / (1 + km_away / 100)) · activity` over the
+trails within 300 km (topped up with the nearest others to at least three; worldwide by
+`pop · activity` without a position) — `src/core/trails/rank.ts`.
+
+**Hiking first** (owner call, #472): `activity` is the best weight among the trail's activities —
+hiking 1.0, skiing 0.85, paddling 0.8, cycling 0.75. It multiplies the near-you score and
+"Most popular"; "Nearest first" sorts by `km_away / activity` (a cycle route 20 km away sorts like
+a hike 27 km away). Cycling, paddling and ski routes still appear, after comparable hikes.
+
+**Offline download, stage by stage** (#472): each stage's corridor (≈3 km each side, cut into
+≤ 20 km boxes, one MapLibre pack per box) downloads on its own from its row on the trail page or
+from the map's stage sheet. A trail without stages is one download only when it is ≤ 60 km;
+longer ones say to download an area from the map.
 
 **Outputs** (`work/trails/out/`), served by the Worker:
 

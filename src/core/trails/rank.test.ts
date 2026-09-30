@@ -1,4 +1,6 @@
 import {
+  ACTIVITY_WEIGHT,
+  activityWeight,
   groupTrails,
   matchesActivity,
   nearScore,
@@ -46,6 +48,29 @@ describe('near-you ranking', () => {
     const ranked = rankTrails(index.trails, null);
     expect(ranked.every((r) => r.distanceM === null)).toBe(true);
     expect(ids(trailsNearYou(ranked, { limit: 2 }))).toEqual(['r9454', 'r391736']);
+  });
+
+  it('puts hiking first among comparable trails', () => {
+    const hike = trailById(index, 'r8730405');
+    const ride = { ...hike, id: 'rBike', name: 'Bike twin', activities: ['cycling' as const] };
+    const both = { ...ride, id: 'rBoth', activities: ['cycling' as const, 'hiking' as const] };
+    expect(activityWeight(hike)).toBe(1);
+    expect(activityWeight(ride)).toBe(ACTIVITY_WEIGHT.cycling);
+    expect(activityWeight(both)).toBe(1);
+    expect(activityWeight({ activities: [] })).toBe(1);
+    const ranked = rankTrails([ride, hike], QUEBEC_CITY);
+    // Same popularity, same place: the hike leads the carousel and every sort.
+    expect(ids(trailsNearYou(ranked))).toEqual(['r8730405', 'rBike']);
+    expect(ids(sortRanked(ranked, 'nearest'))).toEqual(['r8730405', 'rBike']);
+    expect(ids(sortRanked(ranked, 'popular'))).toEqual(['r8730405', 'rBike']);
+    expect(ids(trailsNearYou(rankTrails([ride, hike], null)))).toEqual(['r8730405', 'rBike']);
+    // A cycle route much nearer still comes first when sorting by distance.
+    const nearRide = {
+      ...ride,
+      thumb: [],
+      bbox: [-71.21, 46.81, -71.2, 46.82] as typeof ride.bbox,
+    };
+    expect(ids(sortRanked(rankTrails([hike, nearRide], QUEBEC_CITY), 'nearest'))[0]).toBe('rBike');
   });
 
   it('filters by activity', () => {

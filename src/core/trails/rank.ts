@@ -20,6 +20,14 @@ import { trailThumb, type LongTrail, type TrailActivity, type TrailIndex } from 
  * the nearest others fill in, so the section is never a lonely single card.
  * Without any position the carousel is the most popular trails worldwide.
  *
+ * HIKING FIRST (owner call, #472): the score is then multiplied by the
+ * trail's ACTIVITY_WEIGHT — the best of its activities: hiking 1, skiing 0.85,
+ * paddling 0.8, cycling 0.75. Cycling, paddling and ski routes still appear,
+ * after comparable hiking trails; a far better one still wins. "Nearest
+ * first" compares the same way: a route's distance is divided by its weight
+ * (a cycle route 20 km away sorts like a hike 27 km away), and "Most
+ * popular" multiplies popularity by it.
+ *
  * Distances are to the index's thumbnail geometry (≈ 40 points), i.e. within
  * a kilometre or two of the true trail — enough for "45 km away" — with a
  * bbox lower bound skipping the far side of the world cheaply.
@@ -30,6 +38,18 @@ export const POPULARITY_WEIGHT = 0.55;
 export const NEAR_RADIUS_KM = 300;
 export const MIN_NEAR = 3;
 export const DEFAULT_NEAR_LIMIT = 10;
+
+export const ACTIVITY_WEIGHT: Record<TrailActivity, number> = {
+  hiking: 1,
+  skiing: 0.85,
+  paddling: 0.8,
+  cycling: 0.75,
+};
+
+/** The best weight among the trail's activities (1 for a hiking + cycling trail). */
+export function activityWeight(trail: Pick<LongTrail, 'activities'>): number {
+  return trail.activities.reduce((w, a) => Math.max(w, ACTIVITY_WEIGHT[a]), 0) || 1;
+}
 
 export interface RankedTrail {
   trail: LongTrail;
@@ -54,16 +74,20 @@ export function nearScore(popularity: number, distanceM: number): number {
 /** Every trail with its distance and near-you score (unsorted). */
 export function rankTrails(trails: readonly LongTrail[], origin: LngLat | null): RankedTrail[] {
   return trails.map((trail) => {
-    if (origin === null) return { trail, distanceM: null, score: trail.popularity };
+    const w = activityWeight(trail);
+    if (origin === null) return { trail, distanceM: null, score: trail.popularity * w };
     const distanceM = trailDistanceM(trail, origin);
-    return { trail, distanceM, score: nearScore(trail.popularity, distanceM) };
+    return { trail, distanceM, score: nearScore(trail.popularity, distanceM) * w };
   });
 }
 
 const byScore = (a: RankedTrail, b: RankedTrail) =>
   b.score - a.score || a.trail.name.localeCompare(b.trail.name);
+/** Distance as sorted: divided by the activity weight (hiking first). */
+const sortDistance = (r: RankedTrail) =>
+  r.distanceM === null ? Infinity : r.distanceM / activityWeight(r.trail);
 const byDistance = (a: RankedTrail, b: RankedTrail) =>
-  (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity) || byScore(a, b);
+  sortDistance(a) - sortDistance(b) || byScore(a, b);
 
 /** The carousel: best-scored trails within reach, topped up with the nearest others. */
 export function trailsNearYou(
@@ -101,7 +125,11 @@ export function sortRanked(ranked: readonly RankedTrail[], sort: TrailSort): Ran
     case 'nearest':
       return out.sort(byDistance);
     case 'popular':
-      return out.sort((a, b) => b.trail.popularity - a.trail.popularity || byDistance(a, b));
+      return out.sort(
+        (a, b) =>
+          b.trail.popularity * activityWeight(b.trail) -
+            a.trail.popularity * activityWeight(a.trail) || byDistance(a, b),
+      );
     case 'longest':
       return out.sort((a, b) => b.trail.lengthKm - a.trail.lengthKm || byDistance(a, b));
     case 'name':

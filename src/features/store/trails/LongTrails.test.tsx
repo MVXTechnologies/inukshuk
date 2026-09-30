@@ -55,9 +55,13 @@ jest.mock('./useTrailClimb', () => ({
 }));
 jest.mock('./trailDownload', () => ({
   downloadTrail: jest.fn(async () => null),
-  planTrailDownload: () => ({ boxes: [{}, {}], tiles: 3000, bytes: 36_000_000, tooBig: false }),
+  planTrailDownload: () => ({ boxes: [{}, {}], tiles: 3000, bytes: 3_000_000, tooBig: false }),
+  // The real rule: stages always; a stage-less trail only when ≤ 60 km.
+  downloadable: (d: { stages: unknown[]; lengthKm: number }, stage: number | null) =>
+    stage !== null || (d.stages.length === 0 && d.lengthKm <= 60),
   refusalMessage: () => 'refused',
   trailPacks: () => [],
+  trailDownloadKey: (id: string, stage: number | null) => `${id}-${stage ?? 'all'}`,
 }));
 
 // The Caps de Charlevoix and Route Verte are near; the Long Trail and TMB far.
@@ -167,9 +171,9 @@ describe('Trail page', () => {
     expect(view.getByLabelText('Length: ≈43 km')).toBeTruthy();
     expect(view.getByLabelText('Stages: 4')).toBeTruthy();
     expect(view.getByLabelText('Climb: ≈1 850 m')).toBeTruthy();
-    expect(view.getByText(/≈3 km each side\) · /)).toBeTruthy();
+    expect(view.getByText(/Download a stage below/)).toBeTruthy();
     expect(view.getByText('Étape 2')).toBeTruthy();
-    expect(view.getByText('≈11 km · ≈510 m climb')).toBeTruthy();
+    expect(view.getByText('≈11 km · ≈510 m climb · 3 MB')).toBeTruthy();
     expect(view.getByText('1 NRCan sheet · 1:50 000')).toBeTruthy();
     expect(view.getByText(/Route from OpenStreetMap/)).toBeTruthy();
     expect(view.getByText('sentierdescaps.com')).toBeTruthy();
@@ -189,6 +193,8 @@ describe('Trail page', () => {
     expect(useMapStore.getState().focusBounds).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
     expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.754, 3);
+    // Framed clear of the name pill, the controls rail and the stage sheet.
+    expect(useMapStore.getState().focusPadding?.right).toBeGreaterThanOrEqual(80);
   });
 
   it('opens a stage on the map', async () => {
@@ -200,15 +206,49 @@ describe('Trail page', () => {
     expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.68, 3);
   });
 
-  it('downloads the corridor', async () => {
+  it('downloads stage by stage, with no whole-trail download', async () => {
+    const view = await mountWithProviders(<LongTrailScreen id="r8730405" />);
+    await settle();
+    expect(view.queryByLabelText('Download')).toBeNull();
+    expect(view.getByText(/Download a stage below/)).toBeTruthy();
+    expect(view.getByText('≈11 km · ≈510 m climb · 3 MB')).toBeTruthy();
+    await act(async () => {
+      await fireEvent.press(view.getByLabelText('Download stage 2, Étape 2, 3 MB'));
+    });
+    await settle();
+    expect(downloadTrail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'r8730405' }),
+      1,
+      expect.anything(),
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(view.getByText('Offline map ready — it works without signal')).toBeTruthy();
+  });
+
+  it('offers one download for a short trail without stages, a note for a long one', async () => {
+    (loadTrailDetail as jest.Mock).mockResolvedValue(sampleDetail(false));
     const view = await mountWithProviders(<LongTrailScreen id="r8730405" />);
     await settle();
     await act(async () => {
       await fireEvent.press(view.getByLabelText('Download'));
     });
     await settle();
-    expect(downloadTrail).toHaveBeenCalled();
-    expect(view.getByText('Offline map ready — it works without signal')).toBeTruthy();
+    expect(downloadTrail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'r8730405' }),
+      null,
+      expect.anything(),
+      expect.any(Function),
+      expect.any(Function),
+    );
+    await view.unmount();
+
+    (loadTrailDetail as jest.Mock).mockResolvedValue({ ...sampleDetail(false), lengthKm: 400 });
+    resetLongTrailsStore();
+    const long = await mountWithProviders(<LongTrailScreen id="r8730405" />);
+    await settle();
+    expect(long.queryByLabelText('Download')).toBeNull();
+    expect(long.getByText(/download an area from the map instead/)).toBeTruthy();
   });
 
   it('hides the stages section for a stage-less trail', async () => {

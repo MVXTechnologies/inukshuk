@@ -2,6 +2,8 @@ import type { LngLat } from '@core/models';
 
 import {
   bufferBox,
+  canDownloadWholeTrail,
+  WHOLE_TRAIL_MAX_KM,
   CORRIDOR_MAX_BOXES,
   corridorBoxes,
   corridorTileCount,
@@ -66,5 +68,14 @@ describe('trail corridor', () => {
     expect(big.boxes.length).toBeGreaterThan(CORRIDOR_MAX_BOXES);
     expect(big.tooBig).toBe(true);
     expect(planCorridorDownload([], 'raster').tooBig).toBe(true);
+  });
+});
+
+describe('whole-trail download', () => {
+  it('is offered only for short stage-less trails within budget', () => {
+    const plan = planCorridorDownload([CAPS_LINE], 'vector');
+    expect(canDownloadWholeTrail(43, plan)).toBe(true);
+    expect(canDownloadWholeTrail(WHOLE_TRAIL_MAX_KM + 1, plan)).toBe(false);
+    expect(canDownloadWholeTrail(10, { ...plan, tooBig: true })).toBe(false);
   });
 });

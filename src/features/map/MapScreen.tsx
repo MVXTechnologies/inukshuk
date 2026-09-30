@@ -2550,6 +2550,7 @@ export function MapScreen() {
           position={location ? [location.longitude, location.latitude] : null}
           units={units}
           onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
+          onMessage={showSnack}
         />
       )}
 

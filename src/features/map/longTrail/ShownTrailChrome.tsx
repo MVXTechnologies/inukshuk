@@ -4,6 +4,7 @@ import { formatClimb, formatDistanceFrom, formatTrailLength } from '@core/trails
 import { distanceToLineM, toBoundingBox } from '@core/trails/geometry';
 import { focusBbox, focusGeometry, stageTitle, stepStage } from '@core/trails/stages';
 import { useTrailClimb } from '@features/store/trails/useTrailClimb';
+import { TrailDownloadButton, useTrailDownload } from '@features/store/trails/useTrailDownload';
 import { exploreTrailHref } from '@features/store/explore/exploreRoutes';
 import { useLongTrailsStore, type ShownTrail } from '@state/longTrailsStore';
 import { useMapStore } from '@state/mapStore';
@@ -13,11 +14,14 @@ import { useRouter } from 'expo-router';
 import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
+import { TRAIL_FOCUS_PADDING } from './trailFocus';
+
 /**
  * The chrome of a long-distance trail shown on the main map (#467, board
  * `OnMap.dc.html`): a top pill with the trail's name and a close, and a
  * bottom sheet with the selected stage (number, name, length, climb, how far
- * you are from it), stage stepping, **Zoom to stage** and **Trail page**.
+ * you are from it), stage stepping, **Zoom to stage**, **Trail page** and
+ * the stage's own offline download (#472).
  *
  * There is no route-following mode in the app yet, so the board's "Follow
  * this stage" frames the stage instead — and says so.
@@ -61,11 +65,14 @@ export function ShownTrailSheet({
   position,
   units,
   onLayout,
+  onMessage,
 }: {
   shown: ShownTrail;
   position: LngLat | null;
   units: Units;
   onLayout?: (e: LayoutChangeEvent) => void;
+  /** Download outcomes (the map's snackbar). */
+  onMessage: (message: string) => void;
 }) {
   const t = useSchemeTokens();
   const router = useRouter();
@@ -74,6 +81,8 @@ export function ShownTrailSheet({
   const { detail, stageIndex } = shown;
   const climb = useTrailClimb(detail);
   const stage = stageIndex === null ? undefined : detail.stages[stageIndex];
+  // The selected stage, or a stage-less trail as a whole (when short enough).
+  const download = useTrailDownload(detail, stage !== undefined ? stageIndex : null, onMessage);
 
   const title =
     stage !== undefined && stageIndex !== null
@@ -94,7 +103,8 @@ export function ShownTrailSheet({
     .filter((p): p is string => p !== null)
     .join(' · ');
 
-  const focus = (index: number | null) => setFocusBounds(toBoundingBox(focusBbox(detail, index)));
+  const focus = (index: number | null) =>
+    setFocusBounds(toBoundingBox(focusBbox(detail, index)), TRAIL_FOCUS_PADDING);
   const step = (delta: number) => {
     const next = stepStage(detail, stageIndex, delta);
     if (next === null || next === stageIndex) return;
@@ -173,6 +183,12 @@ export function ShownTrailSheet({
         >
           <Text style={[styles.secondaryText, { color: t.explore.accent }]}>Trail page</Text>
         </Pressable>
+        {download.allowed && (
+          <TrailDownloadButton
+            download={download}
+            label={stage !== undefined ? `stage ${(stageIndex ?? 0) + 1}` : detail.name}
+          />
+        )}
       </View>
     </View>
   );

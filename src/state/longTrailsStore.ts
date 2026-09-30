@@ -26,6 +26,9 @@ interface LongTrailsState {
   /** Detail ids being fetched, or that failed (value false). */
   detailStatus: Record<string, 'loading' | 'failed'>;
   shown: ShownTrail | null;
+  /** The trail/stage download in progress (`trailDownloadKey`) and its 0…1 progress. */
+  download: { key: string; fraction: number } | null;
+  setDownload: (download: { key: string; fraction: number } | null) => void;
   load: (force?: boolean) => Promise<void>;
   loadDetail: (id: string) => Promise<TrailDetail | null>;
   show: (detail: TrailDetail, stageIndex: number | null) => void;
@@ -42,6 +45,8 @@ export const useLongTrailsStore = create<LongTrailsState>((set, get) => ({
   details: {},
   detailStatus: {},
   shown: null,
+  download: null,
+  setDownload: (download) => set({ download }),
 
   load: (force = false) => {
     if (indexRequest !== null) return indexRequest;
@@ -98,5 +103,6 @@ export function resetLongTrailsStore(): void {
     details: {},
     detailStatus: {},
     shown: null,
+    download: null,
   });
 }

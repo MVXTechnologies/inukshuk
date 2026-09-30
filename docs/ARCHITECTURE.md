@@ -185,7 +185,7 @@ The logic is `src/core/trails`: parsing, the near-you ranking (popularity ×
 proximity — formula in `rank.ts`, popularity in the build script), grouping by
 country/continent, stage selection, the topo sheets a trail crosses
 (`catalogAlong`), the climb from our DEM tiles (`climb`, computed on the trail
-page — never estimated), and the **corridor download**: the trail cut into
+page — never estimated), and the **corridor download**, stage by stage (#472): the stage cut into
 ≤ 20 km chunks, each chunk's box grown by 3 km, one MapLibre pack per box
 through the region downloader (`offlineStore.downloadSeries`). "Show on map"
 puts the trail on the main map (`features/map/longTrail`: halo + orange line,

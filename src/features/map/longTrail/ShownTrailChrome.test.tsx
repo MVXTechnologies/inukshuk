@@ -16,6 +16,19 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: jest.fn(), push: mockPush, back: jest.fn(), replace: jest.fn() }),
 }));
+jest.mock('@state/offlineStore', () => ({
+  useOfflineStore: (select: (s: { regions: unknown[]; progress: null }) => unknown) =>
+    select({ regions: [], progress: null }),
+}));
+jest.mock('@features/store/trails/trailDownload', () => ({
+  downloadTrail: jest.fn(async () => null),
+  planTrailDownload: () => ({ boxes: [{}], tiles: 100, bytes: 2_000_000, tooBig: false }),
+  downloadable: () => true,
+  refusalMessage: () => 'refused',
+  trailPacks: () => [],
+  trailDownloadKey: (id: string, stage: number | null) => `${id}-${stage ?? 'all'}`,
+}));
+const mockMessage = jest.fn();
 jest.mock('@features/store/trails/useTrailClimb', () => ({
   useTrailClimb: () => ({ status: 'done', totalM: 1847, stagesM: [420, 510, null, 380] }),
 }));
@@ -33,7 +46,7 @@ async function sheet(stageIndex: number | null, position: [number, number] | nul
   const shown = useLongTrailsStore.getState().shown!;
   return render(
     <PaperProvider>
-      <ShownTrailSheet shown={shown} position={position} units="metric" />
+      <ShownTrailSheet shown={shown} position={position} units="metric" onMessage={mockMessage} />
     </PaperProvider>,
   );
 }
@@ -62,6 +75,19 @@ it('steps between stages and frames them', async () => {
   expect(useLongTrailsStore.getState().shown?.stageIndex).toBe(1);
   expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.72, 3);
   await fireEvent.press(view.getByText('Zoom to stage'));
+  expect(useMapStore.getState().focusPadding?.right).toBeGreaterThanOrEqual(80);
+  // The shown stage downloads from the sheet.
+  await fireEvent.press(view.getByLabelText('Download stage 1, 2 MB'));
+  await Promise.resolve();
+  expect(
+    jest.requireMock('@features/store/trails/trailDownload').downloadTrail,
+  ).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'r8730405' }),
+    0, // the stage this sheet was rendered for
+    expect.anything(),
+    expect.any(Function),
+    expect.any(Function),
+  );
   await fireEvent.press(view.getByText('Trail page'));
   expect(mockPush).toHaveBeenCalledWith('/explore/trail/r8730405');
 });
@@ -74,6 +100,7 @@ it('works for a trail without stages', async () => {
         shown={useLongTrailsStore.getState().shown!}
         position={[-70.66, 47.22]}
         units="metric"
+        onMessage={mockMessage}
       />
     </PaperProvider>,
   );

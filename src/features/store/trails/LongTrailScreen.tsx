@@ -1,7 +1,7 @@
+import type { Units } from '@core/format';
 import { sourceAbbreviation } from '@core/catalog/exploreFormat';
 import { indexInstallStatus } from '@core/catalog/installStatus';
 import { catalogItemDistanceMeters } from '@core/catalog/nearest';
-import { formatByteSize } from '@core/storage/diskBudget';
 import { groupBySource, topoGroupTitle, topoMapsAlong } from '@core/trails/catalogAlong';
 import {
   activitiesLabel,
@@ -18,7 +18,6 @@ import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
 import { useMapStore } from '@state/mapStore';
-import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { radius, space, target } from '@ui/tokens';
@@ -33,8 +32,10 @@ import { CatalogItemRow } from '../CatalogItemRow';
 import { ExploreStat } from '../explore/ExploreParts';
 import { exploreItemHref } from '../explore/exploreRoutes';
 import { useCatalogDownloadFlow } from '../explore/useCatalogDownloadFlow';
+import { TRAIL_FOCUS_PADDING } from '@features/map/longTrail/trailFocus';
+
 import { TrailRouteMap } from './TrailRouteMap';
-import { downloadTrail, planTrailDownload, refusalMessage, trailPacks } from './trailDownload';
+import { TrailDownloadButton, useTrailDownload } from './useTrailDownload';
 import { useTrailOrigin } from './useLongTrails';
 import { useTrailClimb } from './useTrailClimb';
 
@@ -104,10 +105,6 @@ export function LongTrailScreen({ id }: { id: string }) {
   }, [index, detail, detailStatus, id, loadDetail]);
 
   const climb = useTrailClimb(detail ?? null);
-  const plan = useMemo(() => (detail ? planTrailDownload(detail) : null), [detail]);
-  const regions = useOfflineStore((s) => s.regions);
-  const packs = useMemo(() => trailPacks(regions, id), [regions, id]);
-  const [downloading, setDownloading] = useState<number | null>(null);
 
   // Topo sheets along the trail: pull the catalog shards the trail reaches.
   const catalogStatus = useCatalogStore((s) => s.status);
@@ -150,21 +147,7 @@ export function LongTrailScreen({ id }: { id: string }) {
     setFollowUser(false);
     router.navigate('/');
     const bounds = toBoundingBox(focusBbox(d, focusStage ? stageIndex : null));
-    setTimeout(() => setFocusBounds(bounds), FOCUS_DELAY_MS);
-  };
-
-  const startDownload = () => {
-    if (detail === undefined || plan === null) return;
-    setDownloading(0);
-    void downloadTrail(detail, plan, setDownloading, (warning) => {
-      if (warning !== null) snack.show(warning);
-    })
-      .then((refusal) => {
-        if (refusal !== null) snack.show(refusalMessage(refusal));
-        else snack.show('Offline map ready — it works without signal');
-      })
-      .catch((err: unknown) => snack.show(err instanceof Error ? err.message : String(err)))
-      .finally(() => setDownloading(null));
+    setTimeout(() => setFocusBounds(bounds, TRAIL_FOCUS_PADDING), FOCUS_DELAY_MS);
   };
 
   const name = detail?.name ?? trail?.name;
@@ -196,19 +179,6 @@ export function LongTrailScreen({ id }: { id: string }) {
         ? { label: 'Climb', value: '…' }
         : null,
   ].filter((s): s is { label: string; value: string } => s !== null);
-
-  const downloaded = packs.length > 0 && packs.every((p) => p.complete);
-  const packBytes = packs.reduce((sum, p) => sum + p.sizeBytes, 0);
-  const downloadNote =
-    downloading !== null
-      ? `Downloading the offline map… ${Math.round(downloading * 100)} %`
-      : downloaded
-        ? `Offline map downloaded · ${formatByteSize(packBytes)} · manage it in Settings`
-        : plan === null
-          ? 'Offline map along the whole trail (≈3 km each side)'
-          : plan.tooBig
-            ? 'Too long to download in one go — download an area from the map instead'
-            : `Offline map along the whole trail (≈3 km each side) · ${formatByteSize(plan.bytes)}`;
 
   const rows: { label: string; value: string; url?: string }[] = [
     ...(detail !== undefined || trail !== undefined
@@ -289,72 +259,31 @@ export function LongTrailScreen({ id }: { id: string }) {
             <Icon source="map-outline" size={20} color={t.background} />
             <Text style={[styles.primaryText, { color: t.background }]}>Show on map</Text>
           </Pressable>
-          <Pressable
-            onPress={startDownload}
-            disabled={
-              detail === undefined || downloading !== null || downloaded || plan?.tooBig === true
-            }
-            accessibilityRole="button"
-            accessibilityLabel={downloaded ? 'Offline map downloaded' : 'Download'}
-            accessibilityState={{
-              disabled: detail === undefined || downloading !== null || downloaded,
-            }}
-            style={({ pressed }) => [
-              styles.secondary,
-              { borderColor: t.explore.accent },
-              (pressed || detail === undefined || plan?.tooBig === true) && styles.pressed,
-            ]}
-          >
-            <Icon source={downloaded ? 'check' : 'download'} size={20} color={t.explore.accent} />
-            <Text style={[styles.secondaryText, { color: t.explore.accent }]}>
-              {downloaded ? 'Downloaded' : downloading !== null ? 'Downloading…' : 'Download'}
-            </Text>
-          </Pressable>
         </View>
-        {downloading !== null && (
-          <ProgressBar progress={downloading} color={t.explore.accent} style={styles.progress} />
+        {detail !== undefined && detail.stages.length === 0 ? (
+          <WholeTrailDownload detail={detail} onMessage={snack.show} />
+        ) : (
+          <Text style={[styles.note, { color: t.inkMuted }]}>
+            Download a stage below for offline use — its map ≈3 km each side.
+          </Text>
         )}
-        <Text style={[styles.note, { color: t.inkMuted }]}>{downloadNote}</Text>
 
         {detail !== undefined && detail.stages.length > 0 && (
           <>
             <Text accessibilityRole="header" style={[styles.h2, { color: t.ink }]}>
               Stages
             </Text>
-            {detail.stages.map((stage, i) => {
-              const climbText = climbStage(i);
-              const meta = [
-                stage.lengthKm > 0 ? formatTrailLength(stage.lengthKm, units) : null,
-                climbText !== null ? `${climbText} climb` : null,
-              ]
-                .filter((p): p is string => p !== null)
-                .join(' · ');
-              return (
-                <Pressable
-                  key={stage.id}
-                  onPress={() => showOnMap(detail, i, true)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Stage ${i + 1}, ${stageDisplayName(stage, detail.name)}${meta !== '' ? `, ${meta}` : ''}`}
-                  accessibilityHint="Shows this stage on the map"
-                  style={({ pressed }) => [styles.stage, pressed && styles.pressed]}
-                >
-                  <View style={[styles.stageBadge, { backgroundColor: t.explore.trailBadge }]}>
-                    <Text style={[styles.stageBadgeText, { color: t.explore.trailBadgeInk }]}>
-                      {i + 1}
-                    </Text>
-                  </View>
-                  <View style={styles.stageText}>
-                    <Text numberOfLines={2} style={[styles.stageName, { color: t.ink }]}>
-                      {stageDisplayName(stage, detail.name)}
-                    </Text>
-                    {meta !== '' && (
-                      <Text style={[styles.stageMeta, { color: t.inkMuted }]}>{meta}</Text>
-                    )}
-                  </View>
-                  <Icon source="chevron-right" size={20} color={t.inkMuted} />
-                </Pressable>
-              );
-            })}
+            {detail.stages.map((stage, i) => (
+              <StageRow
+                key={stage.id}
+                detail={detail}
+                index={i}
+                climb={climbStage(i)}
+                units={units}
+                onShow={() => showOnMap(detail, i, true)}
+                onMessage={snack.show}
+              />
+            ))}
           </>
         )}
 
@@ -468,6 +397,124 @@ export function LongTrailScreen({ id }: { id: string }) {
   );
 }
 
+/** One stage: number, name, length · climb · size, its download, and a tap shows it on the map. */
+function StageRow({
+  detail,
+  index,
+  climb,
+  units,
+  onShow,
+  onMessage,
+}: {
+  detail: TrailDetail;
+  index: number;
+  climb: string | null;
+  units: Units;
+  onShow: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const t = useSchemeTokens();
+  const stage = detail.stages[index];
+  const download = useTrailDownload(detail, index, onMessage);
+  if (stage === undefined) return null;
+  const name = stageDisplayName(stage, detail.name);
+  const meta = [
+    stage.lengthKm > 0 ? formatTrailLength(stage.lengthKm, units) : null,
+    climb !== null ? `${climb} climb` : null,
+    download.status === 'done'
+      ? `${download.sizeLabel} offline`
+      : download.allowed
+        ? download.sizeLabel
+        : null,
+  ]
+    .filter((p): p is string => p !== null)
+    .join(' · ');
+  return (
+    <View style={styles.stage}>
+      <Pressable
+        onPress={onShow}
+        accessibilityRole="button"
+        accessibilityLabel={`Stage ${index + 1}, ${name}${meta !== '' ? `, ${meta}` : ''}`}
+        accessibilityHint="Shows this stage on the map"
+        style={({ pressed }) => [styles.stageMain, pressed && styles.pressed]}
+      >
+        <View style={[styles.stageBadge, { backgroundColor: t.explore.trailBadge }]}>
+          <Text style={[styles.stageBadgeText, { color: t.explore.trailBadgeInk }]}>
+            {index + 1}
+          </Text>
+        </View>
+        <View style={styles.stageText}>
+          <Text numberOfLines={2} style={[styles.stageName, { color: t.ink }]}>
+            {name}
+          </Text>
+          {meta !== '' && <Text style={[styles.stageMeta, { color: t.inkMuted }]}>{meta}</Text>}
+        </View>
+      </Pressable>
+      {download.allowed && (
+        <TrailDownloadButton download={download} label={`stage ${index + 1}, ${name}`} />
+      )}
+    </View>
+  );
+}
+
+/** A trail without stages: one download when it is short, else a note. */
+function WholeTrailDownload({
+  detail,
+  onMessage,
+}: {
+  detail: TrailDetail;
+  onMessage: (message: string) => void;
+}) {
+  const t = useSchemeTokens();
+  const download = useTrailDownload(detail, null, onMessage);
+  if (!download.allowed) {
+    return (
+      <Text style={[styles.note, { color: t.inkMuted }]}>
+        Too long to download in one go — download an area from the map instead.
+      </Text>
+    );
+  }
+  const busy = download.status === 'downloading';
+  return (
+    <>
+      <Pressable
+        onPress={download.start}
+        disabled={download.status !== 'idle'}
+        accessibilityRole="button"
+        accessibilityLabel={download.status === 'done' ? 'Offline map downloaded' : 'Download'}
+        accessibilityState={{ disabled: download.status !== 'idle' }}
+        style={({ pressed }) => [
+          styles.secondary,
+          styles.wholeDownload,
+          { borderColor: t.explore.accent },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Icon
+          source={download.status === 'done' ? 'check' : 'download'}
+          size={20}
+          color={t.explore.accent}
+        />
+        <Text style={[styles.secondaryText, { color: t.explore.accent }]}>
+          {download.status === 'done' ? 'Downloaded' : busy ? 'Downloading…' : 'Download'}
+        </Text>
+      </Pressable>
+      {busy && (
+        <ProgressBar
+          progress={download.fraction}
+          color={t.explore.accent}
+          style={styles.progress}
+        />
+      )}
+      <Text style={[styles.note, { color: t.inkMuted }]}>
+        {download.status === 'done'
+          ? `Offline map downloaded · ${download.sizeLabel} · manage it in Settings`
+          : `Offline map along the trail (≈3 km each side) · ${download.sizeLabel}`}
+      </Text>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
@@ -523,10 +570,18 @@ const styles = StyleSheet.create({
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: space.sm,
+    paddingRight: space.lg,
+  },
+  stageMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: space.md,
     paddingVertical: 10,
-    paddingHorizontal: space.lg,
+    paddingLeft: space.lg,
   },
+  wholeDownload: { flex: 0, marginTop: space.sm, marginHorizontal: space.lg },
   stageBadge: {
     width: 30,
     height: 30,
