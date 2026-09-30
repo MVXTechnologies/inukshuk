@@ -21,7 +21,7 @@ import {
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
-import { useSettingsStore } from '@state/settingsStore';
+import type { Settings } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -121,6 +121,18 @@ async function buildGroupFor(
 }
 
 /**
+ * The focused view's mode: always the 2D MapLibre map since #480 (owner:
+ * "Remove the 3D button from the focused view. Just allow the 2-finger 3D
+ * mode movements like on the main map"). The three.js terrain branch below
+ * is kept but UNREACHABLE — nothing else routes into it, and the persisted
+ * `trailViewMode` setting is no longer read. A function (not a literal) so
+ * the type stays the full union and the dormant branches still typecheck.
+ */
+function focusedTrailViewMode(): Settings['trailViewMode'] {
+  return '2d';
+}
+
+/**
  * The unified trail view: real 3D terrain (expo-gl + Three.js) on top, then the
  * elevation profile and notes/photos + PDF export below in one scroll. Scrubbing
  * the profile drives a marker on the 3D terrain. One finger orbits; two fingers
@@ -142,7 +154,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
 
-  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
+  const trailViewMode = focusedTrailViewMode();
 
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
   // Pause boundaries in `points` (one per extra <trkseg>): the 2D/3D traces

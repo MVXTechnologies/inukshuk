@@ -1,23 +1,19 @@
-# Trail view e2e (#134/#137/#140): open a saved trail from the Library, check
-# the 2D view, switch to 3D terrain, exercise the control rail's basemap and
-# overlay menus when the device's GL stack supports them, switch back to 2D,
-# and leave. The point is crash-detection: software-GL emulators render 3D
-# slowly (fine) but must not crash or black-screen (#134's shader-fallback
-# path).
+# Trail view e2e (#134/#137/#140, #480): open a saved trail from the Library,
+# check the focused view's map and exercise the control rail's basemap and
+# overlay menus, then leave. Crash-detection: the view must mount and stay
+# responsive on a software-GL emulator.
 #
 # Portability notes:
 # - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
-#   label is "<name> — open 3D view, long-press to select" (em dash).
-# - The 2D/3D switch is the rail's video-3d FAB with a STATE-DEPENDENT label
-#   ("Switch to 3D view" / "Switch to 2D view") so the flow can force a known
-#   mode without reading toggle state.
-# - #140 replaced the inline basemap pills + Slope/Contours/Tint bar with a
-#   right-edge rail: a "Trail layers" FAB (basemap menu: Relief/Map/Satellite)
-#   and a "Trail overlays" FAB (Slope / Contours / Elevation tint switches +
-#   contour-interval picker). Both a11y labels are identical on both
-#   platforms. The overlays FAB renders ONLY when the GL context supports the
-#   overlay shaders (overlaysAvailable) — on low-capability devices it is
-#   legitimately absent, so it's exercised conditionally.
+#   label is "<name> — open trail view, long-press to select" (em dash).
+# - #480 removed the rail's 2D/3D toggle (owner call): the focused view is the
+#   MapLibre map, tilted with two fingers like the main map. The three.js
+#   terrain view is no longer reachable, so this flow no longer builds it.
+# - #140's right-edge rail: a "Trail layers" FAB (basemap menu: Relief/Map/
+#   Satellite) and a "Trail overlays" FAB (Slope / Contours / Elevation tint
+#   switches + contour-interval picker). Both a11y labels are identical on
+#   both platforms. The overlays FAB renders ONLY when overlaysAvailable, so
+#   it's exercised conditionally.
 # - The rail menus are Paper Menus: a tap anywhere outside lands on the
 #   dismiss backdrop and only closes the menu (it does NOT reach what's
 #   underneath), so a far-left point tap is a safe dual-platform dismissal.
@@ -47,33 +43,17 @@ appId: com.inukshuk.app
     text: 'Library(, tab.*)?'
     retryTapIfNoChange: true
 - assertVisible: 'Recorded trails.*'
-- tapOn: '.* — open 3D view, long-press to select'
-# Trail screen chrome: the mode-toggle FAB proves it mounted.
-- extendedWaitUntil:
-    visible: 'Switch to (2D|3D) view'
-    timeout: 15000
-# Make sure we start from 2D (the mode setting persists across runs): the
-# toggle's label says which mode a press ENTERS, so tap it only when it
-# offers 2D.
-- runFlow:
-    when:
-      visible: 'Switch to 2D view'
-    commands:
-      - tapOn: 'Switch to 2D view'
-- assertVisible: 'Notes.*'
-# Switch to 3D. Terrain tiles + software GL: be generous.
-- tapOn: 'Switch to 3D view'
-- extendedWaitUntil:
-    notVisible: 'Building 3D terrain.*'
-    timeout: 120000
-- assertNotVisible: 'Couldn.t load 3D terrain.*'
-# The layers FAB is enabled once the build lands; its menu carries the
-# basemap trio. Assert the choices, then dismiss WITHOUT picking one — a pick
-# would kick off a 3D rebuild that software GL takes minutes to finish.
-# ("Map" is not asserted: it would also match the tab bar's Map tab.)
+- tapOn: '.* — open trail view, long-press to select'
+# Trail screen chrome: the layers FAB proves it mounted.
 - extendedWaitUntil:
     visible: 'Trail layers'
     timeout: 30000
+- assertVisible: 'Notes.*'
+# The 2D/3D toggle is gone (#480) — its labels must not come back.
+- assertNotVisible: 'Switch to (2D|3D) view'
+# The layers menu carries the basemap trio. Assert the choices, then dismiss
+# without picking one. ("Map" is not asserted: it would also match the tab
+# bar's Map tab.)
 - tapOn: 'Trail layers'
 - extendedWaitUntil:
     visible: 'Relief'
@@ -111,8 +91,7 @@ appId: com.inukshuk.app
       - tapOn: 'Slope'
       - tapOn:
           point: 50%,8%
-# Still responsive after GL work: flip back to 2D, then leave.
-- tapOn: 'Switch to 2D view'
+# Still responsive: leave.
 - assertVisible: 'Notes.*'
 - tapOn: 'Back'
 - assertVisible: 'Recorded trails.*'

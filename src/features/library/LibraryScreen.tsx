@@ -893,7 +893,7 @@ export function LibraryScreen() {
         accessibilityLabel={
           selectionMode
             ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
-            : `${spoken} — open 3D view, long-press to select`
+            : `${spoken} — open trail view, long-press to select`
         }
         onPress={() =>
           selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)

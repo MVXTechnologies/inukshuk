@@ -73,7 +73,12 @@ export interface Settings {
   minDisplacementM: number;
   /** Preferred elevation-profile chart style. */
   elevationProfileStyle: ElevationProfileStyle;
-  /** Trail detail view: real 3D terrain or a flat 2D map. */
+  /**
+   * Trail detail view: real 3D terrain or a flat 2D map. DORMANT since #480:
+   * the focused view is always the 2D map (two-finger tilt), and nothing
+   * reads this — kept so settings files round-trip and the three.js view can
+   * come back without a migration.
+   */
   trailViewMode: '2d' | '3d';
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;

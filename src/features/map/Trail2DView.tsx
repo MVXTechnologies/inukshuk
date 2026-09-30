@@ -23,6 +23,7 @@ import { useTheme } from 'react-native-paper';
 import { buildOsmStyle } from './mapStyle';
 import { toLngLatBounds } from './geojson';
 import { NoteNumberBadge } from './components/NoteNumberBadge';
+import { useTiltRelief } from './hooks/useTiltRelief';
 
 export function Trail2DView({
   points,
@@ -51,20 +52,24 @@ export function Trail2DView({
   const bm = basemap ?? mainBasemap;
   const theme = useTheme();
   const contours = useSettingsStore((s) => s.terrainContours);
+  // The main map's shading strength and "3D relief" (#461/#480): the focused
+  // view tilts with two fingers like the main map (owner call, #480 — its
+  // three.js 3D button is gone), so it deepens the relief the same way.
+  const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
+  const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   // The Stone & Paper vector map here too (flag-gated), with served contours.
   const style = useMemo(
     () =>
-      buildOsmStyle(
-        tileUrl,
-        false,
-        bm,
-        showHillshade,
-        VECTOR_BASEMAP_ENABLED && bm === 'map'
+      buildOsmStyle(tileUrl, false, bm, showHillshade, {
+        ...(VECTOR_BASEMAP_ENABLED && bm === 'map'
           ? { vectorBasemap: vectorBasemapOption(theme.dark, contours) }
-          : {},
-      ),
-    [tileUrl, bm, showHillshade, theme.dark, contours],
+          : {}),
+        hillshadeStrength,
+        tiltRelief,
+      }),
+    [tileUrl, bm, showHillshade, theme.dark, contours, hillshadeStrength, tiltRelief],
   );
+  const tilt = useTiltRelief(style);
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
 
@@ -165,10 +170,16 @@ export function Trail2DView({
       style={styles.fill}
       mapStyle={style}
       compass={false}
+      // Two-finger tilt, as on the main map (#480). MapLibre's default, but
+      // explicit: it is now the ONLY way into a 3D-ish view here.
+      touchPitch
       onDidFinishLoadingMap={fitToTrail}
+      onDidFinishLoadingStyle={tilt.onStyleLoaded}
+      onRegionDidChange={(e) => tilt.onSettledPitch(e.nativeEvent.pitch)}
       onPress={onMapPress}
     >
       <Camera ref={cameraRef} />
+      {tilt.layer}
       <GeoJSONSource id="trail-2d" data={lineFeature}>
         <Layer
           id="trail-2d-casing"
