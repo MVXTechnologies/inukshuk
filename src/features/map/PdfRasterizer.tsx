@@ -1,5 +1,7 @@
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
+import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
+import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
  *
@@ -282,7 +284,19 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // other content inside it can break out of the document. The main bundle is
   // injected directly inside its own <script> element so pdf.js evaluates at
   // load time and exposes window.pdfjsLib.
-  const workerLiteral = JSON.stringify(pdfWorkerSource);
+  //
+  // The worker is patched to skip content hidden by optional content (layers)
+  // instead of decoding it (#477: a US Topo sheet's hidden orthoimage and
+  // shaded relief cost ~5 s of JPEG decoding per render). Unpatchable sources
+  // (a different pdf.js build) run stock: slower, never wrong.
+  const worker = patchPdfWorkerSource(pdfWorkerSource);
+  if (!worker.patched && pdfWorkerSource.length > 0) {
+    console.warn(
+      `PdfRasterizer: pdf.js worker not patched (${worker.unmatched.join(', ')}); ` +
+        'hidden PDF layers will still be decoded',
+    );
+  }
+  const workerLiteral = JSON.stringify(worker.source);
 
   return `<!DOCTYPE html>
 <html>
@@ -293,11 +307,64 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
 </head>
 <body>
 <div id="stage"><canvas id="canvas"></canvas></div>
+<script>${PDF_LAYER_RUNTIME_SOURCE}</script>
 <script>${pdfMainSource}</script>
 <script>
 (function () {
   'use strict';
   var WORKER_SOURCE = ${workerLiteral};
+  // True when the worker can drop hidden layer content (patched, #477).
+  var WORKER_FILTERS_LAYERS = ${worker.patched ? 'true' : 'false'};
+  // Aerial imagery stays off until there is a per-map switch for it (#477).
+  var LAYER_PREFS = { showImagery: false };
+
+  // Decide every optional-content group's visibility (document defaults plus
+  // __inkPlanLayers' rules), apply it to the config pdf.js paints with, and
+  // hand the same map to the worker so hidden images, shadings and forms are
+  // never decoded. Resolves { config, changed }: config is null when the
+  // document has no layers or they could not be read (pdf.js defaults apply).
+  function prepareLayers(doc, loadingTask) {
+    var none = { config: null, changed: 0 };
+    function filterWorker(visibility) {
+      if (!WORKER_FILTERS_LAYERS) return;
+      // Same port as pdf.js' own messages, so it lands before the operator
+      // list request. The fake (main-thread) worker shares this global.
+      try {
+        var port = loadingTask._worker && loadingTask._worker.port;
+        if (port && typeof port.postMessage === 'function') port.postMessage({ inukshukOptionalContent: visibility });
+      } catch (e) {}
+      if (window.__inkOC) window.__inkOC.set(visibility);
+    }
+    if (!doc || typeof doc.getOptionalContentConfig !== 'function' || typeof window.__inkPlanLayers !== 'function') {
+      filterWorker(null);
+      return Promise.resolve(none);
+    }
+    return doc.getOptionalContentConfig().then(function (config) {
+      try {
+        var groups = config && typeof config.getGroups === 'function' ? config.getGroups() : null;
+        if (!groups) {
+          filterWorker(null);
+          return none;
+        }
+        var list = Object.keys(groups).map(function (id) {
+          return { id: id, name: groups[id].name, visible: groups[id].visible };
+        });
+        var plan = window.__inkPlanLayers(list, LAYER_PREFS);
+        // Paint config first, worker second: a failure in between leaves the
+        // worker unfiltered, which is only slower, never wrong.
+        plan.changed.forEach(function (id) { config.setVisibility(id, plan.visibility[id]); });
+        filterWorker(plan.visibility);
+        return { config: config, changed: plan.changed.length };
+      } catch (e) {
+        filterWorker(null);
+        return none;
+      }
+    }, function () {
+      filterWorker(null);
+      return none;
+    });
+  }
+
   // Keep this ES-compatible function literal: Hermes cannot serialize a
   // compiled function back to source with Function.prototype.toString().
   function cropGeometry(pageWidth, pageHeight, targetWidth, crop) {
@@ -530,7 +597,9 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (pageNumber < 1 || pageNumber > pageCount) {
           throw new Error('pageIndex ' + pageIndex + ' out of range (pageCount ' + pageCount + ')');
         }
-        return doc.getPage(pageNumber).then(function (page) {
+        return Promise.all([doc.getPage(pageNumber), prepareLayers(doc, loadingTask)]).then(function (loadedPage) {
+          var page = loadedPage[0];
+          var layers = loadedPage[1];
           // Always rasterize in the page's UNROTATED (MediaBox) coordinate space
           // by forcing rotation: 0 — overriding any /Rotate display flag. The
           // georeferencing (VP/Measure BBox + GPTS, and the LGIDict registration)
@@ -540,7 +609,10 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var baseViewport = page.getViewport({ scale: 1, rotation: 0 });
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
-          if (nativePage && page.rotate === 0 && page.userUnit === 1 &&
+          // Native renderers draw the document's default layers; a page whose
+          // layer plan differs from them stays on pdf.js so every raster of it
+          // (overview and detail tiles) shows the same layers.
+          if (nativePage && layers.changed === 0 && page.rotate === 0 && page.userUnit === 1 &&
               Array.isArray(page.view) && page.view.length === 4 &&
               page.view[0] === 0 && page.view[1] === 0 &&
               page.view[2] === nativePage.expectedPageWidthPt &&
@@ -564,7 +636,9 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           ctx.fillRect(0, 0, widthPx, heightPx);
 
           var t1 = Date.now();
-          return page.render({ canvasContext: ctx, viewport: viewport, transform: [1, 0, 0, 1, geometry.offsetX, geometry.offsetY] }).promise.then(function () {
+          var renderParams = { canvasContext: ctx, viewport: viewport, transform: [1, 0, 0, 1, geometry.offsetX, geometry.offsetY] };
+          if (layers.config) renderParams.optionalContentConfigPromise = Promise.resolve(layers.config);
+          return page.render(renderParams).promise.then(function () {
             var pngDataUri = canvas.toDataURL('image/png');
             // Free the canvas memory before reporting back.
             canvas.width = 1;
