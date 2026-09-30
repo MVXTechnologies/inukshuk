@@ -38,7 +38,7 @@ function ui(props: ButtonProps = {}, visibleMs = 60_000) {
   return (
     <PaperProvider>
       <TipButton intervalMs={100_000} bubbleCheckMs={CHECK} clock={clock} {...props} />
-      <TipBubble right={72} bottom={64} visibleMs={visibleMs} />
+      <TipBubble right={16} bottom={80} tailRight={24} visibleMs={visibleMs} />
     </PaperProvider>
   );
 }

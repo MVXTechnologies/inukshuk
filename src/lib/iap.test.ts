@@ -35,7 +35,7 @@ function fakeIap() {
     initConnection: jest.fn(async () => true),
     endConnection: jest.fn(async () => true),
     fetchProducts: jest.fn(async () => [
-      { id: 'tip_small', displayPrice: '$2.99' },
+      { id: 'tip_medium', displayPrice: '$6.99' },
       { id: 'tip_large', displayPrice: '$14.99' },
     ]),
     requestPurchase: jest.fn(async () => null),
@@ -65,12 +65,12 @@ describe('createTipStore', () => {
   it('fetches in-app products and keeps only id and store price', async () => {
     const { iap, slice } = fakeIap();
     const store = createTipStore(slice);
-    await expect(store.fetchTips(['tip_small', 'tip_large'])).resolves.toEqual([
-      { id: 'tip_small', displayPrice: '$2.99' },
+    await expect(store.fetchTips(['tip_medium', 'tip_large'])).resolves.toEqual([
+      { id: 'tip_medium', displayPrice: '$6.99' },
       { id: 'tip_large', displayPrice: '$14.99' },
     ]);
     expect(iap.fetchProducts).toHaveBeenCalledWith({
-      skus: ['tip_small', 'tip_large'],
+      skus: ['tip_medium', 'tip_large'],
       type: 'in-app',
     });
   });
@@ -78,7 +78,7 @@ describe('createTipStore', () => {
   it('treats a null product list as empty', async () => {
     const { iap, slice } = fakeIap();
     iap.fetchProducts.mockResolvedValueOnce(null as never);
-    await expect(createTipStore(slice).fetchTips(['tip_small'])).resolves.toEqual([]);
+    await expect(createTipStore(slice).fetchTips(['tip_medium'])).resolves.toEqual([]);
   });
 
   it('requests the same sku on both stores', async () => {
@@ -94,11 +94,13 @@ describe('createTipStore', () => {
     const { iap, slice, update } = fakeIap();
     const events: TipEvent[] = [];
     createTipStore(slice).subscribe((e) => events.push(e));
-    const purchase: Purchase = { id: 'GPA.1', productId: 'tip_small', purchaseState: 'purchased' };
+    const purchase: Purchase = { id: 'GPA.1', productId: 'tip_xlarge', purchaseState: 'purchased' };
     update(purchase);
     await flush();
     expect(iap.finishTransaction).toHaveBeenCalledWith({ purchase, isConsumable: true });
-    expect(events).toEqual([{ kind: 'purchased', productId: 'tip_small', transactionId: 'GPA.1' }]);
+    expect(events).toEqual([
+      { kind: 'purchased', productId: 'tip_xlarge', transactionId: 'GPA.1' },
+    ]);
   });
 
   it('still thanks the person when the consume fails', async () => {
@@ -115,12 +117,12 @@ describe('createTipStore', () => {
     const { iap, slice, update } = fakeIap();
     const events: TipEvent[] = [];
     createTipStore(slice).subscribe((e) => events.push(e));
-    update({ productId: 'tip_small', purchaseState: 'pending' });
+    update({ productId: 'tip_xlarge', purchaseState: 'pending' });
     update({ productId: 'premium', purchaseState: 'purchased' });
-    update({ productId: 'tip_small', purchaseState: 'unknown' });
+    update({ productId: 'tip_xlarge', purchaseState: 'unknown' });
     await flush();
     expect(iap.finishTransaction).not.toHaveBeenCalled();
-    expect(events).toEqual([{ kind: 'pending', productId: 'tip_small' }]);
+    expect(events).toEqual([{ kind: 'pending', productId: 'tip_xlarge' }]);
   });
 
   it('forwards store errors with their code, and unsubscribes', async () => {
@@ -140,7 +142,7 @@ describe('createTipStore', () => {
   it('sweeps up unfinished tips only', async () => {
     const { iap, slice } = fakeIap();
     iap.getAvailablePurchases.mockResolvedValueOnce([
-      { id: 'T1', productId: 'tip_small', purchaseState: 'purchased' },
+      { id: 'T1', productId: 'tip_xlarge', purchaseState: 'purchased' },
       { id: 'T2', productId: 'tip_patron', purchaseState: 'purchased' },
       { productId: 'tip_medium', purchaseState: 'pending' },
       { productId: 'premium', purchaseState: 'purchased' },
@@ -151,11 +153,11 @@ describe('createTipStore', () => {
     const finished = await createTipStore(slice).sweepUnfinished();
     expect(iap.finishTransaction).toHaveBeenCalledTimes(2);
     expect(iap.finishTransaction).toHaveBeenCalledWith({
-      purchase: { id: 'T1', productId: 'tip_small', purchaseState: 'purchased' },
+      purchase: { id: 'T1', productId: 'tip_xlarge', purchaseState: 'purchased' },
       isConsumable: true,
     });
     // Only what was actually finished counts toward the person's total.
-    expect(finished).toEqual([{ productId: 'tip_small', transactionId: 'T1' }]);
+    expect(finished).toEqual([{ productId: 'tip_xlarge', transactionId: 'T1' }]);
   });
 
   it('reports a failed connection as false', async () => {

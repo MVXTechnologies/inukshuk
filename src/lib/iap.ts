@@ -270,7 +270,6 @@ export function getTipStore(): TipStore | null {
 /** Emulator-only fake: US prices, and every purchase succeeds after a beat. */
 function createDevTipStore(): TipStore {
   const prices: Record<string, string> = {
-    tip_small: '$2.99',
     tip_medium: '$6.99',
     tip_large: '$14.99',
     tip_xlarge: '$29.99',

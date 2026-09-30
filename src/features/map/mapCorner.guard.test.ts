@@ -60,8 +60,20 @@ describe('coffee mascot bubble', () => {
   const map = read('src/features/map/MapScreen.tsx');
 
   it('is drawn at the Map root so Android delivers its taps', () => {
-    expect(map).toMatch(/<TipBubble right=\{TIP_BUBBLE_RIGHT\} bottom=\{TIP_BUBBLE_BOTTOM\} \/>/);
+    expect(map).toMatch(/<TipBubble\s+right=\{TIP_BUBBLE_RIGHT\}/);
     expect(map).not.toMatch(/styles\.bottomSideEnd\][^<]*<TipBubble/);
+  });
+
+  it('sits above the measured bottom row, so it never covers the credit caption', () => {
+    // The column and the row report their layout; the bubble's bottom is the
+    // row's top (from the column's bottom edge) plus a gap.
+    expect(map).toMatch(/onLayout=\{\(e\) => setBottomColumnH\(e\.nativeEvent\.layout\.height\)\}/);
+    expect(map).toMatch(
+      /style=\{styles\.bottomRow\}[^>]*onLayout=\{\(e\) => setBottomRowY\(e\.nativeEvent\.layout\.y\)\}/,
+    );
+    expect(map).toMatch(/bottom=\{bottomColumnH - bottomRowY \+ TIP_BUBBLE_GAP\}/);
+    // The row holds the scale bar, the credit caption and the tip button.
+    expect(map).toMatch(/styles\.bottomRow\}[^]*?<MapCreditText[^]*?<TipButton/);
   });
 
   it.each([

@@ -19,7 +19,8 @@ export const FUN_FACTS: readonly FunFact[] = [
     fr: 'Saviez-vous qu’il existe un dinosaure appelé Donationausaurus? Très généreux, en effet.',
   },
   // Owner's own, kept word for word. OWNER TO CONFIRM before release: it is
-  // only true if (active users × $2.99) ≥ the private yearly goal. The app
+  // only true if (active users × $6.99, the "Coffee at the trailhead" tip,
+  // before store fees) ≥ the private yearly goal. The app
   // cannot check that (it knows no user count and no goal amount), so this
   // line is unverified — reword or drop it if the numbers don't hold.
   {

@@ -23,14 +23,14 @@ beforeEach(() => {
 
 it('replays tips recorded before hydration over the saved ledger, once each', async () => {
   mockSaved = { totalCents: 9999, tipCount: 1, transactionIds: ['p1'], donorSubmitted: false };
-  useSupportStore.getState().recordTip({ productId: 'tip_small', transactionId: 't1' });
+  useSupportStore.getState().recordTip({ productId: 'tip_medium', transactionId: 't1' });
   // The launch sweep met the saved Patron tip again: not counted twice.
   useSupportStore.getState().recordTip({ productId: 'tip_patron', transactionId: 'p1' });
   await useSupportStore.getState().hydrate();
   const s = useSupportStore.getState();
-  expect(s).toMatchObject({ totalCents: 9999 + 299, tipCount: 2, transactionIds: ['p1', 't1'] });
+  expect(s).toMatchObject({ totalCents: 9999 + 699, tipCount: 2, transactionIds: ['p1', 't1'] });
   expect(writeJson).toHaveBeenLastCalledWith('support.json', {
-    totalCents: 10298,
+    totalCents: 10698,
     tipCount: 2,
     transactionIds: ['p1', 't1'],
     donorSubmitted: false,

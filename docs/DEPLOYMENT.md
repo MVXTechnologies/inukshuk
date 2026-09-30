@@ -337,15 +337,17 @@ update_). Regenerating the secret on Strava only needs a new
 
 ### In-app tips (store consoles, one-time)
 
-Five **consumable** in-app products, same ids on both stores, all unlocking
-nothing:
+Four **consumable** in-app products, same ids on both stores, all unlocking
+nothing. There is no $2.99 tier: the coffee is the $6.99 `tip_medium`. The ids
+keep their original names because a store product id can never be reused. Do not
+create `tip_small`; if one already exists in a console, remove it from sale (the
+app ignores it).
 
 | Product id   | USD base price | Name in the app         |
 | ------------ | -------------- | ----------------------- |
-| `tip_small`  | $2.99          | Coffee at the trailhead |
-| `tip_medium` | $6.99          | Lunch at the lookout    |
-| `tip_large`  | $14.99         | A day on the trail      |
-| `tip_xlarge` | $29.99         | A season of trails      |
+| `tip_medium` | $6.99          | Coffee at the trailhead |
+| `tip_large`  | $14.99         | Lunch at the lookout    |
+| `tip_xlarge` | $29.99         | A day on the trail      |
 | `tip_patron` | $99.99         | Patron of the trail     |
 
 The USD base prices are mirrored in `TIP_USD` (`src/core/support/tips.ts`) and

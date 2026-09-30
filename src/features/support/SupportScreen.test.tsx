@@ -46,7 +46,6 @@ const COSTS: CostsDocument = {
 
 const PRODUCTS: StoreProduct[] = [
   { id: 'tip_large', displayPrice: '19,99 $' },
-  { id: 'tip_small', displayPrice: '3,99 $' },
   { id: 'tip_medium', displayPrice: '8,99 $' },
   { id: 'tip_patron', displayPrice: '139,99 $' },
   { id: 'tip_xlarge', displayPrice: '41,99 $' },
@@ -226,19 +225,18 @@ describe('tips', () => {
     expect(screen.getByText(/Tips aren't available on this device right now/)).toBeTruthy();
   });
 
-  it('lists the tiers with the store prices, middle one chosen', async () => {
+  it('lists the tiers with the store prices, the coffee chosen', async () => {
     const { store } = fakeStore();
     mockStore = store;
     await mount();
     expect(screen.getByText('Coffee at the trailhead')).toBeTruthy();
-    expect(screen.getByText('3,99 $')).toBeTruthy();
     expect(screen.getByText('8,99 $')).toBeTruthy();
     expect(screen.getByText('19,99 $')).toBeTruthy();
     expect(screen.getByText('Tip 8,99 $')).toBeTruthy();
     expect(screen.getByText(/A tip unlocks nothing: everything stays free\./)).toBeTruthy();
     // Leftovers from an earlier session are consumed quietly.
     expect(store.sweepUnfinished).toHaveBeenCalled();
-    await press(screen.getByText('A day on the trail'));
+    await press(screen.getByText('Lunch at the lookout'));
     expect(screen.getByText('Tip 19,99 $')).toBeTruthy();
   });
 
@@ -257,17 +255,17 @@ describe('tips', () => {
     expect(screen.queryByText(/^Tip /)).toBeNull();
   });
 
-  it('offers all five tiers in order, from coffee to patron', async () => {
+  it('offers all four tiers in order, from coffee to patron', async () => {
     mockStore = fakeStore().store;
     await mount();
     const names = [
       'Coffee at the trailhead',
       'Lunch at the lookout',
       'A day on the trail',
-      'A season of trails',
       'Patron of the trail',
     ];
-    for (const name of names) expect(screen.getByText(name)).toBeTruthy();
+    const shown = screen.getAllByText(/^(Coffee|Lunch|A day|A season|Patron) /);
+    expect(shown.map((n) => n.props.children)).toEqual(names);
     expect(screen.getByText('139,99 $')).toBeTruthy();
     expect(screen.queryByTestId('support-jar-prompt')).toBeNull();
   });
@@ -284,16 +282,16 @@ describe('tips', () => {
     mockStore = store;
     await mount();
     await press(screen.getByText('Coffee at the trailhead'));
-    await press(screen.getByText('Tip 3,99 $'));
-    expect(store.requestTip).toHaveBeenCalledWith('tip_small');
+    await press(screen.getByText('Tip 8,99 $'));
+    expect(store.requestTip).toHaveBeenCalledWith('tip_medium');
     expect(screen.getByLabelText('Waiting for the store')).toBeTruthy();
-    await emit({ kind: 'purchased', productId: 'tip_small', transactionId: 'GPA.7' });
+    await emit({ kind: 'purchased', productId: 'tip_medium', transactionId: 'GPA.7' });
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: '/support/thanks',
-      params: { tip: 'tip_small' },
+      params: { tip: 'tip_medium' },
     });
     // Counted toward the person's own total (donors list) before the thanks.
-    expect(useSupportStore.getState()).toMatchObject({ totalCents: 299, tipCount: 1 });
+    expect(useSupportStore.getState()).toMatchObject({ totalCents: 699, tipCount: 1 });
   });
 
   it('says nothing when the person cancels, and lets them try again', async () => {

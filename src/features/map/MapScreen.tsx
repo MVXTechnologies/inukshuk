@@ -196,11 +196,14 @@ const TOP_CHIP_OFFSET = 8 + 48 + 8;
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
 
-// Where the coffee mascot's bubble sits (#476): left of the tip button (16 dp
-// margin + 48 dp button + 8 dp gap) and above the scale bar and credit (10 dp
-// column padding + ~54 dp for the two), so it never covers them.
-const TIP_BUBBLE_RIGHT = 16 + 48 + 8;
-const TIP_BUBBLE_BOTTOM = 10 + 54;
+// Where the coffee mascot's bubble sits (#476): ABOVE the whole bottom row
+// (scale bar, credit caption and tip button, measured live so a wrapped
+// credit, a bigger font or a toast never ends up under it), right-aligned with
+// the button (the column's 16 dp margin), its tail pointing down at the mug's
+// centre (16 + 48 / 2 from the edge).
+const TIP_BUBBLE_RIGHT = 16;
+const TIP_BUBBLE_GAP = 8;
+const TIP_BUBBLE_TAIL_RIGHT = 48 / 2;
 
 /**
  * Throttled `toLineFeature(points, segmentStarts)`. Between rebuilds the
@@ -517,6 +520,9 @@ export function MapScreen() {
   const [cameraMoving, setCameraMoving] = useState(false);
   // A rail sheet (map type, overlays, "+" actions) is open: no mascot bubble (#476).
   const [railMenuOpen, setRailMenuOpen] = useState(false);
+  // The bottom column's height and the row's top inside it, for the bubble.
+  const [bottomColumnH, setBottomColumnH] = useState<number | null>(null);
+  const [bottomRowY, setBottomRowY] = useState<number | null>(null);
   // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
   // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
   // than tracked per settle — nothing else needs a metre-accurate centre, and
@@ -2503,6 +2509,7 @@ export function MapScreen() {
           trailSheetUp && { bottom: trailSheetHeight },
         ]}
         pointerEvents="box-none"
+        onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
       >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
             First in the column so they stack above the scale bar. */}
@@ -2526,7 +2533,11 @@ export function MapScreen() {
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
         {!selecting && makeMapState === null && (
-          <View style={styles.bottomRow} pointerEvents="box-none">
+          <View
+            style={styles.bottomRow}
+            pointerEvents="box-none"
+            onLayout={(e) => setBottomRowY(e.nativeEvent.layout.y)}
+          >
             <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
               {showScaleBar && !terrain3d && scaleAt !== null && (
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
@@ -2731,10 +2742,18 @@ export function MapScreen() {
         />
       )}
 
-      {/* The coffee mascot's speech bubble (#476), beside the tip button in the
+      {/* The coffee mascot's speech bubble (#476), over the tip button in the
           bottom-right corner: at the root so it can be tapped on Android, and
-          above the scale bar and credit so it never covers them. */}
-      <TipBubble right={TIP_BUBBLE_RIGHT} bottom={TIP_BUBBLE_BOTTOM} />
+          above the whole bottom row so it never covers the scale bar or the
+          credit caption. The bubble only shows with no panel or sheet up, so
+          the column sits at the bottom edge. */}
+      {bottomColumnH !== null && bottomRowY !== null && (
+        <TipBubble
+          right={TIP_BUBBLE_RIGHT}
+          bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
+          tailRight={TIP_BUBBLE_TAIL_RIGHT}
+        />
+      )}
 
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}

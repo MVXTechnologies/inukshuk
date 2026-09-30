@@ -11,13 +11,23 @@ import {
 } from './tips';
 
 describe('tip catalog', () => {
-  it('sells exactly the five store product ids, smallest first', () => {
-    expect(TIP_IDS).toEqual(['tip_small', 'tip_medium', 'tip_large', 'tip_xlarge', 'tip_patron']);
+  it('sells exactly the four store product ids, smallest first (no $2.99 tier)', () => {
+    expect(TIP_IDS).toEqual(['tip_medium', 'tip_large', 'tip_xlarge', 'tip_patron']);
+    expect(TIP_IDS).not.toContain('tip_small');
+  });
+
+  it('reads as a ladder from a coffee upward', () => {
+    expect(TIP_TIERS.map((t) => t.name)).toEqual([
+      'Coffee at the trailhead',
+      'Lunch at the lookout',
+      'A day on the trail',
+      'Patron of the trail',
+    ]);
   });
 
   it("knows each product's USD base price, rising with the tier", () => {
     const prices = TIP_IDS.map((id) => TIP_USD[id]);
-    expect(prices).toEqual([2.99, 6.99, 14.99, 29.99, 99.99]);
+    expect(prices).toEqual([6.99, 14.99, 29.99, 99.99]);
   });
 
   it('describes no tier as buying a feature', () => {
@@ -29,7 +39,8 @@ describe('tip catalog', () => {
   });
 
   it('recognizes tip ids', () => {
-    expect(isTipId('tip_small')).toBe(true);
+    expect(isTipId('tip_medium')).toBe(true);
+    expect(isTipId('tip_small')).toBe(false);
     expect(isTipId('premium')).toBe(false);
     expect(isTipId(3)).toBe(false);
   });
@@ -42,8 +53,8 @@ describe('tipOffers', () => {
       { id: 'tip_small', displayPrice: '3,99 $' },
       { id: 'tip_medium', displayPrice: ' 8,99 $ ' },
     ]);
+    // A leftover tip_small from a console is never offered.
     expect(offers.map((o) => [o.id, o.displayPrice])).toEqual([
-      ['tip_small', '3,99 $'],
       ['tip_medium', '8,99 $'],
       ['tip_large', '19,99 $'],
     ]);
@@ -65,17 +76,17 @@ describe('tipOffers', () => {
 });
 
 describe('defaultTipId', () => {
-  it('starts on the modest second tier when it is on sale', () => {
+  it('starts on the first tier, the coffee', () => {
     const offers = tipOffers(TIP_IDS.map((id) => ({ id, displayPrice: '$1' })));
     expect(defaultTipId(offers)).toBe('tip_medium');
   });
 
-  it('starts on the first otherwise, and on nothing when nothing is on sale', () => {
+  it('starts on the smallest one on sale otherwise, and on nothing when nothing is', () => {
     const two = tipOffers([
-      { id: 'tip_large', displayPrice: '$1' },
-      { id: 'tip_small', displayPrice: '$1' },
+      { id: 'tip_patron', displayPrice: '$1' },
+      { id: 'tip_xlarge', displayPrice: '$1' },
     ]);
-    expect(defaultTipId(two)).toBe('tip_small');
+    expect(defaultTipId(two)).toBe('tip_xlarge');
     expect(defaultTipId([])).toBeNull();
   });
 });

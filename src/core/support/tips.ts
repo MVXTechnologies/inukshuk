@@ -1,5 +1,5 @@
 /**
- * The tip jar (#476): five consumable in-app products, all of which unlock
+ * The tip jar (#476): four consumable in-app products, all of which unlock
  * nothing. They are donations of different sizes, and the copy says so; no
  * tier is described as paying for a feature.
  *
@@ -16,7 +16,7 @@
  * Pure: no React Native / Expo imports.
  */
 
-export type TipId = 'tip_small' | 'tip_medium' | 'tip_large' | 'tip_xlarge' | 'tip_patron';
+export type TipId = 'tip_medium' | 'tip_large' | 'tip_xlarge' | 'tip_patron';
 
 export interface TipTier {
   id: TipId;
@@ -26,31 +26,29 @@ export interface TipTier {
   icon: string;
 }
 
-/** Catalog order is display order: smallest first. */
+/**
+ * Catalog order is display order: smallest first, a ladder from a coffee
+ * upward. There is no $2.99 tier (owner, round 4): the coffee is the $6.99
+ * product, whose id stays `tip_medium` because store product ids are forever.
+ */
 export const TIP_TIERS: readonly TipTier[] = [
   {
-    id: 'tip_small',
+    id: 'tip_medium',
     name: 'Coffee at the trailhead',
     what: 'A small thank-you',
     icon: 'coffee-outline',
   },
   {
-    id: 'tip_medium',
+    id: 'tip_large',
     name: 'Lunch at the lookout',
     what: 'A warm thank-you',
     icon: 'food-apple-outline',
   },
   {
-    id: 'tip_large',
+    id: 'tip_xlarge',
     name: 'A day on the trail',
     what: 'A generous thank-you',
     icon: 'hiking',
-  },
-  {
-    id: 'tip_xlarge',
-    name: 'A season of trails',
-    what: 'For a season of good outings',
-    icon: 'pine-tree',
   },
   {
     id: 'tip_patron',
@@ -66,7 +64,6 @@ export const TIP_TIERS: readonly TipTier[] = [
  * threshold, never displayed.
  */
 export const TIP_USD: Readonly<Record<TipId, number>> = {
-  tip_small: 2.99,
   tip_medium: 6.99,
   tip_large: 14.99,
   tip_xlarge: 29.99,
@@ -82,7 +79,7 @@ export function isTipId(value: unknown): value is TipId {
 /** A product as the store adapter reports it: its id and localized price. */
 export interface StoreProduct {
   id: string;
-  /** Localized by the store, e.g. `$2.99`, `2,99 $`, `3,49 €`. */
+  /** Localized by the store, e.g. `$6.99`, `6,99 $`, `7,49 €`. */
   displayPrice: string;
 }
 
@@ -104,12 +101,11 @@ export function tipOffers(products: readonly StoreProduct[]): TipOffer[] {
 }
 
 /**
- * Which offer starts selected: the second tier when it is on sale (a modest
- * default, never the biggest), else the first. Null when nothing is on sale.
+ * Which offer starts selected: the first (smallest) one on sale, never a
+ * bigger one. Null when nothing is on sale.
  */
 export function defaultTipId(offers: readonly TipOffer[]): TipId | null {
-  const preferred = offers.find((o) => o.id === 'tip_medium') ?? offers[0];
-  return preferred?.id ?? null;
+  return offers[0]?.id ?? null;
 }
 
 /**

@@ -94,6 +94,60 @@ export const MASCOT_FACE_PHASES = {
   happy: [0.55, 0.65] as const,
 } as const;
 
+/**
+ * Geometry of the coffee mug glyph (owner, round 4 fix), in dp inside the
+ * 28 dp glyph box that the 48 dp button centres. The cup's BODY (not the
+ * handle) sits on the button's vertical axis, and the smoke, the heart and
+ * the mascot's eyes and smile all sit on that same axis. The handle hangs to
+ * the right of it, the way a mug icon reads centred. The cup sits a little
+ * low so the puffs and heart have room above the rim, inside the circle.
+ */
+const GLYPH_BOX = 28;
+const CUP_WIDTH = 12;
+const AXIS = GLYPH_BOX / 2;
+export const MUG_LAYOUT = {
+  button: 48,
+  box: GLYPH_BOX,
+  /** The cup body's vertical axis: everything else is centred on it. */
+  axis: AXIS,
+  cup: { left: AXIS - CUP_WIDTH / 2, right: AXIS + CUP_WIDTH / 2, top: 12.5, bottom: 22 },
+  /** Bottom corner radius of the cup. */
+  cupRadius: 4.5,
+  /** The handle loop: from the cup's right wall out to `reach`. */
+  handle: { top: 14, bottom: 18.5, reach: AXIS + CUP_WIDTH / 2 + 3.5 },
+  stroke: 2,
+  /**
+   * Each puff is born on the axis and drifts `drift` dp out to one side as it
+   * rises (the first left, the second right), so the smoke stays centred on
+   * the cup even while only one puff is visible.
+   */
+  puff: { width: 9, height: 7, top: 4.5, left: AXIS - 4.5, drift: 2.5, wobble: 1.2 },
+  heart: { width: 10, height: 9, top: 3, left: AXIS - 5 },
+  /** Two oval eyes on the cup body, and the smile under them. */
+  eyes: { width: 6.2, height: 3, top: 15, left: AXIS - 3.1 },
+  eye: { width: 1.9, height: 3 },
+  smileY: 19.4,
+} as const;
+
+/** The cup + handle path, and the mascot's happy arcs + smile, in glyph-box dp. */
+export function mugPaths(): { cup: string; face: string } {
+  const { cup, cupRadius: r, handle, eyes, eye, smileY, axis } = MUG_LAYOUT;
+  const w = cup.right - cup.left;
+  const loop = (handle.bottom - handle.top) / 2;
+  const cupPath =
+    `M${cup.left} ${cup.top}h${w}v${cup.bottom - cup.top - r}` +
+    `a${r} ${r} 0 01-${r} ${r}h-${w - 2 * r}a${r} ${r} 0 01-${r}-${r}z` +
+    `M${cup.right} ${handle.top}h${handle.reach - cup.right - loop}` +
+    `a${loop} ${loop} 0 010 ${2 * loop}H${cup.right}`;
+  // Happy arcs over each eye's centre, and a small smile under them.
+  const arcY = eyes.top + eyes.height - 0.4;
+  const lx = eyes.left + eye.width / 2 - 1;
+  const rx = eyes.left + eyes.width - eye.width / 2 - 1;
+  const face =
+    `M${lx} ${arcY}q1-1.2 2 0M${rx} ${arcY}q1-1.2 2 0` + `M${axis - 1.6} ${smileY}q1.6 1.3 3.2 0`;
+  return { cup: cupPath, face };
+}
+
 /** One step of an animation: the target value and the time to reach it (ms). */
 export interface AnimStep {
   to: number;

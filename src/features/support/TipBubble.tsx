@@ -24,10 +24,11 @@ function deviceLocale(): string | null {
 }
 
 /**
- * The coffee mascot's speech bubble (#476, round 4): a fun fact up and to the
- * left of the Map's tip button, with a small (x). Drawn by the Map at its
- * root — a touchable that overflows its parent gets no taps on Android — at
- * `right`/`bottom` offsets that put it beside the button's corner.
+ * The coffee mascot's speech bubble (#476, round 4): a fun fact above the
+ * Map's tip button, with a small (x) and a tail pointing down at the mug.
+ * Drawn by the Map at its root — a touchable that overflows its parent gets
+ * no taps on Android — at `right`/`bottom` offsets the Map measures so the
+ * bubble clears the whole bottom row (scale bar, credit caption, button).
  *
  * - Tapping the bubble opens Support at "Leave a tip".
  * - (x) closes it and snoozes bubbles for the rest of the session.
@@ -38,10 +39,13 @@ function deviceLocale(): string | null {
 export function TipBubble({
   right,
   bottom,
+  tailRight,
   visibleMs = BUBBLE_VISIBLE_MS,
 }: {
   right: number;
   bottom: number;
+  /** Where the tail's tip sits, measured from the bubble's right edge. */
+  tailRight: number;
   /** Test hook: how long it stays up untouched. */
   visibleMs?: number;
 }) {
@@ -105,14 +109,25 @@ export function TipBubble({
         >
           <Icon source="close" size={18} color={t.inkMuted} />
         </Pressable>
-        {/* The tail, pointing down-right at the mug. */}
+        {/* The tail, pointing down at the mug. */}
         <View
-          style={[styles.tail, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
+          style={[
+            styles.tail,
+            {
+              right: tailRight - TAIL / 2,
+              backgroundColor: t.surface,
+              borderColor: t.outlineVariant,
+            },
+          ]}
+          testID="tip-bubble-tail"
         />
       </Animated.View>
     </View>
   );
 }
+
+/** Side of the rotated square that draws the tail. */
+const TAIL = 12;
 
 const styles = StyleSheet.create({
   anchor: { position: 'absolute', alignItems: 'flex-end' },
@@ -135,13 +150,12 @@ const styles = StyleSheet.create({
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   tail: {
     position: 'absolute',
-    right: -5,
-    bottom: 10,
-    width: 12,
-    height: 12,
+    bottom: -TAIL / 2,
+    width: TAIL,
+    height: TAIL,
     borderRightWidth: 1,
     borderBottomWidth: 1,
-    transform: [{ rotate: '-45deg' }],
+    transform: [{ rotate: '45deg' }],
   },
   pressed: { opacity: 0.75 },
 });

@@ -11,7 +11,9 @@ import {
   MASCOT_FACE_MS,
   MASCOT_FACE_PHASES,
   motionDurationMs,
+  MUG_LAYOUT,
   MUG_LOOP_INTERVAL_MS,
+  mugPaths,
   TIP_BUTTON_MOTION,
   TIP_BUTTON_VARIANTS,
   TIP_JAR_REST_MS,
@@ -38,6 +40,51 @@ describe('timings (named, owner-tunable)', () => {
     expect(eyesIn[1]).toBeLessThan(blink[0]);
     expect(blink[2]).toBeLessThan(happy[0]);
     expect(happy[1]).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('mug layout (centred composition)', () => {
+  const L = MUG_LAYOUT;
+  // The glyph box is centred in the button, so button centre = box centre.
+  const toButton = (x: number) => (L.button - L.box) / 2 + x;
+  const buttonCentre = L.button / 2;
+
+  it('puts the cup body’s axis on the button centre (±0.5 dp)', () => {
+    const cupAxis = (L.cup.left + L.cup.right) / 2;
+    expect(cupAxis).toBe(L.axis);
+    expect(Math.abs(toButton(cupAxis) - buttonCentre)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('centres the smoke, the heart and the face on the cup axis', () => {
+    // Each puff is born on the axis; they drift out by the same amount, one
+    // to each side, so the pair stays symmetric about it.
+    expect(L.puff.left + L.puff.width / 2).toBeCloseTo(L.axis, 5);
+    expect(L.heart.left + L.heart.width / 2).toBeCloseTo(L.axis, 5);
+    expect(L.eyes.left + L.eyes.width / 2).toBeCloseTo(L.axis, 5);
+  });
+
+  it('keeps the smoke and heart above the rim and inside the circle', () => {
+    const r = L.button / 2;
+    const off = (L.button - L.box) / 2;
+    // Highest point of a puff: it rises 11 dp and swells to 1.3×.
+    const puffTop = off + L.puff.top - 11 - (L.puff.height * 0.3) / 2;
+    const heartTop = off + L.heart.top - 7;
+    for (const top of [puffTop, heartTop]) {
+      // A point on the axis is inside the circle when it is below y = 0.
+      expect(top).toBeGreaterThan(0);
+      expect(top).toBeLessThan(off + L.cup.top);
+    }
+    // The widest puff at its peak still sits inside the circle.
+    const halfW = (L.puff.width * 1.3) / 2 + L.puff.drift + L.puff.wobble;
+    const dy = r - puffTop;
+    expect(Math.hypot(halfW, dy)).toBeLessThan(r);
+  });
+
+  it('draws the cup, handle and face from those numbers', () => {
+    const { cup, face } = mugPaths();
+    expect(cup.startsWith(`M${L.cup.left} ${L.cup.top}`)).toBe(true);
+    expect(cup).toContain(`M${L.cup.right} ${L.handle.top}`);
+    expect(face).toContain(`M${L.axis - 1.6} ${L.smileY}`);
   });
 });
 

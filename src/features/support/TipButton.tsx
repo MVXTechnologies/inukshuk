@@ -6,6 +6,8 @@ import {
   DEFAULT_TIP_BUTTON_VARIANT,
   MASCOT_FACE_MS,
   MASCOT_FACE_PHASES,
+  MUG_LAYOUT,
+  mugPaths,
   TIP_BUTTON_MOTION,
   TIP_JAR_WOBBLE_INTERVAL_MS,
   tipJarAnimates,
@@ -345,11 +347,16 @@ function CoffeeSteam({ t, p, f, faceOn }: GlyphProps) {
   const ink = t.support.onAccent;
   return (
     <View style={styles.glyphBox}>
-      <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+      <Svg
+        width={MUG_LAYOUT.box}
+        height={MUG_LAYOUT.box}
+        viewBox={`0 0 ${MUG_LAYOUT.box} ${MUG_LAYOUT.box}`}
+        fill="none"
+      >
         <Path
-          d="M5 11h11v4.5a4.5 4.5 0 01-4.5 4.5h-2A4.5 4.5 0 015 15.5V11zM16 12.5h1.5a2 2 0 010 4H16"
+          d={MUG_PATHS.cup}
           stroke={ink}
-          strokeWidth={1.9}
+          strokeWidth={MUG_LAYOUT.stroke}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -363,8 +370,8 @@ function CoffeeSteam({ t, p, f, faceOn }: GlyphProps) {
   );
 }
 
-/** Where each puff starts, over the mug's rim (dp in the 28 dp glyph box). */
-const PUFF_LEFT = [5, 10] as const;
+/** The mug and face outlines, built once from {@link MUG_LAYOUT}. */
+const MUG_PATHS = mugPaths();
 
 /**
  * One soft smoke puff: a rounded blob that swells, drifts up with a slight
@@ -391,7 +398,12 @@ function SmokePuff({
       opacity: 0.9 * interpolate(local, [0, 0.25, 0.7, 1], [0, 1, 0.7, 0], Extrapolation.CLAMP),
       transform: [
         { translateY: 3 - local * 11 },
-        { translateX: side * Math.sin(local * 2 * Math.PI) * 1.2 },
+        {
+          translateX:
+            side *
+            (local * MUG_LAYOUT.puff.drift +
+              Math.sin(local * 2 * Math.PI) * MUG_LAYOUT.puff.wobble),
+        },
         { scale: interpolate(local, [0, 1], [0.55, 1.3], Extrapolation.CLAMP) },
       ],
     };
@@ -399,7 +411,7 @@ function SmokePuff({
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.puff, { left: PUFF_LEFT[index] ?? 7, backgroundColor: ink }, style]}
+      style={[styles.puff, { left: MUG_LAYOUT.puff.left, backgroundColor: ink }, style]}
       testID="tip-smoke-puff"
     />
   );
@@ -422,7 +434,7 @@ function RisingHeart({ p, ink }: { p: SharedValue<number>; ink: string }) {
   });
   return (
     <Animated.View pointerEvents="none" style={[styles.heart, style]} testID="tip-steam-heart">
-      <Svg width={10} height={9} viewBox="0 0 24 22">
+      <Svg width={MUG_LAYOUT.heart.width} height={MUG_LAYOUT.heart.height} viewBox="0 0 24 22">
         <Path
           d="M12 21.5c-1.4-1-11-7.3-11-14A6 6 0 0112 4a6 6 0 0111 3.5c0 6.7-9.6 13-11 14z"
           fill={ink}
@@ -469,13 +481,13 @@ function MugFace({ f, on, ink }: { f: SharedValue<number>; on: SharedValue<numbe
         style={[StyleSheet.absoluteFill, smile]}
         testID="tip-mascot-smile"
       >
-        <Svg width={28} height={28} viewBox="0 0 28 28" fill="none">
-          <Path
-            d="M9.4 17.6q1-1.2 2 0M13.6 17.6q1-1.2 2 0M10.9 19.6q1.6 1.3 3.2 0"
-            stroke={ink}
-            strokeWidth={1.1}
-            strokeLinecap="round"
-          />
+        <Svg
+          width={MUG_LAYOUT.box}
+          height={MUG_LAYOUT.box}
+          viewBox={`0 0 ${MUG_LAYOUT.box} ${MUG_LAYOUT.box}`}
+          fill="none"
+        >
+          <Path d={MUG_PATHS.face} stroke={ink} strokeWidth={1.1} strokeLinecap="round" />
         </Svg>
       </Animated.View>
     </>
@@ -535,21 +547,31 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 5,
   },
-  glyphBox: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  // Puffs and heart ride above the mug's rim, inside the 48 dp button.
-  puff: { position: 'absolute', top: 5, width: 9, height: 7, borderRadius: 4.5 },
-  heart: { position: 'absolute', top: 3, left: 7.5 },
-  // The mascot's eyes sit on the mug's body (dp in the 28 dp glyph box).
+  glyphBox: {
+    width: MUG_LAYOUT.box,
+    height: MUG_LAYOUT.box,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Puffs, heart and face all sit on the cup body's axis (MUG_LAYOUT).
+  puff: {
+    position: 'absolute',
+    top: MUG_LAYOUT.puff.top,
+    width: MUG_LAYOUT.puff.width,
+    height: MUG_LAYOUT.puff.height,
+    borderRadius: MUG_LAYOUT.puff.width / 2,
+  },
+  heart: { position: 'absolute', top: MUG_LAYOUT.heart.top, left: MUG_LAYOUT.heart.left },
   eyes: {
     position: 'absolute',
-    left: 9.4,
-    top: 15.4,
-    width: 6.2,
-    height: 3,
+    left: MUG_LAYOUT.eyes.left,
+    top: MUG_LAYOUT.eyes.top,
+    width: MUG_LAYOUT.eyes.width,
+    height: MUG_LAYOUT.eyes.height,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  eye: { width: 1.9, height: 3, borderRadius: 1 },
+  eye: { width: MUG_LAYOUT.eye.width, height: MUG_LAYOUT.eye.height, borderRadius: 1 },
   coin: {
     position: 'absolute',
     left: 11,

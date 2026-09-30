@@ -28,14 +28,16 @@ describe('recordTip', () => {
   });
 
   it('counts tips without a transaction id, and ignores strangers', () => {
-    const l = recordTip(EMPTY_LEDGER, tip('tip_small', null));
-    expect(l).toMatchObject({ totalCents: 299, tipCount: 1, transactionIds: [] });
+    const l = recordTip(EMPTY_LEDGER, tip('tip_medium', null));
+    expect(l).toMatchObject({ totalCents: 699, tipCount: 1, transactionIds: [] });
     expect(recordTip(l, tip('premium', 'x'))).toBe(l);
+    // The retired $2.99 product is a stranger too.
+    expect(recordTip(l, tip('tip_small', 'y'))).toBe(l);
   });
 
   it('remembers a bounded number of ids', () => {
     let l: TipLedger = EMPTY_LEDGER;
-    for (let i = 0; i < 250; i++) l = recordTip(l, tip('tip_small', `t${i}`));
+    for (let i = 0; i < 250; i++) l = recordTip(l, tip('tip_medium', `t${i}`));
     expect(l.transactionIds).toHaveLength(200);
     expect(l.transactionIds[199]).toBe('t249');
   });
