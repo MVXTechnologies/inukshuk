@@ -55,3 +55,29 @@ describe('tip button pause', () => {
     expect(map).toMatch(/paused=\{cameraMoving\}/);
   });
 });
+
+describe('coffee mascot bubble', () => {
+  const map = read('src/features/map/MapScreen.tsx');
+
+  it('is drawn at the Map root so Android delivers its taps', () => {
+    expect(map).toMatch(/<TipBubble right=\{TIP_BUBBLE_RIGHT\} bottom=\{TIP_BUBBLE_BOTTOM\} \/>/);
+    expect(map).not.toMatch(/styles\.bottomSideEnd\][^<]*<TipBubble/);
+  });
+
+  it.each([
+    'railMenuOpen',
+    'trailSheetUp',
+    'pickingCategory',
+    'recordRequested',
+    'modelSheetOpen',
+    'selecting',
+    'makeMapState !== null',
+  ])('stays away while %s', (guard) => {
+    const block = /bubbleBlocked=\{([^}]*)\}/.exec(map)?.[1] ?? '';
+    expect(block).toContain(guard);
+  });
+
+  it('only runs while the Map tab is in front', () => {
+    expect(map).toMatch(/focused=\{isFocused\}/);
+  });
+});

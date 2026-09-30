@@ -100,6 +100,7 @@ import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
+import { TipBubble } from '@features/support/TipBubble';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
@@ -194,6 +195,12 @@ const TOP_CHIP_OFFSET = 8 + 48 + 8;
 
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
+
+// Where the coffee mascot's bubble sits (#476): left of the tip button (16 dp
+// margin + 48 dp button + 8 dp gap) and above the scale bar and credit (10 dp
+// column padding + ~54 dp for the two), so it never covers them.
+const TIP_BUBBLE_RIGHT = 16 + 48 + 8;
+const TIP_BUBBLE_BOTTOM = 10 + 54;
 
 /**
  * Throttled `toLineFeature(points, segmentStarts)`. Between rebuilds the
@@ -508,6 +515,8 @@ export function MapScreen() {
   const [destination, setDestination] = useState<LatLng | null>(null);
   // True between a camera move's start and its settle (tip button pauses, #476).
   const [cameraMoving, setCameraMoving] = useState(false);
+  // A rail sheet (map type, overlays, "+" actions) is open: no mascot bubble (#476).
+  const [railMenuOpen, setRailMenuOpen] = useState(false);
   // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
   // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
   // than tracked per settle — nothing else needs a metre-accurate centre, and
@@ -2448,6 +2457,7 @@ export function MapScreen() {
           }
           compactOpen={compactControlsOpen}
           onCompactOpenChange={setCompactControlsOpen}
+          onMenuOpenChange={setRailMenuOpen}
         />
       )}
 
@@ -2530,6 +2540,16 @@ export function MapScreen() {
               <TipButton
                 navigating={destination !== null}
                 paused={cameraMoving}
+                focused={isFocused}
+                bubbleBlocked={
+                  railMenuOpen ||
+                  trailSheetUp ||
+                  pickingCategory ||
+                  recordRequested ||
+                  modelSheetOpen ||
+                  selecting ||
+                  makeMapState !== null
+                }
                 blocked={inspectId !== null || heatSelection !== null || goToOpen}
               />
             </View>
@@ -2710,6 +2730,11 @@ export function MapScreen() {
           topInset={insets.top}
         />
       )}
+
+      {/* The coffee mascot's speech bubble (#476), beside the tip button in the
+          bottom-right corner: at the root so it can be tapped on Android, and
+          above the scale bar and credit so it never covers them. */}
+      <TipBubble right={TIP_BUBBLE_RIGHT} bottom={TIP_BUBBLE_BOTTOM} />
 
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}

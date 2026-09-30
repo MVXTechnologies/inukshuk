@@ -10,17 +10,36 @@
  *   then, not a place to ask for money), whenever the map says something
  *   else owns the corner, and for {@link TIP_JAR_REST_MS} (12 months) after a
  *   tip in the app or a verified "I already donated" — then it comes back;
- * - one short animation every {@link TIP_JAR_WOBBLE_INTERVAL_MS} (the chosen
- *   coffee scene lasts ~5 s, the others under a second), never when the OS
- *   asks for reduced motion or once the person has tipped, and paused while
- *   the map is being panned or zoomed and while the app is in the background.
+ * - one short animation every {@link MUG_LOOP_INTERVAL_MS} (the chosen coffee
+ *   scene lasts ~2.8 s, the others under a second), never when the OS asks
+ *   for reduced motion or once the person has tipped, and paused while the
+ *   person pans or zooms the map, while the Map tab is not in front and while
+ *   the app is in the background;
+ * - about once a minute the mug becomes a little character with a speech
+ *   bubble and a fun fact — see {@link bubbleDue} for every guard.
  *
  * Pure: no React Native / Expo imports.
  */
 
 export { TIP_JAR_REST_MS } from './verify';
 
-export const TIP_JAR_WOBBLE_INTERVAL_MS = 15_000;
+/** The mug's loop: one short scene every 7 s (owner, round 4; was 15 s). */
+export const MUG_LOOP_INTERVAL_MS = 7_000;
+/** The same period for every variant (the four unused ones included). */
+export const TIP_JAR_WOBBLE_INTERVAL_MS = MUG_LOOP_INTERVAL_MS;
+
+/** The mascot bubble: at most one a minute… */
+export const BUBBLE_INTERVAL_MS = 60_000;
+/** …and never in the first minute after the Map opens. */
+export const BUBBLE_FIRST_DELAY_MS = 60_000;
+/** It folds away on its own after this long if nobody touches it. */
+export const BUBBLE_VISIBLE_MS = 8_000;
+/** The map must have been left alone this long since the person's last gesture. */
+export const BUBBLE_IDLE_MS = 5_000;
+/** The mascot face: eyes appear, blink, close into happy arcs with a smile. */
+export const MASCOT_FACE_MS = 1_600;
+/** How often the bubble schedule is checked (a JS timer, not a frame loop). */
+export const BUBBLE_CHECK_MS = 1_000;
 
 /**
  * The five icon + animation ideas from the owner's mockup
@@ -49,23 +68,30 @@ export const TIP_BUTTON_VARIANTS: readonly TipButtonVariant[] = [
 export const DEFAULT_TIP_BUTTON_VARIANT: TipButtonVariant = 'coffeeSteam';
 
 /**
- * The coffee cycle (owner spec): ~4 s of steam wisps rising and dissolving,
- * then a small heart forms from the last wisp above the mug, holds ~0.5 s and
- * fades. One linear 0→1 progress drives it all on the UI thread; the phase
- * boundaries below are fractions of it.
+ * The coffee scene (owner, round 4): two thick, soft smoke puffs swell, drift
+ * up and fade; then a heart rises out of the mug and fades. ~2.8 s, then
+ * rest. One linear 0→1 progress drives it all on the UI thread; the windows
+ * below are fractions of it.
  */
-export const COFFEE_CYCLE_MS = 5000;
+export const COFFEE_CYCLE_MS = 2_800;
 export const COFFEE_PHASES = {
-  /** Steam runs from 0 until here (4 s). */
-  steamEnd: 0.8,
-  /** The heart has formed (0.3 s later). */
-  heartFormed: 0.86,
-  /** …holds until here (0.5 s), then fades out by 1. */
-  heartHoldEnd: 0.96,
-  /** How many times each wisp rises during the steam phase. */
-  wispLoops: 3,
-  /** Wisps in flight at once, evenly staggered. */
-  wisps: 3,
+  /** Each puff's [start, end] window; the second one trails the first. */
+  puffs: [
+    [0, 0.55],
+    [0.18, 0.72],
+  ] as readonly (readonly [number, number])[],
+  /** The heart rises out of the mug over this window, then fades at its end. */
+  heart: [0.55, 1] as const,
+} as const;
+
+/**
+ * The mascot face, as fractions of {@link MASCOT_FACE_MS}: eyes fade in, blink
+ * once, then close into happy arcs while a small smile appears.
+ */
+export const MASCOT_FACE_PHASES = {
+  eyesIn: [0, 0.15] as const,
+  blink: [0.3, 0.36, 0.42] as const,
+  happy: [0.55, 0.65] as const,
 } as const;
 
 /** One step of an animation: the target value and the time to reach it (ms). */
@@ -104,7 +130,7 @@ export const TIP_BUTTON_MOTION: Readonly<Record<TipButtonVariant, readonly AnimS
     { to: 1.1, ms: 110 },
     { to: 1, ms: 150 },
   ],
-  // Progress 0→1 (linear): the steam-then-heart scene of COFFEE_PHASES.
+  // Progress 0→1 (linear): the puffs-then-heart scene of COFFEE_PHASES.
   coffeeSteam: [
     { to: 1, ms: COFFEE_CYCLE_MS, easing: 'linear' },
     { to: 0, ms: 0 },
@@ -141,4 +167,44 @@ export function tipJarVisible(ctx: TipJarContext): boolean {
 
 export function tipJarAnimates(opts: { reduceMotion: boolean; hasTipped: boolean }): boolean {
   return !opts.reduceMotion && !opts.hasTipped;
+}
+
+/** What decides whether the mascot bubble may appear now. */
+export interface BubbleContext {
+  now: number;
+  /** The tip button is on screen (see {@link tipJarVisible}). */
+  buttonVisible: boolean;
+  /** The Map tab is in front and the app is in the foreground. */
+  active: boolean;
+  /** A sheet, dialog, menu or search is open over the map. */
+  blocked: boolean;
+  /** The person is panning or zooming right now. */
+  gestureActive: boolean;
+  /** When the person's last map gesture ended (null = none yet). */
+  lastGestureEndAt: number | null;
+  /** When the Map was opened (the button mounted). */
+  mapOpenedAt: number;
+  /** When the last bubble was shown (null = none yet this session). */
+  lastBubbleAt: number | null;
+  /** (x) was pressed: no more bubbles this session. */
+  snoozed: boolean;
+}
+
+/**
+ * Guard rails for the mascot bubble (coordinator's recommendation, owner can
+ * loosen them): never while the button is hidden (recording, following a
+ * destination, the 12-month rest after a gift, switched off), never over a
+ * sheet/dialog/menu/search, never during the person's own map gestures nor
+ * within {@link BUBBLE_IDLE_MS} of one, not in the first
+ * {@link BUBBLE_FIRST_DELAY_MS} after the Map opens, at most one per
+ * {@link BUBBLE_INTERVAL_MS}, and never again this session after (x).
+ */
+export function bubbleDue(ctx: BubbleContext): boolean {
+  if (!ctx.buttonVisible || !ctx.active || ctx.blocked || ctx.snoozed) return false;
+  if (ctx.gestureActive) return false;
+  if (ctx.now - ctx.mapOpenedAt < BUBBLE_FIRST_DELAY_MS) return false;
+  if (ctx.lastBubbleAt !== null && ctx.now - ctx.lastBubbleAt < BUBBLE_INTERVAL_MS) return false;
+  if (ctx.lastGestureEndAt !== null && ctx.now - ctx.lastGestureEndAt < BUBBLE_IDLE_MS)
+    return false;
+  return true;
 }
