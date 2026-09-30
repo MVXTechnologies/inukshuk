@@ -149,6 +149,10 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['progress fill on its track', t.support.progress, t.support.progressTrack, GRAPHIC],
     ['thank-you stones on background', t.support.stone, t.background, GRAPHIC],
     ['thank-you deep stones on background', t.support.stoneDeep, t.background, GRAPHIC],
+    ['tip button cairn on stone', t.support.cairnLight, palette.stone, GRAPHIC],
+    ['tip button coin on stone', t.support.coin, palette.stone, GRAPHIC],
+    ['tip button heart on surface', t.support.heart, t.surface, GRAPHIC],
+    ['tip button stone heart on surface', t.support.stone, t.surface, GRAPHIC],
   ];
 }
 

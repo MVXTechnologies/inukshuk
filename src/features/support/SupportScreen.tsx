@@ -110,6 +110,14 @@ export function SupportScreen() {
           )}
         </View>
         <TipSection jar={jar} />
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push('/support/verify')}
+          style={({ pressed }) => [styles.quietLink, pressed && styles.pressed]}
+          hitSlop={8}
+        >
+          <Text style={[styles.quietLinkText, { color: t.inkMuted }]}>I already donated</Text>
+        </Pressable>
 
         {costs !== null && costs.costs.length > 0 && <MoneyGoes costs={costs} />}
 
@@ -406,5 +414,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   linkText: { fontSize: 15, fontWeight: '700' },
+  quietLink: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', marginTop: 4 },
+  quietLinkText: { fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
   pressed: { opacity: 0.75 },
 });

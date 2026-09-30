@@ -9,7 +9,9 @@ import {
 } from '@core/support/tips';
 import { reportError } from '@lib/errorReporting';
 import { getTipStore, type TipEvent, type TipStore } from '@lib/iap';
+import { useSettingsStore } from '@state/settingsStore';
 import { useSupportStore } from '@state/supportStore';
+import { restUntil } from '@core/support/verify';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -86,6 +88,8 @@ export function useTipJar(onThanks: (productId: string) => void): TipJar {
       if (event.kind === 'purchased') {
         // Counted before the thank-you screen reads the total (donors offer).
         useSupportStore.getState().recordTip(event);
+        // Thanked people are not asked again for a year (then the button returns).
+        useSettingsStore.getState().set('tipJarRestingUntil', restUntil(Date.now()));
         setNotice(null);
         onThanksRef.current(event.productId);
         return;

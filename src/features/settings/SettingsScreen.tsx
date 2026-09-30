@@ -349,13 +349,13 @@ export function SettingsScreen() {
                   )}
                 />
                 <List.Item
-                  title="Show the tip jar button"
-                  description="A small jar on the main tabs that opens Support Inukshuk"
+                  title="Show the tip button"
+                  description="A small button on the map that opens Support Inukshuk"
                   right={() => (
                     <Switch
                       value={showTipJar}
                       onValueChange={(v) => set('showTipJar', v)}
-                      accessibilityLabel="Show the tip jar button"
+                      accessibilityLabel="Show the tip button"
                     />
                   )}
                 />

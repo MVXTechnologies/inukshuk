@@ -414,6 +414,51 @@ published automatically:
    then delete the pending file. Removal requests (by email) are the same edit
    in reverse.
 
+### "I already donated": `POST /donor-verify/start|check` (email code)
+
+An honour system: the Support screen's "I already donated" link asks for an
+email, the Worker emails a 6-digit code, and a matching code rests the Map's
+tip button for 12 months on that device. No donation is looked up.
+
+- `start {email}` → always `202 {ok:true}` for a valid address (no
+  enumeration); at most 3 codes per address per hour.
+- `check {email, code}` → `200 {ok:true}` or `400 {ok:false}` (wrong, expired
+  and never-requested all look the same); 5 wrong tries burn the code.
+- Both are rate-limited per client IP (the `DONOR_LIMITER` binding plus a
+  per-isolate hourly cap). Codes are compared in constant time.
+- R2 keeps only `donor-verify/<HMAC(salt, email)>.json` =
+  `{ proof: HMAC(salt, email|code), expiresAt, attempts, starts }` — never the
+  address or the code. The object is deleted on success and swept once
+  stale; add the lifecycle rule below as a backstop.
+- Without both secrets the routes answer 404, so deploying the Worker early is
+  harmless.
+
+**One-time setup (owner):**
+
+1. **Resend account** — sign up at resend.com, then _Domains → Add domain_:
+   `mvxtechnologies.com` (or a subdomain such as `mail.mvxtechnologies.com`).
+2. **DNS at Namecheap** — _Domain List → mvxtechnologies.com → Manage →
+   Advanced DNS → Host Records_: add exactly the records Resend's domain page
+   lists (copy host and value from there; do not type them from memory). They
+   are typically a DKIM `TXT` record (host `resend._domainkey`), an SPF `TXT`
+   record and an `MX` record on the sending subdomain (host `send`), plus an
+   optional DMARC `TXT` (host `_dmarc`, e.g. `v=DMARC1; p=none;`). Wait for
+   Resend to show the domain as _Verified_.
+3. **API key** — Resend → _API Keys → Create_ (permission: sending access,
+   domain: mvxtechnologies.com), then from `infra/tiles/worker/`:
+   `npx wrangler secret put RESEND_API_KEY`.
+4. **Salt** — any long random string, kept secret:
+   `openssl rand -hex 32 | npx wrangler secret put DONOR_VERIFY_SALT`. Changing
+   it later only invalidates codes in flight.
+5. **Sender** — `VERIFY_FROM` in `wrangler.toml` `[vars]`
+   (default `Inukshuk <no-reply@mvxtechnologies.com>`; must be on the verified
+   domain).
+6. **R2 lifecycle backstop** — Cloudflare dashboard → R2 → `inukshuk-tiles` →
+   _Settings → Object lifecycle rules_: delete objects with prefix
+   `donor-verify/` 1 day after upload.
+7. `npx wrangler deploy`, then test:
+   `curl -X POST https://<worker>/donor-verify/start -H 'Content-Type: application/json' -d '{"email":"you@example.org"}'`.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for                                        |

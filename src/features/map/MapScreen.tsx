@@ -96,7 +96,7 @@ import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatRadiusPx } from '@core/heat/heatRadius';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
-import { TipJarButton } from '@features/support/TipJarButton';
+import { TipButton } from '@features/support/TipButton';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
@@ -2427,7 +2427,7 @@ export function MapScreen() {
                   two never collide; it hides itself while recording, while a
                   destination is followed, and while a trail sheet, heat carousel
                   or the coordinate dialog is up. */}
-              <TipJarButton
+              <TipButton
                 navigating={destination !== null}
                 blocked={inspectId !== null || heatSelection !== null || goToOpen}
               />

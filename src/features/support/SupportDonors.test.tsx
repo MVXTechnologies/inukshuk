@@ -1,4 +1,4 @@
-/** Round 2 of #476: the tip-jar button, the donors offer, the donor form, the donors list. */
+/** Round 2 of #476: the donors offer, the donor form, the donors list. */
 import type { CostsDocument } from '@core/support/costs';
 import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -12,7 +12,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DonorFormScreen } from './DonorFormScreen';
 import { DonorsList } from './DonorsList';
 import { SupportThanksScreen } from './SupportThanksScreen';
-import { TipJarButton } from './TipJarButton';
 
 const mockPush = jest.fn();
 const mockDismissTo = jest.fn();
@@ -86,43 +85,6 @@ beforeEach(async () => {
   useRecorderStore.setState({ status: 'idle' });
   setLedger({});
   jest.mocked(useReducedMotion).mockReturnValue(false);
-});
-
-describe('TipJarButton', () => {
-  it('opens Support at the tips', async () => {
-    await mount(<TipJarButton />);
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('tip-jar'));
-    });
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/support', params: { from: 'jar' } });
-  });
-
-  it.each([
-    ['switched off in Settings', () => useSettingsStore.getState().set('showTipJar', false), {}],
-    ['recording', () => useRecorderStore.setState({ status: 'recording' }), {}],
-    ['following a destination', () => undefined, { navigating: true }],
-    ['the corner is taken', () => undefined, { blocked: true }],
-  ])('is hidden when %s', async (_label, arrange, props) => {
-    arrange();
-    await mount(<TipJarButton {...props} />);
-    expect(screen.queryByTestId('tip-jar')).toBeNull();
-  });
-
-  it('long-press offers Hide, which turns the setting off', async () => {
-    await mount(<TipJarButton />);
-    await act(async () => {
-      fireEvent(screen.getByTestId('tip-jar'), 'longPress');
-    });
-    await act(async () => {
-      fireEvent.press(screen.getByText('Hide tip jar'));
-    });
-    expect(useSettingsStore.getState().showTipJar).toBe(false);
-    expect(screen.queryByTestId('tip-jar')).toBeNull();
-  });
-
-  it('is on by default', () => {
-    expect(useSettingsStore.getState().showTipJar).toBe(true);
-  });
 });
 
 describe('Thank-you screen: donors offer', () => {

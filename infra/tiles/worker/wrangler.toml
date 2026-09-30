@@ -15,6 +15,10 @@ ALLOWED_ORIGINS = "*"
 CACHE_CONTROL = "public, max-age=86400"
 # Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
 STRAVA_CLIENT_ID = "283079"
+# "I already donated" code email (#476). Secrets: `wrangler secret put
+# RESEND_API_KEY` and `wrangler secret put DONOR_VERIFY_SALT` (any long random
+# string); without both, /donor-verify/* answers 404.
+VERIFY_FROM = "Inukshuk <no-reply@mvxtechnologies.com>"
 
 # POST /donors (#476): at most 3 donor-name submissions per client IP per
 # minute, on top of the per-isolate hourly cap in src/donors.ts. The IP is the

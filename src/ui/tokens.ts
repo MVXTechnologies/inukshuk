@@ -211,6 +211,11 @@ export interface SchemeTokens {
     /** The thank-you inukshuk: light and dark stones. */
     stone: string;
     stoneDeep: string;
+    /** Tip button pieces (TipButton.dc.html): the cairn's pale stones, the coin, the heart. */
+    cairnLight: string;
+    cairnMid: string;
+    coin: string;
+    heart: string;
   };
 }
 
@@ -337,6 +342,10 @@ export const lightScheme: SchemeTokens = {
     progressTrack: '#E2DBCB',
     stone: '#3B444D',
     stoneDeep: '#2D353D',
+    cairnLight: '#C9CFC2',
+    cairnMid: '#AEB6AA',
+    coin: '#E0B94E',
+    heart: '#C2410C',
   },
 };
 
@@ -469,6 +478,10 @@ export const darkScheme: SchemeTokens = {
     // The light board's charcoal stones vanish on stone night: lift them.
     stone: '#A7B0B8',
     stoneDeep: '#77828E',
+    cairnLight: '#C9CFC2',
+    cairnMid: '#AEB6AA',
+    coin: '#E0B94E',
+    heart: '#F07A45',
   },
 };
 
@@ -595,6 +608,10 @@ export const sunlightScheme: SchemeTokens = {
     progressTrack: '#DDDDDD',
     stone: '#333333',
     stoneDeep: palette.black,
+    cairnLight: '#EEEEEE',
+    cairnMid: '#CCCCCC',
+    coin: '#E0B94E',
+    heart: '#B02222',
   },
 };
 
@@ -726,6 +743,10 @@ export const nightScheme: SchemeTokens = {
     progressTrack: '#3A0B08',
     stone: NIGHT_INK,
     stoneDeep: '#CC2E24',
+    cairnLight: NIGHT_INK,
+    cairnMid: '#CC2E24',
+    coin: NIGHT_INK,
+    heart: NIGHT_INK,
   },
 };
 

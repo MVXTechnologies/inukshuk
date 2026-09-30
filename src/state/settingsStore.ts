@@ -198,6 +198,11 @@ export interface Settings {
   supportNudgeAnsweredAt: number;
   /** The floating tip-jar button on the main tabs (#476; Settings › App settings, or long-press › Hide). */
   showTipJar: boolean;
+  /**
+   * Epoch ms until which the tip button rests (12 months after a tip in the
+   * app or a verified "I already donated"); 0 = not resting. It comes back after.
+   */
+  tipJarRestingUntil: number;
 }
 
 const DEFAULTS: Settings = {
@@ -238,6 +243,7 @@ const DEFAULTS: Settings = {
   lastKnownPosition: null,
   supportNudgeAnsweredAt: 0,
   showTipJar: true,
+  tipJarRestingUntil: 0,
 };
 
 interface SettingsState extends Settings {
@@ -310,6 +316,7 @@ function snapshot(s: SettingsState): Settings {
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
+    tipJarRestingUntil,
   } = s;
   return {
     tileUrl,
@@ -349,6 +356,7 @@ function snapshot(s: SettingsState): Settings {
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
+    tipJarRestingUntil,
   };
 }
 

@@ -70,7 +70,6 @@ import {
 import { MapRow, OnMapChip, RowDivider, TrailRow, WaypointRow } from './components/LibraryRows';
 import { ImportJobCard } from '../import/ImportJobCard';
 import { SupportNudgeCard } from '../support/SupportNudgeCard';
-import { FloatingTipJar, TIP_JAR_CLEARANCE } from '../support/TipJarButton';
 import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
@@ -1325,7 +1324,7 @@ export function LibraryScreen() {
           onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={32}
           onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + space.xl + TIP_JAR_CLEARANCE }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
         >
@@ -1373,9 +1372,6 @@ export function LibraryScreen() {
           )}
         </ScrollView>
       )}
-
-      {/* The tip jar (#476): out of the way while selecting, organizing or dragging. */}
-      <FloatingTipJar blocked={selectionMode || organizing || dragging !== null} />
 
       <DragGhost
         dragging={dragging}

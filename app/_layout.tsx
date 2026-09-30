@@ -126,6 +126,7 @@ export default function RootLayout() {
                   <Stack.Screen name="support/index" />
                   <Stack.Screen name="support/thanks" />
                   <Stack.Screen name="support/donor" />
+                  <Stack.Screen name="support/verify" />
                   {/* The Explore tab's secondary screens (#447). */}
                   <Stack.Screen name="explore/list" />
                   <Stack.Screen name="explore/map" />
