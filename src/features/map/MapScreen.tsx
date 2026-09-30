@@ -483,6 +483,8 @@ export function MapScreen() {
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
   const [destination, setDestination] = useState<LatLng | null>(null);
+  // True between a camera move's start and its settle (tip button pauses, #476).
+  const [cameraMoving, setCameraMoving] = useState(false);
   // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
   // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
   // than tracked per settle — nothing else needs a metre-accurate centre, and
@@ -1825,8 +1827,12 @@ export function MapScreen() {
           // Wind particles track the camera at gesture rate; the handler is
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
+          // Once per camera move (not per frame): pauses the tip button's
+          // animation while the map is being panned or zoomed (#476).
+          onRegionWillChange={() => setCameraMoving(true)}
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
+            setCameraMoving(false);
             // A settled camera is proof the native map is up: in some sessions
             // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
             // never fires, which left every mapLoaded-gated feature dead — the
@@ -2433,6 +2439,7 @@ export function MapScreen() {
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
               <TipButton
                 navigating={destination !== null}
+                paused={cameraMoving}
                 blocked={inspectId !== null || heatSelection !== null || goToOpen}
               />
             </View>

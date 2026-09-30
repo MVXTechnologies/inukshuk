@@ -1,8 +1,7 @@
-import { annualTotal, progressFraction, type CostsDocument } from '@core/support/costs';
+import { GOALS, goalsView, type CostsDocument } from '@core/support/costs';
 import {
-  annualCostLabel,
-  formatMoney,
-  raisedOfGoalLabel,
+  goalFundedLabel,
+  percentFundedLabel,
   supportersLabel,
   supportPageUrl,
 } from '@core/support/format';
@@ -119,7 +118,7 @@ export function SupportScreen() {
           <Text style={[styles.quietLinkText, { color: t.inkMuted }]}>I already donated</Text>
         </Pressable>
 
-        {costs !== null && costs.costs.length > 0 && <MoneyGoes costs={costs} />}
+        <WhatDonationsPayFor />
 
         <Pressable
           accessibilityRole="link"
@@ -130,7 +129,7 @@ export function SupportScreen() {
           hitSlop={8}
         >
           <Text style={[styles.linkText, { color: t.support.link }]}>
-            See the full accounts on the website →
+            More about supporting Inukshuk on the website →
           </Text>
         </Pressable>
       </ScrollView>
@@ -138,31 +137,63 @@ export function SupportScreen() {
   );
 }
 
+/**
+ * This year's two goals, funded in order (owner rule: percentages only, never
+ * an amount): the active goal's bar, and a small check for each goal already
+ * funded.
+ */
 function YearProgress({ costs }: { costs: CostsDocument }) {
   const t = useSchemeTokens();
-  const pct = Math.round(progressFraction(costs.raised, costs.goal) * 100);
+  if (costs.goals === null) return null;
+  const { funded, active } = goalsView(costs.goals);
+  const caption = [
+    costs.supporters === null ? null : supportersLabel(costs.supporters),
+    'updated monthly',
+  ]
+    .filter((x): x is string => x !== null)
+    .join(' · ');
   return (
     <View style={styles.progress} testID="support-progress">
-      <View style={styles.progressHead}>
-        <Text accessibilityRole="header" style={[styles.h2, { color: t.ink }]}>
-          This year
-        </Text>
-        <Text style={[styles.progressLabel, { color: t.inkMuted }]}>
-          {raisedOfGoalLabel(costs.raised, costs.goal, costs.currency)}
-        </Text>
-      </View>
-      <View
-        style={[styles.bar, { backgroundColor: t.support.progressTrack }]}
-        accessible
-        accessibilityRole="progressbar"
-        accessibilityValue={{ min: 0, max: 100, now: pct }}
-        accessibilityLabel={`${pct} percent of this year's costs raised`}
-      >
-        <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: t.support.progress }]} />
-      </View>
-      <Text style={[styles.caption, { color: t.inkMuted }]}>
-        {supportersLabel(costs.supporters)} · updated monthly
+      <Text accessibilityRole="header" style={[styles.h2, { color: t.ink }]}>
+        This year
       </Text>
+      {funded.map((goal) => (
+        <View key={goal.id} style={styles.fundedRow} testID={`goal-funded-${goal.id}`}>
+          <Icon source="check-circle" size={18} color={t.support.progress} />
+          <Text style={[styles.fundedText, { color: t.inkMuted }]}>
+            {goalFundedLabel(goal.label, costs.year)}
+          </Text>
+        </View>
+      ))}
+      {active === null ? (
+        <Text style={[styles.body, { color: t.ink }]} testID="goals-all-funded">
+          Both goals are funded{costs.year === null ? '' : ` for ${costs.year}`}. Thank you!
+        </Text>
+      ) : (
+        <>
+          <View style={styles.progressHead}>
+            <Text style={[styles.goalLabel, { color: t.ink }]}>{active.label}</Text>
+            <Text style={[styles.progressLabel, { color: t.inkMuted }]}>
+              {percentFundedLabel(active.percent)}
+            </Text>
+          </View>
+          <View
+            style={[styles.bar, { backgroundColor: t.support.progressTrack }]}
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: active.percent }}
+            accessibilityLabel={`${active.label}: ${active.percent} percent funded`}
+          >
+            <View
+              style={[
+                styles.barFill,
+                { width: `${active.percent}%`, backgroundColor: t.support.progress },
+              ]}
+            />
+          </View>
+        </>
+      )}
+      <Text style={[styles.caption, { color: t.inkMuted }]}>{caption}</Text>
     </View>
   );
 }
@@ -287,12 +318,13 @@ function TipTile({
   );
 }
 
-function MoneyGoes({ costs }: { costs: CostsDocument }) {
+/** What donations pay for, grouped under the two goals — plain words, no amounts. */
+function WhatDonationsPayFor() {
   const t = useSchemeTokens();
   return (
     <>
       <Text accessibilityRole="header" style={[styles.h2, styles.moneyHeading, { color: t.ink }]}>
-        Where the money goes
+        What donations pay for
       </Text>
       <View
         style={[
@@ -300,24 +332,27 @@ function MoneyGoes({ costs }: { costs: CostsDocument }) {
           styles.ledger,
           { backgroundColor: t.surface, borderColor: t.outlineVariant },
         ]}
+        testID="donations-pay-for"
       >
-        {costs.costs.map((item, i) => (
+        {GOALS.map((goal, gi) => (
           <View
-            key={`${item.labelEn}-${i}`}
-            style={[styles.ledgerRow, { borderBottomColor: t.outlineVariant }]}
+            key={goal.id}
+            style={[
+              styles.ledgerGroup,
+              gi < GOALS.length - 1 && {
+                borderBottomColor: t.outlineVariant,
+                borderBottomWidth: StyleSheet.hairlineWidth,
+              },
+            ]}
           >
-            <Text style={[styles.ledgerLabel, { color: t.ink }]}>{item.labelEn}</Text>
-            <Text style={[styles.ledgerAmount, { color: t.ink }]}>
-              {annualCostLabel(item, costs.currency)}
-            </Text>
+            <Text style={[styles.ledgerGroupTitle, { color: t.ink }]}>{goal.label}</Text>
+            {goal.payFor.map((line) => (
+              <Text key={line} style={[styles.ledgerLabel, { color: t.inkMuted }]}>
+                · {line}
+              </Text>
+            ))}
           </View>
         ))}
-        <View style={[styles.ledgerRow, styles.ledgerTotal]}>
-          <Text style={[styles.ledgerTotalText, { color: t.ink }]}>Total per year</Text>
-          <Text style={[styles.ledgerTotalText, { color: t.ink }]}>
-            {formatMoney(annualTotal(costs.costs), costs.currency)}
-          </Text>
-        </View>
       </View>
     </>
   );
@@ -395,18 +430,12 @@ const styles = StyleSheet.create({
   },
   moneyHeading: { marginTop: 26, marginBottom: space.sm, marginHorizontal: space.lg },
   ledger: { borderRadius: 14 },
-  ledgerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  ledgerLabel: { flex: 1, fontSize: 14.5, lineHeight: 20 },
-  ledgerAmount: { fontSize: 14.5, lineHeight: 20, fontWeight: '700' },
-  ledgerTotal: { borderBottomWidth: 0 },
-  ledgerTotalText: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  ledgerGroup: { paddingVertical: space.md, paddingHorizontal: 14, gap: 4 },
+  ledgerGroupTitle: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  goalLabel: { fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  fundedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  fundedText: { fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  ledgerLabel: { fontSize: 14.5, lineHeight: 20 },
   link: {
     marginTop: 14,
     marginHorizontal: space.lg,

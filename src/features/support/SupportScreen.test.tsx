@@ -2,7 +2,7 @@
 import type { CostsDocument } from '@core/support/costs';
 import type { StoreProduct } from '@core/support/tips';
 import type { TipEvent, TipStore } from '@lib/iap';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -35,23 +35,12 @@ jest.mock('@lib/iap', () => ({ getTipStore: () => mockStore }));
 
 const COSTS: CostsDocument = {
   year: 2026,
-  currency: 'USD',
-  goal: 1267,
-  raised: 317,
+  goals: [
+    { id: 'keepUp', percent: 40 },
+    { id: 'features', percent: 0 },
+  ],
   supporters: 12,
   updated: '2026-09-30',
-  costs: [
-    { labelEn: 'Apple developer account', labelFr: 'x', amount: 99, period: 'year' },
-    { labelEn: 'Strava connection (API)', labelFr: 'x', amount: 14, period: 'month' },
-    {
-      labelEn: 'Servers, maintenance, licences (cushion)',
-      labelFr: 'x',
-      amount: 1000,
-      period: 'year',
-    },
-    { labelEn: 'Google Play account', labelFr: 'x', amount: 25, period: 'once' },
-  ],
-  ledger: [],
   donors: [],
 };
 
@@ -126,33 +115,94 @@ afterEach(() => {
 });
 
 describe('costs', () => {
-  it('shows this year, the supporters and where the money goes', async () => {
+  it('shows the active goal as a percentage, the supporters, and what donations pay for', async () => {
     mockStore = fakeStore().store;
     await mount();
     expect(screen.getByText('Free for everyone. Kept alive by donations.')).toBeTruthy();
-    expect(screen.getByText('$317 of $1,267')).toBeTruthy();
-    expect(screen.getByText('12 supporters so far · updated monthly')).toBeTruthy();
-    expect(screen.getByRole('progressbar').props.accessibilityValue).toMatchObject({ now: 25 });
-    expect(screen.getByText('$168')).toBeTruthy();
-    expect(screen.getByText('paid once')).toBeTruthy();
-    expect(screen.getByText('$1,267')).toBeTruthy();
+    expect(
+      within(screen.getByTestId('support-progress')).getByText('Keep the app up'),
+    ).toBeTruthy();
+    expect(screen.getByText('40% funded')).toBeTruthy();
+    expect(screen.getByText('12 supporters · updated monthly')).toBeTruthy();
+    expect(screen.getByRole('progressbar').props.accessibilityValue).toMatchObject({ now: 40 });
+    expect(screen.queryByTestId('goal-funded-keepUp')).toBeNull();
+    expect(screen.getByText('· Developer time')).toBeTruthy();
+    expect(screen.getByText('· Map servers and data')).toBeTruthy();
   });
 
-  it('leaves the numbers out when the accounts are unavailable (offline, no copy)', async () => {
+  it('never shows an amount of money in the progress or the list', async () => {
+    mockStore = null;
+    await mount();
+    const progress = screen.getByTestId('support-progress');
+    const list = screen.getByTestId('donations-pay-for');
+    for (const node of [progress, list]) {
+      expect(node).not.toHaveTextContent(/\$|€|USD|CAD/);
+    }
+    expect(list).not.toHaveTextContent(/\d/);
+    expect(screen.queryByText(/Total per year|Where the money goes/)).toBeNull();
+  });
+
+  it('marks "Keep the app up" funded and moves the bar to new features', async () => {
+    mockCosts = {
+      doc: {
+        ...COSTS,
+        goals: [
+          { id: 'keepUp', percent: 100 },
+          { id: 'features', percent: 15 },
+        ],
+      },
+      fromCache: false,
+    };
+    await mount();
+    expect(screen.getByTestId('goal-funded-keepUp')).toHaveTextContent(
+      /Keep the app up ✓ funded for 2026/,
+    );
+    expect(
+      within(screen.getByTestId('support-progress')).getByText('Implement new features'),
+    ).toBeTruthy();
+    expect(screen.getByText('15% funded')).toBeTruthy();
+  });
+
+  it('thanks everyone when both goals are funded', async () => {
+    mockCosts = {
+      doc: {
+        ...COSTS,
+        goals: [
+          { id: 'keepUp', percent: 100 },
+          { id: 'features', percent: 100 },
+        ],
+      },
+      fromCache: false,
+    };
+    await mount();
+    expect(screen.getByTestId('goals-all-funded')).toHaveTextContent(
+      'Both goals are funded for 2026. Thank you!',
+    );
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  it('hides the progress when the file publishes no goals', async () => {
+    mockCosts = { doc: { ...COSTS, goals: null }, fromCache: true };
+    await mount();
+    expect(screen.queryByTestId('support-progress')).toBeNull();
+  });
+
+  it('leaves the progress out when it is unavailable (offline, no copy)', async () => {
     mockCosts = null;
     mockStore = fakeStore().store;
     await mount();
     expect(screen.queryByTestId('support-progress')).toBeNull();
-    expect(screen.queryByText('Where the money goes')).toBeNull();
+    // What donations pay for is static copy: it stays.
+    expect(screen.getByTestId('donations-pay-for')).toBeTruthy();
     // The tips and the website link do not depend on them.
     expect(screen.getByText('Tip 8,99 $')).toBeTruthy();
-    expect(screen.getByText('See the full accounts on the website →')).toBeTruthy();
+    expect(screen.getByText('More about supporting Inukshuk on the website →')).toBeTruthy();
   });
 
   it('opens the public accounts on the website', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
     await mount();
-    await press(screen.getByText('See the full accounts on the website →'));
+    await press(screen.getByText('More about supporting Inukshuk on the website →'));
     expect(open).toHaveBeenCalledWith(
       expect.stringMatching(/^https:\/\/inukshuk\.mvxtechnologies\.com\/(fr\/)?support\/$/),
     );

@@ -1,57 +1,25 @@
 /**
- * Copy for the Support screen (#476): money, the progress line and the
- * "where the money goes" amounts. The app is English-only; the website does
- * its own EN/FR formatting inline.
- *
- * Deliberately not `Intl.NumberFormat`: Hermes' Intl differs between Android
- * and iOS builds and between OS versions, and these few strings must read the
- * same everywhere (and in Jest).
+ * Copy for the Support screen (#476). No money anywhere (owner rule): only
+ * percentages, the supporter count and the goal lines. The app is
+ * English-only; the website does its own EN/FR copy.
  */
 
-import { annualAmount, type CostItem } from './costs';
-
-const SYMBOLS: Readonly<Record<string, string>> = { USD: '$', CAD: '$', EUR: '€' };
-
-function groupThousands(whole: number): string {
-  return String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-/**
- * `$1,267`, `$14.50`; a currency with no symbol here reads `1,267 GBP`.
- * Whole amounts drop the cents: this is a ledger for people, not an invoice.
- */
-export function formatMoney(amount: number, currency: string): string {
-  const negative = amount < 0;
-  const abs = Math.abs(amount);
-  const cents = Math.round(abs * 100);
-  const whole = Math.floor(cents / 100);
-  const rest = cents % 100;
-  const digits =
-    rest === 0
-      ? groupThousands(whole)
-      : `${groupThousands(whole)}.${String(rest).padStart(2, '0')}`;
-  const symbol = SYMBOLS[currency];
-  const body = symbol === undefined ? `${digits} ${currency}` : `${symbol}${digits}`;
-  return negative ? `−${body}` : body;
-}
-
-/** The app's cost list shows each line per year; a one-off cost says so instead. */
-export function annualCostLabel(item: CostItem, currency: string): string {
-  if (item.period === 'once') return 'paid once';
-  return formatMoney(annualAmount(item), currency);
-}
-
-/** "1 supporter so far" / "12 supporters so far". */
+/** "1 supporter" / "12 supporters". */
 export function supportersLabel(count: number): string {
-  return count === 1 ? '1 supporter so far' : `${count} supporters so far`;
+  return count === 1 ? '1 supporter' : `${count} supporters`;
 }
 
-/** "$0 of $1,267". */
-export function raisedOfGoalLabel(raised: number, goal: number, currency: string): string {
-  return `${formatMoney(raised, currency)} of ${formatMoney(goal, currency)}`;
+/** "40% funded". */
+export function percentFundedLabel(percent: number): string {
+  return `${percent}% funded`;
 }
 
-/** The public accounts page, in the reader's language when it is French. */
+/** "Keep the app up ✓ funded for 2026" (the year is left out when unknown). */
+export function goalFundedLabel(label: string, year: number | null): string {
+  return year === null ? `${label} ✓ funded` : `${label} ✓ funded for ${year}`;
+}
+
+/** The public support page, in the reader's language when it is French. */
 export const SUPPORT_PAGE_URL = 'https://inukshuk.mvxtechnologies.com/support/';
 export const SUPPORT_PAGE_URL_FR = 'https://inukshuk.mvxtechnologies.com/fr/support/';
 

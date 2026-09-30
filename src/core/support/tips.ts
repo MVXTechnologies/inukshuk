@@ -55,7 +55,7 @@ export const TIP_TIERS: readonly TipTier[] = [
   {
     id: 'tip_patron',
     name: 'Patron of the trail',
-    what: 'About a month of the year’s costs',
+    what: 'For those who can give more',
     icon: 'hand-heart-outline',
   },
 ];

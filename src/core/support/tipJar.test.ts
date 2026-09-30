@@ -1,4 +1,6 @@
 import {
+  COFFEE_CYCLE_MS,
+  COFFEE_PHASES,
   DEFAULT_TIP_BUTTON_VARIANT,
   motionDurationMs,
   TIP_BUTTON_MOTION,
@@ -10,14 +12,28 @@ import {
 } from './tipJar';
 
 describe('tip button variants', () => {
-  it('offers the five mockup ideas, defaulting to the coin on the cairn', () => {
+  it('offers the five mockup ideas; the owner picked the coffee mug', () => {
     expect(TIP_BUTTON_VARIANTS).toHaveLength(5);
-    expect(DEFAULT_TIP_BUTTON_VARIANT).toBe('cairnCoin');
+    expect(DEFAULT_TIP_BUTTON_VARIANT).toBe('coffeeSteam');
   });
 
-  it.each(TIP_BUTTON_VARIANTS)('%s animates in under a second and comes back to rest', (v) => {
+  it('runs the coffee scene: ~4 s of steam, then a heart held ~0.5 s', () => {
+    expect(motionDurationMs(TIP_BUTTON_MOTION.coffeeSteam)).toBe(COFFEE_CYCLE_MS);
+    expect(COFFEE_PHASES.steamEnd * COFFEE_CYCLE_MS).toBeCloseTo(4000);
+    expect((COFFEE_PHASES.heartHoldEnd - COFFEE_PHASES.heartFormed) * COFFEE_CYCLE_MS).toBeCloseTo(
+      500,
+    );
+    expect(COFFEE_PHASES.heartFormed).toBeGreaterThan(COFFEE_PHASES.steamEnd);
+    expect(COFFEE_PHASES.heartHoldEnd).toBeLessThan(1);
+    expect(COFFEE_PHASES.wisps).toBeGreaterThanOrEqual(2);
+    // The scene fits well inside the 15 s period.
+    expect(COFFEE_CYCLE_MS).toBeLessThan(TIP_JAR_WOBBLE_INTERVAL_MS);
+  });
+
+  it.each(TIP_BUTTON_VARIANTS)('%s comes back to rest', (v) => {
     const steps = TIP_BUTTON_MOTION[v];
-    expect(motionDurationMs(steps)).toBeLessThan(1000);
+    // The four unused ideas keep their short, under-a-second motions.
+    if (v !== 'coffeeSteam') expect(motionDurationMs(steps)).toBeLessThan(1000);
     const last = steps[steps.length - 1]?.to;
     expect(last === 0 || last === 1).toBe(true);
   });

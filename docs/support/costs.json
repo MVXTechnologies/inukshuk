@@ -1,36 +1,10 @@
 {
   "year": 2026,
-  "currency": "USD",
-  "goal": 1267,
-  "raised": 0,
+  "goals": [
+    { "id": "keepUp", "percent": 0 },
+    { "id": "features", "percent": 0 }
+  ],
   "supporters": 0,
   "updated": "2026-09-30",
-  "costs": [
-    {
-      "label_en": "Apple developer account",
-      "label_fr": "Compte développeur Apple",
-      "amount": 99,
-      "period": "year"
-    },
-    {
-      "label_en": "Strava connection (API)",
-      "label_fr": "Connexion Strava (API)",
-      "amount": 14,
-      "period": "month"
-    },
-    {
-      "label_en": "Servers, maintenance, licences (cushion)",
-      "label_fr": "Serveurs, entretien, licences (coussin)",
-      "amount": 1000,
-      "period": "year"
-    },
-    {
-      "label_en": "Google Play account",
-      "label_fr": "Compte Google Play",
-      "amount": 25,
-      "period": "once"
-    }
-  ],
-  "ledger": [],
   "donors": []
 }

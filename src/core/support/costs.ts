@@ -1,50 +1,61 @@
 /**
- * The public accounts behind "Support Inukshuk" (#476): the shape of
- * `docs/support/costs.json`, the one file both the website's support page and
- * the app's Support screen read, and its validation.
+ * The public side of "Support Inukshuk" (#476): `docs/support/costs.json`,
+ * read by both the website's support page and the app's Support screen.
  *
- * The file is hand-edited once a month by the owner, so the parser is
- * forgiving about the parts that are decoration (a bad cost or ledger row is
- * dropped with a warning) and strict about the parts a screen cannot do
- * without (year, currency, goal, raised, supporters). A document that fails
- * the strict part parses to `null`, and the app simply hides the progress
- * block rather than showing a wrong number.
+ * Owner rules (2026-09-30):
+ * - no budget and no dollar amounts in public — only percentages;
+ * - two goals funded in order: first "Keep the app up" (servers, store
+ *   accounts, licences), then "Implement new features" (developer time).
+ *   The active goal is the first one under 100 %; the ones before it show as
+ *   funded. Goal amounts are set by the owner and never committed.
  *
- * Pure: no React Native / Expo imports (see AGENTS.md).
+ * Forgiving by design: every field is optional. A missing goal counts as 0 %,
+ * unknown goals are ignored, percentages are clamped to 0–100, and a missing
+ * field only hides the piece of the screen that needs it.
+ *
+ * Labels live here (EN; the website carries EN/FR), never in the JSON.
+ *
+ * Pure: no React Native / Expo imports.
  */
 
 import type { Donor } from './donors';
 
-export type CostPeriod = 'year' | 'month' | 'once';
+export type GoalId = 'keepUp' | 'features';
 
-export interface CostItem {
-  labelEn: string;
-  labelFr: string;
-  /** In the document's currency, for one `period`. */
-  amount: number;
-  period: CostPeriod;
+export interface GoalInfo {
+  id: GoalId;
+  label: string;
+  /** What this goal's donations pay for, in plain words, no amounts. */
+  payFor: readonly string[];
 }
 
-export interface LedgerRow {
-  /** `YYYY-MM`. */
-  month: string;
-  costs: number;
-  gifts: number;
-  balance: number;
+/** In funding order. */
+export const GOALS: readonly GoalInfo[] = [
+  {
+    id: 'keepUp',
+    label: 'Keep the app up',
+    payFor: [
+      'Map servers and data',
+      'App store accounts and licences',
+      'Test devices and software',
+    ],
+  },
+  { id: 'features', label: 'Implement new features', payFor: ['Developer time'] },
+];
+
+export interface GoalProgress {
+  id: GoalId;
+  /** 0–100. */
+  percent: number;
 }
 
 export interface CostsDocument {
-  year: number;
-  /** ISO 4217 code, e.g. `USD`. */
-  currency: string;
-  /** What the year costs; the progress bar's 100 %. */
-  goal: number;
-  raised: number;
-  supporters: number;
-  /** `YYYY-MM-DD` of the last update, or null when absent/invalid. */
+  year: number | null;
+  /** Every known goal, in funding order; null when the file publishes no goals. */
+  goals: GoalProgress[] | null;
+  supporters: number | null;
+  /** `YYYY-MM-DD` of the last update, or null. */
   updated: string | null;
-  costs: CostItem[];
-  ledger: LedgerRow[];
   /** Prominent donors, published by hand after checking the store (may be empty). */
   donors: Donor[];
 }
@@ -58,31 +69,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isAmount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
-}
-
-const PERIODS: readonly CostPeriod[] = ['year', 'month', 'once'];
-
-function isPeriod(value: unknown): value is CostPeriod {
-  return typeof value === 'string' && (PERIODS as readonly string[]).includes(value);
-}
-
-function parseCost(raw: unknown): CostItem | null {
-  if (!isRecord(raw)) return null;
-  const { label_en: labelEn, label_fr: labelFr, amount, period } = raw;
-  if (!isNonEmptyString(labelEn) || !isAmount(amount) || !isPeriod(period)) return null;
-  return {
-    labelEn: labelEn.trim(),
-    // A missing French label falls back to the English one: better than a gap.
-    labelFr: isNonEmptyString(labelFr) ? labelFr.trim() : labelEn.trim(),
-    amount,
-    period,
-  };
 }
 
 function parseDonor(raw: unknown): Donor | null {
@@ -96,94 +84,87 @@ function parseDonor(raw: unknown): Donor | null {
   };
 }
 
-function parseLedgerRow(raw: unknown): LedgerRow | null {
-  if (!isRecord(raw)) return null;
-  const { month, costs, gifts, balance } = raw;
-  if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
-  if (!isAmount(costs) || !isAmount(gifts)) return null;
-  // The balance can go negative (a month that cost more than it raised).
-  if (typeof balance !== 'number' || !Number.isFinite(balance)) return null;
-  return { month, costs, gifts, balance };
+/** Clamp to a whole 0–100 percentage; null for anything that is not a finite number. */
+export function clampPercent(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.round(Math.min(100, Math.max(0, value)));
+}
+
+function parseGoals(raw: unknown, warnings: string[]): GoalProgress[] | null {
+  if (!Array.isArray(raw)) {
+    if (raw !== undefined) warnings.push('costs: goals is not a list');
+    return null;
+  }
+  const byId = new Map<string, number>();
+  raw.forEach((row, i) => {
+    const percent = isRecord(row) ? clampPercent(row.percent) : null;
+    if (!isRecord(row) || typeof row.id !== 'string' || percent === null) {
+      warnings.push(`costs: dropped goal row ${i}`);
+      return;
+    }
+    byId.set(row.id, percent);
+  });
+  // Canonical order; a goal the file forgot counts as not yet funded.
+  return GOALS.map((g) => ({ id: g.id, percent: byId.get(g.id) ?? 0 }));
 }
 
 /** Validate an untrusted `costs.json` payload. Never throws. */
 export function parseCostsDocument(raw: unknown): CostsParseResult {
-  const warnings: string[] = [];
   if (!isRecord(raw)) return { doc: null, warnings: ['costs: not an object'] };
+  const warnings: string[] = [];
 
-  const { year, currency, goal, raised, supporters, updated } = raw;
-  if (typeof year !== 'number' || !Number.isInteger(year) || year < 2000 || year > 3000) {
-    return { doc: null, warnings: ['costs: invalid year'] };
-  }
-  if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) {
-    return { doc: null, warnings: ['costs: invalid currency'] };
-  }
-  if (!isAmount(goal) || goal === 0) return { doc: null, warnings: ['costs: invalid goal'] };
-  if (!isAmount(raised)) return { doc: null, warnings: ['costs: invalid raised'] };
-  if (typeof supporters !== 'number' || !Number.isInteger(supporters) || supporters < 0) {
-    return { doc: null, warnings: ['costs: invalid supporters'] };
-  }
+  const year =
+    typeof raw.year === 'number' && Number.isInteger(raw.year) && raw.year >= 2000
+      ? raw.year
+      : null;
+  if (raw.year !== undefined && year === null) warnings.push('costs: invalid year');
 
-  const costs: CostItem[] = [];
-  const rawCosts = Array.isArray(raw.costs) ? raw.costs : [];
-  if (!Array.isArray(raw.costs)) warnings.push('costs: missing costs list');
-  rawCosts.forEach((row, i) => {
-    const item = parseCost(row);
-    if (item) costs.push(item);
-    else warnings.push(`costs: dropped cost row ${i}`);
-  });
+  const supporters =
+    typeof raw.supporters === 'number' && Number.isInteger(raw.supporters) && raw.supporters >= 0
+      ? raw.supporters
+      : null;
+  if (raw.supporters !== undefined && supporters === null)
+    warnings.push('costs: invalid supporters');
 
-  const ledger: LedgerRow[] = [];
-  const rawLedger = Array.isArray(raw.ledger) ? raw.ledger : [];
-  rawLedger.forEach((row, i) => {
-    const item = parseLedgerRow(row);
-    if (item) ledger.push(item);
-    else warnings.push(`costs: dropped ledger row ${i}`);
-  });
+  const updated =
+    typeof raw.updated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.updated) ? raw.updated : null;
 
   const donors: Donor[] = [];
-  const rawDonors = Array.isArray(raw.donors) ? raw.donors : [];
-  rawDonors.forEach((row, i) => {
+  (Array.isArray(raw.donors) ? raw.donors : []).forEach((row, i) => {
     const donor = parseDonor(row);
     if (donor) donors.push(donor);
     else warnings.push(`costs: dropped donor row ${i}`);
   });
 
   return {
-    doc: {
-      year,
-      currency,
-      goal,
-      raised,
-      supporters,
-      updated: typeof updated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(updated) ? updated : null,
-      costs,
-      ledger,
-      donors,
-    },
+    doc: { year, goals: parseGoals(raw.goals, warnings), supporters, updated, donors },
     warnings,
   };
 }
 
-/** What one cost line weighs over a year (a one-off cost counts for nothing). */
-export function annualAmount(item: CostItem): number {
-  switch (item.period) {
-    case 'year':
-      return item.amount;
-    case 'month':
-      return item.amount * 12;
-    case 'once':
-      return 0;
+export interface GoalsView {
+  /** Goals fully funded, in order. */
+  funded: GoalInfo[];
+  /** The goal being funded now, or null when every goal is funded. */
+  active: (GoalInfo & { percent: number }) | null;
+}
+
+/** Which goal to show as the bar, and which to show as done. */
+export function goalsView(goals: readonly GoalProgress[]): GoalsView {
+  const funded: GoalInfo[] = [];
+  for (const info of GOALS) {
+    const percent = goals.find((g) => g.id === info.id)?.percent ?? 0;
+    if (percent < 100) return { funded, active: { ...info, percent } };
+    funded.push(info);
   }
+  return { funded, active: null };
 }
 
-/** The yearly running cost: the sum of every recurring line. */
-export function annualTotal(costs: readonly CostItem[]): number {
-  return costs.reduce((sum, item) => sum + annualAmount(item), 0);
-}
-
-/** Share of the goal raised, clamped to [0, 1] (a surplus fills the bar, no more). */
-export function progressFraction(raised: number, goal: number): number {
-  if (!(goal > 0) || !Number.isFinite(raised) || raised <= 0) return 0;
-  return Math.min(1, raised / goal);
+/**
+ * Whether a parsed document says anything worth showing. A file that parses
+ * but carries none of the fields (a wrong URL serving some other JSON) must
+ * not replace a good cached copy.
+ */
+export function hasContent(doc: CostsDocument): boolean {
+  return doc.goals !== null || doc.supporters !== null || doc.donors.length > 0;
 }

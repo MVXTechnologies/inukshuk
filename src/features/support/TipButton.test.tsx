@@ -13,6 +13,7 @@ import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSupportStore } from '@state/supportStore';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
@@ -43,10 +44,42 @@ async function mount(props: Partial<Parameters<typeof TipButton>[0]> = {}) {
   );
 }
 
-it('defaults to the coin on the cairn', async () => {
+it('defaults to the coffee mug the owner picked, with its steam heart', async () => {
   await mount();
-  expect(screen.getByTestId(`tip-button-${DEFAULT_TIP_BUTTON_VARIANT}`)).toBeTruthy();
-  expect(DEFAULT_TIP_BUTTON_VARIANT).toBe('cairnCoin');
+  expect(DEFAULT_TIP_BUTTON_VARIANT).toBe('coffeeSteam');
+  expect(screen.getByTestId('tip-button-coffeeSteam')).toBeTruthy();
+  expect(screen.getByTestId('tip-steam-heart')).toBeTruthy();
+});
+
+it('holds the animation while the map is being panned or zoomed', async () => {
+  const onAnimate = jest.fn();
+  const view = await mount({ onAnimate, paused: true });
+  await wait(PERIOD * 4);
+  expect(onAnimate).not.toHaveBeenCalled();
+  expect(screen.getByTestId('tip-button-coffeeSteam')).toBeTruthy();
+  view.unmount();
+});
+
+it('holds the animation while the app is in the background, and resumes after', async () => {
+  let listener: ((state: string) => void) | undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementationOnce((_type, l) => {
+    listener = l as (state: string) => void;
+    return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+  });
+  const onAnimate = jest.fn();
+  const view = await mount({ onAnimate });
+  await act(async () => {
+    listener?.('background');
+  });
+  onAnimate.mockClear();
+  await wait(PERIOD * 4);
+  expect(onAnimate).not.toHaveBeenCalled();
+  await act(async () => {
+    listener?.('active');
+  });
+  await wait(PERIOD * 4);
+  expect(onAnimate).toHaveBeenCalled();
+  view.unmount();
 });
 
 it.each(TIP_BUTTON_VARIANTS)(

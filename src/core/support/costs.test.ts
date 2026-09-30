@@ -1,167 +1,165 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { annualAmount, annualTotal, parseCostsDocument, progressFraction } from './costs';
+import { clampPercent, GOALS, goalsView, hasContent, parseCostsDocument } from './costs';
+
+describe('hasContent', () => {
+  it('rejects a document that carries none of the fields', () => {
+    const empty = parseCostsDocument({ junk: true }).doc;
+    expect(empty !== null && hasContent(empty)).toBe(false);
+    const withGoals = parseCostsDocument({ goals: [] }).doc;
+    expect(withGoals !== null && hasContent(withGoals)).toBe(true);
+    const withSupporters = parseCostsDocument({ supporters: 3 }).doc;
+    expect(withSupporters !== null && hasContent(withSupporters)).toBe(true);
+  });
+});
 
 const valid = {
   year: 2026,
-  currency: 'USD',
-  goal: 1267,
-  raised: 40,
-  supporters: 3,
-  updated: '2026-09-30',
-  costs: [
-    {
-      label_en: 'Apple developer account',
-      label_fr: 'Compte développeur Apple',
-      amount: 99,
-      period: 'year',
-    },
-    {
-      label_en: 'Strava connection (API)',
-      label_fr: 'Connexion Strava (API)',
-      amount: 14,
-      period: 'month',
-    },
-    { label_en: 'Google Play account', label_fr: 'Compte Google Play', amount: 25, period: 'once' },
+  goals: [
+    { id: 'keepUp', percent: 40 },
+    { id: 'features', percent: 0 },
   ],
-  ledger: [{ month: '2026-10', costs: 113, gifts: 40, balance: -73 }],
+  supporters: 37,
+  updated: '2026-09-30',
+  donors: [{ name: 'Anne T.', place: 'Rimouski', since: 2026 }],
 };
 
 describe('parseCostsDocument', () => {
-  it('parses a valid document', () => {
-    const { doc, warnings } = parseCostsDocument(valid);
-    expect(warnings).toEqual([]);
-    expect(doc).toMatchObject({
-      year: 2026,
-      currency: 'USD',
-      goal: 1267,
-      raised: 40,
-      supporters: 3,
+  it('parses the public shape', () => {
+    expect(parseCostsDocument(valid)).toEqual({
+      doc: {
+        year: 2026,
+        goals: [
+          { id: 'keepUp', percent: 40 },
+          { id: 'features', percent: 0 },
+        ],
+        supporters: 37,
+        updated: '2026-09-30',
+        donors: [{ name: 'Anne T.', place: 'Rimouski', since: 2026 }],
+      },
+      warnings: [],
     });
-    expect(doc?.updated).toBe('2026-09-30');
-    expect(doc?.costs[1]).toEqual({
-      labelEn: 'Strava connection (API)',
-      labelFr: 'Connexion Strava (API)',
-      amount: 14,
-      period: 'month',
-    });
-    expect(doc?.ledger).toEqual([{ month: '2026-10', costs: 113, gifts: 40, balance: -73 }]);
   });
 
-  it('parses the published docs/support/costs.json, whose recurring costs make the goal', () => {
-    const raw: unknown = JSON.parse(
-      readFileSync(join(__dirname, '../../../docs/support/costs.json'), 'utf8'),
-    );
-    const { doc, warnings } = parseCostsDocument(raw);
+  it('parses the published docs/support/costs.json, which discloses no amounts', () => {
+    const text = readFileSync(join(__dirname, '../../../docs/support/costs.json'), 'utf8');
+    const { doc, warnings } = parseCostsDocument(JSON.parse(text) as unknown);
     expect(warnings).toEqual([]);
-    expect(doc).not.toBeNull();
-    expect(annualTotal(doc?.costs ?? [])).toBe(doc?.goal);
+    expect(doc?.goals).toHaveLength(2);
+    // Owner rule: percentages only — no goal amount, raised amount, costs or ledger.
+    for (const key of ['goal', 'raised', 'costs', 'ledger', 'currency', 'amount']) {
+      expect(text).not.toContain(`"${key}"`);
+    }
+    expect(text).not.toMatch(/\$|USD|CAD/);
   });
 
   it.each([
-    ['not an object', 42],
-    ['an array', []],
-    ['a bad year', { ...valid, year: 26 }],
-    ['a fractional year', { ...valid, year: 2026.5 }],
-    ['a bad currency', { ...valid, currency: 'usd' }],
-    ['a zero goal', { ...valid, goal: 0 }],
-    ['a negative raised', { ...valid, raised: -1 }],
-    ['a NaN raised', { ...valid, raised: Number.NaN }],
-    ['fractional supporters', { ...valid, supporters: 1.5 }],
-    ['negative supporters', { ...valid, supporters: -2 }],
-  ])('rejects %s', (_label, raw) => {
-    const { doc, warnings } = parseCostsDocument(raw);
-    expect(doc).toBeNull();
-    expect(warnings).toHaveLength(1);
+    [-5, 0],
+    [12.4, 12],
+    [99.6, 100],
+    [140, 100],
+  ])('clamps a goal percent of %p to %p', (input, expected) => {
+    const { doc } = parseCostsDocument({ goals: [{ id: 'keepUp', percent: input }] });
+    expect(doc?.goals?.[0]?.percent).toBe(expected);
   });
 
-  it('drops bad cost and ledger rows with a warning, keeping the rest', () => {
+  it('puts goals in funding order, fills in missing ones at 0 % and ignores unknown ones', () => {
     const { doc, warnings } = parseCostsDocument({
-      ...valid,
-      costs: [
-        ...valid.costs,
-        { label_en: '', amount: 5, period: 'year' },
-        { label_en: 'X', amount: 5, period: 'week' },
-        { label_en: 'Y', amount: -5, period: 'year' },
-        'junk',
-      ],
-      ledger: [
-        ...valid.ledger,
-        { month: '2026-13', costs: 1, gifts: 1, balance: 0 },
-        { month: '2026-11', costs: 1, gifts: 1, balance: 'x' },
-        { month: '2026-11', costs: -1, gifts: 1, balance: 0 },
-        null,
+      goals: [
+        { id: 'features', percent: 10 },
+        { id: 'moonshot', percent: 50 },
       ],
     });
-    expect(doc?.costs).toHaveLength(3);
-    expect(doc?.ledger).toHaveLength(1);
-    expect(warnings).toHaveLength(8);
-  });
-
-  it('falls back to the English label when the French one is missing', () => {
-    const { doc } = parseCostsDocument({
-      ...valid,
-      costs: [{ label_en: 'Servers', amount: 1000, period: 'year' }],
-    });
-    expect(doc?.costs[0]?.labelFr).toBe('Servers');
-  });
-
-  it('tolerates a missing costs list and a bad updated date', () => {
-    const { doc, warnings } = parseCostsDocument({ ...valid, costs: undefined, updated: 'soon' });
-    expect(doc?.costs).toEqual([]);
-    expect(doc?.updated).toBeNull();
-    expect(warnings).toEqual(['costs: missing costs list']);
-  });
-
-  it('reads published donors, dropping bad rows and treating none as empty', () => {
-    const { doc, warnings } = parseCostsDocument({
-      ...valid,
-      donors: [
-        { name: ' Anne T. ', place: 'Rimouski', since: 2026 },
-        { name: 'Luc' },
-        { name: '' },
-        { name: 'x'.repeat(61) },
-        7,
-      ],
-    });
-    expect(doc?.donors).toEqual([
-      { name: 'Anne T.', place: 'Rimouski', since: 2026 },
-      { name: 'Luc', place: null, since: null },
+    expect(doc?.goals).toEqual([
+      { id: 'keepUp', percent: 0 },
+      { id: 'features', percent: 10 },
     ]);
-    expect(warnings).toHaveLength(3);
-    expect(parseCostsDocument(valid).doc?.donors).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 
-  it('treats a missing ledger as empty', () => {
-    const { doc } = parseCostsDocument({ ...valid, ledger: undefined });
-    expect(doc?.ledger).toEqual([]);
+  it('tolerates missing fields, hiding only what they drive', () => {
+    expect(parseCostsDocument({})).toEqual({
+      doc: { year: null, goals: null, supporters: null, updated: null, donors: [] },
+      warnings: [],
+    });
+  });
+
+  it('flags junk fields and drops bad rows', () => {
+    const { doc, warnings } = parseCostsDocument({
+      year: 'soon',
+      goals: [{ id: 'keepUp', percent: 'lots' }, 'x', { percent: 5 }],
+      supporters: -3,
+      updated: 'today',
+      donors: [{ name: 'Luc' }, { name: '' }, 7],
+    });
+    expect(doc).toMatchObject({ year: null, supporters: null, updated: null });
+    expect(doc?.goals).toEqual([
+      { id: 'keepUp', percent: 0 },
+      { id: 'features', percent: 0 },
+    ]);
+    expect(doc?.donors).toEqual([{ name: 'Luc', place: null, since: null }]);
+    expect(warnings).toHaveLength(7);
+    expect(parseCostsDocument({ goals: 'full' }).warnings).toEqual(['costs: goals is not a list']);
+  });
+
+  it('rejects a payload that is not an object', () => {
+    expect(parseCostsDocument([]).doc).toBeNull();
+    expect(parseCostsDocument(null).doc).toBeNull();
   });
 });
 
-describe('annual amounts', () => {
-  it('annualizes by period and ignores one-off costs', () => {
-    expect(annualAmount({ labelEn: 'a', labelFr: 'a', amount: 99, period: 'year' })).toBe(99);
-    expect(annualAmount({ labelEn: 'a', labelFr: 'a', amount: 14, period: 'month' })).toBe(168);
-    expect(annualAmount({ labelEn: 'a', labelFr: 'a', amount: 25, period: 'once' })).toBe(0);
+describe('goalsView', () => {
+  it('shows the first goal while it is under 100 %', () => {
+    const view = goalsView([
+      { id: 'keepUp', percent: 40 },
+      { id: 'features', percent: 0 },
+    ]);
+    expect(view.funded).toEqual([]);
+    expect(view.active).toMatchObject({ id: 'keepUp', label: 'Keep the app up', percent: 40 });
   });
 
-  it('sums the recurring lines', () => {
-    const { doc } = parseCostsDocument(valid);
-    expect(annualTotal(doc?.costs ?? [])).toBe(99 + 168);
+  it('moves on to new features once the app is kept up', () => {
+    const view = goalsView([
+      { id: 'keepUp', percent: 100 },
+      { id: 'features', percent: 15 },
+    ]);
+    expect(view.funded.map((g) => g.id)).toEqual(['keepUp']);
+    expect(view.active).toMatchObject({
+      id: 'features',
+      label: 'Implement new features',
+      percent: 15,
+    });
+  });
+
+  it('knows when both goals are funded', () => {
+    const view = goalsView([
+      { id: 'keepUp', percent: 100 },
+      { id: 'features', percent: 100 },
+    ]);
+    expect(view.funded.map((g) => g.id)).toEqual(['keepUp', 'features']);
+    expect(view.active).toBeNull();
+  });
+
+  it('treats a missing goal as not yet funded', () => {
+    expect(goalsView([]).active?.id).toBe('keepUp');
   });
 });
 
-describe('progressFraction', () => {
-  it.each([
-    [0, 1267, 0],
-    [633.5, 1267, 0.5],
-    [1267, 1267, 1],
-    [5000, 1267, 1],
-    [-10, 1267, 0],
-    [10, 0, 0],
-    [Number.NaN, 1267, 0],
-  ])('%p of %p is %p', (raised, goal, expected) => {
-    expect(progressFraction(raised, goal)).toBeCloseTo(expected);
+describe('goals and what they pay for', () => {
+  it('are two, in order, and name no amounts', () => {
+    expect(GOALS.map((g) => g.id)).toEqual(['keepUp', 'features']);
+    expect(GOALS[0]?.payFor).toEqual([
+      'Map servers and data',
+      'App store accounts and licences',
+      'Test devices and software',
+    ]);
+    expect(GOALS[1]?.payFor).toEqual(['Developer time']);
+    for (const g of GOALS) for (const line of g.payFor) expect(line).not.toMatch(/\d|\$/);
+  });
+
+  it('clampPercent refuses non-numbers', () => {
+    expect(clampPercent(Number.NaN)).toBeNull();
+    expect(clampPercent('12')).toBeNull();
   });
 });

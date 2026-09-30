@@ -6,7 +6,7 @@
     <title>Soutenir Inukshuk — maintenu en vie par des dons</title>
     <meta
       name="description"
-      content="Inukshuk est gratuit, sans publicité ni pistage, et maintenu en vie par des dons. Ce qu’il coûte à faire rouler, les comptes mois par mois, et comment donner."
+      content="Inukshuk est gratuit, sans publicité ni pistage, et maintenu en vie par des dons. Ce que les dons financent, où en sont les objectifs de l’année, et comment donner."
     />
     <link rel="alternate" hreflang="en" href="https://inukshuk.mvxtechnologies.com/support/" />
     <link rel="alternate" hreflang="fr" href="https://inukshuk.mvxtechnologies.com/fr/support/" />
@@ -371,6 +371,39 @@
         scroll-margin-top: 1rem;
       }
 
+      .funded {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--link);
+      }
+      .payfor {
+        margin-top: 2.75rem;
+      }
+      .goals {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem 3.5rem;
+      }
+      @media (max-width: 860px) {
+        .goals {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .goal h3 {
+        margin: 0 0 0.4rem;
+        font-family: var(--sans);
+        font-size: 1.1rem;
+        font-weight: 800;
+      }
+      .goal ul {
+        margin: 0;
+        padding-left: 1.2rem;
+        font-size: 1.0625rem;
+      }
+      [hidden] {
+        display: none !important;
+      }
+
       /* ---- Footer ---- */
       footer {
         margin-top: 4rem;
@@ -420,19 +453,21 @@
           <h1 id="banner-title">Inukshuk est maintenu en vie par des dons.</h1>
           <p>
             Il est gratuit pour tout le monde, sans publicité ni pistage, et il le restera. Il est
-            fait par une seule personne à Québec et payé par les gens qui s’en servent. Si chaque
-            personne qui lit ceci donnait le prix d’un café, l’année serait couverte en une journée.
+            fait par une seule personne à Québec et payé par les gens qui s’en servent. Chaque don,
+            petit ou grand, le fait vivre.
           </p>
         </div>
         <div class="meter">
-          <!-- Chiffres statiques de repli; le script les met à jour depuis costs.json. -->
-          <div class="figure">
-            <span data-raised>0 $</span> sur <span data-goal>1 267 $</span> cette année
+          <!-- Static fallback; the script fills it from costs.json (percentages only). -->
+          <div class="funded" data-funded hidden></div>
+          <div class="figure" data-goal-figure>
+            <span data-goal-label>Garder l’application en ligne</span> :
+            <span data-goal-percent>0 %</span> financé cette année
           </div>
           <div
             class="bar"
             role="progressbar"
-            aria-label="Part des coûts de l’année amassée"
+            aria-label="Garder l’application en ligne : part financée cette année"
             aria-valuemin="0"
             aria-valuemax="100"
             aria-valuenow="0"
@@ -440,79 +475,42 @@
             <span data-bar></span>
           </div>
           <div class="caption">
-            <span data-supporters>0 donateur jusqu’ici</span> · mis à jour chaque mois
+            <span data-supporters>0 donateur</span> · mis à jour chaque mois
           </div>
           <a class="give" href="#give">Donner</a>
         </div>
       </div>
 
-      <div class="columns">
-        <section aria-labelledby="costs-title">
-          <h2 id="costs-title">Ce qu’il coûte à faire rouler</h2>
-          <p>
-            Chaque dollar est inscrit ici. Rien ne va à la publicité, au marketing ou à des
-            salaires. Les tuiles de carte, les sentiers et les courbes de niveau tournent sur un
-            serveur maison et un forfait Cloudflare gratuit pour garder la facture petite.
-          </p>
-          <table class="costs">
-            <tbody data-costs>
-              <tr>
-                <td>Compte développeur Apple</td>
-                <td class="amount">99 $ / an</td>
-              </tr>
-              <tr>
-                <td>Connexion Strava (API)</td>
-                <td class="amount">14 $ / mois</td>
-              </tr>
-              <tr>
-                <td>Serveurs, entretien, licences (coussin)</td>
-                <td class="amount">1 000 $ / an</td>
-              </tr>
-              <tr>
-                <td>Compte Google Play</td>
-                <td class="amount">payé une fois</td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>Total par année</td>
-                <td class="amount" data-total>1 267 $</td>
-              </tr>
-            </tfoot>
-          </table>
-        </section>
-
-        <section aria-labelledby="ledger-title">
-          <h2 id="ledger-title">Les comptes, mois par mois</h2>
-          <p>
-            Mis à jour au début de chaque mois à partir des rapports de l’App Store et de Google
-            Play. Tout surplus est reporté à l’année suivante.
-          </p>
-          <table class="ledger">
-            <thead>
-              <tr>
-                <th scope="col">Mois</th>
-                <th scope="col">Coûts</th>
-                <th scope="col">Dons</th>
-                <th scope="col">Solde</th>
-              </tr>
-            </thead>
-            <tbody data-ledger>
-              <tr class="empty">
-                <td colspan="4">
-                  Rien à signaler pour l’instant : chaque mois s’ajoute une fois terminé.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      </div>
+      <section class="payfor" aria-labelledby="payfor-title">
+        <h2 id="payfor-title">Ce que les dons financent</h2>
+        <p>
+          Les dons paient le temps et les outils qu’il faut pour garder Inukshuk en marche et
+          gratuit. Ils financent dans l’ordre : d’abord garder l’application en ligne, puis de
+          nouvelles fonctionnalités.
+        </p>
+        <div class="goals">
+          <div class="goal">
+            <h3>1. Garder l’application en ligne</h3>
+            <ul>
+              <li>Serveurs de cartes et données</li>
+              <li>Comptes des magasins d’applications et licences</li>
+              <li>Appareils et logiciels de test</li>
+            </ul>
+          </div>
+          <div class="goal">
+            <h3>2. Développer de nouvelles fonctionnalités</h3>
+            <ul>
+              <li>Temps de développement</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <section id="donors" aria-labelledby="donors-title" hidden>
         <h2 id="donors-title">Donateurs d’honneur</h2>
         <p>
-          Les personnes dont les dons atteignent 100 $ ou plus et qui ont choisi d’être nommées.
-          Merci. Pour être retiré de la liste, écrivez à
+          Les personnes qui ont donné généreusement et ont choisi d’être nommées. Merci. Pour être
+          retiré de la liste, écrivez à
           <a href="mailto:marc-andre.vigneault@mvxtechnologies.com"
             >marc-andre.vigneault@mvxtechnologies.com</a
           >.
@@ -526,8 +524,8 @@
           <div class="way">
             <h3>Dans l’application</h3>
             <p>
-              Réglages › Support Inukshuk, ou le petit pot à pourboires des écrans principaux. Des
-              pourboires de 2,99 $ à 99,99 $ par l’App Store ou Google Play.
+              Réglages › Support Inukshuk, ou le bouton café sur la carte. Des pourboires par l’App
+              Store ou Google Play.
             </p>
           </div>
           <div class="way">
@@ -588,64 +586,70 @@
 
     <script>
       // Progressive enhancement: the page above is complete without this. It
-      // only refreshes the figures from costs.json, the file the app reads too.
+      // only refreshes the goals, supporters and donors from costs.json — the
+      // file the app reads too. Percentages only: no amounts are published.
       (function () {
         var LANG = document.documentElement.lang === 'fr' ? 'fr' : 'en';
-        var LOCALE = LANG === 'fr' ? 'fr-CA' : 'en-US';
         var T = {
           en: {
-            year: ' / year',
-            month: ' / month',
-            once: 'paid once',
-            supporters: function (n) {
-              return n === 1 ? '1 supporter so far' : n + ' supporters so far';
+            goals: { keepUp: 'Keep the app up', features: 'Implement new features' },
+            percent: function (p) {
+              return p + '%';
             },
-            empty: 'Nothing to report yet: each month is added once it closes.',
+            figure: function (label, p) {
+              return label + ': ' + p + '% funded this year';
+            },
+            funded: function (label, y) {
+              return '✓ ' + label + ' — funded' + (y ? ' for ' + y : '');
+            },
+            all: function (y) {
+              return 'Both goals are funded' + (y ? ' for ' + y : '') + '. Thank you!';
+            },
+            barLabel: function (label) {
+              return label + ': share funded this year';
+            },
+            supporters: function (n) {
+              return n === 1 ? '1 supporter' : n + ' supporters';
+            },
             since: function (y) {
               return 'since ' + y;
             },
           },
           fr: {
-            year: ' / an',
-            month: ' / mois',
-            once: 'payé une fois',
-            supporters: function (n) {
-              return n <= 1 ? n + ' donateur jusqu’ici' : n + ' donateurs jusqu’ici';
+            goals: {
+              keepUp: 'Garder l’application en ligne',
+              features: 'Développer de nouvelles fonctionnalités',
             },
-            empty: 'Rien à signaler pour l’instant : chaque mois s’ajoute une fois terminé.',
+            percent: function (p) {
+              return p + ' %';
+            },
+            figure: function (label, p) {
+              return label + ' : ' + p + ' % financé cette année';
+            },
+            funded: function (label, y) {
+              return '✓ ' + label + ' — financé' + (y ? ' pour ' + y : '');
+            },
+            all: function (y) {
+              return 'Les deux objectifs sont financés' + (y ? ' pour ' + y : '') + '. Merci!';
+            },
+            barLabel: function (label) {
+              return label + ' : part financée cette année';
+            },
+            supporters: function (n) {
+              return n <= 1 ? n + ' donateur' : n + ' donateurs';
+            },
             since: function (y) {
               return 'depuis ' + y;
             },
           },
         }[LANG];
+        var ORDER = ['keepUp', 'features'];
 
-        function money(amount, currency) {
-          try {
-            return new Intl.NumberFormat(LOCALE, {
-              style: 'currency',
-              currency: currency,
-              currencyDisplay: 'narrowSymbol',
-              minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-              maximumFractionDigits: 2,
-            }).format(amount);
-          } catch (e) {
-            return amount + ' ' + currency;
-          }
-        }
-        function monthName(ym) {
-          var parts = ym.split('-');
-          var d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
-          var s = d.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' });
-          return s.charAt(0).toUpperCase() + s.slice(1);
-        }
-        function cell(text, className) {
-          var td = document.createElement('td');
-          td.textContent = text;
-          if (className) td.className = className;
-          return td;
-        }
         function num(v) {
           return typeof v === 'number' && isFinite(v);
+        }
+        function clamp(v) {
+          return num(v) ? Math.round(Math.min(100, Math.max(0, v))) : null;
         }
 
         var url = document.documentElement.getAttribute('data-costs-url') || './costs.json';
@@ -655,38 +659,54 @@
             return r.json();
           })
           .then(function (doc) {
-            if (!doc || !num(doc.goal) || doc.goal <= 0 || !num(doc.raised)) return;
-            var cur = typeof doc.currency === 'string' ? doc.currency : 'USD';
-            var pct = Math.max(0, Math.min(100, Math.round((doc.raised / doc.goal) * 100)));
-            document.querySelector('[data-raised]').textContent = money(doc.raised, cur);
-            document.querySelector('[data-goal]').textContent = money(doc.goal, cur);
-            document.querySelector('[data-bar]').style.width = pct + '%';
-            document.querySelector('[role="progressbar"]').setAttribute('aria-valuenow', pct);
-            if (num(doc.supporters)) {
+            if (!doc || typeof doc !== 'object') return;
+            var year = num(doc.year) ? doc.year : null;
+
+            if (Array.isArray(doc.goals)) {
+              var byId = {};
+              doc.goals.forEach(function (g) {
+                if (!g || typeof g.id !== 'string') return;
+                var p = clamp(g.percent);
+                if (p !== null) byId[g.id] = p;
+              });
+              // Funded in order: the active goal is the first one under 100 %.
+              var funded = [];
+              var active = null;
+              for (var i = 0; i < ORDER.length; i++) {
+                var p = byId[ORDER[i]] || 0;
+                if (p < 100) {
+                  active = { id: ORDER[i], percent: p };
+                  break;
+                }
+                funded.push(ORDER[i]);
+              }
+              var fundedBox = document.querySelector('[data-funded]');
+              fundedBox.textContent = '';
+              funded.forEach(function (id) {
+                var line = document.createElement('div');
+                line.textContent = T.funded(T.goals[id], year);
+                fundedBox.appendChild(line);
+              });
+              fundedBox.hidden = funded.length === 0;
+              var figure = document.querySelector('[data-goal-figure]');
+              var bar = document.querySelector('[role="progressbar"]');
+              if (active === null) {
+                figure.textContent = T.all(year);
+                bar.hidden = true;
+              } else {
+                var label = T.goals[active.id];
+                figure.textContent = T.figure(label, active.percent);
+                document.querySelector('[data-bar]').style.width = active.percent + '%';
+                bar.setAttribute('aria-valuenow', active.percent);
+                bar.setAttribute('aria-label', T.barLabel(label));
+                bar.hidden = false;
+              }
+            }
+
+            if (num(doc.supporters) && doc.supporters >= 0) {
               document.querySelector('[data-supporters]').textContent = T.supporters(
                 doc.supporters,
               );
-            }
-
-            if (Array.isArray(doc.costs) && doc.costs.length > 0) {
-              var body = document.querySelector('[data-costs]');
-              var total = 0;
-              body.textContent = '';
-              doc.costs.forEach(function (c) {
-                if (!c || !num(c.amount)) return;
-                var label = (LANG === 'fr' && c.label_fr) || c.label_en;
-                var amount =
-                  c.period === 'once'
-                    ? T.once
-                    : money(c.amount, cur) + (c.period === 'month' ? T.month : T.year);
-                if (c.period === 'year') total += c.amount;
-                if (c.period === 'month') total += c.amount * 12;
-                var tr = document.createElement('tr');
-                tr.appendChild(cell(label));
-                tr.appendChild(cell(amount, 'amount'));
-                body.appendChild(tr);
-              });
-              document.querySelector('[data-total]').textContent = money(total, cur);
             }
 
             if (Array.isArray(doc.donors) && doc.donors.length > 0) {
@@ -709,23 +729,9 @@
               });
               if (list.children.length > 0) document.getElementById('donors').hidden = false;
             }
-
-            var ledger = document.querySelector('[data-ledger]');
-            if (Array.isArray(doc.ledger) && doc.ledger.length > 0) {
-              ledger.textContent = '';
-              doc.ledger.forEach(function (row) {
-                if (!row || typeof row.month !== 'string') return;
-                var tr = document.createElement('tr');
-                tr.appendChild(cell(monthName(row.month)));
-                tr.appendChild(cell(num(row.costs) ? money(row.costs, cur) : '—'));
-                tr.appendChild(cell(num(row.gifts) ? money(row.gifts, cur) : '—'));
-                tr.appendChild(cell(num(row.balance) ? money(row.balance, cur) : '—'));
-                ledger.appendChild(tr);
-              });
-            }
           })
           .catch(function () {
-            // Offline or missing file: the static figures stay.
+            // Offline or missing file: the static fallback stays.
           });
       })();
     </script>

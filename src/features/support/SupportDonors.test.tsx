@@ -67,13 +67,9 @@ const setLedger = (patch: Partial<ReturnType<typeof useSupportStore.getState>>) 
 
 const COSTS = (donors: CostsDocument['donors']): CostsDocument => ({
   year: 2026,
-  currency: 'USD',
-  goal: 1267,
-  raised: 0,
+  goals: null,
   supporters: 0,
   updated: null,
-  costs: [],
-  ledger: [],
   donors,
 });
 

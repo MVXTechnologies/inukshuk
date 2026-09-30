@@ -1,6 +1,12 @@
-import { parseCostsDocument, type CostsDocument } from '@core/support/costs';
+import { hasContent, parseCostsDocument, type CostsDocument } from '@core/support/costs';
 
 import * as storage from './storage';
+
+/** Parse, keeping only a document that says something. */
+function usable(raw: unknown): CostsDocument | null {
+  const { doc } = parseCostsDocument(raw);
+  return doc !== null && hasContent(doc) ? doc : null;
+}
 
 /**
  * Fetch + on-device cache for the public accounts (`docs/support/costs.json`,
@@ -65,7 +71,7 @@ export async function loadSupportCosts(options?: {
   force?: boolean;
 }): Promise<SupportCostsResult | null> {
   const cached = await readCache();
-  const cachedDoc = cached === null ? null : parseCostsDocument(cached.raw).doc;
+  const cachedDoc = cached === null ? null : usable(cached.raw);
   const fresh = cached !== null && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
 
   if (cachedDoc !== null && fresh && options?.force !== true) {
@@ -75,7 +81,7 @@ export async function loadSupportCosts(options?: {
   if (storage.isNetworkAllowed()) {
     try {
       const raw = await fetchCosts();
-      const { doc } = parseCostsDocument(raw);
+      const doc = usable(raw);
       if (doc !== null) {
         try {
           storage.writeJson(CACHE_FILE, { fetchedAt: Date.now(), raw } satisfies CachedCosts);

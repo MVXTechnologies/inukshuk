@@ -1,4 +1,5 @@
 import {
+  COFFEE_PHASES,
   DEFAULT_TIP_BUTTON_VARIANT,
   TIP_BUTTON_MOTION,
   TIP_JAR_WOBBLE_INTERVAL_MS,
@@ -13,10 +14,12 @@ import { palette, space, target, type SchemeTokens } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, {
+  cancelAnimation,
   Easing,
+  Extrapolation,
   interpolate,
   useAnimatedStyle,
   useReducedMotion,
@@ -44,12 +47,15 @@ export function TipButton({
   variant = DEFAULT_TIP_BUTTON_VARIANT,
   navigating = false,
   blocked = false,
+  paused = false,
   onAnimate,
   intervalMs = TIP_JAR_WOBBLE_INTERVAL_MS,
 }: {
   variant?: TipButtonVariant;
   navigating?: boolean;
   blocked?: boolean;
+  /** The map is being panned or zoomed: hold the animation. */
+  paused?: boolean;
   /** Test hooks: called at each animation, and the animation period. */
   onAnimate?: () => void;
   intervalMs?: number;
@@ -73,20 +79,38 @@ export function TipButton({
     onAnimateRef.current = onAnimate;
   }, [onAnimate]);
 
+  // Backgrounded apps don't animate (and resume on return).
+  const [foreground, setForeground] = useState(AppState.currentState !== 'background');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => setForeground(s === 'active'));
+    return () => sub.remove();
+  }, []);
+
   const visible = tipJarVisible({ enabled, recording, navigating, blocked, restingUntil, now });
   const animates = visible && tipJarAnimates({ reduceMotion, hasTipped });
+  const running = animates && !paused && foreground;
 
+  // One JS timer per cycle (every 15 s); the scene itself runs on the UI
+  // thread. Pausing (a pan or zoom, the background) stops it at once and puts
+  // the icon back at rest; the next cycle starts on schedule after.
   useEffect(() => {
-    if (!animates) return;
+    if (!running) {
+      cancelAnimation(progress);
+      progress.value = rest;
+      return;
+    }
     const timer = setInterval(() => {
       const [first, ...others] = steps.map((step) =>
-        withTiming(step.to, { duration: step.ms, easing: Easing.inOut(Easing.quad) }),
+        withTiming(step.to, {
+          duration: step.ms,
+          easing: step.easing === 'linear' ? Easing.linear : Easing.inOut(Easing.quad),
+        }),
       );
       if (first !== undefined) progress.value = withSequence(first, ...others);
       onAnimateRef.current?.();
     }, intervalMs);
     return () => clearInterval(timer);
-  }, [animates, intervalMs, progress, steps]);
+  }, [running, intervalMs, progress, rest, steps]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -202,10 +226,6 @@ function StoneHeart({ t, p }: GlyphProps) {
 
 /** 4 · Coffee at the trailhead; steam rises (p: 0 → 1). */
 function CoffeeSteam({ t, p }: GlyphProps) {
-  const steam = useAnimatedStyle(() => ({
-    opacity: interpolate(p.value, [0, 0.2, 1], [0, 0.9, 0]),
-    transform: [{ translateY: interpolate(p.value, [0, 1], [4, -6]) }],
-  }));
   const ink = t.support.onAccent;
   return (
     <View style={styles.glyphBox}>
@@ -218,17 +238,95 @@ function CoffeeSteam({ t, p }: GlyphProps) {
           strokeLinejoin="round"
         />
       </Svg>
-      <Animated.View style={[StyleSheet.absoluteFill, steam]}>
-        <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M8.5 8c-.8-1 .8-2 0-3M12 8c-.8-1 .8-2 0-3"
-            stroke={ink}
-            strokeWidth={1.6}
-            strokeLinecap="round"
-          />
-        </Svg>
-      </Animated.View>
+      {WISP_X.map((x, i) => (
+        <SteamWisp key={x} p={p} index={i} x={x} ink={ink} />
+      ))}
+      <SteamHeart p={p} ink={ink} />
     </View>
+  );
+}
+
+/** Where the wisps rise from, over the mug's rim (dp in the 28 dp glyph box). */
+const WISP_X = [6, 9.5, 13] as const;
+
+/**
+ * One steam wisp. During the steam phase each wisp rises and dissolves
+ * `wispLoops` times, staggered by a third of a loop from its neighbours, so the
+ * steam looks continuous; the whole plume eases in at the start and out as the
+ * heart forms. Pure UI-thread maths on one shared progress value.
+ */
+function SteamWisp({
+  p,
+  index,
+  x,
+  ink,
+}: {
+  p: SharedValue<number>;
+  index: number;
+  x: number;
+  ink: string;
+}) {
+  const style = useAnimatedStyle(() => {
+    const c = p.value;
+    const { steamEnd, wispLoops, wisps } = COFFEE_PHASES;
+    if (c <= 0 || c >= steamEnd) return { opacity: 0 };
+    const plume = interpolate(
+      c,
+      [0, 0.05, steamEnd - 0.1, steamEnd],
+      [0, 1, 1, 0],
+      Extrapolation.CLAMP,
+    );
+    const local = ((c / steamEnd) * wispLoops + index / wisps) % 1;
+    return {
+      opacity: 0.9 * plume * Math.sin(Math.PI * local),
+      transform: [
+        { translateY: 2 - local * 9 },
+        { translateX: Math.sin(local * 2 * Math.PI) * 1.2 },
+      ],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.wisp, { left: x }, style]}>
+      <Svg width={5} height={8} viewBox="0 0 5 8" fill="none">
+        <Path
+          d="M2.5 7.5c-1.3-1.3 1.3-2.4 0-3.7s1.3-2.4 0-3.3"
+          stroke={ink}
+          strokeWidth={1.4}
+          strokeLinecap="round"
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** The heart that forms from the last wisp, holds ~0.5 s and fades. */
+function SteamHeart({ p, ink }: { p: SharedValue<number>; ink: string }) {
+  const style = useAnimatedStyle(() => {
+    const c = p.value;
+    const { steamEnd, heartFormed, heartHoldEnd } = COFFEE_PHASES;
+    const start = steamEnd - 0.03;
+    return {
+      opacity: interpolate(
+        c,
+        [start, heartFormed, heartHoldEnd, 1],
+        [0, 1, 1, 0],
+        Extrapolation.CLAMP,
+      ),
+      transform: [
+        { translateY: interpolate(c, [start, heartFormed], [2, -3], Extrapolation.CLAMP) },
+        { scale: interpolate(c, [start, heartFormed], [0.4, 1], Extrapolation.CLAMP) },
+      ],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.heart, style]} testID="tip-steam-heart">
+      <Svg width={9} height={8} viewBox="0 0 24 22">
+        <Path
+          d="M12 21.5c-1.4-1-11-7.3-11-14A6 6 0 0112 4a6 6 0 0111 3.5c0 6.7-9.6 13-11 14z"
+          fill={ink}
+        />
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -286,6 +384,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   glyphBox: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  // Steam and heart ride above the mug's rim, inside the 48 dp button.
+  wisp: { position: 'absolute', top: 2 },
+  heart: { position: 'absolute', top: 1, left: 8.5 },
   coin: {
     position: 'absolute',
     left: 11,

@@ -356,35 +356,26 @@ library is `expo-iap` (config plugin `expo-iap` in `app.config.ts`), wrapped by
 `src/lib/iap.ts`; it is native, so it ships in a store build, never by OTA.
 Older binaries simply show "Tips aren't available on this device right now".
 
-### `docs/support/costs.json` — the one source of truth
+### `docs/support/costs.json` — the one source of truth (percentages only)
 
 Read by the website's `/support/` and `/fr/support/` pages (inline fetch; the
 page is complete without it) and by the app's Support screen (cached a day,
-`src/data/supportCosts.ts`; validated by `src/core/support/costs.ts`, which
-drops bad rows and hides the numbers if a required field is wrong). Update it
-by hand at the start of each month from the App Store / Google Play reports:
+`src/data/supportCosts.ts`; validated by `src/core/support/costs.ts`).
+
+**Owner rule: the file is public, so it never carries a budget or any dollar
+amount** — no goal, raised amount, costs or ledger. A unit test fails CI if one
+of those keys (or a `$`) appears in the checked-in file.
 
 ```jsonc
 {
-  "year": 2026, // the calendar year the figures cover
-  "currency": "USD", // ISO 4217, upper case
-  "goal": 1267, // what the year costs: the sum of the recurring costs below
-  "raised": 0, // net tips received this year
+  "year": 2026, // the calendar year the goals cover
+  "goals": [
+    // funded in order; labels come from the app and the site, not from here
+    { "id": "keepUp", "percent": 0 }, // "Keep the app up": servers, store accounts, licences
+    { "id": "features", "percent": 0 }, // "Implement new features": developer time
+  ],
   "supporters": 0, // number of people who gave (integer)
   "updated": "2026-09-30", // YYYY-MM-DD of this edit
-  "costs": [
-    // period: "year" | "month" | "once" ("once" is shown, not counted in goal)
-    {
-      "label_en": "Apple developer account",
-      "label_fr": "Compte développeur Apple",
-      "amount": 99,
-      "period": "year",
-    },
-  ],
-  "ledger": [
-    // one row per closed month; balance may be negative
-    { "month": "2026-10", "costs": 113, "gifts": 0, "balance": -113 },
-  ],
   "donors": [
     // opt-in, published by hand (see below); hidden in the app and site while empty
     { "name": "Anne T.", "place": "Rimouski", "since": 2026 },
@@ -392,8 +383,21 @@ by hand at the start of each month from the App Store / Google Play reports:
 }
 ```
 
-A unit test parses the checked-in file and checks that `goal` equals the
-annualized recurring costs, so a typo fails CI rather than the website.
+Every field is optional: a missing goal counts as 0 %, unknown goal ids are
+ignored, percentages are clamped to 0–100. The app and the site show the first
+goal under 100 % as a bar, and each goal before it as "✓ funded for <year>";
+when both reach 100 % they thank everyone instead.
+
+**Computing the percentages (private, owner only).** Each goal has a yearly
+amount set by the owner and kept out of the repository (never commit it, not
+even in a comment). At the start of each month, from the App Store Connect and
+Play Console payout reports (net of store fees) plus any web gifts:
+
+1. `raised` = net donations received this calendar year.
+2. Fill the goals in order: `keepUp.percent = min(100, raised ÷ keepUpGoal × 100)`;
+   whatever exceeds `keepUpGoal` counts toward `features`:
+   `features.percent = min(100, max(0, raised − keepUpGoal) ÷ featuresGoal × 100)`.
+3. Round down to whole percents, update `supporters` and `updated`, commit.
 
 ### Prominent donors: `POST /donors` on the tile Worker
 
