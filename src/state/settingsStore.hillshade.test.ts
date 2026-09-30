@@ -85,3 +85,41 @@ it('reset restores the platform default', () => {
   useSettingsStore.getState().reset();
   expect(useSettingsStore.getState().showHillshade).toBe(platformDefault);
 });
+
+// #461 — the shading strength and peak density ride next to the switch.
+describe('hillshadeStrength / peakDensity (#461)', () => {
+  it('default to medium shading and normal peaks', () => {
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('medium');
+    expect(useSettingsStore.getState().peakDensity).toBe('normal');
+  });
+
+  it('hydrate persisted choices', async () => {
+    storage.readJson.mockResolvedValue({
+      schemaVersion: 3,
+      hillshadeStrength: 'heavy',
+      peakDensity: 'more',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('heavy');
+    expect(useSettingsStore.getState().peakDensity).toBe('more');
+  });
+
+  it('drop junk back to the defaults', async () => {
+    storage.readJson.mockResolvedValue({
+      schemaVersion: 3,
+      hillshadeStrength: 'none',
+      peakDensity: 'lots',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('medium');
+    expect(useSettingsStore.getState().peakDensity).toBe('normal');
+  });
+
+  it('persist like any other setting', () => {
+    useSettingsStore.getState().set('peakDensity', 'fewer');
+    expect(storage.writeJson).toHaveBeenLastCalledWith(
+      'settings.json',
+      expect.objectContaining({ peakDensity: 'fewer' }),
+    );
+  });
+});

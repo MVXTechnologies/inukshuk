@@ -10,7 +10,20 @@ import type {
   RasterDEMSourceSpecification,
   RasterSourceSpecification,
 } from '@maplibre/maplibre-react-native';
-import { basemapAttribution, buildOsmStyle, HILLSHADE_2D_MIN_ZOOM } from './mapStyle';
+import {
+  DEFAULT_HILLSHADE_STRENGTH,
+  HILLSHADE_STRENGTHS,
+  hillshadeLook,
+  PEAK_DENSITIES,
+  PEAK_LEAD,
+} from '@core/map/terrainOptions';
+import { peakDueFilter } from '@core/map/stoneStyle';
+import {
+  basemapAttribution,
+  buildOsmStyle,
+  HILLSHADE_2D_DEM_TILE_SIZE,
+  HILLSHADE_2D_MIN_ZOOM,
+} from './mapStyle';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -89,10 +102,11 @@ describe('buildOsmStyle', () => {
       });
     });
 
-    it('declares the 2D DEM at 512 px — a quarter of the tiles per viewport', () => {
+    it('declares the 2D DEM at its true 256 px — full sample rate, no blocky facets (#461)', () => {
       const dem = buildOsmStyle(TILE, false, 'map', true).sources
         .dem as RasterDEMSourceSpecification;
-      expect(dem.tileSize).toBe(512);
+      expect(dem.tileSize).toBe(256);
+      expect(HILLSHADE_2D_DEM_TILE_SIZE).toBe(256);
       expect(dem.encoding).toBe('terrarium');
       expect(dem.maxzoom).toBe(15);
     });
@@ -857,5 +871,116 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     const s = withFlag(true)(TILE, false, 'map');
     expect(baseSource(s).tiles).toEqual([TILE]);
     expect(s.sources['basemap-vector']).toBeUndefined();
+  });
+});
+
+describe('terrain options in the style (#461)', () => {
+  /** buildOsmStyle with the vector base map flag forced on. */
+  function vectorBuild(): typeof buildOsmStyle {
+    let build: typeof buildOsmStyle = buildOsmStyle;
+    jest.isolateModules(() => {
+      jest.doMock('@core/features/flags', () => ({
+        ...jest.requireActual<object>('@core/features/flags'),
+        VECTOR_BASEMAP_ENABLED: true,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      build = (require('./mapStyle') as typeof import('./mapStyle')).buildOsmStyle;
+    });
+    return build;
+  }
+  const hillshadePaint = (s: ReturnType<typeof buildOsmStyle>) =>
+    s.layers.find((l) => l.id === 'hillshade-2d')?.paint as Record<string, unknown> | undefined;
+  const vector = (dark: boolean) => ({
+    tiles: ['https://vector.example/{z}/{x}/{y}.pbf'],
+    dark,
+    peaks: 'https://peaks.example/{z}/{x}/{y}.mvt',
+  });
+
+  describe('shading', () => {
+    it('None (shaded relief off) draws no hillshade and fetches no DEM, in both themes', () => {
+      for (const dark of [false, true]) {
+        const s = vectorBuild()(TILE, false, 'map', false, {
+          vectorBasemap: vector(dark),
+          hillshadeStrength: 'heavy',
+        });
+        expect(hillshadePaint(s)).toBeUndefined();
+        expect(s.sources.dem).toBeUndefined();
+      }
+    });
+
+    it('defaults to Medium', () => {
+      const paint = hillshadePaint(buildOsmStyle(TILE, false, 'map', true));
+      expect(DEFAULT_HILLSHADE_STRENGTH).toBe('medium');
+      expect(paint?.['hillshade-shadow-color']).toBe(hillshadeLook('medium', false).shadowColor);
+    });
+
+    it.each(HILLSHADE_STRENGTHS)(
+      '%s drives the exaggeration and colours (light raster)',
+      (level) => {
+        const look = hillshadeLook(level, false);
+        const paint = hillshadePaint(
+          buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: level }),
+        );
+        expect(paint).toMatchObject({
+          'hillshade-exaggeration': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            HILLSHADE_2D_MIN_ZOOM,
+            0,
+            HILLSHADE_2D_MIN_ZOOM + 1,
+            look.exaggeration,
+          ],
+          'hillshade-shadow-color': look.shadowColor,
+          'hillshade-highlight-color': look.highlightColor,
+          'hillshade-accent-color': look.accentColor,
+        });
+      },
+    );
+
+    it.each(HILLSHADE_STRENGTHS)('%s uses the dark palette over the stone-night map', (level) => {
+      const build = vectorBuild();
+      const dark = hillshadePaint(
+        build(TILE, false, 'map', true, { vectorBasemap: vector(true), hillshadeStrength: level }),
+      );
+      const light = hillshadePaint(
+        build(TILE, false, 'map', true, { vectorBasemap: vector(false), hillshadeStrength: level }),
+      );
+      expect(dark?.['hillshade-shadow-color']).toBe(hillshadeLook(level, true).shadowColor);
+      expect(light?.['hillshade-shadow-color']).toBe(hillshadeLook(level, false).shadowColor);
+    });
+
+    it('keeps the light palette on raster basemaps even in a dark app theme', () => {
+      // Only the stone vector map has a night variant; the OSM raster is light.
+      const s = buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: 'heavy' });
+      expect(hillshadePaint(s)?.['hillshade-shadow-color']).toBe(
+        hillshadeLook('heavy', false).shadowColor,
+      );
+    });
+  });
+
+  describe('peak density', () => {
+    it.each(PEAK_DENSITIES)('%s reaches the stone peak layer (both themes)', (density) => {
+      for (const dark of [false, true]) {
+        const s = vectorBuild()(TILE, false, 'map', true, {
+          vectorBasemap: { ...vector(dark), peakDensity: density },
+        });
+        const peak = s.layers.find((l) => l.id === 'stone-peak') as { filter?: unknown };
+        expect(peak.filter).toEqual(peakDueFilter(PEAK_LEAD[density]));
+      }
+    });
+
+    it('defaults to normal when the caller passes none (offline packs, trail viewer)', () => {
+      const s = vectorBuild()(TILE, false, 'map', false, { vectorBasemap: vector(false) });
+      const peak = s.layers.find((l) => l.id === 'stone-peak') as { filter?: unknown };
+      expect(peak.filter).toEqual(peakDueFilter(PEAK_LEAD.normal));
+    });
+
+    it('keeps the peaks source z5–z12 (the style filter, not the source, picks the lead)', () => {
+      const s = vectorBuild()(TILE, false, 'map', false, {
+        vectorBasemap: { ...vector(false), peakDensity: 'more' },
+      });
+      expect(s.sources['basemap-peaks']).toMatchObject({ minzoom: 5, maxzoom: 12 });
+    });
   });
 });

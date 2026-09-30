@@ -10,12 +10,17 @@ import {
   hypsoColor,
   hypsoRampRgba,
   luminance601,
+  mercatorMetersPerPixel,
+  mercatorRowLat,
   multidirHillshade,
   skyGradientColor,
   SKY_STOPS,
   SLOPE_BANDS,
   slopeBandColor,
   slopeDegrees,
+  SLOPE_BLEND_DEG,
+  slopeOverlayColor,
+  slopeOverlayMercator,
   slopeOverlayRgba,
   slopeRampRgba,
   smoothstep,
@@ -371,5 +376,122 @@ describe('skyGradientColor', () => {
     expect(low[2]!).toBeGreaterThanOrEqual(mid[2]!); // blue channel: haze is brightest
     expect(low[0]!).toBeGreaterThan(mid[0]!); // red drops toward zenith blue
     expect(mid[0]!).toBeGreaterThan(high[0]!);
+  });
+});
+
+describe('Web-Mercator pixel geometry', () => {
+  it('matches the known equator resolution (156 543 m/px at z0, 256-px tiles)', () => {
+    expect(mercatorMetersPerPixel(0, 0)).toBeCloseTo(156543.03, 1);
+    expect(mercatorMetersPerPixel(0, 14)).toBeCloseTo(9.5546, 3);
+  });
+
+  it('shrinks with cos(latitude) — Québec (47°) at z14 is ~6.5 m/px', () => {
+    expect(mercatorMetersPerPixel(47, 14)).toBeCloseTo(9.5546 * Math.cos((47 * Math.PI) / 180), 3);
+  });
+
+  it('maps global rows to latitudes (equator mid-world, poles at ±85.05°)', () => {
+    expect(mercatorRowLat(128, 0)).toBeCloseTo(0, 9);
+    expect(mercatorRowLat(0, 0)).toBeCloseTo(85.0511, 3);
+    expect(mercatorRowLat(256, 0)).toBeCloseTo(-85.0511, 3);
+    expect(mercatorRowLat(128 * 2 ** 10, 10)).toBeCloseTo(0, 9);
+  });
+});
+
+describe('slopeOverlayColor (anti-aliased bands, #461)', () => {
+  it('is transparent below 27° and outside the window', () => {
+    expect(slopeOverlayColor(20, 0)).toEqual([0, 0, 0, 0]);
+    expect(slopeOverlayColor(26.9, 27)).toEqual([0, 0, 0, 0]);
+    expect(slopeOverlayColor(40, 27, 38)).toEqual([0, 0, 0, 0]);
+    expect(slopeOverlayColor(33, 35)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('is each band’s own colour, opaque, clear of the band edges', () => {
+    for (const [deg, i] of [
+      [29, 0],
+      [31, 1],
+      [33.5, 2],
+      [40, 3],
+      [60, 4],
+    ] as const) {
+      expect(slopeOverlayColor(deg, 27)).toEqual([...SLOPE_BANDS[i]!.rgb, 255]);
+    }
+  });
+
+  it('blends linearly across a band edge — the midpoint is halfway', () => {
+    const [r, g, b] = slopeOverlayColor(35, 27);
+    const from = SLOPE_BANDS[2]!.rgb;
+    const to = SLOPE_BANDS[3]!.rgb;
+    expect(r).toBe(Math.round((from[0] + to[0]) / 2));
+    expect(g).toBe(Math.round((from[1] + to[1]) / 2));
+    expect(b).toBe(Math.round((from[2] + to[2]) / 2));
+    // Already the band colour at edge + half the blend.
+    expect(slopeOverlayColor(35 + SLOPE_BLEND_DEG / 2 + 0.01, 27)).toEqual([...to, 255]);
+  });
+
+  it('fades in from the window floor and out at a ceiling below 90°', () => {
+    const a = (deg: number, lo = 27, hi = 90) => slopeOverlayColor(deg, lo, hi)[3];
+    expect(a(27)).toBe(0);
+    expect(a(27.5)).toBeGreaterThan(0);
+    expect(a(27.5)).toBeLessThan(a(28));
+    expect(a(27 + SLOPE_BLEND_DEG)).toBe(255);
+    expect(a(89.9)).toBe(255); // no fade-out at the natural 90° ceiling
+    expect(a(40, 27, 40)).toBe(0);
+    expect(a(39, 27, 40)).toBeGreaterThan(0);
+    expect(a(39, 27, 40)).toBeLessThan(255);
+  });
+
+  it('is continuous — no jump between neighbouring angles', () => {
+    let prev = slopeOverlayColor(27, 27);
+    for (let deg = 27.05; deg < 70; deg += 0.05) {
+      const c = slopeOverlayColor(deg, 27);
+      for (let k = 0; k < 4; k++) expect(Math.abs(c[k]! - prev[k]!)).toBeLessThan(40);
+      prev = c;
+    }
+  });
+});
+
+describe('slopeOverlayMercator (full-resolution 2D slope, #461)', () => {
+  const Z = 14;
+  // A tile row near 47° N (Mont Sainte-Anne): global pixel row of a z14 tile.
+  const TOP = 5800 * 256;
+
+  /** An east-facing plane of `deg` degrees in true metres on the Mercator mosaic. */
+  function mercatorPlane(deg: number, w: number, h: number): Float32Array {
+    const d = new Float32Array(w * h);
+    const tan = Math.tan((deg * Math.PI) / 180);
+    for (let y = 0; y < h; y++) {
+      const cell = mercatorMetersPerPixel(mercatorRowLat(TOP + y + 0.5, Z), Z);
+      for (let x = 0; x < w; x++) d[y * w + x] = 1000 + tan * x * cell;
+    }
+    return d;
+  }
+
+  it('reads a 33.5° plane as the orange band, using the true Mercator cell size', () => {
+    const img = slopeOverlayMercator(mercatorPlane(33.5, 16, 16), 16, 16, Z, TOP, 27);
+    expect(img.width).toBe(16);
+    const i = (8 * 16 + 8) * 4;
+    expect([...img.rgba.slice(i, i + 4)]).toEqual([...SLOPE_BANDS[2]!.rgb, 255]);
+  });
+
+  it('leaves flat ground and slopes outside the window transparent', () => {
+    const flat = slopeOverlayMercator(new Float32Array(64).fill(500), 8, 8, Z, TOP, 27);
+    expect(flat.rgba.every((v) => v === 0)).toBe(true);
+    const steep = slopeOverlayMercator(mercatorPlane(50, 8, 8), 8, 8, Z, TOP, 27, 40);
+    expect(steep.rgba[(4 * 8 + 4) * 4 + 3]).toBe(0);
+  });
+
+  it('block-averages the slope down by `step` (ceil for ragged edges)', () => {
+    const img = slopeOverlayMercator(mercatorPlane(40, 10, 7), 10, 7, Z, TOP, 27, 90, 3);
+    expect(img.width).toBe(4);
+    expect(img.height).toBe(3);
+    expect(img.rgba).toHaveLength(4 * 3 * 4);
+    // Interior block of a uniform 40° plane: the red band.
+    const i = (1 * 4 + 1) * 4;
+    expect([...img.rgba.slice(i, i + 4)]).toEqual([...SLOPE_BANDS[3]!.rgb, 255]);
+  });
+
+  it('treats a step below 1 as full resolution', () => {
+    const img = slopeOverlayMercator(mercatorPlane(40, 6, 6), 6, 6, Z, TOP, 27, 90, 0);
+    expect([img.width, img.height]).toEqual([6, 6]);
   });
 });

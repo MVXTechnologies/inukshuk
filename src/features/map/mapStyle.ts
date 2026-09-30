@@ -25,6 +25,12 @@ import {
 import type { Feature, Polygon } from 'geojson';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
 import { buildStoneLayers, STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
+import {
+  DEFAULT_HILLSHADE_STRENGTH,
+  hillshadeLook,
+  type HillshadeStrength,
+  type PeakDensity,
+} from '@core/map/terrainOptions';
 import { stoneScheme } from './stoneScheme';
 
 /**
@@ -151,8 +157,9 @@ const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
  * z12 — it crosses pyramid LEVELS, and every level crossed is a fresh set of
  * Terrarium PNGs to fetch, decode and hillshade-prepare. Measured with
  * {@link zoomOutTileLoad} on a 440x956 phone viewport, one z15 -> z8 pinch-out
- * cost 105 DEM tiles as shipped in 1.5.0; the gate alone drops that to 60 and
- * the 512-px declaration below drops it to 30, with a hard zero under z11.
+ * cost 105 DEM tiles as shipped in 1.5.0; the gate alone drops that to 60,
+ * with a hard zero under z11 (a 512-px declaration halved it again, until
+ * #461 — see {@link HILLSHADE_2D_DEM_TILE_SIZE}).
  *
  * z11 is roughly "a whole mountain range on screen", where a hillshade carries
  * almost no information anyway — so this is a free win on every platform, not
@@ -161,20 +168,22 @@ const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
 export const HILLSHADE_2D_MIN_ZOOM = 11;
 
 /**
- * Tile size DECLARED for the 2D shaded-relief DEM source (#230).
+ * Tile size DECLARED for the 2D shaded-relief DEM source: the Terrarium PNGs'
+ * true 256 px.
  *
- * The Terrarium PNGs really are 256 px, but MapLibre's zoom is defined against
- * a 512-px canonical tile: a source declaring 256 is asked for one level
- * DEEPER than the camera (camera z12 fetches DEM z13), so it pulls four times
- * the tiles a 512 declaration would for exactly the same view. Declaring 512
- * trades half the DEM sample rate — invisible in a soft shading pass blended
- * UNDER the basemap at exaggeration 0.45 — for a quarter of the tile traffic
- * and a quarter of the per-tile hillshade prepare work.
+ * MapLibre's zoom is defined against a 512-px canonical tile, so a 256
+ * declaration is asked for one level DEEPER than the camera (camera z13
+ * fetches DEM z14). #230 declared 512 instead — a quarter of the tiles — on
+ * the bet that half the DEM sample rate was invisible under the basemap. It
+ * was not: each DEM sample then spanned ~5 device pixels on a phone and the
+ * shading read as stepped, blocky facets (#461, owner on a Samsung). The
+ * true size restores the full sample rate; the z11 gate still keeps the
+ * zoomed-out views (where the tile count bites) free of DEM traffic, and iOS
+ * — where #230's stutter was seen — defaults the shading off.
  *
- * Deliberately NOT applied to the 3D terrain DEM below: there the DEM is the
- * geometry, and halving its sample rate would visibly flatten the surface.
+ * Same as the 3D terrain DEM below, where the DEM is the geometry.
  */
-const HILLSHADE_2D_DEM_TILE_SIZE = 512;
+export const HILLSHADE_2D_DEM_TILE_SIZE = 256;
 
 /**
  * The raster SOURCE's `maxzoom` per basemap — the highest zoom at which each
@@ -320,7 +329,16 @@ export interface OsmStyleOptions {
      * unset = Protomaps' own peaks, which only appear from z13.
      */
     peaks?: string;
+    /** How early the summits appear (#461); default `normal`. */
+    peakDensity?: PeakDensity;
   };
+  /**
+   * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
+   * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
+   * look. The dark palette applies only over the stone-night vector base —
+   * the raster basemaps are always light.
+   */
+  hillshadeStrength?: HillshadeStrength;
   marineChart?: {
     wmsFallback: boolean;
     /**
@@ -520,6 +538,9 @@ export function buildOsmStyle(
           ...(options.vectorBasemap.peaks
             ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
             : {}),
+          ...(options.vectorBasemap.peakDensity
+            ? { peakDensity: options.vectorBasemap.peakDensity }
+            : {}),
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -549,7 +570,8 @@ export function buildOsmStyle(
         tiles: [options.vectorBasemap.peaks],
         // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
         // z12 (the ladder's last rung), so deeper tiles would be copies —
-        // MapLibre overzooms z12 instead, and packs store fewer tiles.
+        // MapLibre overzooms z12 instead, and packs store fewer tiles. The
+        // stone layer's filter picks which of them to draw (peak density).
         minzoom: 5,
         maxzoom: 12,
       };
@@ -584,11 +606,15 @@ export function buildOsmStyle(
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
       encoding: 'terrarium',
-      // See HILLSHADE_2D_DEM_TILE_SIZE: a quarter of the tiles per view.
+      // See HILLSHADE_2D_DEM_TILE_SIZE: the DEM's full sample rate.
       tileSize: HILLSHADE_2D_DEM_TILE_SIZE,
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
+    const look = hillshadeLook(
+      options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH,
+      stone !== null && options.vectorBasemap?.dark === true,
+    );
     style.layers.push({
       id: 'hillshade-2d',
       type: 'hillshade',
@@ -605,11 +631,11 @@ export function buildOsmStyle(
           HILLSHADE_2D_MIN_ZOOM,
           0,
           HILLSHADE_2D_MIN_ZOOM + 1,
-          0.45,
+          look.exaggeration,
         ],
-        'hillshade-shadow-color': 'rgba(74, 62, 45, 0.55)',
-        'hillshade-highlight-color': 'rgba(255, 250, 240, 0.25)',
-        'hillshade-accent-color': 'rgba(120, 105, 80, 0.30)',
+        'hillshade-shadow-color': look.shadowColor,
+        'hillshade-highlight-color': look.highlightColor,
+        'hillshade-accent-color': look.accentColor,
         'hillshade-illumination-direction': 335,
       },
     });

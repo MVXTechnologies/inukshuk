@@ -249,12 +249,22 @@ export function pdfDetailLayer(id: string) {
   );
 }
 
-/** Slope-angle raster (#332): above the PDF maps, below trails and the puck. */
+/**
+ * Slope-angle raster (#332): above the PDF maps, below trails and the puck.
+ * Resampled LINEARLY (#461): the image has fewer pixels than the screen, and
+ * 'nearest' drew each one as a hard-edged block — the stepped look the owner
+ * reported. Linear blends band edges over a pixel, which is all it changes.
+ */
+export const SLOPE_RASTER_PAINT = {
+  'raster-opacity': 0.62,
+  'raster-resampling': 'linear',
+} as const;
+
 export const SLOPE_LAYER = (
   <Layer
     id="slope2d-layer"
     type="raster"
     beforeId={TERRAIN_OVERLAY_ANCHOR}
-    paint={{ 'raster-opacity': 0.62, 'raster-resampling': 'nearest' }}
+    paint={SLOPE_RASTER_PAINT}
   />
 );

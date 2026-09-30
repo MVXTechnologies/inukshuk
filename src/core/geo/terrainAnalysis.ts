@@ -212,6 +212,144 @@ export function slopeOverlayRgba(
   return out;
 }
 
+/** Degrees over which the 2D overlay blends one slope band into the next. */
+export const SLOPE_BLEND_DEG = 1.5;
+
+/**
+ * Anti-aliased slope-band colour for the 2D overlay (#461): the CalTopo band
+ * colours of {@link slopeBandColor}, but each band boundary is a linear blend
+ * over {@link SLOPE_BLEND_DEG} centred on it, and the overlay fades in over
+ * the same width from the window's lower edge (and out at its upper edge when
+ * that is below 90°). A hard step turned every DEM-pixel edge into a visible
+ * stair; the blend keeps the bands' meaning — the colour at each band's
+ * centre, and at its start ± 0.75°, is the band's own — while the edges read
+ * as contours instead of pixels. Outside [minDeg, maxDeg]: transparent.
+ */
+export function slopeOverlayColor(
+  slopeDeg: number,
+  minDeg: number,
+  maxDeg = 90,
+): [number, number, number, number] {
+  const lo = Math.max(minDeg, SLOPE_BANDS[0]!.minDeg);
+  if (slopeDeg < lo || slopeDeg > maxDeg) return [0, 0, 0, 0];
+  const half = SLOPE_BLEND_DEG / 2;
+  let [r, g, b] = slopeBandColor(slopeDeg);
+  for (let i = 1; i < SLOPE_BANDS.length; i++) {
+    const edge = SLOPE_BANDS[i]!.minDeg;
+    if (Math.abs(slopeDeg - edge) < half) {
+      const t = (slopeDeg - (edge - half)) / SLOPE_BLEND_DEG;
+      const from = SLOPE_BANDS[i - 1]!.rgb;
+      const to = SLOPE_BANDS[i]!.rgb;
+      r = Math.round(from[0] + (to[0] - from[0]) * t);
+      g = Math.round(from[1] + (to[1] - from[1]) * t);
+      b = Math.round(from[2] + (to[2] - from[2]) * t);
+      break;
+    }
+  }
+  let alpha = smoothstep(lo, lo + SLOPE_BLEND_DEG, slopeDeg);
+  if (maxDeg < 90) alpha *= 1 - smoothstep(maxDeg - SLOPE_BLEND_DEG, maxDeg, slopeDeg);
+  return [r, g, b, Math.round(255 * alpha)];
+}
+
+/** Web-Mercator circumference at the equator, metres (EPSG:3857). */
+const EARTH_CIRCUMFERENCE_M = 40075016.686;
+
+/**
+ * Ground metres covered by one pixel of a Web-Mercator tile pyramid
+ * (`tilePx`-pixel tiles) at a latitude and zoom. Mercator is conformal, so
+ * the size is the same east–west and north–south; it shrinks with cos(lat).
+ */
+export function mercatorMetersPerPixel(latDeg: number, z: number, tilePx = 256): number {
+  return (EARTH_CIRCUMFERENCE_M * Math.cos(latDeg * RAD)) / (tilePx * 2 ** z);
+}
+
+/** Latitude (degrees) of a global pixel row `row` (may be fractional) at zoom `z`. */
+export function mercatorRowLat(row: number, z: number, tilePx = 256): number {
+  const n = Math.PI * (1 - (2 * row) / (tilePx * 2 ** z));
+  return Math.atan(Math.sinh(n)) * DEG;
+}
+
+/** A slope overlay image: RGBA, `width` × `height`, row 0 = north. */
+export interface SlopeOverlayImage {
+  rgba: Uint8Array;
+  width: number;
+  height: number;
+}
+
+/**
+ * The 2D map's slope-band overlay, computed at the DEM's FULL resolution
+ * (#461). `data` is a Web-Mercator elevation mosaic (metres, row-major,
+ * `width` × `height`, row 0 = north) whose row 0 is global pixel row `topRow`
+ * of zoom `z` (256-px tiles).
+ *
+ * Why not {@link slopeOverlayRgba} on a resampled grid: the old 2D path first
+ * shrank a up-to-2048-px mosaic to a 384 grid — ~5 DEM pixels per cell with a
+ * single bilinear tap each — and then took the Horn gradient over those wide
+ * cells. That aliased the relief and averaged every short steep pitch into
+ * its gentler neighbours, so steep ground under-read (fewer red/purple
+ * cells, next to nothing when zoomed out) and each cell was a visible block.
+ * Here the gradient uses every DEM pixel with its true ground size (per row:
+ * Mercator pixels shrink with latitude), and only then is the SLOPE averaged
+ * down by `step` × `step` blocks to keep the image a sensible size.
+ *
+ * Colours come from {@link slopeOverlayColor} (anti-aliased bands); cells
+ * outside [minDeg, maxDeg] stay transparent; opacity is the layer's.
+ */
+export function slopeOverlayMercator(
+  data: ArrayLike<number>,
+  width: number,
+  height: number,
+  z: number,
+  topRow: number,
+  minDeg: number,
+  maxDeg = 90,
+  step = 1,
+): SlopeOverlayImage {
+  const s = Math.max(1, Math.floor(step));
+  const outW = Math.ceil(width / s);
+  const outH = Math.ceil(height / s);
+  const sum = new Float32Array(outW * outH);
+  const count = new Uint16Array(outW * outH);
+  // Hot loop (up to 2048² cells on the JS thread): plain indexing, rows and
+  // edge columns clamped once instead of per sample.
+  for (let y = 0; y < height; y++) {
+    const cell = mercatorMetersPerPixel(mercatorRowLat(topRow + y + 0.5, z), z);
+    const inv8 = 1 / (8 * cell);
+    const rN = Math.max(0, y - 1) * width;
+    const r0 = y * width;
+    const rS = Math.min(height - 1, y + 1) * width;
+    const oy = Math.floor(y / s) * outW;
+    for (let x = 0; x < width; x++) {
+      const xw = x > 0 ? x - 1 : 0;
+      const xe = x < width - 1 ? x + 1 : x;
+      const a = data[rN + xw] as number;
+      const b = data[rN + x] as number;
+      const c = data[rN + xe] as number;
+      const d = data[r0 + xw] as number;
+      const f = data[r0 + xe] as number;
+      const g = data[rS + xw] as number;
+      const h = data[rS + x] as number;
+      const i = data[rS + xe] as number;
+      const dzdx = (c + 2 * f + i - (a + 2 * d + g)) * inv8;
+      const dzdy = (g + 2 * h + i - (a + 2 * b + c)) * inv8;
+      const o = oy + ((x / s) | 0);
+      sum[o] = (sum[o] as number) + Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * DEG;
+      count[o] = (count[o] as number) + 1;
+    }
+  }
+  const rgba = new Uint8Array(outW * outH * 4);
+  for (let o = 0; o < sum.length; o++) {
+    const deg = (sum[o] as number) / Math.max(1, count[o] as number);
+    const [r, g, b, al] = slopeOverlayColor(deg, minDeg, maxDeg);
+    if (al === 0) continue; // stays transparent
+    rgba[o * 4] = r;
+    rgba[o * 4 + 1] = g;
+    rgba[o * 4 + 2] = b;
+    rgba[o * 4 + 3] = al;
+  }
+  return { rgba, width: outW, height: outH };
+}
+
 /**
  * A `size`×1 RGBA slope ramp texture spanning 0..90°, sampled at texel centres
  * — so band edges are data, not shader branches. Point-sample it (NEAREST).

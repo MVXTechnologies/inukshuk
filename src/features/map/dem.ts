@@ -70,15 +70,23 @@ export interface Heightmap {
   maxH: number;
 }
 
+/** The full-resolution Terrarium elevation mosaic of a tile range. */
+export interface DemMosaic {
+  /** Elevation in metres, row-major, `width * height`. Row 0 = north edge. */
+  data: Float32Array;
+  width: number;
+  height: number;
+  /** Tile range covered; `range.z` is the DEM zoom (256-px tiles). */
+  range: TileRange;
+  /** Tile-aligned lng/lat bounds of the mosaic. */
+  bbox: BoundingBox;
+}
+
 /**
- * Fetch the free Terrarium DEM tiles covering `bounds`, decode their elevation,
- * and downsample to a `grid × grid` heightmap for a 3D mesh. Network-bound.
+ * Fetch the free Terrarium DEM tiles covering `bounds` and decode them into
+ * one full-resolution elevation mosaic. Network-bound (tiles are cached).
  */
-export async function fetchHeightmap(
-  bounds: BoundingBox,
-  grid = 256,
-  maxTilesPerSide = 6,
-): Promise<Heightmap> {
+export async function fetchDemMosaic(bounds: BoundingBox, maxTilesPerSide = 6): Promise<DemMosaic> {
   // Allow more DEM tiles per side → a higher zoom level → finer elevation detail
   // (and a sharper basemap drape, which reuses the same tile range/zoom).
   const z = pickTerrainZoom(bounds, maxTilesPerSide);
@@ -109,7 +117,12 @@ export async function fetchHeightmap(
     }
   });
   assessTileFailures('elevation', tiles.length, failures, 0);
+  return { data: full, width: fullW, height: fullH, range, bbox: rangeBbox(range) };
+}
 
+/** Downsample a DEM mosaic to a `grid × grid` heightmap (for a mesh or contours). */
+export function heightmapFromMosaic(mosaic: DemMosaic, grid: number): Heightmap {
+  const { data: full, width: fullW, height: fullH } = mosaic;
   const data = new Float32Array(grid * grid);
   let minH = Infinity;
   let maxH = -Infinity;
@@ -124,8 +137,19 @@ export async function fetchHeightmap(
       if (h > maxH) maxH = h;
     }
   }
+  return { data, grid, bbox: mosaic.bbox, range: mosaic.range, minH, maxH };
+}
 
-  return { data, grid, bbox: rangeBbox(range), range, minH, maxH };
+/**
+ * Fetch the free Terrarium DEM tiles covering `bounds`, decode their elevation,
+ * and downsample to a `grid × grid` heightmap for a 3D mesh. Network-bound.
+ */
+export async function fetchHeightmap(
+  bounds: BoundingBox,
+  grid = 256,
+  maxTilesPerSide = 6,
+): Promise<Heightmap> {
+  return heightmapFromMosaic(await fetchDemMosaic(bounds, maxTilesPerSide), grid);
 }
 
 /**

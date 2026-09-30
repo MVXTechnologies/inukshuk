@@ -9,9 +9,10 @@ unnamed at the zooms where you'd plan a trip. This builds our own worldwide
 tileset from OpenStreetMap: every node tagged natural=peak|volcano with a name.
 
 Each feature carries `name` (+ `name:en` / `name:fr` when they differ), `ele`
-(integer metres, when the OSM `ele` tag parses) and `kind` (peak|volcano), and
-a `tippecanoe.minzoom` from ELEVATION_LADDER, so the big summits show from z5
-and smaller ones join as you zoom in. Local prominence would rank better than
+(integer metres, when the OSM `ele` tag parses), `kind` (peak|volcano) and
+`rank`, the zoom ELEVATION_LADDER gives it, so the big summits show from z5
+and smaller ones join as you zoom in. Its `tippecanoe.minzoom` is PEAK_MAX_LEAD
+zooms before the rank, so the app can draw summits earlier (#461). Local prominence would rank better than
 raw height, but OSM rarely has it; when the `prominence` tag is there it
 promotes the peak (PROMINENCE_PROMOTION).
 
@@ -62,6 +63,11 @@ UNKNOWN_ELE_MINZOOM = 12
 # 600 m above its surroundings is a landmark; a 2100 m bump on a ridge is not.
 PROMINENCE_PROMOTION = [(1500, 2), (500, 1)]
 MIN_ZOOM = 5  # tippecanoe -Z
+# The app draws each summit up to this many zooms BEFORE its ladder zoom (the
+# peak-density setting, #461: `PEAK_MAX_LEAD` in src/core/map/terrainOptions.ts
+# — keep the two equal). So every summit carries its ladder zoom as `rank` and
+# goes into the tiles this much earlier; the app's filter picks the lead.
+PEAK_MAX_LEAD = 2
 
 # Plausible summit heights: the Dead Sea shore to Everest (8849 m) with slack.
 ELE_RANGE = (-500.0, 9000.0)
@@ -106,7 +112,7 @@ def parse_ele(raw):
 
 
 def minzoom_for(ele, prominence=None):
-    """The zoom a summit first appears at (see ELEVATION_LADDER)."""
+    """A summit's rank: the zoom its height earns (see ELEVATION_LADDER)."""
     if ele is None or ele <= 0:
         zoom = UNKNOWN_ELE_MINZOOM
     else:
@@ -114,6 +120,11 @@ def minzoom_for(ele, prominence=None):
     if prominence is not None:
         zoom -= next((n for floor, n in PROMINENCE_PROMOTION if prominence >= floor), 0)
     return max(MIN_ZOOM, zoom)
+
+
+def tile_minzoom(rank):
+    """The first zoom whose tiles carry a summit of this rank (PEAK_MAX_LEAD earlier)."""
+    return max(MIN_ZOOM, rank - PEAK_MAX_LEAD)
 
 
 def feature(element):
@@ -134,9 +145,11 @@ def feature(element):
             props[key] = value
     if ele is not None:
         props['ele'] = int(round(ele))
+    rank = minzoom_for(ele, parse_ele(tags.get('prominence')))
+    props['rank'] = rank
     return {
         'type': 'Feature',
-        'tippecanoe': {'minzoom': minzoom_for(ele, parse_ele(tags.get('prominence')))},
+        'tippecanoe': {'minzoom': tile_minzoom(rank)},
         'properties': props,
         'geometry': {'type': 'Point', 'coordinates': [round(lon, 6), round(lat, 6)]},
     }

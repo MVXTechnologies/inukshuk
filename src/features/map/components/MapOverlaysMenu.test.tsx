@@ -100,3 +100,68 @@ describe('OverlaysDrilldown', () => {
     expect(screen.queryByText('Heatmap')).toBeNull();
   });
 });
+
+describe('Topology: Shading and Peaks pickers (#461)', () => {
+  afterEach(() => {
+    useSettingsStore.setState({
+      showHillshade: true,
+      hillshadeStrength: 'medium',
+      peakDensity: 'normal',
+    });
+  });
+
+  async function openTopology(): Promise<void> {
+    await renderMenu();
+    fireEvent.press(screen.getByLabelText('Topology'));
+    await screen.findByText('Shading');
+  }
+
+  it('shows both rows with their current values', async () => {
+    useSettingsStore.setState({ showHillshade: true, hillshadeStrength: 'heavy' });
+    await openTopology();
+    expect(screen.getByText('Peaks')).toBeTruthy();
+    expect(screen.getByLabelText('Heavy').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(screen.getByLabelText('Normal').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+  });
+
+  it('reads the hillshade switch off as None', async () => {
+    useSettingsStore.setState({ showHillshade: false, hillshadeStrength: 'heavy' });
+    await openTopology();
+    expect(screen.getByLabelText('None').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+  });
+
+  it('None turns the hillshade off and keeps the chosen strength', async () => {
+    useSettingsStore.setState({ showHillshade: true, hillshadeStrength: 'light' });
+    await openTopology();
+    fireEvent.press(screen.getByLabelText('None'));
+    expect(useSettingsStore.getState().showHillshade).toBe(false);
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('light');
+  });
+
+  it('a strength turns the hillshade on at that strength', async () => {
+    useSettingsStore.setState({ showHillshade: false, hillshadeStrength: 'medium' });
+    await openTopology();
+    fireEvent.press(screen.getByLabelText('Heavy'));
+    expect(useSettingsStore.getState().showHillshade).toBe(true);
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('heavy');
+  });
+
+  it.each(['Fewer', 'More'] as const)('Peaks: %s sets the density', async (label) => {
+    await openTopology();
+    fireEvent.press(screen.getByLabelText(label));
+    expect(useSettingsStore.getState().peakDensity).toBe(label.toLowerCase());
+  });
+
+  it('never wraps a row label (the owner’s stray "s" of Contours)', async () => {
+    await openTopology();
+    for (const label of ['Contours', 'Shading', 'Peaks', 'Slope']) {
+      expect(screen.getByText(label).props.numberOfLines).toBe(1);
+    }
+  });
+});
