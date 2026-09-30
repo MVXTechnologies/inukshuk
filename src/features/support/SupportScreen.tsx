@@ -48,12 +48,19 @@ export function SupportScreen() {
   );
   const jar = useTipJar(onThanks);
   // Opened from the floating tip jar: go straight to "Leave a tip", and stay
-  // there if the yearly figures load above it, until the person scrolls.
+  // there until the person scrolls. Re-applied whenever the heading moves (the
+  // yearly figures load above it) or the content grows (the tiers arrive: a
+  // scroll asked for while the page is still short is clamped by the view).
   const scrollRef = useRef<ScrollView>(null);
   const userScrolled = useRef(false);
+  const tipsY = useRef<number | null>(null);
+  const keepTipsInView = () => {
+    if (!fromJar || userScrolled.current || tipsY.current === null) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, tipsY.current - space.md), animated: false });
+  };
   const onTipsLayout = (y: number) => {
-    if (!fromJar || userScrolled.current) return;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - space.md), animated: false });
+    tipsY.current = y;
+    keepTipsInView();
   };
 
   return (
@@ -67,6 +74,7 @@ export function SupportScreen() {
 
       <ScrollView
         ref={scrollRef}
+        onContentSizeChange={keepTipsInView}
         onScrollBeginDrag={() => {
           userScrolled.current = true;
         }}
