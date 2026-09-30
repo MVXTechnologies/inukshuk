@@ -29,14 +29,7 @@ const noop = (): void => undefined;
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
 // populates `screen`, exactly as mapLayers.test.tsx does.
 async function renderMenu(): Promise<void> {
-  await render(
-    <OverlaysDrilldown
-      showHypso={false}
-      onSlopeEnabled={noop}
-      onOpenFolders={noop}
-      onOpenTrailNetworks={noop}
-    />,
-  );
+  await render(<OverlaysDrilldown showHypso={false} onSlopeEnabled={noop} onOpenFolders={noop} />);
 }
 
 describe('OverlaysDrilldown', () => {
@@ -91,6 +84,20 @@ describe('OverlaysDrilldown', () => {
       fireEvent.press(screen.getByLabelText('Weather'));
       expect(await screen.findByLabelText('Back to overlays')).toBeTruthy();
     });
+  });
+
+  it('names the heat layer "Personal heatmap" (#462)', async () => {
+    useSettingsStore.setState({
+      showHeatmap: true,
+      terrainSlope: false,
+      terrainContours: false,
+    });
+    await renderMenu();
+    // The Topology subtitle, then the toggle row inside the sub-menu.
+    expect(screen.getByText('Personal heatmap on')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Topology'));
+    expect(await screen.findByText('Personal heatmap')).toBeTruthy();
+    expect(screen.queryByText('Heatmap')).toBeNull();
   });
 });
 

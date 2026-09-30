@@ -1,5 +1,4 @@
 import { clampTileRange, TERRARIUM_TILE_SOURCE, tileRangeForBbox } from '@core/geo/terrain';
-import { trailNetworkTileUrl, TRAIL_NETWORKS } from '@core/geo/trailNetworks';
 import type { BoundingBox } from '@core/models';
 import { mercatorPixel } from './cropRaster';
 import { layoutMadeMap, RASTER_LONG_EDGE_PX, type PageFormat } from './layout';
@@ -272,14 +271,6 @@ describe('tile URLs — every layer the map maker prints', () => {
     expect(tileUrl(TERRARIUM_TILE_SOURCE.template, { z: 14, x: 4951, y: 5774 })).toBe(
       'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4951/5774.png',
     );
-  });
-
-  it('marked-trail overlays are Waymarked Trails PNGs in {z}/{x}/{y} order', () => {
-    for (const n of TRAIL_NETWORKS) {
-      expect(tileUrl(trailNetworkTileUrl(n.id), t)).toBe(
-        `https://tile.waymarkedtrails.org/${n.id}/16/19854/23023.png`,
-      );
-    }
   });
 
   it('refuses a template missing a placeholder', () => {

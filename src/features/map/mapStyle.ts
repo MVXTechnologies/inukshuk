@@ -16,7 +16,6 @@ import {
   WEATHER_DRAPE_ANCHOR,
 } from '@core/geo/mapLayerStack';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
-import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import {
   ROAD_LINE_W,
   WATER_LINE_W,
@@ -274,8 +273,6 @@ export interface OsmStyleOptions {
    * `buildDownloadedMask`); `color` should suit the app theme.
    */
   downloadedMask?: { data: Feature<Polygon>; color: string };
-  /** Checked marked-trail databases, each draped as its own tile overlay. */
-  markedTrailsNetworks?: readonly TrailNetworkId[];
   /**
    * Night red (decision 4): the raster goes greyscale and dim, under the red
    * veil MapScreen draws over the map. Wins over the weather/chart mute.
@@ -476,21 +473,9 @@ export function buildOsmStyle(
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
-      ...Object.fromEntries(
-        (options.markedTrailsNetworks ?? []).map((n) => [
-          `wmt-${n}`,
-          {
-            type: 'raster' as const,
-            tiles: [trailNetworkTileUrl(n)],
-            tileSize: 256,
-            maxzoom: 17,
-            attribution: '© Waymarked Trails',
-          },
-        ]),
-      ),
       // Marine reference drapes (marine M3): NONNA bathymetry rides the same
       // WMS-through-a-raster-source mechanism as the weather layers; the
-      // seamarks are plain XYZ tiles like the trail networks.
+      // seamarks are plain XYZ tiles.
       ...Object.fromEntries(
         marine.map((l) => [
           `marine-${l.id}`,
@@ -529,15 +514,6 @@ export function buildOsmStyle(
             ? WEATHER_MUTED_PAINT
             : (RASTER_PAINT[basemap] ?? {}),
       },
-      // Marked-trail networks, each its own layer over the basemap (only
-      // requested networks get a source — keeps offline packs and 3D drapes
-      // free of network-only layers).
-      ...(options.markedTrailsNetworks ?? []).map((n) => ({
-        id: `marked-trails-${n}`,
-        type: 'raster' as const,
-        source: `wmt-${n}`,
-        paint: { 'raster-opacity': 0.85 },
-      })),
       // Chart-tan land dim (marine chart mode): a semi-opaque warm screen
       // over the muted basemap — the paper-chart ground. `background` paints
       // the whole viewport; the water fill + drape re-cover the wet parts.

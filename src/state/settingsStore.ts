@@ -17,7 +17,6 @@ import {
 } from '@core/map/terrainOptions';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
-import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import {
   DEFAULT_WEATHER_MODEL,
@@ -100,12 +99,9 @@ export interface Settings {
   autoNightAtSunset: boolean;
   /** Switch to Sunlight while a recording is running. */
   sunlightWhileRecording: boolean;
-  /** Checked marked-trail databases draped on the main map (empty = off). */
-  markedTrailsNetworks: TrailNetworkId[];
   /**
    * Active ECCC GeoMet weather overlay (radar / wind / precip), or null = off.
-   * Network-only: the map drops it entirely while `offlineOnly` is on, the
-   * same way `markedTrailsNetworks` is dropped.
+   * Network-only: the map drops it entirely while `offlineOnly` is on.
    */
   weatherLayer: WeatherLayerId | null;
   /**
@@ -234,7 +230,6 @@ const DEFAULTS: Settings = {
   displayCondition: 'normal',
   autoNightAtSunset: false,
   sunlightWhileRecording: false,
-  markedTrailsNetworks: [],
   weatherLayer: null,
   weatherModel: DEFAULT_WEATHER_MODEL,
   windParticles: true,
@@ -307,7 +302,6 @@ function snapshot(s: SettingsState): Settings {
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
-    markedTrailsNetworks,
     weatherLayer,
     weatherModel,
     windParticles,
@@ -347,7 +341,6 @@ function snapshot(s: SettingsState): Settings {
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
-    markedTrailsNetworks,
     weatherLayer,
     weatherModel,
     windParticles,
@@ -388,7 +381,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // migrateSettings only checks `typeof` against the default; with a `null`
       // default any object-typed junk would slip through — deep-validate here.
       next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
-      next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
+      // `markedTrailsNetworks` (the retired Waymarked Trails overlay, #467) is
+      // not a Settings key any more: the ladder copies only known keys, so an
+      // old file's value is dropped here and gone at the next write.
       next.marineLayers = sanitizeMarineLayers(next.marineLayers);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration

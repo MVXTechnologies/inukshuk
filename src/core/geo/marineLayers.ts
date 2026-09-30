@@ -13,7 +13,7 @@
  * - OpenSeaMap seamarks (buoys, lights, harbours; OSM data, ODbL) as plain
  *   transparent XYZ tiles.
  *
- * Same catalog discipline as `trailNetworks.ts` / `weatherLayers.ts`: a
+ * Same catalog discipline as `weatherLayers.ts`: a
  * small const list, an id type derived from it, and a sanitize helper for
  * settings hydration. Every layer carries its attribution and a source
  * maxzoom (the offline downloader must obey it if charts ever join packs).

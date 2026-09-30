@@ -10,13 +10,15 @@ Protomaps daily planet ──(nas/refresh.sh: extract our regions)──▶ base
 phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
 ```
 
-| Path                             | What                                               |
-| -------------------------------- | -------------------------------------------------- |
-| `/basemap/{z}/{x}/{y}.mvt`       | vector tile (gzip), z0–15; 204 where there is none |
-| `/basemap.json`                  | TileJSON                                           |
-| `/peaks/{z}/{x}/{y}.mvt`         | named summits (gzip), z5–12, from `peaks.pmtiles`  |
-| `/contours/{z}/{x}/{y}.mvt`      | contour lines, generated on demand from DEM tiles  |
-| `/fonts/{fontstack}/{range}.pbf` | MapLibre glyphs (Atkinson Hyperlegible Next)       |
+| Path                               | What                                               |
+| ---------------------------------- | -------------------------------------------------- |
+| `/basemap/{z}/{x}/{y}.mvt`         | vector tile (gzip), z0–15; 204 where there is none |
+| `/basemap.json`                    | TileJSON                                           |
+| `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`  |
+| `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles  |
+| `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)       |
+| `/trails/v1/index.json`            | long-distance trail index (Explore, #467)          |
+| `/trails/v1/d/{version}/{id}.json` | one trail's route and stages (range-read)          |
 
 Coverage (`nas/pieces.json`): **the whole world** (land between 60° S and 84° N) as 20 regional
 archives plus `basemap.index.json` — Canada/US/Greenland and Europe first (2026-09-28 morning),
@@ -111,6 +113,107 @@ up to four times. Once a month is well within the public instance's fair use.
 
 **Attribution**: summits are OSM data (ODbL), covered by the base map's existing
 "© OpenStreetMap contributors" credit; the archive carries the same attribution.
+
+## Long-distance trails (Explore, #467)
+
+Explore's "Long-distance trails near you" reads OpenStreetMap route relations built by
+`nas/trails.sh` (+ `nas/trails_build.py`, stdlib Python like the peaks script):
+
+1. **Overpass, tags only** — per `pieces.json` bbox, `out tags bb` for every relation that is
+   `type=route` + `route=hiking|foot|bicycle|mtb|ski|canoe` + `network=iwn|nwn|rwn|icn|ncn|rcn`,
+   every `type=superroute` of those activities, and every hiking/ski/canoe route whatever its
+   network (the Sentier des Caps de Charlevoix is `lwn`), plus their parent relations up to three
+   levels (`rel(br)` — a superroute has no ways of its own, so a bbox never matches it). A
+   prefilter on the relation's bbox diagonal keeps what can be long: ≥ 10 km (international /
+   national; superroutes always), ≥ 15 km (regional), ≥ 20 km or a `distance` ≥ 40 km (local and
+   unnetworked; cycling needs a network). A bare `ref` is not a name.
+2. **Overpass, geometry** — `relation(id:…);out geom;` in batches (≤ 150 relations, ≤ 8 000 km of
+   bbox diagonals), then the same for their child relations (stages), up to three levels.
+3. **Wikidata** — sitelink counts for relations with a `wikidata` tag (50 ids per request).
+4. **Build** — ways chained into lines (member order, either direction, gaps ≤ 60 m joined;
+   `alternative`/`excursion`/`approach`/`backward` members left out), measured, and kept when
+   ≥ 30 km (international / national) or ≥ 40 km (everything else). A relation that is a member
+   of another route is that route's **stage**, and not a trail of its own — unless it stands
+   alone: its own Wikidata item with ≥ 5 sitelinks (the Appalachian Trail, a stage of the Eastern
+   Continental Trail), or its own `website` (the Sentier des Caps, a stage of the Sentier
+   National); a section named like its trail ("Sentier National, Charlevoix") never does. A
+   wrapper around one route (plus variants) is one trail. A stage named only like its trail (the
+   AT's state sections) takes its region's name. Same-name twins with overlapping boxes (a summer
+   hike and a winter ski route) merge into one trail with both activities. Countries and regions
+   come from Natural Earth (21 samples along the line; admin-1 at the midpoint). Thumbnails bridge
+   OSM gaps under 8 % of the trail's extent; details keep them.
+
+**Pilot (2026-09-29)** — Québec + Maritimes + New England (−80…−59, 40.5…50.5) and the Mont-Blanc
+area (6.4…8.2, 45.4…46.4), on overpass-api.de: 2 tag queries + 27 geometry batches, 220 MB of raw Overpass JSON, 3 085 relations with geometry → **355 trails**
+(69 with stages; 183 regional, 106 local, 55 national, 11 international; 145 cycling, 141 hiking,
+73 paddling), index **135 KB (69 KB gzipped)**, details 4.4 MB (median 3 KB, largest 400 KB —
+the Eastern Continental Trail). Parents outside the boxes come along (the whole Appalachian Trail,
+the Via Alpina), so a worldwide run is not the sum of its pieces; expect roughly 20–40k trails,
+an index of ~8–15 MB (~4–8 MB gzipped, ~380 bytes a trail) and a few hundred Overpass queries.
+
+**Popularity** (0…1; OSM has no usage data):
+
+```
+raw = network (international 1.0 · national 0.75 · regional 0.5 · other 0.3)
+    + 0.15 if it has a wikipedia/wikidata tag
+    + 0.35 · min(1, log10(1 + sitelinks) / log10(41))        40 language editions = full marks
+    + 0.15 · clamp(log10(km / 20) / 2, 0, 1)                 20 km → 0, 2 000 km → 1
+    + 0.05 if it has stages
+pop = raw / 1.70
+```
+
+The app ranks "near you" as `(0.55 · pop + 0.45 · 1 / (1 + km_away / 100)) · activity` over the
+trails within 300 km (topped up with the nearest others to at least three; worldwide by
+`pop · activity` without a position) — `src/core/trails/rank.ts`.
+
+**Hiking first** (owner call, #472): `activity` is the best weight among the trail's activities —
+hiking 1.0, skiing 0.85, paddling 0.8, cycling 0.75. It multiplies the near-you score and
+"Most popular"; "Nearest first" sorts by `km_away / activity` (a cycle route 20 km away sorts like
+a hike 27 km away). Cycling, paddling and ski routes still appear, after comparable hikes.
+
+**Offline download, stage by stage** (#472): each stage's corridor (≈3 km each side, cut into
+≤ 20 km boxes, one MapLibre pack per box) downloads on its own from its row on the trail page or
+from the map's stage sheet. A trail without stages is one download only when it is ≤ 60 km;
+longer ones say to download an area from the map.
+
+**Outputs** (`work/trails/out/`), served by the Worker:
+
+| R2 object                       | Route                              | What                                       |
+| ------------------------------- | ---------------------------------- | ------------------------------------------ |
+| `trails-v1.index.json`          | `/trails/v1/index.json`            | every trail, compact keys, 40-pt thumbnail |
+| `trails-{version}.details.bin`  | `/trails/v1/d/{version}/{id}.json` | per-trail detail documents, concatenated   |
+| `trails-{version}.offsets.json` | (read by the Worker)               | `{id: [offset, length]}` into the `.bin`   |
+
+A detail is the trail's geometry simplified at 10 m (raised on the very longest so none passes
+60 000 points) as encoded polylines, its stages (name, from/to, length, geometry) and its
+`operator` / `website` / `wikipedia` / `description`. One `.bin` instead of tens of thousands of
+small objects keeps the upload to three files; the version is in the detail URL, so details cache
+for a month at the edge and the index — uploaded **last** — switches everything atomically.
+Old `trails-{version}.*` objects can be deleted by hand once a newer index is live.
+
+Run by hand:
+
+```sh
+~/inukshuk-tiles/infra/nas/trails.sh                  # Overpass + Wikidata + build + upload
+TRAILS_RESUME=1 ~/inukshuk-tiles/infra/nas/trails.sh  # keep what an interrupted run fetched
+python3 -m unittest infra/tiles/nas/test_trails_build.py
+```
+
+Uploading the new key types needs the Worker from this change deployed first (`/_upload` accepts
+`*.details.bin` and `*.offsets.json`). It refuses to upload below `TRAILS_MIN_TRAILS` (8 000) or
+more than 30 % under the last run's count (`work/trails/count`).
+
+**Monthly**: not in `scheduler.sh` yet. To schedule it after peaks, add to the loop (then
+`docker compose -f nas/compose.yaml up -d --force-recreate` — a running `sh` must not have its
+script edited under it):
+
+```sh
+    echo "$(date) trails starting"
+    "$HOME/inukshuk-tiles/infra/nas/trails.sh" && echo "$(date) trails done" || echo "$(date) trails FAILED"
+```
+
+**Attribution**: OSM data (ODbL) — the trail page says "Route from OpenStreetMap (© contributors,
+ODbL)"; the index carries the attribution string too.
 
 ## Check it
 

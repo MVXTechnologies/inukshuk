@@ -7,7 +7,7 @@ import {
 } from '@core/mapmaker/tilePlan';
 import * as storage from '@data/storage';
 import UPNG from 'upng-js';
-import { fetchBasemapTexture, fetchHeightmap, fetchPrintBasemap, fetchTrailsTexture } from './dem';
+import { fetchBasemapTexture, fetchHeightmap, fetchPrintBasemap } from './dem';
 
 jest.mock('@data/storage', () => ({ downloadBytes: jest.fn() }));
 
@@ -155,17 +155,6 @@ describe('fetchPrintBasemap (#460)', () => {
     await fetchPrintBasemap(plan, 'map', noSleep);
     const xs = download.mock.calls.map(([url]) => Number(url.split('/').at(-1)));
     expect(new Set(xs)).toEqual(new Set([1023, 0]));
-  });
-});
-
-describe('fetchTrailsTexture', () => {
-  it('a missing overlay tile is transparent, not an error', async () => {
-    download.mockRejectedValue(new Error('HTTP 404'));
-    const tex = await fetchTrailsTexture(smallPlan, 'hiking', noSleep);
-    expect(cellPixel(tex, 0, 0)).toEqual([0, 0, 0, 0]);
-    expect(download.mock.calls[0]![0]).toMatch(
-      /^https:\/\/tile\.waymarkedtrails\.org\/hiking\/14\/\d+\/\d+\.png$/,
-    );
   });
 });
 

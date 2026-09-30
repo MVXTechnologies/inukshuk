@@ -323,12 +323,10 @@ describe('buildOsmStyle', () => {
     it('stacks dim above every basemap-side raster (the drape rides above it)', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         weatherMuted,
-        markedTrailsNetworks: ['hiking'],
         marineLayers: ['bathymetry'],
       });
       const ids = layerIds(s);
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('osm'));
-      expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
 
@@ -548,11 +546,9 @@ describe('buildOsmStyle', () => {
     it('draws bathymetry under seamarks in catalog order, whatever the toggle order', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['seamarks', 'bathymetry'],
-        markedTrailsNetworks: ['hiking'],
       });
       const ids = layerIds(s);
       expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('osm'));
-      expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
   });

@@ -247,8 +247,6 @@ export function MapMakerEditor({
       includeUserData: selectedTracks.length > 0 || selectedWaypoints.length > 0,
       trackIds: selectedTracks,
       waypointIds: selectedWaypoints,
-      markedTrailsNetworks: [],
-      markedTrailsOpacity: 0.85,
       grid,
       compass: true,
       declinationDeg: null,
