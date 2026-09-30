@@ -122,18 +122,34 @@ Explore's "Long-distance trails near you" reads OpenStreetMap route relations bu
 1. **Overpass, tags only** — per `pieces.json` bbox, `out tags bb` for every relation that is
    `type=route` + `route=hiking|foot|bicycle|mtb|ski|canoe` + `network=iwn|nwn|rwn|icn|ncn|rcn`,
    every `type=superroute` of those activities, and every hiking/ski/canoe route whatever its
-   network (the Sentier des Caps de Charlevoix is `lwn`). A prefilter on the relation's bbox
-   diagonal keeps what can be long: ≥ 10 km (international / national / superroutes), ≥ 15 km
-   (regional), ≥ 20 km or a `distance` ≥ 40 km (local and unnetworked; cycling needs a network).
+   network (the Sentier des Caps de Charlevoix is `lwn`), plus their parent relations up to three
+   levels (`rel(br)` — a superroute has no ways of its own, so a bbox never matches it). A
+   prefilter on the relation's bbox diagonal keeps what can be long: ≥ 10 km (international /
+   national; superroutes always), ≥ 15 km (regional), ≥ 20 km or a `distance` ≥ 40 km (local and
+   unnetworked; cycling needs a network). A bare `ref` is not a name.
 2. **Overpass, geometry** — `relation(id:…);out geom;` in batches (≤ 150 relations, ≤ 8 000 km of
    bbox diagonals), then the same for their child relations (stages), up to three levels.
 3. **Wikidata** — sitelink counts for relations with a `wikidata` tag (50 ids per request).
 4. **Build** — ways chained into lines (member order, either direction, gaps ≤ 60 m joined;
    `alternative`/`excursion`/`approach`/`backward` members left out), measured, and kept when
-   ≥ 20 km (international / national) or ≥ 40 km (everything else). A relation that is a member
-   of another candidate is that trail's stage. Same-name twins with overlapping boxes (a summer
+   ≥ 30 km (international / national) or ≥ 40 km (everything else). A relation that is a member
+   of another route is that route's **stage**, and not a trail of its own — unless it stands
+   alone: its own Wikidata item with ≥ 5 sitelinks (the Appalachian Trail, a stage of the Eastern
+   Continental Trail), or its own `website` (the Sentier des Caps, a stage of the Sentier
+   National); a section named like its trail ("Sentier National, Charlevoix") never does. A
+   wrapper around one route (plus variants) is one trail. A stage named only like its trail (the
+   AT's state sections) takes its region's name. Same-name twins with overlapping boxes (a summer
    hike and a winter ski route) merge into one trail with both activities. Countries and regions
-   come from Natural Earth (21 samples along the line; admin-1 at the midpoint).
+   come from Natural Earth (21 samples along the line; admin-1 at the midpoint). Thumbnails bridge
+   OSM gaps under 8 % of the trail's extent; details keep them.
+
+**Pilot (2026-09-29)** — Québec + Maritimes + New England (−80…−59, 40.5…50.5) and the Mont-Blanc
+area (6.4…8.2, 45.4…46.4), on overpass-api.de: 2 tag queries + 27 geometry batches, 220 MB of raw Overpass JSON, 3 085 relations with geometry → **355 trails**
+(69 with stages; 183 regional, 106 local, 55 national, 11 international; 145 cycling, 141 hiking,
+73 paddling), index **135 KB (69 KB gzipped)**, details 4.4 MB (median 3 KB, largest 400 KB —
+the Eastern Continental Trail). Parents outside the boxes come along (the whole Appalachian Trail,
+the Via Alpina), so a worldwide run is not the sum of its pieces; expect roughly 20–40k trails,
+an index of ~8–15 MB (~4–8 MB gzipped, ~380 bytes a trail) and a few hundred Overpass queries.
 
 **Popularity** (0…1; OSM has no usage data):
 
