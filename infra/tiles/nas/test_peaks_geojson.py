@@ -6,7 +6,16 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from peaks_geojson import convert, feature, minzoom_for, parse_ele, query_for, split4  # noqa: E402
+from peaks_geojson import (  # noqa: E402
+    PEAK_MAX_LEAD,
+    convert,
+    feature,
+    minzoom_for,
+    parse_ele,
+    query_for,
+    split4,
+    tile_minzoom,
+)
 
 
 class ParseEle(unittest.TestCase):
@@ -81,28 +90,40 @@ class Feature(unittest.TestCase):
             f,
             {
                 'type': 'Feature',
-                'tippecanoe': {'minzoom': 10},
-                'properties': {'name': 'Mont Sainte-Anne', 'kind': 'peak', 'ele': 808},
+                # Rank z10 on the ladder, tiled PEAK_MAX_LEAD (2) zooms earlier.
+                'tippecanoe': {'minzoom': 8},
+                'properties': {'name': 'Mont Sainte-Anne', 'kind': 'peak', 'ele': 808, 'rank': 10},
                 'geometry': {'type': 'Point', 'coordinates': [-70.932024, 47.087437]},
             },
         )
 
     def test_rounds_ele_and_keeps_only_differing_translations(self):
         f = feature(node(1, natural='volcano', name='Fuji', ele='3776.24', **{'name:en': 'Mount Fuji', 'name:fr': 'Fuji'}))
-        self.assertEqual(f['properties'], {'name': 'Fuji', 'kind': 'volcano', 'ele': 3776, 'name:en': 'Mount Fuji'})
-        self.assertEqual(f['tippecanoe'], {'minzoom': 6})
+        self.assertEqual(f['properties'], {'name': 'Fuji', 'kind': 'volcano', 'ele': 3776, 'name:en': 'Mount Fuji', 'rank': 6})
+        # Never before the tileset's own minzoom.
+        self.assertEqual(f['tippecanoe'], {'minzoom': 5})
 
     def test_zero_or_bad_ele_is_dropped(self):
         for ele in ['0', 'high']:
             f = feature(node(1, natural='peak', name='X', ele=ele))
             self.assertNotIn('ele', f['properties'])
-            self.assertEqual(f['tippecanoe'], {'minzoom': 12})
+            self.assertEqual(f['properties']['rank'], 12)
+            self.assertEqual(f['tippecanoe'], {'minzoom': 10})
 
     def test_unusable_elements(self):
         self.assertIsNone(feature(node(1, natural='peak')))
         self.assertIsNone(feature(node(1, natural='peak', name='  ')))
         self.assertIsNone(feature(node(1, natural='saddle', name='Col')))
         self.assertIsNone(feature({'id': 1, 'tags': {'natural': 'peak', 'name': 'X'}}))
+
+
+class TileMinzoom(unittest.TestCase):
+    def test_leads_the_rank_by_the_max_lead(self):
+        self.assertEqual(PEAK_MAX_LEAD, 2)  # = PEAK_MAX_LEAD in src/core/map/terrainOptions.ts
+        self.assertEqual(tile_minzoom(12), 10)
+        self.assertEqual(tile_minzoom(10), 8)
+        self.assertEqual(tile_minzoom(7), 5)
+        self.assertEqual(tile_minzoom(5), 5)
 
 
 class Query(unittest.TestCase):

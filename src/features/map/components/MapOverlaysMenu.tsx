@@ -2,6 +2,13 @@ import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
+import {
+  PEAK_DENSITIES,
+  PEAK_DENSITY_LABEL,
+  SHADING_LABEL,
+  SHADING_LEVELS,
+  type ShadingLevel,
+} from '@core/map/terrainOptions';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -56,6 +63,14 @@ const WEATHER_LAYER_ICONS: Record<WeatherLayerId, string> = {
   wind: 'weather-windy',
   precip: 'weather-rainy',
 };
+
+/**
+ * Track width of the Topology rows' inline sliders. The label column gets
+ * what the slider column leaves: at 100 dp (+ a fixed 170-dp column) a
+ * phone-width slab left "Contours" ~70 dp, and its last letter wrapped onto a
+ * line of its own (#461 — the owner's "s"). Labels are also single-line now.
+ */
+const SELECTOR_TRACK_W = 84;
 
 /** Fixed dark-slab palette for the sliders re-homed onto the panel. */
 const SLIDER_PALETTE = {
@@ -213,7 +228,21 @@ function TopologySubmenu({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
+  const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
+  const peakDensity = useSettingsStore((s) => s.peakDensity);
   const set = useSettingsStore((s) => s.set);
+  // "None" is the hillshade switch off (#230 keeps its platform default);
+  // any other level turns it on at that strength (#461).
+  const shading: ShadingLevel = showHillshade ? hillshadeStrength : 'none';
+  const setShading = (level: ShadingLevel) => {
+    if (level === 'none') {
+      set('showHillshade', false);
+      return;
+    }
+    set('hillshadeStrength', level);
+    set('showHillshade', true);
+  };
 
   const contentTitle = typeMode
     ? 'Content: everything'
@@ -247,7 +276,14 @@ function TopologySubmenu({
             />
           </View>
           <View style={styles.layerText}>
-            <Text style={styles.layerLabel}>{label}</Text>
+            <Text
+              style={styles.layerLabel}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {label}
+            </Text>
             {opts.hint !== undefined && (
               <Text style={styles.groupState} numberOfLines={1}>
                 {opts.hint}
@@ -257,6 +293,29 @@ function TopologySubmenu({
         </View>
       </TouchableRipple>
       {opts.control !== undefined && <View style={styles.rightCol}>{opts.control}</View>}
+    </View>
+  );
+
+  const pickerRow = (label: string, icon: string, control: ReactNode) => (
+    <View style={styles.layerRow}>
+      <View style={styles.layerToggle}>
+        <View style={styles.layerLabelBox}>
+          <View style={styles.iconSlot}>
+            <Icon source={icon} size={22} color={wc.inkMuted} />
+          </View>
+          <View style={styles.layerText}>
+            <Text
+              style={styles.layerLabel}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {label}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.rightCol}>{control}</View>
     </View>
   );
 
@@ -305,7 +364,7 @@ function TopologySubmenu({
             <RangeSlider
               min={0}
               max={90}
-              width={100}
+              width={SELECTOR_TRACK_W}
               lo={slopeMinDeg}
               hi={slopeMaxDeg}
               disabled={!slope}
@@ -327,13 +386,37 @@ function TopologySubmenu({
               selected={intervalM}
               onSelect={(m) => set('terrainContourIntervalM', m)}
               disabled={!contours}
-              width={100}
+              width={SELECTOR_TRACK_W}
               {...SLIDER_PALETTE}
             />
           </View>
         ),
       })}
       {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
+      {/* #461: relief strength and how early summits appear — pickers, not
+          switches, so they carry an icon where the others have a checkbox. */}
+      {pickerRow(
+        'Shading',
+        'image-filter-hdr',
+        <DetentSlider
+          detents={SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }))}
+          selected={shading}
+          onSelect={setShading}
+          width={SELECTOR_TRACK_W}
+          {...SLIDER_PALETTE}
+        />,
+      )}
+      {pickerRow(
+        'Peaks',
+        'triangle-outline',
+        <DetentSlider
+          detents={PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }))}
+          selected={peakDensity}
+          onSelect={(d) => set('peakDensity', d)}
+          width={SELECTOR_TRACK_W}
+          {...SLIDER_PALETTE}
+        />,
+      )}
       <ItemRow
         icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
         iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
@@ -762,7 +845,8 @@ const styles = StyleSheet.create({
   // the label collapses to nothing beside the icon.
   layerText: { flex: 1 },
   layerLabel: { fontSize: 15, lineHeight: 20, color: wc.ink },
-  rightCol: { width: 170, alignItems: 'flex-end' },
+  // Track + gap + the value label (minWidth 56): see SELECTOR_TRACK_W.
+  rightCol: { width: SELECTOR_TRACK_W + 8 + 58, alignItems: 'flex-end' },
   // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
   weatherRow: { borderRadius: 12, paddingVertical: WEATHER_ROW_PAD_V, paddingHorizontal: 6 },
   weatherRowInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },

@@ -67,7 +67,9 @@ if [ "$PREVIOUS" -gt 0 ] && [ $((COUNT * 10)) -lt $((PREVIOUS * 7)) ]; then
 fi
 
 # 3. Tile. Every summit is in the tiles from its minzoom (the `tippecanoe`
-# member of each feature) and nothing is ever dropped: -r1 turns off
+# member of each feature: its `rank` less PEAK_MAX_LEAD, see peaks_geojson.py;
+# the app's peak-density filter picks how early to draw it) and nothing is
+# ever dropped: -r1 turns off
 # tippecanoe's thinning of low zooms, --no-feature-limit / --no-tile-size-limit
 # stop it shedding features from a crowded tile (the Alps at z7 is ~75 KB
 # gzipped — fine). -z12: the ladder's last rung is z12, so z13+ tiles would be
@@ -75,7 +77,7 @@ fi
 docker run --rm -v "$PEAKS:/data" "$TIPPECANOE_IMAGE" \
   -o /data/peaks.new.pmtiles --force -t /data \
   -l peaks -n 'Inukshuk peaks' -A '© OpenStreetMap contributors' \
-  -Z5 -z12 -r1 --no-feature-limit --no-tile-size-limit -T ele:int \
+  -Z5 -z12 -r1 --no-feature-limit --no-tile-size-limit -T ele:int -T rank:int \
   --read-parallel --quiet /data/peaks.geojsonl
 docker run --rm -v "$PEAKS:/data" "$PMTILES_IMAGE" verify /data/peaks.new.pmtiles >/dev/null
 mv "$PEAKS/peaks.new.pmtiles" "$PEAKS/peaks.pmtiles"
