@@ -7,14 +7,20 @@ import { Linking } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useSupportStore } from '@state/supportStore';
+
 import { SupportScreen } from './SupportScreen';
 import { STORE_TIMEOUT_MS } from './useTipJar';
 
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, back: mockBack }),
+  useLocalSearchParams: () => mockParams,
 }));
+
+jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: jest.fn(async () => null) }));
 
 let mockCosts: { doc: CostsDocument; fromCache: boolean } | null = null;
 jest.mock('@data/supportCosts', () => ({
@@ -46,12 +52,15 @@ const COSTS: CostsDocument = {
     { labelEn: 'Google Play account', labelFr: 'x', amount: 25, period: 'once' },
   ],
   ledger: [],
+  donors: [],
 };
 
 const PRODUCTS: StoreProduct[] = [
   { id: 'tip_large', displayPrice: '19,99 $' },
   { id: 'tip_small', displayPrice: '3,99 $' },
   { id: 'tip_medium', displayPrice: '8,99 $' },
+  { id: 'tip_patron', displayPrice: '139,99 $' },
+  { id: 'tip_xlarge', displayPrice: '41,99 $' },
 ];
 
 function fakeStore(overrides: Partial<TipStore> = {}) {
@@ -66,7 +75,7 @@ function fakeStore(overrides: Partial<TipStore> = {}) {
         emit = null;
       };
     }),
-    sweepUnfinished: jest.fn(async () => undefined),
+    sweepUnfinished: jest.fn(async () => []),
     disconnect: jest.fn(async () => undefined),
     ...overrides,
   };
@@ -108,6 +117,8 @@ async function press(node: Parameters<typeof fireEvent.press>[0]) {
 beforeEach(() => {
   mockCosts = { doc: COSTS, fromCache: false };
   mockStore = null;
+  mockParams = {};
+  useSupportStore.setState({ totalCents: 0, tipCount: 0, transactionIds: [], hydrated: true });
 });
 
 afterEach(() => {
@@ -177,7 +188,7 @@ describe('tips', () => {
     expect(screen.getByText(/A tip unlocks nothing: everything stays free\./)).toBeTruthy();
     // Leftovers from an earlier session are consumed quietly.
     expect(store.sweepUnfinished).toHaveBeenCalled();
-    await press(screen.getByText('A month of servers'));
+    await press(screen.getByText('A day on the trail'));
     expect(screen.getByText('Tip 19,99 $')).toBeTruthy();
   });
 
@@ -196,6 +207,28 @@ describe('tips', () => {
     expect(screen.queryByText(/^Tip /)).toBeNull();
   });
 
+  it('offers all five tiers in order, from coffee to patron', async () => {
+    mockStore = fakeStore().store;
+    await mount();
+    const names = [
+      'Coffee at the trailhead',
+      'Lunch at the lookout',
+      'A day on the trail',
+      'A season of trails',
+      'Patron of the trail',
+    ];
+    for (const name of names) expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByText('139,99 $')).toBeTruthy();
+    expect(screen.queryByTestId('support-jar-prompt')).toBeNull();
+  });
+
+  it('greets people who came from the tip jar', async () => {
+    mockParams = { from: 'jar' };
+    mockStore = fakeStore().store;
+    await mount();
+    expect(screen.getByTestId('support-jar-prompt')).toBeTruthy();
+  });
+
   it('thanks the person after a successful tip', async () => {
     const { store, emit } = fakeStore();
     mockStore = store;
@@ -204,8 +237,13 @@ describe('tips', () => {
     await press(screen.getByText('Tip 3,99 $'));
     expect(store.requestTip).toHaveBeenCalledWith('tip_small');
     expect(screen.getByLabelText('Waiting for the store')).toBeTruthy();
-    await emit({ kind: 'purchased', productId: 'tip_small' });
-    expect(mockReplace).toHaveBeenCalledWith('/support/thanks');
+    await emit({ kind: 'purchased', productId: 'tip_small', transactionId: 'GPA.7' });
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/support/thanks',
+      params: { tip: 'tip_small' },
+    });
+    // Counted toward the person's own total (donors list) before the thanks.
+    expect(useSupportStore.getState()).toMatchObject({ totalCents: 299, tipCount: 1 });
   });
 
   it('says nothing when the person cancels, and lets them try again', async () => {

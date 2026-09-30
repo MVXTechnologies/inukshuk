@@ -12,10 +12,21 @@ jest.mock('expo', () => ({ requireOptionalNativeModule: jest.fn(() => null) }));
 
 // expo-iap may not be installed in this checkout yet (it is added with the
 // 2.0.2 native build); a virtual mock stands in for it either way.
-const mockVirtualIap = { initConnection: jest.fn(async () => true) };
+const mockVirtualIap = {
+  initConnection: jest.fn(async () => true),
+  endConnection: jest.fn(async () => true),
+  finishTransaction: jest.fn(async () => undefined),
+  getAvailablePurchases: jest.fn(async () => [
+    { id: 'L1', productId: 'tip_large', purchaseState: 'purchased' },
+  ]),
+};
 jest.mock('expo-iap', () => mockVirtualIap, { virtual: true });
 
-type Purchase = { productId: string; purchaseState: 'pending' | 'purchased' | 'unknown' };
+type Purchase = {
+  id?: string;
+  productId: string;
+  purchaseState: 'pending' | 'purchased' | 'unknown';
+};
 
 function fakeIap() {
   let onUpdate: ((p: Purchase) => void) | null = null;
@@ -83,11 +94,11 @@ describe('createTipStore', () => {
     const { iap, slice, update } = fakeIap();
     const events: TipEvent[] = [];
     createTipStore(slice).subscribe((e) => events.push(e));
-    const purchase: Purchase = { productId: 'tip_small', purchaseState: 'purchased' };
+    const purchase: Purchase = { id: 'GPA.1', productId: 'tip_small', purchaseState: 'purchased' };
     update(purchase);
     await flush();
     expect(iap.finishTransaction).toHaveBeenCalledWith({ purchase, isConsumable: true });
-    expect(events).toEqual([{ kind: 'purchased', productId: 'tip_small' }]);
+    expect(events).toEqual([{ kind: 'purchased', productId: 'tip_small', transactionId: 'GPA.1' }]);
   });
 
   it('still thanks the person when the consume fails', async () => {
@@ -97,7 +108,7 @@ describe('createTipStore', () => {
     createTipStore(slice).subscribe((e) => events.push(e));
     update({ productId: 'tip_large', purchaseState: 'purchased' });
     await flush();
-    expect(events).toEqual([{ kind: 'purchased', productId: 'tip_large' }]);
+    expect(events).toEqual([{ kind: 'purchased', productId: 'tip_large', transactionId: null }]);
   });
 
   it('never finishes a pending payment, nor anything that is not a tip', async () => {
@@ -129,17 +140,22 @@ describe('createTipStore', () => {
   it('sweeps up unfinished tips only', async () => {
     const { iap, slice } = fakeIap();
     iap.getAvailablePurchases.mockResolvedValueOnce([
-      { productId: 'tip_small', purchaseState: 'purchased' },
+      { id: 'T1', productId: 'tip_small', purchaseState: 'purchased' },
+      { id: 'T2', productId: 'tip_patron', purchaseState: 'purchased' },
       { productId: 'tip_medium', purchaseState: 'pending' },
       { productId: 'premium', purchaseState: 'purchased' },
     ]);
-    iap.finishTransaction.mockRejectedValueOnce(new Error('retry later'));
-    await createTipStore(slice).sweepUnfinished();
-    expect(iap.finishTransaction).toHaveBeenCalledTimes(1);
+    iap.finishTransaction
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('later'));
+    const finished = await createTipStore(slice).sweepUnfinished();
+    expect(iap.finishTransaction).toHaveBeenCalledTimes(2);
     expect(iap.finishTransaction).toHaveBeenCalledWith({
-      purchase: { productId: 'tip_small', purchaseState: 'purchased' },
+      purchase: { id: 'T1', productId: 'tip_small', purchaseState: 'purchased' },
       isConsumable: true,
     });
+    // Only what was actually finished counts toward the person's total.
+    expect(finished).toEqual([{ productId: 'tip_small', transactionId: 'T1' }]);
   });
 
   it('reports a failed connection as false', async () => {
@@ -179,6 +195,17 @@ describe('getTipStore', () => {
     expect(store).not.toBeNull();
     await expect(store?.connect()).resolves.toBe(true);
     expect(mockVirtualIap.initConnection).toHaveBeenCalled();
+    await store?.disconnect();
+  });
+
+  it('reports the tips the launch sweep finished', async () => {
+    jest
+      .mocked(requireOptionalNativeModule)
+      .mockImplementation((name: string) => (name === 'ExpoIap' ? {} : null));
+    const onFinished = jest.fn();
+    await sweepUnfinishedTips(onFinished);
+    expect(onFinished).toHaveBeenCalledWith({ productId: 'tip_large', transactionId: 'L1' });
+    expect(mockVirtualIap.endConnection).toHaveBeenCalled();
   });
 
   it('sweeps at launch without throwing, even with no store', async () => {

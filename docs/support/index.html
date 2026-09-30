@@ -298,7 +298,7 @@
       }
       .ways {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 1.5rem;
         font-family: var(--sans);
       }
@@ -335,6 +335,31 @@
         font-size: 0.85rem;
         font-weight: 700;
         color: var(--muted);
+      }
+      .donors {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0.5rem 2rem;
+        font-size: 1.0625rem;
+      }
+      .donors li {
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--hair);
+        display: flex;
+        flex-direction: column;
+      }
+      .donors span {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      #donors {
+        margin-top: 3rem;
+      }
+      section[hidden] {
+        display: none;
       }
       .fine {
         margin: 0.5rem 0 0;
@@ -481,14 +506,26 @@
         </section>
       </div>
 
+      <section id="donors" aria-labelledby="donors-title" hidden>
+        <h2 id="donors-title">Prominent donors</h2>
+        <p>
+          People whose gifts add up to $100 or more and who chose to be named. Thank you. To be
+          removed, write to
+          <a href="mailto:marc-andre.vigneault@mvxtechnologies.com"
+            >marc-andre.vigneault@mvxtechnologies.com</a
+          >.
+        </p>
+        <ul class="donors" data-donors></ul>
+      </section>
+
       <section id="give" aria-labelledby="give-title">
         <h2 id="give-title">How to give</h2>
         <div class="ways">
           <div class="way">
             <h3>In the app</h3>
             <p>
-              Settings › Support Inukshuk. Tips of $3, $7 or $15 through the App Store or Google
-              Play.
+              Settings › Support Inukshuk, or the small tip jar on the main screens. Tips from $2.99
+              to $99.99 through the App Store or Google Play.
             </p>
           </div>
           <div class="way">
@@ -510,6 +547,17 @@
                 >marc-andre.vigneault@mvxtechnologies.com</a
               >.
             </p>
+          </div>
+          <div class="way">
+            <h3>Wear it</h3>
+            <!--
+              MERCH PLACEHOLDER (#476): a print-on-demand shop for the Inukshuk
+              outdoor t-shirt is not chosen yet. Replace the "coming soon" line
+              with the shop link when it exists — never a made-up URL. Mirror the
+              change in /fr/support/.
+            -->
+            <p>An Inukshuk outdoor t-shirt, with every sale going to the running costs.</p>
+            <p><span class="soon">Coming soon</span></p>
           </div>
         </div>
         <p class="fine">
@@ -550,6 +598,9 @@
               return n === 1 ? '1 supporter so far' : n + ' supporters so far';
             },
             empty: 'Nothing to report yet: each month is added once it closes.',
+            since: function (y) {
+              return 'since ' + y;
+            },
           },
           fr: {
             year: ' / an',
@@ -559,6 +610,9 @@
               return n <= 1 ? n + ' donateur jusqu’ici' : n + ' donateurs jusqu’ici';
             },
             empty: 'Rien à signaler pour l’instant : chaque mois s’ajoute une fois terminé.',
+            since: function (y) {
+              return 'depuis ' + y;
+            },
           },
         }[LANG];
 
@@ -630,6 +684,27 @@
                 body.appendChild(tr);
               });
               document.querySelector('[data-total]').textContent = money(total, cur);
+            }
+
+            if (Array.isArray(doc.donors) && doc.donors.length > 0) {
+              var list = document.querySelector('[data-donors]');
+              doc.donors.forEach(function (d) {
+                if (!d || typeof d.name !== 'string' || d.name.trim() === '') return;
+                var li = document.createElement('li');
+                var name = document.createElement('strong');
+                name.textContent = d.name;
+                li.appendChild(name);
+                var bits = [];
+                if (typeof d.place === 'string' && d.place !== '') bits.push(d.place);
+                if (num(d.since)) bits.push(T.since(d.since));
+                if (bits.length > 0) {
+                  var sub = document.createElement('span');
+                  sub.textContent = bits.join(' · ');
+                  li.appendChild(sub);
+                }
+                list.appendChild(li);
+              });
+              if (list.children.length > 0) document.getElementById('donors').hidden = false;
             }
 
             var ledger = document.querySelector('[data-ledger]');

@@ -1,4 +1,5 @@
 import { HeaderContours } from '@ui/components/ContourTexture';
+import { FloatingTipJar, TIP_JAR_CLEARANCE } from '@features/support/TipJarButton';
 import {
   calendarIndex,
   matchesCategoryFilter,
@@ -157,7 +158,11 @@ export function DashboardScreen() {
     <View style={[styles.fill, { backgroundColor: theme.colors.background }]}>
       <HeaderContours />
       {header}
-      <ScrollView style={styles.fill} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.fill}
+        // Room for the floating tip jar (#476) under the calendar.
+        contentContainerStyle={[styles.content, { paddingBottom: space.xl + TIP_JAR_CLEARANCE }]}
+      >
         <View style={styles.top}>
           <LifetimeCard tracks={matching} units={units} typeName={selectedCategory?.name ?? null} />
           <DistanceChart
@@ -230,6 +235,7 @@ export function DashboardScreen() {
           onDismiss={() => setDayPick(null)}
         />
       </ScrollView>
+      <FloatingTipJar />
     </View>
   );
 }

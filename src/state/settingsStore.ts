@@ -196,6 +196,8 @@ export interface Settings {
    * on (see `@core/support/nudge`).
    */
   supportNudgeAnsweredAt: number;
+  /** The floating tip-jar button on the main tabs (#476; Settings › App settings, or long-press › Hide). */
+  showTipJar: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -235,6 +237,7 @@ const DEFAULTS: Settings = {
   librarySortKey: DEFAULT_SORT,
   lastKnownPosition: null,
   supportNudgeAnsweredAt: 0,
+  showTipJar: true,
 };
 
 interface SettingsState extends Settings {
@@ -306,6 +309,7 @@ function snapshot(s: SettingsState): Settings {
     librarySortKey,
     lastKnownPosition,
     supportNudgeAnsweredAt,
+    showTipJar,
   } = s;
   return {
     tileUrl,
@@ -344,6 +348,7 @@ function snapshot(s: SettingsState): Settings {
     librarySortKey,
     lastKnownPosition,
     supportNudgeAnsweredAt,
+    showTipJar,
   };
 }
 

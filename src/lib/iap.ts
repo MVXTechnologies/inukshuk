@@ -24,14 +24,21 @@ import { requireOptionalNativeModule } from 'expo';
  *    come back through the listener once paid, or are swept up by
  *    {@link TipStore.sweepUnfinished} on a later visit.
  * 3. **Unlock nothing.** There is no entitlement to restore, so there is no
- *    restore button and nothing is persisted about a purchase.
+ *    restore button. The only thing kept is the running total of the
+ *    person's own tips (`state/supportStore`), for the opt-in donors list.
  */
 
 /** A purchase outcome, as the Support screen needs to hear it. */
 export type TipEvent =
-  | { kind: 'purchased'; productId: string }
+  | { kind: 'purchased'; productId: string; transactionId: string | null }
   | { kind: 'pending'; productId: string }
   | { kind: 'error'; code: string | null; message: string };
+
+/** A tip the store confirmed and this device finished. */
+export interface FinishedTip {
+  productId: string;
+  transactionId: string | null;
+}
 
 export interface TipStore {
   /** Open the billing connection; false when the store is unusable here. */
@@ -42,7 +49,7 @@ export interface TipStore {
   /** Listen for outcomes. Completed tips are consumed before `purchased` fires. */
   subscribe(listener: (event: TipEvent) => void): () => void;
   /** Consume tips left unfinished by an earlier session (app killed mid-purchase, Ask to Buy). */
-  sweepUnfinished(): Promise<void>;
+  sweepUnfinished(): Promise<FinishedTip[]>;
   disconnect(): Promise<void>;
 }
 
@@ -56,6 +63,8 @@ interface IapProduct {
 }
 
 interface IapPurchase {
+  /** The store transaction id (iOS transaction id, Play order id). */
+  id?: string | null;
   productId: string;
   purchaseState: 'pending' | 'purchased' | 'unknown';
 }
@@ -97,6 +106,10 @@ function loadExpoIap(): ExpoIapSlice | null {
   } catch {
     return null;
   }
+}
+
+function transactionIdOf(purchase: IapPurchase): string | null {
+  return typeof purchase.id === 'string' && purchase.id !== '' ? purchase.id : null;
 }
 
 function errorEvent(error: unknown): TipEvent {
@@ -175,7 +188,13 @@ export function createTipStore(iap: ExpoIapSlice): TipStore {
             // The money moved; say thanks anyway. The next sweep retries the
             // consume, well within Play's three-day window.
           })
-          .finally(() => listener({ kind: 'purchased', productId: purchase.productId }));
+          .finally(() =>
+            listener({
+              kind: 'purchased',
+              productId: purchase.productId,
+              transactionId: transactionIdOf(purchase),
+            }),
+          );
       });
       const errors = iap.purchaseErrorListener((error) => listener(errorEvent(error)));
       return () => {
@@ -186,11 +205,22 @@ export function createTipStore(iap: ExpoIapSlice): TipStore {
 
     async sweepUnfinished() {
       const purchases = await iap.getAvailablePurchases();
+      const finished: FinishedTip[] = [];
       for (const purchase of purchases) {
         if (isTipId(purchase.productId) && purchase.purchaseState === 'purchased') {
-          await finish(purchase).catch(() => undefined);
+          const ok = await finish(purchase).then(
+            () => true,
+            () => false,
+          );
+          if (ok) {
+            finished.push({
+              productId: purchase.productId,
+              transactionId: transactionIdOf(purchase),
+            });
+          }
         }
       }
+      return finished;
     },
 
     async disconnect() {
@@ -210,11 +240,15 @@ export function createTipStore(iap: ExpoIapSlice): TipStore {
  * the app was closed (Play refunds what stays unacknowledged for three days).
  * Run once at launch; silent, and a no-op without a store.
  */
-export async function sweepUnfinishedTips(): Promise<void> {
+export async function sweepUnfinishedTips(
+  onFinished: (tip: FinishedTip) => void = () => undefined,
+): Promise<void> {
   const store = getTipStore();
   if (store === null) return;
   try {
-    if (await store.connect()) await store.sweepUnfinished();
+    if (await store.connect()) {
+      for (const tip of await store.sweepUnfinished()) onFinished(tip);
+    }
   } catch {
     // Retried at the next launch or Support visit.
   } finally {
@@ -239,6 +273,8 @@ function createDevTipStore(): TipStore {
     tip_small: '$2.99',
     tip_medium: '$6.99',
     tip_large: '$14.99',
+    tip_xlarge: '$29.99',
+    tip_patron: '$99.99',
   };
   let emit: ((event: TipEvent) => void) | null = null;
   return {
@@ -249,7 +285,10 @@ function createDevTipStore(): TipStore {
         return displayPrice === undefined ? [] : [{ id, displayPrice }];
       }),
     requestTip: async (id) => {
-      setTimeout(() => emit?.({ kind: 'purchased', productId: id }), 600);
+      setTimeout(
+        () => emit?.({ kind: 'purchased', productId: id, transactionId: `dev-${Date.now()}` }),
+        600,
+      );
     },
     subscribe: (listener) => {
       emit = listener;
@@ -257,7 +296,7 @@ function createDevTipStore(): TipStore {
         emit = null;
       };
     },
-    sweepUnfinished: async () => undefined,
+    sweepUnfinished: async () => [],
     disconnect: async () => undefined,
   };
 }

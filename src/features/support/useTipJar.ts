@@ -9,6 +9,7 @@ import {
 } from '@core/support/tips';
 import { reportError } from '@lib/errorReporting';
 import { getTipStore, type TipEvent, type TipStore } from '@lib/iap';
+import { useSupportStore } from '@state/supportStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -59,7 +60,7 @@ function withTimeout<T>(promise: Promise<T>, fallback: T, ms: number): Promise<T
   });
 }
 
-export function useTipJar(onThanks: () => void): TipJar {
+export function useTipJar(onThanks: (productId: string) => void): TipJar {
   // Resolved once per mount: a build without the store is unavailable from the first frame.
   const [store] = useState<TipStore | null>(getTipStore);
   const [phase, setPhase] = useState<TipJarPhase>(store === null ? 'unavailable' : 'loading');
@@ -83,8 +84,10 @@ export function useTipJar(onThanks: () => void): TipJar {
     (event: TipEvent) => {
       settle();
       if (event.kind === 'purchased') {
+        // Counted before the thank-you screen reads the total (donors offer).
+        useSupportStore.getState().recordTip(event);
         setNotice(null);
-        onThanksRef.current();
+        onThanksRef.current(event.productId);
         return;
       }
       if (event.kind === 'pending') {
@@ -119,7 +122,10 @@ export function useTipJar(onThanks: () => void): TipJar {
       setSelected(defaultTipId(available));
       setPhase(available.length > 0 ? 'ready' : 'unavailable');
       // Consume anything an earlier session left unfinished (quietly).
-      store.sweepUnfinished().catch(() => undefined);
+      store
+        .sweepUnfinished()
+        .then((finished) => finished.forEach((tip) => useSupportStore.getState().recordTip(tip)))
+        .catch(() => undefined);
     })().catch(() => {
       if (alive) setPhase('unavailable');
     });

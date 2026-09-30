@@ -19,6 +19,7 @@ import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
+import { useSupportStore } from '@state/supportStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
 import { useAndroidImmersive } from '@ui/useAndroidImmersive';
@@ -58,6 +59,10 @@ export default function RootLayout() {
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
     hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
+    useSupportStore
+      .getState()
+      .hydrate()
+      .catch((err) => reportError(err, 'support-hydrate'));
   }, [hydrateLibrary, hydrateSettings, hydrateStrava, hydrateImports]);
 
   // A launch hydration that fails (an I/O error — a corrupt file hydrates
@@ -88,7 +93,9 @@ export default function RootLayout() {
   // it never competes with launch; a no-op in builds without the store module.
   useEffect(() => {
     const timer = setTimeout(() => {
-      sweepUnfinishedTips().catch((err) => reportError(err, 'tip-sweep'));
+      sweepUnfinishedTips((tip) => useSupportStore.getState().recordTip(tip)).catch((err) =>
+        reportError(err, 'tip-sweep'),
+      );
     }, 15_000);
     return () => clearTimeout(timer);
   }, []);
@@ -118,6 +125,7 @@ export default function RootLayout() {
                   {/* Support Inukshuk: the tip jar and its thank-you (#476). */}
                   <Stack.Screen name="support/index" />
                   <Stack.Screen name="support/thanks" />
+                  <Stack.Screen name="support/donor" />
                   {/* The Explore tab's secondary screens (#447). */}
                   <Stack.Screen name="explore/list" />
                   <Stack.Screen name="explore/map" />

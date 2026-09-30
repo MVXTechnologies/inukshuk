@@ -114,6 +114,25 @@ describe('parseCostsDocument', () => {
     expect(warnings).toEqual(['costs: missing costs list']);
   });
 
+  it('reads published donors, dropping bad rows and treating none as empty', () => {
+    const { doc, warnings } = parseCostsDocument({
+      ...valid,
+      donors: [
+        { name: ' Anne T. ', place: 'Rimouski', since: 2026 },
+        { name: 'Luc' },
+        { name: '' },
+        { name: 'x'.repeat(61) },
+        7,
+      ],
+    });
+    expect(doc?.donors).toEqual([
+      { name: 'Anne T.', place: 'Rimouski', since: 2026 },
+      { name: 'Luc', place: null, since: null },
+    ]);
+    expect(warnings).toHaveLength(3);
+    expect(parseCostsDocument(valid).doc?.donors).toEqual([]);
+  });
+
   it('treats a missing ledger as empty', () => {
     const { doc } = parseCostsDocument({ ...valid, ledger: undefined });
     expect(doc?.ledger).toEqual([]);

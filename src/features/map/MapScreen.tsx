@@ -96,6 +96,7 @@ import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatRadiusPx } from '@core/heat/heatRadius';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
+import { TipJarButton } from '@features/support/TipJarButton';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
@@ -2422,6 +2423,14 @@ export function MapScreen() {
             </View>
             {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
+              {/* The tip jar (#476) stacks ABOVE the ⓘ credit in this corner, so the
+                  two never collide; it hides itself while recording, while a
+                  destination is followed, and while a trail sheet, heat carousel
+                  or the coordinate dialog is up. */}
+              <TipJarButton
+                navigating={destination !== null}
+                blocked={inspectId !== null || heatSelection !== null || goToOpen}
+              />
               {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
             </View>
           </View>
@@ -2752,7 +2761,7 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
-  bottomSideEnd: { alignItems: 'flex-end' },
+  bottomSideEnd: { alignItems: 'flex-end', gap: 12 },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).

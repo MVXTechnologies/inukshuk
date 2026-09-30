@@ -40,6 +40,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DisplaySheet } from '@features/display/DisplaySheet';
+import { DonorsList } from '@features/support/DonorsList';
 import { SupportSettingsRow } from '@features/support/SupportSettingsRow';
 import { exportAllData } from './exportAllData';
 import { MAP_DATA_CREDITS } from './mapDataCredits';
@@ -128,6 +129,7 @@ export function SettingsScreen() {
   const units = useSettingsStore((s) => s.units);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
+  const showTipJar = useSettingsStore((s) => s.showTipJar);
   const displayCondition = useSettingsStore((s) => s.displayCondition);
   const [displaySheetOpen, setDisplaySheetOpen] = useState(false);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
@@ -343,6 +345,17 @@ export function SettingsScreen() {
                       value={compactMapChrome}
                       onValueChange={(v) => set('compactMapChrome', v)}
                       accessibilityLabel="Compact map chrome"
+                    />
+                  )}
+                />
+                <List.Item
+                  title="Show the tip jar button"
+                  description="A small jar on the main tabs that opens Support Inukshuk"
+                  right={() => (
+                    <Switch
+                      value={showTipJar}
+                      onValueChange={(v) => set('showTipJar', v)}
+                      accessibilityLabel="Show the tip jar button"
                     />
                   )}
                 />
@@ -605,6 +618,8 @@ export function SettingsScreen() {
                   Offline trail navigation
                 </Text>
               </View>
+              {/* Prominent donors (#476): hidden while the published list is empty. */}
+              <DonorsList />
               {/* The version alone cannot answer "did the fix I published
                   arrive?": an over-the-air update never changes it, so a
                   stale bundle and a current one both read the same (#341).

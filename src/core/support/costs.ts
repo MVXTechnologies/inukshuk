@@ -13,6 +13,8 @@
  * Pure: no React Native / Expo imports (see AGENTS.md).
  */
 
+import type { Donor } from './donors';
+
 export type CostPeriod = 'year' | 'month' | 'once';
 
 export interface CostItem {
@@ -43,6 +45,8 @@ export interface CostsDocument {
   updated: string | null;
   costs: CostItem[];
   ledger: LedgerRow[];
+  /** Prominent donors, published by hand after checking the store (may be empty). */
+  donors: Donor[];
 }
 
 export interface CostsParseResult {
@@ -78,6 +82,17 @@ function parseCost(raw: unknown): CostItem | null {
     labelFr: isNonEmptyString(labelFr) ? labelFr.trim() : labelEn.trim(),
     amount,
     period,
+  };
+}
+
+function parseDonor(raw: unknown): Donor | null {
+  if (!isRecord(raw)) return null;
+  const { name, place, since } = raw;
+  if (!isNonEmptyString(name) || name.trim().length > 60) return null;
+  return {
+    name: name.trim(),
+    place: isNonEmptyString(place) ? place.trim() : null,
+    since: typeof since === 'number' && Number.isInteger(since) ? since : null,
   };
 }
 
@@ -126,6 +141,14 @@ export function parseCostsDocument(raw: unknown): CostsParseResult {
     else warnings.push(`costs: dropped ledger row ${i}`);
   });
 
+  const donors: Donor[] = [];
+  const rawDonors = Array.isArray(raw.donors) ? raw.donors : [];
+  rawDonors.forEach((row, i) => {
+    const donor = parseDonor(row);
+    if (donor) donors.push(donor);
+    else warnings.push(`costs: dropped donor row ${i}`);
+  });
+
   return {
     doc: {
       year,
@@ -136,6 +159,7 @@ export function parseCostsDocument(raw: unknown): CostsParseResult {
       updated: typeof updated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(updated) ? updated : null,
       costs,
       ledger,
+      donors,
     },
     warnings,
   };

@@ -15,3 +15,14 @@ ALLOWED_ORIGINS = "*"
 CACHE_CONTROL = "public, max-age=86400"
 # Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
 STRAVA_CLIENT_ID = "283079"
+
+# POST /donors (#476): at most 3 donor-name submissions per client IP per
+# minute, on top of the per-isolate hourly cap in src/donors.ts. The IP is the
+# limiter key only; it is never stored.
+[[ratelimits]]
+name = "DONOR_LIMITER"
+namespace_id = "1476"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60

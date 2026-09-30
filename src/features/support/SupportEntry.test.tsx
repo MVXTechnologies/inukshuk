@@ -17,6 +17,7 @@ const mockPush = jest.fn();
 const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, dismissTo: mockDismissTo }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('@data/storage', () => ({

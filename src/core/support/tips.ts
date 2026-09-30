@@ -1,16 +1,22 @@
 /**
- * The tip jar (#476): three consumable in-app products that unlock nothing.
+ * The tip jar (#476): five consumable in-app products, all of which unlock
+ * nothing. They are donations of different sizes, and the copy says so; no
+ * tier is described as paying for a feature.
  *
  * The store owns the price. What the app owns is the tier's name, its one-line
- * meaning, its icon and its order — joined here with whatever the store
+ * meaning, its icon and its order, joined here with whatever the store
  * returned. A tier the store did not return (not yet approved, removed, not
  * sold in this storefront) is simply not offered; nothing is ever shown with a
  * hard-coded price.
  *
+ * {@link TIP_USD} is different: the USD *base* price of each product, used
+ * only to add up the person's own giving for the donors list (a localized
+ * price in another currency cannot be summed against a $100 threshold).
+ *
  * Pure: no React Native / Expo imports.
  */
 
-export type TipId = 'tip_small' | 'tip_medium' | 'tip_large';
+export type TipId = 'tip_small' | 'tip_medium' | 'tip_large' | 'tip_xlarge' | 'tip_patron';
 
 export interface TipTier {
   id: TipId;
@@ -20,27 +26,52 @@ export interface TipTier {
   icon: string;
 }
 
-/** Catalog order is display order: smallest first, like the mockup. */
+/** Catalog order is display order: smallest first. */
 export const TIP_TIERS: readonly TipTier[] = [
   {
     id: 'tip_small',
     name: 'Coffee at the trailhead',
-    what: 'Thanks for the app',
+    what: 'A small thank-you',
     icon: 'coffee-outline',
   },
   {
     id: 'tip_medium',
-    name: 'A map sheet',
-    what: 'Keeps a map region online for a month',
-    icon: 'map-outline',
+    name: 'Lunch at the lookout',
+    what: 'A warm thank-you',
+    icon: 'food-apple-outline',
   },
   {
     id: 'tip_large',
-    name: 'A month of servers',
-    what: 'Tiles, trails, contours and the Strava link',
-    icon: 'server',
+    name: 'A day on the trail',
+    what: 'A generous thank-you',
+    icon: 'hiking',
+  },
+  {
+    id: 'tip_xlarge',
+    name: 'A season of trails',
+    what: 'For a season of good outings',
+    icon: 'pine-tree',
+  },
+  {
+    id: 'tip_patron',
+    name: 'Patron of the trail',
+    what: 'About a month of the year’s costs',
+    icon: 'hand-heart-outline',
   },
 ];
+
+/**
+ * The USD base price of each product, as set in App Store Connect and Play
+ * Console. Keep in step with the consoles; used only for the donors-list
+ * threshold, never displayed.
+ */
+export const TIP_USD: Readonly<Record<TipId, number>> = {
+  tip_small: 2.99,
+  tip_medium: 6.99,
+  tip_large: 14.99,
+  tip_xlarge: 29.99,
+  tip_patron: 99.99,
+};
 
 export const TIP_IDS: readonly TipId[] = TIP_TIERS.map((t) => t.id);
 
@@ -73,12 +104,12 @@ export function tipOffers(products: readonly StoreProduct[]): TipOffer[] {
 }
 
 /**
- * Which offer starts selected: the middle one when there are three (the
- * mockup's default), else the first. Null when nothing is on sale.
+ * Which offer starts selected: the second tier when it is on sale (a modest
+ * default, never the biggest), else the first. Null when nothing is on sale.
  */
 export function defaultTipId(offers: readonly TipOffer[]): TipId | null {
-  const middle = offers.length === 3 ? offers[1] : offers[0];
-  return middle?.id ?? null;
+  const preferred = offers.find((o) => o.id === 'tip_medium') ?? offers[0];
+  return preferred?.id ?? null;
 }
 
 /**

@@ -8,6 +8,7 @@ import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from '
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FloatingTipJar } from '@features/support/TipJarButton';
 import { HeaderAction, ScreenHeader } from '@ui/components/ScreenHeader';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { space, target } from '@ui/tokens';
@@ -276,6 +277,9 @@ export function StoreScreen() {
       ) : (
         <ExploreLanding index={index} items={items} />
       )}
+
+      {/* The tip jar (#476): not while a search owns the screen (keyboard, results). */}
+      <FloatingTipJar blocked={searching} />
 
       {flow.overlays}
     </View>

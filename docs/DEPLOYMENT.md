@@ -337,8 +337,19 @@ update_). Regenerating the secret on Strava only needs a new
 
 ### In-app tips (store consoles, one-time)
 
-Three **consumable** in-app products, same ids on both stores:
-`tip_small` (~$3), `tip_medium` (~$7), `tip_large` (~$15). The app shows the
+Five **consumable** in-app products, same ids on both stores, all unlocking
+nothing:
+
+| Product id   | USD base price | Name in the app         |
+| ------------ | -------------- | ----------------------- |
+| `tip_small`  | $2.99          | Coffee at the trailhead |
+| `tip_medium` | $6.99          | Lunch at the lookout    |
+| `tip_large`  | $14.99         | A day on the trail      |
+| `tip_xlarge` | $29.99         | A season of trails      |
+| `tip_patron` | $99.99         | Patron of the trail     |
+
+The USD base prices are mirrored in `TIP_USD` (`src/core/support/tips.ts`) and
+used only to add up a person's own giving for the donors list. The app shows the
 store's localized price and offers only the tiers the store returns, so a tier
 can be added, repriced or withdrawn from the console with no release. The
 library is `expo-iap` (config plugin `expo-iap` in `app.config.ts`), wrapped by
@@ -374,11 +385,34 @@ by hand at the start of each month from the App Store / Google Play reports:
     // one row per closed month; balance may be negative
     { "month": "2026-10", "costs": 113, "gifts": 0, "balance": -113 },
   ],
+  "donors": [
+    // opt-in, published by hand (see below); hidden in the app and site while empty
+    { "name": "Anne T.", "place": "Rimouski", "since": 2026 },
+  ],
 }
 ```
 
 A unit test parses the checked-in file and checks that `goal` equals the
 annualized recurring costs, so a typo fails CI rather than the website.
+
+### Prominent donors: `POST /donors` on the tile Worker
+
+People whose tips add up to $100 (USD base prices, counted on the device in
+`support.json`) may send a display name from the thank-you screen or Settings ›
+System info. The app posts
+`{ name (≤ 40), place (≤ 60, optional), platform, transactionIds (1–20) }` to
+`POST /donors` on the tile Worker (`infra/tiles/worker/src/donors.ts`). The
+Worker validates it, rate-limits per client IP (the `DONOR_LIMITER` binding in
+`wrangler.toml`: 3 a minute, plus a per-isolate 3 an hour; the IP is never
+stored) and writes it to R2 as `donors/pending/<ts>-<rand>.json`. Nothing is
+published automatically:
+
+1. List pending files: `wrangler r2 object get inukshuk-tiles/donors/pending/…`
+   (or the dashboard).
+2. Check each transaction id against App Store Connect / Play Console reports.
+3. Add `{ "name", "place", "since" }` to `donors` in `docs/support/costs.json`,
+   then delete the pending file. Removal requests (by email) are the same edit
+   in reverse.
 
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 

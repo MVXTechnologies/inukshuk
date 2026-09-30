@@ -10,8 +10,8 @@ import type { TipOffer } from '@core/support/tips';
 import { HeaderAction } from '@ui/components/ScreenHeader';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useRef } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,8 +40,21 @@ export function SupportScreen() {
   const insets = useSafeAreaInsets();
   const t = useSchemeTokens();
   const costs = useSupportCosts();
-  const onThanks = useCallback(() => router.replace('/support/thanks'), [router]);
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromJar = from === 'jar';
+  const onThanks = useCallback(
+    (tip: string) => router.replace({ pathname: '/support/thanks', params: { tip } }),
+    [router],
+  );
   const jar = useTipJar(onThanks);
+  // Opened from the floating tip jar: go straight to "Leave a tip", and stay
+  // there if the yearly figures load above it, until the person scrolls.
+  const scrollRef = useRef<ScrollView>(null);
+  const userScrolled = useRef(false);
+  const onTipsLayout = (y: number) => {
+    if (!fromJar || userScrolled.current) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - space.md), animated: false });
+  };
 
   return (
     <View style={[styles.fill, { backgroundColor: t.background, paddingTop: insets.top }]}>
@@ -52,7 +65,13 @@ export function SupportScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}>
+      <ScrollView
+        ref={scrollRef}
+        onScrollBeginDrag={() => {
+          userScrolled.current = true;
+        }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
+      >
         <View
           style={[
             styles.card,
@@ -72,9 +91,16 @@ export function SupportScreen() {
 
         {costs !== null && <YearProgress costs={costs} />}
 
-        <Text accessibilityRole="header" style={[styles.h2, styles.tipsHeading, { color: t.ink }]}>
-          Leave a tip
-        </Text>
+        <View onLayout={(e) => onTipsLayout(e.nativeEvent.layout.y)} style={styles.tipsHeading}>
+          <Text accessibilityRole="header" style={[styles.h2, { color: t.ink }]}>
+            Leave a tip
+          </Text>
+          {fromJar && (
+            <Text style={[styles.prompt, { color: t.inkMuted }]} testID="support-jar-prompt">
+              Thanks for stopping by the tip jar. Any amount helps keep Inukshuk free for everyone.
+            </Text>
+          )}
+        </View>
         <TipSection jar={jar} />
 
         {costs !== null && costs.costs.length > 0 && <MoneyGoes costs={costs} />}
@@ -304,7 +330,8 @@ const styles = StyleSheet.create({
   bar: { height: 12, borderRadius: 6, overflow: 'hidden' },
   barFill: { height: 12, borderRadius: 6 },
   caption: { fontSize: 13, lineHeight: 18 },
-  tipsHeading: { marginTop: space.xl, marginBottom: 10, marginHorizontal: space.lg },
+  tipsHeading: { marginTop: space.xl, marginBottom: 10, marginHorizontal: space.lg, gap: 4 },
+  prompt: { fontSize: 14, lineHeight: 20 },
   tipsState: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   unavailable: {
     padding: space.lg,

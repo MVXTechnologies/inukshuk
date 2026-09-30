@@ -3,14 +3,29 @@ import {
   defaultTipId,
   isTipId,
   TIP_IDS,
+  TIP_TIERS,
+  TIP_USD,
   tipFailureMessage,
   tipOffers,
   type TipFailure,
 } from './tips';
 
 describe('tip catalog', () => {
-  it('sells exactly the three store product ids, smallest first', () => {
-    expect(TIP_IDS).toEqual(['tip_small', 'tip_medium', 'tip_large']);
+  it('sells exactly the five store product ids, smallest first', () => {
+    expect(TIP_IDS).toEqual(['tip_small', 'tip_medium', 'tip_large', 'tip_xlarge', 'tip_patron']);
+  });
+
+  it("knows each product's USD base price, rising with the tier", () => {
+    const prices = TIP_IDS.map((id) => TIP_USD[id]);
+    expect(prices).toEqual([2.99, 6.99, 14.99, 29.99, 99.99]);
+  });
+
+  it('describes no tier as buying a feature', () => {
+    for (const tier of TIP_TIERS) {
+      expect(`${tier.name} ${tier.what}`).not.toMatch(
+        /server|map sheet|unlock|online|feature|premium/i,
+      );
+    }
   });
 
   it('recognizes tip ids', () => {
@@ -50,7 +65,7 @@ describe('tipOffers', () => {
 });
 
 describe('defaultTipId', () => {
-  it('starts on the middle tier when all three are on sale', () => {
+  it('starts on the modest second tier when it is on sale', () => {
     const offers = tipOffers(TIP_IDS.map((id) => ({ id, displayPrice: '$1' })));
     expect(defaultTipId(offers)).toBe('tip_medium');
   });

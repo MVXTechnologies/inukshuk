@@ -6,6 +6,7 @@
  *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
  *   GET /fonts/{fontstack}/{range}.pbf    MapLibre glyphs (static objects)
+ *   POST /donors                         opt-in donor name, filed as pending in R2 (./donors.ts)
  *
  * Each archive is ONE PMTiles file in R2 (see ../nas/). The pmtiles library
  * reads only the byte ranges a tile needs, and every response is cached at
@@ -22,6 +23,7 @@ import {
   type Source,
 } from 'pmtiles';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
+import { handleDonor, memoryLimiter } from './donors';
 
 export interface Env {
   BUCKET: R2Bucket;
@@ -38,6 +40,37 @@ export interface Env {
   STRAVA_CLIENT_ID?: string;
   /** Strava API app secret (`wrangler secret put STRAVA_CLIENT_SECRET`). */
   STRAVA_CLIENT_SECRET?: string;
+  /**
+   * Workers rate-limiting binding for `POST /donors` (`[[ratelimits]]` in
+   * wrangler.toml). Unset = a best-effort per-isolate limit.
+   */
+  DONOR_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+}
+
+const donorFallbackLimit = memoryLimiter();
+
+async function donors(request: Request, env: Env): Promise<Response> {
+  const client = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const length = Number(request.headers.get('Content-Length') ?? '0');
+  if (length > 4096) return Response.json({ error: 'body too large' }, { status: 413 });
+  const result = await handleDonor(
+    { method: request.method, client, body: request.method === 'POST' ? await request.text() : '' },
+    {
+      put: async (key, json) => {
+        await env.BUCKET.put(key, json, { httpMetadata: { contentType: 'application/json' } });
+      },
+      allow: async (key) =>
+        env.DONOR_LIMITER
+          ? (await env.DONOR_LIMITER.limit({ key })).success
+          : donorFallbackLimit(key),
+      now: () => new Date(),
+      random: () => crypto.randomUUID().slice(0, 8),
+    },
+  );
+  return Response.json(result.body, {
+    status: result.status,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
@@ -342,6 +375,13 @@ export default {
         return await upload(request, env, url, uploadKey);
       } catch (e) {
         return new Response(`upload error: ${(e as Error).message}`, { status: 500 });
+      }
+    }
+    if (url.pathname === '/donors') {
+      try {
+        return await donors(request, env);
+      } catch {
+        return Response.json({ error: 'could not save' }, { status: 500 });
       }
     }
     const [, stravaKind] = STRAVA_PATH.exec(url.pathname) ?? [];
