@@ -1000,3 +1000,55 @@ export function buildStoneLayers(
 
   return { base, labels };
 }
+
+/**
+ * The stone layers that still make sense drawn OVER satellite imagery — the
+ * "Labels on satellite" overlay (#484): road casings and ribbons, the trail
+ * network (tracks, cycleways, paths) and every label (water, roads, POIs,
+ * peaks, places), in the same order the map draws them. The road casings
+ * are left out and the ribbons made translucent ({@link IMAGERY_ROAD_OPACITY}):
+ * opaque paper roads in dark casings buried the imagery on the emulator
+ * pass. Everything that
+ * paints ground — the paper background, land cover and land use, water
+ * fills, buildings, the contour lines and their labels — is left out, so the
+ * imagery shows through untouched.
+ */
+export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
+  ...ROADS.map((r) => `road-${r.id}`),
+  'track',
+  'cycleway',
+  'path',
+  'waterway-label',
+  'water-label',
+  'road-label',
+  'poi',
+  'peak',
+  'place-village',
+  'place-town',
+  'place-city',
+  'place-province',
+];
+
+/**
+ * {@link buildStoneLayers} cut down to {@link STONE_IMAGERY_LAYER_KEYS}, in
+ * draw order (line work first, labels last). The caller passes a scheme
+ * tuned for imagery — light ink on a dark halo reads over any photo.
+ */
+export function buildStoneImageryLayers(
+  scheme: StoneBasemapScheme,
+  options: Omit<StoneStyleOptions, 'contours'>,
+): LayerSpecification[] {
+  const keep = new Set(STONE_IMAGERY_LAYER_KEYS.map((k) => `${STONE_LAYER_PREFIX}${k}`));
+  const roads = new Set(ROADS.map((r) => `${STONE_LAYER_PREFIX}road-${r.id}`));
+  const { base, labels } = buildStoneLayers(scheme, options);
+  return [...base, ...labels]
+    .filter((l) => keep.has(l.id))
+    .map((l) =>
+      l.type === 'line' && roads.has(l.id)
+        ? { ...l, paint: { ...l.paint, 'line-opacity': IMAGERY_ROAD_OPACITY } }
+        : l,
+    );
+}
+
+/** Road ribbons over imagery: present enough to follow, thin enough to see through. */
+export const IMAGERY_ROAD_OPACITY = 0.5;

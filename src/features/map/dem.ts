@@ -9,7 +9,6 @@ import {
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
-import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { printTileSource } from '@core/mapmaker/printSources';
 import {
   assessTileFailures,
@@ -34,18 +33,17 @@ const demUrl = (z: number, x: number, y: number) =>
   tileUrl(TERRARIUM_TILE_SOURCE.template, { z, x, y });
 
 /**
- * Free, key-free basemaps drapeable on the 3D terrain — every app {@link Basemap}
- * except 'relief', which has no drape (the mesh's hypsometric tint is the relief
- * look). Both come from Esri's public ArcGIS Online tile services (note the
+ * Free, key-free basemaps drapeable on the 3D terrain — every app
+ * {@link Basemap}. Both come from Esri's public ArcGIS Online tile services (note the
  * `{z}/{y}/{x}` row/col order); the templates live in `printSources`, shared
  * with the map maker's live preview.
  *
  * We deliberately do NOT use raw `tile.openstreetmap.org` here: the OSM tile
  * policy forbids app/bulk fetching and returns "Access Blocked 403" tiles when a
  * 3D drape stitches many tiles at once. Esri World Street Map is permissive and
- * matches the satellite/relief sources.
+ * matches the satellite source.
  */
-export type DrapeSource = Exclude<Basemap, 'relief'>;
+export type DrapeSource = Basemap;
 
 /** Decode a tile (PNG or JPEG, by magic bytes) to RGBA. */
 function decodeTileRGBA(bytes: Uint8Array): Uint8Array {
@@ -151,6 +149,22 @@ export async function fetchHeightmap(
   maxTilesPerSide = 6,
 ): Promise<Heightmap> {
   return heightmapFromMosaic(await fetchDemMosaic(bounds, maxTilesPerSide), grid);
+}
+
+/**
+ * One Terrarium DEM tile decoded to metres (256 × 256, row 0 = north), from
+ * the same on-disk tile cache as the 3D view. The long-distance trail page
+ * samples its climb from these (#467).
+ */
+export async function fetchDemTile(z: number, x: number, y: number): Promise<Float32Array> {
+  const rgba = decodeTileRGBA(
+    await storage.downloadBytes(demUrl(z, x, y), `dem-${z}-${x}-${y}.png`),
+  );
+  const out = new Float32Array(TILE * TILE);
+  for (let i = 0; i < TILE * TILE; i++) {
+    out[i] = terrariumToMeters(rgba[i * 4]!, rgba[i * 4 + 1]!, rgba[i * 4 + 2]!);
+  }
+  return out;
 }
 
 /**
@@ -274,23 +288,6 @@ export function fetchPrintBasemap(
     cacheName: basemapCacheName(source),
     fetch,
   });
-}
-
-/**
- * The Waymarked Trails route overlay over a planned sheet, alpha preserved for
- * compositing. Route coverage is patchy by nature, so a tile that never
- * arrives is simply transparent.
- */
-export async function fetchTrailsTexture(
-  plan: TilePlan,
-  network: TrailNetworkId,
-  fetch?: FetchAllOptions,
-): Promise<BasemapTexture> {
-  const { texture } = await stitchTiles(plan.range, plan.tiles, trailNetworkTileUrl(network), {
-    cacheName: (t) => `wmt-${network}-${t.z}-${t.x}-${t.y}`,
-    fetch,
-  });
-  return texture;
 }
 
 /**

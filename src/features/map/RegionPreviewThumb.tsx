@@ -41,6 +41,8 @@ interface Props {
   size: number;
   width?: number;
   height?: number;
+  /** Corner radius; default 8. */
+  radius?: number;
 }
 
 // Same self-identification as the 3D DEM/basemap fetches (see dem.ts) — the
@@ -80,6 +82,7 @@ export function RegionPreviewThumb({
   size,
   width,
   height,
+  radius = 8,
 }: Props): ReactElement {
   const theme = useTheme();
   const tile = useMemo(
@@ -120,7 +123,7 @@ export function RegionPreviewThumb({
 
   const imageUri = url !== null && loaded !== null && loaded.url === url ? loaded.localUri : null;
 
-  const box = { width: width ?? size, height: height ?? size, borderRadius: 8 };
+  const box = { width: width ?? size, height: height ?? size, borderRadius: radius };
   return (
     <View style={[styles.frame, box, { borderColor: theme.colors.outlineVariant }]}>
       {imageUri !== null ? (

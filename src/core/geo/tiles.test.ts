@@ -10,6 +10,8 @@ import {
   packZoomRange,
   sourceMaxZoom,
   needsRedownload,
+  normalizeBasemap,
+  normalizePackBasemap,
   VECTOR_MAX_ZOOM,
   estimateRegionDownload,
   sourceTileZoom,
@@ -56,7 +58,6 @@ it('estimateBytes scales with tile count and basemap', () => {
   expect(estimateBytes(100, 'map')).toBeGreaterThan(0);
   expect(estimateBytes(200, 'map')).toBeCloseTo(2 * estimateBytes(100, 'map'));
   expect(estimateBytes(100, 'satellite')).toBeGreaterThan(estimateBytes(100, 'map'));
-  expect(estimateBytes(100, 'relief')).toBeGreaterThan(estimateBytes(100, 'map'));
 });
 
 it('estimateBytesForBasemaps sums each basemap at the same tile count', () => {
@@ -84,10 +85,18 @@ describe('offlinePackMaxZoom', () => {
   });
 
   it('falls back when no packs exist for the basemap', () => {
-    expect(offlinePackMaxZoom([], 'relief')).toBe(OFFLINE_PACK_FALLBACK_MAX_ZOOM);
-    expect(offlinePackMaxZoom([{ basemap: 'map', maxZoom: 17 }], 'relief')).toBe(
+    expect(offlinePackMaxZoom([], 'satellite')).toBe(OFFLINE_PACK_FALLBACK_MAX_ZOOM);
+    expect(offlinePackMaxZoom([{ basemap: 'map', maxZoom: 17 }], 'satellite')).toBe(
       OFFLINE_PACK_FALLBACK_MAX_ZOOM,
     );
+  });
+
+  it('never lets a legacy relief pack cap the live map (#484)', () => {
+    const packs = [
+      { basemap: 'relief' as const, maxZoom: 13 },
+      { basemap: 'map' as const, maxZoom: 16 },
+    ];
+    expect(offlinePackMaxZoom(packs, 'map')).toBe(16);
   });
 });
 
@@ -95,24 +104,23 @@ describe('packZoomRange', () => {
   const region: BoundingBox = { minLat: 45.9, minLng: -73.1, maxLat: 46.0, maxLng: -73.0 };
 
   it('caps the top zoom at the basemap source native max', () => {
-    // Relief tops out at z15: asking for the "Max" quality (z17) must not
-    // produce a pack that requests zooms the tile service never serves.
-    expect(packZoomRange('relief', 11, 17)).toEqual({ minZoom: 11, maxZoom: 15 });
-    expect(packZoomRange('relief', 11, 16)).toEqual({ minZoom: 11, maxZoom: 15 });
+    // Satellite tops out at z17: asking deeper must not produce a pack that
+    // requests zooms the tile service never serves.
+    expect(packZoomRange('satellite', 11, 19)).toEqual({ minZoom: 11, maxZoom: 17 });
     expect(packZoomRange('satellite', 11, 17)).toEqual({ minZoom: 11, maxZoom: 17 });
     expect(packZoomRange('map', 11, 17)).toEqual({ minZoom: 11, maxZoom: 17 });
   });
 
   it('never inverts the range when the overview zoom exceeds the cap', () => {
-    // A tiny box's overview zoom can sit above relief's cap; MapLibre rejects
-    // maxZoom < minZoom outright ("Invalid offline region definition").
-    const r = packZoomRange('relief', 17, 17);
+    // A tiny box's overview zoom can sit above a source's cap; MapLibre
+    // rejects maxZoom < minZoom outright ("Invalid offline region definition").
+    const r = packZoomRange('map', 17, 17, 'vector');
     expect(r).toEqual({ minZoom: 15, maxZoom: 15 });
     expect(r.minZoom).toBeLessThanOrEqual(r.maxZoom);
   });
 
   it('keeps every basemap within its native max', () => {
-    for (const basemap of ['map', 'satellite', 'relief'] as const) {
+    for (const basemap of ['map', 'satellite'] as const) {
       const { minZoom, maxZoom } = packZoomRange(basemap, 0, 22);
       expect(maxZoom).toBe(NATIVE_MAX_ZOOM[basemap]);
       expect(minZoom).toBeGreaterThanOrEqual(0);
@@ -121,25 +129,37 @@ describe('packZoomRange', () => {
   });
 
   it('estimates each basemap over its own clamped range', () => {
-    const relief = estimateRegionDownload(region, 11, 17, ['relief']);
-    expect(relief.tiles).toBe(tileCountForRegion(region, 11, 15));
-    expect(relief.bytes).toBe(estimateBytes(relief.tiles, 'relief'));
+    const vectorMap = estimateRegionDownload(region, 11, 17, ['map'], 'vector');
+    expect(vectorMap.tiles).toBe(tileCountForRegion(region, 11, 15));
 
-    // Relief stops at z15, so it contributes fewer tiles than satellite (z17).
-    const both = estimateRegionDownload(region, 11, 17, ['satellite', 'relief']);
+    // The vector map stops at z15, so it contributes fewer tiles than satellite (z17).
+    const both = estimateRegionDownload(region, 11, 17, ['satellite', 'map'], 'vector');
     const satellite = estimateRegionDownload(region, 11, 17, ['satellite']);
-    expect(satellite.tiles).toBeGreaterThan(relief.tiles);
-    expect(both.tiles).toBe(satellite.tiles + relief.tiles);
+    expect(satellite.tiles).toBeGreaterThan(vectorMap.tiles);
+    expect(both.tiles).toBe(satellite.tiles + vectorMap.tiles);
     expect(estimateRegionDownload(region, 11, 17, []).tiles).toBe(0);
   });
 });
 
-/**
- * #230 — "map and relief stutter when zooming out, satellite is smooth".
- * These numbers are the evidence for the fix. They are computed against the
- * reporter's phone viewport (iPhone 17 Pro Max, 440 x 956 logical px) and the
- * Terrarium DEM source the `hillshade-2d` layer reads (`maxzoom` 15).
- */
+describe('normalizeBasemap (#484: Relief retired as a base map)', () => {
+  it('keeps the live base maps', () => {
+    expect(normalizeBasemap('map')).toBe('map');
+    expect(normalizeBasemap('satellite')).toBe('satellite');
+  });
+
+  it('migrates relief and junk to map', () => {
+    expect(normalizeBasemap('relief')).toBe('map');
+    expect(normalizeBasemap(undefined)).toBe('map');
+    expect(normalizeBasemap(42)).toBe('map');
+  });
+
+  it('keeps a downloaded relief pack labelled as relief', () => {
+    expect(normalizePackBasemap('relief')).toBe('relief');
+    expect(normalizePackBasemap('satellite')).toBe('satellite');
+    expect(normalizePackBasemap(null)).toBe('map');
+  });
+});
+
 describe('live-viewport DEM tile load (#230)', () => {
   const PHONE: ViewportPx = { width: 440, height: 956 };
   const DEM_MAX_ZOOM = 15;
@@ -193,7 +213,6 @@ describe('vector packs (our Protomaps base map)', () => {
   it('caps only the map basemap at the vector max zoom', () => {
     expect(sourceMaxZoom('map', 'vector')).toBe(VECTOR_MAX_ZOOM);
     expect(sourceMaxZoom('map')).toBe(NATIVE_MAX_ZOOM.map);
-    expect(sourceMaxZoom('relief', 'vector')).toBe(NATIVE_MAX_ZOOM.relief);
     expect(sourceMaxZoom('satellite', 'vector')).toBe(NATIVE_MAX_ZOOM.satellite);
   });
 

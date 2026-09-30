@@ -12,10 +12,8 @@ import {
 import { pageProjector, projectLines, type PagePoint } from '@core/mapmaker/pageSpace';
 import { cropRasterToBbox } from '@core/mapmaker/cropRaster';
 import { formatGratLabel, graticuleForBbox } from '@core/mapmaker/graticule';
-import { blendRgbaOver } from '@core/mapmaker/rasterDraw';
 import type { Position } from 'geojson';
 import type { BoundingBox, CornerCoordinates, LngLat } from '@core/models';
-import type { TrailNetworkId } from '@core/geo/trailNetworks';
 import { Buffer } from 'buffer';
 import jpeg from 'jpeg-js';
 import {
@@ -33,7 +31,7 @@ import {
   LineCapStyle,
 } from 'pdf-lib';
 import UPNG from 'upng-js';
-import { fetchHeightmap, fetchPrintBasemap, fetchTrailsTexture, type DrapeSource } from '../dem';
+import { fetchHeightmap, fetchPrintBasemap, type DrapeSource } from '../dem';
 
 // jpeg-js's ENCODER returns `Buffer.from(...)` whenever `module` is defined
 // (always, under Metro) — Hermes has no Buffer global, so provide one before
@@ -76,9 +74,6 @@ export interface MakeMapOptions {
    */
   trackIds?: string[];
   waypointIds?: string[];
-  /** Marked-trail databases composited over the basemap (empty = none). */
-  markedTrailsNetworks: TrailNetworkId[];
-  markedTrailsOpacity: number;
   /** Lat/lng graticule with edge labels. */
   grid: boolean;
   /** Compass rose (true north; magnetic north too when declination known). */
@@ -182,18 +177,6 @@ export async function composeMapPdf(
   onProgress('tiles', 0.7);
   await nextTask();
   const baseRaster = cropRasterToBbox(texture, plan.range, drawBbox);
-  for (const network of options.markedTrailsNetworks) {
-    // Each checked trail database composited straight into the basemap
-    // raster: the routes become part of the printed base image, under the
-    // vector layers.
-    const trails = await fetchTrailsTexture(plan, network, { isAborted: aborted });
-    if (handle.aborted) throw new Error('aborted');
-    await nextTask();
-    const trailsCrop = cropRasterToBbox(trails, plan.range, drawBbox);
-    if (trailsCrop.width === baseRaster.width && trailsCrop.height === baseRaster.height) {
-      blendRgbaOver(baseRaster.data, trailsCrop.data, options.markedTrailsOpacity);
-    }
-  }
   onProgress('tiles', 1);
 
   // --- terrain layers ------------------------------------------------------
@@ -478,7 +461,6 @@ export async function composeMapPdf(
   if (contourLines) parts.push(`Contours every ${effectiveIntervalM} m`);
   if (slopePng) parts.push(`Slope ${options.slopeMinDeg}–${options.slopeMaxDeg}°`);
   parts.push(options.basemap === 'satellite' ? 'Imagery © Esri' : 'Map © Esri');
-  if (options.markedTrailsNetworks.length > 0) parts.push('Routes © Waymarked Trails');
   parts.push(`Made with Inukshuk · ${new Date().toISOString().slice(0, 10)}`);
   page.drawText(parts.join('  ·  '), {
     x: mapRect.x,

@@ -3,6 +3,12 @@ import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 import {
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  TILT_RELIEF_LAYER_ID,
+} from './mapStyle';
+import {
   HEAT_CROSSFADE,
   HEAT_GLOW_INTENSITY,
   HEAT_GLOW_RADIUS_STOPS,
@@ -338,3 +344,45 @@ export const SLOPE_LAYER = (
     paint={SLOPE_RASTER_PAINT}
   />
 );
+
+/**
+ * Drives the style's hidden tilted-map relief pass (#480): a component
+ * `<Layer>` with the SAME id as the style layer, which both native sides
+ * ADOPT rather than duplicate (MLRNLayer.addToMap / MLRNLayer.m look the id
+ * up first), then set only these properties on. Keep it mounted for as long
+ * as the style has the pass ({@link styleHasTiltRelief}): unmounting removes
+ * the style layer itself until the next style reload. Flat, it is hidden, so
+ * it costs no extra hillshade pass.
+ *
+ * ONLY visibility and exaggeration are set here, never colours or the light:
+ * the wrapper's Android setters read the shadow/highlight colours as string
+ * ARRAYS and the direction as a float array (this MapLibre Native's
+ * multidirectional hillshade). Found on the emulator: a plain colour or a
+ * scalar direction threw "cannot be cast" and killed the React instance, and
+ * no expression yields the `array<color>` type the core then demands. The
+ * style JSON carries those instead.
+ */
+export function tiltReliefLayer(exaggeration: number) {
+  return (
+    <Layer
+      id={TILT_RELIEF_LAYER_ID}
+      type="hillshade"
+      source={HILLSHADE_DEM_SOURCE_ID}
+      afterId={HILLSHADE_2D_LAYER_ID}
+      minzoom={HILLSHADE_2D_MIN_ZOOM}
+      layout={{ visibility: exaggeration > 0 ? 'visible' : 'none' }}
+      paint={{
+        // The base's zoom fade-in (#230), up to the pitch's exaggeration.
+        'hillshade-exaggeration': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          HILLSHADE_2D_MIN_ZOOM,
+          0,
+          HILLSHADE_2D_MIN_ZOOM + 1,
+          exaggeration,
+        ],
+      }}
+    />
+  );
+}

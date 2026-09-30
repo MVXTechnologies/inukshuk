@@ -57,6 +57,7 @@ import {
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
+import { useLongTrailsStore } from '@state/longTrailsStore';
 import { useMapStore } from '@state/mapStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
@@ -89,6 +90,8 @@ import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { NIGHT_MAP } from '@ui/tokens';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
+import { ShownTrailPill, ShownTrailSheet } from './longTrail/ShownTrailChrome';
+import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
@@ -125,6 +128,7 @@ import {
   TRACKS_LINES_LAYER,
 } from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
+import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
@@ -336,6 +340,8 @@ export function MapScreen() {
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
+  const shownTrail = useLongTrailsStore((s) => s.shown);
+  const [trailSheetHeight, setTrailSheetHeight] = useState(0);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   // Stable per basemap so the contour sources' memo can hold (see the hoisted
@@ -368,13 +374,11 @@ export function MapScreen() {
   // Compact map chrome: chevron-rail unfold state (the "+" actions button
   // lives in the rail too, so it folds away with the rest of the controls).
   const [compactControlsOpen, setCompactControlsOpen] = useState(false);
-  const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
   // transient play flag, and the scrubbable timeline that owns the drape's
-  // valid time (throttled inside the hook). Network-only like the marked
-  // trails: while offline-only is on the layer is dropped from the style
-  // entirely and the timeline hook is parked, so the map stays byte-identical
-  // to a weatherless one.
+  // valid time (throttled inside the hook). Network-only: while offline-only
+  // is on the layer is dropped from the style entirely and the timeline hook
+  // is parked, so the map stays byte-identical to a weatherless one.
   //
   // PARKED (2026-09, see `@core/features/flags`): while WEATHER_ENABLED is
   // false the persisted choice is READ BUT NOT USED — every weather surface
@@ -434,11 +438,13 @@ export function MapScreen() {
   // would re-render this whole tree per frame — see ScaleBar's own note. The
   // setter collapses no-op updates so a pan along a parallel costs nothing.
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
-  /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
+  /** Shaded-relief hillshade under `map` — platform-defaulted, #230. */
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   /** Its strength and the summits' density — the Topology menu's #461 rows. */
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
+  /** How much that shading deepens when the map is tilted — "3D relief", #480. */
+  const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   /**
    * Non-null while the map maker is open: the print style whose raster the
    * live map must render so the framed preview matches the sheet (#349).
@@ -468,7 +474,7 @@ export function MapScreen() {
     weatherStagingRef,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
-  // network-only treatment as the marked trails. Any active layer also pins
+  // network-only treatment as the weather. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
   //
   // PARKED (2026-09, see `@core/features/flags`): same treatment as weather —
@@ -562,6 +568,12 @@ export function MapScreen() {
   // must drop the vector base while the editor is open.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
   const vectorBasemap = stoneBase && editorStyle === null;
+  // "Labels on satellite" (#484): our roads, trails and names over the
+  // imagery, from the same vector host as the map (and, offline, from any
+  // downloaded Map pack of the area — packs share tiles by URL).
+  const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const imageryLabels =
+    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
@@ -601,9 +613,7 @@ export function MapScreen() {
     const options = {
       // Night red (decision 4): greyscale, dimmed raster under the red veil.
       night: displayCondition === 'night',
-      // Marked-trail networks (network-only; hidden while offline-only).
-      markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
-      // Marine drapes ride the same offline-only rule.
+      // Marine drapes are network-only: hidden while offline-only.
       marineLayers: offlineOnly ? [] : marineLayers,
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
@@ -616,7 +626,16 @@ export function MapScreen() {
             },
           }
         : {}),
+      ...(imageryLabels
+        ? {
+            imageryLabels: {
+              ...vectorBasemapOption(theme.dark, false),
+              peakDensity,
+            },
+          }
+        : {}),
       hillshadeStrength,
+      tiltRelief,
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
@@ -701,12 +720,12 @@ export function MapScreen() {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    tiltRelief,
     offlineOnly,
     offlineRegions,
     theme.dark,
     theme.colors.background,
     displayCondition,
-    markedTrailsNetworks,
     marineLayers,
     marineActive,
     // Only the FALLBACK shape of the chart state restyles the map; the drape
@@ -718,7 +737,13 @@ export function MapScreen() {
     overlayTiles,
     referenceOverlay,
     vectorBasemap,
+    imageryLabels,
   ]);
+
+  // The tilted-map relief pass (#480): the style carries it hidden whenever
+  // it draws the shading and the setting is on; the hook switches it on from
+  // the settled pitch.
+  const tilt = useTiltRelief(style);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -1764,6 +1789,18 @@ export function MapScreen() {
     ]);
   }, [marinePackOfferState, marinePackSnoozes, setSetting]);
 
+  // A long-distance trail shown from Explore (#467): its sheet owns the
+  // bottom edge only while nothing else does (recording, region select, the
+  // map maker, a trail inspector, the heat carousel).
+  const trailSheetUp =
+    shownTrail !== null &&
+    status === 'idle' &&
+    !selecting &&
+    makeMapState === null &&
+    !inspectId &&
+    heatSelection === null &&
+    !terrain3d;
+
   return (
     <View style={styles.fill}>
       {terrain3d ? (
@@ -1825,7 +1862,10 @@ export function MapScreen() {
           // the effect above re-arms.
           // The style is parsed and the native view exists: safe for
           // getViewState(). Same reasoning as the region-change hook below.
-          onDidFinishLoadingStyle={() => setMapLoaded(true)}
+          onDidFinishLoadingStyle={() => {
+            setMapLoaded(true);
+            tilt.onStyleLoaded();
+          }}
           onDidFinishLoadingMap={() => {
             setMapLoaded(true);
             // Seed the scale bar: onRegionDidChange is not guaranteed to fire
@@ -1836,6 +1876,7 @@ export function MapScreen() {
               .then((vs) => {
                 updateScaleAt(vs.zoom, vs.center[1]);
                 onSettleBearing(vs.bearing);
+                tilt.onSettledPitch(vs.pitch);
               })
               .catch(() => undefined); // mid-teardown — the next settle seeds it
           }}
@@ -1867,6 +1908,8 @@ export function MapScreen() {
             // Settled bearing → the badge's red north needle, and the
             // snap-back detent for a rotation too small to have been meant.
             onSettleBearing(e.nativeEvent.bearing);
+            // Settled pitch → the tilted-map relief pass (#480).
+            tilt.onSettledPitch(e.nativeEvent.pitch);
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1954,6 +1997,10 @@ export function MapScreen() {
               height that drape must occupy (see `@core/geo/mapLayerStack`).
               The PDF overlays and trails below carry no anchor at all, which
               is what keeps them on top of everything. */}
+          {/* The tilted-map relief pass (#480): adopts the style's own hidden
+              layer of that id (right above the base hillshade) and sets its
+              visibility/exaggeration from the settled pitch. */}
+          {tilt.layer}
           {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
           {weatherLayer !== null && !offlineOnly && (
             <WeatherDrapeLayers
@@ -2076,6 +2123,9 @@ export function MapScreen() {
               {FOCUSED_TRAIL_LAYER}
             </GeoJSONSource>
           )}
+
+          {/* A long-distance trail shown from Explore (#467). */}
+          {shownTrail !== null && <ShownTrailLayers shown={shownTrail} />}
 
           {/* Ring marker at the tapped heat spot, shown only while the
               carousel is open — same one-feature GeoJSONSource + circle
@@ -2280,7 +2330,12 @@ export function MapScreen() {
           starts right under it; 2D only, like the dialog's fly-to. */}
       {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          {/* A shown long-distance trail takes the pill's place (#467). */}
+          {shownTrail !== null ? (
+            <ShownTrailPill shown={shownTrail} />
+          ) : (
+            <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          )}
         </View>
       )}
 
@@ -2421,7 +2476,11 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View
-        style={[styles.bottom, recordingPanelUp && { bottom: panelHeight }]}
+        style={[
+          styles.bottom,
+          recordingPanelUp && { bottom: panelHeight },
+          trailSheetUp && { bottom: trailSheetHeight },
+        ]}
         pointerEvents="box-none"
       >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
@@ -2519,6 +2578,16 @@ export function MapScreen() {
           </View>
         )}
       </View>
+
+      {trailSheetUp && shownTrail !== null && (
+        <ShownTrailSheet
+          shown={shownTrail}
+          position={location ? [location.longitude, location.latitude] : null}
+          units={units}
+          onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
+          onMessage={showSnack}
+        />
+      )}
 
       {inspectId && inspectPoints && inspectTrack && (
         <TrailInspectPanel

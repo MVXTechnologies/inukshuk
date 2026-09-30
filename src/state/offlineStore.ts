@@ -46,6 +46,18 @@ interface OfflineState {
     bounds: BoundingBox;
     layers: DownloadLayer[];
   }) => Promise<void>;
+  /**
+   * Download a SERIES of packs of one layer, sequentially — the boxes of a
+   * trail corridor (#467). Progress is the whole series'; a part that fails
+   * is reported, the rest still run, but two failures in a row (offline)
+   * stop the series.
+   */
+  downloadSeries: (args: {
+    parts: { id: string; label: string; bounds: BoundingBox; minZoom: number }[];
+    layer: Omit<DownloadLayer, 'minZoom'>;
+    progressLabel: string;
+    onProgress?: (fraction: number) => void;
+  }) => Promise<void>;
   remove: (id: string) => Promise<void>;
   /**
    * Set the display name of one or more regions (several ids when the layers of
@@ -59,7 +71,6 @@ interface OfflineState {
 const LAYER_LABEL: Record<Basemap, string> = {
   map: 'Map',
   satellite: 'Satellite',
-  relief: 'Relief',
 };
 
 /** Native pack list with the persisted name overrides merged over pack labels. */
@@ -119,6 +130,57 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     }
     if (failed.length > 0) {
       throw new Error(`Download failed — ${failed.join(' · ')}`);
+    }
+  },
+
+  downloadSeries: async ({ parts, layer, progressLabel, onProgress }) => {
+    const failed: string[] = [];
+    let streak = 0;
+    let doneBytes = 0;
+    const total = parts.length;
+    try {
+      for (let i = 0; i < total; i++) {
+        const part = parts[i];
+        if (!part) continue;
+        const label = `${progressLabel} (${i + 1}/${total})`;
+        const report = (pct: number, sizeBytes: number) => {
+          const overall = ((i + Math.min(100, pct) / 100) / total) * 100;
+          set({ progress: { pct: overall, sizeBytes: doneBytes + sizeBytes, label } });
+          onProgress?.(overall / 100);
+        };
+        report(0, 0);
+        try {
+          let last = 0;
+          await createRegionPack(
+            {
+              id: part.id,
+              label: part.label,
+              basemap: layer.basemap,
+              ...(layer.format ? { format: layer.format } : {}),
+              styleJSON: layer.styleJSON,
+              bounds: part.bounds,
+              minZoom: part.minZoom,
+              maxZoom: layer.maxZoom,
+            },
+            (pct, sizeBytes) => {
+              last = sizeBytes;
+              report(pct, sizeBytes);
+            },
+          );
+          doneBytes += last;
+          streak = 0;
+        } catch (err) {
+          reportError(err, 'offline-series-download');
+          failed.push(`${i + 1}/${total}: ${err instanceof Error ? err.message : String(err)}`);
+          streak += 1;
+          if (streak >= 2) break;
+        }
+      }
+    } finally {
+      set({ progress: null, regions: await loadRegions() });
+    }
+    if (failed.length > 0) {
+      throw new Error(`Download failed — ${failed.slice(0, 2).join(' · ')}`);
     }
   },
 

@@ -1,33 +1,33 @@
-# Main-map terrain overlays e2e (1.2.0, reworked for the D-6 drill-down):
-# open the Overlays menu, drill into the Topology group, enable Slope +
-# Contours with their selectors (slope-angle floor, contour interval) and
-# confirm the 2D map stays alive. Crash-detection focus, like trail-view.yaml.
+# Main-map terrain overlays e2e (1.2.0; reworked for the D-6 drill-down, then
+# for the #484 single-sheet redesign): open the Overlays sheet, enable Slope +
+# Contours with their selectors (slope window, contour density) and confirm
+# the 2D map stays alive. Crash-detection focus, like trail-view.yaml.
 # (The main-map 3D segment was removed with the 2026-07-24 rollback — the
 # focused trail viewer's 3D is covered by trail-view.yaml.)
 #
 # Portability notes:
 # - Runs standalone (needs no saved trail); geo comes from the launch
 #   permission + the workflow's geo-fix feed.
-# - The overlays menu is a plain-View dark drill-down sheet under the "Map
-#   overlays" rail button: top level shows the Topology / Weather / Marine
-#   group rows; 'Topology' is the open-state sentinel (it exists nowhere
-#   outside the open menu). Tapping it swaps the sheet content in place (no
-#   animation), so the row taps after the sentinel wait are safe.
-# - Guarded-tap idiom on the opener (tap only while 'Topology' is not
+# - The overlays menu is ONE themed plain-View sheet under the "Map overlays"
+#   rail button (#484): sections On the map / Terrain / Live layers, Switch
+#   rows and segmented level pickers, scrolling inside a capped height. Its ✕
+#   ('Close overlays') is the open-state sentinel — it exists nowhere outside
+#   the open sheet. The sheet mounts fresh (scrolled to the top) on each open.
+# - Guarded-tap idiom on the opener (tap only while 'Close overlays' is not
 #   visible) so a retry can never toggle an open sheet closed.
-# - Sub-menu rows are plain visible-text matches; the slope window is a
-#   two-thumb range slider (its thumbs' a11y labels are asserted, not
-#   dragged — thumb pans are flake bait).
+# - Terrain and Live layers sit below the fold: scrollUntilVisible swipes at
+#   the screen centre, which is inside the sheet. The slope window is a
+#   two-thumb range slider (its thumbs' a11y labels are asserted, not dragged
+#   — thumb pans are flake bait).
 # - Slope's one-time disclaimer snackbar may cover the bottom of the screen;
 #   it auto-dismisses and nothing below asserts during that window.
-# - A far-left tap lands on the sheet's dismiss backdrop and only closes the
-#   menu (see trail-view.yaml).
 # - Weather and Marine are PARKED behind WEATHER_ENABLED / MARINE_ENABLED in
 #   src/core/features/flags.ts. Their rows stay visible but disabled with a
-#   "Coming soon" subtitle, and this flow asserts exactly that — the parked
+#   "Coming soon" hint, and this flow asserts exactly that — the parked
 #   state is shipped behaviour, so it gets coverage like any other. When a
 #   flag flips back to true, delete the parked-row block below (marked) and
-#   re-enable .maestro/weather.yaml / .maestro/marine.yaml.
+#   re-enable .maestro/weather.yaml / .maestro/marine.yaml (their rows now
+#   need a scrollUntilVisible too).
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -48,36 +48,41 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-# --- 2D: drill into Topology, enable both overlays, drive both selectors ---
+# --- Open the sheet (guarded) ---
 - retry:
     maxRetries: 3
     commands:
       - runFlow:
           when:
-            notVisible: 'Topology.*'
+            notVisible: 'Close overlays'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 10000
-# --- Parked features (src/core/features/flags.ts): Weather and Marine stay
-# in the list, greyed, with a "Coming soon" subtitle. Assert the a11y LABELS,
-# not the visible subtitle text: GroupRow sets `accessible`, which merges the
-# row into one element whose label is authoritative on both platforms (the
-# same reason 'Topology' is matched as a label above). The trailing .* covers
-# iOS merging extra state into the accessible string.
-- assertVisible: 'Weather.*coming soon.*'
-- assertVisible: 'Marine.*coming soon.*'
-# Disabled means disabled: tapping the parked Weather row must NOT drill into
-# the weather sub-menu. Staying at the top level (Topology row still there,
-# no sub-menu back button) is the proof.
-- tapOn: 'Weather.*coming soon.*'
-- assertVisible: 'Topology.*'
-- assertNotVisible: 'Back to overlays'
-- tapOn: 'Topology.*'
-- extendedWaitUntil:
-    visible: 'Slope'
-    timeout: 10000
+# --- 'PDF maps' master switch (#233), first section. It is a switch row (a11y
+# label 'PDF maps', trailing .* for iOS merged strings) whose OFF state is
+# explained by a 'Hidden on the map' hint under the label. The switch is
+# PERSISTED, so it starts at whatever a previous run left it at: tap once,
+# and if the hint now shows the switch went OFF — prove it, then tap again so
+# the run ends with the maps ON (a later flow must never inherit a map with
+# its sheets hidden). If the hint does not show, the switch was OFF and the
+# tap turned it on — also the state to leave behind.
+- assertVisible: 'PDF maps.*'
+- tapOn: 'PDF maps.*'
+- runFlow:
+    when:
+      visible: 'Hidden on the map.*'
+    commands:
+      - tapOn: 'PDF maps.*'
+- assertNotVisible: 'Hidden on the map.*'
+- assertVisible: 'PDF maps.*'
+# --- Terrain: Contours with its density, Slope with its window ---
+- scrollUntilVisible:
+    element: 'Slope'
+    direction: DOWN
+    timeout: 15000
+    centerElement: true
 - tapOn: 'Contours'
 - extendedWaitUntil:
     visible: '50 m'
@@ -104,27 +109,26 @@ appId: com.inukshuk.app
     commands:
       - assertVisible: 'Slope minimum, 27°'
       - assertVisible: 'Slope maximum, 90°'
-# --- 'PDF maps' master switch (#233): the row the D-6 rework dropped. It is
-# a checkbox row (a11y label 'PDF maps', trailing .* for iOS merged strings)
-# whose OFF state is explained by a 'Hidden on the map' line under the label.
-# The switch is PERSISTED, so it starts at whatever a previous run left it at:
-# tap once, and if the hint now shows the switch went OFF — prove it, then tap
-# again so the run ends with the maps ON (a later flow must never inherit a
-# map with its sheets hidden). If the hint does not show, the switch was OFF
-# and the tap turned it on — also the state to leave behind.
-- assertVisible: 'PDF maps.*'
-- tapOn: 'PDF maps.*'
-- runFlow:
-    when:
-      visible: 'Hidden on the map.*'
-    commands:
-      - tapOn: 'PDF maps.*'
-- assertNotVisible: 'Hidden on the map.*'
-- assertVisible: 'PDF maps.*'
-# Close the menu via the backdrop; the map beneath must still be responsive
-# while the overlay computes (DEM fetch + raster/contour build are async).
-- tapOn:
-    point: 50%,8%
+# --- Parked features (src/core/features/flags.ts): Weather and Marine stay
+# at the bottom of the sheet, greyed, with a "Coming soon" hint. Assert the
+# a11y LABELS, not the visible hint text: the rows set `accessible`, which
+# merges each into one element whose label is authoritative on both
+# platforms. The trailing .* covers iOS merging extra state into the string.
+- scrollUntilVisible:
+    element: 'Marine.*coming soon.*'
+    direction: DOWN
+    timeout: 15000
+- assertVisible: 'Weather.*coming soon.*'
+- assertVisible: 'Marine.*coming soon.*'
+# Disabled means disabled: tapping the parked Weather row must NOT open the
+# weather list. The sheet staying on its rows (no list back button) is the
+# proof.
+- tapOn: 'Weather.*coming soon.*'
+- assertVisible: 'Close overlays'
+- assertNotVisible: 'Back to overlays'
+# Close the sheet with its ✕; the map beneath must still be responsive while
+# the overlay computes (DEM fetch + raster/contour build are async).
+- tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
 # Leave the overlays off so reruns and later flows start from the default map.
 - retry:
@@ -132,18 +136,20 @@ appId: com.inukshuk.app
     commands:
       - runFlow:
           when:
-            notVisible: 'Topology.*'
+            notVisible: 'Close overlays'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 10000
-- tapOn: 'Topology.*'
-- extendedWaitUntil:
-    visible: 'Slope'
-    timeout: 10000
+- scrollUntilVisible:
+    element: 'Slope'
+    direction: DOWN
+    timeout: 15000
+    centerElement: true
 - tapOn: 'Slope'
 - tapOn: 'Contours'
+# An outside tap lands on the rail's backdrop and only closes the sheet.
 - tapOn:
     point: 50%,8%
 - assertVisible: 'Map actions'

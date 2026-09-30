@@ -1,5 +1,4 @@
 import type { MapBasemap } from '@state/mapStore';
-import { useSettingsStore } from '@state/settingsStore';
 import { schemeTokens } from '@ui/tokens';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -11,9 +10,9 @@ import {
 } from './terrain3d/overlayControls';
 
 /**
- * Right-edge control rail for the focused trail viewer (2D and 3D modes): a
- * 2D↔3D toggle, a layers FAB opening the basemap picker, and an overlays FAB
- * opening the analytical-overlay switches — the same circular-button idiom as
+ * Right-edge control rail for the focused trail viewer: a layers FAB opening
+ * the basemap picker and an overlays FAB opening the analytical-overlay
+ * switches (the 2D↔3D toggle left in #480 — two-finger tilt instead) — the same circular-button idiom as
  * the main map's MapControlsRail/LayersMenu.
  *
  * The rail is strictly for VIEWING the trail. Trim used to live here as a
@@ -22,14 +21,13 @@ import {
  * next to the thing it edits (backlog item 6).
  */
 
-/** Base-map choices: the same trio (labels, icons, colours) as the main map. */
+/** Base-map choices: the same pair (labels, icons, colours) as the main map (#484). */
 const BASEMAPS: {
   key: MapBasemap;
   label: string;
   icon: string;
   color: (t: MD3Theme) => string;
 }[] = [
-  { key: 'relief', label: 'Relief', icon: 'image-filter-hdr', color: () => '#9C6B3F' },
   { key: 'map', label: 'Map', icon: 'map', color: (t) => t.colors.primary },
   {
     key: 'satellite',
@@ -60,29 +58,17 @@ export function TrailViewerRail({
   overlaysAvailable,
   overlaysDisabled,
 }: Props) {
-  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
-  const set = useSettingsStore((s) => s.set);
   return (
     <View style={[styles.rail, { top }]} pointerEvents="box-none">
-      {/* 2D↔3D toggle — a rail FAB like the main map's, replacing the wide
-          segmented bar that used to sit under the viewport. */}
-      <FAB
-        icon="video-3d"
-        size="small"
-        variant={trailViewMode === '3d' ? 'primary' : 'surface'}
-        onPress={() => set('trailViewMode', trailViewMode === '3d' ? '2d' : '3d')}
-        style={styles.controlFab}
-        // State-dependent label: screen readers (and the e2e flows) need to
-        // know which way the toggle will flip before pressing it.
-        accessibilityLabel={trailViewMode === '3d' ? 'Switch to 2D view' : 'Switch to 3D view'}
-      />
+      {/* No 2D↔3D toggle any more (#480, owner call): the focused view is the
+          MapLibre map, tilted with two fingers like the main map. */}
       <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
       {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
     </View>
   );
 }
 
-/** The layers FAB + anchored basemap picker (Relief / Map / Satellite). */
+/** The layers FAB + anchored basemap picker (Map / Satellite). */
 function TrailLayersMenu({
   basemap,
   onSelect,

@@ -11,7 +11,6 @@ import { composeMapPdf, type ComposeHandle, type MakeMapOptions } from './compos
 
 jest.mock('../dem', () => ({
   fetchPrintBasemap: jest.fn(),
-  fetchTrailsTexture: jest.fn(),
   fetchHeightmap: jest.fn(),
 }));
 
@@ -31,8 +30,6 @@ const options: MakeMapOptions = {
   slopeMaxDeg: 45,
   slopeOpacity: 0.55,
   includeUserData: false,
-  markedTrailsNetworks: [],
-  markedTrailsOpacity: 0.85,
   grid: true,
   compass: true,
   declinationDeg: null,

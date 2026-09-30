@@ -30,6 +30,7 @@ export function useCameraControls({
 }) {
   const setFollowUser = useMapStore((s) => s.setFollowUser);
   const focusBounds = useMapStore((s) => s.focusBounds);
+  const focusPadding = useMapStore((s) => s.focusPadding);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const focusWaypoint = useMapStore((s) => s.focusWaypoint);
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
@@ -41,7 +42,7 @@ export function useCameraControls({
     setFollowUser(false);
     cameraRef.current?.fitBounds(toLngLatBounds(focusBounds), {
       duration: 600,
-      padding: { top: 60, right: 60, bottom: 220, left: 60 },
+      padding: focusPadding ?? { top: 60, right: 60, bottom: 220, left: 60 },
     });
     setFocusBounds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps

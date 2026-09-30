@@ -21,7 +21,7 @@ import {
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
-import { useSettingsStore } from '@state/settingsStore';
+import type { Settings } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -105,7 +105,7 @@ interface Props {
 const NOTE_BADGE_HALF_W = 12;
 const NOTE_BADGE_COL_H = 24 + 14;
 
-/** Build a terrain group for a basemap choice, draping its tiles (or relief). */
+/** Build a terrain group for a basemap choice, draping its tiles. */
 async function buildGroupFor(
   hm: Heightmap,
   pts: readonly TrackPoint[],
@@ -118,6 +118,18 @@ async function buildGroupFor(
     injectOverlays,
     segmentStarts,
   });
+}
+
+/**
+ * The focused view's mode: always the 2D MapLibre map since #480 (owner:
+ * "Remove the 3D button from the focused view. Just allow the 2-finger 3D
+ * mode movements like on the main map"). The three.js terrain branch below
+ * is kept but UNREACHABLE — nothing else routes into it, and the persisted
+ * `trailViewMode` setting is no longer read. A function (not a literal) so
+ * the type stays the full union and the dormant branches still typecheck.
+ */
+function focusedTrailViewMode(): Settings['trailViewMode'] {
+  return '2d';
 }
 
 /**
@@ -142,7 +154,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
 
-  const trailViewMode = useSettingsStore((s) => s.trailViewMode);
+  const trailViewMode = focusedTrailViewMode();
 
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
   // Pause boundaries in `points` (one per extra <trkseg>): the 2D/3D traces
@@ -761,9 +773,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
         disposeGroup(groupRef.current);
       }
       scene.add(built.group);
-      // The map- and relief-variants compile different overlay programs, so a
-      // basemap switch can hit a fresh device-only shader failure: validate the
-      // new variant too and fall back to the plain material if it can't run.
+      // A basemap switch rebuilds the terrain with a new overlay program, so it
+      // can hit a fresh device-only shader failure: validate the new build too and fall back to the plain material if it can't run.
       const renderer = rendererRef.current;
       const camera = cameraRef.current;
       if (built.overlay && renderer && camera && overlayRenderFailed(renderer, scene, camera)) {

@@ -22,8 +22,14 @@ import {
   basemapAttribution,
   buildOsmStyle,
   HILLSHADE_2D_DEM_TILE_SIZE,
+  HILLSHADE_2D_LAYER_ID,
   HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  styleHasHillshade,
+  styleHasTiltRelief,
+  TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
+import { tiltReliefLook } from '@core/map/tiltRelief';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -67,12 +73,12 @@ describe('buildOsmStyle', () => {
   it('keeps offline packs lean: shadedRelief defaults off so the DEM never enters a pack style', () => {
     // The offline-download path calls buildOsmStyle(tileUrl, false, basemap) with
     // no shadedRelief arg — assert that path yields no DEM source/tiles.
-    const s = buildOsmStyle(TILE, false, 'relief');
+    const s = buildOsmStyle(TILE, false, 'map');
     expect(s.sources.dem).toBeUndefined();
   });
 
   /**
-   * #230 — map/relief stutter on zoom-out on iOS, satellite is smooth. The
+   * #230 — map stutter on zoom-out on iOS, satellite is smooth. The
    * arithmetic behind these constants lives in `@core/geo/tiles`
    * ("live-viewport DEM tile load"); this pins the style that spends it.
    */
@@ -80,8 +86,8 @@ describe('buildOsmStyle', () => {
     const hillshade2d = (s: ReturnType<typeof buildOsmStyle>) =>
       s.layers.find((l) => l.id === 'hillshade-2d');
 
-    it.each(['map', 'relief'] as const)('zoom-gates the %s hillshade at z11', (basemap) => {
-      const layer = hillshade2d(buildOsmStyle(TILE, false, basemap, true));
+    it('zoom-gates the map hillshade at z11', () => {
+      const layer = hillshade2d(buildOsmStyle(TILE, false, 'map', true));
       expect(layer).toBeDefined();
       expect(layer?.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
       expect(HILLSHADE_2D_MIN_ZOOM).toBe(11);
@@ -123,7 +129,7 @@ describe('buildOsmStyle', () => {
 
     it('emits NO hillshade layer and NO DEM source when the setting is off', () => {
       // showHillshade=false must cost zero DEM fetches, not a hidden layer.
-      for (const basemap of ['map', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const s = buildOsmStyle(TILE, false, basemap, false);
         expect(layerIds(s)).not.toContain('hillshade-2d');
         expect(s.sources.dem).toBeUndefined();
@@ -145,11 +151,10 @@ describe('buildOsmStyle', () => {
       // maxzoom must stop fetching before that zone; OSM is real through z19.
       expect(baseSource(buildOsmStyle(TILE, false, 'map')).maxzoom).toBe(19);
       expect(baseSource(buildOsmStyle(TILE, false, 'satellite')).maxzoom).toBe(17);
-      expect(baseSource(buildOsmStyle(TILE, false, 'relief')).maxzoom).toBe(15);
     });
 
     it('leaves the raster LAYER without a maxzoom so tiles overscale past the source cap', () => {
-      for (const basemap of ['map', 'satellite', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const osmLayer = buildOsmStyle(TILE, false, basemap, true).layers.find(
           (l) => l.id === 'osm',
         );
@@ -164,8 +169,8 @@ describe('buildOsmStyle', () => {
     });
 
     it("never raises the source cap above the service's real-data zoom", () => {
-      const s = buildOsmStyle(TILE, false, 'relief', true, { rasterMaxZoom: 17 });
-      expect(baseSource(s).maxzoom).toBe(15);
+      const s = buildOsmStyle(TILE, false, 'satellite', true, { rasterMaxZoom: 19 });
+      expect(baseSource(s).maxzoom).toBe(17);
     });
   });
 
@@ -317,12 +322,10 @@ describe('buildOsmStyle', () => {
     it('stacks dim above every basemap-side raster (the drape rides above it)', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         weatherMuted,
-        markedTrailsNetworks: ['hiking'],
         marineLayers: ['bathymetry'],
       });
       const ids = layerIds(s);
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('osm'));
-      expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('weather-dim')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
 
@@ -542,11 +545,9 @@ describe('buildOsmStyle', () => {
     it('draws bathymetry under seamarks in catalog order, whatever the toggle order', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, {
         marineLayers: ['seamarks', 'bathymetry'],
-        markedTrailsNetworks: ['hiking'],
       });
       const ids = layerIds(s);
       expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('osm'));
-      expect(ids.indexOf('marine-bathymetry')).toBeGreaterThan(ids.indexOf('marked-trails-hiking'));
       expect(ids.indexOf('marine-seamarks')).toBeGreaterThan(ids.indexOf('marine-bathymetry'));
     });
   });
@@ -665,7 +666,7 @@ describe('buildOsmStyle', () => {
     });
 
     it('sits above the base raster layer for every basemap', () => {
-      for (const basemap of ['map', 'satellite', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const ids = layerIds(buildOsmStyle(TILE, false, basemap, true, { downloadedMask: mask }));
         expect(ids.indexOf('downloaded-mask')).toBeGreaterThan(ids.indexOf('osm'));
       }
@@ -714,7 +715,6 @@ describe('position-puck anchors (#332)', () => {
 describe('basemapAttribution', () => {
   it.each([
     ['map' as const, '© OpenStreetMap'],
-    ['relief' as const, '© Esri, USGS'],
     ['satellite' as const, '© Esri, Maxar'],
   ])('credits the %s basemap', (basemap, credit) => {
     expect(basemapAttribution(basemap)).toBe(credit);
@@ -864,10 +864,10 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     expect(JSON.stringify(dark.layers)).not.toEqual(JSON.stringify(light.layers));
   });
 
-  it.each(['relief', 'satellite'] as const)('flag on: %s stays raster', (basemap) => {
+  it('flag on: satellite stays raster', () => {
     const build = withFlag(true);
-    expect(build(TILE, false, basemap, false, { vectorBasemap })).toEqual(
-      build(TILE, false, basemap, false),
+    expect(build(TILE, false, 'satellite', false, { vectorBasemap })).toEqual(
+      build(TILE, false, 'satellite', false),
     );
   });
 
@@ -923,7 +923,7 @@ describe('terrain options in the style (#461)', () => {
       (level) => {
         const look = hillshadeLook(level, false);
         const paint = hillshadePaint(
-          buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: level }),
+          buildOsmStyle(TILE, false, 'map', true, { hillshadeStrength: level }),
         );
         expect(paint).toMatchObject({
           'hillshade-exaggeration': [
@@ -956,7 +956,7 @@ describe('terrain options in the style (#461)', () => {
 
     it('keeps the light palette on raster basemaps even in a dark app theme', () => {
       // Only the stone vector map has a night variant; the OSM raster is light.
-      const s = buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: 'heavy' });
+      const s = buildOsmStyle(TILE, false, 'map', true, { hillshadeStrength: 'heavy' });
       expect(hillshadePaint(s)?.['hillshade-shadow-color']).toBe(
         hillshadeLook('heavy', false).shadowColor,
       );
@@ -986,5 +986,155 @@ describe('terrain options in the style (#461)', () => {
       });
       expect(s.sources['basemap-peaks']).toMatchObject({ minzoom: 5, maxzoom: 12 });
     });
+  });
+});
+
+// #480 — the tilted-map relief pass mounts only over a style that has the base
+// shading (it names that layer as its afterId and reads the same DEM source).
+describe('styleHasHillshade (#480)', () => {
+  it('is true when the shaded relief is drawn, and names the ids the pass uses', () => {
+    const s = buildOsmStyle(TILE, false, 'map', true);
+    expect(styleHasHillshade(s)).toBe(true);
+    expect(layerIds(s)).toContain(HILLSHADE_2D_LAYER_ID);
+    const dem = s.sources[HILLSHADE_DEM_SOURCE_ID] as RasterDEMSourceSpecification;
+    expect(dem.type).toBe('raster-dem');
+    expect(dem.encoding).toBe('terrarium');
+  });
+
+  it('is false with shading off, over satellite, and under the weather dim', () => {
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'map', false))).toBe(false);
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'satellite', true))).toBe(false);
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'map', true, { weatherMuted }))).toBe(
+      false,
+    );
+  });
+});
+
+// #480 — the tilted-map relief pass ships hidden in the style, carrying the
+// colours the RN component cannot set on Android.
+describe('tilted-map relief pass (#480)', () => {
+  const tiltLayer = (s: ReturnType<typeof buildOsmStyle>) =>
+    s.layers.find((l) => l.id === TILT_RELIEF_LAYER_ID);
+
+  it.each(['natural', 'dramatic'] as const)(
+    '%s: hidden, flat, right above the base shading, on its DEM',
+    (mode) => {
+      const s = buildOsmStyle(TILE, false, 'map', true, { tiltRelief: mode });
+      expect(styleHasTiltRelief(s)).toBe(true);
+      const ids = layerIds(s);
+      expect(ids.indexOf(TILT_RELIEF_LAYER_ID)).toBe(ids.indexOf(HILLSHADE_2D_LAYER_ID) + 1);
+      const layer = tiltLayer(s);
+      expect(layer).toMatchObject({
+        type: 'hillshade',
+        source: HILLSHADE_DEM_SOURCE_ID,
+        minzoom: HILLSHADE_2D_MIN_ZOOM,
+        layout: { visibility: 'none' },
+      });
+      const look = tiltReliefLook(mode, 60, false)!;
+      expect(layer).toMatchObject({
+        paint: {
+          'hillshade-exaggeration': 0,
+          'hillshade-shadow-color': look.shadowColor,
+          'hillshade-highlight-color': look.highlightColor,
+          'hillshade-accent-color': look.accentColor,
+        },
+      });
+    },
+  );
+
+  it('is absent when the setting is off or unset', () => {
+    expect(
+      tiltLayer(buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'off' })),
+    ).toBeUndefined();
+    expect(tiltLayer(buildOsmStyle(TILE, false, 'map', true))).toBeUndefined();
+  });
+
+  it('is absent wherever the base shading is (none, satellite, weather dim)', () => {
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+    for (const s of [
+      buildOsmStyle(TILE, false, 'map', false, { tiltRelief: 'dramatic' }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic' }),
+      buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'dramatic', weatherMuted }),
+    ]) {
+      expect(tiltLayer(s)).toBeUndefined();
+      expect(styleHasTiltRelief(s)).toBe(false);
+    }
+  });
+});
+
+describe('labels on satellite (#484)', () => {
+  const imageryLabels = {
+    tiles: ['https://vector.example/{z}/{x}/{y}.mvt'],
+    glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+    peaks: 'https://tiles.example/peaks/{z}/{x}/{y}.mvt',
+  };
+  const stoneIds = (s: ReturnType<typeof buildOsmStyle>) =>
+    layerIds(s).filter((id) => id.startsWith('stone-'));
+
+  it('draws the roads, trails and names over the imagery when on', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels });
+    // The imagery stays the base…
+    expect(baseSource(s).tiles?.[0]).toContain('World_Imagery');
+    expect(s.sources['basemap-vector']).toMatchObject({ type: 'vector' });
+    expect(s.sources['basemap-peaks']).toMatchObject({ type: 'vector', maxzoom: 12 });
+    expect(s.glyphs).toBe(imageryLabels.glyphs);
+    const ids = stoneIds(s);
+    for (const id of [
+      'stone-path',
+      'stone-road-minor',
+      'stone-place-town',
+      'stone-waterway-label',
+    ]) {
+      expect(ids).toContain(id);
+    }
+    // …with no ground fills over it.
+    const fills = s.layers.filter(
+      (l) => l.id.startsWith('stone-') && (l.type === 'fill' || l.type === 'background'),
+    );
+    expect(fills).toEqual([]);
+  });
+
+  it('sits above the imagery and below the overlay anchors and the puck', () => {
+    const ids = layerIds(buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels }));
+    const firstStone = ids.findIndex((id) => id.startsWith('stone-'));
+    const lastStone = ids.map((id) => id.startsWith('stone-')).lastIndexOf(true);
+    expect(firstStone).toBeGreaterThan(ids.indexOf('osm'));
+    expect(lastStone).toBeLessThan(ids.indexOf(ALWAYS_PRESENT_ANCHORS[0]));
+  });
+
+  it('reads light ink on a dark halo — the imagery palette, whatever the app theme', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels });
+    const town = s.layers.find((l) => l.id === 'stone-place-town');
+    const paint = town?.paint as Record<string, string> | undefined;
+    expect(paint?.['text-color']).toBe('#FBF8F2');
+    expect(paint?.['text-halo-color']).toBe('#14181C');
+  });
+
+  it('emits nothing when off, on the map base, or under weather/marine', () => {
+    const off = buildOsmStyle(TILE, false, 'satellite', true);
+    expect(stoneIds(off)).toEqual([]);
+    expect(off.sources['basemap-vector']).toBeUndefined();
+    expect(off.glyphs).toBeUndefined();
+    // The raster map: the option is ignored (the vector map has its own labels).
+    expect(stoneIds(buildOsmStyle(TILE, false, 'map', true, { imageryLabels }))).toEqual([]);
+    const weather = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels,
+      weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 },
+    });
+    expect(stoneIds(weather)).toEqual([]);
+    const marine = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels,
+      marineChart: { wmsFallback: false },
+    });
+    expect(stoneIds(marine)).toEqual([]);
+  });
+
+  it('falls back to the Noto glyphs without our glyph host', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels: { tiles: imageryLabels.tiles },
+    });
+    expect(s.glyphs).toContain('openfreemap');
+    expect(s.sources['basemap-peaks']).toBeUndefined();
   });
 });

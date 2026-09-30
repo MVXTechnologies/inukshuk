@@ -240,17 +240,16 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 2
     commands:
-      # D-6 drill-down: the Content row lives in the Topology sub-menu now —
-      # guarded open ('Topology' is the top-level open sentinel), then drill.
+      # The Content row tops the Overlays sheet (#484) — guarded open
+      # ('Close overlays' is the sheet's open-state sentinel).
       - runFlow:
           when:
-            notVisible: 'Topology.*'
+            notVisible: 'Close overlays'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 10000
-      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 10000
@@ -267,12 +266,11 @@ appId: com.inukshuk.app
       - tapOn: 'Ungrouped'
       - tapOn: 'Done'
       - assertVisible: 'Map actions'
-      # Verify through the drill-down: reopen, enter Topology, check the row.
+      # Verify through the sheet: reopen and check the row.
       - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 10000
-      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content: 1 folder'
           timeout: 10000
@@ -529,17 +527,16 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 3
     commands:
-      # D-6 drill-down: guarded open, then through Topology to the Content
-      # picker (30 s waits absorb the post-viewer JS-thread stall).
+      # Guarded open of the Overlays sheet, then the Content picker (30 s
+      # waits absorb the post-viewer JS-thread stall).
       - runFlow:
           when:
-            notVisible: 'Topology.*'
+            notVisible: 'Close overlays'
           commands:
             - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 30000
-      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 30000
@@ -555,9 +552,8 @@ appId: com.inukshuk.app
       - assertVisible: 'Map actions'
       - tapOn: 'Map overlays'
       - extendedWaitUntil:
-          visible: 'Topology.*'
+          visible: 'Close overlays'
           timeout: 30000
-      - tapOn: 'Topology.*'
       - extendedWaitUntil:
           visible: 'Content: everything'
           timeout: 30000

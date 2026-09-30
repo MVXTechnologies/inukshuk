@@ -1,6 +1,12 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { packZoomRange, type PackFormat } from '@core/geo/tiles';
+import {
+  normalizePackBasemap,
+  packZoomRange,
+  type Basemap,
+  type PackBasemap,
+  type PackFormat,
+} from '@core/geo/tiles';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import type { BoundingBox } from '@core/models';
@@ -46,7 +52,11 @@ function writeStyleFile(id: string, styleJSON: string): void {
 export interface OfflineRegion {
   id: string;
   label: string;
-  basemap: 'map' | 'satellite' | 'relief';
+  /**
+   * What the pack holds. `relief` only on packs downloaded before #484
+   * retired that base map: still listed and deletable, never drawn.
+   */
+  basemap: PackBasemap;
   bounds: BoundingBox;
   sizeBytes: number;
   complete: boolean;
@@ -97,7 +107,7 @@ function regionFromPack(
   return {
     id: (meta.appId as string | undefined) ?? packId,
     label: (meta.label as string | undefined) ?? 'Region',
-    basemap: (meta.basemap as OfflineRegion['basemap'] | undefined) ?? 'map',
+    basemap: normalizePackBasemap(meta.basemap),
     bounds: { minLng: w, minLat: s, maxLng: e, maxLat: n },
     // Tile bytes are the number users care about; fall back to the total
     // resource bytes when the platform reports 0 tile bytes for a pack that
@@ -145,7 +155,8 @@ export async function createRegionPack(
   args: {
     id: string;
     label: string;
-    basemap: OfflineRegion['basemap'];
+    /** New packs are only ever a live base map (never the retired relief). */
+    basemap: Basemap;
     /** Default raster; `vector` for a Stone & Paper `map` pack. */
     format?: PackFormat;
     styleJSON: string;
@@ -156,7 +167,7 @@ export async function createRegionPack(
   onProgress: (pct: number, sizeBytes: number) => void,
 ): Promise<void> {
   // Last line of defence for the zoom range: a pack may only request zooms its
-  // basemap's tile source actually serves (relief: z15) and MapLibre rejects an
+  // basemap's tile source actually serves (satellite: z17) and MapLibre rejects an
   // inverted range outright. Clamping here means no caller can create a pack
   // that is doomed before the first tile is fetched.
   const format = args.format ?? 'raster';

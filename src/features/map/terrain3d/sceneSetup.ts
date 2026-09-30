@@ -122,14 +122,12 @@ export function buildQueryMarker(): { group: THREE.Group; setOpacity: (o: number
 
 /**
  * Fetch the basemap drape texture for a heightmap's tile range. Returns
- * undefined for 'relief' (the mesh's hypsometric tint IS the relief look, no
- * drape) and on fetch failure (fall back to hypsometric relief).
+ * undefined on fetch failure (fall back to the mesh's hypsometric tint).
  */
 export async function fetchDrapeTexture(
   range: TileRange,
   basemap: Basemap,
 ): Promise<BasemapTexture | undefined> {
-  if (basemap === 'relief') return undefined;
   try {
     return await fetchBasemapTexture(range, basemap);
   } catch {
