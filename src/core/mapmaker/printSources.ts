@@ -16,7 +16,7 @@ import { NATIVE_MAX_ZOOM, type Basemap } from '@core/geo/tiles';
 import type { TileSourceSpec } from './tilePlan';
 
 /** The drape sources the composer can stitch (see `features/map/dem`). */
-export type PrintDrapeSource = Exclude<Basemap, 'relief'>;
+export type PrintDrapeSource = Basemap;
 
 export type PrintStyleId = 'street' | 'imagery';
 

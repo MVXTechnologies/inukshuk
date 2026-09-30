@@ -2,11 +2,20 @@ import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
+import {
+  PEAK_DENSITIES,
+  PEAK_DENSITY_LABEL,
+  SHADING_LABEL,
+  SHADING_LEVELS,
+  type ShadingLevel,
+} from '@core/map/terrainOptions';
+import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useState, type ReactNode } from 'react';
-import { PixelRatio, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
   CONTOUR_INTERVALS,
@@ -14,37 +23,51 @@ import {
   DisclaimerSnackbar,
   useSlopeDisclaimer,
 } from '../terrain3d/overlayControls';
-import { weatherChrome as wc } from '../weather/weatherChrome';
-import { DetentSlider } from './DetentSlider';
 import { FolderPickerDialog } from './FolderPickerDialog';
-import { RangeSlider } from './RangeSlider';
-import { TrailNetworksDialog } from './TrailNetworksDialog';
 import { MapButton } from './MapButton';
+import {
+  LevelsRow,
+  MapSheet,
+  NavRow,
+  SectionTitle,
+  Segmented,
+  SheetHeader,
+  SwitchRow,
+  useSheetAccent,
+  useSheetWidth,
+} from './mapSheet';
+import { RangeSlider } from './RangeSlider';
 
 /**
- * THE overlays menu (D-6 drill-down rework): everything drawn on top of the
- * base map lives here, organised as an in-place drill-down on one dark
- * translucent slab (the weather chrome, see weatherChrome.ts) instead of the
- * old flat paper Menu + pop-up dialogs. The top level shows GROUPS —
- * Topology and Weather drill into sub-menus that replace the panel content
- * (back arrow returns); Marine (D-6 amendment) is a single all-or-nothing
- * chart-mode toggle right at the top level. The panel mounts fresh on every
- * open, so it always opens at the top level.
+ * THE overlays menu (#484 redesign): everything drawn on top of the base map,
+ * as ONE themed, scrolling sheet in the Map type panel's visual language —
+ * section titles, icon + label + one-line hint rows, Switches instead of
+ * checkboxes, segmented pickers where a row has levels. It replaces the
+ * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * Plain themed Views throughout — never a Portal/Dialog (the invisible-
- * overlay soft-lock landmine) and never a Paper Surface (the absolutely-
- * positioned iOS flex collapse) — following WeatherModelSheet's pattern. The
- * folder picker and trail-networks dialogs it launches stay user-invoked
- * paper Dialogs (safe per [[paper-portal-touch-swallow]]).
+ * - On the map — Content (folder picker), PDF maps, Personal heatmap,
+ *   Labels on satellite.
+ * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
+ *   Peaks, Elevation tint (3D only).
+ * - Live layers — Weather (drills into its list) and Marine, both parked
+ *   this release (greyed "Coming soon", never removed: a feature that
+ *   silently disappears reads as a bug).
  *
- * A11y/Maestro contract: the opener keeps the EXACT label 'Map overlays'.
- * Group rows carry the labels the flows key on — 'Topology',
- * 'Weather'/'Weather: <layer>', 'Marine' — and the sub-menus keep the row
- * labels the old dialogs had ('Rain radar', 'Temperature', …, 'None',
- * 'Content: …', 'PDF maps', 'Slope', 'Contours', 'Marked trails', 'Personal heatmap'). Sub-menu
- * titles render inside the back button (label 'Back to overlays'), so they
- * never echo group-row matchers. There is no 'Done' — closing is back/
- * outside tap.
+ * Every setting it drives is the one the old rows drove, with the same
+ * semantics (Shading None = hillshade off; a level turns it on at that
+ * strength; 3D relief rests with Shading None).
+ *
+ * A11y/Maestro contract: the opener keeps the EXACT label 'Map overlays';
+ * the sheet's ✕ is 'Close overlays' — the open-state sentinel now that
+ * 'Topology' is gone. Rows keep the labels the flows key on: 'Content: …',
+ * 'PDF maps', 'Personal heatmap', 'Slope', 'Contours', the level names
+ * ('Auto', '50 m', 'Heavy', …), 'Slope minimum/maximum', 'Weather'/
+ * 'Weather: <layer>'/'Weather (coming soon)', 'Marine'/'Marine (coming
+ * soon)'; the weather list's back row stays 'Back to overlays'.
+ *
+ * The rows scroll inside a capped height. The slope RangeSlider claims its
+ * touches at touch-down and refuses termination, so a drag on a thumb beats
+ * the ScrollView; the level pickers are taps.
  */
 
 /** Per-layer icon (MaterialCommunityIcons). UI-only mapping — the catalog in
@@ -57,154 +80,45 @@ const WEATHER_LAYER_ICONS: Record<WeatherLayerId, string> = {
   precip: 'weather-rainy',
 };
 
-/** Fixed dark-slab palette for the sliders re-homed onto the panel. */
-const SLIDER_PALETTE = {
-  accentColor: wc.accent,
-  trackColor: 'rgba(255, 255, 255, 0.24)',
-  tickColor: wc.inkFaint,
-};
+/** Tallest the sheet's scrolling body gets, as a share of the window. */
+const BODY_MAX_SHARE = 0.6;
+/** The RangeSlider's value label + its gap, beside the track. */
+const RANGE_VALUE_W = 74;
+/** The `below` indent of a sheet row (see mapSheet), left + right. */
+const BELOW_INSET = 52 + 16;
 
-type OverlayGroup = 'topology' | 'weather';
-
-/** "Slope, Contours" / "Personal heatmap on" / "off" — the Topology group subtitle. */
-function topologySummary(parts: string[]): string {
-  if (parts.length === 0) return 'off';
-  if (parts.length === 1) return `${parts[0]} on`;
-  return parts.join(', ');
-}
-
-/** One top-level group/toggle row: 40 px icon slot, name + state subtitle. */
-function GroupRow({
-  icon,
-  name,
-  subtitle,
-  accessibilityLabel,
-  disabled,
-  onPress,
-  checked,
-}: {
-  icon: string;
-  name: string;
-  subtitle: string;
-  accessibilityLabel: string;
-  disabled?: boolean;
-  onPress: () => void;
-  /** undefined → drill-down row ('›'); boolean → toggle row (checkbox). */
-  checked?: boolean;
-}) {
-  return (
-    <TouchableRipple
-      onPress={onPress}
-      disabled={disabled}
-      // `accessible` collapses the row into ONE element on iOS, so the label
-      // below is authoritative. Without it iOS also exposes the name/subtitle
-      // Texts and the row's accessible string carries the state ("off"),
-      // which broke every full-match flow matcher (2026-08-10).
-      accessible
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={checked === undefined ? undefined : { checked }}
-      style={styles.groupRow}
-      borderless
-    >
-      <View style={[styles.groupRowInner, disabled === true && styles.dimmed]}>
-        <View style={styles.iconSlot}>
-          <Icon source={icon} size={24} color={wc.ink} />
-        </View>
-        <View style={styles.groupText}>
-          <Text style={styles.groupName}>{name}</Text>
-          <Text style={styles.groupState} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-        {checked === undefined ? (
-          <Icon source="chevron-right" size={22} color={wc.inkFaint} />
-        ) : (
-          <Icon
-            source={checked ? 'checkbox-marked' : 'checkbox-blank-outline'}
-            size={22}
-            color={checked ? wc.accent : wc.inkMuted}
-          />
-        )}
-      </View>
-    </TouchableRipple>
-  );
-}
-
-/** Sub-menu title bar: '‹' + title, one tap target back to the top level. */
-function SubmenuHeader({ title, onBack }: { title: string; onBack: () => void }) {
-  return (
-    <TouchableRipple
-      onPress={onBack}
-      accessibilityLabel="Back to overlays"
-      style={styles.backRow}
-      borderless
-    >
-      <View style={styles.backInner}>
-        <Icon source="chevron-left" size={24} color={wc.ink} />
-        <Text style={styles.backTitle}>{title}</Text>
-      </View>
-    </TouchableRipple>
-  );
-}
-
-/** Compact dark-chrome list row (icon + title, optional trailing chevron). */
-function ItemRow({
-  icon,
-  iconColor,
-  title,
-  accessibilityLabel,
-  onPress,
-  chevron = false,
-}: {
-  icon: string;
-  iconColor?: string;
-  title: string;
-  accessibilityLabel?: string;
-  onPress: () => void;
-  chevron?: boolean;
-}) {
-  return (
-    <TouchableRipple
-      onPress={onPress}
-      accessibilityLabel={accessibilityLabel ?? title}
-      style={styles.itemRow}
-      borderless
-    >
-      <View style={styles.itemRowInner}>
-        <View style={styles.iconSlot}>
-          <Icon source={icon} size={22} color={iconColor ?? wc.ink} />
-        </View>
-        <Text style={styles.itemLabel}>{title}</Text>
-        {chevron && <Icon source="chevron-right" size={20} color={wc.inkFaint} />}
-      </View>
-    </TouchableRipple>
-  );
-}
+const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
+const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
+const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
+const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
+  value: m,
+  label: contourIntervalLabel(m),
+}));
 
 /**
- * Topology sub-menu: the terrain-analysis and content rows re-homed from the
- * old flat menu — Content picker, PDF maps (the master switch the #201
- * rework dropped, restored for #233), Slope (+ range), Contours (+ interval),
- * Elevation tint (3D only), Marked trails, Personal heatmap. Sliders render always
- * (dimmed while off) and sit inline on the right, as before.
+ * The overlay rows (everything but the sheet chrome). `onOpenWeather` drills
+ * into the weather list.
  */
-function TopologySubmenu({
+function OverlayRows({
   showHypso,
   onSlopeEnabled,
   onOpenFolders,
-  onOpenTrailNetworks,
-  onBack,
+  onOpenWeather,
 }: {
   showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
-  onOpenTrailNetworks: () => void;
-  onBack: () => void;
+  onOpenWeather: () => void;
 }) {
+  const { accent } = useSheetAccent();
+  const tokens = useSchemeTokens();
+  const sheetW = useSheetWidth();
+  const basemap = useMapStore((s) => s.basemap);
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
-  const typeMode = mapVisibilityMode === 'type';
-  const networks = useSettingsStore((s) => s.markedTrailsNetworks);
+  const offlineOnly = useSettingsStore((s) => s.offlineOnly);
+  const weatherLayer = useSettingsStore((s) => s.weatherLayer);
+  const marineLayers = useSettingsStore((s) => s.marineLayers);
   const slope = useSettingsStore((s) => s.terrainSlope);
   const contours = useSettingsStore((s) => s.terrainContours);
   const hypso = useSettingsStore((s) => s.terrainHypso);
@@ -213,168 +127,212 @@ function TopologySubmenu({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
+  const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const showHillshade = useSettingsStore((s) => s.showHillshade);
+  const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
+  const peakDensity = useSettingsStore((s) => s.peakDensity);
+  const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const set = useSettingsStore((s) => s.set);
 
+  // "None" is the hillshade switch off (#230 keeps its platform default);
+  // any other level turns it on at that strength (#461).
+  const shading: ShadingLevel = showHillshade ? hillshadeStrength : 'none';
+  const setShading = (level: ShadingLevel) => {
+    if (level === 'none') {
+      set('showHillshade', false);
+      return;
+    }
+    set('hillshadeStrength', level);
+    set('showHillshade', true);
+  };
+
+  const typeMode = mapVisibilityMode === 'type';
   const contentTitle = typeMode
     ? 'Content: everything'
     : `Content: ${visibleFolderIds.length} folder${visibleFolderIds.length === 1 ? '' : 's'}`;
 
-  const checkRow = (
-    label: string,
-    on: boolean,
-    onToggle: () => void,
-    opts: {
-      /** Inline selector on the right (slider), rendered always. */
-      control?: ReactNode;
-      /** One-line state explainer under the label. */
-      hint?: string;
-    } = {},
-  ) => (
-    <View style={styles.layerRow}>
-      <TouchableRipple
-        onPress={onToggle}
-        accessibilityLabel={label}
-        accessibilityState={{ checked: on }}
-        style={styles.layerToggle}
-        borderless
-      >
-        <View style={styles.layerLabelBox}>
-          <View style={styles.iconSlot}>
-            <Icon
-              source={on ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              size={22}
-              color={on ? wc.accent : wc.inkMuted}
-            />
-          </View>
-          <View style={styles.layerText}>
-            <Text style={styles.layerLabel}>{label}</Text>
-            {opts.hint !== undefined && (
-              <Text style={styles.groupState} numberOfLines={1}>
-                {opts.hint}
-              </Text>
-            )}
-          </View>
-        </View>
-      </TouchableRipple>
-      {opts.control !== undefined && <View style={styles.rightCol}>{opts.control}</View>}
-    </View>
-  );
+  // Only meaningful over imagery: on the Map base the row stays visible but
+  // greyed, saying where it applies.
+  const onSatellite = basemap === 'satellite';
+
+  // Marine chart mode is all-or-nothing (D-6 amendment): on = every catalog
+  // layer, off = none. While parked the persisted array is left ALONE but
+  // reads as off, so the row never shows a mode the map is not drawing.
+  const marineOn = MARINE_ENABLED && marineLayers.length > 0;
+  const weatherName = weatherLayer !== null ? weatherLayerById(weatherLayer).label : null;
 
   return (
-    <View>
-      {/* No scroll container here — b39ebc9 wrapped these rows in one and
-          f3180c8 reverted it. Two mechanisms make a ScrollView wrong for
-          THIS list specifically:
-          - Gesture: the rows host RangeSlider/DetentSlider. A vertical
-            ScrollView competes with the thumbs' pan responder, so drags get
-            claimed by the scroll instead of the slider.
-          - Reach: rows past the capped height are off-screen, and Android's
-            removeClippedSubviews may unmount them outright. (They are NOT
-            "hidden from the a11y tree" — the tree still describes them; they
-            simply aren't on screen, which is what Maestro's tapOn needs.)
-          Flows that depend on every Topology row staying reachable and
-          draggable: map-overlays.yaml (Slope, Contours, the interval detents
-          and the slope-range label), folders.yaml and heatmap.yaml (the
-          Content row). Verify against those three before adding a cap here.
-          Topology fits its sheet as-is — the Weather list was the one that
-          grew, so the cap lives there instead. */}
-      <SubmenuHeader title="Topology" onBack={onBack} />
-      <ItemRow
+    <>
+      <SectionTitle>On the map</SectionTitle>
+      <NavRow
         icon={typeMode ? 'folder-multiple-outline' : 'folder-multiple'}
-        title={contentTitle}
+        label={contentTitle}
+        hint="Which trails and maps are drawn"
         onPress={onOpenFolders}
-        chevron
       />
       {/* The "PDF maps" master switch (#233): the one way to clear the map of
-          imported/made sheets whatever the Content picker says. Off, the
-          overlay pipeline targets nothing (see `pdfOverlayMaps`), so the row
-          says where the maps went — the Library still lists them as active. */}
-      {checkRow('PDF maps', showPdfMaps, () => set('showPdfOverlay', !showPdfMaps), {
-        hint: showPdfMaps ? undefined : 'Hidden on the map',
-      })}
-      {checkRow(
-        'Slope',
-        slope,
-        () => {
+          imported/made sheets whatever the Content picker says. */}
+      <SwitchRow
+        icon="map-legend"
+        label="PDF maps"
+        hint={showPdfMaps ? 'Your imported and made maps' : 'Hidden on the map'}
+        value={showPdfMaps}
+        onToggle={() => set('showPdfOverlay', !showPdfMaps)}
+      />
+      <SwitchRow
+        icon="fire"
+        label="Personal heatmap"
+        hint="Where you have been, by visits"
+        value={showHeatmap}
+        onToggle={() => set('showHeatmap', !showHeatmap)}
+      />
+      <SwitchRow
+        icon="label-outline"
+        label="Labels on satellite"
+        hint={onSatellite ? 'Trails and names over imagery' : 'For the Satellite map type'}
+        value={satelliteLabels}
+        disabled={!onSatellite}
+        onToggle={() => set('satelliteLabels', !satelliteLabels)}
+      />
+
+      <SectionTitle>Terrain</SectionTitle>
+      <LevelsRow
+        icon="image-filter-hdr"
+        label="Shading"
+        levels={SHADING}
+        selected={shading}
+        onSelect={setShading}
+      />
+      {/* #480: how much that shading deepens when the map is tilted (two
+          fingers). It deepens the hillshade, so it rests with Shading None. */}
+      <LevelsRow
+        icon="rotate-3d-variant"
+        label="3D relief"
+        hint={showHillshade ? 'When you tilt the map' : 'Needs shading'}
+        levels={TILT}
+        selected={tiltRelief}
+        onSelect={(r) => set('tiltRelief', r)}
+        disabled={!showHillshade}
+      />
+      <SwitchRow
+        icon="vector-curve"
+        label="Contours"
+        value={contours}
+        onToggle={() => set('terrainContours', !contours)}
+        below={
+          <Segmented
+            levels={CONTOUR_DENSITY}
+            selected={intervalM}
+            onSelect={(m) => set('terrainContourIntervalM', m)}
+            disabled={!contours}
+          />
+        }
+      />
+      <SwitchRow
+        icon="angle-acute"
+        label="Slope"
+        hint="Steepness shading"
+        value={slope}
+        onToggle={() => {
           const next = !slope;
           set('terrainSlope', next);
           if (next) onSlopeEnabled();
-        },
-        {
-          control: (
-            <RangeSlider
-              min={0}
-              max={90}
-              width={100}
-              lo={slopeMinDeg}
-              hi={slopeMaxDeg}
-              disabled={!slope}
-              accessibilityLabel="Slope"
-              onChange={(newLo, newHi) => {
-                set('terrainSlopeMinDeg', newLo);
-                set('terrainSlopeMaxDeg', newHi);
-              }}
-              {...SLIDER_PALETTE}
-            />
-          ),
-        },
-      )}
-      {checkRow('Contours', contours, () => set('terrainContours', !contours), {
-        control: (
-          <View style={!contours && styles.dimmed}>
-            <DetentSlider
-              detents={CONTOUR_INTERVALS.map((m) => ({ value: m, label: contourIntervalLabel(m) }))}
-              selected={intervalM}
-              onSelect={(m) => set('terrainContourIntervalM', m)}
-              disabled={!contours}
-              width={100}
-              {...SLIDER_PALETTE}
-            />
-          </View>
-        ),
-      })}
-      {showHypso && checkRow('Elevation tint', hypso, () => set('terrainHypso', !hypso))}
-      <ItemRow
-        icon={networks.length > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
-        iconColor={networks.length > 0 ? wc.accent : wc.inkMuted}
-        title={networks.length > 0 ? `Marked trails (${networks.length})` : 'Marked trails'}
-        onPress={onOpenTrailNetworks}
-        chevron
+        }}
+        below={
+          <RangeSlider
+            min={0}
+            max={90}
+            width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+            lo={slopeMinDeg}
+            hi={slopeMaxDeg}
+            disabled={!slope}
+            accessibilityLabel="Slope"
+            onChange={(newLo, newHi) => {
+              set('terrainSlopeMinDeg', newLo);
+              set('terrainSlopeMaxDeg', newHi);
+            }}
+            accentColor={accent}
+            trackColor={tokens.surfaceVariant}
+          />
+        }
       />
-      {checkRow('Personal heatmap', showHeatmap, () => set('showHeatmap', !showHeatmap))}
-    </View>
+      <LevelsRow
+        icon="triangle-outline"
+        label="Peaks"
+        hint="How early summits are named"
+        levels={PEAKS}
+        selected={peakDensity}
+        onSelect={(d) => set('peakDensity', d)}
+      />
+      {showHypso && (
+        <SwitchRow
+          icon="palette-outline"
+          label="Elevation tint"
+          value={hypso}
+          onToggle={() => set('terrainHypso', !hypso)}
+        />
+      )}
+
+      <SectionTitle>Live layers</SectionTitle>
+      {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
+          it is the permanent condition this release. Otherwise these are
+          network-only: under "Locally downloaded only" the layers are dropped
+          from the style, so the rows are disabled with a hint instead of
+          pretending a pick would show anything. */}
+      <NavRow
+        icon="weather-partly-cloudy"
+        label="Weather"
+        hint={
+          !WEATHER_ENABLED
+            ? PARKED_LABEL
+            : offlineOnly
+              ? 'Needs connection'
+              : (weatherName ?? 'Off')
+        }
+        accessibilityLabel={
+          !WEATHER_ENABLED
+            ? `Weather (${PARKED_LABEL.toLowerCase()})`
+            : offlineOnly
+              ? 'Weather (needs connection)'
+              : weatherName !== null
+                ? `Weather: ${weatherName}`
+                : 'Weather'
+        }
+        disabled={!WEATHER_ENABLED || offlineOnly}
+        onPress={onOpenWeather}
+      />
+      <SwitchRow
+        icon="anchor"
+        label="Marine"
+        hint={!MARINE_ENABLED ? PARKED_LABEL : offlineOnly ? 'Needs connection' : 'Nautical chart'}
+        accessibilityLabel={
+          !MARINE_ENABLED
+            ? `Marine (${PARKED_LABEL.toLowerCase()})`
+            : offlineOnly
+              ? 'Marine (needs connection)'
+              : 'Marine'
+        }
+        value={marineOn}
+        disabled={!MARINE_ENABLED || offlineOnly}
+        onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
+      />
+    </>
   );
 }
 
 /**
- * Weather sub-menu: the old WeatherLayersDialog's icon-disc rows verbatim —
- * layer icon on a subtle dark disc, accent ring + bolder label on the
- * selection, the ECCC hint line, and the honest "Canada only" hint on radar
- * rows while the map centre sits outside the North American composite.
+ * Weather list: None + the catalog, the selection ringed in the accent, the
+ * honest "Canada only" hint on radar rows while the map centre sits outside
+ * the North American composite.
  */
-function WeatherSubmenu({ onBack }: { onBack: () => void }) {
+function WeatherList({ onBack }: { onBack: () => void }) {
+  const tokens = useSchemeTokens();
+  const { accent } = useSheetAccent();
   const weatherLayer = useSettingsStore((s) => s.weatherLayer);
   const set = useSettingsStore((s) => s.set);
-  // Boolean selector, so the panel only re-renders when the answer flips at
+  // Boolean selector, so the list only re-renders when the answer flips at
   // the coverage edge.
   const radarOutside = useMapStore((s) => !radarAvailableAt(s.mapCenter));
-
-  // Scroll cap, derived rather than a magic number. A row is its vertical
-  // padding plus its tallest child — normally the selection ring, but the
-  // label overtakes it once the user's text size scales up, which is exactly
-  // the case a fixed cap used to clip INSIDE the row instead of scrolling.
-  const { height: windowH } = useWindowDimensions();
-  const rowH =
-    2 * WEATHER_ROW_PAD_V +
-    Math.max(WEATHER_RING_D, WEATHER_LABEL_LINE * PixelRatio.getFontScale());
-  // Clamped against the window so landscape and small phones can't hand the
-  // sheet a cap taller than the screen it has to sit in — there the list DOES
-  // scroll, which is the correct degradation when the rows genuinely cannot
-  // fit. On a phone in portrait the budget wins and today's catalog shows in
-  // full. Note the cap is a function of rowH, so growing the row (touch
-  // targets, font scale) grows the cap in lockstep and can never push a row
-  // past the fold on its own.
-  const listMaxHeight = Math.min(rowH * WEATHER_VISIBLE_ROWS, windowH * 0.45);
 
   const row = (id: WeatherLayerId | null, label: string, hint?: string) => {
     const selected = weatherLayer === id;
@@ -388,216 +346,127 @@ function WeatherSubmenu({ onBack }: { onBack: () => void }) {
         borderless
       >
         <View style={styles.weatherRowInner}>
-          <View style={[styles.discRing, selected && styles.discRingSelected]}>
-            <View style={styles.disc}>
-              <Icon
-                source={id === null ? 'eye-off-outline' : WEATHER_LAYER_ICONS[id]}
-                size={WEATHER_ICON}
-                color={id === null ? wc.inkMuted : wc.ink}
-              />
-            </View>
+          <View
+            style={[
+              styles.disc,
+              {
+                backgroundColor: tokens.surfaceVariant,
+                borderColor: selected ? accent : 'transparent',
+              },
+            ]}
+          >
+            <Icon
+              source={id === null ? 'eye-off-outline' : WEATHER_LAYER_ICONS[id]}
+              size={18}
+              color={id === null ? tokens.inkMuted : tokens.ink}
+            />
           </View>
-          <View style={styles.weatherRowText}>
-            <Text style={[styles.weatherRowLabel, selected && styles.weatherRowLabelSelected]}>
+          <View style={styles.weatherText}>
+            <Text
+              numberOfLines={1}
+              style={[styles.weatherLabel, { color: tokens.ink }, selected && styles.bold]}
+            >
               {label}
             </Text>
-            {hint !== undefined && <Text style={styles.weatherRowHint}>{hint}</Text>}
+            {hint !== undefined && (
+              <Text numberOfLines={1} style={[styles.weatherHint, { color: tokens.inkMuted }]}>
+                {hint}
+              </Text>
+            )}
           </View>
-          {selected && <Icon source="check" size={18} color={wc.accent} />}
+          {selected && <Icon source="check" size={18} color={accent} />}
         </View>
       </TouchableRipple>
     );
   };
 
   return (
-    <View>
-      <SubmenuHeader title="Weather" onBack={onBack} />
-      {/* Owner call (2026-08-10): a sub-menu must occupy the SAME footprint as
-          the menu it replaces — no growing panel that swallows the map, so
-          the list scrolls inside a capped height instead of stretching.
-
-          The three-line ECCC explainer that used to sit here was DROPPED, not
-          moved — it cost more height than every row it explained. Both facts
-          it carried still reach the user, and earlier than before:
-          - Attribution: `mapDataCredits.ts` already folds ECCC_ATTRIBUTION
-            into Settings → System info → Maps & data (it was always there;
-            this sub-menu was a duplicate, not the source).
-          - "Needs a connection / hidden while Locally downloaded only is on":
-            carried by the Weather GROUP row in OverlaysDrilldown, which goes
-            disabled with a "Needs connection" subtitle and a matching a11y
-            label while offlineOnly is set. That states the caveat one level
-            UP, where it is actionable — under offlineOnly you can no longer
-            open this sub-menu at all, so a hint inside it was unreachable
-            exactly when it applied. */}
-      <ScrollView style={{ maxHeight: listMaxHeight }} showsVerticalScrollIndicator>
-        {row(null, 'None')}
-        {WEATHER_LAYERS.map((l) =>
-          row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
-        )}
-      </ScrollView>
-    </View>
+    <>
+      <TouchableRipple
+        onPress={onBack}
+        accessibilityLabel="Back to overlays"
+        style={styles.backRow}
+        borderless
+      >
+        <View style={styles.backInner}>
+          <Icon source="chevron-left" size={24} color={tokens.ink} />
+          <Text style={[styles.backTitle, { color: tokens.ink }]}>Weather</Text>
+        </View>
+      </TouchableRipple>
+      {row(null, 'None')}
+      {WEATHER_LAYERS.map((l) =>
+        row(l.id, l.label, l.timeline === 'past' && radarOutside ? 'Canada only' : undefined),
+      )}
+    </>
   );
 }
 
 /**
- * The drill-down content, shared by the classic/minimal rail's sheet and the
- * edge rail's expanding panel. Mounted only while the menu is open, so the
- * level always resets to the top.
+ * The sheet's content: title + ✕, then the scrolling rows (or the weather
+ * list). Mounted only while the menu is open, so it always opens at the top.
  */
-export function OverlaysDrilldown({
+export function OverlaysPanel({
   showHypso,
   onSlopeEnabled,
   onOpenFolders,
-  onOpenTrailNetworks,
+  onClose,
 }: {
   /** Show the 3D-only Elevation tint row (when the 3D view is active). */
   showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
-  onOpenTrailNetworks: () => void;
+  onClose: () => void;
 }) {
-  const [group, setGroup] = useState<OverlayGroup | null>(null);
-  const offlineOnly = useSettingsStore((s) => s.offlineOnly);
-  const networks = useSettingsStore((s) => s.markedTrailsNetworks);
-  const weatherLayer = useSettingsStore((s) => s.weatherLayer);
-  const marineLayers = useSettingsStore((s) => s.marineLayers);
-  const showHeatmap = useSettingsStore((s) => s.showHeatmap);
-  const slope = useSettingsStore((s) => s.terrainSlope);
-  const contours = useSettingsStore((s) => s.terrainContours);
-  const hypso = useSettingsStore((s) => s.terrainHypso);
-  const set = useSettingsStore((s) => s.set);
-
-  if (group === 'topology')
-    return (
-      <TopologySubmenu
-        showHypso={showHypso}
-        onSlopeEnabled={onSlopeEnabled}
-        onOpenFolders={onOpenFolders}
-        onOpenTrailNetworks={onOpenTrailNetworks}
-        onBack={() => setGroup(null)}
-      />
-    );
-  if (group === 'weather') return <WeatherSubmenu onBack={() => setGroup(null)} />;
-
-  const topoParts: string[] = [];
-  if (slope) topoParts.push('Slope');
-  if (contours) topoParts.push('Contours');
-  if (showHypso && hypso) topoParts.push('Elevation tint');
-  if (networks.length > 0) topoParts.push('Marked trails');
-  if (showHeatmap) topoParts.push('Personal heatmap');
-
-  // Marine chart mode is all-or-nothing (D-6 amendment): depth bands and
-  // seamarks drape together as one iBoating-style mode. The store keeps the
-  // marineLayers array shape — on = every catalog layer, off = none. While
-  // parked the persisted array is left ALONE but reads as off, so the row
-  // never shows a checkbox for a mode the map is not drawing.
-  const marineOn = MARINE_ENABLED && marineLayers.length > 0;
-
+  const [weatherOpen, setWeatherOpen] = useState(false);
+  const { height: windowH } = useWindowDimensions();
   return (
-    <View>
-      <Text style={styles.caption}>OVERLAYS</Text>
-      <GroupRow
-        icon="terrain"
-        name="Topology"
-        subtitle={topologySummary(topoParts)}
-        accessibilityLabel="Topology"
-        onPress={() => setGroup('topology')}
-      />
-      {/* Weather and Marine are PARKED for this release (see
-          `@core/features/flags`): the rows stay in the list, greyed, with a
-          "Coming soon" subtitle. Deliberately not removed — a feature that
-          silently disappears reads as a bug, and the row is the one place the
-          user is told this is a roadmap item rather than a failure. Parking
-          outranks the offline-only hint below: it is the permanent condition
-          this release, so it must not be masked by a transient one.
-
-          Otherwise these are network-only layers: while "Locally downloaded
-          only" is on (Settings → Data settings) the layers are dropped from
-          the style, so the rows are disabled with a hint instead of
-          pretending a pick would show anything. */}
-      <GroupRow
-        icon="weather-partly-cloudy"
-        name="Weather"
-        subtitle={
-          !WEATHER_ENABLED
-            ? PARKED_LABEL
-            : offlineOnly
-              ? 'Needs connection'
-              : weatherLayer !== null
-                ? weatherLayerById(weatherLayer).label
-                : 'off'
-        }
-        accessibilityLabel={
-          !WEATHER_ENABLED
-            ? `Weather (${PARKED_LABEL.toLowerCase()})`
-            : offlineOnly
-              ? 'Weather (needs connection)'
-              : weatherLayer !== null
-                ? `Weather: ${weatherLayerById(weatherLayer).label}`
-                : 'Weather'
-        }
-        disabled={!WEATHER_ENABLED || offlineOnly}
-        onPress={() => setGroup('weather')}
-      />
-      <GroupRow
-        icon="anchor"
-        name="Marine"
-        subtitle={
-          !MARINE_ENABLED
-            ? PARKED_LABEL
-            : offlineOnly
-              ? 'Needs connection'
-              : marineOn
-                ? 'on'
-                : 'off'
-        }
-        accessibilityLabel={
-          !MARINE_ENABLED
-            ? `Marine (${PARKED_LABEL.toLowerCase()})`
-            : offlineOnly
-              ? 'Marine (needs connection)'
-              : 'Marine'
-        }
-        disabled={!MARINE_ENABLED || offlineOnly}
-        // No checkbox while parked — a drill-down chevron would be just as
-        // wrong, so the row keeps its toggle affordance in a plainly off,
-        // plainly dimmed state.
-        checked={marineOn}
-        onPress={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
-      />
-    </View>
+    <>
+      <SheetHeader title="Overlays" closeLabel="Close overlays" onClose={onClose} />
+      <ScrollView
+        style={{ maxHeight: windowH * BODY_MAX_SHARE }}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+      >
+        {weatherOpen ? (
+          <WeatherList onBack={() => setWeatherOpen(false)} />
+        ) : (
+          <OverlayRows
+            showHypso={showHypso}
+            onSlopeEnabled={onSlopeEnabled}
+            onOpenFolders={onOpenFolders}
+            onOpenWeather={() => setWeatherOpen(true)}
+          />
+        )}
+      </ScrollView>
+    </>
   );
 }
 
-/** The dialogs the drill-down launches, hosted once by whichever rail shows. */
+/** The dialogs the sheet launches, hosted once by the rail. */
 export function OverlaysDialogs({
   foldersOpen,
   onFoldersDismiss,
-  networksOpen,
-  onNetworksDismiss,
   snackbar,
 }: {
   foldersOpen: boolean;
   onFoldersDismiss: () => void;
-  networksOpen: boolean;
-  onNetworksDismiss: () => void;
   snackbar: ReturnType<typeof useSlopeDisclaimer>['snackbar'];
 }) {
   return (
     <>
       <FolderPickerDialog visible={foldersOpen} onDismiss={onFoldersDismiss} />
-      <TrailNetworksDialog visible={networksOpen} onDismiss={onNetworksDismiss} />
       <DisclaimerSnackbar snackbar={snackbar} />
     </>
   );
 }
 
 /**
- * The overlays button + the drill-down sheet unfolding beneath it in the
- * rail's own column (the MapActionsMenu idiom). `open` is owned by the rail so
- * it can drop the map-covering backdrop that closes the sheet on an outside
- * tap. `hideTrigger` lets the rail draw the button itself, joined with Base
- * map in one pill (revamp `Main.html`); the sheet and dialogs still live here.
+ * The overlays button + the sheet unfolding beneath it in the rail's own
+ * column (the MapActionsMenu idiom). `open` is owned by the rail so it can
+ * drop the map-covering backdrop that closes the sheet on an outside tap.
+ * `hideTrigger` lets the rail draw the button itself, joined with Base map in
+ * one pill (revamp `Main.html`); the sheet and dialogs still live here.
  */
 export function MapOverlaysMenu({
   showHypso = false,
@@ -611,7 +480,6 @@ export function MapOverlaysMenu({
   hideTrigger?: boolean;
 }) {
   const [foldersOpen, setFoldersOpen] = useState(false);
-  const [networksOpen, setNetworksOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
   return (
@@ -624,169 +492,56 @@ export function MapOverlaysMenu({
         />
       )}
       {open && (
-        <View style={styles.sheet}>
-          <OverlaysDrilldown
+        <MapSheet>
+          <OverlaysPanel
             showHypso={showHypso}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={() => {
               onToggle(false);
               setFoldersOpen(true);
             }}
-            onOpenTrailNetworks={() => {
-              onToggle(false);
-              setNetworksOpen(true);
-            }}
+            onClose={() => onToggle(false)}
           />
-        </View>
+        </MapSheet>
       )}
       <OverlaysDialogs
         foldersOpen={foldersOpen}
         onFoldersDismiss={() => setFoldersOpen(false)}
-        networksOpen={networksOpen}
-        onNetworksDismiss={() => setNetworksOpen(false)}
         snackbar={snackbar}
       />
     </>
   );
 }
 
-/** 40 px icon disc — same slot the old gradient thumbnail occupied. */
-const DISC_D = 40;
-/** Weather rows use a smaller disc so the sub-menu keeps the top level's
- * footprint (owner call 2026-08-10). */
-const WEATHER_DISC = 30;
-/** Glyph inside the weather disc, sized to leave a ring of padding around it. */
-const WEATHER_ICON = Math.round(WEATHER_DISC * 0.57);
-/** Selection ring around the disc — the tallest fixed child of a weather row. */
-const WEATHER_RING_D = WEATHER_DISC + 6;
-/**
- * Row padding. 6 keeps the row at WEATHER_RING_D + 12 = 48 px, which clears
- * both the iOS HIG 44 pt and the Material 48 dp touch minimums; 3 (briefly
- * shipped on this branch) put it at 42 and missed both.
- */
-const WEATHER_ROW_PAD_V = 6;
-/** Label line box at fontScale 1 — the row grows past the ring beyond that. */
-const WEATHER_LABEL_LINE = 20;
-/**
- * Rows the list shows before it starts scrolling.
- *
- * Sized so TODAY's catalog fits with NO scrolling: None + the five entries in
- * WEATHER_LAYERS is 6 rows. At the previous 5.5 the sixth row (Precipitation)
- * sat permanently half below the fold — a layer that is only discoverable by
- * scrolling is a discoverability regression, not an affordance, and it was
- * the one row no e2e flow happened to reach so nothing caught it.
- *
- * The extra half row IS the "there is more below" affordance, but it now only
- * appears once the catalog GROWS past today's six rows. `weatherLayers.ts`
- * says the catalog shape deliberately tolerates more entries, so the excess
- * has to degrade to scrolling.
- *
- * Deliberately a fixed budget rather than `WEATHER_LAYERS.length + 1.5`:
- * deriving it from the catalog would let the sheet grow without bound as
- * entries are appended, and the owner's call (2026-08-10) is that a sub-menu
- * keeps the footprint of the menu it replaces. The window clamp at the use
- * site is the other bound, for landscape and small phones.
- */
-const WEATHER_VISIBLE_ROWS = 6.5;
-
 const styles = StyleSheet.create({
-  sheet: {
-    minWidth: 316,
-    maxWidth: 344,
-    backgroundColor: wc.panelSolid,
-    borderRadius: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  caption: {
-    fontSize: 10,
-    lineHeight: 12,
-    letterSpacing: 1.2,
-    color: wc.inkFaint,
-    marginLeft: 10,
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  // --- top-level group rows ---
-  groupRow: { borderRadius: 12 },
-  groupRowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 8,
-  },
-  iconSlot: { width: DISC_D, alignItems: 'center' },
-  groupText: { flex: 1 },
-  groupName: { fontSize: 15, lineHeight: 20, color: wc.ink },
-  groupState: { fontSize: 12, lineHeight: 16, color: wc.inkMuted },
-  dimmed: { opacity: 0.4 },
-  // --- sub-menu chrome ---
-  backRow: { borderRadius: 12 },
+  body: { paddingBottom: 4 },
+  backRow: { borderRadius: 12, marginHorizontal: 4 },
   backInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 10,
+    minHeight: 48,
     paddingHorizontal: 8,
   },
-  backTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: wc.ink },
-  itemRow: { borderRadius: 12 },
-  itemRowInner: {
+  backTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  weatherRow: { borderRadius: 12, marginHorizontal: 4 },
+  weatherRowInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    minHeight: 52,
+    paddingHorizontal: 12,
   },
-  itemLabel: { flex: 1, fontSize: 15, lineHeight: 20, color: wc.ink },
-  // --- topology check rows with inline selectors ---
-  layerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 10,
-  },
-  // flex:1 is load-bearing — itemLabel inside is flex:1, so without it the
-  // touchable shrinks to its icon and the label renders at zero width
-  // (Slope/Contours/Heatmap looked label-less on device).
-  layerToggle: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingLeft: 8,
-    paddingRight: 6,
-  },
-  layerLabelBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  // Same flex:1 story as itemLabel — the column must take the row's width or
-  // the label collapses to nothing beside the icon.
-  layerText: { flex: 1 },
-  layerLabel: { fontSize: 15, lineHeight: 20, color: wc.ink },
-  rightCol: { width: 170, alignItems: 'flex-end' },
-  // --- weather icon-disc rows (ported from the retired WeatherLayersDialog) ---
-  weatherRow: { borderRadius: 12, paddingVertical: WEATHER_ROW_PAD_V, paddingHorizontal: 6 },
-  weatherRowInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  // Constant-size ring wrapper so selection never shifts the layout.
-  discRing: {
-    width: WEATHER_RING_D,
-    height: WEATHER_RING_D,
-    borderRadius: WEATHER_RING_D / 2,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  discRingSelected: { borderColor: wc.accent },
   disc: {
-    width: WEATHER_DISC,
-    height: WEATHER_DISC,
-    borderRadius: WEATHER_DISC / 2,
-    backgroundColor: '#353B43',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  weatherRowText: { flex: 1 },
-  weatherRowLabel: { fontSize: 15, color: wc.ink },
-  weatherRowLabelSelected: { fontWeight: '700' },
-  weatherRowHint: { fontSize: 11, color: wc.inkFaint },
+  weatherText: { flex: 1 },
+  weatherLabel: { fontSize: 15, lineHeight: 20 },
+  weatherHint: { fontSize: 12, lineHeight: 16 },
+  bold: { fontWeight: '700' },
 });

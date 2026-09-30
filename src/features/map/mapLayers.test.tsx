@@ -4,14 +4,21 @@ import type { ReactNode } from 'react';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYER,
-  HEATMAP_LAYERS,
+  HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   SLOPE_LAYER,
   TRACKS_LINES_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
+  tiltReliefLayer,
 } from './mapLayers';
+import {
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  TILT_RELIEF_LAYER_ID,
+} from './mapStyle';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
@@ -55,7 +62,10 @@ describe('hoisted map layers', () => {
   // is invisible on device; this test is the only thing that would catch a
   // regression before a MapLibre bump stops backfilling.
   it.each([
-    ['HEATMAP_LAYERS', HEATMAP_LAYERS, ['tracks-heatmap']],
+    ['HEAT_LAYERS.light.glow', HEAT_LAYERS.light.glow, ['tracks-heat-glow']],
+    ['HEAT_LAYERS.light.lines', HEAT_LAYERS.light.lines, ['tracks-heat-lines']],
+    ['HEAT_LAYERS.dark.glow', HEAT_LAYERS.dark.glow, ['tracks-heat-glow']],
+    ['HEAT_LAYERS.dark.lines', HEAT_LAYERS.dark.lines, ['tracks-heat-lines']],
     ['TRACKS_LINES_LAYER.shown', TRACKS_LINES_LAYER.shown, ['tracks-lines-layer']],
     ['TRACKS_LINES_LAYER.hidden', TRACKS_LINES_LAYER.hidden, ['tracks-lines-layer']],
     ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, ['focused-trail-line-layer']],
@@ -132,7 +142,8 @@ async function injectedBeforeIds(children: ReactNode): Promise<[string, unknown]
 
 describe('overlay layers sit below the position puck (#332)', () => {
   it.each([
-    ['HEATMAP_LAYERS', HEATMAP_LAYERS, TRAILS_ANCHOR],
+    ['HEAT_LAYERS.light.glow', HEAT_LAYERS.light.glow, TRAILS_ANCHOR],
+    ['HEAT_LAYERS.dark.lines', HEAT_LAYERS.dark.lines, TRAILS_ANCHOR],
     ['TRACKS_LINES_LAYER.shown', TRACKS_LINES_LAYER.shown, TRAILS_ANCHOR],
     ['TRACKS_LINES_LAYER.hidden', TRACKS_LINES_LAYER.hidden, TRAILS_ANCHOR],
     ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, TRAILS_ANCHOR],
@@ -147,5 +158,44 @@ describe('overlay layers sit below the position puck (#332)', () => {
     const injected = await injectedBeforeIds(children as ReactNode);
     expect(injected.length).toBeGreaterThan(0);
     for (const [, beforeId] of injected) expect(beforeId).toBe(anchor);
+  });
+});
+
+// #480 — the tilted-map relief pass: the style ships it hidden with its
+// colours; this same-id component layer adopts it and drives only visibility
+// and exaggeration.
+describe('tiltReliefLayer (#480)', () => {
+  type Styled = Record<string, { styletype: string; stylevalue: unknown }>;
+  async function rendered(exaggeration: number) {
+    const view = await render(tiltReliefLayer(exaggeration));
+    return view.getByTestId('mlrn-hillshade-layer');
+  }
+
+  it('names the style layer it adopts, above the base, on the same DEM', async () => {
+    const node = await rendered(0.3);
+    expect(node.props.id).toBe(TILT_RELIEF_LAYER_ID);
+    expect(node.props.source).toBe(HILLSHADE_DEM_SOURCE_ID);
+    expect(node.props.afterId).toBe(HILLSHADE_2D_LAYER_ID);
+    expect(node.props.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
+  });
+
+  it('is visible with the exaggeration when tilted, hidden when flat', async () => {
+    const tilted = (await rendered(0.45)).props.reactStyle as Styled;
+    expect(JSON.stringify(tilted.visibility?.stylevalue)).toContain('"visible"');
+    expect(JSON.stringify(tilted.hillshadeExaggeration)).toContain(
+      '{"type":"number","value":0.45}',
+    );
+    const flat = (await rendered(0)).props.reactStyle as Styled;
+    expect(JSON.stringify(flat.visibility?.stylevalue)).toContain('"none"');
+  });
+
+  // Device-found (#480, Android emulator): the RN wrapper's hillshade setters
+  // read shadow/highlight colours as string ARRAYS and the light direction as
+  // a float array. A plain colour or a scalar direction threw "cannot be
+  // cast" and killed the React instance; expressions were rejected as not
+  // `array<color>`. Those stay in the style JSON — never on this component.
+  it('sets nothing but visibility and exaggeration', async () => {
+    const rs = (await rendered(0.6)).props.reactStyle as Styled;
+    expect(Object.keys(rs).sort()).toEqual(['hillshadeExaggeration', 'visibility']);
   });
 });

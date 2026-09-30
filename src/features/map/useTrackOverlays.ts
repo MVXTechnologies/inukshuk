@@ -1,8 +1,10 @@
+import type { TrackGeometry } from '@core/geo/track/simplify';
 import type { TrackSummary } from '@core/models';
-import { parseGpx } from '@core/geo/gpx';
-import * as storage from '@data/storage';
-import { useEffect, useMemo, useState } from 'react';
-import { toLineFeature, type TrailLineFeature } from './geojson';
+import { peekTrackGeometry } from '@data/trackGeometry';
+import { useMemo } from 'react';
+
+import type { TrailLineFeature } from './geojson';
+import { indexTracks, useTrackGeometries } from './useTrackGeometries';
 
 export interface TrackOverlay {
   id: string;
@@ -10,50 +12,46 @@ export interface TrackOverlay {
   feature: TrailLineFeature;
 }
 
-// Cache key: the id alone is not enough — a trim "overwrite" rewrites the GPX
-// under the same id, and a stale cached feature would keep drawing the old
-// geometry until app restart. Point count + distance change on any edit.
-const cacheKey = (t: TrackSummary): string => `${t.id}|${t.stats.pointCount}|${t.stats.distanceM}`;
+// One feature per geometry object (a new object per trail revision), so the
+// overlay list's entries keep their identity across rebuilds.
+const features = new WeakMap<TrackGeometry, TrailLineFeature | null>();
+
+function featureOf(g: TrackGeometry): TrailLineFeature | null {
+  let f = features.get(g);
+  if (f === undefined) {
+    const parts = g.parts.filter((p) => p.length >= 2);
+    const [only] = parts;
+    f = only
+      ? {
+          type: 'Feature',
+          geometry:
+            parts.length === 1
+              ? { type: 'LineString', coordinates: only }
+              : { type: 'MultiLineString', coordinates: parts },
+          properties: {},
+        }
+      : null;
+    features.set(g, f);
+  }
+  return f;
+}
 
 /**
- * Loads + parses the GPX of every active trail (persisted in the library store,
- * like PDF page activation) into GeoJSON line features for rendering. Parsed
- * features are cached by track id + stats so toggling a trail back on is
- * instant while an edited trail reloads. Mirrors `usePdfOverlays`.
+ * The line features of every active trail (the caller resolves visibility),
+ * for the 3D drape and the overlay count. Geometry is the shared simplified
+ * one (`@data/trackGeometry`, loaded in batches by `useTrackGeometries`) —
+ * this used to parse every active trail's GPX a second time, next to
+ * `useTrackHeat`, and keep full-resolution copies (#465). An edited trail is
+ * a new revision and reloads; a deleted one drops out with the track list.
  */
 export function useTrackOverlays(
   tracks: readonly TrackSummary[],
   /** Which trails to draw — the caller resolves the visibility mode. */
   activeTrackIds: readonly string[],
 ): TrackOverlay[] {
-  const [cache, setCache] = useState<Record<string, TrailLineFeature | null>>({});
-
+  const tracksById = useMemo(() => indexTracks(tracks), [tracks]);
+  const version = useTrackGeometries(tracksById, activeTrackIds);
   const key = activeTrackIds.join('|');
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (const id of activeTrackIds) {
-        const t = tracks.find((x) => x.id === id);
-        if (!t) continue;
-        const ck = cacheKey(t);
-        if (cache[ck] !== undefined) continue;
-        try {
-          const gpx = await storage.readFileText(t.fileUri);
-          const { points, segmentStarts } = parseGpx(gpx);
-          if (cancelled) return;
-          setCache((c) => ({ ...c, [ck]: toLineFeature(points, segmentStarts) }));
-        } catch {
-          if (cancelled) return;
-          setCache((c) => ({ ...c, [ck]: null }));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, tracks]);
 
   // Memoized on the resolved inputs: an unmemoized array here got a new
   // identity on every host render, which defeated the caller's own memos (the
@@ -61,17 +59,16 @@ export function useTrackOverlays(
   return useMemo(() => {
     const overlays: TrackOverlay[] = [];
     for (const id of activeTrackIds) {
-      // Membership check: removeTrack prunes activeTrackIds, but the parsed
-      // cache (and any stale persisted id) must never render a deleted trail —
-      // without this it kept rendering until app restart.
-      const t = tracks.find((x) => x.id === id);
+      // Membership check: a stale persisted id must never render a deleted trail.
+      const t = tracksById.get(id);
       if (!t) continue;
-      const feature = cache[cacheKey(t)];
+      const g = peekTrackGeometry(t);
+      const feature = g ? featureOf(g) : null;
       if (feature) overlays.push({ id, feature });
     }
     return overlays;
     // `key` is the joined activeTrackIds — the array itself is rebuilt by the
     // caller on every render, so keying on its content is what makes this hold.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, tracks, cache]);
+  }, [key, tracksById, version]);
 }

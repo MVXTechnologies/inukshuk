@@ -12,7 +12,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
-import { Fragment, type ReactNode, useCallback, useMemo, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Badge,
@@ -44,6 +44,7 @@ import {
 } from '@core/library/libraryRows';
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
+import { createRowBudget, LIBRARY_ROW_PAGE, nearScrollEnd } from '@core/library/rowBudget';
 import { folderItemCount, groupByFolder } from '@core/library/folders';
 import { georeferenceNotice } from '@core/library/overlayPages';
 import {
@@ -185,6 +186,14 @@ export function LibraryScreen() {
     onElevationError,
   );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Progressive rows (#465): trail rows mount a page at a time, growing as the
+  // list is scrolled toward its end (see @core/library/rowBudget).
+  const [rowLimit, setRowLimit] = useState(LIBRARY_ROW_PAGE);
+  const moreRowsRef = useRef(false);
+  const showMoreRows = useCallback(() => {
+    moreRowsRef.current = false;
+    setRowLimit((n) => n + LIBRARY_ROW_PAGE);
+  }, []);
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
     kind: 'map' | 'track' | 'waypoint';
@@ -894,7 +903,7 @@ export function LibraryScreen() {
         accessibilityLabel={
           selectionMode
             ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
-            : `${spoken} — open 3D view, long-press to select`
+            : `${spoken} — open trail view, long-press to select`
         }
         onPress={() =>
           selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
@@ -993,18 +1002,24 @@ export function LibraryScreen() {
   const renderFolderGroups = () =>
     grouped.groups.flatMap((g, index) => {
       const key = `folder:${g.folder.id}`;
-      const rows = [
-        // Trail filters and trail search are about trails — maps drop out of
-        // results while either narrowing is active.
-        ...(showMaps ? g.maps.map(renderMapRow) : []),
-        ...(showTrails ? g.tracks.map(renderTrackRow) : []),
-        ...(showWaypoints
-          ? (sortedFolderWaypoints.get(g.folder.id) ?? []).map(renderWaypointRow)
-          : []),
-      ];
-      const count = effectiveType === 'all' ? folderItemCount(g) : rows.length;
+      const folderWaypoints = showWaypoints ? (sortedFolderWaypoints.get(g.folder.id) ?? []) : [];
+      const rowCount =
+        (showMaps ? g.maps.length : 0) +
+        (showTrails ? g.tracks.length : 0) +
+        folderWaypoints.length;
+      // A collapsed folder builds no rows (and spends none of the row budget).
+      const rows = collapsed[key]
+        ? []
+        : [
+            // Trail filters and trail search are about trails — maps drop out
+            // of results while either narrowing is active.
+            ...(showMaps ? g.maps.map(renderMapRow) : []),
+            ...(showTrails ? rowBudget.take(g.tracks).map(renderTrackRow) : []),
+            ...folderWaypoints.map(renderWaypointRow),
+          ];
+      const count = effectiveType === 'all' ? folderItemCount(g) : rowCount;
       // Under a type chip, a folder holding none of that type steps aside.
-      if (effectiveType !== 'all' && rows.length === 0 && !organizing) return [];
+      if (effectiveType !== 'all' && rowCount === 0 && !organizing) return [];
       return [
         <View key={key}>
           {sectionHeader({
@@ -1034,7 +1049,7 @@ export function LibraryScreen() {
           })}
           {collapsed[key]
             ? null
-            : rows.length === 0
+            : rowCount === 0
               ? emptyRow(
                   'Empty folder',
                   organizing
@@ -1046,11 +1061,25 @@ export function LibraryScreen() {
       ];
     });
 
-  const ungroupedRows = [
+  const ungroupedCount =
+    (showMaps ? grouped.ungroupedMaps.length : 0) +
+    (showTrails ? grouped.ungroupedTracks.length : 0) +
+    (showWaypoints ? sortedUngroupedWaypoints.length : 0);
+  // A function, not a value: rows must be built in display order (after the
+  // folders) so the row budget is spent top to bottom.
+  const renderUngroupedRows = () => [
     ...(showMaps ? grouped.ungroupedMaps.map(renderMapRow) : []),
-    ...(showTrails ? grouped.ungroupedTracks.map(renderTrackRow) : []),
+    ...(showTrails ? rowBudget.take(grouped.ungroupedTracks).map(renderTrackRow) : []),
     ...(showWaypoints ? sortedUngroupedWaypoints.map(renderWaypointRow) : []),
   ];
+
+  // Spent top to bottom while the list below renders (folders, then
+  // ungrouped / the trail section).
+  const rowBudget = createRowBudget(rowLimit);
+  // After the render has spent the budget: are there rows left to mount?
+  useEffect(() => {
+    moreRowsRef.current = rowBudget.hidden > 0;
+  });
 
   const trailsCount = tracks.length
     ? narrowed
@@ -1107,7 +1136,7 @@ export function LibraryScreen() {
                       'No trails match the filters',
                       'Adjust or clear the filters from the sort and filter button',
                     )
-                : withDividers(visibleTracks.map(renderTrackRow))}
+                : withDividers(rowBudget.take(visibleTracks).map(renderTrackRow))}
         </View>,
       );
     }
@@ -1319,9 +1348,20 @@ export function LibraryScreen() {
         </>
       ) : (
         <ScrollView
+          testID="library-list"
           ref={dragScrollRef}
           scrollEnabled={dragging === null}
-          onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
+          onScroll={(e) => {
+            const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+            onDragScroll(contentOffset.y);
+            // Mount the next page of trail rows before the end comes into view.
+            if (
+              moreRowsRef.current &&
+              nearScrollEnd(contentOffset.y, layoutMeasurement.height, contentSize.height)
+            ) {
+              showMoreRows();
+            }
+          }}
           scrollEventThrottle={32}
           onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
           contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
@@ -1354,21 +1394,31 @@ export function LibraryScreen() {
             <>
               {renderFolderGroups()}
               {/* With folders: one cross-type "Ungrouped" catch-all for leftovers. */}
-              {ungroupedRows.length > 0 && (
+              {ungroupedCount > 0 && (
                 <View>
                   {sectionHeader({
                     key: 'ungrouped',
                     title: 'Ungrouped',
-                    count: `(${ungroupedRows.length})`,
+                    count: `(${ungroupedCount})`,
                     first: grouped.groups.length === 0,
                     dropTarget: null,
                   })}
-                  {collapsed.ungrouped ? null : withDividers(ungroupedRows)}
+                  {collapsed.ungrouped ? null : withDividers(renderUngroupedRows())}
                 </View>
               )}
             </>
           ) : (
             renderTypeSections()
+          )}
+          {rowBudget.hidden > 0 && (
+            <Button
+              mode="text"
+              style={styles.showMore}
+              onPress={showMoreRows}
+              accessibilityLabel="Show more trails"
+            >
+              {`Show ${Math.min(rowBudget.hidden, LIBRARY_ROW_PAGE)} more trails`}
+            </Button>
           )}
         </ScrollView>
       )}
@@ -1497,6 +1547,7 @@ export function LibraryScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  showMore: { alignSelf: 'center', marginVertical: space.md },
   // Board: 52 dp, 16 dp left / 4 dp right, 28/800 title then 48 dp actions.
   header: {
     minHeight: 52,

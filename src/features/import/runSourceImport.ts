@@ -9,7 +9,7 @@ import {
   type ImportPause,
   type RemoteActivity,
 } from '@core/import/sources';
-import type { TrackSummary } from '@core/models';
+import type { Track, TrackPoint, TrackSummary } from '@core/models';
 
 import type { ImportedTrack } from '../library/importGpx';
 
@@ -31,6 +31,15 @@ export interface SourceImportDeps {
   addTracks: (items: readonly ImportedTrack[]) => void;
   /** Write a trail's GPX; returns its file uri. */
   writeGpx: (id: string, gpx: string) => string;
+  /**
+   * A trail was saved and its points are still in hand: seed its drawable
+   * geometry so the map and Library never parse the GPX back (#465).
+   */
+  onTrackSaved?: (
+    track: Track,
+    points: readonly TrackPoint[],
+    segmentStarts: readonly number[],
+  ) => void;
   newId: () => string;
   now: () => number;
   /** Hand the JS thread back to the UI between activities. */
@@ -222,6 +231,7 @@ export async function runSourceImport(
         metadata: { name: track.name, time: track.startedAt },
       });
       const fileUri = deps.writeGpx(id, gpx);
+      deps.onTrackSaved?.(track, points, segmentStarts);
       pending.push({ track: { ...track, points: [] }, fileUri, notes: [] });
     } catch {
       // A GPX that couldn't be written (disk full): count it, keep going.

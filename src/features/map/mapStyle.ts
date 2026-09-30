@@ -16,7 +16,6 @@ import {
   WEATHER_DRAPE_ANCHOR,
 } from '@core/geo/mapLayerStack';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
-import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import {
   ROAD_LINE_W,
   WATER_LINE_W,
@@ -25,8 +24,20 @@ import {
 } from '@core/weather/weatherLook';
 import type { Feature, Polygon } from 'geojson';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
-import { buildStoneLayers, STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
-import { stoneScheme } from './stoneScheme';
+import {
+  buildStoneImageryLayers,
+  buildStoneLayers,
+  STONE_FONTS_ATKINSON,
+  STONE_FONTS_NOTO,
+} from '@core/map/stoneStyle';
+import {
+  DEFAULT_HILLSHADE_STRENGTH,
+  hillshadeLook,
+  type HillshadeStrength,
+  type PeakDensity,
+} from '@core/map/terrainOptions';
+import { MAP_MAX_PITCH_DEG, tiltReliefLook, type TiltRelief } from '@core/map/tiltRelief';
+import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -53,7 +64,7 @@ const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (
 /**
  * What a new offline pack of the `map` basemap stores: our vector base map once
  * `VECTOR_BASEMAP_ENABLED` is on (the OSM tile policy forbids offline packs of
- * its raster tiles), the OSM raster until then. Satellite and relief stay raster.
+ * its raster tiles), the OSM raster until then. Satellite stays raster.
  */
 export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : 'raster';
 
@@ -67,8 +78,8 @@ export const VECTOR_PEAKS_SOURCE = 'basemap-peaks';
 export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
 /**
- * Free, key-free raster base layers. Satellite/relief come from Esri's public
- * ArcGIS Online tile services (note the `{z}/{y}/{x}` row/col order). `map` uses
+ * Free, key-free raster base layers. Satellite comes from Esri's public
+ * ArcGIS Online tile service (note the `{z}/{y}/{x}` row/col order). `map` uses
  * the OSM URL injected from settings.
  */
 function baseSource(
@@ -82,13 +93,6 @@ function baseSource(
           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         ],
         attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
-      };
-    case 'relief':
-      return {
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        ],
-        attribution: 'Topographic © Esri, USGS, NOAA',
       };
     default:
       return { tiles: [tileUrl], attribution: '© OpenStreetMap contributors' };
@@ -104,8 +108,6 @@ export function basemapAttribution(basemap: MapBasemap, vector = false): string 
   switch (basemap) {
     case 'satellite':
       return '© Esri, Maxar';
-    case 'relief':
-      return '© Esri, USGS';
     default:
       // The vector base is OSM data cut by Protomaps' pipeline.
       return vector ? '© OpenStreetMap · Protomaps' : '© OpenStreetMap';
@@ -132,28 +134,25 @@ const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
     'raster-brightness-min': 0.04,
     'raster-brightness-max': 0.96,
   },
-  relief: {
-    'raster-saturation': -0.1,
-    'raster-contrast': 0.04,
-  },
 };
 
 /** Basemaps that get a shaded-relief hillshade blended under the live 2D map. */
-const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
+const SHADE_BASEMAPS = new Set<MapBasemap>(['map']);
 
 /**
  * Camera zoom below which the 2D shaded relief is not drawn — and, because
  * MapLibre only keeps a source loaded while some layer using it is in range,
  * below which the DEM is not even FETCHED (#230).
  *
- * The owner reported map/relief hitching on zoom-out on iOS while satellite
+ * The owner reported map hitching on zoom-out on iOS while satellite
  * (the one basemap with no hillshade) stayed smooth. Zooming out does not put
  * more DEM tiles on screen — a viewport needs the same ~15 of them at z8 as at
  * z12 — it crosses pyramid LEVELS, and every level crossed is a fresh set of
  * Terrarium PNGs to fetch, decode and hillshade-prepare. Measured with
  * {@link zoomOutTileLoad} on a 440x956 phone viewport, one z15 -> z8 pinch-out
- * cost 105 DEM tiles as shipped in 1.5.0; the gate alone drops that to 60 and
- * the 512-px declaration below drops it to 30, with a hard zero under z11.
+ * cost 105 DEM tiles as shipped in 1.5.0; the gate alone drops that to 60,
+ * with a hard zero under z11 (a 512-px declaration halved it again, until
+ * #461 — see {@link HILLSHADE_2D_DEM_TILE_SIZE}).
  *
  * z11 is roughly "a whole mountain range on screen", where a hillshade carries
  * almost no information anyway — so this is a free win on every platform, not
@@ -161,21 +160,59 @@ const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
  */
 export const HILLSHADE_2D_MIN_ZOOM = 11;
 
+/** The 2D shaded relief's layer id, and its Terrarium DEM source's id. */
+export const HILLSHADE_2D_LAYER_ID = 'hillshade-2d';
+export const HILLSHADE_DEM_SOURCE_ID = 'dem';
+/** The shaded relief's light: from the north-north-west, as on paper maps. */
+export const HILLSHADE_ILLUMINATION_DIRECTION = 335;
 /**
- * Tile size DECLARED for the 2D shaded-relief DEM source (#230).
- *
- * The Terrarium PNGs really are 256 px, but MapLibre's zoom is defined against
- * a 512-px canonical tile: a source declaring 256 is asked for one level
- * DEEPER than the camera (camera z12 fetches DEM z13), so it pulls four times
- * the tiles a 512 declaration would for exactly the same view. Declaring 512
- * trades half the DEM sample rate — invisible in a soft shading pass blended
- * UNDER the basemap at exaggeration 0.45 — for a quarter of the tile traffic
- * and a quarter of the per-tile hillshade prepare work.
- *
- * Deliberately NOT applied to the 3D terrain DEM below: there the DEM is the
- * geometry, and halving its sample rate would visibly flatten the surface.
+ * The tilted-map relief pass (#480): a second hillshade stacked right on the
+ * base shading. It ships HIDDEN in the style (visibility none, exaggeration
+ * 0) carrying its colours; MapScreen adopts it with a same-id component
+ * `<Layer>` that only switches it on and sets the exaggeration from the
+ * settled pitch — a paint change in place, where a style change would reload
+ * everything. The colours must live here: this MapLibre Native types the
+ * hillshade shadow/highlight colours `array<color>`, which no component prop
+ * can express on Android (see `tiltReliefLayer`).
  */
-const HILLSHADE_2D_DEM_TILE_SIZE = 512;
+export const TILT_RELIEF_LAYER_ID = 'hillshade-tilt';
+
+/**
+ * Whether a style draws the 2D shaded relief — i.e. has the DEM source and
+ * the layer that the tilted-map relief pass anchors to (#480). The
+ * gate lives in {@link buildOsmStyle} (shading on, a shade-able basemap, no
+ * weather dim, no marine chart); reading the built style keeps callers from
+ * having to mirror it.
+ */
+export function styleHasHillshade(style: StyleSpecification): boolean {
+  return (
+    style.sources[HILLSHADE_DEM_SOURCE_ID] !== undefined &&
+    style.layers.some((l) => l.id === HILLSHADE_2D_LAYER_ID)
+  );
+}
+
+/** Whether a style carries the (hidden) tilted-map relief pass (#480). */
+export function styleHasTiltRelief(style: StyleSpecification): boolean {
+  return styleHasHillshade(style) && style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID);
+}
+
+/**
+ * Tile size DECLARED for the 2D shaded-relief DEM source: the Terrarium PNGs'
+ * true 256 px.
+ *
+ * MapLibre's zoom is defined against a 512-px canonical tile, so a 256
+ * declaration is asked for one level DEEPER than the camera (camera z13
+ * fetches DEM z14). #230 declared 512 instead — a quarter of the tiles — on
+ * the bet that half the DEM sample rate was invisible under the basemap. It
+ * was not: each DEM sample then spanned ~5 device pixels on a phone and the
+ * shading read as stepped, blocky facets (#461, owner on a Samsung). The
+ * true size restores the full sample rate; the z11 gate still keeps the
+ * zoomed-out views (where the tile count bites) free of DEM traffic, and iOS
+ * — where #230's stutter was seen — defaults the shading off.
+ *
+ * Same as the 3D terrain DEM below, where the DEM is the geometry.
+ */
+export const HILLSHADE_2D_DEM_TILE_SIZE = 256;
 
 /**
  * The raster SOURCE's `maxzoom` per basemap — the highest zoom at which each
@@ -228,8 +265,6 @@ export interface OsmStyleOptions {
    * `buildDownloadedMask`); `color` should suit the app theme.
    */
   downloadedMask?: { data: Feature<Polygon>; color: string };
-  /** Checked marked-trail databases, each draped as its own tile overlay. */
-  markedTrailsNetworks?: readonly TrailNetworkId[];
   /**
    * Night red (decision 4): the raster goes greyscale and dim, under the red
    * veil MapScreen draws over the map. Wins over the weather/chart mute.
@@ -323,7 +358,36 @@ export interface OsmStyleOptions {
      * unset = Protomaps' own peaks, which only appear from z13.
      */
     peaks?: string;
+    /** How early the summits appear (#461); default `normal`. */
+    peakDensity?: PeakDensity;
   };
+  /**
+   * "Labels on satellite" (#484): our vector base map's roads, trails and
+   * names — no ground fills — drawn over the satellite imagery, in the
+   * imagery palette (light ink on a dark halo, both app themes). Honoured
+   * ONLY when the basemap is `satellite`, and not under a weather or marine
+   * chart drape, whose own reference overlay carries the names there.
+   * Same tile/glyph/summit hosts as {@link vectorBasemap}.
+   */
+  imageryLabels?: {
+    tiles: readonly string[];
+    glyphs?: string;
+    peaks?: string;
+    peakDensity?: PeakDensity;
+  };
+  /**
+   * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
+   * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
+   * look. The dark palette applies only over the stone-night vector base —
+   * the raster basemaps are always light.
+   */
+  hillshadeStrength?: HillshadeStrength;
+  /**
+   * The "3D relief" setting (#480): unset or `off` = no tilted-map relief
+   * pass; otherwise a hidden pass in that mode's palette rides above the
+   * shaded relief, for the map screen to switch on as the map tilts.
+   */
+  tiltRelief?: TiltRelief;
   marineChart?: {
     wmsFallback: boolean;
     /**
@@ -379,9 +443,35 @@ function marineDrapeUrl(id: MarineLayerId, options: OsmStyleOptions): string {
   return options.marineChart?.rasterUrl ?? marineTileUrl(id);
 }
 
+/** The vector base map's source (our Protomaps extract). */
+function vectorBaseSource(tiles: readonly string[]): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [...tiles],
+    minzoom: 0,
+    // Protomaps builds go to z15; MapLibre overzooms past that.
+    maxzoom: 15,
+    attribution: PROTOMAPS_ATTRIBUTION,
+  };
+}
+
+/** Our named-summits source. OSM data, already credited by the base map. */
+function peaksSource(tiles: string): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [tiles],
+    // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
+    // z12 (the ladder's last rung), so deeper tiles would be copies —
+    // MapLibre overzooms z12 instead, and packs store fewer tiles. The
+    // stone layer's filter picks which of them to draw (peak density).
+    minzoom: 5,
+    maxzoom: 12,
+  };
+}
+
 /**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
- * satellite imagery, or a topographic relief map — see {@link baseSource}).
+ * or satellite imagery — see {@link baseSource}).
  * Raster (not vector) keeps us free of any API key or paid tile service. The OSM
  * tile URL is injected from settings so it can be swapped without touching code.
  *
@@ -415,21 +505,9 @@ export function buildOsmStyle(
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
-      ...Object.fromEntries(
-        (options.markedTrailsNetworks ?? []).map((n) => [
-          `wmt-${n}`,
-          {
-            type: 'raster' as const,
-            tiles: [trailNetworkTileUrl(n)],
-            tileSize: 256,
-            maxzoom: 17,
-            attribution: '© Waymarked Trails',
-          },
-        ]),
-      ),
       // Marine reference drapes (marine M3): NONNA bathymetry rides the same
       // WMS-through-a-raster-source mechanism as the weather layers; the
-      // seamarks are plain XYZ tiles like the trail networks.
+      // seamarks are plain XYZ tiles.
       ...Object.fromEntries(
         marine.map((l) => [
           `marine-${l.id}`,
@@ -468,15 +546,6 @@ export function buildOsmStyle(
             ? WEATHER_MUTED_PAINT
             : (RASTER_PAINT[basemap] ?? {}),
       },
-      // Marked-trail networks, each its own layer over the basemap (only
-      // requested networks get a source — keeps offline packs and 3D drapes
-      // free of network-only layers).
-      ...(options.markedTrailsNetworks ?? []).map((n) => ({
-        id: `marked-trails-${n}`,
-        type: 'raster' as const,
-        source: `wmt-${n}`,
-        paint: { 'raster-opacity': 0.85 },
-      })),
       // Chart-tan land dim (marine chart mode): a semi-opaque warm screen
       // over the muted basemap — the paper-chart ground. `background` paints
       // the whole viewport; the water fill + drape re-cover the wet parts.
@@ -544,18 +613,14 @@ export function buildOsmStyle(
           ...(options.vectorBasemap.peaks
             ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
             : {}),
+          ...(options.vectorBasemap.peakDensity
+            ? { peakDensity: options.vectorBasemap.peakDensity }
+            : {}),
         })
       : null;
   if (stone && options.vectorBasemap) {
     delete style.sources.osm;
-    style.sources[VECTOR_BASEMAP_SOURCE] = {
-      type: 'vector',
-      tiles: [...options.vectorBasemap.tiles],
-      minzoom: 0,
-      // Protomaps builds go to z15; MapLibre overzooms past that.
-      maxzoom: 15,
-      attribution: PROTOMAPS_ATTRIBUTION,
-    };
+    style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(options.vectorBasemap.tiles);
     if (options.vectorBasemap.contours) {
       style.sources[VECTOR_CONTOURS_SOURCE] = {
         type: 'vector',
@@ -567,16 +632,7 @@ export function buildOsmStyle(
       };
     }
     if (options.vectorBasemap.peaks) {
-      // OSM data, already credited by the base map's attribution.
-      style.sources[VECTOR_PEAKS_SOURCE] = {
-        type: 'vector',
-        tiles: [options.vectorBasemap.peaks],
-        // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
-        // z12 (the ladder's last rung), so deeper tiles would be copies —
-        // MapLibre overzooms z12 instead, and packs store fewer tiles.
-        minzoom: 5,
-        maxzoom: 12,
-      };
+      style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(options.vectorBasemap.peaks);
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     style.layers = [
@@ -604,19 +660,23 @@ export function buildOsmStyle(
     // Chart mode: terrain shading under a nautical chart is noise.
     !options.marineChart
   ) {
-    style.sources.dem = {
+    style.sources[HILLSHADE_DEM_SOURCE_ID] = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
       encoding: 'terrarium',
-      // See HILLSHADE_2D_DEM_TILE_SIZE: a quarter of the tiles per view.
+      // See HILLSHADE_2D_DEM_TILE_SIZE: the DEM's full sample rate.
       tileSize: HILLSHADE_2D_DEM_TILE_SIZE,
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
+    const look = hillshadeLook(
+      options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH,
+      stone !== null && options.vectorBasemap?.dark === true,
+    );
     style.layers.push({
-      id: 'hillshade-2d',
+      id: HILLSHADE_2D_LAYER_ID,
       type: 'hillshade',
-      source: 'dem',
+      source: HILLSHADE_DEM_SOURCE_ID,
       // The zoom gate (#230) — no shading, and no DEM traffic at all, below it.
       minzoom: HILLSHADE_2D_MIN_ZOOM,
       paint: {
@@ -629,14 +689,35 @@ export function buildOsmStyle(
           HILLSHADE_2D_MIN_ZOOM,
           0,
           HILLSHADE_2D_MIN_ZOOM + 1,
-          0.45,
+          look.exaggeration,
         ],
-        'hillshade-shadow-color': 'rgba(74, 62, 45, 0.55)',
-        'hillshade-highlight-color': 'rgba(255, 250, 240, 0.25)',
-        'hillshade-accent-color': 'rgba(120, 105, 80, 0.30)',
-        'hillshade-illumination-direction': 335,
+        'hillshade-shadow-color': look.shadowColor,
+        'hillshade-highlight-color': look.highlightColor,
+        'hillshade-accent-color': look.accentColor,
+        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       },
     });
+    const tilt = tiltReliefLook(
+      options.tiltRelief ?? 'off',
+      MAP_MAX_PITCH_DEG,
+      stone !== null && options.vectorBasemap?.dark === true,
+    );
+    if (tilt !== null) {
+      style.layers.push({
+        id: TILT_RELIEF_LAYER_ID,
+        type: 'hillshade',
+        source: HILLSHADE_DEM_SOURCE_ID,
+        minzoom: HILLSHADE_2D_MIN_ZOOM,
+        layout: { visibility: 'none' },
+        paint: {
+          'hillshade-exaggeration': 0,
+          'hillshade-shadow-color': tilt.shadowColor,
+          'hillshade-highlight-color': tilt.highlightColor,
+          'hillshade-accent-color': tilt.accentColor,
+          'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+        },
+      });
+    }
   }
 
   if (terrain3d) {
@@ -654,11 +735,36 @@ export function buildOsmStyle(
       source: 'dem',
       paint: { 'hillshade-exaggeration': 0.7 },
     });
+    // NOTE (#480): MapLibre Native as bundled (Android 13.6.1 / iOS 6.31.0)
+    // does not parse `terrain` — it is dropped, and the map stays a flat
+    // sheet. Only a MapLibre GL JS host would drape this. The main map never
+    // passes terrain3d=true (its 3D is the three.js Terrain3DLiveView).
     style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
 
   // Stone labels above the map body and its hillshade.
   if (stone) style.layers.push(...stone.labels);
+
+  // "Labels on satellite" (#484): the stone roads, trails and names over the
+  // imagery, where the stone labels would sit on the map — above the base,
+  // below the overlay anchors (PDF maps, trails) and the position puck.
+  const imagery =
+    basemap === 'satellite' && !options.weatherMuted && !options.marineChart
+      ? (options.imageryLabels ?? null)
+      : null;
+  if (imagery) {
+    style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imagery.tiles);
+    if (imagery.peaks) style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imagery.peaks);
+    style.glyphs = imagery.glyphs ?? OFM_GLYPHS_URL;
+    style.layers.push(
+      ...buildStoneImageryLayers(imageryStoneScheme(), {
+        source: VECTOR_BASEMAP_SOURCE,
+        fonts: imagery.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
+        ...(imagery.peaks ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } } : {}),
+        ...(imagery.peakDensity ? { peakDensity: imagery.peakDensity } : {}),
+      }),
+    );
+  }
 
   // Weather-mode dim: a semi-opaque neutral BACKGROUND layer above the
   // basemap/overlay rasters and below the weather drape. `background` paints

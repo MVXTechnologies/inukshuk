@@ -40,15 +40,19 @@ appId: com.inukshuk.app
     maxRetries: 3
     commands:
       # Self-heal: on iOS a state-shifted a11y frame sometimes lands this tap
-      # on the neighbouring Overlays button — if that menu opened ('Topology'
-      # is its top-level open sentinel since the D-6 drill-down), dismiss it
-      # via its backdrop before trying again.
+      # on a neighbouring rail button — if the Overlays sheet or the Map type
+      # panel opened (their ✕ buttons are the open-state sentinels since
+      # #484), close it before trying again.
       - runFlow:
           when:
-            visible: 'Topology.*'
+            visible: 'Close overlays'
           commands:
-            - tapOn:
-                point: 8%,70%
+            - tapOn: 'Close overlays'
+      - runFlow:
+          when:
+            visible: 'Close map type'
+          commands:
+            - tapOn: 'Close map type'
       - runFlow:
           when:
             notVisible: 'Record track'

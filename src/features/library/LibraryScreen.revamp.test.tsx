@@ -143,7 +143,9 @@ describe('trail row', () => {
     const view = await show({ tracks: [track({ category: 'hike' })] });
     expect(view.getByText('11.2 km · 3:31 · ↑1068 m')).toBeOnTheScreen();
     expect(view.getByText(/ · Hike$/)).toBeOnTheScreen();
-    const row = view.getByLabelText(/^Les Loups, Hike, .* — open 3D view, long-press to select$/);
+    const row = view.getByLabelText(
+      /^Les Loups, Hike, .* — open trail view, long-press to select$/,
+    );
     expect(row).toBeOnTheScreen();
   });
 
@@ -201,7 +203,7 @@ describe('imported trails (#432)', () => {
   it('carry a source mark and get a "From Strava" chip that narrows to them', async () => {
     const view = await show({ tracks: [imported, track()], maps: [map] });
     expect(view.getByLabelText('Imported from Strava')).toBeOnTheScreen();
-    expect(view.getByLabelText(/^Crête, .*, from Strava — open 3D view/)).toBeOnTheScreen();
+    expect(view.getByLabelText(/^Crête, .*, from Strava — open trail view/)).toBeOnTheScreen();
 
     await press(view, view.getByText('From Strava 1'));
     expect(view.getByText('Recorded trails (1/2)')).toBeOnTheScreen();

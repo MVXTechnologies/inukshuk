@@ -85,3 +85,74 @@ it('reset restores the platform default', () => {
   useSettingsStore.getState().reset();
   expect(useSettingsStore.getState().showHillshade).toBe(platformDefault);
 });
+
+// #461 — the shading strength and peak density ride next to the switch.
+describe('hillshadeStrength / peakDensity (#461)', () => {
+  it('default to medium shading and normal peaks', () => {
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('medium');
+    expect(useSettingsStore.getState().peakDensity).toBe('normal');
+  });
+
+  it('hydrate persisted choices', async () => {
+    storage.readJson.mockResolvedValue({
+      schemaVersion: 3,
+      hillshadeStrength: 'heavy',
+      peakDensity: 'more',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('heavy');
+    expect(useSettingsStore.getState().peakDensity).toBe('more');
+  });
+
+  it('drop junk back to the defaults', async () => {
+    storage.readJson.mockResolvedValue({
+      schemaVersion: 3,
+      hillshadeStrength: 'none',
+      peakDensity: 'lots',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('medium');
+    expect(useSettingsStore.getState().peakDensity).toBe('normal');
+  });
+
+  it('persist like any other setting', () => {
+    useSettingsStore.getState().set('peakDensity', 'fewer');
+    expect(storage.writeJson).toHaveBeenLastCalledWith(
+      'settings.json',
+      expect.objectContaining({ peakDensity: 'fewer' }),
+    );
+  });
+});
+
+// #480 — how much the relief deepens when the map is tilted.
+describe('tiltRelief (#480)', () => {
+  it('defaults to natural', () => {
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('hydrates a persisted choice', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, tiltRelief: 'dramatic' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('dramatic');
+  });
+
+  it('fills the default into a settings file written before the setting existed', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, hillshadeStrength: 'heavy' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('drops junk back to the default', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, tiltRelief: 'extreme' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('persists like any other setting', () => {
+    useSettingsStore.getState().set('tiltRelief', 'off');
+    expect(storage.writeJson).toHaveBeenLastCalledWith(
+      'settings.json',
+      expect.objectContaining({ tiltRelief: 'off' }),
+    );
+  });
+});

@@ -23,7 +23,9 @@ describe('map corner', () => {
   });
 
   it('keeps the credit visible on the map as text', () => {
-    expect(map).toMatch(/<MapCreditText basemap=\{basemap\} vector=\{stoneBase\} \/>/);
+    expect(map).toMatch(
+      /<MapCreditText basemap=\{basemap\} vector=\{stoneBase\} osmLabels=\{imageryLabels\} \/>/,
+    );
   });
 
   it('puts the tip button in the bottom-right corner', () => {

@@ -16,10 +16,21 @@ import { basemapAttribution } from '../mapStyle';
  * in a settings screen. So it is always shown, but as quiet text rather than
  * a control; a tap opens Settings, where the full credits are.
  */
-export function MapCreditText({ basemap, vector }: { basemap: MapBasemap; vector: boolean }) {
+export function MapCreditText({
+  basemap,
+  vector,
+  osmLabels = false,
+}: {
+  basemap: MapBasemap;
+  vector: boolean;
+  /** OSM-based labels are drawn over the imagery ("Labels on satellite"). */
+  osmLabels?: boolean;
+}) {
   const t = useSchemeTokens();
   const router = useRouter();
-  const credit = basemapAttribution(basemap, vector);
+  const base = basemapAttribution(basemap, vector);
+  // Labels over the imagery are OpenStreetMap data: credit it too.
+  const credit = osmLabels && !base.includes('OpenStreetMap') ? `${base} · © OpenStreetMap` : base;
   return (
     <Text
       onPress={() => router.push('/settings')}

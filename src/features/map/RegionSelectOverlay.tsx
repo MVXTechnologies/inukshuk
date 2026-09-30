@@ -102,7 +102,6 @@ const QUALITY_BUTTONS: { value: Quality; label: string }[] = [
 const LAYERS: { key: Basemap; label: string }[] = [
   { key: 'map', label: 'Map' },
   { key: 'satellite', label: 'Satellite' },
-  { key: 'relief', label: 'Relief' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -141,7 +140,6 @@ export function RegionSelectOverlay({
   const [selected, setSelected] = useState<Record<Basemap, boolean>>({
     map: activeBasemap === 'map',
     satellite: activeBasemap === 'satellite',
-    relief: activeBasemap === 'relief',
   });
   const [quality, setQuality] = useState<Quality>('high');
 
@@ -226,7 +224,7 @@ export function RegionSelectOverlay({
     [selected],
   );
   // Every basemap's tile source tops out at its own zoom, so each is estimated
-  // over the range it will really store (relief stops at z15).
+  // over the range it will really store (satellite stops at z17).
   // The usable region: null while geometry is pending OR when the box crosses
   // the antimeridian (`crossesSeam`), which the planner can't represent.
   const region = geo?.bbox ?? null;
@@ -238,7 +236,7 @@ export function RegionSelectOverlay({
   const totalTiles = estimate.tiles;
   const totalBytes = estimate.bytes;
   // Basemaps whose source can't reach the chosen quality — worth saying out loud,
-  // otherwise "Max" quality silently downloads a coarser relief layer. A vector
+  // otherwise "Max" quality silently downloads a coarser layer. A vector
   // map stops at z15 too but stays sharp beyond it, so it is never "capped".
   const cappedLayers = LAYERS.filter(
     (l) =>

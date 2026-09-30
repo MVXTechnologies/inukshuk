@@ -7,8 +7,16 @@ import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks'
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
+import {
+  DEFAULT_HILLSHADE_STRENGTH,
+  DEFAULT_PEAK_DENSITY,
+  isHillshadeStrength,
+  isPeakDensity,
+  type HillshadeStrength,
+  type PeakDensity,
+} from '@core/map/terrainOptions';
+import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
-import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import {
   DEFAULT_WEATHER_MODEL,
@@ -64,7 +72,12 @@ export interface Settings {
   minDisplacementM: number;
   /** Preferred elevation-profile chart style. */
   elevationProfileStyle: ElevationProfileStyle;
-  /** Trail detail view: real 3D terrain or a flat 2D map. */
+  /**
+   * Trail detail view: real 3D terrain or a flat 2D map. DORMANT since #480:
+   * the focused view is always the 2D map (two-finger tilt), and nothing
+   * reads this — kept so settings files round-trip and the three.js view can
+   * come back without a migration.
+   */
   trailViewMode: '2d' | '3d';
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;
@@ -86,12 +99,9 @@ export interface Settings {
   autoNightAtSunset: boolean;
   /** Switch to Sunlight while a recording is running. */
   sunlightWhileRecording: boolean;
-  /** Checked marked-trail databases draped on the main map (empty = off). */
-  markedTrailsNetworks: TrailNetworkId[];
   /**
    * Active ECCC GeoMet weather overlay (radar / wind / precip), or null = off.
-   * Network-only: the map drops it entirely while `offlineOnly` is on, the
-   * same way `markedTrailsNetworks` is dropped.
+   * Network-only: the map drops it entirely while `offlineOnly` is on.
    */
   weatherLayer: WeatherLayerId | null;
   /**
@@ -147,11 +157,31 @@ export interface Settings {
    */
   showScaleBar: boolean;
   /**
-   * Shaded-relief hillshade blended under the `map` and `relief` basemaps (the
+   * "Labels on satellite" (overlays menu → On the map, #484): while the base
+   * map is Satellite, draw our vector map's roads, trails and names over the
+   * imagery. No effect on the Map base, which carries its own.
+   */
+  satelliteLabels: boolean;
+  /**
+   * Shaded-relief hillshade blended under the `map` basemap (the
    * `hillshade-2d` layer in `mapStyle.ts`). Platform-defaulted — see
    * {@link DEFAULT_SHOW_HILLSHADE} and #230.
    */
   showHillshade: boolean;
+  /**
+   * How strong the shaded relief is when {@link showHillshade} is on (#461).
+   * The map menu's "Shading: None / Light / Medium / Heavy" is the pair:
+   * None = showHillshade off, so the #230 platform default keeps working.
+   */
+  hillshadeStrength: HillshadeStrength;
+  /** How early named summits appear on the vector map (#461). */
+  peakDensity: PeakDensity;
+  /**
+   * How much the shaded relief deepens when the map is tilted (#480) — the
+   * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
+   * None there is nothing to deepen.
+   */
+  tiltRelief: TiltRelief;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -219,7 +249,6 @@ const DEFAULTS: Settings = {
   displayCondition: 'normal',
   autoNightAtSunset: false,
   sunlightWhileRecording: false,
-  markedTrailsNetworks: [],
   weatherLayer: null,
   weatherModel: DEFAULT_WEATHER_MODEL,
   windParticles: true,
@@ -229,7 +258,11 @@ const DEFAULTS: Settings = {
   showHeatmap: true,
   showPdfOverlay: true,
   showScaleBar: true,
+  satelliteLabels: true,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
+  hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
+  peakDensity: DEFAULT_PEAK_DENSITY,
+  tiltRelief: DEFAULT_TILT_RELIEF,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -292,7 +325,6 @@ function snapshot(s: SettingsState): Settings {
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
-    markedTrailsNetworks,
     weatherLayer,
     weatherModel,
     windParticles,
@@ -302,7 +334,11 @@ function snapshot(s: SettingsState): Settings {
     showHeatmap,
     showPdfOverlay,
     showScaleBar,
+    satelliteLabels,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
+    tiltRelief,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -332,7 +368,6 @@ function snapshot(s: SettingsState): Settings {
     displayCondition,
     autoNightAtSunset,
     sunlightWhileRecording,
-    markedTrailsNetworks,
     weatherLayer,
     weatherModel,
     windParticles,
@@ -342,7 +377,11 @@ function snapshot(s: SettingsState): Settings {
     showHeatmap,
     showPdfOverlay,
     showScaleBar,
+    satelliteLabels,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
+    tiltRelief,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -373,7 +412,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // migrateSettings only checks `typeof` against the default; with a `null`
       // default any object-typed junk would slip through — deep-validate here.
       next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
-      next.markedTrailsNetworks = sanitizeTrailNetworks(next.markedTrailsNetworks);
+      // `markedTrailsNetworks` (the retired Waymarked Trails overlay, #467) is
+      // not a Settings key any more: the ladder copies only known keys, so an
+      // old file's value is dropped here and gone at the next write.
       next.marineLayers = sanitizeMarineLayers(next.marineLayers);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration
@@ -391,6 +432,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // retired by a later build would survive as an unmatched switch case.
       if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
       if (!isDisplayCondition(next.displayCondition)) next.displayCondition = 'normal';
+      if (!isHillshadeStrength(next.hillshadeStrength)) {
+        next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;
+      }
+      if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
+      if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

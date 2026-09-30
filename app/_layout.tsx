@@ -132,6 +132,9 @@ export default function RootLayout() {
                   <Stack.Screen name="explore/map" />
                   <Stack.Screen name="explore/item/[id]" />
                   <Stack.Screen name="explore/collection/[id]" />
+                  {/* Long-distance trails (#467). */}
+                  <Stack.Screen name="explore/trails" />
+                  <Stack.Screen name="explore/trail/[id]" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />

@@ -57,3 +57,7 @@ export const openedFromList = (params: Params): boolean => first(params.from) ==
 export const exploreItemHref = (id: string): string => `/explore/item/${encodeURIComponent(id)}`;
 export const exploreCollectionHref = (id: string): string =>
   `/explore/collection/${encodeURIComponent(id)}`;
+
+/** Long-distance trails (#467): the full list, and one trail's page. */
+export const exploreTrailsHref = (): string => '/explore/trails';
+export const exploreTrailHref = (id: string): string => `/explore/trail/${encodeURIComponent(id)}`;

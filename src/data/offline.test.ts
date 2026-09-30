@@ -232,10 +232,10 @@ describe('createRegionPack', () => {
     await expect(pending).rejects.toThrow('the tile server rejected the request (z10–z14)');
   });
 
-  it('clamps the pack to the basemap native max zoom (relief tops out at z15)', async () => {
+  it('clamps the pack to the basemap native max zoom (satellite tops out at z17)', async () => {
     mockCreatePack();
     const pending = createRegionPack(
-      { ...packArgs, id: 'r2', basemap: 'relief', minZoom: 11, maxZoom: 17 },
+      { ...packArgs, id: 'r2', basemap: 'satellite', minZoom: 11, maxZoom: 19 },
       jest.fn(),
     );
     await flushMicrotasks();
@@ -245,13 +245,13 @@ describe('createRegionPack', () => {
       maxZoom: number;
       metadata: Record<string, unknown>;
     };
-    // Requesting z16/z17 from a source that only serves z15 is what made the
-    // relief layer fail to download.
+    // Requesting zooms past what the source serves is what made the (since
+    // retired) relief layer fail to download.
     expect(options.minZoom).toBe(11);
-    expect(options.maxZoom).toBe(15);
+    expect(options.maxZoom).toBe(17);
     // The metadata records what the pack REALLY holds, so the live map overzooms
-    // from z15 instead of asking for tiles that were never stored.
-    expect(options.metadata).toMatchObject({ basemap: 'relief', maxZoom: 15 });
+    // from z17 instead of asking for tiles that were never stored.
+    expect(options.metadata).toMatchObject({ basemap: 'satellite', maxZoom: 17 });
 
     emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 10 });
     await pending;
@@ -297,6 +297,25 @@ describe('pack format', () => {
     (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([legacy]);
     const [region] = await listRegionPacks();
     expect(region?.format).toBe('raster');
+  });
+
+  it('still lists a relief pack from before #484, and reads junk as map', async () => {
+    const pack = (appId: string, basemap: unknown) => ({
+      id: `native-${appId}`,
+      bounds: [-72, 46, -71, 47],
+      metadata: { appId, label: appId, basemap },
+      status: jest.fn(async () => ({
+        percentage: 100,
+        completedTileSize: 5,
+        completedResourceSize: 5,
+      })),
+    });
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([
+      pack('old-relief', 'relief'),
+      pack('junk', 'terrain'),
+    ]);
+    const regions = await listRegionPacks();
+    expect(regions.map((r) => r.basemap)).toEqual(['relief', 'map']);
   });
 });
 

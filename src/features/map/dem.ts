@@ -9,7 +9,6 @@ import {
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
-import { trailNetworkTileUrl, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { printTileSource } from '@core/mapmaker/printSources';
 import {
   assessTileFailures,
@@ -34,18 +33,17 @@ const demUrl = (z: number, x: number, y: number) =>
   tileUrl(TERRARIUM_TILE_SOURCE.template, { z, x, y });
 
 /**
- * Free, key-free basemaps drapeable on the 3D terrain — every app {@link Basemap}
- * except 'relief', which has no drape (the mesh's hypsometric tint is the relief
- * look). Both come from Esri's public ArcGIS Online tile services (note the
+ * Free, key-free basemaps drapeable on the 3D terrain — every app
+ * {@link Basemap}. Both come from Esri's public ArcGIS Online tile services (note the
  * `{z}/{y}/{x}` row/col order); the templates live in `printSources`, shared
  * with the map maker's live preview.
  *
  * We deliberately do NOT use raw `tile.openstreetmap.org` here: the OSM tile
  * policy forbids app/bulk fetching and returns "Access Blocked 403" tiles when a
  * 3D drape stitches many tiles at once. Esri World Street Map is permissive and
- * matches the satellite/relief sources.
+ * matches the satellite source.
  */
-export type DrapeSource = Exclude<Basemap, 'relief'>;
+export type DrapeSource = Basemap;
 
 /** Decode a tile (PNG or JPEG, by magic bytes) to RGBA. */
 function decodeTileRGBA(bytes: Uint8Array): Uint8Array {
@@ -71,15 +69,23 @@ export interface Heightmap {
   maxH: number;
 }
 
+/** The full-resolution Terrarium elevation mosaic of a tile range. */
+export interface DemMosaic {
+  /** Elevation in metres, row-major, `width * height`. Row 0 = north edge. */
+  data: Float32Array;
+  width: number;
+  height: number;
+  /** Tile range covered; `range.z` is the DEM zoom (256-px tiles). */
+  range: TileRange;
+  /** Tile-aligned lng/lat bounds of the mosaic. */
+  bbox: BoundingBox;
+}
+
 /**
- * Fetch the free Terrarium DEM tiles covering `bounds`, decode their elevation,
- * and downsample to a `grid × grid` heightmap for a 3D mesh. Network-bound.
+ * Fetch the free Terrarium DEM tiles covering `bounds` and decode them into
+ * one full-resolution elevation mosaic. Network-bound (tiles are cached).
  */
-export async function fetchHeightmap(
-  bounds: BoundingBox,
-  grid = 256,
-  maxTilesPerSide = 6,
-): Promise<Heightmap> {
+export async function fetchDemMosaic(bounds: BoundingBox, maxTilesPerSide = 6): Promise<DemMosaic> {
   // Allow more DEM tiles per side → a higher zoom level → finer elevation detail
   // (and a sharper basemap drape, which reuses the same tile range/zoom).
   const z = pickTerrainZoom(bounds, maxTilesPerSide);
@@ -110,7 +116,12 @@ export async function fetchHeightmap(
     }
   });
   assessTileFailures('elevation', tiles.length, failures, 0);
+  return { data: full, width: fullW, height: fullH, range, bbox: rangeBbox(range) };
+}
 
+/** Downsample a DEM mosaic to a `grid × grid` heightmap (for a mesh or contours). */
+export function heightmapFromMosaic(mosaic: DemMosaic, grid: number): Heightmap {
+  const { data: full, width: fullW, height: fullH } = mosaic;
   const data = new Float32Array(grid * grid);
   let minH = Infinity;
   let maxH = -Infinity;
@@ -125,8 +136,35 @@ export async function fetchHeightmap(
       if (h > maxH) maxH = h;
     }
   }
+  return { data, grid, bbox: mosaic.bbox, range: mosaic.range, minH, maxH };
+}
 
-  return { data, grid, bbox: rangeBbox(range), range, minH, maxH };
+/**
+ * Fetch the free Terrarium DEM tiles covering `bounds`, decode their elevation,
+ * and downsample to a `grid × grid` heightmap for a 3D mesh. Network-bound.
+ */
+export async function fetchHeightmap(
+  bounds: BoundingBox,
+  grid = 256,
+  maxTilesPerSide = 6,
+): Promise<Heightmap> {
+  return heightmapFromMosaic(await fetchDemMosaic(bounds, maxTilesPerSide), grid);
+}
+
+/**
+ * One Terrarium DEM tile decoded to metres (256 × 256, row 0 = north), from
+ * the same on-disk tile cache as the 3D view. The long-distance trail page
+ * samples its climb from these (#467).
+ */
+export async function fetchDemTile(z: number, x: number, y: number): Promise<Float32Array> {
+  const rgba = decodeTileRGBA(
+    await storage.downloadBytes(demUrl(z, x, y), `dem-${z}-${x}-${y}.png`),
+  );
+  const out = new Float32Array(TILE * TILE);
+  for (let i = 0; i < TILE * TILE; i++) {
+    out[i] = terrariumToMeters(rgba[i * 4]!, rgba[i * 4 + 1]!, rgba[i * 4 + 2]!);
+  }
+  return out;
 }
 
 /**
@@ -250,23 +288,6 @@ export function fetchPrintBasemap(
     cacheName: basemapCacheName(source),
     fetch,
   });
-}
-
-/**
- * The Waymarked Trails route overlay over a planned sheet, alpha preserved for
- * compositing. Route coverage is patchy by nature, so a tile that never
- * arrives is simply transparent.
- */
-export async function fetchTrailsTexture(
-  plan: TilePlan,
-  network: TrailNetworkId,
-  fetch?: FetchAllOptions,
-): Promise<BasemapTexture> {
-  const { texture } = await stitchTiles(plan.range, plan.tiles, trailNetworkTileUrl(network), {
-    cacheName: (t) => `wmt-${network}-${t.z}-${t.x}-${t.y}`,
-    fetch,
-  });
-  return texture;
 }
 
 /**

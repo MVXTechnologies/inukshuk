@@ -3,12 +3,22 @@ import type { LayerSpecification } from '@maplibre/maplibre-react-native';
 // The reference validator ships with maplibre-react-native (its style-spec
 // dependency). It rejects what the TS types can't see, e.g. two zoom curves
 // in one expression — which the native renderer drops silently.
-import { createExpression, validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import {
+  createExpression,
+  featureFilter,
+  validateStyleMin,
+} from '@maplibre/maplibre-gl-style-spec';
+import type { FilterSpecification } from '@maplibre/maplibre-gl-style-spec';
+import { PEAK_DENSITIES, PEAK_LEAD, type PeakDensity } from './terrainOptions';
+import {
+  buildStoneImageryLayers,
   buildStoneLayers,
   elevationLabel,
+  IMAGERY_ROAD_OPACITY,
+  peakDueFilter,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
+  STONE_IMAGERY_LAYER_KEYS,
   STONE_LAYER_PREFIX,
   type StoneBasemapScheme,
 } from './stoneStyle';
@@ -342,8 +352,8 @@ describe('buildStoneLayers', () => {
     const { labels } = buildStoneLayers(LIGHT, { source: SOURCE, peaks: PEAKS });
     const peak = peakOf(labels);
     expect(peak).toMatchObject({ source: 'peaks', 'source-layer': 'peaks', minzoom: 5 });
-    // The tiles hold only named summits, each from the zoom its height earns.
-    expect(peak?.filter).toBeUndefined();
+    // The tiles hold only named summits; the filter picks how early (#461).
+    expect(peak?.filter).toEqual(peakDueFilter(PEAK_LEAD.normal));
     // Higher summits win collisions.
     expect(peak?.layout['symbol-sort-key']).toEqual([
       '-',
@@ -382,6 +392,92 @@ describe('buildStoneLayers', () => {
   });
 });
 
+describe('peak density (#461)', () => {
+  const peakFilter = (density?: PeakDensity) => {
+    const peak = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      peaks: PEAKS,
+      ...(density ? { peakDensity: density } : {}),
+    }).labels.find((l) => l.id === `${STONE_LAYER_PREFIX}peak`) as { filter?: unknown };
+    const f = featureFilter(peak.filter as FilterSpecification, 'filter');
+    return (zoom: number, properties: Record<string, unknown>) =>
+      f.filter({ zoom }, {
+        type: 1,
+        properties,
+        geometry: [],
+      } as unknown as Parameters<typeof f.filter>[1]);
+  };
+
+  // Mont Sainte-Anne (808 m): rank z10 on the elevation ladder.
+  const msa = { name: 'Mont Sainte-Anne', ele: 808, rank: 10 };
+
+  it.each([
+    ['fewer', 10],
+    ['normal', 9],
+    ['more', 8],
+  ] as const)('%s draws a rank-10 summit from z%i', (density, first) => {
+    const due = peakFilter(density);
+    expect(due(first - 1, msa)).toBe(false);
+    expect(due(first, msa)).toBe(true);
+    expect(due(first + 3, msa)).toBe(true);
+  });
+
+  it('defaults to normal — one zoom earlier than the old ladder', () => {
+    const due = peakFilter();
+    expect(due(9, msa)).toBe(true);
+    expect(due(8, msa)).toBe(false);
+  });
+
+  it('draws every summit of pre-#461 tiles (no rank: already tiled from its zoom)', () => {
+    for (const d of PEAK_DENSITIES) expect(peakFilter(d)(5, { name: 'Old', ele: 808 })).toBe(true);
+  });
+
+  it('orders the densities: more ⊇ normal ⊇ fewer at every zoom', () => {
+    for (let rank = 5; rank <= 12; rank++) {
+      for (let zoom = 5; zoom <= 14; zoom++) {
+        const f = { name: 'X', rank };
+        const [fewer, normal, more] = PEAK_DENSITIES.map((d) => peakFilter(d)(zoom, f));
+        if (fewer) expect(normal).toBe(true);
+        if (normal) expect(more).toBe(true);
+      }
+    }
+  });
+
+  it('keeps collisions sane: higher summits win and labels get extra padding', () => {
+    for (const d of PEAK_DENSITIES) {
+      const peak = buildStoneLayers(DARK, {
+        source: SOURCE,
+        peaks: PEAKS,
+        peakDensity: d,
+      }).labels.find((l) => l.id === `${STONE_LAYER_PREFIX}peak`) as {
+        layout: Record<string, unknown>;
+      };
+      expect(peak.layout['text-padding']).toBe(6);
+      expect(peak.layout['symbol-sort-key']).toBeDefined();
+    }
+  });
+
+  it('passes the style-spec validator for every density', () => {
+    for (const d of PEAK_DENSITIES) {
+      const { base, labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        peaks: PEAKS,
+        peakDensity: d,
+      });
+      const errors = validateStyleMin({
+        version: 8,
+        glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+        sources: {
+          [SOURCE]: { type: 'vector', tiles: ['https://t.example/{z}/{x}/{y}.pbf'] },
+          peaks: { type: 'vector', tiles: ['https://peaks.example/{z}/{x}/{y}.pbf'] },
+        },
+        layers: [...base, ...labels],
+      } as Parameters<typeof validateStyleMin>[0]);
+      expect(errors).toEqual([]);
+    }
+  });
+});
+
 describe('elevationLabel', () => {
   const evaluate = (properties: Record<string, unknown>): unknown => {
     const parsed = createExpression(elevationLabel('ele'), 'layers[0].layout.text-field');
@@ -393,19 +489,84 @@ describe('elevationLabel', () => {
   };
 
   it.each([
-    [808, '808 m'],
-    [4, '4 m'],
-    [1000, '1\u2009000 m'],
-    [1005, '1\u2009005 m'],
-    [1234, '1\u2009234 m'],
-    [1299.6, '1\u2009300 m'],
-    [8849, '8\u2009849 m'],
-    [-12, '-12 m'],
+    [808, '808\u00a0m'],
+    [4, '4\u00a0m'],
+    [1000, '1\u2009000\u00a0m'],
+    [1005, '1\u2009005\u00a0m'],
+    [1234, '1\u2009234\u00a0m'],
+    [1299.6, '1\u2009300\u00a0m'],
+    [8849, '8\u2009849\u00a0m'],
+    [-12, '-12\u00a0m'],
   ])('%s → %j', (ele, text) => {
     expect(evaluate({ ele })).toBe(text);
   });
 
   it('is empty without a height', () => {
     expect(evaluate({})).toBe('');
+  });
+
+  it('never offers a line break inside the height (#461)', () => {
+    // MapLibre wraps point labels at these characters (its `breakable` table).
+    const breakable = /[ \n&()+\-/\u00ad\u00b7\u200b\u2010\u2013\u2027]/;
+    for (const ele of [4, 808, 1234, 8849]) {
+      expect(evaluate({ ele })).not.toMatch(breakable);
+    }
+  });
+});
+
+describe('buildStoneImageryLayers (labels on satellite, #484)', () => {
+  const imagery = (scheme: StoneBasemapScheme) =>
+    buildStoneImageryLayers(scheme, { source: SOURCE, peaks: PEAKS });
+
+  it.each([
+    ['light', LIGHT],
+    ['dark', DARK],
+  ])('keeps only line work and labels — never a ground fill (%s)', (_, scheme) => {
+    const layers = imagery(scheme);
+    expect(layers.length).toBe(STONE_IMAGERY_LAYER_KEYS.length);
+    for (const l of layers) expect(['line', 'symbol']).toContain(l.type);
+    const ids = layers.map((l) => l.id);
+    expect(ids).not.toContain(`${STONE_LAYER_PREFIX}background`);
+    expect(ids).not.toContain(`${STONE_LAYER_PREFIX}water`);
+    expect(ids.some((id) => id.includes('contour'))).toBe(false);
+  });
+
+  it('carries the trails, the roads and the place and water names', () => {
+    const ids = imagery(LIGHT).map((l) => l.id.slice(STONE_LAYER_PREFIX.length));
+    for (const k of ['path', 'track', 'road-minor', 'road-motorway', 'place-town']) {
+      expect(ids).toContain(k);
+    }
+    expect(ids).toContain('waterway-label');
+    expect(ids).toContain('peak');
+  });
+
+  it('drops the road casings and lets the imagery show through the ribbons', () => {
+    const layers = imagery(LIGHT);
+    expect(layers.some((l) => l.id.endsWith('-casing'))).toBe(false);
+    const road = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}road-primary`);
+    expect((road?.paint as Record<string, unknown>)['line-opacity']).toBe(IMAGERY_ROAD_OPACITY);
+    // Trails keep their own treatment.
+    const path = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}path`);
+    expect((path?.paint as Record<string, unknown>)['line-opacity']).toBeUndefined();
+  });
+
+  it('keeps the map draw order: line work under every label', () => {
+    const layers = imagery(LIGHT);
+    const lastLine = layers.map((l) => l.type).lastIndexOf('line');
+    const firstLabel = layers.findIndex((l) => l.type === 'symbol');
+    expect(lastLine).toBeLessThan(firstLabel);
+  });
+
+  it('passes the style-spec validator', () => {
+    const style = {
+      version: 8 as const,
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      sources: {
+        [SOURCE]: { type: 'vector' as const, tiles: ['https://t.example/{z}/{x}/{y}.mvt'] },
+        peaks: { type: 'vector' as const, tiles: ['https://p.example/{z}/{x}/{y}.mvt'] },
+      },
+      layers: imagery(DARK),
+    };
+    expect(validateStyleMin(style as never)).toEqual([]);
   });
 });

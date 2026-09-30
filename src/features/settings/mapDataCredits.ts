@@ -39,7 +39,6 @@ const PARTS: readonly string[] = [
   // The map's own credit line names the imagery providers per basemap
   // (`basemapAttribution`); the full roll must name every one of them too.
   'Satellite imagery: Esri, Maxar',
-  'Relief: Esri, USGS',
   'AWS Terrain Tiles',
   'MapLibre',
   ...(WEATHER_ENABLED

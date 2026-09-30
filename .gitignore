@@ -67,6 +67,12 @@ scripts/catalog/fragments/usgs-ustopo.json
 # FSTopo: rebuilt from the Forest Service feature index + the HEAD cache below.
 scripts/catalog/fragments/usfs-fstopo.json
 
+# Long-distance trails build (#467): a local run of
+# infra/tiles/nas/trails_build.py (raw Overpass answers, Natural Earth layers,
+# the built index and details) — rebuilt by the script, never checked in.
+/trails-pilot/
+__pycache__/
+
 # Catalog generator caches: CanTopo/FSTopo HEADs, DEM block summaries and
 # Natural Earth layers for the terrain pass (~80 MB; safe to delete).
 scripts/catalog/.cache/

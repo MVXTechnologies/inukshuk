@@ -55,8 +55,32 @@ export function centerTileForRegion(b: BoundingBox): { x: number; y: number; z: 
   return { x: lngToX(cLng, z), y: latToY(cLat, z), z };
 }
 
-/** The downloadable raster basemaps. */
-export type Basemap = 'map' | 'satellite' | 'relief';
+/**
+ * The base maps: our map (vector Stone & Paper, or the OSM raster) and
+ * satellite imagery. Esri's "Relief" topo raster was retired as a base map
+ * (#484) — see {@link PackBasemap} for the packs it may have left on disk.
+ */
+export type Basemap = 'map' | 'satellite';
+
+/**
+ * What a DOWNLOADED offline pack may say it holds: a live {@link Basemap}, or
+ * `relief` — packs made before #484 retired that base map. They stay listed
+ * (so they can be seen and deleted) but never match the live map's base.
+ */
+export type PackBasemap = Basemap | 'relief';
+
+/**
+ * Any stored or incoming base-map value as a live {@link Basemap}: the
+ * retired `relief` (and anything unrecognised) becomes `map` (#484).
+ */
+export function normalizeBasemap(value: unknown): Basemap {
+  return value === 'satellite' ? 'satellite' : 'map';
+}
+
+/** A pack's stored base map, keeping the legacy `relief` label (#484). */
+export function normalizePackBasemap(value: unknown): PackBasemap {
+  return value === 'relief' ? 'relief' : normalizeBasemap(value);
+}
 
 /**
  * Highest zoom at which each tile service reliably serves REAL tiles worldwide —
@@ -67,10 +91,11 @@ export type Basemap = 'map' | 'satellite' | 'relief';
  * Requesting a pack deeper than this is not just wasted — it produces a pack
  * whose requested zoom range is partly (or, for a small box whose overview zoom
  * already exceeds the cap, entirely) outside what the source can serve, which is
- * how the relief basemap (cap z15, requested z16/z17) failed to download while
- * map (z19) and satellite (z17) succeeded. Clamp with {@link packZoomRange}.
+ * how the since-retired relief basemap (cap z15, requested z16/z17) failed to
+ * download while map (z19) and satellite (z17) succeeded. Clamp with
+ * {@link packZoomRange}.
  */
-export const NATIVE_MAX_ZOOM: Record<Basemap, number> = { map: 19, satellite: 17, relief: 15 };
+export const NATIVE_MAX_ZOOM: Record<Basemap, number> = { map: 19, satellite: 17 };
 
 /**
  * What an offline pack stores. `raster` = the historical OSM/Esri image
@@ -84,7 +109,7 @@ export const VECTOR_MAX_ZOOM = 15;
 
 /**
  * The deepest zoom a basemap's source serves in a given pack format — only
- * the `map` basemap has a vector form; satellite and relief are always raster.
+ * the `map` basemap has a vector form; satellite is always raster.
  */
 export function sourceMaxZoom(basemap: Basemap, format: PackFormat = 'raster'): number {
   return format === 'vector' && basemap === 'map' ? VECTOR_MAX_ZOOM : NATIVE_MAX_ZOOM[basemap];
@@ -94,10 +119,11 @@ export function sourceMaxZoom(basemap: Basemap, format: PackFormat = 'raster'): 
  * A downloaded `map` pack of the OLD raster kind once the app draws the map
  * from vector tiles: the live map can no longer show it offline, so the user
  * should download the area again (the OSM tile policy forbids raster packs
- * anyway). Satellite and relief packs are raster by design and never stale.
+ * anyway). Satellite (and legacy relief) packs are raster by design and never
+ * stale.
  */
 export function needsRedownload(
-  pack: { basemap: Basemap; format: PackFormat },
+  pack: { basemap: PackBasemap; format: PackFormat },
   mapFormat: PackFormat,
 ): boolean {
   return pack.basemap === 'map' && mapFormat === 'vector' && pack.format === 'raster';
@@ -139,7 +165,7 @@ export const OFFLINE_PACK_FALLBACK_MAX_ZOOM = 15;
  * zoom — deeper packs just render slightly blurrier than they could.
  */
 export function offlinePackMaxZoom(
-  packs: readonly { basemap: Basemap; maxZoom?: number }[],
+  packs: readonly { basemap: PackBasemap; maxZoom?: number }[],
   basemap: Basemap,
 ): number {
   let min = Number.POSITIVE_INFINITY;
@@ -150,9 +176,9 @@ export function offlinePackMaxZoom(
   return Number.isFinite(min) ? min : OFFLINE_PACK_FALLBACK_MAX_ZOOM;
 }
 
-// Rough average compressed tile sizes: Esri satellite/relief JPEG tiles are
-// heavier than OSM/street PNG tiles. Used only for a pre-download size estimate.
-const AVG_BYTES: Record<Basemap, number> = { map: 18_000, satellite: 30_000, relief: 28_000 };
+// Rough average compressed tile sizes: Esri satellite JPEG tiles are heavier
+// than OSM/street PNG tiles. Used only for a pre-download size estimate.
+const AVG_BYTES: Record<Basemap, number> = { map: 18_000, satellite: 30_000 };
 
 /**
  * Average gzip vector tile, measured on a Québec City + Laurentides extract
@@ -183,7 +209,7 @@ export function estimateBytesForBasemaps(tileCount: number, basemaps: readonly B
 /**
  * Pre-download estimate for a region across several basemaps. Each basemap gets
  * its own clamped zoom range ({@link packZoomRange}), so a basemap whose source
- * tops out early (relief at z15) is estimated for the tiles it will really
+ * tops out early (satellite at z17) is estimated for the tiles it will really
  * store, not for the requested quality zoom it cannot reach.
  */
 export function estimateRegionDownload(

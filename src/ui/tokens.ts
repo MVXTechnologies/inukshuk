@@ -194,6 +194,18 @@ export interface SchemeTokens {
     clusterInk: string;
     point: string;
     footprint: string;
+    /**
+     * Long-distance trails (#467, boards `Main/List/Detail/OnMap.dc.html`):
+     * the trail line, its halo, the selected stage, the numbered stage disc
+     * and its figure, and the drawn thumbnail's ground and contours.
+     */
+    trail: string;
+    trailHalo: string;
+    trailStage: string;
+    trailBadge: string;
+    trailBadgeInk: string;
+    trailThumb: string;
+    trailThumbContour: string;
   };
   /** Support Inukshuk (#476, boards `Main/Thanks/Entry.dc.html`). */
   support: {
@@ -331,6 +343,13 @@ export const lightScheme: SchemeTokens = {
     clusterInk: palette.surface,
     point: palette.sageDeep,
     footprint: palette.sageDeep,
+    trail: '#C2410C',
+    trailHalo: palette.surface,
+    trailStage: '#7C2D12',
+    trailBadge: '#C2410C',
+    trailBadgeInk: palette.surface,
+    trailThumb: '#E8E4D6',
+    trailThumbContour: '#C9C0A8',
   },
   support: {
     accent: palette.sageDeep,
@@ -464,6 +483,14 @@ export const darkScheme: SchemeTokens = {
     clusterInk: '#F2ECE0',
     point: '#B9C98A',
     footprint: '#B9C98A',
+    trail: '#D4521A',
+    // Dark ground: the selected stage lifts to a lighter orange, not a darker one.
+    trailHalo: '#13171B',
+    trailStage: '#F4A26B',
+    trailBadge: '#C2410C',
+    trailBadgeInk: '#FBF8F2',
+    trailThumb: '#1B2127',
+    trailThumbContour: '#39424B',
   },
   support: {
     // The board's #6F8A45 fill is only ~3.5:1 under paper ink; one step
@@ -597,6 +624,13 @@ export const sunlightScheme: SchemeTokens = {
     clusterInk: palette.white,
     point: palette.black,
     footprint: palette.black,
+    trail: '#C2410C',
+    trailHalo: palette.white,
+    trailStage: '#5A1E0B',
+    trailBadge: '#A8380A',
+    trailBadgeInk: palette.white,
+    trailThumb: '#F2F2F2',
+    trailThumbContour: '#D0D0D0',
   },
   support: {
     accent: palette.black,
@@ -732,6 +766,13 @@ export const nightScheme: SchemeTokens = {
     clusterInk: NIGHT_INK,
     point: NIGHT_INK,
     footprint: NIGHT_INK,
+    trail: NIGHT_INK,
+    trailHalo: palette.black,
+    trailStage: '#FF8A80',
+    trailBadge: '#3A0B08',
+    trailBadgeInk: NIGHT_INK,
+    trailThumb: '#1A0000',
+    trailThumbContour: '#7A1C17',
   },
   support: {
     accent: '#3A0B08',

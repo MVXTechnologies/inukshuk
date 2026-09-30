@@ -23,10 +23,6 @@ describe('PRINT_STYLES', () => {
     expect(new Set(PRINT_STYLES.map((s) => s.id)).size).toBe(PRINT_STYLES.length);
     expect(new Set(PRINT_STYLES.map((s) => s.drape)).size).toBe(PRINT_STYLES.length);
   });
-
-  it('never drapes `relief`, which has no tile source to stitch', () => {
-    for (const s of PRINT_STYLES) expect(s.drape).not.toBe('relief');
-  });
 });
 
 describe('printStyleById', () => {

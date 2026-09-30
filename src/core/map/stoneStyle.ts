@@ -27,6 +27,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from '@maplibre/maplibre-react-native';
+import { DEFAULT_PEAK_DENSITY, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 
 /**
  * The style-spec expression type. Not re-exported by the RN package, so it is
@@ -125,9 +126,12 @@ export interface StoneContourSource {
 /**
  * Our worldwide named-summits tileset (`infra/tiles/nas/peaks.sh`): one point
  * per OSM natural=peak|volcano with a name, carrying `name` (+ `name:en` /
- * `name:fr`), `ele` (integer metres, when known) and `kind`. Each summit is
- * in the tiles only from the zoom its height earns (≥ 4000 m from z5
- * … unknown height at z12), so the layer needs no zoom filter of its own.
+ * `name:fr`), `ele` (integer metres, when known), `kind` and `rank` — the
+ * zoom its height earns on the elevation ladder (≥ 4000 m at z5 … unknown
+ * height at z12). Tiles carry each summit `PEAK_MAX_LEAD` zooms before its
+ * rank, and the style's filter picks how early to draw it (the peak-density
+ * setting). Tiles built before `rank` existed carry each summit only from its
+ * rank, and every feature of theirs is drawn as it arrives.
  * Protomaps only ships peaks from z13; without this source the map falls back
  * to those.
  */
@@ -143,6 +147,11 @@ export interface StoneStyleOptions {
   language?: StoneLabelLanguage;
   contours?: StoneContourSource;
   peaks?: StonePeaksSource;
+  /**
+   * How early our summits appear (#461): each is drawn `PEAK_LEAD` zooms
+   * before its elevation-ladder `rank`. Default {@link DEFAULT_PEAK_DENSITY}.
+   */
+  peakDensity?: PeakDensity;
 }
 
 /**
@@ -186,6 +195,20 @@ function dueWithin(lead: number): ExpressionSpecification {
   return ['<=', ['-', ['coalesce', ['get', 'min_zoom'], 0], lead], ['zoom']];
 }
 
+/**
+ * A summit from our peaks tiles is due `lead` zooms before its `rank`.
+ * Features without a rank (tiles built before #461) are already tiled from
+ * their rank, so they pass. Filters see the TILE's zoom — an integer, which
+ * is why the leads are whole levels.
+ */
+export function peakDueFilter(lead: number): ExpressionSpecification {
+  return [
+    'any',
+    ['!', ['has', 'rank']],
+    ['>=', ['zoom'], ['-', ['to-number', ['get', 'rank'], 0], lead]],
+  ];
+}
+
 /** Rivers and canals draw wider than streams, drains and ditches. */
 function byWaterwayKind(river: number, stream: number): ExpressionSpecification {
   return ['match', ['get', 'kind'], ['river', 'canal'], river, stream];
@@ -215,9 +238,18 @@ function pad3(n: ExpressionSpecification): ExpressionSpecification {
 }
 
 /**
+ * No-break space between a height and its unit. A plain space is a line-break
+ * opportunity for MapLibre's label wrapping, which balances line widths over
+ * the WHOLE label — so a long summit name could push the unit onto a line of
+ * its own ("1 234" / "m", #461). U+00A0 is in both glyph fonts' 0–255 range.
+ */
+const NBSP = '\u00a0';
+
+/**
  * A summit height in whole metres, thousands set off by a thin space the way
  * the topo sheets print them: "808 m", "1 234 m", "8 849 m"; empty when the
- * feature has none. Built from plain arithmetic rather than `number-format`,
+ * feature has none. Neither the thin space (U+2009) nor the no-break space
+ * before the unit is a break opportunity, so the height never wraps. Built from plain arithmetic rather than `number-format`,
  * whose locale support differs between the native renderers.
  */
 export function elevationLabel(field: string): ExpressionSpecification {
@@ -227,8 +259,14 @@ export function elevationLabel(field: string): ExpressionSpecification {
     ['!', ['has', field]],
     '',
     ['>=', m, 1000],
-    ['concat', ['to-string', ['floor', ['/', m, 1000]]], '\u2009', pad3(['%', m, 1000]), ' m'],
-    ['concat', ['to-string', m], ' m'],
+    [
+      'concat',
+      ['to-string', ['floor', ['/', m, 1000]]],
+      '\u2009',
+      pad3(['%', m, 1000]),
+      `${NBSP}m`,
+    ],
+    ['concat', ['to-string', m], `${NBSP}m`],
   ];
 }
 
@@ -384,8 +422,13 @@ export function buildStoneLayers(
     const ele = ours ? 'ele' : 'elevation';
     const from: Pick<SymbolLayerSpecification, 'source' | 'source-layer' | 'minzoom' | 'filter'> =
       ours
-        ? // Every feature is a named summit, tiled from the zoom it earns.
-          { source: ours.source, 'source-layer': ours.sourceLayer, minzoom: 5 }
+        ? // Every feature is a named summit, drawn from its rank less the lead.
+          {
+            source: ours.source,
+            'source-layer': ours.sourceLayer,
+            minzoom: 5,
+            filter: peakDueFilter(PEAK_LEAD[options.peakDensity ?? DEFAULT_PEAK_DENSITY]),
+          }
         : {
             source,
             'source-layer': 'pois',
@@ -408,6 +451,9 @@ export function buildStoneLayers(
         'text-font': fonts.regular,
         'text-size': ramp([5, 10.5], [10, 12], [14, 13]),
         'text-max-width': 8,
+        // A little more air than the default 2 px: with summits arriving
+        // earlier (#461) the ranges would otherwise read as a wall of names.
+        'text-padding': 6,
         'symbol-sort-key': ['-', 0, ['to-number', ['coalesce', ['get', ele], 0], 0]],
       },
       paint: { 'text-color': scheme.ink, ...halo },
@@ -954,3 +1000,55 @@ export function buildStoneLayers(
 
   return { base, labels };
 }
+
+/**
+ * The stone layers that still make sense drawn OVER satellite imagery — the
+ * "Labels on satellite" overlay (#484): road casings and ribbons, the trail
+ * network (tracks, cycleways, paths) and every label (water, roads, POIs,
+ * peaks, places), in the same order the map draws them. The road casings
+ * are left out and the ribbons made translucent ({@link IMAGERY_ROAD_OPACITY}):
+ * opaque paper roads in dark casings buried the imagery on the emulator
+ * pass. Everything that
+ * paints ground — the paper background, land cover and land use, water
+ * fills, buildings, the contour lines and their labels — is left out, so the
+ * imagery shows through untouched.
+ */
+export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
+  ...ROADS.map((r) => `road-${r.id}`),
+  'track',
+  'cycleway',
+  'path',
+  'waterway-label',
+  'water-label',
+  'road-label',
+  'poi',
+  'peak',
+  'place-village',
+  'place-town',
+  'place-city',
+  'place-province',
+];
+
+/**
+ * {@link buildStoneLayers} cut down to {@link STONE_IMAGERY_LAYER_KEYS}, in
+ * draw order (line work first, labels last). The caller passes a scheme
+ * tuned for imagery — light ink on a dark halo reads over any photo.
+ */
+export function buildStoneImageryLayers(
+  scheme: StoneBasemapScheme,
+  options: Omit<StoneStyleOptions, 'contours'>,
+): LayerSpecification[] {
+  const keep = new Set(STONE_IMAGERY_LAYER_KEYS.map((k) => `${STONE_LAYER_PREFIX}${k}`));
+  const roads = new Set(ROADS.map((r) => `${STONE_LAYER_PREFIX}road-${r.id}`));
+  const { base, labels } = buildStoneLayers(scheme, options);
+  return [...base, ...labels]
+    .filter((l) => keep.has(l.id))
+    .map((l) =>
+      l.type === 'line' && roads.has(l.id)
+        ? { ...l, paint: { ...l.paint, 'line-opacity': IMAGERY_ROAD_OPACITY } }
+        : l,
+    );
+}
+
+/** Road ribbons over imagery: present enough to follow, thin enough to see through. */
+export const IMAGERY_ROAD_OPACITY = 0.5;

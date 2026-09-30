@@ -1,12 +1,14 @@
-import { parseGpx } from '@core/geo/gpx';
+import { geometryPoints } from '@core/geo/track/simplify';
 import { buildRouteThumbnail, type RouteThumbnail } from '@core/library/routeThumbnail';
 import type { TrackSummary } from '@core/models';
-import * as storage from '@data/storage';
+import { loadTrackGeometry } from '@data/trackGeometry';
 import { useEffect, useState } from 'react';
 
 /**
- * Route thumbnails for Library rows, loaded lazily from each trail's GPX and
- * memoized per trail id + revision for the session.
+ * Route thumbnails for Library rows, drawn from each trail's shared
+ * simplified geometry (`@data/trackGeometry` — the same one the map uses,
+ * cached on disk, so a 400-trail Library no longer parses 400 GPX files every
+ * time it opens, #465) and memoized per trail id + revision for the session.
  *
  * - One GPX at a time: a long library must not parse 20 recordings at once
  *   on the JS thread the moment the tab opens.
@@ -44,9 +46,10 @@ function load(track: TrackSummary, key: string): Promise<RouteThumbnail | null> 
   const pending = inflight.get(key);
   if (pending) return pending;
   const next = queue
-    .then(async () =>
-      buildRouteThumbnail(parseGpx(await storage.readFileText(track.fileUri)).points),
-    )
+    .then(async () => {
+      const geometry = await loadTrackGeometry(track);
+      return geometry ? buildRouteThumbnail(geometryPoints(geometry)) : null;
+    })
     .catch(() => null)
     .then((thumb) => {
       remember(key, thumb);

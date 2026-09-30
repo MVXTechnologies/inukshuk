@@ -2,7 +2,25 @@ import { mapColors } from '@ui/theme';
 import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
-import { heatRadiusExpression } from '@core/heat/heatRadius';
+import {
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  TILT_RELIEF_LAYER_ID,
+} from './mapStyle';
+import {
+  HEAT_CROSSFADE,
+  HEAT_GLOW_INTENSITY,
+  HEAT_GLOW_RADIUS_STOPS,
+  HEAT_LINE_RAMP_DARK,
+  HEAT_LINE_RAMP_LIGHT,
+  HEAT_LINE_WIDTH_STOPS,
+  heatGlowColorStops,
+  heatGlowOpacity,
+  heatLineOpacity,
+  rgba,
+  type Ramp,
+} from '@core/heat/heatStyle';
 
 // ---------------------------------------------------------------------------
 // Static <Layer> children for the map's GeoJSON sources, hoisted out of the
@@ -34,35 +52,93 @@ import { heatRadiusExpression } from '@core/heat/heatRadius';
 // and asserts every layer got its `source`.
 // ---------------------------------------------------------------------------
 
-export const HEATMAP_LAYERS = (
-  <Layer
-    id="tracks-heatmap"
-    beforeId={TRAILS_ANCHOR}
-    type="heatmap"
-    paint={{
-      'heatmap-weight': 1,
-      'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 16, 1.0],
-      'heatmap-color': [
-        'interpolate',
-        ['linear'],
-        ['heatmap-density'],
-        0,
-        'rgba(255,140,0,0)',
-        0.15,
-        'rgba(255,140,0,0)',
-        0.4,
-        'rgba(255,140,0,0.18)',
-        0.7,
-        'rgba(255,130,0,0.35)',
-        1,
-        'rgba(255,120,0,0.55)',
-      ],
-      // Shared with the tap test (core/heat/heatRadius): the glow is what users aim at.
-      'heatmap-radius': heatRadiusExpression() as never,
-      'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.5, 15, 0.5, 18, 0.35],
-    }}
-  />
-);
+/**
+ * The personal heatmap (#466), one set per basemap tone. Street zooms draw
+ * the pass-count lines (`useTrackHeat.heatLines`): crisp, 1–5 px, a single
+ * pass a clearly visible warm line and many passes hot; low zooms draw a
+ * soft glow from the coarse grid (`useTrackHeat.heatGlow`). The two
+ * crossfade over `HEAT_CROSSFADE`. All numbers live in `@core/heat/heatStyle`
+ * (shared with the offline PNG preview).
+ */
+function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
+  const widthFactor = ['+', 1, ['min', 0.6, ['*', 0.12, ['log2', ['max', 1, ['get', 'count']]]]]];
+  const [first, ...rest] = ramp;
+  return {
+    glow: (
+      <Layer
+        id="tracks-heat-glow"
+        key={`glow-${tone}`}
+        beforeId={TRAILS_ANCHOR}
+        type="heatmap"
+        maxzoom={HEAT_CROSSFADE[1]}
+        paint={{
+          'heatmap-weight': ['+', 0.5, ['/', ['log2', ['max', 1, ['get', 'count']]], 4]] as never,
+          'heatmap-intensity': HEAT_GLOW_INTENSITY,
+          'heatmap-color': [
+            'interpolate',
+            ['linear'],
+            ['heatmap-density'],
+            ...heatGlowColorStops(ramp).flatMap(([d, c, a]) => [d, rgba(c, a)]),
+          ] as never,
+          'heatmap-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...HEAT_GLOW_RADIUS_STOPS.flat(),
+          ] as never,
+          'heatmap-opacity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            HEAT_CROSSFADE[0],
+            heatGlowOpacity(HEAT_CROSSFADE[0]),
+            HEAT_CROSSFADE[1],
+            0,
+          ] as never,
+        }}
+      />
+    ),
+    lines: (
+      <Layer
+        id="tracks-heat-lines"
+        key={`lines-${tone}`}
+        beforeId={TRAILS_ANCHOR}
+        type="line"
+        minzoom={HEAT_CROSSFADE[0] - 1}
+        layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+        paint={{
+          'line-color': [
+            'step',
+            ['get', 'count'],
+            first?.[1] ?? '#F28E2B',
+            ...rest.flatMap(([count, color]) => [count, color]),
+          ] as never,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...HEAT_LINE_WIDTH_STOPS.flatMap(([z, px]) => [z, ['*', px, widthFactor]]),
+          ] as never,
+          'line-opacity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            HEAT_CROSSFADE[0],
+            heatLineOpacity(HEAT_CROSSFADE[0]),
+            HEAT_CROSSFADE[1],
+            1,
+          ] as never,
+        }}
+      />
+    ),
+  };
+}
+
+/** Light basemaps vs dark basemaps (dark theme, satellite). */
+export const HEAT_LAYERS = {
+  light: heatLayers(HEAT_LINE_RAMP_LIGHT, 'light'),
+  dark: heatLayers(HEAT_LINE_RAMP_DARK, 'dark'),
+} as const;
 
 /** Trail-lines layer, one element per `filter` value (see the selection rule). */
 export const TRACKS_LINES_LAYER = {
@@ -249,12 +325,64 @@ export function pdfDetailLayer(id: string) {
   );
 }
 
-/** Slope-angle raster (#332): above the PDF maps, below trails and the puck. */
+/**
+ * Slope-angle raster (#332): above the PDF maps, below trails and the puck.
+ * Resampled LINEARLY (#461): the image has fewer pixels than the screen, and
+ * 'nearest' drew each one as a hard-edged block — the stepped look the owner
+ * reported. Linear blends band edges over a pixel, which is all it changes.
+ */
+export const SLOPE_RASTER_PAINT = {
+  'raster-opacity': 0.62,
+  'raster-resampling': 'linear',
+} as const;
+
 export const SLOPE_LAYER = (
   <Layer
     id="slope2d-layer"
     type="raster"
     beforeId={TERRAIN_OVERLAY_ANCHOR}
-    paint={{ 'raster-opacity': 0.62, 'raster-resampling': 'nearest' }}
+    paint={SLOPE_RASTER_PAINT}
   />
 );
+
+/**
+ * Drives the style's hidden tilted-map relief pass (#480): a component
+ * `<Layer>` with the SAME id as the style layer, which both native sides
+ * ADOPT rather than duplicate (MLRNLayer.addToMap / MLRNLayer.m look the id
+ * up first), then set only these properties on. Keep it mounted for as long
+ * as the style has the pass ({@link styleHasTiltRelief}): unmounting removes
+ * the style layer itself until the next style reload. Flat, it is hidden, so
+ * it costs no extra hillshade pass.
+ *
+ * ONLY visibility and exaggeration are set here, never colours or the light:
+ * the wrapper's Android setters read the shadow/highlight colours as string
+ * ARRAYS and the direction as a float array (this MapLibre Native's
+ * multidirectional hillshade). Found on the emulator: a plain colour or a
+ * scalar direction threw "cannot be cast" and killed the React instance, and
+ * no expression yields the `array<color>` type the core then demands. The
+ * style JSON carries those instead.
+ */
+export function tiltReliefLayer(exaggeration: number) {
+  return (
+    <Layer
+      id={TILT_RELIEF_LAYER_ID}
+      type="hillshade"
+      source={HILLSHADE_DEM_SOURCE_ID}
+      afterId={HILLSHADE_2D_LAYER_ID}
+      minzoom={HILLSHADE_2D_MIN_ZOOM}
+      layout={{ visibility: exaggeration > 0 ? 'visible' : 'none' }}
+      paint={{
+        // The base's zoom fade-in (#230), up to the pitch's exaggeration.
+        'hillshade-exaggeration': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          HILLSHADE_2D_MIN_ZOOM,
+          0,
+          HILLSHADE_2D_MIN_ZOOM + 1,
+          exaggeration,
+        ],
+      }}
+    />
+  );
+}

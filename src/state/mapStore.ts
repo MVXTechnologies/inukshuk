@@ -1,4 +1,4 @@
-import type { Basemap } from '@core/geo/tiles';
+import { normalizeBasemap, type Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { create } from 'zustand';
 
@@ -19,7 +19,7 @@ interface MapState {
   showTrackOverlays: boolean;
   /** Whether the map shows a 3D relief (DEM hillshade + terrain + pitch). */
   terrain3d: boolean;
-  /** Base layer: OSM streets, satellite imagery, or a topographic relief map. */
+  /** Base layer: our map or satellite imagery (Relief was retired, #484). */
   basemap: MapBasemap;
   /**
    * Whether the active weather overlay plays across its scrubber timeline
@@ -39,6 +39,12 @@ interface MapState {
   /** One-shot request for the map to fit these bounds (e.g. "view trail"). */
   focusBounds: BoundingBox | null;
   /**
+   * Screen padding for that fit, when the caller knows what covers the map
+   * (a shown long-distance trail's pill and stage sheet, #472). Null = the
+   * default fit padding.
+   */
+  focusPadding: { top: number; right: number; bottom: number; left: number } | null;
+  /**
    * One-shot request (from the Library's "Show on map") for the map to fly the
    * camera to a waypoint's position. Consumed and cleared by the map's camera
    * controls, like {@link focusBounds}.
@@ -57,7 +63,10 @@ interface MapState {
   setBasemap: (b: MapBasemap) => void;
   toggleWeatherAnimation: () => void;
   setMapCenter: (c: { latitude: number; longitude: number } | null) => void;
-  setFocusBounds: (b: BoundingBox | null) => void;
+  setFocusBounds: (
+    b: BoundingBox | null,
+    padding?: { top: number; right: number; bottom: number; left: number },
+  ) => void;
   setFocusWaypoint: (target: { latitude: number; longitude: number } | null) => void;
 }
 
@@ -69,15 +78,19 @@ export const useMapStore = create<MapState>((set) => ({
   weatherAnimating: false,
   mapCenter: null,
   focusBounds: null,
+  focusPadding: null,
   focusWaypoint: null,
   recordRequested: false,
   setRecordRequested: (requested) => set({ recordRequested: requested }),
-  setFocusBounds: (b) => set({ focusBounds: b }),
+  setFocusBounds: (b, padding) => set({ focusBounds: b, focusPadding: padding ?? null }),
   setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
-  setBasemap: (b) => set({ basemap: b }),
+  // Normalised: a stale `relief` (retired as a base map, #484) from any
+  // caller — an older deep link, a trail viewer seeded before the update —
+  // lands on `map` instead of a base map the style can no longer draw.
+  setBasemap: (b) => set({ basemap: normalizeBasemap(b) }),
   toggleWeatherAnimation: () => set((s) => ({ weatherAnimating: !s.weatherAnimating })),
   // Written on EVERY camera settle — including rotate/pitch-only gestures and
   // the follow-mode camera moving with each GPS fix, where the centre is

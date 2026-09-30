@@ -57,6 +57,7 @@ import {
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
+import { useLongTrailsStore } from '@state/longTrailsStore';
 import { useMapStore } from '@state/mapStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
@@ -89,11 +90,13 @@ import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
 import { NIGHT_MAP } from '@ui/tokens';
 import { HeatPointCarousel } from './components/HeatPointCarousel';
+import { ShownTrailPill, ShownTrailSheet } from './longTrail/ShownTrailChrome';
+import { ShownTrailLayers } from './longTrail/ShownTrailLayers';
 import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { metersPerPixel } from '@core/geo/scaleBar';
-import { heatRadiusPx } from '@core/heat/heatRadius';
+import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { TipButton } from '@features/support/TipButton';
@@ -120,17 +123,19 @@ import {
   SLOPE_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
-  HEATMAP_LAYERS,
+  HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYER,
 } from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
+import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
+import { useGeoJsonString } from './useGeoJsonString';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { MarinePackBanner } from './marine/MarinePackBanner';
@@ -156,6 +161,9 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 // re-serializes the entire track so far and pushes it across the bridge each
 // fix. Rebuild at most once per TRAIL_REBUILD_MS or every TRAIL_REBUILD_POINTS
 // new fixes, whichever comes first.
+/** Stable empty id list: trail overlays switched off (#465). */
+const NO_IDS: readonly string[] = [];
+
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
 
@@ -293,22 +301,31 @@ export function MapScreen() {
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
-  const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
+  // The trail-overlays master switch (map store): off, no trail or heat
+  // geometry is drawn, so none is loaded or built either (#465).
+  const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
+  const drawnTrackIds = showTrackOverlays ? shownTrackIds : NO_IDS;
+  const trackOverlays = useTrackOverlays(tracks, drawnTrackIds);
   // When the heatmap toggle is on, the heat layer + tap-carousel must source
   // EVERY track in the library, not just whatever the current visibility
   // mode/folder filters/activeTrackIds happen to show ("if heatmap is
   // selected, it shouldn't need the trace to be shown"). When it's off this
-  // collapses to exactly shownTrackIds, so useTrackHeat's behavior — and its
-  // GPX-load footprint — is byte-for-byte the pre-this-feature one: "when
-  // heatmap is OFF, nothing changes". showHeatmap itself is declared below
-  // (with the rest of the map-store/settings-store reads); read it here too
-  // since allTrackIds must be computed before useTrackHeat is called.
+  // collapses to exactly the shown trails, and the heat grid isn't built.
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
+  const heatOn = showTrackOverlays && showHeatmap;
   const allTrackIds = useMemo(
-    () => (showHeatmap ? tracks.map((t) => t.id) : shownTrackIds),
-    [showHeatmap, tracks, shownTrackIds],
+    () => (heatOn ? tracks.map((t) => t.id) : drawnTrackIds),
+    [heatOn, tracks, drawnTrackIds],
   );
-  const trackHeat = useTrackHeat(tracks, shownTrackIds, allTrackIds);
+  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn);
+  // The big sources, serialized once per data change (#465).
+  // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
+  // — and a selection flips the lines layer's filter, which re-renders it — so
+  // a 400-trail source used to be re-serialized and re-parsed natively on
+  // every tap. A string that keeps its identity is passed through untouched.
+  const linesJson = useGeoJsonString(trackHeat.lines);
+  const heatLinesJson = useGeoJsonString(trackHeat.heatLines);
+  const heatGlowJson = useGeoJsonString(trackHeat.heatGlow);
   const router = useRouter();
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
@@ -322,9 +339,10 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
+  const shownTrail = useLongTrailsStore((s) => s.shown);
+  const [trailSheetHeight, setTrailSheetHeight] = useState(0);
   const theme = useTheme();
   const offlineOnly = useSettingsStore((s) => s.offlineOnly);
   // Stable per basemap so the contour sources' memo can hold (see the hoisted
@@ -334,6 +352,8 @@ export function MapScreen() {
   const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
   // Contours on the vector map are served tiles, part of the style.
   const terrainContours = useSettingsStore((s) => s.terrainContours);
+  // Heat tone follows the basemap: dark theme and satellite imagery are dark.
+  const heatLayerSet = theme.dark || basemap === 'satellite' ? HEAT_LAYERS.dark : HEAT_LAYERS.light;
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -355,13 +375,11 @@ export function MapScreen() {
   // Compact map chrome: chevron-rail unfold state (the "+" actions button
   // lives in the rail too, so it folds away with the rest of the controls).
   const [compactControlsOpen, setCompactControlsOpen] = useState(false);
-  const markedTrailsNetworks = useSettingsStore((s) => s.markedTrailsNetworks);
   // Weather overlay (weather UX M1): the persisted GeoMet layer choice, the
   // transient play flag, and the scrubbable timeline that owns the drape's
-  // valid time (throttled inside the hook). Network-only like the marked
-  // trails: while offline-only is on the layer is dropped from the style
-  // entirely and the timeline hook is parked, so the map stays byte-identical
-  // to a weatherless one.
+  // valid time (throttled inside the hook). Network-only: while offline-only
+  // is on the layer is dropped from the style entirely and the timeline hook
+  // is parked, so the map stays byte-identical to a weatherless one.
   //
   // PARKED (2026-09, see `@core/features/flags`): while WEATHER_ENABLED is
   // false the persisted choice is READ BUT NOT USED — every weather surface
@@ -421,8 +439,13 @@ export function MapScreen() {
   // would re-render this whole tree per frame — see ScaleBar's own note. The
   // setter collapses no-op updates so a pan along a parallel costs nothing.
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
-  /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
+  /** Shaded-relief hillshade under `map` — platform-defaulted, #230. */
   const showHillshade = useSettingsStore((s) => s.showHillshade);
+  /** Its strength and the summits' density — the Topology menu's #461 rows. */
+  const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
+  const peakDensity = useSettingsStore((s) => s.peakDensity);
+  /** How much that shading deepens when the map is tilted — "3D relief", #480. */
+  const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   /**
    * Non-null while the map maker is open: the print style whose raster the
    * live map must render so the framed preview matches the sheet (#349).
@@ -452,7 +475,7 @@ export function MapScreen() {
     weatherStagingRef,
   );
   // Marine reference layers (marine M3): NONNA bathymetry / seamarks, same
-  // network-only treatment as the marked trails. Any active layer also pins
+  // network-only treatment as the weather. Any active layer also pins
   // the mandatory "Not for navigation" chip below.
   //
   // PARKED (2026-09, see `@core/features/flags`): same treatment as weather —
@@ -548,6 +571,12 @@ export function MapScreen() {
   // must drop the vector base while the editor is open.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
   const vectorBasemap = stoneBase && editorStyle === null;
+  // "Labels on satellite" (#484): our roads, trails and names over the
+  // imagery, from the same vector host as the map (and, offline, from any
+  // downloaded Map pack of the area — packs share tiles by URL).
+  const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const imageryLabels =
+    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
@@ -587,18 +616,29 @@ export function MapScreen() {
     const options = {
       // Night red (decision 4): greyscale, dimmed raster under the red veil.
       night: displayCondition === 'night',
-      // Marked-trail networks (network-only; hidden while offline-only).
-      markedTrailsNetworks: offlineOnly ? [] : markedTrailsNetworks,
-      // Marine drapes ride the same offline-only rule.
+      // Marine drapes are network-only: hidden while offline-only.
       marineLayers: offlineOnly ? [] : marineLayers,
       // Labels + coastlines readable ABOVE the colour drapes (wave B): the
       // reference overlay rides whenever a weather OR marine layer is on and
       // the OpenFreeMap TileJSON resolved (silent-degrade otherwise).
       ...(vectorBasemap
         ? {
-            vectorBasemap: vectorBasemapOption(theme.dark, terrainContours),
+            vectorBasemap: {
+              ...vectorBasemapOption(theme.dark, terrainContours),
+              peakDensity,
+            },
           }
         : {}),
+      ...(imageryLabels
+        ? {
+            imageryLabels: {
+              ...vectorBasemapOption(theme.dark, false),
+              peakDensity,
+            },
+          }
+        : {}),
+      hillshadeStrength,
+      tiltRelief,
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
@@ -681,12 +721,14 @@ export function MapScreen() {
     editorStyle,
     basemap,
     showHillshade,
+    hillshadeStrength,
+    peakDensity,
+    tiltRelief,
     offlineOnly,
     offlineRegions,
     theme.dark,
     theme.colors.background,
     displayCondition,
-    markedTrailsNetworks,
     marineLayers,
     marineActive,
     // Only the FALLBACK shape of the chart state restyles the map; the drape
@@ -698,7 +740,13 @@ export function MapScreen() {
     overlayTiles,
     referenceOverlay,
     vectorBasemap,
+    imageryLabels,
   ]);
+
+  // The tilted-map relief pass (#480): the style carries it hidden whenever
+  // it draws the shading and the setting is on; the hook switches it on from
+  // the settled pitch.
+  const tilt = useTiltRelief(style);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -1080,9 +1128,10 @@ export function MapScreen() {
   // per carousel "open", not on every focused-card swipe.
   useEffect(() => {
     if (!heatSelection) return;
-    const boxes = heatSelection.trackIds
-      .map((id) => tracks.find((t) => t.id === id)?.stats.bbox)
-      .filter((b): b is BoundingBox => b !== undefined);
+    // One pass over the library, not a `tracks.find` per carousel trail (#465).
+    const wanted = new Set(heatSelection.trackIds);
+    const boxes: BoundingBox[] = [];
+    for (const t of tracks) if (wanted.has(t.id) && t.stats.bbox) boxes.push(t.stats.bbox);
     const union = unionBoundingBoxes(boxes);
     if (!union) return;
     setFollowUser(false);
@@ -1538,9 +1587,9 @@ export function MapScreen() {
               { lng: lngLatArr[0], lat: lngLatArr[1] },
               // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
               // visible heat glow when the heatmap is on.
-              Math.max(TRAIL_HIT_PX, showHeatmap ? heatRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+              Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
                 (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
-              showHeatmap,
+              heatOn,
             )
           : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
@@ -1598,7 +1647,7 @@ export function MapScreen() {
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
-      showHeatmap,
+      heatOn,
       inspect,
       showTrackOverlays,
       restoreCameraOnDeselect,
@@ -1743,6 +1792,18 @@ export function MapScreen() {
     ]);
   }, [marinePackOfferState, marinePackSnoozes, setSetting]);
 
+  // A long-distance trail shown from Explore (#467): its sheet owns the
+  // bottom edge only while nothing else does (recording, region select, the
+  // map maker, a trail inspector, the heat carousel).
+  const trailSheetUp =
+    shownTrail !== null &&
+    status === 'idle' &&
+    !selecting &&
+    makeMapState === null &&
+    !inspectId &&
+    heatSelection === null &&
+    !terrain3d;
+
   return (
     <View style={styles.fill}>
       {terrain3d ? (
@@ -1804,7 +1865,10 @@ export function MapScreen() {
           // the effect above re-arms.
           // The style is parsed and the native view exists: safe for
           // getViewState(). Same reasoning as the region-change hook below.
-          onDidFinishLoadingStyle={() => setMapLoaded(true)}
+          onDidFinishLoadingStyle={() => {
+            setMapLoaded(true);
+            tilt.onStyleLoaded();
+          }}
           onDidFinishLoadingMap={() => {
             setMapLoaded(true);
             // Seed the scale bar: onRegionDidChange is not guaranteed to fire
@@ -1815,6 +1879,7 @@ export function MapScreen() {
               .then((vs) => {
                 updateScaleAt(vs.zoom, vs.center[1]);
                 onSettleBearing(vs.bearing);
+                tilt.onSettledPitch(vs.pitch);
               })
               .catch(() => undefined); // mid-teardown — the next settle seeds it
           }}
@@ -1854,6 +1919,8 @@ export function MapScreen() {
             // Settled bearing → the badge's red north needle, and the
             // snap-back detent for a rotation too small to have been meant.
             onSettleBearing(e.nativeEvent.bearing);
+            // Settled pitch → the tilted-map relief pass (#480).
+            tilt.onSettledPitch(e.nativeEvent.pitch);
             // Settled centre → mapStore (wave B): resolves the effective
             // forecast model and the radar rows' "Canada only" hint. Same
             // render batch as the version bump above — no extra re-render.
@@ -1941,6 +2008,10 @@ export function MapScreen() {
               height that drape must occupy (see `@core/geo/mapLayerStack`).
               The PDF overlays and trails below carry no anchor at all, which
               is what keeps them on top of everything. */}
+          {/* The tilted-map relief pass (#480): adopts the style's own hidden
+              layer of that id (right above the base hillshade) and sets its
+              visibility/exaggeration from the settled pitch. */}
+          {tilt.layer}
           {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
           {weatherLayer !== null && !offlineOnly && (
             <WeatherDrapeLayers
@@ -2011,21 +2082,24 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {/* Heatmap density: a native MapLibre `heatmap` layer under the
-              trail lines, built from sampled points of EVERY qualifying
-              trail in the library (useTrackHeat.heatPoints — global while
-              the toggle is on, independent of visibility mode/folder
-              filters/activeTrackIds, bounded feature count regardless of how
-              many/long those trails are — see qualifiesForHeat). Tight
-              dots/streaks at province/city zoom (small radius, low intensity
-              — DENSITY carries the "hot" signal, not blob size), growing
-              into a corridor wash as you zoom toward street level. Capped at
-              a warm orange (no dark/red-brown top) and faded slightly above
-              z15 once the trail lines themselves carry the detail. Drawn
-              BEFORE the lines below so it sits beneath them. */}
-          {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
-            <GeoJSONSource id="tracks-heat-points" data={trackHeat.heatPoints}>
-              {HEATMAP_LAYERS}
+          {/* The personal heatmap (#470), over EVERY qualifying trail in the
+              library while the toggle is on (independent of visibility
+              mode/folder filters/activeTrackIds — see qualifiesForHeat):
+              a soft glow from the coarse pass grid when zoomed out, fading
+              into crisp pass-count lines that follow the streets actually
+              travelled (one pass a clearly visible warm line, many passes
+              hot). Both sources are bounded by the ground covered, not by
+              how many trails or fixes there are, and are serialized once per
+              data change. Drawn BEFORE the trail lines below so they sit
+              beneath them. */}
+          {heatOn && heatGlowJson && (
+            <GeoJSONSource id="tracks-heat-glow-points" data={heatGlowJson}>
+              {heatLayerSet.glow}
+            </GeoJSONSource>
+          )}
+          {heatOn && heatLinesJson && (
+            <GeoJSONSource id="tracks-heat-lines-source" data={heatLinesJson}>
+              {heatLayerSet.lines}
             </GeoJSONSource>
           )}
 
@@ -2041,8 +2115,8 @@ export function MapScreen() {
               onMapPress below to open the HeatPointCarousel; the per-trail
               onPress this replaced is gone for good — the map-level hit-test
               (heatAt) is the only way in now. */}
-          {showTrackOverlays && trackHeat.lines && (
-            <GeoJSONSource id="tracks-lines" data={trackHeat.lines}>
+          {showTrackOverlays && linesJson && (
+            <GeoJSONSource id="tracks-lines" data={linesJson}>
               {hasSelection ? TRACKS_LINES_LAYER.hidden : TRACKS_LINES_LAYER.shown}
             </GeoJSONSource>
           )}
@@ -2060,6 +2134,9 @@ export function MapScreen() {
               {FOCUSED_TRAIL_LAYER}
             </GeoJSONSource>
           )}
+
+          {/* A long-distance trail shown from Explore (#467). */}
+          {shownTrail !== null && <ShownTrailLayers shown={shownTrail} />}
 
           {/* Ring marker at the tapped heat spot, shown only while the
               carousel is open — same one-feature GeoJSONSource + circle
@@ -2264,7 +2341,12 @@ export function MapScreen() {
           starts right under it; 2D only, like the dialog's fly-to. */}
       {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          {/* A shown long-distance trail takes the pill's place (#467). */}
+          {shownTrail !== null ? (
+            <ShownTrailPill shown={shownTrail} />
+          ) : (
+            <MapSearchPill onPress={() => void openGoToCoordinates()} />
+          )}
         </View>
       )}
 
@@ -2405,7 +2487,11 @@ export function MapScreen() {
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
       <View
-        style={[styles.bottom, recordingPanelUp && { bottom: panelHeight }]}
+        style={[
+          styles.bottom,
+          recordingPanelUp && { bottom: panelHeight },
+          trailSheetUp && { bottom: trailSheetHeight },
+        ]}
         pointerEvents="box-none"
       >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
@@ -2435,7 +2521,7 @@ export function MapScreen() {
               {showScaleBar && !terrain3d && scaleAt !== null && (
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
               )}
-              <MapCreditText basemap={basemap} vector={stoneBase} />
+              <MapCreditText basemap={basemap} vector={stoneBase} osmLabels={imageryLabels} />
             </View>
             {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
@@ -2515,6 +2601,16 @@ export function MapScreen() {
           </View>
         )}
       </View>
+
+      {trailSheetUp && shownTrail !== null && (
+        <ShownTrailSheet
+          shown={shownTrail}
+          position={location ? [location.longitude, location.latitude] : null}
+          units={units}
+          onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
+          onMessage={showSnack}
+        />
+      )}
 
       {inspectId && inspectPoints && inspectTrack && (
         <TrailInspectPanel
