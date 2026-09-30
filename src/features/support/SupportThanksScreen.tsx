@@ -1,3 +1,4 @@
+import { InukshukGlyph } from '@ui/components/InukshukGlyph';
 import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { isTipId } from '@core/support/tips';
@@ -8,10 +9,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Rect } from 'react-native-svg';
 
 /**
- * After a tip (#476, board `Thanks.dc.html`): a stone figure, thanks, and the
+ * After a tip (#476, board `Thanks.dc.html`): the Inukshuk (the app icon's five stones), thanks, and the
  * way back to what the person came for. Reached by `router.replace` from the
  * Support screen, so Back from here returns to Settings, not to the jar.
  */
@@ -36,13 +36,7 @@ export function SupportThanksScreen() {
         { backgroundColor: t.background, paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
     >
-      <Svg width={120} height={140} viewBox="0 0 120 140" accessibilityElementsHidden>
-        <Rect x={44} y={8} width={32} height={24} rx={8} fill={t.support.stone} />
-        <Rect x={14} y={38} width={92} height={20} rx={8} fill={t.support.stoneDeep} />
-        <Rect x={36} y={62} width={48} height={30} rx={9} fill={t.support.stone} />
-        <Rect x={30} y={96} width={24} height={38} rx={8} fill={t.support.stoneDeep} />
-        <Rect x={66} y={96} width={24} height={38} rx={8} fill={t.support.stoneDeep} />
-      </Svg>
+      <InukshukGlyph size={140} />
       <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
         Thank you
       </Text>
