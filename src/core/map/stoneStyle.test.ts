@@ -14,6 +14,7 @@ import {
   buildStoneImageryLayers,
   buildStoneLayers,
   elevationLabel,
+  IMAGERY_ROAD_OPACITY,
   peakDueFilter,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
@@ -532,11 +533,21 @@ describe('buildStoneImageryLayers (labels on satellite, #484)', () => {
 
   it('carries the trails, the roads and the place and water names', () => {
     const ids = imagery(LIGHT).map((l) => l.id.slice(STONE_LAYER_PREFIX.length));
-    for (const k of ['path', 'track', 'road-minor', 'road-motorway-casing', 'place-town']) {
+    for (const k of ['path', 'track', 'road-minor', 'road-motorway', 'place-town']) {
       expect(ids).toContain(k);
     }
     expect(ids).toContain('waterway-label');
     expect(ids).toContain('peak');
+  });
+
+  it('drops the road casings and lets the imagery show through the ribbons', () => {
+    const layers = imagery(LIGHT);
+    expect(layers.some((l) => l.id.endsWith('-casing'))).toBe(false);
+    const road = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}road-primary`);
+    expect((road?.paint as Record<string, unknown>)['line-opacity']).toBe(IMAGERY_ROAD_OPACITY);
+    // Trails keep their own treatment.
+    const path = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}path`);
+    expect((path?.paint as Record<string, unknown>)['line-opacity']).toBeUndefined();
   });
 
   it('keeps the map draw order: line work under every label', () => {

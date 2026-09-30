@@ -215,7 +215,7 @@ function OverlayRows({
         disabled={!showHillshade}
       />
       <SwitchRow
-        icon="terrain"
+        icon="vector-curve"
         label="Contours"
         value={contours}
         onToggle={() => set('terrainContours', !contours)}

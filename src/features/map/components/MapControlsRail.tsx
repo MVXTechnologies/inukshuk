@@ -120,7 +120,10 @@ export function MapControlsRail(props: Props) {
           open={openMenu === 'overlays'}
           onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
         />
-        {actions !== undefined && (
+        {/* The "+" folds away while the Map type panel or the Overlays sheet
+            is up: under a tall sheet it was pushed onto the attribution chip
+            (#484 emulator pass). It is back the moment the sheet closes. */}
+        {actions !== undefined && openMenu !== 'basemap' && openMenu !== 'overlays' && (
           <MapActionsMenu
             actions={actions}
             open={openMenu === 'actions'}
