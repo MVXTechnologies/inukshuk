@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support Inukshuk — kept alive by donations</title>
+    <meta
+      name="description"
+      content="Inukshuk is free, with no ads and no tracking, and kept alive by donations. What it costs to run, the accounts month by month, and how to give."
+    />
+    <link rel="alternate" hreflang="en" href="https://inukshuk.mvxtechnologies.com/support/" />
+    <link rel="alternate" hreflang="fr" href="https://inukshuk.mvxtechnologies.com/fr/support/" />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://inukshuk.mvxtechnologies.com/support/"
+    />
+    <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <style>
+      /* A calm, Wikipedia-like reading page (#476). Serif body, Atkinson-ish
+         sans for figures and chrome; no web fonts, no trackers. */
+      :root {
+        color-scheme: light dark;
+        --ground: #f7f4ec;
+        --paper: #fffdf7;
+        --ink: #1e252c;
+        --muted: #4a5561;
+        --rule: #cfc6b3;
+        --hair: #e2dbcb;
+        --accent: #566b33;
+        --on-accent: #fbf8f2;
+        --link: #3f5025;
+        --link-hover: #2c3919;
+        --track: #e2dbcb;
+        --serif: 'Source Serif 4', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        --sans:
+          'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont,
+          'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #13171b;
+          --paper: #1a1f24;
+          --ink: #e9e4d8;
+          --muted: #a7b0b8;
+          --rule: #3e4852;
+          --hair: #2f3842;
+          --accent: #4a5e2b;
+          --on-accent: #f2ece0;
+          --link: #b9c98a;
+          --link-hover: #d6deb8;
+          --track: #2f3842;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--serif);
+        line-height: 1.6;
+        color: var(--ink);
+        background: var(--ground);
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: var(--link);
+      }
+      a:hover {
+        color: var(--link-hover);
+      }
+      .wrap {
+        max-width: 1152px;
+        margin: 0 auto;
+        padding: 0 1.25rem;
+      }
+
+      /* ---- Nav (the site's, in this page's palette) ---- */
+      nav {
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--sans);
+      }
+      nav .wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: 64px;
+      }
+      nav img {
+        width: 34px;
+        height: 34px;
+      }
+      nav .brand {
+        font-weight: 800;
+        font-size: 1.15rem;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      nav .spacer {
+        flex: 1;
+      }
+      nav a.navlink {
+        text-decoration: none;
+        color: var(--ink);
+        font-weight: 700;
+        font-size: 0.95rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 8px;
+      }
+      nav a.navlink[aria-current='page'] {
+        color: var(--link);
+        font-weight: 800;
+      }
+      nav a.navlink:hover {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+      }
+      @media (max-width: 680px) {
+        nav a.navlink.hide-sm {
+          display: none;
+        }
+      }
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 2px;
+        margin-left: 0.35rem;
+      }
+      .lang-switch a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 700;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        padding: 0.4rem 0.6rem;
+        border-radius: 999px;
+      }
+      .lang-switch a:hover {
+        color: var(--ink);
+      }
+      .lang-switch a[aria-current='page'] {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+
+      /* ---- Banner ---- */
+      .banner {
+        margin-top: 2.5rem;
+        padding: 1.6rem 2rem;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-top: 5px solid var(--accent);
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+      }
+      .banner .lede {
+        flex: 1;
+        min-width: 0;
+      }
+      .banner h1 {
+        margin: 0 0 0.6rem;
+        font-size: clamp(1.6rem, 3.4vw, 1.9rem);
+        line-height: 1.2;
+        font-weight: 700;
+      }
+      .banner p {
+        margin: 0;
+        font-size: 1.125rem;
+        max-width: 47.5rem;
+      }
+      .meter {
+        width: 300px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        font-family: var(--sans);
+      }
+      .meter .figure {
+        font-size: 0.95rem;
+        font-weight: 700;
+      }
+      .meter .caption {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .bar {
+        height: 14px;
+        border-radius: 7px;
+        background: var(--track);
+        overflow: hidden;
+      }
+      .bar > span {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: var(--accent);
+      }
+      .give {
+        min-height: 48px;
+        border-radius: 24px;
+        background: var(--accent);
+        color: var(--on-accent);
+        font-size: 1rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+      }
+      .give:hover {
+        color: var(--on-accent);
+        filter: brightness(1.08);
+      }
+      @media (max-width: 760px) {
+        .banner {
+          flex-direction: column;
+          align-items: stretch;
+          padding: 1.4rem 1.2rem;
+        }
+        .meter {
+          width: auto;
+        }
+      }
+
+      /* ---- Sections ---- */
+      .columns {
+        margin-top: 2.75rem;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3.5rem;
+      }
+      @media (max-width: 860px) {
+        .columns {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 2.5rem;
+        }
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+      }
+      h2 {
+        margin: 0;
+        font-size: 1.625rem;
+        font-weight: 700;
+        line-height: 1.25;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 0.5rem;
+      }
+      section > p {
+        margin: 0;
+        font-size: 1.0625rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .costs td {
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--hair);
+        font-size: 1.0625rem;
+        vertical-align: top;
+      }
+      .costs td.amount {
+        text-align: right;
+        font-weight: 700;
+        white-space: nowrap;
+        padding-left: 1rem;
+      }
+      .costs tfoot td {
+        border-bottom: 0;
+        font-weight: 700;
+      }
+      .ledger {
+        font-family: var(--sans);
+        font-size: 1rem;
+      }
+      .ledger th {
+        text-align: left;
+        padding: 0.5rem 0;
+        font-weight: 800;
+        border-bottom: 2px solid var(--rule);
+      }
+      .ledger td {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--hair);
+      }
+      .ledger .empty td {
+        color: var(--muted);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .ways {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1.5rem;
+        font-family: var(--sans);
+      }
+      @media (max-width: 860px) {
+        .ways {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .way {
+        padding: 1.25rem;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .way h3 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 800;
+      }
+      .way p {
+        margin: 0;
+        font-size: 0.97rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .soon {
+        display: inline-block;
+        margin-top: 0.25rem;
+        padding: 0.1rem 0.55rem;
+        border: 1px dashed var(--rule);
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .fine {
+        margin: 0.5rem 0 0;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      #give {
+        margin-top: 3rem;
+        scroll-margin-top: 1rem;
+      }
+
+      /* ---- Footer ---- */
+      footer {
+        margin-top: 4rem;
+        border-top: 1px solid var(--rule);
+        padding: 2rem 0 3rem;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 0.92rem;
+      }
+      footer .cols {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem 2.5rem;
+        align-items: center;
+        justify-content: space-between;
+      }
+      footer a {
+        color: var(--muted);
+        text-decoration: none;
+        margin-right: 1.1rem;
+      }
+      footer a:hover {
+        color: var(--ink);
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <img src="../assets/brand/logo-128.webp" alt="" width="34" height="34" />
+        <a class="brand" href="../">Inukshuk</a>
+        <span class="spacer"></span>
+        <a class="navlink hide-sm" href="../#features">Features</a>
+        <a class="navlink hide-sm" href="../privacy/">Privacy</a>
+        <a class="navlink" href="./" aria-current="page">Support</a>
+        <div class="lang-switch" role="navigation" aria-label="Language / Langue">
+          <a href="./" lang="en" hreflang="en" aria-current="page">EN</a
+          ><a href="../fr/support/" lang="fr" hreflang="fr">FR</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="wrap">
+      <div class="banner" role="region" aria-labelledby="banner-title">
+        <div class="lede">
+          <h1 id="banner-title">Inukshuk is kept alive by donations.</h1>
+          <p>
+            It is free for everyone, with no ads and no tracking, and it will stay that way. It is
+            built by one person in Québec City and paid for by the people who use it. If everyone
+            reading this gave the price of a coffee, the year would be covered in a day.
+          </p>
+        </div>
+        <div class="meter">
+          <!-- Figures below are the static fallback; the script refreshes them from costs.json. -->
+          <div class="figure">
+            <span data-raised>$0</span> of <span data-goal>$1,267</span> this year
+          </div>
+          <div
+            class="bar"
+            role="progressbar"
+            aria-label="Share of this year's costs raised"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <span data-bar></span>
+          </div>
+          <div class="caption">
+            <span data-supporters>0 supporters so far</span> · updated monthly
+          </div>
+          <a class="give" href="#give">Give</a>
+        </div>
+      </div>
+
+      <div class="columns">
+        <section aria-labelledby="costs-title">
+          <h2 id="costs-title">What it costs to run</h2>
+          <p>
+            Every dollar is listed here. Nothing goes to ads, marketing or salaries. The map tiles,
+            trails and contours run on a home server and a free Cloudflare plan to keep the bill
+            small.
+          </p>
+          <table class="costs">
+            <tbody data-costs>
+              <tr>
+                <td>Apple developer account</td>
+                <td class="amount">$99 / year</td>
+              </tr>
+              <tr>
+                <td>Strava connection (API)</td>
+                <td class="amount">$14 / month</td>
+              </tr>
+              <tr>
+                <td>Servers, maintenance, licences (cushion)</td>
+                <td class="amount">$1,000 / year</td>
+              </tr>
+              <tr>
+                <td>Google Play account</td>
+                <td class="amount">paid once</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total per year</td>
+                <td class="amount" data-total>$1,267</td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+
+        <section aria-labelledby="ledger-title">
+          <h2 id="ledger-title">The accounts, month by month</h2>
+          <p>
+            Updated at the start of each month from the App Store and Google Play reports. Any
+            surplus rolls over to the next year.
+          </p>
+          <table class="ledger">
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Costs</th>
+                <th scope="col">Gifts</th>
+                <th scope="col">Balance</th>
+              </tr>
+            </thead>
+            <tbody data-ledger>
+              <tr class="empty">
+                <td colspan="4">Nothing to report yet: each month is added once it closes.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <section id="give" aria-labelledby="give-title">
+        <h2 id="give-title">How to give</h2>
+        <div class="ways">
+          <div class="way">
+            <h3>In the app</h3>
+            <p>
+              Settings › Support Inukshuk. Tips of $3, $7 or $15 through the App Store or Google
+              Play.
+            </p>
+          </div>
+          <div class="way">
+            <h3>On the web</h3>
+            <!--
+              DONATION PROVIDER PLACEHOLDER (#476): the owner has not chosen a
+              provider yet (e.g. GitHub Sponsors, Ko-fi, Liberapay). Replace the
+              "coming soon" line with the real link when there is one — never a
+              made-up URL. Mirror the change in /fr/support/.
+            -->
+            <p>One-off or monthly, by card.</p>
+            <p><span class="soon">Coming soon</span></p>
+          </div>
+          <div class="way">
+            <h3>Parks and clubs</h3>
+            <p>
+              Publish your maps and trails in Inukshuk for your members. Write to
+              <a href="mailto:marc-andre.vigneault@mvxtechnologies.com"
+                >marc-andre.vigneault@mvxtechnologies.com</a
+              >.
+            </p>
+          </div>
+        </div>
+        <p class="fine">
+          Gifts are not tax-deductible: MVX Technologies is a small company, not a registered
+          charity. Tips unlock nothing in the app.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap cols">
+        <div>
+          <strong style="color: var(--ink)">Inukshuk</strong> — free &amp; open-source offline trail
+          navigation.
+        </div>
+        <div>
+          <a href="../">Home</a>
+          <a href="../privacy/">Privacy</a>
+          <a href="./">Support</a>
+          <a href="https://github.com/MVXTechnologies/inukshuk">GitHub</a>
+          <a href="../fr/support/" lang="fr" hreflang="fr">Français</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Progressive enhancement: the page above is complete without this. It
+      // only refreshes the figures from costs.json, the file the app reads too.
+      (function () {
+        var LANG = document.documentElement.lang === 'fr' ? 'fr' : 'en';
+        var LOCALE = LANG === 'fr' ? 'fr-CA' : 'en-US';
+        var T = {
+          en: {
+            year: ' / year',
+            month: ' / month',
+            once: 'paid once',
+            supporters: function (n) {
+              return n === 1 ? '1 supporter so far' : n + ' supporters so far';
+            },
+            empty: 'Nothing to report yet: each month is added once it closes.',
+          },
+          fr: {
+            year: ' / an',
+            month: ' / mois',
+            once: 'payé une fois',
+            supporters: function (n) {
+              return n <= 1 ? n + ' donateur jusqu’ici' : n + ' donateurs jusqu’ici';
+            },
+            empty: 'Rien à signaler pour l’instant : chaque mois s’ajoute une fois terminé.',
+          },
+        }[LANG];
+
+        function money(amount, currency) {
+          try {
+            return new Intl.NumberFormat(LOCALE, {
+              style: 'currency',
+              currency: currency,
+              currencyDisplay: 'narrowSymbol',
+              minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+              maximumFractionDigits: 2,
+            }).format(amount);
+          } catch (e) {
+            return amount + ' ' + currency;
+          }
+        }
+        function monthName(ym) {
+          var parts = ym.split('-');
+          var d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+          var s = d.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' });
+          return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+        function cell(text, className) {
+          var td = document.createElement('td');
+          td.textContent = text;
+          if (className) td.className = className;
+          return td;
+        }
+        function num(v) {
+          return typeof v === 'number' && isFinite(v);
+        }
+
+        var url = document.documentElement.getAttribute('data-costs-url') || './costs.json';
+        fetch(url, { cache: 'no-cache' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (doc) {
+            if (!doc || !num(doc.goal) || doc.goal <= 0 || !num(doc.raised)) return;
+            var cur = typeof doc.currency === 'string' ? doc.currency : 'USD';
+            var pct = Math.max(0, Math.min(100, Math.round((doc.raised / doc.goal) * 100)));
+            document.querySelector('[data-raised]').textContent = money(doc.raised, cur);
+            document.querySelector('[data-goal]').textContent = money(doc.goal, cur);
+            document.querySelector('[data-bar]').style.width = pct + '%';
+            document.querySelector('[role="progressbar"]').setAttribute('aria-valuenow', pct);
+            if (num(doc.supporters)) {
+              document.querySelector('[data-supporters]').textContent = T.supporters(
+                doc.supporters,
+              );
+            }
+
+            if (Array.isArray(doc.costs) && doc.costs.length > 0) {
+              var body = document.querySelector('[data-costs]');
+              var total = 0;
+              body.textContent = '';
+              doc.costs.forEach(function (c) {
+                if (!c || !num(c.amount)) return;
+                var label = (LANG === 'fr' && c.label_fr) || c.label_en;
+                var amount =
+                  c.period === 'once'
+                    ? T.once
+                    : money(c.amount, cur) + (c.period === 'month' ? T.month : T.year);
+                if (c.period === 'year') total += c.amount;
+                if (c.period === 'month') total += c.amount * 12;
+                var tr = document.createElement('tr');
+                tr.appendChild(cell(label));
+                tr.appendChild(cell(amount, 'amount'));
+                body.appendChild(tr);
+              });
+              document.querySelector('[data-total]').textContent = money(total, cur);
+            }
+
+            var ledger = document.querySelector('[data-ledger]');
+            if (Array.isArray(doc.ledger) && doc.ledger.length > 0) {
+              ledger.textContent = '';
+              doc.ledger.forEach(function (row) {
+                if (!row || typeof row.month !== 'string') return;
+                var tr = document.createElement('tr');
+                tr.appendChild(cell(monthName(row.month)));
+                tr.appendChild(cell(num(row.costs) ? money(row.costs, cur) : '—'));
+                tr.appendChild(cell(num(row.gifts) ? money(row.gifts, cur) : '—'));
+                tr.appendChild(cell(num(row.balance) ? money(row.balance, cur) : '—'));
+                ledger.appendChild(tr);
+              });
+            }
+          })
+          .catch(function () {
+            // Offline or missing file: the static figures stay.
+          });
+      })();
+    </script>
+  </body>
+</html>

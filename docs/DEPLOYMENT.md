@@ -333,6 +333,53 @@ update_). Regenerating the secret on Strava only needs a new
 - Nothing is uploaded without an explicit user action, and _Disconnect_ in
   Settings also revokes the grant via `/oauth/deauthorize`.
 
+## Support Inukshuk: tips and the public accounts (#476)
+
+### In-app tips (store consoles, one-time)
+
+Three **consumable** in-app products, same ids on both stores:
+`tip_small` (~$3), `tip_medium` (~$7), `tip_large` (~$15). The app shows the
+store's localized price and offers only the tiers the store returns, so a tier
+can be added, repriced or withdrawn from the console with no release. The
+library is `expo-iap` (config plugin `expo-iap` in `app.config.ts`), wrapped by
+`src/lib/iap.ts`; it is native, so it ships in a store build, never by OTA.
+Older binaries simply show "Tips aren't available on this device right now".
+
+### `docs/support/costs.json` — the one source of truth
+
+Read by the website's `/support/` and `/fr/support/` pages (inline fetch; the
+page is complete without it) and by the app's Support screen (cached a day,
+`src/data/supportCosts.ts`; validated by `src/core/support/costs.ts`, which
+drops bad rows and hides the numbers if a required field is wrong). Update it
+by hand at the start of each month from the App Store / Google Play reports:
+
+```jsonc
+{
+  "year": 2026, // the calendar year the figures cover
+  "currency": "USD", // ISO 4217, upper case
+  "goal": 1267, // what the year costs: the sum of the recurring costs below
+  "raised": 0, // net tips received this year
+  "supporters": 0, // number of people who gave (integer)
+  "updated": "2026-09-30", // YYYY-MM-DD of this edit
+  "costs": [
+    // period: "year" | "month" | "once" ("once" is shown, not counted in goal)
+    {
+      "label_en": "Apple developer account",
+      "label_fr": "Compte développeur Apple",
+      "amount": 99,
+      "period": "year",
+    },
+  ],
+  "ledger": [
+    // one row per closed month; balance may be negative
+    { "month": "2026-10", "costs": 113, "gifts": 0, "balance": -113 },
+  ],
+}
+```
+
+A unit test parses the checked-in file and checks that `goal` equals the
+annualized recurring costs, so a typo fails CI rather than the website.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for                                        |
