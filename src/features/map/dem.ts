@@ -33,18 +33,17 @@ const demUrl = (z: number, x: number, y: number) =>
   tileUrl(TERRARIUM_TILE_SOURCE.template, { z, x, y });
 
 /**
- * Free, key-free basemaps drapeable on the 3D terrain — every app {@link Basemap}
- * except 'relief', which has no drape (the mesh's hypsometric tint is the relief
- * look). Both come from Esri's public ArcGIS Online tile services (note the
+ * Free, key-free basemaps drapeable on the 3D terrain — every app
+ * {@link Basemap}. Both come from Esri's public ArcGIS Online tile services (note the
  * `{z}/{y}/{x}` row/col order); the templates live in `printSources`, shared
  * with the map maker's live preview.
  *
  * We deliberately do NOT use raw `tile.openstreetmap.org` here: the OSM tile
  * policy forbids app/bulk fetching and returns "Access Blocked 403" tiles when a
  * 3D drape stitches many tiles at once. Esri World Street Map is permissive and
- * matches the satellite/relief sources.
+ * matches the satellite source.
  */
-export type DrapeSource = Exclude<Basemap, 'relief'>;
+export type DrapeSource = Basemap;
 
 /** Decode a tile (PNG or JPEG, by magic bytes) to RGBA. */
 function decodeTileRGBA(bytes: Uint8Array): Uint8Array {

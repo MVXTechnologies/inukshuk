@@ -44,7 +44,7 @@ async function mount(): Promise<void> {
   mockLayers.length = 0;
   await render(
     <PaperProvider>
-      <Trail2DView points={POINTS} basemap="relief" />
+      <Trail2DView points={POINTS} basemap="map" />
     </PaperProvider>,
   );
 }

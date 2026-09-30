@@ -438,7 +438,7 @@ export function MapScreen() {
   // would re-render this whole tree per frame — see ScaleBar's own note. The
   // setter collapses no-op updates so a pan along a parallel costs nothing.
   const showScaleBar = useSettingsStore((s) => s.showScaleBar);
-  /** Shaded-relief hillshade under `map`/`relief` — platform-defaulted, #230. */
+  /** Shaded-relief hillshade under `map` — platform-defaulted, #230. */
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   /** Its strength and the summits' density — the Topology menu's #461 rows. */
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
@@ -568,6 +568,12 @@ export function MapScreen() {
   // must drop the vector base while the editor is open.
   const referenceOverlay = weatherLayer !== null || marineLayers.length > 0;
   const vectorBasemap = stoneBase && editorStyle === null;
+  // "Labels on satellite" (#484): our roads, trails and names over the
+  // imagery, from the same vector host as the map (and, offline, from any
+  // downloaded Map pack of the area — packs share tiles by URL).
+  const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const imageryLabels =
+    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
@@ -616,6 +622,14 @@ export function MapScreen() {
         ? {
             vectorBasemap: {
               ...vectorBasemapOption(theme.dark, terrainContours),
+              peakDensity,
+            },
+          }
+        : {}),
+      ...(imageryLabels
+        ? {
+            imageryLabels: {
+              ...vectorBasemapOption(theme.dark, false),
               peakDensity,
             },
           }
@@ -723,6 +737,7 @@ export function MapScreen() {
     overlayTiles,
     referenceOverlay,
     vectorBasemap,
+    imageryLabels,
   ]);
 
   // The tilted-map relief pass (#480): the style carries it hidden whenever

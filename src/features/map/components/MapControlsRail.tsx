@@ -1,7 +1,7 @@
 import { useSettingsStore } from '@state/settingsStore';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { BasemapMenu } from './LayersMenu';
+import { MapTypePanel } from './LayersMenu';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
 import { MapButton, MapButtonGroup } from './MapButton';
 import { MapOverlaysMenu } from './MapOverlaysMenu';
@@ -48,10 +48,10 @@ interface Props {
 export function MapControlsRail(props: Props) {
   const compact = useSettingsStore((s) => s.compactMapChrome);
   const { compactOpen, onCompactOpenChange } = props;
-  // The overlays drill-down and the "+" actions sheet are both plain-View
-  // sheets in the rail's own column; ONE open at a time, owned here so an
-  // outside tap on the backdrop below closes whichever is up.
-  const [openMenu, setOpenMenu] = useState<null | 'overlays' | 'actions'>(null);
+  // The Map type panel, the overlays sheet and the "+" actions sheet are all
+  // plain-View sheets in the rail's own column; ONE open at a time, owned
+  // here so an outside tap on the backdrop below closes whichever is up.
+  const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
 
   const { top, following, onLocate, onStopFollowing, showFitControl, onFit, terrain3d, actions } =
     props;
@@ -100,7 +100,12 @@ export function MapControlsRail(props: Props) {
             viewer keeps its 3D. To restore, re-add a 3D button here —
             everything behind terrain3d still works. */}
         <MapButtonGroup>
-          <BasemapMenu grouped />
+          <MapButton
+            icon="layers-outline"
+            grouped
+            onPress={() => setOpenMenu(openMenu === 'basemap' ? null : 'basemap')}
+            accessibilityLabel="Base map"
+          />
           <MapButton
             icon="gradient-vertical"
             grouped
@@ -108,6 +113,7 @@ export function MapControlsRail(props: Props) {
             accessibilityLabel="Map overlays"
           />
         </MapButtonGroup>
+        {openMenu === 'basemap' && <MapTypePanel onClose={() => setOpenMenu(null)} />}
         <MapOverlaysMenu
           hideTrigger
           showHypso={terrain3d}

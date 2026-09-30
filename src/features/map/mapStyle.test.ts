@@ -73,12 +73,12 @@ describe('buildOsmStyle', () => {
   it('keeps offline packs lean: shadedRelief defaults off so the DEM never enters a pack style', () => {
     // The offline-download path calls buildOsmStyle(tileUrl, false, basemap) with
     // no shadedRelief arg — assert that path yields no DEM source/tiles.
-    const s = buildOsmStyle(TILE, false, 'relief');
+    const s = buildOsmStyle(TILE, false, 'map');
     expect(s.sources.dem).toBeUndefined();
   });
 
   /**
-   * #230 — map/relief stutter on zoom-out on iOS, satellite is smooth. The
+   * #230 — map stutter on zoom-out on iOS, satellite is smooth. The
    * arithmetic behind these constants lives in `@core/geo/tiles`
    * ("live-viewport DEM tile load"); this pins the style that spends it.
    */
@@ -86,8 +86,8 @@ describe('buildOsmStyle', () => {
     const hillshade2d = (s: ReturnType<typeof buildOsmStyle>) =>
       s.layers.find((l) => l.id === 'hillshade-2d');
 
-    it.each(['map', 'relief'] as const)('zoom-gates the %s hillshade at z11', (basemap) => {
-      const layer = hillshade2d(buildOsmStyle(TILE, false, basemap, true));
+    it('zoom-gates the map hillshade at z11', () => {
+      const layer = hillshade2d(buildOsmStyle(TILE, false, 'map', true));
       expect(layer).toBeDefined();
       expect(layer?.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
       expect(HILLSHADE_2D_MIN_ZOOM).toBe(11);
@@ -129,7 +129,7 @@ describe('buildOsmStyle', () => {
 
     it('emits NO hillshade layer and NO DEM source when the setting is off', () => {
       // showHillshade=false must cost zero DEM fetches, not a hidden layer.
-      for (const basemap of ['map', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const s = buildOsmStyle(TILE, false, basemap, false);
         expect(layerIds(s)).not.toContain('hillshade-2d');
         expect(s.sources.dem).toBeUndefined();
@@ -151,11 +151,10 @@ describe('buildOsmStyle', () => {
       // maxzoom must stop fetching before that zone; OSM is real through z19.
       expect(baseSource(buildOsmStyle(TILE, false, 'map')).maxzoom).toBe(19);
       expect(baseSource(buildOsmStyle(TILE, false, 'satellite')).maxzoom).toBe(17);
-      expect(baseSource(buildOsmStyle(TILE, false, 'relief')).maxzoom).toBe(15);
     });
 
     it('leaves the raster LAYER without a maxzoom so tiles overscale past the source cap', () => {
-      for (const basemap of ['map', 'satellite', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const osmLayer = buildOsmStyle(TILE, false, basemap, true).layers.find(
           (l) => l.id === 'osm',
         );
@@ -170,8 +169,8 @@ describe('buildOsmStyle', () => {
     });
 
     it("never raises the source cap above the service's real-data zoom", () => {
-      const s = buildOsmStyle(TILE, false, 'relief', true, { rasterMaxZoom: 17 });
-      expect(baseSource(s).maxzoom).toBe(15);
+      const s = buildOsmStyle(TILE, false, 'satellite', true, { rasterMaxZoom: 19 });
+      expect(baseSource(s).maxzoom).toBe(17);
     });
   });
 
@@ -667,7 +666,7 @@ describe('buildOsmStyle', () => {
     });
 
     it('sits above the base raster layer for every basemap', () => {
-      for (const basemap of ['map', 'satellite', 'relief'] as const) {
+      for (const basemap of ['map', 'satellite'] as const) {
         const ids = layerIds(buildOsmStyle(TILE, false, basemap, true, { downloadedMask: mask }));
         expect(ids.indexOf('downloaded-mask')).toBeGreaterThan(ids.indexOf('osm'));
       }
@@ -716,7 +715,6 @@ describe('position-puck anchors (#332)', () => {
 describe('basemapAttribution', () => {
   it.each([
     ['map' as const, '© OpenStreetMap'],
-    ['relief' as const, '© Esri, USGS'],
     ['satellite' as const, '© Esri, Maxar'],
   ])('credits the %s basemap', (basemap, credit) => {
     expect(basemapAttribution(basemap)).toBe(credit);
@@ -866,10 +864,10 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     expect(JSON.stringify(dark.layers)).not.toEqual(JSON.stringify(light.layers));
   });
 
-  it.each(['relief', 'satellite'] as const)('flag on: %s stays raster', (basemap) => {
+  it('flag on: satellite stays raster', () => {
     const build = withFlag(true);
-    expect(build(TILE, false, basemap, false, { vectorBasemap })).toEqual(
-      build(TILE, false, basemap, false),
+    expect(build(TILE, false, 'satellite', false, { vectorBasemap })).toEqual(
+      build(TILE, false, 'satellite', false),
     );
   });
 
@@ -925,7 +923,7 @@ describe('terrain options in the style (#461)', () => {
       (level) => {
         const look = hillshadeLook(level, false);
         const paint = hillshadePaint(
-          buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: level }),
+          buildOsmStyle(TILE, false, 'map', true, { hillshadeStrength: level }),
         );
         expect(paint).toMatchObject({
           'hillshade-exaggeration': [
@@ -958,7 +956,7 @@ describe('terrain options in the style (#461)', () => {
 
     it('keeps the light palette on raster basemaps even in a dark app theme', () => {
       // Only the stone vector map has a night variant; the OSM raster is light.
-      const s = buildOsmStyle(TILE, false, 'relief', true, { hillshadeStrength: 'heavy' });
+      const s = buildOsmStyle(TILE, false, 'map', true, { hillshadeStrength: 'heavy' });
       expect(hillshadePaint(s)?.['hillshade-shadow-color']).toBe(
         hillshadeLook('heavy', false).shadowColor,
       );
@@ -1062,5 +1060,81 @@ describe('tilted-map relief pass (#480)', () => {
       expect(tiltLayer(s)).toBeUndefined();
       expect(styleHasTiltRelief(s)).toBe(false);
     }
+  });
+});
+
+describe('labels on satellite (#484)', () => {
+  const imageryLabels = {
+    tiles: ['https://vector.example/{z}/{x}/{y}.mvt'],
+    glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+    peaks: 'https://tiles.example/peaks/{z}/{x}/{y}.mvt',
+  };
+  const stoneIds = (s: ReturnType<typeof buildOsmStyle>) =>
+    layerIds(s).filter((id) => id.startsWith('stone-'));
+
+  it('draws the roads, trails and names over the imagery when on', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels });
+    // The imagery stays the base…
+    expect(baseSource(s).tiles?.[0]).toContain('World_Imagery');
+    expect(s.sources['basemap-vector']).toMatchObject({ type: 'vector' });
+    expect(s.sources['basemap-peaks']).toMatchObject({ type: 'vector', maxzoom: 12 });
+    expect(s.glyphs).toBe(imageryLabels.glyphs);
+    const ids = stoneIds(s);
+    for (const id of [
+      'stone-path',
+      'stone-road-minor',
+      'stone-place-town',
+      'stone-waterway-label',
+    ]) {
+      expect(ids).toContain(id);
+    }
+    // …with no ground fills over it.
+    const fills = s.layers.filter(
+      (l) => l.id.startsWith('stone-') && (l.type === 'fill' || l.type === 'background'),
+    );
+    expect(fills).toEqual([]);
+  });
+
+  it('sits above the imagery and below the overlay anchors and the puck', () => {
+    const ids = layerIds(buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels }));
+    const firstStone = ids.findIndex((id) => id.startsWith('stone-'));
+    const lastStone = ids.map((id) => id.startsWith('stone-')).lastIndexOf(true);
+    expect(firstStone).toBeGreaterThan(ids.indexOf('osm'));
+    expect(lastStone).toBeLessThan(ids.indexOf(ALWAYS_PRESENT_ANCHORS[0]));
+  });
+
+  it('reads light ink on a dark halo — the imagery palette, whatever the app theme', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryLabels });
+    const town = s.layers.find((l) => l.id === 'stone-place-town');
+    const paint = town?.paint as Record<string, string> | undefined;
+    expect(paint?.['text-color']).toBe('#FBF8F2');
+    expect(paint?.['text-halo-color']).toBe('#14181C');
+  });
+
+  it('emits nothing when off, on the map base, or under weather/marine', () => {
+    const off = buildOsmStyle(TILE, false, 'satellite', true);
+    expect(stoneIds(off)).toEqual([]);
+    expect(off.sources['basemap-vector']).toBeUndefined();
+    expect(off.glyphs).toBeUndefined();
+    // The raster map: the option is ignored (the vector map has its own labels).
+    expect(stoneIds(buildOsmStyle(TILE, false, 'map', true, { imageryLabels }))).toEqual([]);
+    const weather = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels,
+      weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 },
+    });
+    expect(stoneIds(weather)).toEqual([]);
+    const marine = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels,
+      marineChart: { wmsFallback: false },
+    });
+    expect(stoneIds(marine)).toEqual([]);
+  });
+
+  it('falls back to the Noto glyphs without our glyph host', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryLabels: { tiles: imageryLabels.tiles },
+    });
+    expect(s.glyphs).toContain('openfreemap');
+    expect(s.sources['basemap-peaks']).toBeUndefined();
   });
 });

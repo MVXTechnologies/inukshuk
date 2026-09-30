@@ -71,7 +71,6 @@ interface OfflineState {
 const LAYER_LABEL: Record<Basemap, string> = {
   map: 'Map',
   satellite: 'Satellite',
-  relief: 'Relief',
 };
 
 /** Native pack list with the persisted name overrides merged over pack labels. */

@@ -43,3 +43,26 @@ export function stoneSchemeFromTokens(tokens: SchemeTokens, dark: boolean): Ston
 export function stoneScheme(dark: boolean): StoneBasemapScheme {
   return stoneSchemeFromTokens(schemeTokens(dark), dark);
 }
+
+/**
+ * The palette for our trails and names drawn OVER satellite imagery ("Labels
+ * on satellite", #484). One palette in both app themes: imagery is dark in
+ * both (the same reasoning that gives satellite the dark heat ramp), so ink
+ * is paper-light on a near-black halo, roads are paper ribbons in a shadow
+ * casing and trails are paper dashes. Only the colours the imagery layers
+ * read matter (`buildStoneImageryLayers`); the fills are set for completeness.
+ * Every colour is an existing token.
+ */
+export function imageryStoneScheme(): StoneBasemapScheme {
+  const night = schemeTokens(true);
+  return {
+    ...stoneSchemeFromTokens(night, true),
+    roadFill: palette.surface,
+    roadCasing: palette.shadow,
+    path: palette.paper,
+    waterInk: night.data.info,
+    ink: palette.surface,
+    inkMuted: night.ink,
+    halo: palette.shadow,
+  };
+}

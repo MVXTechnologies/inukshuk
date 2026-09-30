@@ -105,7 +105,7 @@ interface Props {
 const NOTE_BADGE_HALF_W = 12;
 const NOTE_BADGE_COL_H = 24 + 14;
 
-/** Build a terrain group for a basemap choice, draping its tiles (or relief). */
+/** Build a terrain group for a basemap choice, draping its tiles. */
 async function buildGroupFor(
   hm: Heightmap,
   pts: readonly TrackPoint[],
@@ -773,9 +773,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
         disposeGroup(groupRef.current);
       }
       scene.add(built.group);
-      // The map- and relief-variants compile different overlay programs, so a
-      // basemap switch can hit a fresh device-only shader failure: validate the
-      // new variant too and fall back to the plain material if it can't run.
+      // A basemap switch rebuilds the terrain with a new overlay program, so it
+      // can hit a fresh device-only shader failure: validate the new build too and fall back to the plain material if it can't run.
       const renderer = rendererRef.current;
       const camera = cameraRef.current;
       if (built.overlay && renderer && camera && overlayRenderFailed(renderer, scene, camera)) {

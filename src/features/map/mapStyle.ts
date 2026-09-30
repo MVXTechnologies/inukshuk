@@ -24,7 +24,12 @@ import {
 } from '@core/weather/weatherLook';
 import type { Feature, Polygon } from 'geojson';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
-import { buildStoneLayers, STONE_FONTS_ATKINSON, STONE_FONTS_NOTO } from '@core/map/stoneStyle';
+import {
+  buildStoneImageryLayers,
+  buildStoneLayers,
+  STONE_FONTS_ATKINSON,
+  STONE_FONTS_NOTO,
+} from '@core/map/stoneStyle';
 import {
   DEFAULT_HILLSHADE_STRENGTH,
   hillshadeLook,
@@ -32,7 +37,7 @@ import {
   type PeakDensity,
 } from '@core/map/terrainOptions';
 import { MAP_MAX_PITCH_DEG, tiltReliefLook, type TiltRelief } from '@core/map/tiltRelief';
-import { stoneScheme } from './stoneScheme';
+import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
  * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
@@ -59,7 +64,7 @@ const OFM_ATTRIBUTION = 'Labels © OpenStreetMap contributors, via OpenFreeMap (
 /**
  * What a new offline pack of the `map` basemap stores: our vector base map once
  * `VECTOR_BASEMAP_ENABLED` is on (the OSM tile policy forbids offline packs of
- * its raster tiles), the OSM raster until then. Satellite and relief stay raster.
+ * its raster tiles), the OSM raster until then. Satellite stays raster.
  */
 export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : 'raster';
 
@@ -73,8 +78,8 @@ export const VECTOR_PEAKS_SOURCE = 'basemap-peaks';
 export const VECTOR_BASEMAP_SOURCE = 'basemap-vector';
 
 /**
- * Free, key-free raster base layers. Satellite/relief come from Esri's public
- * ArcGIS Online tile services (note the `{z}/{y}/{x}` row/col order). `map` uses
+ * Free, key-free raster base layers. Satellite comes from Esri's public
+ * ArcGIS Online tile service (note the `{z}/{y}/{x}` row/col order). `map` uses
  * the OSM URL injected from settings.
  */
 function baseSource(
@@ -88,13 +93,6 @@ function baseSource(
           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         ],
         attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
-      };
-    case 'relief':
-      return {
-        tiles: [
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        ],
-        attribution: 'Topographic © Esri, USGS, NOAA',
       };
     default:
       return { tiles: [tileUrl], attribution: '© OpenStreetMap contributors' };
@@ -110,8 +108,6 @@ export function basemapAttribution(basemap: MapBasemap, vector = false): string 
   switch (basemap) {
     case 'satellite':
       return '© Esri, Maxar';
-    case 'relief':
-      return '© Esri, USGS';
     default:
       // The vector base is OSM data cut by Protomaps' pipeline.
       return vector ? '© OpenStreetMap · Protomaps' : '© OpenStreetMap';
@@ -138,21 +134,17 @@ const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
     'raster-brightness-min': 0.04,
     'raster-brightness-max': 0.96,
   },
-  relief: {
-    'raster-saturation': -0.1,
-    'raster-contrast': 0.04,
-  },
 };
 
 /** Basemaps that get a shaded-relief hillshade blended under the live 2D map. */
-const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
+const SHADE_BASEMAPS = new Set<MapBasemap>(['map']);
 
 /**
  * Camera zoom below which the 2D shaded relief is not drawn — and, because
  * MapLibre only keeps a source loaded while some layer using it is in range,
  * below which the DEM is not even FETCHED (#230).
  *
- * The owner reported map/relief hitching on zoom-out on iOS while satellite
+ * The owner reported map hitching on zoom-out on iOS while satellite
  * (the one basemap with no hillshade) stayed smooth. Zooming out does not put
  * more DEM tiles on screen — a viewport needs the same ~15 of them at z8 as at
  * z12 — it crosses pyramid LEVELS, and every level crossed is a fresh set of
@@ -370,6 +362,20 @@ export interface OsmStyleOptions {
     peakDensity?: PeakDensity;
   };
   /**
+   * "Labels on satellite" (#484): our vector base map's roads, trails and
+   * names — no ground fills — drawn over the satellite imagery, in the
+   * imagery palette (light ink on a dark halo, both app themes). Honoured
+   * ONLY when the basemap is `satellite`, and not under a weather or marine
+   * chart drape, whose own reference overlay carries the names there.
+   * Same tile/glyph/summit hosts as {@link vectorBasemap}.
+   */
+  imageryLabels?: {
+    tiles: readonly string[];
+    glyphs?: string;
+    peaks?: string;
+    peakDensity?: PeakDensity;
+  };
+  /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
    * look. The dark palette applies only over the stone-night vector base —
@@ -437,9 +443,35 @@ function marineDrapeUrl(id: MarineLayerId, options: OsmStyleOptions): string {
   return options.marineChart?.rasterUrl ?? marineTileUrl(id);
 }
 
+/** The vector base map's source (our Protomaps extract). */
+function vectorBaseSource(tiles: readonly string[]): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [...tiles],
+    minzoom: 0,
+    // Protomaps builds go to z15; MapLibre overzooms past that.
+    maxzoom: 15,
+    attribution: PROTOMAPS_ATTRIBUTION,
+  };
+}
+
+/** Our named-summits source. OSM data, already credited by the base map. */
+function peaksSource(tiles: string): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [tiles],
+    // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
+    // z12 (the ladder's last rung), so deeper tiles would be copies —
+    // MapLibre overzooms z12 instead, and packs store fewer tiles. The
+    // stone layer's filter picks which of them to draw (peak density).
+    minzoom: 5,
+    maxzoom: 12,
+  };
+}
+
 /**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
- * satellite imagery, or a topographic relief map — see {@link baseSource}).
+ * or satellite imagery — see {@link baseSource}).
  * Raster (not vector) keeps us free of any API key or paid tile service. The OSM
  * tile URL is injected from settings so it can be swapped without touching code.
  *
@@ -588,14 +620,7 @@ export function buildOsmStyle(
       : null;
   if (stone && options.vectorBasemap) {
     delete style.sources.osm;
-    style.sources[VECTOR_BASEMAP_SOURCE] = {
-      type: 'vector',
-      tiles: [...options.vectorBasemap.tiles],
-      minzoom: 0,
-      // Protomaps builds go to z15; MapLibre overzooms past that.
-      maxzoom: 15,
-      attribution: PROTOMAPS_ATTRIBUTION,
-    };
+    style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(options.vectorBasemap.tiles);
     if (options.vectorBasemap.contours) {
       style.sources[VECTOR_CONTOURS_SOURCE] = {
         type: 'vector',
@@ -607,17 +632,7 @@ export function buildOsmStyle(
       };
     }
     if (options.vectorBasemap.peaks) {
-      // OSM data, already credited by the base map's attribution.
-      style.sources[VECTOR_PEAKS_SOURCE] = {
-        type: 'vector',
-        tiles: [options.vectorBasemap.peaks],
-        // Built z5–z12: the ≥ 4000 m summits from z5, every named summit by
-        // z12 (the ladder's last rung), so deeper tiles would be copies —
-        // MapLibre overzooms z12 instead, and packs store fewer tiles. The
-        // stone layer's filter picks which of them to draw (peak density).
-        minzoom: 5,
-        maxzoom: 12,
-      };
+      style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(options.vectorBasemap.peaks);
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     style.layers = [
@@ -729,6 +744,27 @@ export function buildOsmStyle(
 
   // Stone labels above the map body and its hillshade.
   if (stone) style.layers.push(...stone.labels);
+
+  // "Labels on satellite" (#484): the stone roads, trails and names over the
+  // imagery, where the stone labels would sit on the map — above the base,
+  // below the overlay anchors (PDF maps, trails) and the position puck.
+  const imagery =
+    basemap === 'satellite' && !options.weatherMuted && !options.marineChart
+      ? (options.imageryLabels ?? null)
+      : null;
+  if (imagery) {
+    style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imagery.tiles);
+    if (imagery.peaks) style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imagery.peaks);
+    style.glyphs = imagery.glyphs ?? OFM_GLYPHS_URL;
+    style.layers.push(
+      ...buildStoneImageryLayers(imageryStoneScheme(), {
+        source: VECTOR_BASEMAP_SOURCE,
+        fonts: imagery.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
+        ...(imagery.peaks ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } } : {}),
+        ...(imagery.peakDensity ? { peakDensity: imagery.peakDensity } : {}),
+      }),
+    );
+  }
 
   // Weather-mode dim: a semi-opaque neutral BACKGROUND layer above the
   // basemap/overlay rasters and below the weather drape. `background` paints

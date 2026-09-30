@@ -11,11 +11,13 @@ import {
 import type { FilterSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { PEAK_DENSITIES, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 import {
+  buildStoneImageryLayers,
   buildStoneLayers,
   elevationLabel,
   peakDueFilter,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
+  STONE_IMAGERY_LAYER_KEYS,
   STONE_LAYER_PREFIX,
   type StoneBasemapScheme,
 } from './stoneStyle';
@@ -508,5 +510,52 @@ describe('elevationLabel', () => {
     for (const ele of [4, 808, 1234, 8849]) {
       expect(evaluate({ ele })).not.toMatch(breakable);
     }
+  });
+});
+
+describe('buildStoneImageryLayers (labels on satellite, #484)', () => {
+  const imagery = (scheme: StoneBasemapScheme) =>
+    buildStoneImageryLayers(scheme, { source: SOURCE, peaks: PEAKS });
+
+  it.each([
+    ['light', LIGHT],
+    ['dark', DARK],
+  ])('keeps only line work and labels — never a ground fill (%s)', (_, scheme) => {
+    const layers = imagery(scheme);
+    expect(layers.length).toBe(STONE_IMAGERY_LAYER_KEYS.length);
+    for (const l of layers) expect(['line', 'symbol']).toContain(l.type);
+    const ids = layers.map((l) => l.id);
+    expect(ids).not.toContain(`${STONE_LAYER_PREFIX}background`);
+    expect(ids).not.toContain(`${STONE_LAYER_PREFIX}water`);
+    expect(ids.some((id) => id.includes('contour'))).toBe(false);
+  });
+
+  it('carries the trails, the roads and the place and water names', () => {
+    const ids = imagery(LIGHT).map((l) => l.id.slice(STONE_LAYER_PREFIX.length));
+    for (const k of ['path', 'track', 'road-minor', 'road-motorway-casing', 'place-town']) {
+      expect(ids).toContain(k);
+    }
+    expect(ids).toContain('waterway-label');
+    expect(ids).toContain('peak');
+  });
+
+  it('keeps the map draw order: line work under every label', () => {
+    const layers = imagery(LIGHT);
+    const lastLine = layers.map((l) => l.type).lastIndexOf('line');
+    const firstLabel = layers.findIndex((l) => l.type === 'symbol');
+    expect(lastLine).toBeLessThan(firstLabel);
+  });
+
+  it('passes the style-spec validator', () => {
+    const style = {
+      version: 8 as const,
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      sources: {
+        [SOURCE]: { type: 'vector' as const, tiles: ['https://t.example/{z}/{x}/{y}.mvt'] },
+        peaks: { type: 'vector' as const, tiles: ['https://p.example/{z}/{x}/{y}.mvt'] },
+      },
+      layers: imagery(DARK),
+    };
+    expect(validateStyleMin(style as never)).toEqual([]);
   });
 });

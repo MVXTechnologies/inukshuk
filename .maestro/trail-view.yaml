@@ -9,8 +9,8 @@
 # - #480 removed the rail's 2D/3D toggle (owner call): the focused view is the
 #   MapLibre map, tilted with two fingers like the main map. The three.js
 #   terrain view is no longer reachable, so this flow no longer builds it.
-# - #140's right-edge rail: a "Trail layers" FAB (basemap menu: Relief/Map/
-#   Satellite) and a "Trail overlays" FAB (Slope / Contours / Elevation tint
+# - #140's right-edge rail: a "Trail layers" FAB (basemap menu: Map/
+#   Satellite — Relief retired in #484) and a "Trail overlays" FAB (Slope / Contours / Elevation tint
 #   switches + contour-interval picker). Both a11y labels are identical on
 #   both platforms. The overlays FAB renders ONLY when overlaysAvailable, so
 #   it's exercised conditionally.
@@ -51,14 +51,14 @@ appId: com.inukshuk.app
 - assertVisible: 'Notes.*'
 # The 2D/3D toggle is gone (#480) — its labels must not come back.
 - assertNotVisible: 'Switch to (2D|3D) view'
-# The layers menu carries the basemap trio. Assert the choices, then dismiss
-# without picking one. ("Map" is not asserted: it would also match the tab
-# bar's Map tab.)
+# The layers menu carries the two base maps (Relief retired, #484). Assert
+# the choices, then dismiss without picking one. ("Map" is not asserted: it
+# would also match the tab bar's Map tab.)
 - tapOn: 'Trail layers'
 - extendedWaitUntil:
-    visible: 'Relief'
+    visible: 'Satellite'
     timeout: 60000
-- assertVisible: 'Satellite'
+- assertNotVisible: 'Relief'
 - tapOn:
     point: 50%,8%
 # Overlay switches live in the overlays FAB's menu (#134 fallback keeps the

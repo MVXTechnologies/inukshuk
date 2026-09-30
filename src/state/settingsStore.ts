@@ -157,7 +157,13 @@ export interface Settings {
    */
   showScaleBar: boolean;
   /**
-   * Shaded-relief hillshade blended under the `map` and `relief` basemaps (the
+   * "Labels on satellite" (overlays menu → On the map, #484): while the base
+   * map is Satellite, draw our vector map's roads, trails and names over the
+   * imagery. No effect on the Map base, which carries its own.
+   */
+  satelliteLabels: boolean;
+  /**
+   * Shaded-relief hillshade blended under the `map` basemap (the
    * `hillshade-2d` layer in `mapStyle.ts`). Platform-defaulted — see
    * {@link DEFAULT_SHOW_HILLSHADE} and #230.
    */
@@ -239,6 +245,7 @@ const DEFAULTS: Settings = {
   showHeatmap: true,
   showPdfOverlay: true,
   showScaleBar: true,
+  satelliteLabels: true,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
@@ -311,6 +318,7 @@ function snapshot(s: SettingsState): Settings {
     showHeatmap,
     showPdfOverlay,
     showScaleBar,
+    satelliteLabels,
     showHillshade,
     hillshadeStrength,
     peakDensity,
@@ -350,6 +358,7 @@ function snapshot(s: SettingsState): Settings {
     showHeatmap,
     showPdfOverlay,
     showScaleBar,
+    satelliteLabels,
     showHillshade,
     hillshadeStrength,
     peakDensity,

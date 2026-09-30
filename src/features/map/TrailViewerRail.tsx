@@ -21,14 +21,13 @@ import {
  * next to the thing it edits (backlog item 6).
  */
 
-/** Base-map choices: the same trio (labels, icons, colours) as the main map. */
+/** Base-map choices: the same pair (labels, icons, colours) as the main map (#484). */
 const BASEMAPS: {
   key: MapBasemap;
   label: string;
   icon: string;
   color: (t: MD3Theme) => string;
 }[] = [
-  { key: 'relief', label: 'Relief', icon: 'image-filter-hdr', color: () => '#9C6B3F' },
   { key: 'map', label: 'Map', icon: 'map', color: (t) => t.colors.primary },
   {
     key: 'satellite',
@@ -69,7 +68,7 @@ export function TrailViewerRail({
   );
 }
 
-/** The layers FAB + anchored basemap picker (Relief / Map / Satellite). */
+/** The layers FAB + anchored basemap picker (Map / Satellite). */
 function TrailLayersMenu({
   basemap,
   onSelect,

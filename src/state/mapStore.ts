@@ -1,4 +1,4 @@
-import type { Basemap } from '@core/geo/tiles';
+import { normalizeBasemap, type Basemap } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { create } from 'zustand';
 
@@ -19,7 +19,7 @@ interface MapState {
   showTrackOverlays: boolean;
   /** Whether the map shows a 3D relief (DEM hillshade + terrain + pitch). */
   terrain3d: boolean;
-  /** Base layer: OSM streets, satellite imagery, or a topographic relief map. */
+  /** Base layer: our map or satellite imagery (Relief was retired, #484). */
   basemap: MapBasemap;
   /**
    * Whether the active weather overlay plays across its scrubber timeline
@@ -87,7 +87,10 @@ export const useMapStore = create<MapState>((set) => ({
   setFollowUser: (follow) => set({ followUser: follow }),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
   toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
-  setBasemap: (b) => set({ basemap: b }),
+  // Normalised: a stale `relief` (retired as a base map, #484) from any
+  // caller — an older deep link, a trail viewer seeded before the update —
+  // lands on `map` instead of a base map the style can no longer draw.
+  setBasemap: (b) => set({ basemap: normalizeBasemap(b) }),
   toggleWeatherAnimation: () => set((s) => ({ weatherAnimating: !s.weatherAnimating })),
   // Written on EVERY camera settle — including rotate/pitch-only gestures and
   // the follow-mode camera moving with each GPS fix, where the centre is
