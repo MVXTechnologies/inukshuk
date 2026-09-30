@@ -123,3 +123,36 @@ describe('hillshadeStrength / peakDensity (#461)', () => {
     );
   });
 });
+
+// #480 — how much the relief deepens when the map is tilted.
+describe('tiltRelief (#480)', () => {
+  it('defaults to natural', () => {
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('hydrates a persisted choice', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, tiltRelief: 'dramatic' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('dramatic');
+  });
+
+  it('fills the default into a settings file written before the setting existed', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, hillshadeStrength: 'heavy' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('drops junk back to the default', async () => {
+    storage.readJson.mockResolvedValue({ schemaVersion: 3, tiltRelief: 'extreme' });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('persists like any other setting', () => {
+    useSettingsStore.getState().set('tiltRelief', 'off');
+    expect(storage.writeJson).toHaveBeenLastCalledWith(
+      'settings.json',
+      expect.objectContaining({ tiltRelief: 'off' }),
+    );
+  });
+});

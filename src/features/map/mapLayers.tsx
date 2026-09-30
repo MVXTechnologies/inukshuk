@@ -3,6 +3,13 @@ import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 import { heatRadiusExpression } from '@core/heat/heatRadius';
+import type { HillshadeLook } from '@core/map/terrainOptions';
+import {
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  HILLSHADE_ILLUMINATION_DIRECTION,
+} from './mapStyle';
 
 // ---------------------------------------------------------------------------
 // Static <Layer> children for the map's GeoJSON sources, hoisted out of the
@@ -268,3 +275,45 @@ export const SLOPE_LAYER = (
     paint={SLOPE_RASTER_PAINT}
   />
 );
+
+/** Id of the tilted-map relief pass (#480). */
+export const TILT_RELIEF_LAYER_ID = 'hillshade-tilt';
+
+/**
+ * The tilted-map relief pass (#480): a second hillshade over the style's own
+ * Terrarium DEM source, stacked directly above the base shading so the two
+ * add up. A component layer rather than a style-JSON one on purpose: its
+ * exaggeration follows the settled pitch, and a style-JSON change reloads the
+ * whole style (every source, every layer) — a paint change on a component
+ * layer is applied in place. Mounted only while the map is tilted and the
+ * style has a hillshade ({@link styleHasHillshade}); flat, it costs nothing.
+ * Same zoom gate and fade-in as the base (#230): no DEM traffic below z11.
+ */
+export function tiltReliefLayer(look: HillshadeLook) {
+  return (
+    <Layer
+      id={TILT_RELIEF_LAYER_ID}
+      type="hillshade"
+      source={HILLSHADE_DEM_SOURCE_ID}
+      afterId={HILLSHADE_2D_LAYER_ID}
+      minzoom={HILLSHADE_2D_MIN_ZOOM}
+      paint={{
+        'hillshade-exaggeration': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          HILLSHADE_2D_MIN_ZOOM,
+          0,
+          HILLSHADE_2D_MIN_ZOOM + 1,
+          look.exaggeration,
+        ],
+        'hillshade-shadow-color': look.shadowColor,
+        'hillshade-highlight-color': look.highlightColor,
+        'hillshade-accent-color': look.accentColor,
+        // The base shading's light, so the pass deepens it rather than
+        // adding a second, contradicting sun.
+        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+      }}
+    />
+  );
+}

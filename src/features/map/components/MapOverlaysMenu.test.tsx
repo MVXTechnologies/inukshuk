@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useSettingsStore } from '@state/settingsStore';
 import { OverlaysDrilldown } from './MapOverlaysMenu';
 
@@ -95,11 +95,14 @@ describe('OverlaysDrilldown', () => {
 });
 
 describe('Topology: Shading and Peaks pickers (#461)', () => {
-  afterEach(() => {
-    useSettingsStore.setState({
-      showHillshade: true,
-      hillshadeStrength: 'medium',
-      peakDensity: 'normal',
+  // In act(): the menu is still mounted here and re-renders on the reset.
+  afterEach(async () => {
+    await act(async () => {
+      useSettingsStore.setState({
+        showHillshade: true,
+        hillshadeStrength: 'medium',
+        peakDensity: 'normal',
+      });
     });
   });
 
@@ -153,8 +156,55 @@ describe('Topology: Shading and Peaks pickers (#461)', () => {
 
   it('never wraps a row label (the owner’s stray "s" of Contours)', async () => {
     await openTopology();
-    for (const label of ['Contours', 'Shading', 'Peaks', 'Slope']) {
+    for (const label of ['Contours', 'Shading', '3D relief', 'Peaks', 'Slope']) {
       expect(screen.getByText(label).props.numberOfLines).toBe(1);
     }
+  });
+});
+
+describe('Topology: 3D relief picker (#480)', () => {
+  afterEach(async () => {
+    await act(async () => {
+      useSettingsStore.setState({ showHillshade: true, tiltRelief: 'natural' });
+    });
+  });
+
+  async function openTopology(): Promise<void> {
+    await renderMenu();
+    fireEvent.press(screen.getByLabelText('Topology'));
+    await screen.findByText('3D relief');
+  }
+
+  it('shows the current choice, Natural by default', async () => {
+    useSettingsStore.setState({ showHillshade: true, tiltRelief: 'natural' });
+    await openTopology();
+    expect(screen.getByLabelText('Natural').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(screen.getByLabelText('Off').props.accessibilityState).toMatchObject({
+      selected: false,
+    });
+  });
+
+  it.each([
+    ['Off', 'off'],
+    ['Dramatic', 'dramatic'],
+    ['Natural', 'natural'],
+  ] as const)('%s sets the setting', async (label, value) => {
+    useSettingsStore.setState({
+      showHillshade: true,
+      tiltRelief: value === 'natural' ? 'off' : 'natural',
+    });
+    await openTopology();
+    fireEvent.press(screen.getByLabelText(label));
+    expect(useSettingsStore.getState().tiltRelief).toBe(value);
+  });
+
+  it('never touches the shading itself', async () => {
+    useSettingsStore.setState({ showHillshade: true, hillshadeStrength: 'light' });
+    await openTopology();
+    fireEvent.press(screen.getByLabelText('Dramatic'));
+    expect(useSettingsStore.getState().showHillshade).toBe(true);
+    expect(useSettingsStore.getState().hillshadeStrength).toBe('light');
   });
 });

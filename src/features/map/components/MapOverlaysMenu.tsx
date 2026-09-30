@@ -9,6 +9,7 @@ import {
   SHADING_LEVELS,
   type ShadingLevel,
 } from '@core/map/terrainOptions';
+import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -231,6 +232,7 @@ function TopologySubmenu({
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
+  const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const set = useSettingsStore((s) => s.set);
   // "None" is the hillshade switch off (#230 keeps its platform default);
   // any other level turns it on at that strength (#461).
@@ -402,6 +404,20 @@ function TopologySubmenu({
           detents={SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }))}
           selected={shading}
           onSelect={setShading}
+          width={SELECTOR_TRACK_W}
+          {...SLIDER_PALETTE}
+        />,
+      )}
+      {/* #480: how much that shading deepens when the map is tilted (two
+          fingers). It deepens the hillshade, so it rests with Shading None. */}
+      {pickerRow(
+        '3D relief',
+        'rotate-3d-variant',
+        <DetentSlider
+          detents={TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }))}
+          selected={tiltRelief}
+          onSelect={(r) => set('tiltRelief', r)}
+          disabled={!showHillshade}
           width={SELECTOR_TRACK_W}
           {...SLIDER_PALETTE}
         />,

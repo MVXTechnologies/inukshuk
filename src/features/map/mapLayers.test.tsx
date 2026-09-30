@@ -11,7 +11,11 @@ import {
   TRACKS_LINES_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
+  TILT_RELIEF_LAYER_ID,
+  tiltReliefLayer,
 } from './mapLayers';
+import { HILLSHADE_2D_LAYER_ID, HILLSHADE_2D_MIN_ZOOM, HILLSHADE_DEM_SOURCE_ID } from './mapStyle';
+import { tiltReliefLook } from '@core/map/tiltRelief';
 import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
@@ -147,5 +151,46 @@ describe('overlay layers sit below the position puck (#332)', () => {
     const injected = await injectedBeforeIds(children as ReactNode);
     expect(injected.length).toBeGreaterThan(0);
     for (const [, beforeId] of injected) expect(beforeId).toBe(anchor);
+  });
+});
+
+// #480 — the tilted-map relief pass: a component hillshade stacked right on
+// the style's base shading, over the style's own DEM source.
+describe('tiltReliefLayer (#480)', () => {
+  async function rendered(dark: boolean) {
+    const look = tiltReliefLook('dramatic', 60, dark);
+    if (look === null) throw new Error('expected a look at full tilt');
+    const view = await render(tiltReliefLayer(look));
+    return { look, node: view.getByTestId('mlrn-hillshade-layer') };
+  }
+
+  it('stacks on the base hillshade over the same DEM source', async () => {
+    const { node } = await rendered(false);
+    expect(node.props.id).toBe(TILT_RELIEF_LAYER_ID);
+    expect(node.props.source).toBe(HILLSHADE_DEM_SOURCE_ID);
+    expect(node.props.afterId).toBe(HILLSHADE_2D_LAYER_ID);
+    expect(node.props.beforeId).toBeUndefined();
+    // The base's zoom gate: no DEM traffic below it.
+    expect(node.props.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
+  });
+
+  it('paints the look it is given, in each theme', async () => {
+    type Painted = { stylevalue: { value: unknown } };
+    const paint = async (dark: boolean) => {
+      const { look, node } = await rendered(dark);
+      const rs = node.props.reactStyle as Record<string, Painted>;
+      return { look, rs };
+    };
+    const light = await paint(false);
+    const dark = await paint(true);
+    // Colours reach native as packed ints, so compare the themes to each
+    // other; the exaggeration rides the zoom ramp's last stop.
+    expect(light.rs.hillshadeShadowColor?.stylevalue.value).not.toEqual(
+      dark.rs.hillshadeShadowColor?.stylevalue.value,
+    );
+    expect(JSON.stringify(light.rs.hillshadeExaggeration)).toContain(
+      `{"type":"number","value":${light.look.exaggeration}}`,
+    );
+    expect(light.rs.hillshadeIlluminationDirection?.stylevalue.value).toBe(335);
   });
 });

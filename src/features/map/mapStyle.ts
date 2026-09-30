@@ -168,6 +168,26 @@ const SHADE_BASEMAPS = new Set<MapBasemap>(['map', 'relief']);
  */
 export const HILLSHADE_2D_MIN_ZOOM = 11;
 
+/** The 2D shaded relief's layer id, and its Terrarium DEM source's id. */
+export const HILLSHADE_2D_LAYER_ID = 'hillshade-2d';
+export const HILLSHADE_DEM_SOURCE_ID = 'dem';
+/** The shaded relief's light: from the north-north-west, as on paper maps. */
+export const HILLSHADE_ILLUMINATION_DIRECTION = 335;
+
+/**
+ * Whether a style draws the 2D shaded relief — i.e. has the DEM source and
+ * the layer that the tilted-map relief pass anchors to (#480). The
+ * gate lives in {@link buildOsmStyle} (shading on, a shade-able basemap, no
+ * weather dim, no marine chart); reading the built style keeps callers from
+ * having to mirror it.
+ */
+export function styleHasHillshade(style: StyleSpecification): boolean {
+  return (
+    style.sources[HILLSHADE_DEM_SOURCE_ID] !== undefined &&
+    style.layers.some((l) => l.id === HILLSHADE_2D_LAYER_ID)
+  );
+}
+
 /**
  * Tile size DECLARED for the 2D shaded-relief DEM source: the Terrarium PNGs'
  * true 256 px.
@@ -626,7 +646,7 @@ export function buildOsmStyle(
     // Chart mode: terrain shading under a nautical chart is noise.
     !options.marineChart
   ) {
-    style.sources.dem = {
+    style.sources[HILLSHADE_DEM_SOURCE_ID] = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
       encoding: 'terrarium',
@@ -640,9 +660,9 @@ export function buildOsmStyle(
       stone !== null && options.vectorBasemap?.dark === true,
     );
     style.layers.push({
-      id: 'hillshade-2d',
+      id: HILLSHADE_2D_LAYER_ID,
       type: 'hillshade',
-      source: 'dem',
+      source: HILLSHADE_DEM_SOURCE_ID,
       // The zoom gate (#230) — no shading, and no DEM traffic at all, below it.
       minzoom: HILLSHADE_2D_MIN_ZOOM,
       paint: {
@@ -660,7 +680,7 @@ export function buildOsmStyle(
         'hillshade-shadow-color': look.shadowColor,
         'hillshade-highlight-color': look.highlightColor,
         'hillshade-accent-color': look.accentColor,
-        'hillshade-illumination-direction': 335,
+        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       },
     });
   }
@@ -680,6 +700,10 @@ export function buildOsmStyle(
       source: 'dem',
       paint: { 'hillshade-exaggeration': 0.7 },
     });
+    // NOTE (#480): MapLibre Native as bundled (Android 13.6.1 / iOS 6.31.0)
+    // does not parse `terrain` — it is dropped, and the map stays a flat
+    // sheet. Only a MapLibre GL JS host would drape this. The main map never
+    // passes terrain3d=true (its 3D is the three.js Terrain3DLiveView).
     style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
 

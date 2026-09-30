@@ -15,6 +15,7 @@ import {
   type HillshadeStrength,
   type PeakDensity,
 } from '@core/map/terrainOptions';
+import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeTrailNetworks, type TrailNetworkId } from '@core/geo/trailNetworks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
@@ -168,6 +169,12 @@ export interface Settings {
   hillshadeStrength: HillshadeStrength;
   /** How early named summits appear on the vector map (#461). */
   peakDensity: PeakDensity;
+  /**
+   * How much the shaded relief deepens when the map is tilted (#480) — the
+   * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
+   * None there is nothing to deepen.
+   */
+  tiltRelief: TiltRelief;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** 3D terrain: CalTopo-style slope-angle shading overlay. */
@@ -235,6 +242,7 @@ const DEFAULTS: Settings = {
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
+  tiltRelief: DEFAULT_TILT_RELIEF,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -307,6 +315,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    tiltRelief,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -346,6 +355,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    tiltRelief,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -395,6 +405,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;
       }
       if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
+      if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

@@ -22,7 +22,10 @@ import {
   basemapAttribution,
   buildOsmStyle,
   HILLSHADE_2D_DEM_TILE_SIZE,
+  HILLSHADE_2D_LAYER_ID,
   HILLSHADE_2D_MIN_ZOOM,
+  HILLSHADE_DEM_SOURCE_ID,
+  styleHasHillshade,
 } from './mapStyle';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
@@ -986,5 +989,27 @@ describe('terrain options in the style (#461)', () => {
       });
       expect(s.sources['basemap-peaks']).toMatchObject({ minzoom: 5, maxzoom: 12 });
     });
+  });
+});
+
+// #480 — the tilted-map relief pass mounts only over a style that has the base
+// shading (it names that layer as its afterId and reads the same DEM source).
+describe('styleHasHillshade (#480)', () => {
+  it('is true when the shaded relief is drawn, and names the ids the pass uses', () => {
+    const s = buildOsmStyle(TILE, false, 'map', true);
+    expect(styleHasHillshade(s)).toBe(true);
+    expect(layerIds(s)).toContain(HILLSHADE_2D_LAYER_ID);
+    const dem = s.sources[HILLSHADE_DEM_SOURCE_ID] as RasterDEMSourceSpecification;
+    expect(dem.type).toBe('raster-dem');
+    expect(dem.encoding).toBe('terrarium');
+  });
+
+  it('is false with shading off, over satellite, and under the weather dim', () => {
+    const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'map', false))).toBe(false);
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'satellite', true))).toBe(false);
+    expect(styleHasHillshade(buildOsmStyle(TILE, false, 'map', true, { weatherMuted }))).toBe(
+      false,
+    );
   });
 });
