@@ -96,7 +96,7 @@ import { MapControlsRail } from './components/MapControlsRail';
 import { RenderingToasts } from './components/RenderingToasts';
 import { ScaleBar } from './components/ScaleBar';
 import { metersPerPixel } from '@core/geo/scaleBar';
-import { heatRadiusPx } from '@core/heat/heatRadius';
+import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
@@ -122,7 +122,7 @@ import {
   SLOPE_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
-  HEATMAP_LAYERS,
+  HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYER,
@@ -133,6 +133,7 @@ import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useTrackHeat } from './useTrackHeat';
+import { useGeoJsonString } from './useGeoJsonString';
 import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { MarinePackBanner } from './marine/MarinePackBanner';
@@ -158,6 +159,9 @@ import { useTimedSnackbar } from '../common/useTimedSnackbar';
 // re-serializes the entire track so far and pushes it across the bridge each
 // fix. Rebuild at most once per TRAIL_REBUILD_MS or every TRAIL_REBUILD_POINTS
 // new fixes, whichever comes first.
+/** Stable empty id list: trail overlays switched off (#465). */
+const NO_IDS: readonly string[] = [];
+
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
 
@@ -295,22 +299,31 @@ export function MapScreen() {
   // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
   // controls-rail overlay count — only the 2D per-trail render block was
   // replaced by the combined heat source (trackHeat), so this call stays.
-  const trackOverlays = useTrackOverlays(tracks, shownTrackIds);
+  // The trail-overlays master switch (map store): off, no trail or heat
+  // geometry is drawn, so none is loaded or built either (#465).
+  const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
+  const drawnTrackIds = showTrackOverlays ? shownTrackIds : NO_IDS;
+  const trackOverlays = useTrackOverlays(tracks, drawnTrackIds);
   // When the heatmap toggle is on, the heat layer + tap-carousel must source
   // EVERY track in the library, not just whatever the current visibility
   // mode/folder filters/activeTrackIds happen to show ("if heatmap is
   // selected, it shouldn't need the trace to be shown"). When it's off this
-  // collapses to exactly shownTrackIds, so useTrackHeat's behavior — and its
-  // GPX-load footprint — is byte-for-byte the pre-this-feature one: "when
-  // heatmap is OFF, nothing changes". showHeatmap itself is declared below
-  // (with the rest of the map-store/settings-store reads); read it here too
-  // since allTrackIds must be computed before useTrackHeat is called.
+  // collapses to exactly the shown trails, and the heat grid isn't built.
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
+  const heatOn = showTrackOverlays && showHeatmap;
   const allTrackIds = useMemo(
-    () => (showHeatmap ? tracks.map((t) => t.id) : shownTrackIds),
-    [showHeatmap, tracks, shownTrackIds],
+    () => (heatOn ? tracks.map((t) => t.id) : drawnTrackIds),
+    [heatOn, tracks, drawnTrackIds],
   );
-  const trackHeat = useTrackHeat(tracks, shownTrackIds, allTrackIds);
+  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn);
+  // The big sources, serialized once per data change (#465).
+  // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
+  // — and a selection flips the lines layer's filter, which re-renders it — so
+  // a 400-trail source used to be re-serialized and re-parsed natively on
+  // every tap. A string that keeps its identity is passed through untouched.
+  const linesJson = useGeoJsonString(trackHeat.lines);
+  const heatLinesJson = useGeoJsonString(trackHeat.heatLines);
+  const heatGlowJson = useGeoJsonString(trackHeat.heatGlow);
   const router = useRouter();
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
@@ -324,7 +337,6 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
   const shownTrail = useLongTrailsStore((s) => s.shown);
@@ -338,6 +350,8 @@ export function MapScreen() {
   const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
   // Contours on the vector map are served tiles, part of the style.
   const terrainContours = useSettingsStore((s) => s.terrainContours);
+  // Heat tone follows the basemap: dark theme and satellite imagery are dark.
+  const heatLayerSet = theme.dark || basemap === 'satellite' ? HEAT_LAYERS.dark : HEAT_LAYERS.light;
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -1086,9 +1100,10 @@ export function MapScreen() {
   // per carousel "open", not on every focused-card swipe.
   useEffect(() => {
     if (!heatSelection) return;
-    const boxes = heatSelection.trackIds
-      .map((id) => tracks.find((t) => t.id === id)?.stats.bbox)
-      .filter((b): b is BoundingBox => b !== undefined);
+    // One pass over the library, not a `tracks.find` per carousel trail (#465).
+    const wanted = new Set(heatSelection.trackIds);
+    const boxes: BoundingBox[] = [];
+    for (const t of tracks) if (wanted.has(t.id) && t.stats.bbox) boxes.push(t.stats.bbox);
     const union = unionBoundingBoxes(boxes);
     if (!union) return;
     setFollowUser(false);
@@ -1544,9 +1559,9 @@ export function MapScreen() {
               { lng: lngLatArr[0], lat: lngLatArr[1] },
               // The finger's tolerance: at least TRAIL_HIT_PX, and the whole
               // visible heat glow when the heatmap is on.
-              Math.max(TRAIL_HIT_PX, showHeatmap ? heatRadiusPx(scaleAt?.zoom ?? 16) : 0) *
+              Math.max(TRAIL_HIT_PX, heatOn ? heatTapRadiusPx(scaleAt?.zoom ?? 16) : 0) *
                 (metersPerPixel(scaleAt?.zoom ?? 16, lngLatArr[1]) ?? 0),
-              showHeatmap,
+              heatOn,
             )
           : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
@@ -1604,7 +1619,7 @@ export function MapScreen() {
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
-      showHeatmap,
+      heatOn,
       inspect,
       showTrackOverlays,
       restoreCameraOnDeselect,
@@ -2021,21 +2036,24 @@ export function MapScreen() {
             </GeoJSONSource>
           )}
 
-          {/* Heatmap density: a native MapLibre `heatmap` layer under the
-              trail lines, built from sampled points of EVERY qualifying
-              trail in the library (useTrackHeat.heatPoints — global while
-              the toggle is on, independent of visibility mode/folder
-              filters/activeTrackIds, bounded feature count regardless of how
-              many/long those trails are — see qualifiesForHeat). Tight
-              dots/streaks at province/city zoom (small radius, low intensity
-              — DENSITY carries the "hot" signal, not blob size), growing
-              into a corridor wash as you zoom toward street level. Capped at
-              a warm orange (no dark/red-brown top) and faded slightly above
-              z15 once the trail lines themselves carry the detail. Drawn
-              BEFORE the lines below so it sits beneath them. */}
-          {showTrackOverlays && showHeatmap && trackHeat.heatPoints && (
-            <GeoJSONSource id="tracks-heat-points" data={trackHeat.heatPoints}>
-              {HEATMAP_LAYERS}
+          {/* The personal heatmap (#470), over EVERY qualifying trail in the
+              library while the toggle is on (independent of visibility
+              mode/folder filters/activeTrackIds — see qualifiesForHeat):
+              a soft glow from the coarse pass grid when zoomed out, fading
+              into crisp pass-count lines that follow the streets actually
+              travelled (one pass a clearly visible warm line, many passes
+              hot). Both sources are bounded by the ground covered, not by
+              how many trails or fixes there are, and are serialized once per
+              data change. Drawn BEFORE the trail lines below so they sit
+              beneath them. */}
+          {heatOn && heatGlowJson && (
+            <GeoJSONSource id="tracks-heat-glow-points" data={heatGlowJson}>
+              {heatLayerSet.glow}
+            </GeoJSONSource>
+          )}
+          {heatOn && heatLinesJson && (
+            <GeoJSONSource id="tracks-heat-lines-source" data={heatLinesJson}>
+              {heatLayerSet.lines}
             </GeoJSONSource>
           )}
 
@@ -2051,8 +2069,8 @@ export function MapScreen() {
               onMapPress below to open the HeatPointCarousel; the per-trail
               onPress this replaced is gone for good — the map-level hit-test
               (heatAt) is the only way in now. */}
-          {showTrackOverlays && trackHeat.lines && (
-            <GeoJSONSource id="tracks-lines" data={trackHeat.lines}>
+          {showTrackOverlays && linesJson && (
+            <GeoJSONSource id="tracks-lines" data={linesJson}>
               {hasSelection ? TRACKS_LINES_LAYER.hidden : TRACKS_LINES_LAYER.shown}
             </GeoJSONSource>
           )}
