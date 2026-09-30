@@ -79,23 +79,23 @@ export interface HillshadeLook {
  */
 export function hillshadeLook(strength: HillshadeStrength, dark: boolean): HillshadeLook {
   const k = { light: 0, medium: 1, heavy: 2 }[strength];
-  const exaggeration = [0.25, 0.45, 0.75][k]!;
+  const exaggeration = [0.25, 0.45, 1][k]!;
   if (dark) {
-    const shadow = [0.55, 0.75, 0.9][k]!;
-    const highlight = [0.06, 0.1, 0.14][k]!;
+    const shadow = [0.55, 0.75, 1][k]!;
+    const highlight = [0.06, 0.1, 0.2][k]!;
     return {
       exaggeration,
       shadowColor: `rgba(0, 0, 0, ${shadow})`,
       highlightColor: `rgba(235, 228, 214, ${highlight})`,
-      accentColor: `rgba(0, 0, 0, ${[0.15, 0.25, 0.35][k]!})`,
+      accentColor: `rgba(0, 0, 0, ${[0.15, 0.25, 0.5][k]!})`,
     };
   }
-  const shadow = [0.4, 0.55, 0.75][k]!;
-  const highlight = [0.18, 0.25, 0.32][k]!;
+  const shadow = [0.4, 0.55, 0.95][k]!;
+  const highlight = [0.18, 0.25, 0.45][k]!;
   return {
     exaggeration,
     shadowColor: `rgba(74, 62, 45, ${shadow})`,
     highlightColor: `rgba(255, 250, 240, ${highlight})`,
-    accentColor: `rgba(120, 105, 80, ${[0.2, 0.3, 0.4][k]!})`,
+    accentColor: `rgba(120, 105, 80, ${[0.2, 0.3, 0.55][k]!})`,
   };
 }
