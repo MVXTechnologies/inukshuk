@@ -6,6 +6,17 @@ import type { BoundingBox } from '@core/models';
  * using these helpers to build a heightmap mesh.
  */
 
+/**
+ * Mapzen/AWS Terrarium elevation tiles (open data, no key): the DEM behind
+ * the 3D view, the 2D terrain overlays and the map maker's contours/slope.
+ * Served z0-15; `{z}/{x}/{y}` order.
+ */
+export const TERRARIUM_TILE_SOURCE = {
+  template: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  minZoom: 0,
+  maxZoom: 15,
+} as const;
+
 /** Fractional XYZ tile coordinates of a lng/lat at zoom `z`. */
 export function lngLatToTile(lng: number, lat: number, z: number): { x: number; y: number } {
   const n = 2 ** z;

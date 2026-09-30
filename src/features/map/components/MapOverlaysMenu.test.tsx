@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { useSettingsStore } from '@state/settingsStore';
 import { OverlaysDrilldown } from './MapOverlaysMenu';
 
 /**
@@ -83,5 +84,19 @@ describe('OverlaysDrilldown', () => {
       fireEvent.press(screen.getByLabelText('Weather'));
       expect(await screen.findByLabelText('Back to overlays')).toBeTruthy();
     });
+  });
+
+  it('names the heat layer "Personal heatmap" (#462)', async () => {
+    useSettingsStore.setState({
+      showHeatmap: true,
+      terrainSlope: false,
+      terrainContours: false,
+    });
+    await renderMenu();
+    // The Topology subtitle, then the toggle row inside the sub-menu.
+    expect(screen.getByText('Personal heatmap on')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Topology'));
+    expect(await screen.findByText('Personal heatmap')).toBeTruthy();
+    expect(screen.queryByText('Heatmap')).toBeNull();
   });
 });

@@ -3,11 +3,24 @@ import {
   pickTerrainZoom,
   rangeBbox,
   sampleGridBilinear,
+  TERRARIUM_TILE_SOURCE,
   terrariumToMeters,
   tileRangeForBbox,
   type TileRange,
 } from '@core/geo/terrain';
 import type { Basemap } from '@core/geo/tiles';
+import { printTileSource } from '@core/mapmaker/printSources';
+import {
+  assessTileFailures,
+  fetchAllTiles,
+  tilesInRange,
+  tileUrl,
+  type FetchAllOptions,
+  type PlannedRange,
+  type PlannedTile,
+  type TileFailure,
+  type TilePlan,
+} from '@core/mapmaker/tilePlan';
 import type { BoundingBox } from '@core/models';
 import * as storage from '@data/storage';
 import jpeg from 'jpeg-js';
@@ -17,13 +30,14 @@ const TILE = 256;
 const UA = { 'User-Agent': 'Inukshuk/1.0 (offline trail navigation app)' };
 
 const demUrl = (z: number, x: number, y: number) =>
-  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+  tileUrl(TERRARIUM_TILE_SOURCE.template, { z, x, y });
 
 /**
  * Free, key-free basemaps drapeable on the 3D terrain — every app {@link Basemap}
  * except 'relief', which has no drape (the mesh's hypsometric tint is the relief
  * look). Both come from Esri's public ArcGIS Online tile services (note the
- * `{z}/{y}/{x}` row/col order).
+ * `{z}/{y}/{x}` row/col order); the templates live in `printSources`, shared
+ * with the map maker's live preview.
  *
  * We deliberately do NOT use raw `tile.openstreetmap.org` here: the OSM tile
  * policy forbids app/bulk fetching and returns "Access Blocked 403" tiles when a
@@ -31,10 +45,6 @@ const demUrl = (z: number, x: number, y: number) =>
  * matches the satellite/relief sources.
  */
 export type DrapeSource = Exclude<Basemap, 'relief'>;
-const basemapUrl = (source: DrapeSource, z: number, x: number, y: number) =>
-  source === 'satellite'
-    ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
-    : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`;
 
 /** Decode a tile (PNG or JPEG, by magic bytes) to RGBA. */
 function decodeTileRGBA(bytes: Uint8Array): Uint8Array {
@@ -81,31 +91,24 @@ export async function fetchHeightmap(
   const fullH = (range.maxY - range.minY + 1) * TILE;
   const full = new Float32Array(fullW * fullH);
 
-  const jobs: Promise<void>[] = [];
-  for (let ty = range.minY; ty <= range.maxY; ty++) {
-    for (let tx = range.minX; tx <= range.maxX; tx++) {
-      const ox = (tx - range.minX) * TILE;
-      const oy = (ty - range.minY) * TILE;
-      jobs.push(
-        (async () => {
-          const rgba = decodeTileRGBA(
-            await storage.downloadBytes(demUrl(z, tx, ty), `dem-${z}-${tx}-${ty}.png`),
-          );
-          for (let y = 0; y < TILE; y++) {
-            for (let x = 0; x < TILE; x++) {
-              const i = (y * TILE + x) * 4;
-              full[(oy + y) * fullW + (ox + x)] = terrariumToMeters(
-                rgba[i]!,
-                rgba[i + 1]!,
-                rgba[i + 2]!,
-              );
-            }
-          }
-        })(),
-      );
+  // Bounded, retried downloads (#460). A heightmap with a hole would draw a
+  // cliff down to -32 768 m, so unlike a base raster ANY missing tile throws —
+  // with a message that says so, instead of the bare download error.
+  const tiles = tilesInRange(range);
+  const failures = await fetchAllTiles(tiles, async (t) => {
+    const rgba = decodeTileRGBA(
+      await storage.downloadBytes(demUrl(t.z, t.x, t.y), `dem-${t.z}-${t.x}-${t.y}.png`),
+    );
+    const ox = t.col * TILE;
+    const oy = t.row * TILE;
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const i = (y * TILE + x) * 4;
+        full[(oy + y) * fullW + (ox + x)] = terrariumToMeters(rgba[i]!, rgba[i + 1]!, rgba[i + 2]!);
+      }
     }
-  }
-  await Promise.all(jobs);
+  });
+  assessTileFailures('elevation', tiles.length, failures, 0);
 
   const data = new Float32Array(grid * grid);
   let minH = Infinity;
@@ -171,115 +174,114 @@ export interface BasemapTexture {
 }
 
 /**
- * Stitch any `{z}/{x}/{y}` raster tile service over a tile range (#349).
- *
- * Two modes, because the map maker needs both:
- * - `opaque`: force alpha to 255, for a BASE layer that must not let anything
- *   show through (and whose JPEG tiles have no alpha to begin with).
- * - otherwise: preserve tile alpha, for an OVERLAY that gets composited on
- *   top — place labels, hillshade, route networks.
- *
- * A tile that fails to download is left as a hole rather than failing the
- * whole texture: overlay coverage is patchy by nature, and one dropped base
- * tile is a blank square rather than no map at all.
+ * The warm paper tone the live map paints behind its tiles; a print tile that
+ * never arrived shows as this rather than as black (#460).
  */
-export async function fetchTileTexture(
-  range: TileRange,
-  urlTemplate: string,
-  { opaque = false, cacheKey = 'tile' }: { opaque?: boolean; cacheKey?: string } = {},
-): Promise<BasemapTexture> {
-  const fullW = (range.maxX - range.minX + 1) * TILE;
-  const fullH = (range.maxY - range.minY + 1) * TILE;
-  const out = new Uint8Array(fullW * fullH * 4);
+const PAPER_RGB = [0xe6, 0xdf, 0xcf] as const;
 
-  const jobs: Promise<void>[] = [];
-  for (let ty = range.minY; ty <= range.maxY; ty++) {
-    for (let tx = range.minX; tx <= range.maxX; tx++) {
-      const ox = (tx - range.minX) * TILE;
-      const oy = (ty - range.minY) * TILE;
-      jobs.push(
-        (async () => {
-          let rgba: Uint8Array;
-          try {
-            const url = urlTemplate
-              .replace('{z}', String(range.z))
-              .replace('{x}', String(tx))
-              .replace('{y}', String(ty));
-            rgba = decodeTileRGBA(
-              await storage.downloadBytes(url, `${cacheKey}-${range.z}-${tx}-${ty}`, UA),
-            );
-          } catch {
-            return; // hole
-          }
-          if (opaque) {
-            for (let y = 0; y < TILE; y++) {
-              for (let x = 0; x < TILE; x++) {
-                const si = (y * TILE + x) * 4;
-                const di = ((oy + y) * fullW + (ox + x)) * 4;
-                out[di] = rgba[si]!;
-                out[di + 1] = rgba[si + 1]!;
-                out[di + 2] = rgba[si + 2]!;
-                out[di + 3] = 255;
-              }
-            }
-          } else {
-            for (let y = 0; y < TILE; y++) {
-              out.set(
-                rgba.subarray(y * TILE * 4, (y * TILE + TILE) * 4),
-                ((oy + y) * fullW + ox) * 4,
-              );
-            }
-          }
-        })(),
-      );
-    }
-  }
-  await Promise.all(jobs);
-  return { data: out, width: fullW, height: fullH };
+export interface StitchOptions {
+  /** Base layer: alpha forced to 255, holes painted paper. Otherwise alpha is kept. */
+  opaque?: boolean;
+  /** Cache file name for a tile (kept identical to older builds' names). */
+  cacheName: (t: PlannedTile) => string;
+  /** Concurrency, retries, progress and abort — see {@link fetchAllTiles}. */
+  fetch?: FetchAllOptions;
+}
+
+export interface StitchResult {
+  texture: BasemapTexture;
+  /** Tiles that never arrived, after retries; their cells are holes. */
+  failures: TileFailure<PlannedTile>[];
 }
 
 /**
- * Fetch the basemap (OSM map or free Esri satellite) tiles for the same tile
+ * Download `tiles` of `range` from `template` and stitch them into one RGBA
+ * raster, row 0 = north (#460). Bounded concurrency with per-tile retries, and
+ * a tile that still fails is REPORTED, not thrown: the caller decides whether a
+ * raster with holes is acceptable (see `assessTileFailures`).
+ */
+export async function stitchTiles(
+  range: PlannedRange,
+  tiles: readonly PlannedTile[],
+  template: string,
+  { opaque = false, cacheName, fetch }: StitchOptions,
+): Promise<StitchResult> {
+  const fullW = (range.maxX - range.minX + 1) * TILE;
+  const fullH = (range.maxY - range.minY + 1) * TILE;
+  const out = new Uint8Array(fullW * fullH * 4);
+  if (opaque) {
+    for (let i = 0; i < out.length; i += 4) {
+      out[i] = PAPER_RGB[0];
+      out[i + 1] = PAPER_RGB[1];
+      out[i + 2] = PAPER_RGB[2];
+      out[i + 3] = 255;
+    }
+  }
+
+  const failures = await fetchAllTiles(
+    tiles,
+    async (t) => {
+      const rgba = decodeTileRGBA(
+        await storage.downloadBytes(tileUrl(template, t), cacheName(t), UA),
+      );
+      const ox = t.col * TILE;
+      const oy = t.row * TILE;
+      if (opaque) {
+        for (let y = 0; y < TILE; y++) {
+          for (let x = 0; x < TILE; x++) {
+            const si = (y * TILE + x) * 4;
+            const di = ((oy + y) * fullW + (ox + x)) * 4;
+            out[di] = rgba[si]!;
+            out[di + 1] = rgba[si + 1]!;
+            out[di + 2] = rgba[si + 2]!;
+            out[di + 3] = 255;
+          }
+        }
+      } else {
+        for (let y = 0; y < TILE; y++) {
+          out.set(rgba.subarray(y * TILE * 4, (y * TILE + TILE) * 4), ((oy + y) * fullW + ox) * 4);
+        }
+      }
+    },
+    fetch,
+  );
+  return { texture: { data: out, width: fullW, height: fullH }, failures };
+}
+
+const basemapCacheName = (source: DrapeSource) => (t: PlannedTile) =>
+  `${source}-${t.z}-${t.x}-${t.y}.${source === 'satellite' ? 'jpg' : 'png'}`;
+
+/**
+ * The map maker's base raster (#460): the print source's tiles for a planned
+ * sheet, holes and all — the composer judges whether they are few enough.
+ */
+export function fetchPrintBasemap(
+  plan: TilePlan,
+  source: DrapeSource,
+  fetch?: FetchAllOptions,
+): Promise<StitchResult> {
+  return stitchTiles(plan.range, plan.tiles, printTileSource(source).template, {
+    opaque: true,
+    cacheName: basemapCacheName(source),
+    fetch,
+  });
+}
+
+/**
+ * Fetch the basemap (Esri street map or satellite) tiles for the same tile
  * range as the heightmap and stitch them into one RGBA texture to drape on the
- * terrain. Row 0 = north, matching the mesh UVs.
+ * terrain. Row 0 = north, matching the mesh UVs. Each tile is retried; a tile
+ * still missing throws, and the 3D caller falls back to its relief tint.
  */
 export async function fetchBasemapTexture(
   range: TileRange,
   source: DrapeSource,
 ): Promise<BasemapTexture> {
-  const fullW = (range.maxX - range.minX + 1) * TILE;
-  const fullH = (range.maxY - range.minY + 1) * TILE;
-  const out = new Uint8Array(fullW * fullH * 4);
-
-  const jobs: Promise<void>[] = [];
-  for (let ty = range.minY; ty <= range.maxY; ty++) {
-    for (let tx = range.minX; tx <= range.maxX; tx++) {
-      const ox = (tx - range.minX) * TILE;
-      const oy = (ty - range.minY) * TILE;
-      jobs.push(
-        (async () => {
-          const ext = source === 'satellite' ? 'jpg' : 'png';
-          const rgba = decodeTileRGBA(
-            await storage.downloadBytes(
-              basemapUrl(source, range.z, tx, ty),
-              `${source}-${range.z}-${tx}-${ty}.${ext}`,
-              UA,
-            ),
-          );
-          for (let y = 0; y < TILE; y++) {
-            for (let x = 0; x < TILE; x++) {
-              const si = (y * TILE + x) * 4;
-              const di = ((oy + y) * fullW + (ox + x)) * 4;
-              out[di] = rgba[si]!;
-              out[di + 1] = rgba[si + 1]!;
-              out[di + 2] = rgba[si + 2]!;
-              out[di + 3] = 255;
-            }
-          }
-        })(),
-      );
-    }
-  }
-  await Promise.all(jobs);
-  return { data: out, width: fullW, height: fullH };
+  const tiles = tilesInRange(range);
+  const { texture, failures } = await stitchTiles(range, tiles, printTileSource(source).template, {
+    opaque: true,
+    cacheName: basemapCacheName(source),
+  });
+  assessTileFailures('map', tiles.length, failures, 0);
+  return texture;
 }

@@ -9,7 +9,7 @@ import type { LatLng } from '@core/models';
  * User-Agent, client-side caching — which is why the time scrubber's TIME
  * updates are throttled and its frame lists bounded (see `weatherTimeline.ts`).
  *
- * Same catalog discipline as `trailNetworks.ts`: a small const list, an id
+ * Same catalog discipline as `marineLayers.ts`: a small const list, an id
  * type derived from it, and a sanitize helper for settings hydration.
  */
 

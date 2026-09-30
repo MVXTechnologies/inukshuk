@@ -238,7 +238,7 @@ function ShowOnHeatmap({ job }: { job: ImportJob }) {
     dismissImportJob();
     router.navigate('/');
   };
-  return <PillButton primary label="Show on heatmap" onPress={onPress} />;
+  return <PillButton primary label="Show on personal heatmap" onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({
