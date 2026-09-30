@@ -8,10 +8,11 @@ import {
   formatClimb,
   formatTrailLength,
   TRAIL_NETWORK_LABELS,
+  trailPlaceLabel,
 } from '@core/trails/format';
 import { toBoundingBox } from '@core/trails/geometry';
-import type { LongTrail, TrailDetail } from '@core/trails/schema';
-import { focusBbox, initialStageIndex } from '@core/trails/stages';
+import type { LongTrail, TrailCountry, TrailDetail } from '@core/trails/schema';
+import { focusBbox, initialStageIndex, stageDisplayName } from '@core/trails/stages';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import { useCatalogStore } from '@state/catalogStore';
 import { useLibraryStore } from '@state/libraryStore';
@@ -49,6 +50,8 @@ import { useTrailClimb } from './useTrailClimb';
  */
 
 const MAP_HEIGHT = 300;
+/** Let the map tab come up before framing the trail on it. */
+const FOCUS_DELAY_MS = 450;
 /** Topo sheets listed inline before "See all". */
 const TOPO_ROWS = 12;
 
@@ -56,14 +59,21 @@ function hostOf(url: string): string {
   return /^https?:\/\/(?:www\.)?([^/?#]+)/i.exec(url)?.[1] ?? url;
 }
 
-function subtitle(trail: LongTrail | undefined, detail: TrailDetail | undefined): string {
+function subtitle(
+  trail: LongTrail | undefined,
+  detail: TrailDetail | undefined,
+  countries: Record<string, TrailCountry>,
+): string {
   const acts = activitiesLabel(detail?.activities ?? trail?.activities ?? []);
   const from = detail?.from ?? trail?.from;
   const to = detail?.to ?? trail?.to;
-  const place = from !== undefined && to !== undefined && from !== to ? `${from} → ${to}` : null;
-  return [acts, place ?? trail?.region]
-    .filter((p) => p !== undefined && p !== null && p !== '')
-    .join(' · ');
+  const place =
+    from !== undefined && to !== undefined && from !== to
+      ? `${from} → ${to}`
+      : trail !== undefined
+        ? trailPlaceLabel(trail, countries)
+        : null;
+  return [acts, place].filter((p) => p !== null && p !== '').join(' · ');
 }
 
 export function LongTrailScreen({ id }: { id: string }) {
@@ -83,6 +93,7 @@ export function LongTrailScreen({ id }: { id: string }) {
   const loadDetail = useLongTrailsStore((s) => s.loadDetail);
   const show = useLongTrailsStore((s) => s.show);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
+  const setFollowUser = useMapStore((s) => s.setFollowUser);
   const trail = useMemo(() => index?.trails.find((x) => x.id === id), [index, id]);
 
   useEffect(() => {
@@ -106,7 +117,7 @@ export function LongTrailScreen({ id }: { id: string }) {
   const ensureShardsInBounds = useCatalogStore((s) => s.ensureShardsInBounds);
   const catalogDownloads = useCatalogStore((s) => s.downloads);
   const maps = useLibraryStore((s) => s.maps);
-  const [topoOpen, setTopoOpen] = useState(false);
+  const [topoOpen, setTopoOpen] = useState<string | null>(null);
   useEffect(() => {
     if (catalogStatus === 'idle') void loadCatalog();
   }, [catalogStatus, loadCatalog]);
@@ -133,8 +144,13 @@ export function LongTrailScreen({ id }: { id: string }) {
 
   const showOnMap = (d: TrailDetail, stageIndex: number | null, focusStage: boolean) => {
     show(d, stageIndex);
-    setFocusBounds(toBoundingBox(focusBbox(d, focusStage ? stageIndex : null)));
+    // Stop following the GPS dot first, and frame the trail once the map tab
+    // is up: a fit issued while the camera still tracks the user (or while
+    // the tab is hidden) is overridden on device (emulator check, #467).
+    setFollowUser(false);
     router.navigate('/');
+    const bounds = toBoundingBox(focusBbox(d, focusStage ? stageIndex : null));
+    setTimeout(() => setFocusBounds(bounds), FOCUS_DELAY_MS);
   };
 
   const startDownload = () => {
@@ -241,7 +257,9 @@ export function LongTrailScreen({ id }: { id: string }) {
           <Text accessibilityRole="header" style={[styles.title, { color: t.ink }]}>
             {name}
           </Text>
-          <Text style={[styles.subtitle, { color: t.inkMuted }]}>{subtitle(trail, detail)}</Text>
+          <Text style={[styles.subtitle, { color: t.inkMuted }]}>
+            {subtitle(trail, detail, index?.countries ?? {})}
+          </Text>
         </View>
 
         {stats.length > 0 && (
@@ -289,7 +307,7 @@ export function LongTrailScreen({ id }: { id: string }) {
           >
             <Icon source={downloaded ? 'check' : 'download'} size={20} color={t.explore.accent} />
             <Text style={[styles.secondaryText, { color: t.explore.accent }]}>
-              {downloaded ? 'Downloaded' : 'Download'}
+              {downloaded ? 'Downloaded' : downloading !== null ? 'Downloading…' : 'Download'}
             </Text>
           </Pressable>
         </View>
@@ -316,7 +334,7 @@ export function LongTrailScreen({ id }: { id: string }) {
                   key={stage.id}
                   onPress={() => showOnMap(detail, i, true)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Stage ${i + 1}, ${stage.name}${meta !== '' ? `, ${meta}` : ''}`}
+                  accessibilityLabel={`Stage ${i + 1}, ${stageDisplayName(stage, detail.name)}${meta !== '' ? `, ${meta}` : ''}`}
                   accessibilityHint="Shows this stage on the map"
                   style={({ pressed }) => [styles.stage, pressed && styles.pressed]}
                 >
@@ -327,7 +345,7 @@ export function LongTrailScreen({ id }: { id: string }) {
                   </View>
                   <View style={styles.stageText}>
                     <Text numberOfLines={2} style={[styles.stageName, { color: t.ink }]}>
-                      {stage.name}
+                      {stageDisplayName(stage, detail.name)}
                     </Text>
                     {meta !== '' && (
                       <Text style={[styles.stageMeta, { color: t.inkMuted }]}>{meta}</Text>
@@ -345,61 +363,72 @@ export function LongTrailScreen({ id }: { id: string }) {
             <Text accessibilityRole="header" style={[styles.h2, { color: t.ink }]}>
               Topo maps along this trail
             </Text>
-            {topoGroups.map((group) => (
-              <Pressable
-                key={group.sourceId}
-                onPress={() => setTopoOpen((o) => !o)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: topoOpen }}
-                style={({ pressed }) => [
-                  styles.topo,
-                  { backgroundColor: t.surface, borderColor: t.outlineVariant },
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={[styles.topoBadge, { backgroundColor: t.explore.placeholder }]}>
-                  <Icon source="map-legend" size={24} color={t.explore.accent} />
+            {topoGroups.map((group) => {
+              const open = topoOpen === group.sourceId;
+              const near = (item: (typeof group.items)[number]) =>
+                origin !== null
+                  ? catalogItemDistanceMeters(item, { latitude: origin[1], longitude: origin[0] })
+                  : null;
+              // The sheets nearest to you first: the ones you'd print for a start.
+              const rowsShown = open
+                ? [...group.items]
+                    .sort((a, b) => (near(a) ?? 0) - (near(b) ?? 0))
+                    .slice(0, TOPO_ROWS)
+                : [];
+              return (
+                <View key={group.sourceId}>
+                  <Pressable
+                    onPress={() => setTopoOpen(open ? null : group.sourceId)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open }}
+                    style={({ pressed }) => [
+                      styles.topo,
+                      { backgroundColor: t.surface, borderColor: t.outlineVariant },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={[styles.topoBadge, { backgroundColor: t.explore.placeholder }]}>
+                      <Icon source="map-legend" size={24} color={t.explore.accent} />
+                    </View>
+                    <View style={styles.stageText}>
+                      <Text style={[styles.stageName, { color: t.ink }]}>
+                        {topoGroupTitle(group, sourceAbbreviation(group.sourceName))}
+                      </Text>
+                      <Text style={[styles.stageMeta, { color: t.inkMuted }]}>
+                        {['Free', `from ${group.sourceName}`].join(' · ')}
+                      </Text>
+                    </View>
+                    <Text style={[styles.see, { color: t.explore.accent }]}>
+                      {open ? 'Hide' : 'See'}
+                    </Text>
+                  </Pressable>
+                  {rowsShown.map((item) => (
+                    <CatalogItemRow
+                      key={item.id}
+                      item={item}
+                      source={catalogIndex?.sources.find((src) => src.id === item.sourceId)}
+                      installStatus={installStatusById.get(item.id) ?? 'not-installed'}
+                      downloading={item.id in catalogDownloads}
+                      progress={catalogDownloads[item.id]}
+                      expanded={false}
+                      distanceMeters={near(item)}
+                      units={units}
+                      onToggleExpand={() => undefined}
+                      onOpenDetails={() => router.push(exploreItemHref(item.id))}
+                      onDownload={() => flow.requestDownload(item)}
+                      onUpdate={() => flow.update(item)}
+                      onOpen={() => flow.open(item)}
+                      onCancel={() => flow.cancel(item)}
+                    />
+                  ))}
+                  {open && group.items.length > TOPO_ROWS && (
+                    <Text style={[styles.note, styles.topoMore, { color: t.inkMuted }]}>
+                      The {TOPO_ROWS} nearest of {group.items.length} — the rest are in Explore.
+                    </Text>
+                  )}
                 </View>
-                <View style={styles.stageText}>
-                  <Text style={[styles.stageName, { color: t.ink }]}>
-                    {topoGroupTitle(group, sourceAbbreviation(group.sourceName))}
-                  </Text>
-                  <Text style={[styles.stageMeta, { color: t.inkMuted }]}>
-                    {['Free', `from ${group.sourceName}`].join(' · ')}
-                  </Text>
-                </View>
-                <Text style={[styles.see, { color: t.explore.accent }]}>
-                  {topoOpen ? 'Hide' : 'See'}
-                </Text>
-              </Pressable>
-            ))}
-            {topoOpen &&
-              topo.slice(0, TOPO_ROWS).map((item) => (
-                <CatalogItemRow
-                  key={item.id}
-                  item={item}
-                  source={catalogIndex?.sources.find((s) => s.id === item.sourceId)}
-                  installStatus={installStatusById.get(item.id) ?? 'not-installed'}
-                  downloading={item.id in catalogDownloads}
-                  progress={catalogDownloads[item.id]}
-                  expanded={false}
-                  distanceMeters={
-                    origin !== null
-                      ? catalogItemDistanceMeters(item, {
-                          latitude: origin[1],
-                          longitude: origin[0],
-                        })
-                      : null
-                  }
-                  units={units}
-                  onToggleExpand={() => undefined}
-                  onOpenDetails={() => router.push(exploreItemHref(item.id))}
-                  onDownload={() => flow.requestDownload(item)}
-                  onUpdate={() => flow.update(item)}
-                  onOpen={() => flow.open(item)}
-                  onCancel={() => flow.cancel(item)}
-                />
-              ))}
+              );
+            })}
           </>
         )}
 
@@ -527,6 +556,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   see: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
+  topoMore: { marginBottom: space.sm },
   rows: { marginTop: space.xl, marginHorizontal: space.lg, gap: 10 },
   row: {
     flexDirection: 'row',

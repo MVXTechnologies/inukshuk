@@ -1,6 +1,6 @@
-import { formatDistance, type Units } from '@core/format';
+import type { Units } from '@core/format';
 import type { LngLat } from '@core/models';
-import { formatClimb, formatTrailLength } from '@core/trails/format';
+import { formatClimb, formatDistanceFrom, formatTrailLength } from '@core/trails/format';
 import { distanceToLineM, toBoundingBox } from '@core/trails/geometry';
 import { focusBbox, focusGeometry, stageTitle, stepStage } from '@core/trails/stages';
 import { useTrailClimb } from '@features/store/trails/useTrailClimb';
@@ -53,7 +53,7 @@ function youLine(position: LngLat | null, geometry: LngLat[][], units: Units): s
   const d = distanceToLineM(position, geometry);
   if (!Number.isFinite(d)) return null;
   if (d < 100) return 'you are on it';
-  return `you are ${formatDistance(d, units)} from it`;
+  return `you are ${formatDistanceFrom(d, units)} from it`;
 }
 
 export function ShownTrailSheet({
@@ -76,7 +76,9 @@ export function ShownTrailSheet({
   const stage = stageIndex === null ? undefined : detail.stages[stageIndex];
 
   const title =
-    stage !== undefined && stageIndex !== null ? stageTitle(stage, stageIndex) : detail.name;
+    stage !== undefined && stageIndex !== null
+      ? stageTitle(stage, stageIndex, detail.name)
+      : detail.name;
   const lengthKm = stage !== undefined ? stage.lengthKm : detail.lengthKm;
   const climbM =
     climb.status !== 'done'

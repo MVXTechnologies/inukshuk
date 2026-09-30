@@ -83,7 +83,15 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
           id="long-trail-shown-marks-dot"
           type="circle"
           paint={{
-            'circle-radius': ['match', ['get', 'kind'], 'join', 4.5, 7],
+            // Stage joins stay small at a continental zoom (the Appalachian
+            // Trail's eleven would bead the whole line) and grow as you zoom in.
+            'circle-radius': [
+              'match',
+              ['get', 'kind'],
+              'join',
+              ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 4.5],
+              7,
+            ],
             'circle-color': [
               'match',
               ['get', 'kind'],

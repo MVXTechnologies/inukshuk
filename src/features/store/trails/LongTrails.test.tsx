@@ -183,8 +183,12 @@ describe('Trail page', () => {
     const shown = useLongTrailsStore.getState().shown;
     expect(shown?.detail.id).toBe('r8730405');
     expect(shown?.stageIndex).toBe(0);
-    expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.754, 3);
+    expect(useMapStore.getState().followUser).toBe(false);
     expect(mockNavigate).toHaveBeenCalledWith('/');
+    // The fit waits for the map tab to come up.
+    expect(useMapStore.getState().focusBounds).toBeNull();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.754, 3);
   });
 
   it('opens a stage on the map', async () => {
@@ -192,6 +196,7 @@ describe('Trail page', () => {
     await settle();
     await fireEvent.press(view.getByLabelText(/^Stage 3, Étape 3/));
     expect(useLongTrailsStore.getState().shown?.stageIndex).toBe(2);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
     expect(useMapStore.getState().focusBounds?.minLng).toBeCloseTo(-70.68, 3);
   });
 

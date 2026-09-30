@@ -169,7 +169,7 @@ export function resampleLine(parts: readonly (readonly LngLat[])[], stepM: numbe
 
 /**
  * SVG path data for a thumbnail of `parts` fitted into `width × height` px
- * (minus `padding`), aspect-correct (x scaled by cos φ), centred. Empty
+ * (minus `padding`, and `paddingBottom` at the bottom), aspect-correct (x scaled by cos φ), centred. Empty
  * string for an empty line.
  */
 export function thumbnailPath(
@@ -177,6 +177,8 @@ export function thumbnailPath(
   width: number,
   height: number,
   padding: number,
+  /** Extra room kept clear at the bottom (a badge drawn over the thumbnail). */
+  paddingBottom = padding,
 ): { d: string; start: [number, number] | null; end: [number, number] | null } {
   const bbox = bboxOfLine(parts);
   if (bbox === null) return { d: '', start: null, end: null };
@@ -185,7 +187,7 @@ export function thumbnailPath(
   const spanX = Math.max((e - w) * k, 1e-9);
   const spanY = Math.max(n - s, 1e-9);
   const innerW = Math.max(1, width - padding * 2);
-  const innerH = Math.max(1, height - padding * 2);
+  const innerH = Math.max(1, height - padding - paddingBottom);
   const scale = Math.min(innerW / spanX, innerH / spanY);
   const ox = padding + (innerW - spanX * scale) / 2;
   const oy = padding + (innerH - spanY * scale) / 2;

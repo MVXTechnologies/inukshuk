@@ -74,8 +74,28 @@ export function trailPlaceLabel(
   if (trail.from !== undefined && trail.to !== undefined && trail.from !== trail.to) {
     return `${trail.from} → ${trail.to}`;
   }
-  if (trail.countries.length > 1) return countriesLabel(trail.countries, countries);
+  // A region names a short trail's whereabouts; a 12 000 km one's midpoint
+  // province would mislead, so long trails say their countries.
+  if (trail.countries.length > 1 || trail.lengthKm > LONG_TRAIL_KM) {
+    return countriesLabel(trail.countries, countries) ?? trail.region ?? null;
+  }
   return trail.region ?? countriesLabel(trail.countries, countries);
+}
+
+/** Beyond this, a trail is placed by country, not by its midpoint's region. */
+export const LONG_TRAIL_KM = 800;
+
+/** How far you are from a trail: "350 m", "1.2 km", "17 km" (feet / miles in imperial). */
+export function formatDistanceFrom(meters: number, units: Units): string {
+  if (units === 'imperial') {
+    const feet = meters / 0.3048;
+    if (feet < 1000) return `${Math.round(feet / 10) * 10} ft`;
+    const mi = meters / (KM_PER_MI * 1000);
+    return mi < 10 ? `${Math.round(mi * 10) / 10} mi` : `${grouped(Math.round(mi))} mi`;
+  }
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  const km = meters / 1000;
+  return km < 10 ? `${Math.round(km * 10) / 10} km` : `${grouped(Math.round(km))} km`;
 }
 
 /** Carousel card: "Hiking · ≈50 km · 4 stages". */

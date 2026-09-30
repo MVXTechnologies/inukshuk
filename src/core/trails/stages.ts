@@ -80,7 +80,24 @@ export function trailMarkers(detail: TrailDetail): TrailMarkers {
   return { start: first, finish: roundtrip ? null : last, joins };
 }
 
-/** "Stage 2 · Les Éboulements → Baie-Saint-Paul" (the name alone when it says it all). */
-export function stageTitle(stage: TrailStage, index: number): string {
-  return `Stage ${index + 1} · ${stage.name}`;
+/**
+ * A stage's name without its trail's name in front — "Sentier National,
+ * Mauricie" under "Sentier National" reads "Mauricie" — falling back to the
+ * full name when stripping would leave nothing useful.
+ */
+export function stageDisplayName(stage: Pick<TrailStage, 'name'>, trailName: string): string {
+  const name = stage.name.trim();
+  const prefix = trailName.trim();
+  if (prefix === '' || !name.toLowerCase().startsWith(prefix.toLowerCase())) return name;
+  const rest = name
+    .slice(prefix.length)
+    .replace(/^[\s,:;–—-]+/, '')
+    .replace(/^\((.*)\)$/, '$1')
+    .trim();
+  return rest.length >= 2 ? rest : name;
+}
+
+/** "Stage 2 · Mauricie" */
+export function stageTitle(stage: TrailStage, index: number, trailName = ''): string {
+  return `Stage ${index + 1} · ${stageDisplayName(stage, trailName)}`;
 }

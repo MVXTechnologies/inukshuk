@@ -83,7 +83,7 @@ NETWORK_WEIGHT = {'i': 1.0, 'n': 0.75, 'r': 0.5, 'o': 0.3}
 POP_MAX = 1.70
 
 # Length floors, km. "Long distance" is a weekend and up.
-MIN_KM_INTL_NATIONAL = 20.0
+MIN_KM_INTL_NATIONAL = 30.0
 MIN_KM_OTHER = 40.0
 # Phase-1 prefilter on the relation's bbox diagonal (km), per network level:
 # a route that never leaves a box this size is a day-hike loop, not a
@@ -106,6 +106,8 @@ MAIN_ROLES = {'', 'main', 'forward', 'section', 'stage', 'route'}
 SIMPLIFY_M = 10.0
 MAX_DETAIL_POINTS = 60000
 THUMB_POINTS = 40
+# Thumbnail gaps shorter than this share of the trail's bbox diagonal are bridged.
+THUMB_BRIDGE_FRACTION = 0.08
 # Gaps up to this many metres between consecutive way chains are joined.
 JOIN_GAP_M = 60.0
 DESCRIPTION_MAX = 400
@@ -272,6 +274,29 @@ def chain_ways(ways):
     return join_gaps(parts)
 
 
+def bridge_parts(parts, max_gap_m):
+    """Join each part to the next one when their nearest ends are within max_gap_m."""
+    out = []
+    for part in parts:
+        part = list(part)
+        if out:
+            prev = out[-1]
+            options = [
+                (haversine_m(prev[-1], part[0]), False, False),
+                (haversine_m(prev[-1], part[-1]), False, True),
+                (haversine_m(prev[0], part[0]), True, False),
+                (haversine_m(prev[0], part[-1]), True, True),
+            ]
+            gap, flip_prev, flip_part = min(options)
+            if gap <= max_gap_m:
+                if flip_prev:
+                    prev.reverse()
+                prev.extend(reversed(part) if flip_part else part)
+                continue
+        out.append(part)
+    return out
+
+
 def join_gaps(parts):
     """Join consecutive parts whose ends meet within JOIN_GAP_M (either way round)."""
     out = []
@@ -323,7 +348,8 @@ def activities_of(tags):
 
 
 def display_name(tags):
-    for key in ('name', 'name:en', 'official_name', 'ref'):
+    # A bare `ref` ("1", "E4") is not a name people search for or recognise.
+    for key in ('name', 'name:en', 'official_name'):
         value = (tags.get(key) or '').strip()
         if value:
             return value
@@ -344,7 +370,9 @@ def is_candidate(el):
         else MIN_DIAG_KM
     )
     if tags.get('type') == 'superroute':
-        return diag >= MIN_DIAG_KM
+        # Its `bb` covers only its own few ways (the Appalachian Trail's is
+        # 5 km across): the geometry decides, once its stages are fetched.
+        return True
     level = level_of(tags)
     if level in ('i', 'n'):
         return diag >= MIN_DIAG_KM
@@ -357,6 +385,70 @@ def is_candidate(el):
         return False
     dist = parse_distance_km(tags.get('distance'))
     return diag >= MIN_DIAG_KM_LOCAL or (dist is not None and dist >= MIN_KM_OTHER)
+
+
+# A stage that is famous in its own right stays a trail too (stands_alone):
+# Wikidata sitelinks at least this many (the Appalachian Trail has 35; its
+# state sections, which carry their own Wikidata items, have 0).
+NOTABLE_SITELINKS = 5
+
+
+def ancestors_of(rid, parents):
+    """Every relation above `rid` (parents, their parents, …)."""
+    out, todo = set(), list(parents.get(rid, ()))
+    while todo:
+        p = todo.pop()
+        if p not in out:
+            out.add(p)
+            todo.extend(parents.get(p, ()))
+    return out
+
+
+def stands_alone(rid, relations, parents, sitelinks):
+    """Is a stage also a trail in its own right?
+
+    - famous: a well-linked Wikidata item (NOTABLE_SITELINKS) that is its own —
+      sections tagged with their whole trail's item don't count (every
+      "SIA, n-…" section carries the International Appalachian Trail's);
+    - or independently run: its own `website`, which none of the trails it is
+      part of shares (the Sentier des Caps de Charlevoix is a stage of the
+      Sentier National and a trail with its own operator and site).
+
+    A section named after its trail ("Sentier National, Charlevoix") never
+    stands alone.
+    """
+    tags = (relations.get(rid) or {}).get('tags') or {}
+    above = [((relations.get(a) or {}).get('tags') or {}) for a in ancestors_of(rid, parents)]
+    name = normalize_name(display_name(tags) or '')
+    for a in above:
+        parent_name = normalize_name(display_name(a) or '')
+        if parent_name and name.startswith(parent_name):
+            return False
+    q = (tags.get('wikidata') or '').strip()
+    if q and sitelinks.get(q, 0) >= NOTABLE_SITELINKS:
+        if all((a.get('wikidata') or '').strip() != q for a in above):
+            return True
+    site = (tags.get('website') or '').strip().rstrip('/')
+    if site and all((a.get('website') or '').strip().rstrip('/') != site for a in above):
+        return True
+    return False
+
+
+def relation_members(rel, main_only=False):
+    return [
+        m['ref']
+        for m in (rel or {}).get('members', [])
+        if m.get('type') == 'relation'
+        and (not main_only or (m.get('role') or '').strip() in MAIN_ROLES)
+    ]
+
+
+def own_main_ways(rel):
+    return [
+        m
+        for m in (rel or {}).get('members', [])
+        if m.get('type') == 'way' and (m.get('role') or '').strip() in MAIN_ROLES
+    ]
 
 
 def normalize_name(name):
@@ -377,12 +469,20 @@ def log(message):
 def tags_query(bbox):
     w, s, e, n = bbox
     area = f'({s},{w},{n},{e})'
+    # A superroute's members are relations, not ways, so a bbox filter never
+    # matches it (the Appalachian Trail's own relation holds 14 state
+    # sections and no way): parents are found upward from the routes, with
+    # `rel(br)`, up to three levels.
     return (
         f'[out:json][timeout:{QUERY_TIMEOUT_S}][maxsize:{QUERY_MAXSIZE}];('
         f'relation["type"="route"]["route"~"^({ROUTES})$"]["network"~"^({NETWORKS})$"]{area};'
         f'relation["type"="superroute"]["route"~"^({ROUTES})$"]{area};'
         f'relation["type"="route"]["route"~"^(hiking|foot|ski|canoe)$"]{area};'
-        ');out tags bb;'
+        ')->.r;'
+        '(rel(br.r)["type"~"^(route|superroute)$"];)->.p1;'
+        '(rel(br.p1)["type"~"^(route|superroute)$"];)->.p2;'
+        '(rel(br.p2)["type"~"^(route|superroute)$"];)->.p3;'
+        '(.r;.p1;.p2;.p3;);out tags bb;'
     )
 
 
@@ -779,14 +879,18 @@ def popularity(tags, km, sitelinks, has_stages):
     return round(min(1.0, raw / POP_MAX), 3)
 
 
-def stage_name(tags, n):
+def stage_name(tags, n, parent_name=None, region=None):
+    """A stage's name; one that only repeats its trail's (the Appalachian
+    Trail's state sections are all "Appalachian Trail") says where it runs."""
     name = clean(tags.get('name'))
-    if name:
+    if name and (parent_name is None or normalize_name(name) != normalize_name(parent_name)):
         return name
     f, t = clean(tags.get('from')), clean(tags.get('to'))
     if f and t:
         return f'{f} → {t}'
-    return f'Stage {n}'
+    if region:
+        return region
+    return name or f'Stage {n}'
 
 
 def build_trail(rel, relations, sitelinks, regions):
@@ -802,7 +906,12 @@ def build_trail(rel, relations, sitelinks, regions):
         simplified, _ = simplify_parts(parts, SIMPLIFY_M, MAX_DETAIL_POINTS)
         doc = {
             'id': f"r{child['id']}",
-            'name': stage_name(ctags, n),
+            'name': stage_name(
+                ctags,
+                n,
+                display_name(tags),
+                regions.region(point_at_fraction(parts, 0.5)) if regions.admin1 else None,
+            ),
             'km': round(sum(line_length_m(p) for p in parts) / 1000, 1),
             'geom': [encode_polyline(p) for p in simplified if len(p) >= 2],
         }
@@ -811,6 +920,11 @@ def build_trail(rel, relations, sitelinks, regions):
                 doc[key] = clean(ctags.get(key))
         stage_docs.append(doc)
         all_parts.extend(parts)
+    single = None
+    if len(stage_docs) == 1:
+        # One stage is no stages: a wrapper around its one route.
+        single = stages[0] if stages else None
+        stage_docs = []
     own = main_parts(rel, relations) if not stage_docs else all_parts
     if not own:
         return None
@@ -829,7 +943,11 @@ def build_trail(rel, relations, sitelinks, regions):
     bbox = bbox_of(own)
     mid = point_at_fraction(own, 0.5)
     thumb_tol = max(bbox_diag_km(bbox) * 1000 / 150, 20.0)
-    thumb, _ = simplify_parts(own, thumb_tol, THUMB_POINTS)
+    # The thumbnail is a picture of the trail's shape: gaps OSM hasn't mapped
+    # yet (the Sentier National is a string of sections) would read as a
+    # broken line at 64 px, so small ones are bridged — the detail keeps them.
+    bridged = bridge_parts(own, bbox_diag_km(bbox) * 1000 * THUMB_BRIDGE_FRACTION)
+    thumb, _ = simplify_parts(bridged, thumb_tol, THUMB_POINTS)
     thumb = [p for p in thumb if len(p) >= 2]
     # Countries along the trail (21 samples), most-travelled first; the
     # region is the midpoint's, else the most-travelled one (a midpoint on a
@@ -852,6 +970,8 @@ def build_trail(rel, relations, sitelinks, regions):
             iter(sorted(region_tally, key=lambda k: -region_tally[k])), None
         )
     q = (tags.get('wikidata') or '').strip()
+    if not q and single is not None:
+        q = ((single.get('tags') or {}).get('wikidata') or '').strip()
     pop = popularity(tags, km, sitelinks.get(q, 0), bool(stage_docs))
     index_row = {
         'id': f"r{rel['id']}",
@@ -949,15 +1069,33 @@ def build(work, out_dir, ne_dir=None, version=None):
                 for el in json.load(f)['elements']:
                     if el.get('type') == 'relation' and is_candidate(el):
                         candidates.add(el['id'])
-    # A relation that is a member of another candidate is a stage, not a trail.
-    children = set()
-    for rid in candidates:
-        rel = relations.get(rid)
-        if rel is None:
-            continue
-        for m in rel.get('members', []):
-            if m.get('type') == 'relation':
-                children.add(m['ref'])
+    # A wrapper holding a single main route and no way of its own (the "Tour
+    # du Mont Blanc" superroute around its "Itinéraire principal" and its
+    # variants) is ONE trail: the wrapper keeps its name, its route is not
+    # listed again (and is not a one-stage "stage" either — see build_trail).
+    wrapped = {
+        relation_members(relations.get(rid), main_only=True)[0]
+        for rid in candidates
+        if len(relation_members(relations.get(rid), main_only=True)) == 1
+        and not own_main_ways(relations.get(rid))
+    }
+    # A relation that is a member of another candidate is a stage, not a
+    # trail — unless it is notable in its own right (NOTABLE_SITELINKS): the
+    # Appalachian Trail is a stage of the Eastern Continental Trail and still
+    # a trail, while its state sections are only its stages.
+    # Parents are every fetched route of ours, not only the candidates: an
+    # intermediate level ("Sentier international des Appalaches, Québec")
+    # holds one way and its sections, so its `bb` is tiny and it never became
+    # a candidate — its sections must still stay its (grand-parent's) stages.
+    parents = {}
+    for rel in relations.values():
+        tags = rel.get('tags') or {}
+        if tags.get('type') in ('route', 'superroute') and activities_of(tags):
+            for c in relation_members(rel):
+                parents.setdefault(c, []).append(rel['id'])
+    children = {
+        c for c in parents if not stands_alone(c, relations, parents, sitelinks)
+    } | wrapped
     regions = Regions(ne_dir)
     rows, details, countries = [], {}, {}
     for rid in sorted(candidates - children):

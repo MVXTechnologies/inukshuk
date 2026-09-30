@@ -19,6 +19,7 @@ export const TrailThumb = memo(function TrailThumb({
   seed,
   stroke = 3.5,
   contours = true,
+  insetBottom = 0,
 }: {
   parts: readonly (readonly LngLat[])[];
   width: number;
@@ -26,12 +27,14 @@ export const TrailThumb = memo(function TrailThumb({
   seed: string;
   stroke?: number;
   contours?: boolean;
+  /** Room kept clear at the bottom for a badge drawn over the thumbnail. */
+  insetBottom?: number;
 }) {
   const t = useSchemeTokens();
   const pad = Math.max(8, Math.round(Math.min(width, height) * 0.12));
   const { d, start } = useMemo(
-    () => thumbnailPath(parts, width, height, pad),
-    [parts, width, height, pad],
+    () => thumbnailPath(parts, width, height, pad, Math.max(pad, insetBottom)),
+    [parts, width, height, pad, insetBottom],
   );
   const o = ((badgeIndex(seed, 997) % 5) - 2) * (height / 24);
   const curve = (y: number, a: number, b: number) =>

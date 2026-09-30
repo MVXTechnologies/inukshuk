@@ -80,6 +80,8 @@ describe('trail geometry', () => {
     expect(start).toEqual([8, 32]);
     expect(end).toEqual([56, 32]);
     expect(thumbnailPath([], 64, 64, 8).d).toBe('');
+    // A bottom inset lifts the line clear of a badge.
+    expect(thumbnailPath([EQ], 64, 64, 8, 24).start).toEqual([8, 24]);
     const two = thumbnailPath(
       [
         EQ,

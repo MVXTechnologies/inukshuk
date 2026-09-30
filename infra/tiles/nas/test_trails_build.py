@@ -11,6 +11,7 @@ from trails_build import (  # noqa: E402
     activities_of,
     batches,
     bbox_iou,
+    bridge_parts,
     build,
     build_trail,
     chain_ways,
@@ -26,6 +27,8 @@ from trails_build import (  # noqa: E402
     popularity,
     simplify,
     split4,
+    stage_name,
+    stands_alone,
     tags_query,
 )
 
@@ -112,6 +115,13 @@ class Geometry(unittest.TestCase):
         near = [(-70.7, 47.1003), (-70.7, 47.15)]  # 33 m gap
         self.assertEqual(len(join_gaps([list(A), near])), 1)
 
+    def test_bridges_small_gaps_only(self):
+        near = [(-70.7, 47.105), (-70.7, 47.15)]  # ~550 m after A's end
+        self.assertEqual(len(bridge_parts([A, near], 1000)), 1)
+        self.assertEqual(len(bridge_parts([A, near], 100)), 2)
+        # A part drawn the other way round is flipped to meet.
+        self.assertEqual(len(bridge_parts([A, list(reversed(near))], 1000)), 1)
+
     def test_simplify_keeps_ends_and_shape(self):
         line = [(0, 0), (0.0001, 0.00001), (0.0002, 0), (0.01, 0.01)]
         out = simplify(line, 10)
@@ -132,6 +142,36 @@ class Geometry(unittest.TestCase):
         self.assertEqual(bbox_iou([0, 0, 1, 1], [0, 0, 1, 1]), 1.0)
         self.assertEqual(bbox_iou([0, 0, 1, 1], [2, 2, 3, 3]), 0.0)
         self.assertEqual(batches([1, 2, 3, 4], lambda x: x, 5, 10), [[1, 2], [3], [4]])
+
+
+class StageNames(unittest.TestCase):
+    def test_names(self):
+        self.assertEqual(stage_name({'name': 'Étape 1'}, 1, 'Tour'), 'Étape 1')
+        self.assertEqual(stage_name({}, 3), 'Stage 3')
+        self.assertEqual(stage_name({'from': 'A', 'to': 'B'}, 1), 'A → B')
+        # A section named like its trail says where it runs instead.
+        at = {'name': 'Appalachian Trail'}
+        self.assertEqual(stage_name(at, 2, 'Appalachian Trail', 'Vermont'), 'Vermont')
+        self.assertEqual(stage_name(at, 2, 'Appalachian Trail'), 'Appalachian Trail')
+
+
+class StandsAlone(unittest.TestCase):
+    def test_sections_fold_into_their_trail(self):
+        rels = {
+            1: rel(1, {'name': 'Sentier National', 'website': 'https://a.org'}, []),
+            2: rel(2, {'name': 'Sentier National, Charlevoix'}, []),
+            3: rel(3, {'name': 'Sentier des Caps', 'website': 'https://caps.org'}, []),
+            4: rel(4, {'name': 'SIA, 2', 'wikidata': 'Q9'}, []),
+            5: rel(5, {'name': 'IAT', 'wikidata': 'Q9'}, []),
+            6: rel(6, {'name': 'Appalachian Trail', 'wikidata': 'Q7'}, []),
+        }
+        parents = {2: [1], 3: [2], 4: [5], 6: [5]}
+        links = {'Q9': 30, 'Q7': 35}
+        self.assertFalse(stands_alone(2, rels, parents, links))  # named after its trail
+        self.assertTrue(stands_alone(3, rels, parents, links))  # its own website
+        self.assertFalse(stands_alone(4, rels, parents, links))  # its trail's Wikidata item
+        self.assertTrue(stands_alone(6, rels, parents, links))  # famous in its own right
+        self.assertFalse(stands_alone(6, rels, parents, {}))
 
 
 class Popularity(unittest.TestCase):

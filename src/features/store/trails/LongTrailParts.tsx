@@ -45,6 +45,7 @@ export const LongTrailCard = memo(function LongTrailCard({
           width={TRAIL_CARD_WIDTH - 2}
           height={TRAIL_CARD_IMAGE_HEIGHT - 2}
           seed={trail.id}
+          insetBottom={distance !== null ? 38 : 0}
         />
         {distance !== null && (
           <View style={[styles.distanceBadge, { backgroundColor: t.surface }]}>

@@ -2,6 +2,7 @@ import {
   activitiesLabel,
   countriesLabel,
   formatClimb,
+  formatDistanceFrom,
   formatTrailLength,
   stagesLabel,
   trailCardMeta,
@@ -20,6 +21,22 @@ describe('trail formatting', () => {
     expect(formatTrailLength(8.26, 'metric')).toBe('≈8.3 km');
     expect(formatTrailLength(50, 'imperial')).toBe('≈31 mi');
     expect(formatTrailLength(0, 'metric')).toBe('— km');
+  });
+
+  it('formats how far you are', () => {
+    expect(formatDistanceFrom(347, 'metric')).toBe('350 m');
+    expect(formatDistanceFrom(1234, 'metric')).toBe('1.2 km');
+    expect(formatDistanceFrom(17_050, 'metric')).toBe('17 km');
+    expect(formatDistanceFrom(1_234_000, 'metric')).toBe(`1${NB}234 km`);
+    expect(formatDistanceFrom(100, 'imperial')).toBe('330 ft');
+    expect(formatDistanceFrom(5000, 'imperial')).toBe('3.1 mi');
+    expect(formatDistanceFrom(50_000, 'imperial')).toBe('31 mi');
+  });
+
+  it('places long trails by country', () => {
+    const long = { ...trailById(index, 'r391736'), lengthKm: 3000 };
+    expect(trailPlaceLabel(long, index.countries)).toBe('United States');
+    expect(trailPlaceLabel({ ...long, countries: [] }, index.countries)).toBe('Vermont');
   });
 
   it('formats climb to the nearest 10', () => {

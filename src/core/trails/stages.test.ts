@@ -3,6 +3,7 @@ import {
   focusGeometry,
   initialStageIndex,
   nearestStage,
+  stageDisplayName,
   stageTitle,
   stepStage,
   trailMarkers,
@@ -52,7 +53,19 @@ describe('trail stages', () => {
     expect(trailMarkers(loop).finish).toBeNull();
   });
 
-  it('titles stages', () => {
+  it('titles stages, without repeating the trail name', () => {
     expect(stageTitle(detail.stages[1]!, 1)).toBe('Stage 2 · Étape 2');
+    const s = { name: 'Sentier National, Mauricie' };
+    expect(stageDisplayName(s, 'Sentier National')).toBe('Mauricie');
+    expect(
+      stageDisplayName({ name: 'West Highland Way (Drymen to Rowardennan)' }, 'West Highland Way'),
+    ).toBe('Drymen to Rowardennan');
+    expect(stageDisplayName({ name: 'Appalachian Trail' }, 'Appalachian Trail')).toBe(
+      'Appalachian Trail',
+    );
+    expect(stageDisplayName({ name: 'Étape 1' }, 'Tour')).toBe('Étape 1');
+    expect(stageTitle({ ...detail.stages[0]!, name: 'Caps - Nord' }, 0, 'Caps')).toBe(
+      'Stage 1 · Nord',
+    );
   });
 });
