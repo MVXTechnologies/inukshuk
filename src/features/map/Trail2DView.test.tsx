@@ -4,6 +4,7 @@ import { PaperProvider } from 'react-native-paper';
 import type { TrackPoint } from '@core/models';
 import { TILT_RELIEF_EXAGGERATION } from '@core/map/tiltRelief';
 import { useSettingsStore } from '@state/settingsStore';
+import { mapColors } from '@ui/theme';
 import { Trail2DView } from './Trail2DView';
 import { TILT_RELIEF_LAYER_ID } from './mapStyle';
 
@@ -91,4 +92,13 @@ it('drives the pass from the settled pitch, once the style has loaded', async ()
 
   await act(async () => onSettle({ nativeEvent: { pitch: 0 } }));
   expect(tiltLayer()?.layout).toEqual({ visibility: 'none' });
+});
+
+it('draws the trail in the main map’s route tokens, not the old red', async () => {
+  await mount();
+  const paint = (id: string) =>
+    [...mockLayers].reverse().find((l) => l.id === id)?.paint as Record<string, unknown>;
+  expect(paint('trail-2d-line')['line-color']).toBe(mapColors.trail);
+  expect(paint('trail-2d-casing')['line-color']).toBe(mapColors.trailCasing);
+  expect(JSON.stringify(mockLayers.map((l) => l.paint))).not.toContain('#E0312B');
 });

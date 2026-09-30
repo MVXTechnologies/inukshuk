@@ -190,13 +190,15 @@ export function Trail2DView({
           id="trail-2d-casing"
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': '#FFFFFF', 'line-width': 5, 'line-opacity': 0.7 }}
+          // The main map's route tokens (backlog): the warm route orange on
+          // its paper casing, replacing the old red on white.
+          paint={{ 'line-color': mapColors.trailCasing, 'line-width': 6, 'line-opacity': 0.9 }}
         />
         <Layer
           id="trail-2d-line"
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': '#E0312B', 'line-width': 2.6, 'line-opacity': 0.96 }}
+          paint={{ 'line-color': mapColors.trail, 'line-width': 3.2 }}
         />
       </GeoJSONSource>
 
