@@ -212,6 +212,39 @@ export const cornersAreValid = (c: CornerCoordinates): boolean =>
   isValidLngLat(c.bottomLeft);
 
 /**
+ * Signed area of the corner quad (top-left → top-right → bottom-right →
+ * bottom-left), in square degrees of a local equirectangular frame (east =
+ * longitude scaled by cos(latitude), north = latitude; longitude deltas are
+ * wrapped so a sheet straddling the antimeridian still measures right).
+ *
+ * An image placed the right way round — at any rotation — walks those corners
+ * CLOCKWISE on the ground, so its area is negative. A positive area means the
+ * image is drawn as its mirror image (flipped on one axis), which no real map
+ * ever is: it is the signature of a georeference whose point order was read
+ * wrong (#487). Zero for a degenerate quad.
+ */
+export function cornersSignedArea(c: CornerCoordinates): number {
+  const ring = [c.topLeft, c.topRight, c.bottomRight, c.bottomLeft];
+  const [lng0, lat0] = c.topLeft;
+  const meanLat = ring.reduce((sum, p) => sum + p[1], 0) / ring.length;
+  const kx = Math.cos(meanLat * DEG2RAD);
+  const pts = ring.map(([lng, lat]): [number, number] => {
+    const dLng = ((((lng - lng0) % 360) + 540) % 360) - 180;
+    return [dLng * kx, lat - lat0];
+  });
+  let twice = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i]!;
+    const [x2, y2] = pts[(i + 1) % pts.length]!;
+    twice += x1 * y2 - x2 * y1;
+  }
+  return twice / 2;
+}
+
+/** True when the corners would draw the image mirrored (see `cornersSignedArea`). */
+export const cornersAreMirrored = (c: CornerCoordinates): boolean => cornersSignedArea(c) > 0;
+
+/**
  * True if a bbox is effectively a point or a line (near-zero area). A degenerate
  * image quad can crash MapLibre's projection, and is never a real map sheet — so
  * overlays skip these. The default ~1e-6° threshold is ~0.1 m, far below any real

@@ -1,6 +1,7 @@
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
+import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
 import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
@@ -606,7 +607,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           // is defined in unrotated user space, so applying /Rotate here would
           // render the image rotated relative to its geo corners, making rotated
           // pages (e.g. a /Rotate 90 landscape sheet) appear flipped and stretched.
-          var baseViewport = page.getViewport({ scale: 1, rotation: 0 });
+          var baseViewport = page.getViewport({ scale: 1, rotation: ${PDF_RASTER_ROTATION} });
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
           // Native renderers draw the document's default layers; a page whose
@@ -624,7 +625,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           }
           var geometry = cropGeometry(pageWidthPt, pageHeightPt, targetWidthPx, crop);
           var scale = geometry.scale;
-          var viewport = page.getViewport({ scale: scale, rotation: 0 });
+          var viewport = page.getViewport({ scale: scale, rotation: ${PDF_RASTER_ROTATION} });
           var widthPx = geometry.widthPx;
           var heightPx = geometry.heightPx;
 

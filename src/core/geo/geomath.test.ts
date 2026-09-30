@@ -3,7 +3,9 @@ import {
   applyAffine,
   bboxFromCorners,
   bboxFromLngLats,
+  cornersAreMirrored,
   cornersAreValid,
+  cornersSignedArea,
   extrapolatePageCorners,
   fitAffine,
   initialBearingDeg,
@@ -307,5 +309,60 @@ describe('initialBearingDeg', () => {
   it('returns 0 for coincident points instead of NaN', () => {
     const at = { latitude: 46.8139, longitude: -71.2082 };
     expect(initialBearingDeg(at, { ...at })).toBe(0);
+  });
+});
+
+describe('cornersSignedArea / cornersAreMirrored (#487)', () => {
+  const northUp: CornerCoordinates = {
+    topLeft: [-70, 47],
+    topRight: [-69, 47],
+    bottomRight: [-69, 46],
+    bottomLeft: [-70, 46],
+  };
+
+  it('is negative (clockwise on the ground) for a north-up image', () => {
+    // 1° of longitude at 46.5°N is cos(46.5°) of a degree of latitude.
+    expect(cornersSignedArea(northUp)).toBeCloseTo(-Math.cos((46.5 * Math.PI) / 180), 9);
+    expect(cornersAreMirrored(northUp)).toBe(false);
+  });
+
+  it('keeps its sign under rotation and flips it under a mirror', () => {
+    const rotated: CornerCoordinates = {
+      topLeft: northUp.bottomRight,
+      topRight: northUp.bottomLeft,
+      bottomRight: northUp.topLeft,
+      bottomLeft: northUp.topRight,
+    };
+    expect(cornersAreMirrored(rotated)).toBe(false);
+    const flippedNorthSouth: CornerCoordinates = {
+      topLeft: northUp.bottomLeft,
+      topRight: northUp.bottomRight,
+      bottomRight: northUp.topRight,
+      bottomLeft: northUp.topLeft,
+    };
+    expect(cornersAreMirrored(flippedNorthSouth)).toBe(true);
+    const flippedEastWest: CornerCoordinates = {
+      topLeft: northUp.topRight,
+      topRight: northUp.topLeft,
+      bottomRight: northUp.bottomLeft,
+      bottomLeft: northUp.bottomRight,
+    };
+    expect(cornersAreMirrored(flippedEastWest)).toBe(true);
+  });
+
+  it('measures a sheet straddling the antimeridian correctly', () => {
+    const c: CornerCoordinates = {
+      topLeft: [179.5, 52],
+      topRight: [-179.5, 52],
+      bottomRight: [-179.5, 51],
+      bottomLeft: [179.5, 51],
+    };
+    expect(cornersAreMirrored(c)).toBe(false);
+    expect(cornersSignedArea(c)).toBeLessThan(0);
+  });
+
+  it('is zero for a degenerate quad', () => {
+    const p: [number, number] = [-70, 46];
+    expect(cornersSignedArea({ topLeft: p, topRight: p, bottomRight: p, bottomLeft: p })).toBe(0);
   });
 });
