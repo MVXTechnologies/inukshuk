@@ -1,5 +1,6 @@
 import type { CornerCoordinates, GeoReference, LngLat, PointRect } from '@core/models';
 import { applyAffine, bboxFromCorners, fitAffine } from '@core/geo/geomath';
+import { isMirroredSheet } from './orientation';
 import {
   type LgiProjection,
   type ResolvedCrs,
@@ -210,6 +211,11 @@ function fromOneLgiDict(
     bottomRight: toWgs(rect.x1, rect.y0),
     bottomLeft: toWgs(rect.x0, rect.y0),
   };
+  // Only meaningful once the corners are lon/lat: an unsupported projection
+  // leaves them in its own units, where the geographic test does not apply.
+  if (crs.proj4Def !== null && isMirroredSheet(corners)) {
+    warnings.push(`page ${page.index}: georeference is mirrored (check /Registration)`);
+  }
 
   return {
     pageIndex: page.index,

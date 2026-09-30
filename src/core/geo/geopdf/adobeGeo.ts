@@ -1,5 +1,6 @@
 import type { CornerCoordinates, GeoReference, LngLat, PointRect } from '@core/models';
 import { applyAffine, bboxFromCorners, fitAffine } from '@core/geo/geomath';
+import { isMirroredSheet } from './orientation';
 import { type Reprojector, epsgFromText, makeReprojector } from './crs';
 import { pointRectFromPdfRect } from './pageBox';
 import type { PdfDocument } from './pdfReader';
@@ -10,7 +11,9 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  * Adobe ISO 32000 geospatial extraction.
  *
  * A page may carry a `/VP` array of Viewport dicts. Each viewport has:
- *   - `/BBox` — rectangle in page points bounding the georeferenced frame
+ *   - `/BBox` — rectangle in page points bounding the georeferenced frame. Its
+ *     corner ORDER matters: the LPTS unit square is anchored on it as written
+ *     (see `bboxUnitToPage`), and some producers write it top-first (#487).
  *   - `/Measure` dict with `/Subtype /GEO`:
  *       - `/GPTS` — flat array of lat,lon pairs (GEOGRAPHIC, lat-first!) giving
  *         the geo positions of the /LPTS points
@@ -30,6 +33,11 @@ import { type PdfArray, type PdfDict, type PdfValue, isArray, isDict, isName } f
  * space, the page's *rendered* box (`page.pageBox` — CropBox ∩ MediaBox), so
  * the overlay can map the viewport onto the pixels a renderer actually
  * produces rather than onto a zero-origin MediaBox (#287).
+ *
+ * Page `/Rotate` plays no part here: the rasterizer draws every page in
+ * unrotated user space (`PDF_RASTER_ROTATION`), the same space as the BBox,
+ * so the corners below are the rendered raster's corners whatever the page's
+ * display rotation (see `orientation.ts`).
  */
 
 function numArray(doc: PdfDocument, v: PdfValue | undefined): number[] | undefined {
@@ -55,12 +63,37 @@ function reprojectorFromGcs(doc: PdfDocument, gcs: PdfValue | undefined): Reproj
 }
 
 /**
- * Map a viewport's bbox corners to geographic corners using GPTS/BOUNDS.
- * Returns corners in MapLibre visual-top-first order.
+ * The page user-space point at unit-square `(u, v)` of a viewport `/BBox`.
+ *
+ * The unit square is anchored on the BBox **as written**: `u` runs from its
+ * first x to its second, `v` from its first y to its second. That is GDAL's
+ * reading, and the only one under which every real sheet comes out
+ * unmirrored. Most producers write the BBox bottom-first (`[x0 y0 x1 y1]`),
+ * but the 2024 USGS US Topo production writes it TOP-first — Beau Lake, Maine
+ * has `/BBox [84.42 2088 1634.72 59.03]` — and lists its `/LPTS` against that
+ * order: the first point, `(0, 1.00062)`, is the frame's LOWER-left and pairs
+ * with the sheet's south-west GPTS. Reading `v = 1` as "the top" whatever
+ * the BBox order flipped that sheet north–south, i.e. mirrored it (#487).
+ */
+export function bboxUnitToPage(
+  bbox: readonly [number, number, number, number],
+  u: number,
+  v: number,
+): [number, number] {
+  const [bx0, by0, bx1, by1] = bbox;
+  return [bx0 + u * (bx1 - bx0), by0 + v * (by1 - by0)];
+}
+
+/**
+ * Map a viewport's frame to geographic corners using GPTS/LPTS. `bbox` is the
+ * `/BBox` as written (it anchors the LPTS); `rect` is the same box normalized
+ * (y1 = visual top of the unrotated raster). Returns corners of `rect` in
+ * MapLibre visual-top-first order.
  */
 function cornersFromMeasure(
   doc: PdfDocument,
   bbox: [number, number, number, number],
+  rect: PointRect,
   measure: PdfDict,
 ): { corners: CornerCoordinates; epsg?: number } | undefined {
   const gpts = numArray(doc, measure.entries.get('GPTS'));
@@ -77,11 +110,9 @@ function cornersFromMeasure(
 
   const reproj = reprojectorFromGcs(doc, measure.entries.get('GCS'));
 
-  const [bx0, by0, bx1, by1] = bbox;
-  const w = bx1 - bx0;
-  const h = by1 - by0;
-
-  // Build (unitX, unitY) -> WGS84 lng/lat sample points.
+  // Build (page x, page y) -> WGS84 lng/lat sample points. Going through page
+  // space, not straight from the unit square, is what makes the result
+  // independent of the order the producer wrote the BBox in (#487).
   const src: [number, number][] = [];
   const dst: LngLat[] = [];
   for (let i = 0; i + 1 < gpts.length; i += 2) {
@@ -89,7 +120,7 @@ function cornersFromMeasure(
     const lon = gpts[i + 1]!;
     const ux = lpts[i] ?? 0;
     const uy = lpts[i + 1] ?? 0;
-    src.push([ux, uy]);
+    src.push(bboxUnitToPage(bbox, ux, uy));
     // Per ISO 32000-2, GPTS are ALWAYS geographic lat/lon degrees, even when the
     // /GCS dict names a projected EPSG (e.g. a UTM zone). They are NOT in the
     // projected CRS's units, so they must be used as lon/lat directly — never
@@ -98,33 +129,25 @@ function cornersFromMeasure(
     dst.push([lon, lat]);
   }
 
-  // Map each bbox corner (in unit space) through an affine fit of src->dst.
-  const toGeo = affineFromUnit(src, dst);
+  // Map each frame corner (in page space) through an affine fit of src->dst.
+  const toGeo = affineFromPage(src, dst);
   if (!toGeo) return undefined;
 
-  const cornerUnit = {
-    topLeft: [0, 1] as [number, number], // larger Y = visual top
-    topRight: [1, 1] as [number, number],
-    bottomRight: [1, 0] as [number, number],
-    bottomLeft: [0, 0] as [number, number],
-  };
-  void w;
-  void h;
+  // `rect` is normalized, so y1 is the visual top of the unrotated raster.
   const corners: CornerCoordinates = {
-    topLeft: toGeo(cornerUnit.topLeft[0], cornerUnit.topLeft[1]),
-    topRight: toGeo(cornerUnit.topRight[0], cornerUnit.topRight[1]),
-    bottomRight: toGeo(cornerUnit.bottomRight[0], cornerUnit.bottomRight[1]),
-    bottomLeft: toGeo(cornerUnit.bottomLeft[0], cornerUnit.bottomLeft[1]),
+    topLeft: toGeo(rect.x0, rect.y1),
+    topRight: toGeo(rect.x1, rect.y1),
+    bottomRight: toGeo(rect.x1, rect.y0),
+    bottomLeft: toGeo(rect.x0, rect.y0),
   };
   return { corners, epsg: reproj.epsg };
 }
 
 /**
- * Fit an affine from unit-square sample points to lng/lat. With the typical 4
- * corner samples this is exact; with 3+ it least-squares fits. Uses the shared
- * geomath fitAffine via a tiny local solver to avoid import cycles.
+ * Fit an affine from page-space sample points to lng/lat. With the typical 4
+ * corner samples this is exact; with 3+ it least-squares fits.
  */
-function affineFromUnit(
+function affineFromPage(
   src: [number, number][],
   dst: LngLat[],
 ): ((x: number, y: number) => LngLat) | undefined {
@@ -162,18 +185,23 @@ export function extractAdobeGeo(
     // A viewport without a /BBox (it is required, but producers slip) frames
     // the whole rendered page, not the MediaBox.
     const bbox = readRect(doc, (vd as PdfDict).entries.get('BBox')) ?? page.pageBox;
-    const result = cornersFromMeasure(doc, bbox, measure as PdfDict);
-    if (!result) {
-      warnings.push(`page ${page.index}: VP/Measure GEO present but GPTS unusable`);
-      continue;
-    }
-
     const rect: PointRect = {
       x0: Math.min(bbox[0], bbox[2]),
       y0: Math.min(bbox[1], bbox[3]),
       x1: Math.max(bbox[0], bbox[2]),
       y1: Math.max(bbox[1], bbox[3]),
     };
+    const result = cornersFromMeasure(doc, bbox, rect, measure as PdfDict);
+    if (!result) {
+      warnings.push(`page ${page.index}: VP/Measure GEO present but GPTS unusable`);
+      continue;
+    }
+    if (isMirroredSheet(result.corners)) {
+      // No printed map is a mirror image: this is the producer and this parser
+      // disagreeing about the point order. Say so instead of drawing it quietly.
+      warnings.push(`page ${page.index}: georeference is mirrored (check /BBox and /LPTS order)`);
+    }
+
     const ref: GeoReference = {
       pageIndex: page.index,
       source: 'adobe-geo',

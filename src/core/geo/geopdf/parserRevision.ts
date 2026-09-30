@@ -19,8 +19,11 @@
  * 3. #287 — the rendered page box (CropBox ∩ MediaBox, origin included) is
  *    recorded as `pageBox` and used for placement. Cropped or shifted-origin
  *    pages were drawn at the wrong extent.
+ * 4. #487 — `/LPTS` is anchored on the viewport `/BBox` as written. Sheets
+ *    that write the BBox top-first (the 2024 USGS US Topo production, e.g.
+ *    Beau Lake, Maine) drew flipped north–south, i.e. mirrored.
  */
-export const GEOPDF_PARSER_REVISION = 3;
+export const GEOPDF_PARSER_REVISION = 4;
 
 /**
  * The revision a stored georeference was produced by. Anything unstamped
