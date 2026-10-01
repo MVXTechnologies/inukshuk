@@ -15,19 +15,23 @@
  * | `contours`  | — (inside `base`) · on-device contours on the raster fallback | served contour tiles · on-device contours on the raster fallback |
  * | `linework`  | — (inside `base`)                     | roads and trails ("Labels on satellite") |
  * | `chart`     | marine chart: land dim, water fill, depth drape, WMS | same |
- * | `relief`    | shaded relief + the tilted-map pass   | — (imagery carries real shadows)   |
+ * | `relief`    | shaded relief + the tilted-map pass   | the tilted-map pass only, lighter (no flat shading: imagery carries real shadows) |
  * | `terrain`   | slope-angle raster                    | slope-angle raster                 |
  * | `labels`    | names, peaks, contour heights         | names, peaks, contour heights      |
  * | `weather`   | weather dim + drape                   | same                               |
  * | `soundings` | marine spot soundings                 | same                               |
+ * | `mask`      | "locally downloaded only" mask        | same                               |
  * | `pdf`       | PDF maps                              | PDF maps                           |
  * | `trails`    | heat, trail lines, highlights, markers | same                              |
  * | `reference` | weather/marine reference labels       | same                               |
- * | `mask`      | "locally downloaded only" mask        | same                               |
  *
  * so the visible order — ground, contours, roads and trails, relief, slope,
  * names, PDF maps, your trails — is the same on both, and PDF maps always
  * cover the contours, the relief and the slope shading under them.
+ *
+ * The offline-only mask hides undownloaded BASE MAP; it sits under the PDF
+ * maps and the user's own trails, which live on the device and must stay
+ * visible offline (owner, #492 — they used to vanish under it).
  *
  * Slots that hold layers mounted at runtime (MapView children: PDF maps,
  * slope, on-device contours, drapes, trails) carry an invisible ANCHOR
@@ -61,10 +65,10 @@ export const MAP_LAYER_SLOTS = [
   'labels',
   'weather',
   'soundings',
+  'mask',
   'pdf',
   'trails',
   'reference',
-  'mask',
 ] as const;
 
 export type MapLayerSlot = (typeof MAP_LAYER_SLOTS)[number];
@@ -184,11 +188,11 @@ const ELEMENT_ORDER: readonly MapElement[] = [
   'slope',
   'labels',
   'weather',
+  'mask',
   'pdf',
   'heat',
   'trails',
   'reference',
-  'mask',
 ];
 
 /**
@@ -200,6 +204,18 @@ export function drawsShadedRelief(
   i: Pick<MapStackInput, 'basemap' | 'shadedRelief' | 'weather' | 'marine'>,
 ): boolean {
   return i.basemap === 'map' && i.shadedRelief && !i.weather && !i.marine;
+}
+
+/**
+ * The tilted-map relief pass: wherever the shaded relief is drawn (Map), and
+ * on its own over satellite imagery (#492) — no flat shading there, the pass
+ * only fades in as the map tilts. Same drape gates as the relief.
+ */
+export function drawsTiltRelief(
+  i: Pick<MapStackInput, 'basemap' | 'shadedRelief' | 'tiltRelief' | 'weather' | 'marine'>,
+): boolean {
+  if (!i.tiltRelief || i.weather || i.marine) return false;
+  return i.basemap === 'satellite' || drawsShadedRelief(i);
 }
 
 /**
@@ -267,7 +283,7 @@ export function mapDrawOrder(i: MapStackInput): MapElement[] {
     linework: stoneMap || imageryLabels,
     chart: i.marine,
     relief,
-    tiltRelief: relief && i.tiltRelief,
+    tiltRelief: drawsTiltRelief(i),
     slope: i.slope && !i.offlineMask,
     labels: stoneMap || imageryLabels,
     weather: i.weather,

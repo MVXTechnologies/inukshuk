@@ -2,6 +2,7 @@ import { DRAPE_ANCHORS_BOTTOM_TO_TOP } from '@core/geo/mapLayerStack';
 import {
   drawsImageryLabels,
   drawsShadedRelief,
+  drawsTiltRelief,
   elementSlot,
   MAP_LAYER_SLOTS,
   mapDrawOrder,
@@ -115,6 +116,19 @@ describe('gates', () => {
     ).toBe(false);
   });
 
+  it('draws the tilt pass with the map relief, or alone over imagery', () => {
+    const t = { ...base, tiltRelief: true };
+    expect(drawsTiltRelief({ ...t, basemap: 'map', shadedRelief: true })).toBe(true);
+    expect(drawsTiltRelief({ ...t, basemap: 'map', shadedRelief: false })).toBe(false);
+    expect(drawsTiltRelief({ ...t, basemap: 'satellite', shadedRelief: false })).toBe(true);
+    expect(
+      drawsTiltRelief({ ...t, basemap: 'satellite', shadedRelief: false, tiltRelief: false }),
+    ).toBe(false);
+    expect(drawsTiltRelief({ ...t, basemap: 'satellite', shadedRelief: true, weather: true })).toBe(
+      false,
+    );
+  });
+
   it('draws imagery labels on satellite only, with the toggle, without a drape', () => {
     const on = { ...base, vector: true, satelliteLabels: true };
     expect(drawsImageryLabels({ ...on, basemap: 'satellite' })).toBe(true);
@@ -164,7 +178,7 @@ describe(`mapDrawOrder — every combination (${ALL.length} inputs)`, () => {
     }
   });
 
-  it('draws heat and trails above the PDF maps, and the mask on top', () => {
+  it('draws heat and trails above the PDF maps', () => {
     for (const input of ALL) {
       const order = mapDrawOrder(input);
       for (const trail of ['heat', 'trails'] as const) {
@@ -172,7 +186,18 @@ describe(`mapDrawOrder — every combination (${ALL.length} inputs)`, () => {
           expect(above(order, trail, 'pdf')).toBe(true);
         }
       }
-      if (input.offlineMask) expect(order[order.length - 1]).toBe('mask');
+    }
+  });
+
+  it('masks every base-map element offline, never the PDF maps or your trails (#492)', () => {
+    const device: MapElement[] = ['pdf', 'heat', 'trails'];
+    for (const input of ALL) {
+      if (!input.offlineMask) continue;
+      const order = mapDrawOrder(input);
+      for (const e of order) {
+        if (e === 'mask' || e === 'reference') continue;
+        expect([input, e, above(order, e, 'mask')]).toEqual([input, e, device.includes(e)]);
+      }
     }
   });
 
@@ -196,7 +221,7 @@ describe(`mapDrawOrder — every combination (${ALL.length} inputs)`, () => {
     }
   });
 
-  it('is the SAME order on both base maps — satellite just lacks the relief', () => {
+  it('is the SAME order on both base maps — satellite just lacks the flat relief', () => {
     for (const input of ALL) {
       if (input.basemap !== 'map') continue;
       const map = mapDrawOrder(input);
@@ -204,7 +229,15 @@ describe(`mapDrawOrder — every combination (${ALL.length} inputs)`, () => {
       const common = (a: MapElement[], b: MapElement[]) => a.filter((e) => b.includes(e));
       expect(common(map, sat)).toEqual(common(sat, map));
       expect(sat).not.toContain('relief');
-      expect(sat).not.toContain('tiltRelief');
+    }
+  });
+
+  it('gives satellite the tilt pass on its own, with the same drape gates as the map', () => {
+    for (const input of ALL) {
+      if (input.basemap !== 'satellite') continue;
+      const order = mapDrawOrder(input);
+      const expected = input.tiltRelief && !input.weather && !input.marine;
+      expect(order.includes('tiltRelief')).toBe(expected);
     }
   });
 
@@ -248,6 +281,7 @@ describe(`mapDrawOrder — every combination (${ALL.length} inputs)`, () => {
       'ground',
       'contours',
       'linework',
+      'tiltRelief',
       'slope',
       'labels',
       'pdf',

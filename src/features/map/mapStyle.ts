@@ -12,6 +12,7 @@ import { drapeAnchorLayer } from '@core/geo/mapLayerStack';
 import {
   drawsImageryLabels,
   drawsShadedRelief,
+  drawsTiltRelief,
   SLOT_ANCHOR,
   stackLayers,
   type MapLayerSlot,
@@ -196,7 +197,11 @@ export function styleHasHillshade(style: StyleSpecification): boolean {
 
 /** Whether a style carries the (hidden) tilted-map relief pass (#480). */
 export function styleHasTiltRelief(style: StyleSpecification): boolean {
-  return styleHasHillshade(style) && style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID);
+  // Not tied to the flat shading: over satellite the pass stands alone (#492).
+  return (
+    style.sources[HILLSHADE_DEM_SOURCE_ID] !== undefined &&
+    style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID)
+  );
 }
 
 /**
@@ -719,11 +724,20 @@ export function buildOsmStyle(
   // Skipped in 3D (the real terrain surface adds its own DEM/hillshade
   // below), on satellite imagery (it carries the sun's real shadows) and
   // under weather and the marine chart (see `drawsShadedRelief`).
-  if (
-    !terrain3d &&
-    SHADE_BASEMAPS.has(basemap) &&
-    drawsShadedRelief({ basemap: 'map', shadedRelief, weather: weatherOn, marine: chartOn })
-  ) {
+  //
+  // The tilted-map pass (#480) rides above it; over satellite imagery it is
+  // drawn on its own (#492) — hidden flat, faded in with the pitch by the
+  // map screen, lighter and in the night palette (see `tiltReliefLook`).
+  const reliefGates = {
+    basemap: basemap === 'satellite' ? ('satellite' as const) : ('map' as const),
+    shadedRelief: shadedRelief && SHADE_BASEMAPS.has(basemap),
+    tiltRelief: (options.tiltRelief ?? 'off') !== 'off',
+    weather: weatherOn,
+    marine: chartOn,
+  };
+  const flatRelief = !terrain3d && drawsShadedRelief(reliefGates);
+  const tiltPass = !terrain3d && drawsTiltRelief(reliefGates);
+  if (flatRelief || tiltPass) {
     style.sources[HILLSHADE_DEM_SOURCE_ID] = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
@@ -733,10 +747,10 @@ export function buildOsmStyle(
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
-    const look = hillshadeLook(
-      options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH,
-      stone !== null && options.vectorBasemap?.dark === true,
-    );
+  }
+  const stoneNight = stone !== null && options.vectorBasemap?.dark === true;
+  if (flatRelief) {
+    const look = hillshadeLook(options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH, stoneNight);
     put('relief', {
       id: HILLSHADE_2D_LAYER_ID,
       type: 'hillshade',
@@ -761,27 +775,30 @@ export function buildOsmStyle(
         'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       },
     });
-    const tilt = tiltReliefLook(
-      options.tiltRelief ?? 'off',
-      MAP_MAX_PITCH_DEG,
-      stone !== null && options.vectorBasemap?.dark === true,
-    );
-    if (tilt !== null) {
-      put('relief', {
-        id: TILT_RELIEF_LAYER_ID,
-        type: 'hillshade',
-        source: HILLSHADE_DEM_SOURCE_ID,
-        minzoom: HILLSHADE_2D_MIN_ZOOM,
-        layout: { visibility: 'none' },
-        paint: {
-          'hillshade-exaggeration': 0,
-          'hillshade-shadow-color': tilt.shadowColor,
-          'hillshade-highlight-color': tilt.highlightColor,
-          'hillshade-accent-color': tilt.accentColor,
-          'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
-        },
-      });
-    }
+  }
+  const tilt = tiltPass
+    ? tiltReliefLook(
+        options.tiltRelief ?? 'off',
+        MAP_MAX_PITCH_DEG,
+        stoneNight,
+        reliefGates.basemap === 'satellite',
+      )
+    : null;
+  if (tilt !== null) {
+    put('relief', {
+      id: TILT_RELIEF_LAYER_ID,
+      type: 'hillshade',
+      source: HILLSHADE_DEM_SOURCE_ID,
+      minzoom: HILLSHADE_2D_MIN_ZOOM,
+      layout: { visibility: 'none' },
+      paint: {
+        'hillshade-exaggeration': 0,
+        'hillshade-shadow-color': tilt.shadowColor,
+        'hillshade-highlight-color': tilt.highlightColor,
+        'hillshade-accent-color': tilt.accentColor,
+        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+      },
+    });
   }
 
   if (terrain3d) {
@@ -984,9 +1001,11 @@ export function buildOsmStyle(
     );
   }
 
-  // "Locally downloaded only" mask, the TOP slot: above every basemap layer
-  // (raster + hillshade). The position puck and markers are appended after
-  // the style's own layers, so they still draw on top of the mask.
+  // "Locally downloaded only" mask, the `mask` slot: above every base-map
+  // layer (raster, vector, relief, drapes) but UNDER the PDF maps and the
+  // trails (#492) — those are on the device and must stay visible offline.
+  // The position puck and markers are appended after the style's own
+  // layers, so they draw on top of the mask too.
   if (options.downloadedMask) {
     style.sources['downloaded-mask'] = {
       type: 'geojson',

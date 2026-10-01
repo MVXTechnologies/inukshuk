@@ -119,14 +119,15 @@ import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
 import {
   CONTOUR_LAYERS,
-  FOCUSED_TRAIL_LAYER,
+  FOCUSED_TRAIL_LAYERS,
   SLOPE_LAYER,
   pdfDetailLayer,
   pdfOverviewLayer,
   HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
   LIVE_TRAIL_LAYERS,
-  TRACKS_LINES_LAYER,
+  TRACKS_LINES_LAYERS,
+  lineOutlineFor,
 } from './mapLayers';
 import { buildOsmStyle } from './mapStyle';
 import { useTiltRelief } from './hooks/useTiltRelief';
@@ -355,8 +356,10 @@ export function MapScreen() {
   const stoneBase = VECTOR_BASEMAP_ENABLED && basemap === 'map';
   // Contours on the vector map are served tiles, part of the style.
   const terrainContours = useSettingsStore((s) => s.terrainContours);
-  // Heat tone follows the basemap: dark theme and satellite imagery are dark.
-  const heatLayerSet = theme.dark || basemap === 'satellite' ? HEAT_LAYERS.dark : HEAT_LAYERS.light;
+  // Heat ramp and line outlines follow the ground (#492): paper map, night
+  // map, or satellite imagery (dark in both themes).
+  const lineOutline = lineOutlineFor(basemap === 'satellite' ? 'satellite' : 'map', theme.dark);
+  const heatLayerSet = HEAT_LAYERS[lineOutline];
   const contourLayerSet =
     basemap === 'satellite'
       ? CONTOUR_LAYERS.satellite
@@ -755,7 +758,7 @@ export function MapScreen() {
   // The tilted-map relief pass (#480): the style carries it hidden whenever
   // it draws the shading and the setting is on; the hook switches it on from
   // the settled pitch.
-  const tilt = useTiltRelief(style);
+  const tilt = useTiltRelief(style, basemap === 'satellite' && editorStyle === null);
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -2120,7 +2123,9 @@ export function MapScreen() {
               (heatAt) is the only way in now. */}
           {showTrackOverlays && linesJson && (
             <GeoJSONSource id="tracks-lines" data={linesJson}>
-              {hasSelection ? TRACKS_LINES_LAYER.hidden : TRACKS_LINES_LAYER.shown}
+              {hasSelection
+                ? TRACKS_LINES_LAYERS[lineOutline].hidden
+                : TRACKS_LINES_LAYERS[lineOutline].shown}
             </GeoJSONSource>
           )}
 
@@ -2134,7 +2139,7 @@ export function MapScreen() {
               simply follows whether there's a trail to draw. */}
           {focusLine && (
             <GeoJSONSource id="focused-trail-line" data={focusLine}>
-              {FOCUSED_TRAIL_LAYER}
+              {FOCUSED_TRAIL_LAYERS[lineOutline]}
             </GeoJSONSource>
           )}
 

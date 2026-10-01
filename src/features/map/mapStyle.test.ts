@@ -34,7 +34,7 @@ import {
   styleHasTiltRelief,
   TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
-import { tiltReliefLook } from '@core/map/tiltRelief';
+import { MAP_MAX_PITCH_DEG, tiltReliefLook } from '@core/map/tiltRelief';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -295,7 +295,6 @@ describe('buildOsmStyle', () => {
       const ids = layerIds(
         buildOsmStyle(TILE, false, 'map', true, { marineChart: chart, downloadedMask: mask }),
       );
-      expect(ids[ids.length - 1]).toBe('downloaded-mask');
       for (const a of [MARINE_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
         expect(ids.indexOf(a)).toBeGreaterThan(-1);
         expect(ids.indexOf(a)).toBeLessThan(ids.indexOf('downloaded-mask'));
@@ -648,12 +647,15 @@ describe('buildOsmStyle', () => {
       expect(layerIds(s)).not.toContain('downloaded-mask');
     });
 
-    it('adds an opaque fill in the requested colour as the TOP style layer', () => {
+    it('adds an opaque fill in the requested colour over every base-map layer', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, { downloadedMask: mask });
       expect(s.sources['downloaded-mask']).toEqual({ type: 'geojson', data: mask.data });
       const ids = layerIds(s);
-      expect(ids[ids.length - 1]).toBe('downloaded-mask'); // above raster + hillshade
-      const layer = s.layers[s.layers.length - 1];
+      // Above raster + hillshade…
+      for (const id of ['osm', 'hillshade-2d']) {
+        expect(ids.indexOf('downloaded-mask')).toBeGreaterThan(ids.indexOf(id));
+      }
+      const layer = s.layers.find((l) => l.id === 'downloaded-mask');
       expect(layer).toMatchObject({
         type: 'fill',
         source: 'downloaded-mask',
@@ -661,13 +663,26 @@ describe('buildOsmStyle', () => {
       });
     });
 
-    it('stays the TOP layer even in weather mode', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        downloadedMask: mask,
-        weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
-      });
-      const ids = layerIds(s);
-      expect(ids[ids.length - 1]).toBe('downloaded-mask');
+    it('keeps PDF maps and trails ABOVE it — they live on the device (#492)', () => {
+      // Owner: in "Locally downloaded only" mode a PDF map outside a
+      // downloaded region vanished under the mask, as did your own trails.
+      for (const basemap of ['map', 'satellite'] as const) {
+        for (const opts of [{}, { weatherMuted: { dimColor: '#111', dimOpacity: 0.4 } }]) {
+          const ids = layerIds(
+            buildOsmStyle(TILE, false, basemap, true, { downloadedMask: mask, ...opts }),
+          );
+          const at = (id: string) => ids.indexOf(id);
+          expect(at(PDF_MAPS_ANCHOR)).toBe(at('downloaded-mask') + 1);
+          expect(at(TRAILS_ANCHOR)).toBeGreaterThan(at('downloaded-mask'));
+          // …and every base-map drape and terrain overlay stays under it.
+          for (const a of [CONTOURS_ANCHOR, TERRAIN_OVERLAY_ANCHOR]) {
+            expect(at(a)).toBeLessThan(at('downloaded-mask'));
+          }
+          if (at(WEATHER_DRAPE_ANCHOR) >= 0) {
+            expect(at(WEATHER_DRAPE_ANCHOR)).toBeLessThan(at('downloaded-mask'));
+          }
+        }
+      }
     });
 
     it('sits above the base raster layer for every basemap', () => {
@@ -1062,12 +1077,13 @@ describe('tilted-map relief pass (#480)', () => {
     expect(tiltLayer(buildOsmStyle(TILE, false, 'map', true))).toBeUndefined();
   });
 
-  it('is absent wherever the base shading is (none, satellite, weather dim)', () => {
+  it('is absent on the map wherever the base shading is (none, weather dim)', () => {
     const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
     for (const s of [
       buildOsmStyle(TILE, false, 'map', false, { tiltRelief: 'dramatic' }),
-      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic' }),
       buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'dramatic', weatherMuted }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic', weatherMuted }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'off' }),
     ]) {
       expect(tiltLayer(s)).toBeUndefined();
       expect(styleHasTiltRelief(s)).toBe(false);
@@ -1383,5 +1399,63 @@ describe('one layer order on both base maps (#492)', () => {
         expect([i.basemap, id, ids.indexOf(id) < pdf]).toEqual([i.basemap, id, true]);
       }
     }
+  });
+});
+
+// #492 — satellite gains the tilted-map relief: no flat shading on the
+// imagery, only the pass that fades in with the pitch, lighter.
+describe('tilted relief over satellite (#492)', () => {
+  const tiltOf = (s: ReturnType<typeof buildOsmStyle>) =>
+    s.layers.find((l) => l.id === TILT_RELIEF_LAYER_ID);
+
+  it.each(['natural', 'dramatic'] as const)(
+    '%s: carries the hidden pass and its DEM, but no flat hillshade',
+    (mode) => {
+      // The flat-shading setting does not matter on imagery; the 3D one does.
+      for (const shaded of [false, true]) {
+        const s = buildOsmStyle(TILE, false, 'satellite', shaded, { tiltRelief: mode });
+        expect(styleHasHillshade(s)).toBe(false);
+        expect(layerIds(s)).not.toContain(HILLSHADE_2D_LAYER_ID);
+        expect(styleHasTiltRelief(s)).toBe(true);
+        expect(s.sources[HILLSHADE_DEM_SOURCE_ID]).toMatchObject({ type: 'raster-dem' });
+        const tilt = tiltOf(s);
+        // Flat it is hidden; the map screen switches it on as the map tilts.
+        expect(tilt?.layout).toEqual({ visibility: 'none' });
+        expect(tilt?.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
+      }
+    },
+  );
+
+  it('uses the night palette — near-black shadow, no umber tint on the photo', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', false, { tiltRelief: 'natural' });
+    const paint = tiltOf(s)?.paint as Record<string, unknown>;
+    expect(paint['hillshade-shadow-color']).toBe(
+      tiltReliefLook('natural', MAP_MAX_PITCH_DEG, true, true)?.shadowColor,
+    );
+    expect(String(paint['hillshade-shadow-color'])).toMatch(/^rgba\(0, 0, 0,/);
+  });
+
+  it('sits over the imagery and its contours and roads, under the slope and the PDF maps', () => {
+    const ids = layerIds(
+      buildOsmStyle(TILE, false, 'satellite', false, {
+        tiltRelief: 'natural',
+        imageryContours: { tiles: 'https://c.example/{z}/{x}/{y}.mvt' },
+        imageryLabels: { tiles: ['https://v.example/{z}/{x}/{y}.mvt'] },
+      }),
+    );
+    const at = (id: string) => ids.indexOf(id);
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeGreaterThan(at('stone-contour-major'));
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeGreaterThan(at('stone-path'));
+    expect(at(TILT_RELIEF_LAYER_ID)).toBe(at(TERRAIN_OVERLAY_ANCHOR) - 1);
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeLessThan(at(PDF_MAPS_ANCHOR));
+  });
+
+  it('stays out of offline packs (no tilt option) and the marine chart', () => {
+    expect(styleHasTiltRelief(buildOsmStyle(TILE, false, 'satellite'))).toBe(false);
+    const chart = buildOsmStyle(TILE, false, 'satellite', false, {
+      tiltRelief: 'natural',
+      marineChart: { wmsFallback: false },
+    });
+    expect(styleHasTiltRelief(chart)).toBe(false);
   });
 });

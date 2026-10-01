@@ -45,7 +45,7 @@
  *   stack", and `MLRNLayer.setBelowLayerID(null)` — which does
  *   `removeFromMap()` then `addBelow(mBelowLayerID!!)`, i.e. a
  *   KotlinNullPointerException — is unreachable;
- * - the anchors sit below `downloaded-mask`, so offline-only mode keeps
+ * - the drape anchors sit below `downloaded-mask`, so offline-only mode keeps
  *   masking undownloaded ground.
  *
  * Bottom → top the live stack is (full table in `@core/map/layerSlots`):
