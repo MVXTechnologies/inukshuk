@@ -28,6 +28,7 @@ import {
   type UploadOutcome,
 } from '@core/strava/upload';
 import { TILE_HOST } from '@data/basemapTiles';
+import { resolveDocumentPath } from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useStravaStore } from '@state/stravaStore';
 import Constants from 'expo-constants';
@@ -271,9 +272,12 @@ export async function uploadTrackToStrava(track: UploadableTrack): Promise<Uploa
       form.append(key, value);
     }
     // React Native's FormData takes a { uri, name, type } file descriptor and
-    // streams the file from disk (its types call it a Blob).
+    // streams the file from disk (its types call it a Blob). Saved trails
+    // store a document-relative path (`tracks/<id>.gpx`, since #255), which
+    // the native networking layer can't open — resolve it first, or every
+    // upload dies as a network error.
     form.append('file', {
-      uri: track.fileUri,
+      uri: resolveDocumentPath(track.fileUri),
       name: `${track.id}.gpx`,
       type: 'application/gpx+xml',
     } as unknown as Blob);
