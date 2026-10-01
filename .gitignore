@@ -87,3 +87,6 @@ expo-env.d.ts
 
 # Local agent worktrees and tooling (~800 MB); keeps EAS build uploads small.
 .claude/
+
+# IDE
+.idea/
