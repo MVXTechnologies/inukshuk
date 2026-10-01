@@ -1,0 +1,758 @@
+{
+  "request": "q=lac%20saint-jean&lang=en&alt=fr&limit=15&lat=46.81&lon=-71.21",
+  "upstream": {
+    "https://photon.komoot.io/api/?q=lac+saint-jean&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=%21shop&osm_tag=%21office&osm_tag=%21craft": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.0048797, 48.583336] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 58214,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Saint-Jean",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.360992, 48.749653, -71.7508903, 48.4170337]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.1126184, 49.5457597] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 13102364,
+            "osm_key": "boundary",
+            "osm_value": "political",
+            "type": "other",
+            "name": "Lac-Saint-Jean",
+            "country": "Canada",
+            "extent": [-74.4438903, 51.142272, -71.374544, 47.9498808]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.759514, 48.3919764] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8154703,
+            "osm_key": "place",
+            "osm_value": "county",
+            "type": "county",
+            "name": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.1056943, 48.9631002, -71.3215259, 47.9498808]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.4149956, 46.4515916] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 85193508,
+            "osm_key": "natural",
+            "osm_value": "water",
+            "type": "other",
+            "name": "Lac Saint-Jean",
+            "city": "Mandeville",
+            "county": "D'Autray",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-73.4160184, 46.4522636, -73.4144045, 46.4508866]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.8216694, 50.3237707] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8120111,
+            "osm_key": "boundary",
+            "osm_value": "administrative",
+            "type": "county",
+            "name": "Saguenay–Lac-Saint-Jean",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-74.4438903, 52.6947453, -69.8713941, 47.9498808]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.989288, 48.314711] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8134378,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Saint-André-du-Lac-Saint-Jean",
+            "county": "Le Domaine-du-Roy",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.0739611, 48.379224, -71.8875061, 48.2417806]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.6543365, 48.5447352] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 14023137786,
+            "osm_key": "amenity",
+            "osm_value": "university",
+            "type": "house",
+            "name": "Université du Québec à Chicoutimi",
+            "city": "Alma",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.4586511, 48.6499348] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 14023154260,
+            "osm_key": "amenity",
+            "osm_value": "university",
+            "type": "house",
+            "name": "Université du Québec à Chicoutimi",
+            "city": "Saint-Félicien",
+            "county": "Le Domaine-du-Roy",
+            "state": "Quebec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.20101, 48.235223] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8279999,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.5298877, 48.2981029, -70.1293377, 47.9973323]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.3965682, 47.3685103] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 104866788,
+            "osm_key": "natural",
+            "osm_value": "wetland",
+            "type": "other",
+            "name": "Lac à Jean-Paul-Lemieux",
+            "city": "Saint-Bernard-sur-Mer",
+            "county": "Charlevoix",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.3978436, 47.3689056, -70.3950007, 47.3681327]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.7669359, 47.9818799] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8376233,
+            "osm_key": "boundary",
+            "osm_value": "administrative",
+            "type": "city",
+            "name": "Lac-Moncouche",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.0999201, 47.9985293, -71.4037246, 47.9498808]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.5954221, 48.092049] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8376234,
+            "osm_key": "boundary",
+            "osm_value": "administrative",
+            "type": "city",
+            "name": "Lac-Achouakan",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-71.7258514, 48.1873072, -71.4211825, 47.9953942]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.646279, 46.7150921] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 101957986,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Béland",
+            "city": "Neuville",
+            "county": "Portneuf",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-71.6469939, 46.7155308, -71.6455601, 46.7146454]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.3784832, 47.3828528] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 597095276,
+            "osm_key": "water",
+            "osm_value": "pond",
+            "type": "other",
+            "name": "Lac à Jean-Yves",
+            "city": "Saint-Bernard-sur-Mer",
+            "county": "Charlevoix",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.3791744, 47.3832923, -70.3777796, 47.382475]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.9043461, 46.096883] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 16126737,
+            "osm_key": "place",
+            "osm_value": "island",
+            "type": "other",
+            "name": "Île Saint-Jean",
+            "city": "Saint-François-du-Lac",
+            "county": "Nicolet-Yamaska",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.9326864, 46.1064248, -72.8741268, 46.0875115]
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=lac+saint-jean&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=natural%3Awater&osm_tag=water&osm_tag=natural%3Abay&osm_tag=landuse%3Areservoir&osm_tag=waterway%3Ariver": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.0048797, 48.583336] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 58214,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Saint-Jean",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-72.360992, 48.749653, -71.7508903, 48.4170337]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.4149956, 46.4515916] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 85193508,
+            "osm_key": "natural",
+            "osm_value": "water",
+            "type": "other",
+            "name": "Lac Saint-Jean",
+            "city": "Mandeville",
+            "county": "D'Autray",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-73.4160184, 46.4522636, -73.4144045, 46.4508866]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.646279, 46.7150921] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 101957986,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Béland",
+            "city": "Neuville",
+            "county": "Portneuf",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-71.6469939, 46.7155308, -71.6455601, 46.7146454]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.3784832, 47.3828528] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 597095276,
+            "osm_key": "water",
+            "osm_value": "pond",
+            "type": "other",
+            "name": "Lac à Jean-Yves",
+            "city": "Saint-Bernard-sur-Mer",
+            "county": "Charlevoix",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.3791744, 47.3832923, -70.3777796, 47.382475]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.3460542, 48.1806025] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 10974996,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean",
+            "city": "Rivière-Éternité",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.5511004, 48.2415955, -70.1996415, 48.15015]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.9876351, 47.894346] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 98818222,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac à Jean",
+            "city": "Saint-Siméon",
+            "county": "Charlevoix-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-69.989199, 47.8952205, -69.9855851, 47.893692]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.2388239, 48.0837359] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 111443811,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Jean-Paul",
+            "city": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.2397789, 48.0846725, -70.2380332, 48.0827481]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.2175922, 48.1179928] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 111438154,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Jean-Ré",
+            "city": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.2195868, 48.1195638, -70.2092209, 48.1163406]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.7990689, 47.9588618] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 101996881,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Saint-Louis",
+            "city": "Lac-Moncouche",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-71.8007831, 47.9627661, -71.7924834, 47.9549659]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.9309974, 47.9680227] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1177057865,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Saint-Véran",
+            "city": "Lac-Moncouche",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Quebec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.3580631, 46.8111026] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 110982769,
+            "osm_key": "natural",
+            "osm_value": "water",
+            "type": "other",
+            "name": "Lac Jean",
+            "city": "Saint-Alexis-des-Monts",
+            "county": "Maskinongé",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-73.3603582, 46.8121075, -73.3555331, 46.8100048]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.2527565, 46.1006476] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 100186591,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Little Saint John Lake",
+            "city": "T5 R20 WELS",
+            "county": "Somerset",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-70.2577079, 46.1059704, -70.2492268, 46.0953097]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.4374713, 48.0004127] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 99929872,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Épinglette",
+            "city": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.4414249, 48.0061828, -70.4352166, 47.9945225]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.3971508, 48.0071283] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 111437348,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Mathieu",
+            "city": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.3982146, 48.0085243, -70.395902, 48.0055989]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.4452885, 48.0294509] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 1567847,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac à la Catin",
+            "city": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Quebec",
+            "country": "Canada",
+            "extent": [-70.4546387, 48.0406768, -70.4409308, 48.0181215]
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=saint+jean&limit=15&lang=fr&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill&osm_tag=natural%3Awater&osm_tag=water&osm_tag=natural%3Abay&osm_tag=landuse%3Areservoir&osm_tag=waterway%3Ariver&osm_tag=place%3Acity&osm_tag=place%3Atown&osm_tag=place%3Avillage": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.8902398, 46.9206187] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8099226,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Saint-Jean-de-l'Île-d'Orléans",
+            "county": "L'Île-d'Orléans",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-70.9828952, 46.9868626, -70.8021326, 46.8811287]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.2692296, 47.2144457] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8188530,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Saint-Jean-Port-Joli",
+            "county": "L'Islet",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-70.3227618, 47.2681468, -70.1800226, 47.127104]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.4586415, 46.1828916] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8055335,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Saint-Jean-de-Brébeuf",
+            "county": "Les Appalaches",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-71.5338858, 46.2311942, -71.3450061, 46.1126835]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.2533401, 45.3056879] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 1600484,
+            "osm_key": "place",
+            "osm_value": "city",
+            "type": "city",
+            "name": "Saint-Jean-sur-Richelieu",
+            "county": "Le Haut-Richelieu",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-73.4121803, 45.4130868, -73.1692225, 45.2336197]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-73.534927, 46.230203] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 7707049,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Saint-Jean-de-Matha",
+            "county": "Matawinie",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-73.6398206, 46.3024882, -73.4435527, 46.1863162]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.7061291, 46.046508] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 477130905,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Saint-Jean-de-la-Lande",
+            "city": "Saint-Georges",
+            "county": "Beauce-Sartigan",
+            "state": "Québec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.740822, 46.691841] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1174695314,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Saint-Jean-des-Piles",
+            "city": "Shawinigan",
+            "county": "Mauricie",
+            "state": "Québec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.200889, 46.7168441] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1176306781,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Sommet de Saint-Jean",
+            "city": "Lévis",
+            "county": "Chaudière-Appalaches",
+            "state": "Québec",
+            "country": "Canada"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.9603685, 46.5966045] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 11376739,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean Nord-Ouest",
+            "city": "Powers Gore",
+            "county": "Comté d'Aroostook",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique",
+            "extent": [-70.0008065, 46.7016577, -69.8838895, 46.5631618]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.8070667, 47.2126489] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1275044764,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean",
+            "county": "Comté d'Aroostook",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique",
+            "extent": [-68.8174523, 47.217093, -68.7974783, 47.2111187]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7378614, 47.2376973] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1491489416,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean",
+            "city": "Paroisse de Saint-François",
+            "county": "Haut-Madawaska",
+            "state": "Nouveau-Brunswick",
+            "country": "Canada",
+            "extent": [-68.749149, 47.2400852, -68.722238, 47.2278658]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7219152, 47.242839] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 119324141,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean",
+            "city": "Paroisse de Saint-François",
+            "county": "Haut-Madawaska",
+            "state": "Nouveau-Brunswick",
+            "country": "Canada",
+            "extent": [-68.7323744, 47.2431256, -68.7098824, 47.2395079]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.6640055, 47.2367427] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1275044765,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Rivière Saint-Jean",
+            "city": "Paroisse de Saint-François",
+            "county": "Haut-Madawaska",
+            "state": "Nouveau-Brunswick",
+            "country": "Canada",
+            "extent": [-68.6726996, 47.240965, -68.6550576, 47.2363126]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.0048797, 48.583336] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 58214,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Lac Saint-Jean",
+            "county": "Lac-Saint-Jean-Est",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-72.360992, 48.749653, -71.7508903, 48.4170337]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-70.20101, 48.235223] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 8279999,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "L'Anse-Saint-Jean",
+            "county": "Le Fjord-du-Saguenay",
+            "state": "Québec",
+            "country": "Canada",
+            "extent": [-70.5298877, 48.2981029, -70.1293377, 47.9973323]
+          }
+        }
+      ]
+    }
+  }
+}

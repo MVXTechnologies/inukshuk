@@ -84,6 +84,11 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
+import { PlaceSearchSheet } from './search/PlaceSearchSheet';
+import { SearchHitMarker } from './search/SearchHitMarker';
+import { cameraTargetFor } from '@core/search/camera';
+import type { Place } from '@core/search/place';
+import { usePlaceRecentsStore } from '@state/placeRecentsStore';
 import { imageryContoursOption, vectorBasemapOption } from '@data/basemapTiles';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
@@ -548,6 +553,13 @@ export function MapScreen() {
   // #232 — the tapped point the coordinates dialog opens prefilled with; null
   // for the "+" sheet's secondary entry, which opens on an empty box.
   const [goToSeed, setGoToSeed] = useState<LatLng | null>(null);
+  // Place search (#496): the sheet the pill opens, the map centre read when
+  // it opened (the index's bias without a GPS fix), and the result just
+  // flown to — highlighted until the next tap on the map.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchBias, setSearchBias] = useState<LatLng | null>(null);
+  const [searchHit, setSearchHit] = useState<Place | null>(null);
+  const pushPlaceRecent = usePlaceRecentsStore((s) => s.push);
   // Tap-anywhere point readout (wave A item 7, generalized by marine wave D
   // §D1/D-5): a bare tap drops/moves ONE chip here whatever the active
   // layers — coordinates on the plain map, the weather value with a weather
@@ -872,7 +884,7 @@ export function MapScreen() {
     })();
   }, [forecastAt, mapLoaded, lastKnownPosition, router, weatherLayer]);
 
-  const { fitOverlayBounds, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel } =
+  const { fitOverlayBounds, flyToPlace, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel } =
     useCameraControls({
       cameraRef,
       mapRef,
@@ -926,6 +938,37 @@ export function MapScreen() {
     },
     [mapLoaded],
   );
+
+  // Open the place search (#496). Same mapLoaded gate as above for the
+  // centre read; without it the search simply has no fallback bias.
+  const openPlaceSearch = useCallback(async () => {
+    let center: LatLng | null = null;
+    if (mapLoaded) {
+      try {
+        const vs = await mapRef.current?.getViewState();
+        if (vs) center = { latitude: vs.center[1], longitude: vs.center[0] };
+      } catch {
+        // Map mid-teardown: search without a bias.
+      }
+    }
+    setSearchBias(center);
+    setSearchOpen(true);
+  }, [mapLoaded]);
+
+  // A result was picked: remember it, fly there, and mark the spot.
+  const onPickPlace = useCallback(
+    (place: Place) => {
+      setSearchOpen(false);
+      pushPlaceRecent(place);
+      setPointAt(null);
+      setSearchHit(place);
+      flyToPlace(cameraTargetFor(place));
+    },
+    // flyToPlace closes over refs only (see aimAt below).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pushPlaceRecent],
+  );
+  const closePlaceSearch = useCallback(() => setSearchOpen(false), []);
 
   // Aim at a coordinate: plant the pin, point the camera at it, and say so.
   const aimAt = useCallback(
@@ -1702,6 +1745,8 @@ export function MapScreen() {
   const onMapPress = useCallback(
     (e: MapPressEvent) => {
       const press = readMapPress(e); // synchronously, before anything awaits
+      // The search highlight (#496) is temporary: any tap on the map clears it.
+      setSearchHit(null);
       if (press) void handleMapPress(press);
     },
     [handleMapPress],
@@ -2235,6 +2280,17 @@ export function MapScreen() {
             </Marker>
           )}
 
+          {/* Place-search highlight (#496): where the last pick landed. */}
+          {searchHit !== null && (
+            <Marker
+              id="search-hit"
+              lngLat={[searchHit.longitude, searchHit.latitude]}
+              anchor="bottom"
+            >
+              <SearchHitMarker place={searchHit} />
+            </Marker>
+          )}
+
           {/* Tap-anywhere readout chip (wave A item 7, unified by wave D
               §D1/D-5): ONE compact Windy-style chip at the tapped spot —
               the weather value pinned to the scrubbed TIME, the surveyed
@@ -2353,17 +2409,27 @@ export function MapScreen() {
       </View>
 
       {/* "Search places" between the compass and the rail (revamp Main.html).
-          Phase 1 is coordinates-first: it opens the coordinates dialog. Same
-          gates as the rail, plus the offline-area selector, whose box
-          starts right under it; 2D only, like the dialog's fly-to. */}
+          Opens the place search (#496): towns, peaks, lakes, campgrounds by
+          name, or a coordinate. Same gates as the rail, plus the offline-area
+          selector, whose box starts right under it. */}
       {makeMapState === null && heatSelection === null && !selecting && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
           {/* A shown long-distance trail takes the pill's place (#467). */}
           {shownTrail !== null ? (
             <ShownTrailPill shown={shownTrail} />
           ) : (
-            <MapSearchPill onPress={() => void openGoToCoordinates()} />
+            !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
           )}
+        </View>
+      )}
+      {searchOpen && (
+        <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <PlaceSearchSheet
+            origin={location}
+            bias={searchBias}
+            onSelect={onPickPlace}
+            onClose={closePlaceSearch}
+          />
         </View>
       )}
 
@@ -2878,6 +2944,8 @@ const styles = StyleSheet.create({
   topLeft: { position: 'absolute', left: 16, alignItems: 'flex-start' },
   // Between the compass (16 + 48) and the rail, with 12 dp either side.
   searchPill: { position: 'absolute', left: 76, right: 76 },
+  // The open place search takes the whole top band, over compass and rail.
+  searchSheet: { position: 'absolute', left: 12, right: 12, zIndex: 20 },
   // Centred under the search pill, between the compass and the rail.
   marineChip: { position: 'absolute', left: 76, right: 76, alignItems: 'center' },
   // Same lane, used by the destination readout (#97).
