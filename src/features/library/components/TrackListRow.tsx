@@ -51,7 +51,7 @@ export interface TrackListRowProps {
   selected: boolean;
   menuOpen: boolean;
   /** Elevation peek: undefined = closed, null = loading, else the points. */
-  elevation: readonly TrackPoint[] | null | undefined;
+  elevation: TrackPoint[] | null | undefined;
   /** Organize mode with folders: show the drag grip. */
   grip: boolean;
   stravaConnected: boolean;
@@ -194,7 +194,7 @@ export const TrackListRow = memo(function TrackListRow({
         {elevation !== undefined &&
           (elevation ? (
             <ElevationProfile
-              points={elevation as TrackPoint[]}
+              points={elevation}
               ascentM={t.stats.ascentM}
               descentM={t.stats.descentM}
             />
