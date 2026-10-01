@@ -378,8 +378,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   tagLabel: { fontSize: 13, lineHeight: 17, fontWeight: '700', maxWidth: 200 },
+  // Wraps (primary button onto its own line) rather than squeezing a label.
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 8,

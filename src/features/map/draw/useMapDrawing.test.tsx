@@ -859,7 +859,7 @@ describe('Back & forth (#515)', () => {
     expect(screen.queryByTestId('route-profile-turnaround')).toBeNull();
 
     await chooseFinish('Back and forth');
-    expect(screen.getByLabelText('Return, Back and forth')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Back and forth')).toBeOnTheScreen();
     await settleElevation();
     // The return is the snapped outbound reversed: no routing request for it.
     expect(mockRouteCalls).toHaveLength(0);
@@ -937,7 +937,7 @@ describe('Back & forth (#515)', () => {
     await flush(0);
     await flush(400);
     expect(screen.getByText('Edit route · There and back')).toBeOnTheScreen();
-    expect(screen.getByLabelText('Return, Back and forth')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Back and forth')).toBeOnTheScreen();
     expect(mockRouteCalls).toHaveLength(0);
     // The leg came back snapped (via the corner), counted out and back.
     const legM = polylineLengthM([P1, corner, P2]);
@@ -969,7 +969,7 @@ describe('Return menu and Loop (#515)', () => {
     await tap(P1);
     expect(screen.getByTestId('return-chip')).toBeDisabled();
     await tap(BY_P1);
-    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: One way')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('return-chip'));
     expect(screen.getByTestId('return-menu')).toBeOnTheScreen();
     expect(screen.getByLabelText('One way')).toBeSelected();
@@ -988,9 +988,9 @@ describe('Return menu and Loop (#515)', () => {
     await tap(P3);
     await chooseFinish('Loop');
     expect(screen.queryByTestId('return-menu')).toBeNull();
-    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Loop')).toBeOnTheScreen();
     await chooseFinish('One way');
-    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: One way')).toBeOnTheScreen();
   });
 
   it('a Freehand loop closes with a straight leg, counted in the stats and the profile', async () => {
@@ -1067,12 +1067,12 @@ describe('Return menu and Loop (#515)', () => {
     // The last point is near the start: the one-time tip.
     expect(screen.getByText('Tap the start to close the loop')).toBeOnTheScreen();
     await tap(P1);
-    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Loop')).toBeOnTheScreen();
     expect(screen.queryByTestId('loop-tip')).toBeNull();
     // No fourth point was added, and nothing got selected.
     expect(screen.queryByText(/selected$/)).toBeNull();
     await tap(P1);
-    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Loop')).toBeOnTheScreen();
     expect(screen.queryByText(/selected$/)).toBeNull();
     await press('Undo'); // undoes the last point, not the loop
     await press('Save route');
@@ -1097,7 +1097,7 @@ describe('Return menu and Loop (#515)', () => {
     await tap(P2);
     await tap(P1);
     expect(screen.getByText('Point 1 selected')).toBeOnTheScreen();
-    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: One way')).toBeOnTheScreen();
   });
 
   it('"Edit route" restores a loop with its snapped closing leg, asking for nothing', async () => {
@@ -1140,7 +1140,7 @@ describe('Return menu and Loop (#515)', () => {
     await flush(0);
     await flush(400);
     expect(screen.getByText('Edit route · Round')).toBeOnTheScreen();
-    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return: Loop')).toBeOnTheScreen();
     expect(mockRouteCalls).toHaveLength(0);
     const loopM = polylineLengthM([P1, c1, P2, c2, P3, c3, P1]);
     expect(distanceM()).toBeCloseTo(loopM, -2);
