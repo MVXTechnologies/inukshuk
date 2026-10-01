@@ -5,6 +5,8 @@ import {
   gridTrailsNear,
   gridTrailsNearWithin,
   HEAT_LINE_CELL_M,
+  HeatGridAccumulator,
+  HeatGridSync,
   heatGlowPoints,
   heatGridLines,
   MAX_BRIDGE_M,
@@ -243,5 +245,92 @@ describe('grid tap index', () => {
       { id: 'b', categoryId: 'bike', cells: walkTrackCells(street('b', 8), grid).cells },
     ]);
     expect(gridTrailsNear(mixed, grid, grid.key(...at(1000, 0))).hot).toBe(false);
+  });
+});
+
+describe('HeatGridAccumulator / HeatGridSync (#494)', () => {
+  const walks = {
+    a: walkTrackCells(street('a', 0), grid),
+    b: walkTrackCells(street('b', 5), grid),
+    c: walkTrackCells(street('c', 400, 0, 1000), grid),
+  };
+  const sorted = <K, V>(m: Map<K, V>) => [...m.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1));
+  const same = (x: ReturnType<typeof buildHeatGrid>, y: ReturnType<typeof buildHeatGrid>) => {
+    expect(sorted(x.cellCounts)).toEqual(sorted(y.cellCounts));
+    expect(sorted(x.edgeCounts)).toEqual(sorted(y.edgeCounts));
+    expect(x.centroids.size).toBe(y.centroids.size);
+    for (const [k, [lng, lat]] of x.centroids) {
+      const other = y.centroids.get(k);
+      expect(other?.[0]).toBeCloseTo(lng, 9);
+      expect(other?.[1]).toBeCloseTo(lat, 9);
+    }
+  };
+
+  it('adding walks one by one equals merging them', () => {
+    const acc = new HeatGridAccumulator(grid);
+    acc.add(walks.a);
+    acc.add(walks.b);
+    acc.add(walks.c);
+    same(acc.heat, buildHeatGrid([walks.a, walks.b, walks.c], grid));
+  });
+
+  it('removing a walk undoes its add exactly', () => {
+    const acc = new HeatGridAccumulator(grid);
+    acc.add(walks.a);
+    acc.add(walks.c);
+    acc.add(walks.b);
+    acc.remove(walks.c);
+    same(acc.heat, buildHeatGrid([walks.a, walks.b], grid));
+    acc.remove(walks.a);
+    acc.remove(walks.b);
+    expect(acc.heat.cellCounts.size).toBe(0);
+    expect(acc.heat.edgeCounts.size).toBe(0);
+    expect(acc.heat.centroids.size).toBe(0);
+  });
+
+  it('sync applies only the difference and stamps each change', () => {
+    const sync = new HeatGridSync(grid);
+    expect(sync.heat).toBeNull();
+    expect(sync.stamp).toBe(0);
+    expect(
+      sync.sync(
+        new Map([
+          ['a', walks.a],
+          ['b', walks.b],
+        ]),
+      ),
+    ).toBe(true);
+    const first = sync.stamp;
+    expect(sync.size).toBe(2);
+    // Same set: nothing to do, same stamp.
+    expect(
+      sync.sync(
+        new Map([
+          ['b', walks.b],
+          ['a', walks.a],
+        ]),
+      ),
+    ).toBe(false);
+    expect(sync.stamp).toBe(first);
+    // b re-walked (an edited trail), a gone, c new.
+    const b2 = walkTrackCells(street('b', 300), grid);
+    expect(
+      sync.sync(
+        new Map([
+          ['b', b2],
+          ['c', walks.c],
+        ]),
+      ),
+    ).toBe(true);
+    expect(sync.stamp).toBeGreaterThan(first);
+    const heat = sync.heat;
+    expect(heat).not.toBeNull();
+    if (heat) same(heat, buildHeatGrid([b2, walks.c], grid));
+    sync.clear();
+    expect(sync.heat).toBeNull();
+    expect(sync.size).toBe(0);
+    const cleared = sync.stamp;
+    sync.clear();
+    expect(sync.stamp).toBe(cleared);
   });
 });

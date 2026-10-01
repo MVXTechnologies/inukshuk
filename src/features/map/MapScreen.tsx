@@ -133,6 +133,7 @@ import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
 import { usePdfDetails } from './usePdfDetails';
 import { useTerrainOverlays2D } from './useTerrainOverlays2D';
+import { useCullRegion } from './useCullRegion';
 import { useTrackHeat } from './useTrackHeat';
 import { useGeoJsonString } from './useGeoJsonString';
 import { useTrackOverlays } from './useTrackOverlays';
@@ -304,7 +305,14 @@ export function MapScreen() {
   // geometry is drawn, so none is loaded or built either (#465).
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const drawnTrackIds = showTrackOverlays ? shownTrackIds : NO_IDS;
-  const trackOverlays = useTrackOverlays(tracks, drawnTrackIds);
+  const terrain3dOn = useMapStore((s) => s.terrain3d);
+  // Only the 3D drape needs every drawn trail's line; the 2D map culls to
+  // the viewport (useTrackHeat), so nothing loads off-screen trails here.
+  const trackOverlays = useTrackOverlays(tracks, terrain3dOn ? drawnTrackIds : NO_IDS);
+  const drawnTrackCount = useMemo(() => {
+    const ids = new Set(tracks.map((t) => t.id));
+    return drawnTrackIds.filter((id) => ids.has(id)).length;
+  }, [tracks, drawnTrackIds]);
   // When the heatmap toggle is on, the heat layer + tap-carousel must source
   // EVERY track in the library, not just whatever the current visibility
   // mode/folder filters/activeTrackIds happen to show ("if heatmap is
@@ -316,15 +324,6 @@ export function MapScreen() {
     () => (heatOn ? tracks.map((t) => t.id) : drawnTrackIds),
     [heatOn, tracks, drawnTrackIds],
   );
-  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn);
-  // The big sources, serialized once per data change (#465).
-  // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
-  // — and a selection flips the lines layer's filter, which re-renders it — so
-  // a 400-trail source used to be re-serialized and re-parsed natively on
-  // every tap. A string that keeps its identity is passed through untouched.
-  const linesJson = useGeoJsonString(trackHeat.lines);
-  const heatLinesJson = useGeoJsonString(trackHeat.heatLines);
-  const heatGlowJson = useGeoJsonString(trackHeat.heatGlow);
   const router = useRouter();
   // Tap-selected heat spot (set by onMapPress's hit-test below when a tap
   // lands on a "hot" spot with 2+ trails underneath it): drives the
@@ -462,6 +461,18 @@ export function MapScreen() {
         : { zoom, latitude },
     );
   }, []);
+  // What the trail lines and heatmap are built for (#494): the settled
+  // viewport plus a margin, sticky across small moves (see useCullRegion).
+  const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
+  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn, cullRegion);
+  // The big sources, serialized once per data change (#465).
+  // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
+  // — and a selection flips the lines layer's filter, which re-renders it — so
+  // a 400-trail source used to be re-serialized and re-parsed natively on
+  // every tap. A string that keeps its identity is passed through untouched.
+  const linesJson = useGeoJsonString(trackHeat.lines);
+  const heatLinesJson = useGeoJsonString(trackHeat.heatLines);
+  const heatGlowJson = useGeoJsonString(trackHeat.heatGlow);
   // The MapView's laid-out size as low-rate STATE: the wind camera seed must
   // not run before the map has laid out (see its comment), and the weather
   // drape sizes its GetMap from it. onLayout fires only on mount/rotation,
@@ -2396,7 +2407,7 @@ export function MapScreen() {
           }}
           terrain3d={terrain3d}
           pdfOverlayCount={overlays.length}
-          trackOverlayCount={trackOverlays.length}
+          trackOverlayCount={terrain3dOn ? trackOverlays.length : drawnTrackCount}
           // "+" map actions (wave A item 6): moved out of the bottom-right
           // FAB.Group into the rail, directly below Map overlays. Hidden
           // (undefined) while a recording is under way (the active controls
