@@ -36,6 +36,8 @@ const memory = new Map<string, TrackGeometry | null>();
 /** Trail id → the revision key held in `memory` (one revision per trail). */
 const revisionOf = new Map<string, string>();
 const inflight = new Map<string, Promise<TrackGeometry | null>>();
+/** One-off reads in progress (see {@link readTrackGeometryOnce}), shared with loads. */
+const transient = new Map<string, Promise<TrackGeometry | null>>();
 let queue: Promise<unknown> = Promise.resolve();
 
 /** Already-loaded geometry: the value, `null` (nothing drawable), or `undefined` (not loaded). */
@@ -98,7 +100,9 @@ export function loadTrackGeometry(t: TrackSummary): Promise<TrackGeometry | null
   const pending = inflight.get(key);
   if (pending) return pending;
   const next = queue
-    .then(() => (memory.has(key) ? (memory.get(key) ?? null) : compute(t, key)))
+    .then(() =>
+      memory.has(key) ? (memory.get(key) ?? null) : (transient.get(key) ?? compute(t, key)),
+    )
     .catch(() => null)
     .then((geometry) => {
       remember(t.id, key, geometry);
@@ -108,6 +112,26 @@ export function loadTrackGeometry(t: TrackSummary): Promise<TrackGeometry | null
   queue = next;
   inflight.set(key, next);
   return next;
+}
+
+/**
+ * The trail's simplified geometry for a one-off pass (the stored heatmap's
+ * build, #500): the in-memory copy when there is one, else read (cache file,
+ * else GPX) WITHOUT keeping it in memory — walking a whole library once must
+ * not pin every trail's geometry for the session. Never throws.
+ */
+export async function readTrackGeometryOnce(t: TrackSummary): Promise<TrackGeometry | null> {
+  const key = trackGeometryKey(t);
+  if (memory.has(key)) return memory.get(key) ?? null;
+  const pending = inflight.get(key) ?? transient.get(key);
+  if (pending) return pending;
+  const read = compute(t, key).catch(() => null);
+  transient.set(key, read);
+  try {
+    return await read;
+  } finally {
+    transient.delete(key);
+  }
 }
 
 /**
@@ -138,5 +162,6 @@ export function clearTrackGeometryMemory(): void {
   memory.clear();
   revisionOf.clear();
   inflight.clear();
+  transient.clear();
   queue = Promise.resolve();
 }
