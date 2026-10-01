@@ -1,11 +1,16 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import {
   ALWAYS_PRESENT_ANCHORS,
+  CONTOURS_ANCHOR,
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
 } from '@core/geo/mapLayerStack';
+import { mapDrawOrder, type MapElement, type MapStackInput } from '@core/map/layerSlots';
 import type {
   RasterDEMSourceSpecification,
   RasterSourceSpecification,
@@ -29,7 +34,7 @@ import {
   styleHasTiltRelief,
   TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
-import { tiltReliefLook } from '@core/map/tiltRelief';
+import { MAP_MAX_PITCH_DEG, tiltReliefLook } from '@core/map/tiltRelief';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -290,7 +295,6 @@ describe('buildOsmStyle', () => {
       const ids = layerIds(
         buildOsmStyle(TILE, false, 'map', true, { marineChart: chart, downloadedMask: mask }),
       );
-      expect(ids[ids.length - 1]).toBe('downloaded-mask');
       for (const a of [MARINE_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
         expect(ids.indexOf(a)).toBeGreaterThan(-1);
         expect(ids.indexOf(a)).toBeLessThan(ids.indexOf('downloaded-mask'));
@@ -643,12 +647,15 @@ describe('buildOsmStyle', () => {
       expect(layerIds(s)).not.toContain('downloaded-mask');
     });
 
-    it('adds an opaque fill in the requested colour as the TOP style layer', () => {
+    it('adds an opaque fill in the requested colour over every base-map layer', () => {
       const s = buildOsmStyle(TILE, false, 'map', true, { downloadedMask: mask });
       expect(s.sources['downloaded-mask']).toEqual({ type: 'geojson', data: mask.data });
       const ids = layerIds(s);
-      expect(ids[ids.length - 1]).toBe('downloaded-mask'); // above raster + hillshade
-      const layer = s.layers[s.layers.length - 1];
+      // Above raster + hillshade…
+      for (const id of ['osm', 'hillshade-2d']) {
+        expect(ids.indexOf('downloaded-mask')).toBeGreaterThan(ids.indexOf(id));
+      }
+      const layer = s.layers.find((l) => l.id === 'downloaded-mask');
       expect(layer).toMatchObject({
         type: 'fill',
         source: 'downloaded-mask',
@@ -656,13 +663,26 @@ describe('buildOsmStyle', () => {
       });
     });
 
-    it('stays the TOP layer even in weather mode', () => {
-      const s = buildOsmStyle(TILE, false, 'map', true, {
-        downloadedMask: mask,
-        weatherMuted: { dimColor: '#111', dimOpacity: 0.4 },
-      });
-      const ids = layerIds(s);
-      expect(ids[ids.length - 1]).toBe('downloaded-mask');
+    it('keeps PDF maps and trails ABOVE it — they live on the device (#492)', () => {
+      // Owner: in "Locally downloaded only" mode a PDF map outside a
+      // downloaded region vanished under the mask, as did your own trails.
+      for (const basemap of ['map', 'satellite'] as const) {
+        for (const opts of [{}, { weatherMuted: { dimColor: '#111', dimOpacity: 0.4 } }]) {
+          const ids = layerIds(
+            buildOsmStyle(TILE, false, basemap, true, { downloadedMask: mask, ...opts }),
+          );
+          const at = (id: string) => ids.indexOf(id);
+          expect(at(PDF_MAPS_ANCHOR)).toBe(at('downloaded-mask') + 1);
+          expect(at(TRAILS_ANCHOR)).toBeGreaterThan(at('downloaded-mask'));
+          // …and every base-map drape and terrain overlay stays under it.
+          for (const a of [CONTOURS_ANCHOR, TERRAIN_OVERLAY_ANCHOR]) {
+            expect(at(a)).toBeLessThan(at('downloaded-mask'));
+          }
+          if (at(WEATHER_DRAPE_ANCHOR) >= 0) {
+            expect(at(WEATHER_DRAPE_ANCHOR)).toBeLessThan(at('downloaded-mask'));
+          }
+        }
+      }
     });
 
     it('sits above the base raster layer for every basemap', () => {
@@ -690,22 +710,26 @@ describe('position-puck anchors (#332)', () => {
     ['labels only', { overlayLabels }],
   ];
 
-  it.each(variants)('%s: carries all three, in order, above every drape anchor', (name, opts) => {
-    const ids = layerIds(
-      buildOsmStyle(TILE, false, name === 'satellite' ? 'satellite' : 'map', true, opts),
-    );
-    const at = (id: string) => ids.indexOf(id);
-    for (const a of ALWAYS_PRESENT_ANCHORS) expect(at(a)).toBeGreaterThanOrEqual(0);
-    expect(at(ALWAYS_PRESENT_ANCHORS[0])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[1]));
-    expect(at(ALWAYS_PRESENT_ANCHORS[1])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[2]));
-    for (const drape of [MARINE_DRAPE_ANCHOR, WEATHER_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
-      if (at(drape) >= 0) expect(at(drape)).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
-    }
-  });
+  it.each(variants)(
+    '%s: carries every anchor in order, drapes under the PDF maps',
+    (name, opts) => {
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, name === 'satellite' ? 'satellite' : 'map', true, opts),
+      );
+      const at = (id: string) => ids.indexOf(id);
+      for (const a of ALWAYS_PRESENT_ANCHORS) expect(at(a)).toBeGreaterThanOrEqual(0);
+      // Whatever subset is present appears in the table's order.
+      const present = DRAPE_ANCHORS_BOTTOM_TO_TOP.filter((a) => at(a) >= 0).map(at);
+      expect(present).toEqual([...present].sort((a, b) => a - b));
+      for (const drape of [MARINE_DRAPE_ANCHOR, WEATHER_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
+        if (at(drape) >= 0) expect(at(drape)).toBeLessThan(at(PDF_MAPS_ANCHOR));
+      }
+    },
+  );
 
   it('keeps the reference labels above the overlays (ink beats maps)', () => {
     const ids = layerIds(buildOsmStyle(TILE, false, 'map', true, { overlayLabels }));
-    const lastAnchor = ids.indexOf(ALWAYS_PRESENT_ANCHORS[2]);
+    const lastAnchor = ids.indexOf(TRAILS_ANCHOR);
     const labelIds = ids.filter((id) => /label|overlay-labels|coast/i.test(id));
     expect(labelIds.length).toBeGreaterThan(0);
     for (const id of labelIds) expect(ids.indexOf(id)).toBeGreaterThan(lastAnchor);
@@ -720,9 +744,12 @@ describe('basemapAttribution', () => {
     expect(basemapAttribution(basemap)).toBe(credit);
   });
 
-  it('credits Protomaps on the vector base map only', () => {
+  it('credits Protomaps on the vector base map', () => {
     expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
-    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar');
+  });
+
+  it('credits OpenStreetMap too when our vector overlays ride the imagery (#492)', () => {
+    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar · © OpenStreetMap');
   });
 });
 
@@ -787,7 +814,7 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     const at = (id: string) => ids.indexOf(id);
     expect(at('stone-water')).toBeLessThan(at('hillshade-2d'));
     expect(at('stone-place-town')).toBeGreaterThan(at('hillshade-2d'));
-    expect(at('stone-place-town')).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
+    expect(at('stone-place-town')).toBeLessThan(at(PDF_MAPS_ANCHOR));
     // Every vector layer reads the declared source.
     for (const l of s.layers) {
       if ('source' in l && l.id.startsWith('stone-')) expect(l.source).toBe('basemap-vector');
@@ -1050,12 +1077,13 @@ describe('tilted-map relief pass (#480)', () => {
     expect(tiltLayer(buildOsmStyle(TILE, false, 'map', true))).toBeUndefined();
   });
 
-  it('is absent wherever the base shading is (none, satellite, weather dim)', () => {
+  it('is absent on the map wherever the base shading is (none, weather dim)', () => {
     const weatherMuted = { dimColor: '#F4F1EC', dimOpacity: 0.42 };
     for (const s of [
       buildOsmStyle(TILE, false, 'map', false, { tiltRelief: 'dramatic' }),
-      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic' }),
       buildOsmStyle(TILE, false, 'map', true, { tiltRelief: 'dramatic', weatherMuted }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'dramatic', weatherMuted }),
+      buildOsmStyle(TILE, false, 'satellite', true, { tiltRelief: 'off' }),
     ]) {
       expect(tiltLayer(s)).toBeUndefined();
       expect(styleHasTiltRelief(s)).toBe(false);
@@ -1100,7 +1128,7 @@ describe('labels on satellite (#484)', () => {
     const firstStone = ids.findIndex((id) => id.startsWith('stone-'));
     const lastStone = ids.map((id) => id.startsWith('stone-')).lastIndexOf(true);
     expect(firstStone).toBeGreaterThan(ids.indexOf('osm'));
-    expect(lastStone).toBeLessThan(ids.indexOf(ALWAYS_PRESENT_ANCHORS[0]));
+    expect(lastStone).toBeLessThan(ids.indexOf(PDF_MAPS_ANCHOR));
   });
 
   it('reads light ink on a dark halo — the imagery palette, whatever the app theme', () => {
@@ -1136,5 +1164,298 @@ describe('labels on satellite (#484)', () => {
     });
     expect(s.glyphs).toContain('openfreemap');
     expect(s.sources['basemap-peaks']).toBeUndefined();
+  });
+});
+
+describe('contours on satellite (#492)', () => {
+  const imageryContours = {
+    tiles: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
+    glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+  };
+  const imageryLabels = {
+    tiles: ['https://vector.example/{z}/{x}/{y}.mvt'],
+    glyphs: imageryContours.glyphs,
+  };
+
+  it('draws the served contour tiles over the imagery, with their heights', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryContours });
+    expect(s.sources['basemap-contours']).toMatchObject({
+      type: 'vector',
+      tiles: [imageryContours.tiles],
+      maxzoom: 14,
+    });
+    // Contours alone need no base-map source, but the heights need glyphs.
+    expect(s.sources['basemap-vector']).toBeUndefined();
+    expect(s.glyphs).toBe(imageryContours.glyphs);
+    const ids = layerIds(s);
+    for (const id of [
+      'stone-contour-minor-casing',
+      'stone-contour-minor',
+      'stone-contour-major-casing',
+      'stone-contour-major',
+      'stone-contour-label',
+    ]) {
+      expect(ids).toContain(id);
+    }
+    // No roads or names without the labels toggle.
+    expect(ids).not.toContain('stone-path');
+    expect(ids).not.toContain('stone-place-town');
+  });
+
+  it('draws each line over its own dark casing, in the imagery palette', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryContours });
+    const ids = layerIds(s);
+    const paint = (id: string) =>
+      s.layers.find((l) => l.id === id)?.paint as Record<string, unknown> | undefined;
+    for (const kind of ['minor', 'major']) {
+      expect(ids.indexOf(`stone-contour-${kind}-casing`)).toBe(
+        ids.indexOf(`stone-contour-${kind}`) - 1,
+      );
+      expect(paint(`stone-contour-${kind}`)?.['line-color']).toBe('#F2ECE0');
+      expect(paint(`stone-contour-${kind}-casing`)?.['line-color']).toBe('#14181C');
+    }
+  });
+
+  it('puts the contours under the roads and names, and EVERY contour under the PDF maps', () => {
+    const ids = layerIds(
+      buildOsmStyle(TILE, false, 'satellite', true, { imageryContours, imageryLabels }),
+    );
+    const at = (id: string) => ids.indexOf(id);
+    expect(at('stone-contour-major')).toBeGreaterThan(at('osm'));
+    expect(at('stone-contour-major')).toBeLessThan(at('stone-road-minor'));
+    expect(at('stone-path')).toBeLessThan(at('stone-place-town'));
+    for (const id of ids.filter((x) => x.includes('contour'))) {
+      expect([id, at(id) < at(PDF_MAPS_ANCHOR)]).toEqual([id, true]);
+    }
+  });
+
+  it('is ignored on the Map base (its contours are part of the stone body)', () => {
+    const s = buildOsmStyle(TILE, false, 'map', true, { imageryContours });
+    expect(s.sources['basemap-contours']).toBeUndefined();
+    expect(layerIds(s).some((id) => id.startsWith('stone-contour'))).toBe(false);
+  });
+
+  it('stays under weather — like the map body', () => {
+    const weather = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryContours,
+      weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 },
+    });
+    const ids = layerIds(weather);
+    expect(ids.indexOf('stone-contour-major')).toBeLessThan(ids.indexOf('weather-dim'));
+  });
+
+  it('falls back to Noto from OpenFreeMap without our glyph host', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryContours: { tiles: imageryContours.tiles },
+    });
+    expect(s.glyphs).toContain('openfreemap');
+    const label = s.layers.find((l) => l.id === 'stone-contour-label');
+    expect((label?.layout as Record<string, unknown>)['text-font']).toEqual(['Noto Sans Regular']);
+  });
+});
+
+// #492 — ONE stack for both base maps. Builds the style the main map would
+// for every combination of toggles, on both base maps, in both themes, and
+// holds it to `mapDrawOrder` (the pure statement of the order in
+// `@core/map/layerSlots`): every element drawn appears in exactly that order.
+describe('one layer order on both base maps (#492)', () => {
+  const VECTOR = ['https://vector.example/{z}/{x}/{y}.pbf'];
+  const CONTOURS = 'https://contours.example/{z}/{x}/{y}.mvt';
+  const GLYPHS = 'https://glyphs.example/{fontstack}/{range}.pbf';
+
+  function withFlag(): typeof buildOsmStyle {
+    let build: typeof buildOsmStyle = buildOsmStyle;
+    jest.isolateModules(() => {
+      jest.doMock('@core/features/flags', () => ({
+        ...jest.requireActual<object>('@core/features/flags'),
+        VECTOR_BASEMAP_ENABLED: true,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      build = (require('./mapStyle') as typeof import('./mapStyle')).buildOsmStyle;
+    });
+    return build;
+  }
+  const build = withFlag();
+  const mask = {
+    data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),
+    color: '#FFFFFF',
+  };
+
+  /** The options MapScreen passes for these toggles. */
+  function styleFor(i: MapStackInput) {
+    const satellite = i.basemap === 'satellite';
+    return build(TILE, false, i.basemap, i.shadedRelief, {
+      tiltRelief: i.tiltRelief ? 'natural' : 'off',
+      ...(!satellite
+        ? {
+            vectorBasemap: {
+              tiles: VECTOR,
+              dark: i.dark,
+              glyphs: GLYPHS,
+              ...(i.contours ? { contours: CONTOURS } : {}),
+            },
+          }
+        : {}),
+      ...(satellite && i.satelliteLabels
+        ? { imageryLabels: { tiles: VECTOR, glyphs: GLYPHS } }
+        : {}),
+      ...(satellite && i.contours ? { imageryContours: { tiles: CONTOURS, glyphs: GLYPHS } } : {}),
+      ...(i.weather ? { weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 } } : {}),
+      ...(i.marine ? { marineChart: { wmsFallback: false } } : {}),
+      ...(i.weather || i.marine
+        ? { overlayLabels: { dark: i.dark, tiles: ['https://ofm.example/{z}/{x}/{y}.pbf'] } }
+        : {}),
+      ...(i.offlineMask ? { downloadedMask: mask } : {}),
+    });
+  }
+
+  /** The layer that stands for an element in the style (anchors for runtime ones). */
+  function representative(e: MapElement, i: MapStackInput): string {
+    switch (e) {
+      case 'ground':
+        return i.basemap === 'map' ? 'stone-background' : 'osm';
+      case 'contours':
+        return 'stone-contour-major';
+      case 'linework':
+        return 'stone-path';
+      case 'chart':
+        return 'marine-land-dim';
+      case 'relief':
+        return HILLSHADE_2D_LAYER_ID;
+      case 'tiltRelief':
+        return TILT_RELIEF_LAYER_ID;
+      case 'slope':
+        return TERRAIN_OVERLAY_ANCHOR;
+      case 'labels':
+        return 'stone-place-town';
+      case 'weather':
+        return WEATHER_DRAPE_ANCHOR;
+      case 'pdf':
+        return PDF_MAPS_ANCHOR;
+      case 'heat':
+      case 'trails':
+        return TRAILS_ANCHOR;
+      case 'reference':
+        return 'overlay-town-labels';
+      case 'mask':
+        return 'downloaded-mask';
+    }
+  }
+
+  const inputs: MapStackInput[] = [];
+  for (const basemap of ['map', 'satellite'] as const) {
+    for (let bits = 0; bits < 1 << 8; bits++) {
+      const b = (n: number) => (bits & (1 << n)) !== 0;
+      inputs.push({
+        basemap,
+        vector: true,
+        dark: b(0),
+        shadedRelief: b(1),
+        tiltRelief: b(2),
+        contours: b(3),
+        satelliteLabels: b(4),
+        weather: b(5),
+        marine: b(6),
+        offlineMask: b(7),
+        // Runtime overlays: their anchors are always in the style.
+        slope: true,
+        pdf: true,
+        heat: true,
+        trails: true,
+      });
+    }
+  }
+  const built = inputs.map((i) => ({ i, ids: layerIds(styleFor(i)), order: mapDrawOrder(i) }));
+
+  it(`draws every element in mapDrawOrder's order (${inputs.length} combinations)`, () => {
+    for (const { i, ids, order } of built) {
+      const at = order.map((e) => [e, ids.indexOf(representative(e, i))] as const);
+      for (const [e, n] of at) expect([i, e, n >= 0]).toEqual([i, e, true]);
+      for (let k = 1; k < at.length; k++) {
+        const prev = at[k - 1];
+        const cur = at[k];
+        if (!prev || !cur || representative(prev[0], i) === representative(cur[0], i)) continue;
+        expect([i, prev[0], cur[0], cur[1] > prev[1]]).toEqual([i, prev[0], cur[0], true]);
+      }
+    }
+  });
+
+  it('draws nothing mapDrawOrder leaves out (relief on satellite, names under a drape)', () => {
+    for (const { i, ids, order } of built) {
+      for (const e of ['contours', 'linework', 'relief', 'tiltRelief', 'labels'] as const) {
+        if (!order.includes(e)) {
+          expect([i, e, ids.includes(representative(e, i))]).toEqual([i, e, false]);
+        }
+      }
+    }
+  });
+
+  it('keeps every contour, relief and slope layer under the PDF maps, always', () => {
+    const underPdf = (id: string) =>
+      /contour|hillshade/.test(id) || id === TERRAIN_OVERLAY_ANCHOR || id === CONTOURS_ANCHOR;
+    for (const { i, ids } of built) {
+      const pdf = ids.indexOf(PDF_MAPS_ANCHOR);
+      for (const id of ids.filter(underPdf)) {
+        expect([i.basemap, id, ids.indexOf(id) < pdf]).toEqual([i.basemap, id, true]);
+      }
+    }
+  });
+});
+
+// #492 — satellite gains the tilted-map relief: no flat shading on the
+// imagery, only the pass that fades in with the pitch, lighter.
+describe('tilted relief over satellite (#492)', () => {
+  const tiltOf = (s: ReturnType<typeof buildOsmStyle>) =>
+    s.layers.find((l) => l.id === TILT_RELIEF_LAYER_ID);
+
+  it.each(['natural', 'dramatic'] as const)(
+    '%s: carries the hidden pass and its DEM, but no flat hillshade',
+    (mode) => {
+      // The flat-shading setting does not matter on imagery; the 3D one does.
+      for (const shaded of [false, true]) {
+        const s = buildOsmStyle(TILE, false, 'satellite', shaded, { tiltRelief: mode });
+        expect(styleHasHillshade(s)).toBe(false);
+        expect(layerIds(s)).not.toContain(HILLSHADE_2D_LAYER_ID);
+        expect(styleHasTiltRelief(s)).toBe(true);
+        expect(s.sources[HILLSHADE_DEM_SOURCE_ID]).toMatchObject({ type: 'raster-dem' });
+        const tilt = tiltOf(s);
+        // Flat it is hidden; the map screen switches it on as the map tilts.
+        expect(tilt?.layout).toEqual({ visibility: 'none' });
+        expect(tilt?.minzoom).toBe(HILLSHADE_2D_MIN_ZOOM);
+      }
+    },
+  );
+
+  it('uses the night palette — near-black shadow, no umber tint on the photo', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', false, { tiltRelief: 'natural' });
+    const paint = tiltOf(s)?.paint as Record<string, unknown>;
+    expect(paint['hillshade-shadow-color']).toBe(
+      tiltReliefLook('natural', MAP_MAX_PITCH_DEG, true, true)?.shadowColor,
+    );
+    expect(String(paint['hillshade-shadow-color'])).toMatch(/^rgba\(0, 0, 0,/);
+  });
+
+  it('sits over the imagery and its contours and roads, under the slope and the PDF maps', () => {
+    const ids = layerIds(
+      buildOsmStyle(TILE, false, 'satellite', false, {
+        tiltRelief: 'natural',
+        imageryContours: { tiles: 'https://c.example/{z}/{x}/{y}.mvt' },
+        imageryLabels: { tiles: ['https://v.example/{z}/{x}/{y}.mvt'] },
+      }),
+    );
+    const at = (id: string) => ids.indexOf(id);
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeGreaterThan(at('stone-contour-major'));
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeGreaterThan(at('stone-path'));
+    expect(at(TILT_RELIEF_LAYER_ID)).toBe(at(TERRAIN_OVERLAY_ANCHOR) - 1);
+    expect(at(TILT_RELIEF_LAYER_ID)).toBeLessThan(at(PDF_MAPS_ANCHOR));
+  });
+
+  it('stays out of offline packs (no tilt option) and the marine chart', () => {
+    expect(styleHasTiltRelief(buildOsmStyle(TILE, false, 'satellite'))).toBe(false);
+    const chart = buildOsmStyle(TILE, false, 'satellite', false, {
+      tiltRelief: 'natural',
+      marineChart: { wmsFallback: false },
+    });
+    expect(styleHasTiltRelief(chart)).toBe(false);
   });
 });

@@ -78,23 +78,37 @@ export function pitchBucket(pitchDeg: number): number {
 }
 
 /**
+ * Satellite imagery's share of the tilt pass (#492): the photo already
+ * carries the sun's real shadows, so the pass only deepens them — lighter
+ * than on the map, where it stacks on our own shading.
+ */
+export const IMAGERY_TILT_RELIEF_SCALE = 0.6;
+
+/**
  * The extra hillshade pass for a setting at a pitch, or null when there is
  * none to draw (setting off, or the map flat). Colours come from the base
  * shading's own palette (Medium for Natural, Heavy for Dramatic), so the dark
  * stone-night map deepens toward black and the light maps toward umber.
+ *
+ * `imagery` (#492): the pass over satellite imagery, which has no flat
+ * shading under it — the night palette (near-black shadows, a faint warm
+ * highlight: umber would tint the photo) at {@link IMAGERY_TILT_RELIEF_SCALE}
+ * of the strength.
  */
 export function tiltReliefLook(
   mode: TiltRelief,
   pitchDeg: number,
   dark: boolean,
+  imagery = false,
 ): HillshadeLook | null {
   if (mode === 'off') return null;
   const t = tiltAmount(pitchDeg);
   if (t === 0) return null;
-  const palette = hillshadeLook(mode === 'dramatic' ? 'heavy' : 'medium', dark);
+  const palette = hillshadeLook(mode === 'dramatic' ? 'heavy' : 'medium', dark || imagery);
+  const scale = imagery ? IMAGERY_TILT_RELIEF_SCALE : 1;
   return {
     ...palette,
-    exaggeration: Math.round(TILT_RELIEF_EXAGGERATION[mode] * t * 100) / 100,
+    exaggeration: Math.round(TILT_RELIEF_EXAGGERATION[mode] * scale * t * 100) / 100,
   };
 }
 
@@ -103,6 +117,10 @@ export function tiltReliefLook(
  * pass is hidden. The pass's colours live in the style (see
  * `features/map/mapStyle.ts`), so the map screens only need this number.
  */
-export function tiltReliefExaggeration(mode: TiltRelief, pitchDeg: number): number {
-  return tiltReliefLook(mode, pitchDeg, false)?.exaggeration ?? 0;
+export function tiltReliefExaggeration(
+  mode: TiltRelief,
+  pitchDeg: number,
+  imagery = false,
+): number {
+  return tiltReliefLook(mode, pitchDeg, false, imagery)?.exaggeration ?? 0;
 }

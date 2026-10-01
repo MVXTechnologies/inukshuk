@@ -1,13 +1,9 @@
 import { mapColors } from '@ui/theme';
 import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
-import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
-import {
-  HILLSHADE_2D_LAYER_ID,
-  HILLSHADE_2D_MIN_ZOOM,
-  HILLSHADE_DEM_SOURCE_ID,
-  TILT_RELIEF_LAYER_ID,
-} from './mapStyle';
+import type { ReactElement } from 'react';
+import { overlayAnchor } from '@core/map/layerSlots';
+import { HILLSHADE_2D_MIN_ZOOM, HILLSHADE_DEM_SOURCE_ID, TILT_RELIEF_LAYER_ID } from './mapStyle';
 import {
   HEAT_CROSSFADE,
   HEAT_GLOW_INTENSITY,
@@ -50,25 +46,85 @@ import {
 // happens to still draw — but that is a native fallback, not the contract.
 // mapLayers.test.tsx renders each of these through the real <GeoJSONSource>
 // and asserts every layer got its `source`.
+//
+// HEIGHT COMES FROM THE SLOT TABLE. Every layer here names its anchor
+// through `overlayAnchor` (`@core/map/layerSlots`), the one place the map's
+// draw order is defined for both base maps (#492).
 // ---------------------------------------------------------------------------
 
+/** Where each runtime overlay mounts (see `@core/map/layerSlots`). */
+const HEAT_ANCHOR = overlayAnchor('heat');
+const TRAIL_LINES_ANCHOR = overlayAnchor('trailLines');
+const MARKERS_ANCHOR = overlayAnchor('markers');
+const DEM_CONTOURS_ANCHOR = overlayAnchor('demContours');
+const SLOPE_ANCHOR = overlayAnchor('slope');
+const PDF_MAP_ANCHOR = overlayAnchor('pdfMap');
+/** The relief slot's top: the slope's anchor sits directly above it. */
+const RELIEF_TOP_ANCHOR = SLOPE_ANCHOR;
+
 /**
- * The personal heatmap (#466), one set per basemap tone. Street zooms draw
- * the pass-count lines (`useTrackHeat.heatLines`): crisp, 1–5 px, a single
- * pass a clearly visible warm line and many passes hot; low zooms draw a
- * soft glow from the coarse grid (`useTrackHeat.heatGlow`). The two
- * crossfade over `HEAT_CROSSFADE`. All numbers live in `@core/heat/heatStyle`
- * (shared with the offline PNG preview).
+ * The outline ("casing") drawn under the heat lines and trail lines (#492),
+ * per ground: a line's own colour cannot win against every ground, so a thin
+ * halo of the opposite polarity carries its contrast with it. Over imagery
+ * it is a soft shadow — category and heat colours sank into forest and
+ * water without one; on the night map the same shadow, lighter; on the
+ * paper map a paper halo that lifts the line off contours and roads.
  */
-function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
+export type LineOutline = 'paper' | 'night' | 'imagery';
+
+export const LINE_OUTLINE: Readonly<
+  Record<LineOutline, { color: string; opacity: number; widthAdd: number }>
+> = {
+  paper: { color: palette.surface, opacity: 0.75, widthAdd: 2 },
+  night: { color: palette.shadow, opacity: 0.55, widthAdd: 2 },
+  imagery: { color: palette.shadow, opacity: 0.7, widthAdd: 2.5 },
+};
+
+/** Which outline the lines get on this ground. */
+export function lineOutlineFor(basemap: 'map' | 'satellite', dark: boolean): LineOutline {
+  if (basemap === 'satellite') return 'imagery';
+  return dark ? 'night' : 'paper';
+}
+
+/**
+ * The personal heatmap (#466), one set per ground. Street zooms draw the
+ * pass-count lines (`useTrackHeat.heatLines`): crisp, 1–5 px, a single pass
+ * a clearly visible warm line and many passes hot, over the ground's
+ * outline (#492); low zooms draw a soft glow from the coarse grid
+ * (`useTrackHeat.heatGlow`). The two crossfade over `HEAT_CROSSFADE`. All
+ * numbers live in `@core/heat/heatStyle` (shared with the offline PNG
+ * preview).
+ *
+ * `lines` is an ARRAY, casing first: both name the same anchor, and of two
+ * children inserted below one anchor the later one lands on top.
+ */
+function heatLayers(ramp: Ramp, tone: LineOutline) {
   const widthFactor = ['+', 1, ['min', 0.6, ['*', 0.12, ['log2', ['max', 1, ['get', 'count']]]]]];
+  const outline = LINE_OUTLINE[tone];
   const [first, ...rest] = ramp;
+  const lineWidth = (add: number) =>
+    [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      ...HEAT_LINE_WIDTH_STOPS.flatMap(([z, px]) => [z, ['+', ['*', px, widthFactor], add]]),
+    ] as never;
+  const lineOpacity = (k: number) =>
+    [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      HEAT_CROSSFADE[0],
+      heatLineOpacity(HEAT_CROSSFADE[0]) * k,
+      HEAT_CROSSFADE[1],
+      k,
+    ] as never;
   return {
     glow: (
       <Layer
         id="tracks-heat-glow"
         key={`glow-${tone}`}
-        beforeId={TRAILS_ANCHOR}
+        beforeId={HEAT_ANCHOR}
         type="heatmap"
         maxzoom={HEAT_CROSSFADE[1]}
         paint={{
@@ -98,11 +154,25 @@ function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
         }}
       />
     ),
-    lines: (
+    lines: [
+      <Layer
+        id="tracks-heat-lines-casing"
+        key={`casing-${tone}`}
+        beforeId={HEAT_ANCHOR}
+        type="line"
+        minzoom={HEAT_CROSSFADE[0] - 1}
+        layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+        paint={{
+          'line-color': outline.color,
+          'line-width': lineWidth(outline.widthAdd),
+          'line-opacity': lineOpacity(outline.opacity),
+          'line-blur': 0.5,
+        }}
+      />,
       <Layer
         id="tracks-heat-lines"
         key={`lines-${tone}`}
-        beforeId={TRAILS_ANCHOR}
+        beforeId={HEAT_ANCHOR}
         type="line"
         minzoom={HEAT_CROSSFADE[0] - 1}
         layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -113,71 +183,84 @@ function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
             first?.[1] ?? '#F28E2B',
             ...rest.flatMap(([count, color]) => [count, color]),
           ] as never,
-          'line-width': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            ...HEAT_LINE_WIDTH_STOPS.flatMap(([z, px]) => [z, ['*', px, widthFactor]]),
-          ] as never,
-          'line-opacity': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            HEAT_CROSSFADE[0],
-            heatLineOpacity(HEAT_CROSSFADE[0]),
-            HEAT_CROSSFADE[1],
-            1,
-          ] as never,
+          'line-width': lineWidth(0),
+          'line-opacity': lineOpacity(1),
         }}
-      />
-    ),
+      />,
+    ],
   };
 }
 
-/** Light basemaps vs dark basemaps (dark theme, satellite). */
+/**
+ * Per ground: the light ramp on the paper map, the dark ramp on the night
+ * map and on satellite imagery (dark in both themes), each with its outline.
+ */
 export const HEAT_LAYERS = {
-  light: heatLayers(HEAT_LINE_RAMP_LIGHT, 'light'),
-  dark: heatLayers(HEAT_LINE_RAMP_DARK, 'dark'),
+  paper: heatLayers(HEAT_LINE_RAMP_LIGHT, 'paper'),
+  night: heatLayers(HEAT_LINE_RAMP_DARK, 'night'),
+  imagery: heatLayers(HEAT_LINE_RAMP_DARK, 'imagery'),
 } as const;
 
-/** Trail-lines layer, one element per `filter` value (see the selection rule). */
-export const TRACKS_LINES_LAYER = {
-  shown: (
+/** A trail line over its outline, both under one filter (arrays: see the note above). */
+function outlinedTrailLayers(
+  id: string,
+  width: number,
+  tone: LineOutline,
+  filter?: boolean,
+): ReactElement[] {
+  const outline = LINE_OUTLINE[tone];
+  const shared = {
+    beforeId: TRAIL_LINES_ANCHOR,
+    type: 'line' as const,
+    layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
+    ...(filter === undefined ? {} : { filter }),
+  };
+  return [
     <Layer
-      id="tracks-lines-layer"
-      beforeId={TRAILS_ANCHOR}
-      type="line"
-      filter={true}
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': ['get', 'color'], 'line-width': 3 }}
-    />
-  ),
-  hidden: (
+      key="casing"
+      id={`${id}-casing`}
+      {...shared}
+      paint={{
+        'line-color': outline.color,
+        'line-width': width + outline.widthAdd,
+        'line-opacity': outline.opacity,
+        'line-blur': 0.5,
+      }}
+    />,
     <Layer
-      id="tracks-lines-layer"
-      beforeId={TRAILS_ANCHOR}
-      type="line"
-      filter={false}
-      layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-      paint={{ 'line-color': ['get', 'color'], 'line-width': 3 }}
-    />
-  ),
+      key="line"
+      id={id}
+      {...shared}
+      paint={{ 'line-color': ['get', 'color'], 'line-width': width }}
+    />,
+  ];
+}
+
+function trackLineSet(tone: LineOutline) {
+  return {
+    shown: outlinedTrailLayers('tracks-lines-layer', 3, tone, true),
+    hidden: outlinedTrailLayers('tracks-lines-layer', 3, tone, false),
+  };
+}
+
+/** Trail lines per ground, one element set per `filter` value (see the selection rule). */
+export const TRACKS_LINES_LAYERS = {
+  paper: trackLineSet('paper'),
+  night: trackLineSet('night'),
+  imagery: trackLineSet('imagery'),
 } as const;
 
-export const FOCUSED_TRAIL_LAYER = (
-  <Layer
-    id="focused-trail-line-layer"
-    beforeId={TRAILS_ANCHOR}
-    type="line"
-    layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-    paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
-  />
-);
+/** The focused trail's highlight per ground. */
+export const FOCUSED_TRAIL_LAYERS = {
+  paper: outlinedTrailLayers('focused-trail-line-layer', 4, 'paper'),
+  night: outlinedTrailLayers('focused-trail-line-layer', 4, 'night'),
+  imagery: outlinedTrailLayers('focused-trail-line-layer', 4, 'imagery'),
+} as const;
 
 export const INSPECT_MARKER_LAYER = (
   <Layer
     id="inspect-marker-dot"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={MARKERS_ANCHOR}
     type="circle"
     paint={{
       'circle-radius': 7,
@@ -193,7 +276,7 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="casing"
     id="trail-casing"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={TRAIL_LINES_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
@@ -201,21 +284,25 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="line"
     id="trail-line"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={TRAIL_LINES_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trail, 'line-width': 5 }}
   />,
 ];
 
-/** Contour layers per basemap — only the two colour schemes exist. */
+/**
+ * On-device contour layers per basemap (the raster fallback: map maker open,
+ * or the vector flag off; the vector bases draw served contours in the
+ * style). In the contours slot, under the PDF maps (#492).
+ */
 function contourLayers(satellite: boolean) {
   return {
     minor: [
       <Layer
         key="halo"
         id="contours2d-minor-halo"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -226,7 +313,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-minor-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -239,7 +326,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="halo"
         id="contours2d-major-halo"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -250,7 +337,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-major-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -273,7 +360,7 @@ function stoneContourLayers(dark: boolean) {
       <Layer
         key="line"
         id="contours2d-minor-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': palette.ochre,
@@ -286,7 +373,7 @@ function stoneContourLayers(dark: boolean) {
       <Layer
         key="line"
         id="contours2d-major-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{ 'line-color': palette.ochre, 'line-opacity': dark ? 0.6 : 0.8, 'line-width': 1.4 }}
       />,
@@ -301,13 +388,16 @@ export const CONTOUR_LAYERS = {
   stoneDark: stoneContourLayers(true),
 } as const;
 
-/** PDF overview raster (#332): below the terrain overlays, trails and the puck. */
+/**
+ * PDF overview raster (#332): above the contours, the relief and the slope
+ * raster on both base maps (#492), below trails and the puck.
+ */
 export function pdfOverviewLayer(id: string) {
   return (
     <Layer
       id={`${id}-layer`}
       type="raster"
-      beforeId={PDF_MAPS_ANCHOR}
+      beforeId={PDF_MAP_ANCHOR}
       paint={{ 'raster-opacity': 0.92 }}
     />
   );
@@ -319,14 +409,15 @@ export function pdfDetailLayer(id: string) {
     <Layer
       id={`${id}-layer`}
       type="raster"
-      beforeId={PDF_MAPS_ANCHOR}
+      beforeId={PDF_MAP_ANCHOR}
       paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
     />
   );
 }
 
 /**
- * Slope-angle raster (#332): above the PDF maps, below trails and the puck.
+ * Slope-angle raster: over the relief, under the names and the PDF maps
+ * (#492 — a PDF map is the more specific source wherever it covers).
  * Resampled LINEARLY (#461): the image has fewer pixels than the screen, and
  * 'nearest' drew each one as a hard-edged block — the stepped look the owner
  * reported. Linear blends band edges over a pixel, which is all it changes.
@@ -337,12 +428,7 @@ export const SLOPE_RASTER_PAINT = {
 } as const;
 
 export const SLOPE_LAYER = (
-  <Layer
-    id="slope2d-layer"
-    type="raster"
-    beforeId={TERRAIN_OVERLAY_ANCHOR}
-    paint={SLOPE_RASTER_PAINT}
-  />
+  <Layer id="slope2d-layer" type="raster" beforeId={SLOPE_ANCHOR} paint={SLOPE_RASTER_PAINT} />
 );
 
 /**
@@ -368,7 +454,11 @@ export function tiltReliefLayer(exaggeration: number) {
       id={TILT_RELIEF_LAYER_ID}
       type="hillshade"
       source={HILLSHADE_DEM_SOURCE_ID}
-      afterId={HILLSHADE_2D_LAYER_ID}
+      // Top of the relief slot: right above the base shading on the map,
+      // and the slot's only layer on satellite (#492), which has no base
+      // shading to sit after. Native adopts the style's own layer by id, so
+      // this only matters if the style ever lacked it.
+      beforeId={RELIEF_TOP_ANCHOR}
       minzoom={HILLSHADE_2D_MIN_ZOOM}
       layout={{ visibility: exaggeration > 0 ? 'visible' : 'none' }}
       paint={{

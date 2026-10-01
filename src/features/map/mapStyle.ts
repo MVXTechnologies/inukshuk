@@ -8,13 +8,15 @@ import type {
 } from '@maplibre/maplibre-react-native';
 import type { MapBasemap } from '@state/mapStore';
 import { CHART_LAND_COLOR, CHART_WATER_COLOR } from '@core/geo/depthChart';
+import { drapeAnchorLayer } from '@core/geo/mapLayerStack';
 import {
-  drapeAnchorLayer,
-  ALWAYS_PRESENT_ANCHORS,
-  MARINE_DRAPE_ANCHOR,
-  MARINE_SOUNDINGS_ANCHOR,
-  WEATHER_DRAPE_ANCHOR,
-} from '@core/geo/mapLayerStack';
+  drawsImageryLabels,
+  drawsShadedRelief,
+  drawsTiltRelief,
+  SLOT_ANCHOR,
+  stackLayers,
+  type MapLayerSlot,
+} from '@core/map/layerSlots';
 import { MARINE_LAYERS, marineTileUrl, type MarineLayerId } from '@core/geo/marineLayers';
 import {
   ROAD_LINE_W,
@@ -25,8 +27,9 @@ import {
 import type { Feature, Polygon } from 'geojson';
 import { VECTOR_BASEMAP_ENABLED } from '@core/features/flags';
 import {
-  buildStoneImageryLayers,
+  buildStoneImagerySlots,
   buildStoneLayers,
+  type StoneContourSource,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
 } from '@core/map/stoneStyle';
@@ -107,7 +110,8 @@ function baseSource(
 export function basemapAttribution(basemap: MapBasemap, vector = false): string {
   switch (basemap) {
     case 'satellite':
-      return '© Esri, Maxar';
+      // `vector`: our OSM names, roads and trails ride the imagery (#492).
+      return vector ? '© Esri, Maxar · © OpenStreetMap' : '© Esri, Maxar';
     default:
       // The vector base is OSM data cut by Protomaps' pipeline.
       return vector ? '© OpenStreetMap · Protomaps' : '© OpenStreetMap';
@@ -193,7 +197,11 @@ export function styleHasHillshade(style: StyleSpecification): boolean {
 
 /** Whether a style carries the (hidden) tilted-map relief pass (#480). */
 export function styleHasTiltRelief(style: StyleSpecification): boolean {
-  return styleHasHillshade(style) && style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID);
+  // Not tied to the flat shading: over satellite the pass stands alone (#492).
+  return (
+    style.sources[HILLSHADE_DEM_SOURCE_ID] !== undefined &&
+    style.layers.some((l) => l.id === TILT_RELIEF_LAYER_ID)
+  );
 }
 
 /**
@@ -376,6 +384,15 @@ export interface OsmStyleOptions {
     peakDensity?: PeakDensity;
   };
   /**
+   * Contours on satellite (#492): the Map base's served contour tiles, with
+   * their height labels, drawn over the imagery in the imagery palette — in
+   * the same slot as on the map, under the roads, the names and every PDF
+   * map. Honoured ONLY when the basemap is `satellite`; independent of
+   * {@link imageryLabels}. `glyphs` as for the labels (the heights need a
+   * glyph host).
+   */
+  imageryContours?: { tiles: string; glyphs?: string };
+  /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
    * look. The dark palette applies only over the stone-night vector base —
@@ -455,6 +472,26 @@ function vectorBaseSource(tiles: readonly string[]): StyleSpecification['sources
   };
 }
 
+/** Our served contour tiles (the Worker), on the map and over imagery alike. */
+function contoursSource(tiles: string): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [tiles],
+    minzoom: 0,
+    // Generated to z14; the lines overzoom cleanly past it.
+    maxzoom: 14,
+    attribution: 'Elevation: Mapzen Terrain Tiles',
+  };
+}
+
+/** How the stone layers read the served contour tiles. */
+const STONE_CONTOURS: StoneContourSource = {
+  source: VECTOR_CONTOURS_SOURCE,
+  sourceLayer: 'contours',
+  field: 'ele',
+  levelField: 'level',
+};
+
 /** Our named-summits source. OSM data, already credited by the base map. */
 function peaksSource(tiles: string): StyleSpecification['sources'][string] {
   return {
@@ -527,89 +564,27 @@ export function buildOsmStyle(
         ]),
       ),
     },
-    layers: [
-      // Warm paper backdrop that shows through while tiles load and at the edges.
-      {
-        id: 'background',
-        type: 'background',
-        paint: { 'background-color': '#E6DFCF' },
-      },
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-        // Chart mode mutes the raster exactly like weather mode: the chart
-        // colours own the palette; streets/labels ghost through the tan dim.
-        paint: options.night
-          ? NIGHT_RASTER_PAINT
-          : options.weatherMuted || options.marineChart
-            ? WEATHER_MUTED_PAINT
-            : (RASTER_PAINT[basemap] ?? {}),
-      },
-      // Chart-tan land dim (marine chart mode): a semi-opaque warm screen
-      // over the muted basemap — the paper-chart ground. `background` paints
-      // the whole viewport; the water fill + drape re-cover the wet parts.
-      ...(options.marineChart
-        ? [
-            {
-              id: 'marine-land-dim',
-              type: 'background' as const,
-              paint: { 'background-color': CHART_LAND_COLOR, 'background-opacity': 0.62 },
-            },
-          ]
-        : []),
-      // Flat chart-blue water fill from the OpenFreeMap vector water
-      // polygons (the wave B overlay source — declared below whenever
-      // overlayLabels is set): uncharted water reads chart-blue instead of
-      // tan, the iBoating overview idiom. Skipped silently when the vector
-      // host didn't resolve.
-      ...(options.marineChart && options.overlayLabels
-        ? [
-            {
-              id: 'marine-water-fill',
-              type: 'fill' as const,
-              source: 'overlay-labels',
-              'source-layer': 'water',
-              paint: { 'fill-color': CHART_WATER_COLOR, 'fill-opacity': 0.88 },
-            },
-          ]
-        : []),
-      // Anchor for the client-rendered depth-band drape (a MapView child —
-      // see `@core/geo/mapLayerStack`). It sits under the marine WMS layers:
-      // the seamark symbols must stay above the bands, and the legacy WMS
-      // bathymetry drape is only ever present as the fallback for a FAILED
-      // client pipeline, i.e. never at the same time as the drape itself.
-      ...(options.marineChart ? [drapeAnchorLayer(MARINE_DRAPE_ANCHOR)] : []),
-      // Marine layers above the trail overlays; the depth tint is dimmed so
-      // the basemap's shoreline/labels stay readable through it.
-      ...marine.map((l) => ({
-        id: `marine-${l.id}`,
-        type: 'raster' as const,
-        source: `marine-${l.id}`,
-        paint: { 'raster-opacity': l.opacity },
-      })),
-    ],
+    layers: [],
+  };
+
+  // The layers go into the map's stack slots (`@core/map/layerSlots`), which
+  // fix the order — bottom to top, the same on every base map — whatever
+  // order the code below happens to fill them in.
+  const slots: Partial<Record<MapLayerSlot, LayerSpecification[]>> = {};
+  const put = (slot: MapLayerSlot, ...layers: LayerSpecification[]) => {
+    (slots[slot] ??= []).push(...layers);
   };
 
   // Vector Stone & Paper base (flag-gated): swaps the paper backdrop + OSM
-  // raster for the vector source and the stone body layers; its labels go
-  // on after the hillshade, below.
+  // raster for the vector source and the stone body layers (its contours,
+  // roads and trails included); its labels go in the labels slot.
   const stone =
     VECTOR_BASEMAP_ENABLED && basemap === 'map' && options.vectorBasemap
       ? buildStoneLayers(stoneScheme(options.vectorBasemap.dark), {
           source: VECTOR_BASEMAP_SOURCE,
           // Atkinson from our host when configured, else OpenFreeMap's Noto.
           fonts: options.vectorBasemap.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
-          ...(options.vectorBasemap.contours
-            ? {
-                contours: {
-                  source: VECTOR_CONTOURS_SOURCE,
-                  sourceLayer: 'contours',
-                  field: 'ele',
-                  levelField: 'level',
-                },
-              }
-            : {}),
+          ...(options.vectorBasemap.contours ? { contours: STONE_CONTOURS } : {}),
           ...(options.vectorBasemap.peaks
             ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
             : {}),
@@ -622,24 +597,119 @@ export function buildOsmStyle(
     delete style.sources.osm;
     style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(options.vectorBasemap.tiles);
     if (options.vectorBasemap.contours) {
-      style.sources[VECTOR_CONTOURS_SOURCE] = {
-        type: 'vector',
-        tiles: [options.vectorBasemap.contours],
-        minzoom: 0,
-        // Generated to z14; the lines overzoom cleanly past it.
-        maxzoom: 14,
-        attribution: 'Elevation: Mapzen Terrain Tiles',
-      };
+      style.sources[VECTOR_CONTOURS_SOURCE] = contoursSource(options.vectorBasemap.contours);
     }
     if (options.vectorBasemap.peaks) {
       style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(options.vectorBasemap.peaks);
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
-    style.layers = [
-      ...stone.base,
-      ...style.layers.filter((l) => l.id !== 'background' && l.id !== 'osm'),
-    ];
+    put('base', ...stone.base);
+    put('labels', ...stone.labels);
+  } else {
+    put(
+      'base',
+      // Warm paper backdrop that shows through while tiles load and at the edges.
+      { id: 'background', type: 'background', paint: { 'background-color': '#E6DFCF' } },
+      {
+        id: 'osm',
+        type: 'raster',
+        source: 'osm',
+        // Chart mode mutes the raster exactly like weather mode: the chart
+        // colours own the palette; streets/labels ghost through the tan dim.
+        paint: options.night
+          ? NIGHT_RASTER_PAINT
+          : options.weatherMuted || options.marineChart
+            ? WEATHER_MUTED_PAINT
+            : (RASTER_PAINT[basemap] ?? {}),
+      },
+    );
   }
+
+  // Over satellite imagery (#484, #492): the Map base's served contours and
+  // its roads, trails and names, in the imagery palette and in the SAME
+  // slots the stone body fills on the map — contours under the roads, names
+  // above the relief, everything under the PDF maps.
+  const weatherOn = options.weatherMuted !== undefined;
+  const chartOn = options.marineChart !== undefined;
+  const imageryLabels = drawsImageryLabels({
+    basemap: basemap === 'satellite' ? 'satellite' : 'map',
+    vector: true,
+    satelliteLabels: options.imageryLabels !== undefined,
+    weather: weatherOn,
+    marine: chartOn,
+  })
+    ? (options.imageryLabels ?? null)
+    : null;
+  const imageryContours = basemap === 'satellite' ? (options.imageryContours ?? null) : null;
+  if (imageryLabels || imageryContours) {
+    const glyphs = imageryLabels?.glyphs ?? imageryContours?.glyphs;
+    if (imageryLabels) {
+      style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imageryLabels.tiles);
+      if (imageryLabels.peaks)
+        style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imageryLabels.peaks);
+    }
+    if (imageryContours) {
+      style.sources[VECTOR_CONTOURS_SOURCE] = contoursSource(imageryContours.tiles);
+    }
+    style.glyphs = glyphs ?? OFM_GLYPHS_URL;
+    const imagery = buildStoneImagerySlots(imageryStoneScheme(), {
+      source: VECTOR_BASEMAP_SOURCE,
+      fonts: glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
+      labels: imageryLabels !== null,
+      ...(imageryContours ? { contours: STONE_CONTOURS } : {}),
+      ...(imageryLabels?.peaks
+        ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
+        : {}),
+      ...(imageryLabels?.peakDensity ? { peakDensity: imageryLabels.peakDensity } : {}),
+    });
+    put('contours', ...imagery.contours);
+    put('linework', ...imagery.linework);
+    put('labels', ...imagery.labels);
+  }
+  // On-device contours (the raster fallback) mount at the top of the
+  // contours slot: under the roads and relief, as the served ones draw.
+  put('contours', drapeAnchorLayer(SLOT_ANCHOR.contours));
+
+  // Marine chart mode — chart-tan land dim: a semi-opaque warm screen over
+  // the muted basemap, the paper-chart ground. `background` paints the whole
+  // viewport; the water fill + drape re-cover the wet parts.
+  if (options.marineChart) {
+    put('chart', {
+      id: 'marine-land-dim',
+      type: 'background',
+      paint: { 'background-color': CHART_LAND_COLOR, 'background-opacity': 0.62 },
+    });
+  }
+  // Flat chart-blue water fill from the OpenFreeMap vector water polygons
+  // (the wave B overlay source — declared below whenever overlayLabels is
+  // set): uncharted water reads chart-blue instead of tan, the iBoating
+  // overview idiom. Skipped silently when the vector host didn't resolve.
+  if (options.marineChart && options.overlayLabels) {
+    put('chart', {
+      id: 'marine-water-fill',
+      type: 'fill',
+      source: 'overlay-labels',
+      'source-layer': 'water',
+      paint: { 'fill-color': CHART_WATER_COLOR, 'fill-opacity': 0.88 },
+    });
+  }
+  // Anchor for the client-rendered depth-band drape (a MapView child — see
+  // `@core/geo/mapLayerStack`). It sits under the marine WMS layers: the
+  // seamark symbols must stay above the bands, and the legacy WMS bathymetry
+  // drape is only ever present as the fallback for a FAILED client
+  // pipeline, i.e. never at the same time as the drape itself.
+  if (options.marineChart) put('chart', drapeAnchorLayer(SLOT_ANCHOR.chart));
+  // Marine layers; the depth tint is dimmed so the basemap's shoreline and
+  // labels stay readable through it.
+  put(
+    'chart',
+    ...marine.map((l) => ({
+      id: `marine-${l.id}`,
+      type: 'raster' as const,
+      source: `marine-${l.id}`,
+      paint: { 'raster-opacity': l.opacity },
+    })),
+  );
 
   // The client-rendered depth-band drape and the spot soundings are NOT
   // declared here either: they are MapView children (`MarineChartLayers`),
@@ -647,19 +717,27 @@ export function buildOsmStyle(
   // reloading the entire style (which used to feed a reload storm — see
   // `@core/geo/mapLayerStack`).
 
-  // A shaded-relief hillshade derived from the free Terrarium DEM, blended under
-  // the live 2D map for the warm topographic look. Kept OFF for offline packs
-  // (shadedRelief=false) so the DEM source doesn't bloat downloaded tile pyramids
-  // — relief just degrades to flat tiles offline. Skipped in 3D (the real terrain
-  // surface adds its own DEM/hillshade below) and for satellite imagery.
-  if (
-    shadedRelief &&
-    !terrain3d &&
-    SHADE_BASEMAPS.has(basemap) &&
-    !options.weatherMuted &&
-    // Chart mode: terrain shading under a nautical chart is noise.
-    !options.marineChart
-  ) {
+  // A shaded-relief hillshade derived from the free Terrarium DEM, blended
+  // over the live 2D map body for the warm topographic look. Kept OFF for
+  // offline packs (shadedRelief=false) so the DEM source doesn't bloat
+  // downloaded tile pyramids — relief just degrades to flat tiles offline.
+  // Skipped in 3D (the real terrain surface adds its own DEM/hillshade
+  // below), on satellite imagery (it carries the sun's real shadows) and
+  // under weather and the marine chart (see `drawsShadedRelief`).
+  //
+  // The tilted-map pass (#480) rides above it; over satellite imagery it is
+  // drawn on its own (#492) — hidden flat, faded in with the pitch by the
+  // map screen, lighter and in the night palette (see `tiltReliefLook`).
+  const reliefGates = {
+    basemap: basemap === 'satellite' ? ('satellite' as const) : ('map' as const),
+    shadedRelief: shadedRelief && SHADE_BASEMAPS.has(basemap),
+    tiltRelief: (options.tiltRelief ?? 'off') !== 'off',
+    weather: weatherOn,
+    marine: chartOn,
+  };
+  const flatRelief = !terrain3d && drawsShadedRelief(reliefGates);
+  const tiltPass = !terrain3d && drawsTiltRelief(reliefGates);
+  if (flatRelief || tiltPass) {
     style.sources[HILLSHADE_DEM_SOURCE_ID] = {
       type: 'raster-dem',
       tiles: [TERRAIN_DEM_URL],
@@ -669,11 +747,11 @@ export function buildOsmStyle(
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
-    const look = hillshadeLook(
-      options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH,
-      stone !== null && options.vectorBasemap?.dark === true,
-    );
-    style.layers.push({
+  }
+  const stoneNight = stone !== null && options.vectorBasemap?.dark === true;
+  if (flatRelief) {
+    const look = hillshadeLook(options.hillshadeStrength ?? DEFAULT_HILLSHADE_STRENGTH, stoneNight);
+    put('relief', {
       id: HILLSHADE_2D_LAYER_ID,
       type: 'hillshade',
       source: HILLSHADE_DEM_SOURCE_ID,
@@ -697,27 +775,30 @@ export function buildOsmStyle(
         'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
       },
     });
-    const tilt = tiltReliefLook(
-      options.tiltRelief ?? 'off',
-      MAP_MAX_PITCH_DEG,
-      stone !== null && options.vectorBasemap?.dark === true,
-    );
-    if (tilt !== null) {
-      style.layers.push({
-        id: TILT_RELIEF_LAYER_ID,
-        type: 'hillshade',
-        source: HILLSHADE_DEM_SOURCE_ID,
-        minzoom: HILLSHADE_2D_MIN_ZOOM,
-        layout: { visibility: 'none' },
-        paint: {
-          'hillshade-exaggeration': 0,
-          'hillshade-shadow-color': tilt.shadowColor,
-          'hillshade-highlight-color': tilt.highlightColor,
-          'hillshade-accent-color': tilt.accentColor,
-          'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
-        },
-      });
-    }
+  }
+  const tilt = tiltPass
+    ? tiltReliefLook(
+        options.tiltRelief ?? 'off',
+        MAP_MAX_PITCH_DEG,
+        stoneNight,
+        reliefGates.basemap === 'satellite',
+      )
+    : null;
+  if (tilt !== null) {
+    put('relief', {
+      id: TILT_RELIEF_LAYER_ID,
+      type: 'hillshade',
+      source: HILLSHADE_DEM_SOURCE_ID,
+      minzoom: HILLSHADE_2D_MIN_ZOOM,
+      layout: { visibility: 'none' },
+      paint: {
+        'hillshade-exaggeration': 0,
+        'hillshade-shadow-color': tilt.shadowColor,
+        'hillshade-highlight-color': tilt.highlightColor,
+        'hillshade-accent-color': tilt.accentColor,
+        'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+      },
+    });
   }
 
   if (terrain3d) {
@@ -729,7 +810,7 @@ export function buildOsmStyle(
       maxzoom: 15,
       attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
     };
-    style.layers.push({
+    put('relief', {
       id: 'hillshade',
       type: 'hillshade',
       source: 'dem',
@@ -742,29 +823,9 @@ export function buildOsmStyle(
     style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
 
-  // Stone labels above the map body and its hillshade.
-  if (stone) style.layers.push(...stone.labels);
-
-  // "Labels on satellite" (#484): the stone roads, trails and names over the
-  // imagery, where the stone labels would sit on the map — above the base,
-  // below the overlay anchors (PDF maps, trails) and the position puck.
-  const imagery =
-    basemap === 'satellite' && !options.weatherMuted && !options.marineChart
-      ? (options.imageryLabels ?? null)
-      : null;
-  if (imagery) {
-    style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imagery.tiles);
-    if (imagery.peaks) style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imagery.peaks);
-    style.glyphs = imagery.glyphs ?? OFM_GLYPHS_URL;
-    style.layers.push(
-      ...buildStoneImageryLayers(imageryStoneScheme(), {
-        source: VECTOR_BASEMAP_SOURCE,
-        fonts: imagery.glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO,
-        ...(imagery.peaks ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } } : {}),
-        ...(imagery.peakDensity ? { peakDensity: imagery.peakDensity } : {}),
-      }),
-    );
-  }
+  // The slope-angle raster (a MapView child) mounts here: over the relief,
+  // under the names and the PDF maps.
+  put('terrain', drapeAnchorLayer(SLOT_ANCHOR.terrain));
 
   // Weather-mode dim: a semi-opaque neutral BACKGROUND layer above the
   // basemap/overlay rasters and below the weather drape. `background` paints
@@ -772,32 +833,34 @@ export function buildOsmStyle(
   // works as a "screen" over raster tiles — the only muting available when
   // labels are baked into tile pixels (see the option's doc).
   if (options.weatherMuted) {
-    style.layers.push({
-      id: 'weather-dim',
-      type: 'background',
-      paint: {
-        'background-color': options.weatherMuted.dimColor,
-        'background-opacity': options.weatherMuted.dimOpacity,
+    put(
+      'weather',
+      {
+        id: 'weather-dim',
+        type: 'background',
+        paint: {
+          'background-color': options.weatherMuted.dimColor,
+          'background-opacity': options.weatherMuted.dimOpacity,
+        },
       },
-    });
-    // The weather drape itself is NOT declared here: its two crossfade slots
-    // are mounted as MapView children (`WeatherDrapeLayers`) — a frame URL
-    // inside this style would make every playback tick reload the whole
-    // native style. They anchor HERE, directly above the dim, whatever order
-    // the modes were toggled in (see `@core/geo/mapLayerStack`).
-    style.layers.push(drapeAnchorLayer(WEATHER_DRAPE_ANCHOR));
+      // The weather drape itself is NOT declared here: its two crossfade
+      // slots are mounted as MapView children (`WeatherDrapeLayers`) — a
+      // frame URL inside this style would make every playback tick reload
+      // the whole native style. They anchor HERE, directly above the dim,
+      // whatever order the modes were toggled in.
+      drapeAnchorLayer(SLOT_ANCHOR.weather),
+    );
   }
 
   // Anchor for the spot soundings, above the weather anchor: ink beats
   // colour, so the depth numbers stay readable through a weather field.
-  if (options.marineChart) {
-    style.layers.push(drapeAnchorLayer(MARINE_SOUNDINGS_ANCHOR));
-  }
+  if (options.marineChart) put('soundings', drapeAnchorLayer(SLOT_ANCHOR.soundings));
 
-  // Unconditional anchors for the MapView-child overlays (#332): PDF maps,
-  // then terrain overlays, then trails — below the reference labels and,
-  // more importantly, below the position puck, which the map appends last.
-  for (const id of ALWAYS_PRESENT_ANCHORS) style.layers.push(drapeAnchorLayer(id));
+  // The always-present anchors for the MapView-child overlays (#332): PDF
+  // maps, then trails — below the reference labels and, more importantly,
+  // below the position puck, which the map appends last.
+  put('pdf', drapeAnchorLayer(SLOT_ANCHOR.pdf));
+  put('trails', drapeAnchorLayer(SLOT_ANCHOR.trails));
 
   // Labels + coastline reference overlay, ABOVE the dim and the weather/
   // marine drapes (see the option's doc). Water outlines first, then towns,
@@ -862,7 +925,8 @@ export function buildOsmStyle(
           },
         ]
       : [];
-    style.layers.push(
+    put(
+      'reference',
       // Coast/water edges, drawn as a CASING + CORE pair. One flat line is
       // what the owner rejected on 2026-08-13 ("it should be much easier to
       // differentiate coasts and features"): a single stroke has to compete
@@ -937,16 +1001,17 @@ export function buildOsmStyle(
     );
   }
 
-  // "Locally downloaded only" mask, pushed LAST so it sits above every basemap
-  // layer (raster + hillshade). Layers the map adds at runtime (trails, the
-  // recording line, markers, the location dot) are appended after the style's
-  // own layers, so they still draw on top of the mask.
+  // "Locally downloaded only" mask, the `mask` slot: above every base-map
+  // layer (raster, vector, relief, drapes) but UNDER the PDF maps and the
+  // trails (#492) — those are on the device and must stay visible offline.
+  // The position puck and markers are appended after the style's own
+  // layers, so they draw on top of the mask too.
   if (options.downloadedMask) {
     style.sources['downloaded-mask'] = {
       type: 'geojson',
       data: options.downloadedMask.data,
     };
-    style.layers.push({
+    put('mask', {
       id: 'downloaded-mask',
       type: 'fill',
       source: 'downloaded-mask',
@@ -954,5 +1019,6 @@ export function buildOsmStyle(
     });
   }
 
+  style.layers = stackLayers(slots);
   return style;
 }

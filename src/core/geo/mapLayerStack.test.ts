@@ -1,5 +1,6 @@
 import {
   ALWAYS_PRESENT_ANCHORS,
+  CONTOURS_ANCHOR,
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   drapeAnchorLayer,
   MARINE_DRAPE_ANCHOR,
@@ -45,18 +46,24 @@ describe('drape anchors', () => {
 // MapView children after first paint were appended ABOVE the puck. These
 // anchors give every such layer a fixed slot below it.
 describe('overlay anchors below the position puck (#332)', () => {
-  it('stacks PDF maps under terrain overlays under trails, all above the drape anchors', () => {
-    const order = [...DRAPE_ANCHORS_BOTTOM_TO_TOP];
-    expect(order.indexOf(PDF_MAPS_ANCHOR)).toBeGreaterThan(order.indexOf(MARINE_SOUNDINGS_ANCHOR));
-    expect(order.indexOf(TERRAIN_OVERLAY_ANCHOR)).toBeGreaterThan(order.indexOf(PDF_MAPS_ANCHOR));
-    expect(order.indexOf(TRAILS_ANCHOR)).toBeGreaterThan(order.indexOf(TERRAIN_OVERLAY_ANCHOR));
+  it('stacks contours under the slope under PDF maps under trails (#492)', () => {
+    const order: readonly string[] = DRAPE_ANCHORS_BOTTOM_TO_TOP;
+    const at = (id: string) => order.indexOf(id);
+    // The owner's report: contours drew OVER the PDF maps on satellite.
+    expect(at(PDF_MAPS_ANCHOR)).toBeGreaterThan(at(CONTOURS_ANCHOR));
+    expect(at(PDF_MAPS_ANCHOR)).toBeGreaterThan(at(TERRAIN_OVERLAY_ANCHOR));
+    expect(at(TERRAIN_OVERLAY_ANCHOR)).toBeGreaterThan(at(CONTOURS_ANCHOR));
+    // The drapes stay under the PDF maps, and the trails top everything.
+    expect(at(PDF_MAPS_ANCHOR)).toBeGreaterThan(at(MARINE_SOUNDINGS_ANCHOR));
+    expect(at(TRAILS_ANCHOR)).toBeGreaterThan(at(PDF_MAPS_ANCHOR));
     expect(order[order.length - 1]).toBe(TRAILS_ANCHOR);
   });
 
-  it('the always-present anchors are exactly the three the puck depends on', () => {
+  it('the always-present anchors are the four the runtime overlays depend on', () => {
     expect([...ALWAYS_PRESENT_ANCHORS]).toEqual([
-      PDF_MAPS_ANCHOR,
+      CONTOURS_ANCHOR,
       TERRAIN_OVERLAY_ANCHOR,
+      PDF_MAPS_ANCHOR,
       TRAILS_ANCHOR,
     ]);
     for (const id of ALWAYS_PRESENT_ANCHORS) expect(DRAPE_ANCHORS_BOTTOM_TO_TOP).toContain(id);
