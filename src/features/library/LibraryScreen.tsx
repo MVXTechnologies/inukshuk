@@ -12,8 +12,17 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type ListRenderItem,
+} from 'react-native';
 import {
   Badge,
   Button,
@@ -32,20 +41,17 @@ import {
 } from 'react-native-paper';
 import { countBySource, sourceLabel } from '@core/import/origin';
 import type { ActivitySourceId } from '@core/import/sources';
-import { findCategory } from '@core/library/categories';
 import { countActiveFilters, filterTracks, type TrackFilter } from '@core/library/filterTracks';
 import {
   shortDate,
   showsKind,
-  trailCaption,
-  trailStatsLine,
   typeCounts,
   type LibraryTypeFilter,
 } from '@core/library/libraryRows';
 import { isSearchActive, searchTracks } from '@core/library/searchTracks';
 import { sortTracks, type SortKey } from '@core/library/sortTracks';
-import { createRowBudget, LIBRARY_ROW_PAGE, nearScrollEnd } from '@core/library/rowBudget';
-import { folderItemCount, groupByFolder } from '@core/library/folders';
+import { groupByFolder } from '@core/library/folders';
+import { libraryListItems, type LibraryListItem } from '@core/library/libraryListItems';
 import { georeferenceNotice } from '@core/library/overlayPages';
 import {
   overlayDetailStatusKey,
@@ -59,7 +65,6 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { waypointIconGlyph } from '@core/library/waypointIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ElevationProfile } from '../common/components/ElevationProfile';
 import { WaypointEditorDialog } from '../map/components/WaypointEditorDialog';
 import { useTimedSnackbar } from '@features/common/useTimedSnackbar';
 import {
@@ -68,7 +73,10 @@ import {
   SectionHeader,
   TypeFilterChips,
 } from './components/LibraryChrome';
-import { MapRow, OnMapChip, RowDivider, TrailRow, WaypointRow } from './components/LibraryRows';
+import { MapRow, OnMapChip, RowDivider, WaypointRow } from './components/LibraryRows';
+import { MoveToFolderItems } from './components/MoveToFolderItems';
+import { TrackListRow, type TrackRowActions } from './components/TrackListRow';
+import { useDebouncedValue } from '@features/common/useDebouncedValue';
 import { ImportJobCard } from '../import/ImportJobCard';
 import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
@@ -80,6 +88,11 @@ import { useDragToFolder, type DragItem } from './useDragToFolder';
 import { SetCategoryDialog } from './SetCategoryDialog';
 import { TrackFilterDialog } from './TrackFilterDialog';
 import { useTrackElevationPreview } from './useTrackElevationPreview';
+
+/** Quiet time after a keystroke before the list re-filters. */
+const SEARCH_DEBOUNCE_MS = 200;
+
+const keyOfItem = (item: LibraryListItem) => item.key;
 
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
@@ -109,16 +122,6 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
       body: (name) => `Delete waypoint "${name}"? Its note and photo are permanently deleted.`,
     },
   };
-
-/** Interleave rows with the indented row hairline. */
-function withDividers(rows: ReactNode[]): ReactNode[] {
-  return rows.map((row, i) => (
-    <Fragment key={i}>
-      {i > 0 && <RowDivider />}
-      {row}
-    </Fragment>
-  ));
-}
 
 /**
  * The Library (revamp §5, boards `After-Library.html` / `After-Empty.html`):
@@ -185,14 +188,6 @@ export function LibraryScreen() {
     onElevationError,
   );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  // Progressive rows (#465): trail rows mount a page at a time, growing as the
-  // list is scrolled toward its end (see @core/library/rowBudget).
-  const [rowLimit, setRowLimit] = useState(LIBRARY_ROW_PAGE);
-  const moreRowsRef = useRef(false);
-  const showMoreRows = useCallback(() => {
-    moreRowsRef.current = false;
-    setRowLimit((n) => n + LIBRARY_ROW_PAGE);
-  }, []);
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
     kind: 'map' | 'track' | 'waypoint';
@@ -254,7 +249,11 @@ export function LibraryScreen() {
   // once it is collapsed.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const searching = isSearchActive(searchQuery);
+  // The list filters on the query once typing pauses (#494): re-filtering and
+  // re-laying out a 2,000-trail list per keystroke made the field lag.
+  // Clearing applies at once.
+  const appliedQuery = useDebouncedValue(searchQuery, SEARCH_DEBOUNCE_MS, (q) => q.trim() === '');
+  const searching = isSearchActive(appliedQuery);
   const closeSearch = () => {
     setSearchOpen(false);
     setSearchQuery('');
@@ -272,12 +271,12 @@ export function LibraryScreen() {
   const visibleTracks = useMemo(
     () =>
       sortTracks(
-        filterTracks(searchTracks(tracks, searchQuery, folders), filter).filter(
+        filterTracks(searchTracks(tracks, appliedQuery, folders), filter).filter(
           (t) => activeSource === null || t.origin?.source === activeSource,
         ),
         sortKey,
       ),
-    [tracks, searchQuery, folders, filter, sortKey, activeSource],
+    [tracks, appliedQuery, folders, filter, sortKey, activeSource],
   );
 
   const grouped = useMemo(
@@ -319,16 +318,21 @@ export function LibraryScreen() {
   // Drag-and-drop moves (Organize mode): each row's grip drags a ghost chip
   // onto a folder (or Ungrouped) header. The ⋮ move-to-folder menu remains
   // for one-handed use. Grips render only once a folder exists.
+  const listRef = useRef<FlatList<LibraryListItem>>(null);
+  const scrollListTo = useCallback(
+    (y: number) => listRef.current?.scrollToOffset({ offset: y, animated: false }),
+    [],
+  );
   const {
     dragging,
     hovered: dragHovered,
     ghost: dragGhost,
     registerTarget,
     handleProps,
-    scrollRef: dragScrollRef,
     onScroll: onDragScroll,
     onWindowHeight: onDragWindowHeight,
   } = useDragToFolder({
+    scrollTo: scrollListTo,
     onDrop: (item, target) => {
       const folderName = target === null ? null : folders.find((f) => f.id === target)?.name;
       // A target that no longer exists (deleted mid-drag, #303) is not a move.
@@ -338,6 +342,7 @@ export function LibraryScreen() {
     },
   });
   const hasFolders = folders.length > 0;
+  const grip = hasFolders && organizing;
   const dragHandle = (item: DragItem) =>
     hasFolders && organizing ? (
       <View
@@ -576,38 +581,17 @@ export function LibraryScreen() {
     />
   );
 
-  // The "Move to folder" block shared by every ⋮ menu. It only appears once a
-  // folder exists — a section of nothing but greyed-out placeholders is
-  // clutter, not guidance.
   const moveToFolderItems = (
     kind: 'map' | 'track' | 'waypoint',
     id: string,
     folderId: string | undefined,
-  ) =>
-    folders.length > 0 && (
-      <>
-        <Divider />
-        <Menu.Item disabled title="Move to folder" />
-        {folders.map((f) => (
-          <Menu.Item
-            key={f.id}
-            leadingIcon={folderId === f.id ? 'folder-check' : 'folder-outline'}
-            title={f.name}
-            // Distinct from the folder section header's text (screen readers
-            // and the e2e driver would otherwise hit the header first).
-            accessibilityLabel={`Move to ${f.name}`}
-            onPress={() => setItemFolder(kind, id, folderId === f.id ? null : f.id)}
-          />
-        ))}
-        {folderId !== undefined && (
-          <Menu.Item
-            leadingIcon="folder-off-outline"
-            title="Remove from folder"
-            onPress={() => setItemFolder(kind, id, null)}
-          />
-        )}
-      </>
-    );
+  ) => (
+    <MoveToFolderItems
+      folders={folders}
+      folderId={folderId}
+      onMove={(target) => setItemFolder(kind, id, target)}
+    />
+  );
 
   const menuAnchor = (kind: 'map' | 'track' | 'waypoint', id: string, label: string) => (
     <IconButton
@@ -781,152 +765,54 @@ export function LibraryScreen() {
     );
   };
 
-  // Full overflow menu for a trail: every secondary action plus folder
-  // membership — the row itself only opens the trail (revamp §5).
-  const trackMenu = (t: TrackSummary) => (
-    <Menu
-      visible={cardMenu?.kind === 'track' && cardMenu.id === t.id}
-      onDismiss={() => setCardMenu(null)}
-      anchor={menuAnchor('track', t.id, 'More options')}
-    >
-      <Menu.Item
-        leadingIcon="pencil-outline"
-        title="Rename"
-        onPress={() => {
-          setCardMenu(null);
-          setRenamingTrack({ id: t.id, name: t.name });
-        }}
-      />
-      <Menu.Item
-        leadingIcon="map-outline"
-        title="View on map"
-        onPress={() => {
-          setCardMenu(null);
-          viewTrack(t.id);
-        }}
-      />
-      {/* The row's old chart button: an inline profile peek under the row. */}
-      <Menu.Item
-        leadingIcon="chart-areaspline"
-        title={expandedTrack === t.id ? 'Hide elevation profile' : 'Elevation profile'}
-        accessibilityLabel="Elevation profile"
-        onPress={() => {
-          setCardMenu(null);
-          toggleElevation(t.id);
-        }}
-      />
-      <Menu.Item
-        leadingIcon="share-variant"
-        title="Share GPX"
-        onPress={() => {
-          setCardMenu(null);
-          void shareTrack(t.fileUri);
-        }}
-      />
-      {stravaConnected && (
-        <Menu.Item
-          leadingIcon="cloud-upload-outline"
-          title="Send to Strava"
-          onPress={() => {
-            setCardMenu(null);
-            void sendToStrava(t);
-          }}
-        />
-      )}
-      <Menu.Item
-        leadingIcon="content-cut"
-        title="Trim"
-        onPress={() => {
-          setCardMenu(null);
-          trimTrack(t.id);
-        }}
-      />
-      <Menu.Item
-        leadingIcon="call-merge"
-        title="Merge"
-        onPress={() => {
-          // Enter the multi-select mode (same one long-press opens) with this
-          // trail pre-selected; the user then taps the others and confirms.
-          setCardMenu(null);
-          if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
-        }}
-      />
-      <Menu.Item
-        leadingIcon="tag-outline"
-        title="Set category"
-        onPress={() => {
-          setCardMenu(null);
-          setCategoryTarget(t.id);
-        }}
-      />
-      {moveToFolderItems('track', t.id, t.folderId)}
-      <Divider />
-      <Menu.Item
-        leadingIcon="trash-can-outline"
-        title="Delete trail"
-        onPress={() => {
-          setCardMenu(null);
-          setConfirmDelete({ kind: 'track', id: t.id, name: t.name });
-        }}
-      />
-    </Menu>
-  );
-
-  const renderTrackRow = (t: TrackSummary) => {
-    const selected = selectedTrackIds.includes(t.id);
-    // Decision 7: the type is a badge on the thumbnail, a word in the caption
-    // and part of the spoken label — never colour alone.
-    const found = findCategory(t.category, customCategories);
-    // Night red (decision 4) allows no other hue: the badge takes the ink red.
-    const category = found && night ? { ...found, color: tokens.ink } : found;
-    const stats = trailStatsLine(t.stats, units);
-    const caption = trailCaption(t.startedAt, category?.name ?? null, nowMs);
-    const spoken = [
-      t.name,
-      category?.name,
-      shortDate(t.startedAt, nowMs),
-      stats,
-      t.origin ? `from ${sourceLabel(t.origin.source)}` : undefined,
-    ]
-      .filter((part): part is string => typeof part === 'string' && part.length > 0)
-      .join(', ');
-    return (
-      <TrailRow
-        key={t.id}
-        track={t}
-        category={category}
-        stats={stats}
-        caption={caption}
-        // Long-press enters trail selection (for merging); while selecting,
-        // taps toggle membership instead of opening the trail.
-        accessibilityLabel={
-          selectionMode
-            ? `${t.name} — ${selected ? 'deselect' : 'select'} for merge`
-            : `${spoken} — open trail view, long-press to select`
-        }
-        onPress={() =>
-          selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`)
-        }
-        onLongPress={() => toggleTrackSelected(t.id)}
-        selecting={selectionMode}
-        selected={selected}
-        sourceMark={t.origin ? sourceLabel(t.origin.source) : undefined}
-        leading={dragHandle({ kind: 'track', id: t.id, label: t.name })}
-        trailing={trackMenu(t)}
-      >
-        {expandedTrack === t.id &&
-          (elevationPreview?.points ? (
-            <ElevationProfile
-              points={elevationPreview.points}
-              ascentM={t.stats.ascentM}
-              descentM={t.stats.descentM}
-            />
-          ) : (
-            <ActivityIndicator style={styles.loader} />
-          ))}
-      </TrailRow>
-    );
-  };
+  // Trail rows are memoized (TrackListRow): they get ONE actions object whose
+  // identity never changes, each entry forwarding to the latest handler, so a
+  // re-render of this screen (a menu, a selection tap, a drag hover) re-renders
+  // only the rows whose own props changed.
+  const trackHandlers = {
+    press: (t: TrackSummary) =>
+      selectionMode ? toggleTrackSelected(t.id) : router.navigate(`/trail3d/${t.id}`),
+    longPress: (t: TrackSummary) => toggleTrackSelected(t.id),
+    openMenu: (t: TrackSummary) => setCardMenu({ kind: 'track', id: t.id }),
+    closeMenu: () => setCardMenu(null),
+    rename: (t: TrackSummary) => setRenamingTrack({ id: t.id, name: t.name }),
+    viewOnMap: (t: TrackSummary) => viewTrack(t.id),
+    toggleElevation: (t: TrackSummary) => toggleElevation(t.id),
+    share: (t: TrackSummary) => void shareTrack(t.fileUri),
+    sendToStrava: (t: TrackSummary) => void sendToStrava(t),
+    trim: (t: TrackSummary) => trimTrack(t.id),
+    merge: (t: TrackSummary) => {
+      if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
+    },
+    setCategory: (t: TrackSummary) => setCategoryTarget(t.id),
+    moveToFolder: (t: TrackSummary, folderId: string | null) =>
+      setItemFolder('track', t.id, folderId),
+    remove: (t: TrackSummary) => setConfirmDelete({ kind: 'track', id: t.id, name: t.name }),
+    dragHandleProps: handleProps,
+  } satisfies TrackRowActions;
+  const trackHandlersRef = useRef(trackHandlers);
+  useEffect(() => {
+    trackHandlersRef.current = trackHandlers;
+  });
+  const [trackActions] = useState<TrackRowActions>(() => ({
+    press: (t) => trackHandlersRef.current.press(t),
+    longPress: (t) => trackHandlersRef.current.longPress(t),
+    openMenu: (t) => trackHandlersRef.current.openMenu(t),
+    closeMenu: () => trackHandlersRef.current.closeMenu(),
+    rename: (t) => trackHandlersRef.current.rename(t),
+    viewOnMap: (t) => trackHandlersRef.current.viewOnMap(t),
+    toggleElevation: (t) => trackHandlersRef.current.toggleElevation(t),
+    share: (t) => trackHandlersRef.current.share(t),
+    sendToStrava: (t) => trackHandlersRef.current.sendToStrava(t),
+    trim: (t) => trackHandlersRef.current.trim(t),
+    merge: (t) => trackHandlersRef.current.merge(t),
+    setCategory: (t) => trackHandlersRef.current.setCategory(t),
+    moveToFolder: (t, folderId) => trackHandlersRef.current.moveToFolder(t, folderId),
+    remove: (t) => trackHandlersRef.current.remove(t),
+    dragHandleProps: (item) => trackHandlersRef.current.dragHandleProps(item),
+  }));
+  const selectedSet = useMemo(() => new Set(selectedTrackIds), [selectedTrackIds]);
+  const menuTrackId = cardMenu?.kind === 'track' ? cardMenu.id : null;
 
   // ⋮ / long-press menu for a waypoint row: rename, jump the map to the pin,
   // folders, or delete (through the same confirm flow as every other delete).
@@ -996,170 +882,122 @@ export function LibraryScreen() {
     <List.Item title={title} description={description} titleStyle={styles.emptyRowTitle} />
   );
 
-  // Folder groups (cross-type: each folder shows its maps, trails, waypoints),
-  // narrowed to the selected type chip.
-  const renderFolderGroups = () =>
-    grouped.groups.flatMap((g, index) => {
-      const key = `folder:${g.folder.id}`;
-      const folderWaypoints = showWaypoints ? (sortedFolderWaypoints.get(g.folder.id) ?? []) : [];
-      const rowCount =
-        (showMaps ? g.maps.length : 0) +
-        (showTrails ? g.tracks.length : 0) +
-        folderWaypoints.length;
-      // A collapsed folder builds no rows (and spends none of the row budget).
-      const rows = collapsed[key]
-        ? []
-        : [
-            // Trail filters and trail search are about trails — maps drop out
-            // of results while either narrowing is active.
-            ...(showMaps ? g.maps.map(renderMapRow) : []),
-            ...(showTrails ? rowBudget.take(g.tracks).map(renderTrackRow) : []),
-            ...folderWaypoints.map(renderWaypointRow),
-          ];
-      const count = effectiveType === 'all' ? folderItemCount(g) : rowCount;
-      // Under a type chip, a folder holding none of that type steps aside.
-      if (effectiveType !== 'all' && rowCount === 0 && !organizing) return [];
-      return [
-        <View key={key}>
-          {sectionHeader({
-            key,
-            title: g.folder.name,
-            count: count ? `(${count})` : '',
-            first: index === 0,
-            dropTarget: g.folder.id,
-            actions: organizing ? (
-              <View style={styles.folderActions}>
-                <IconButton
-                  icon="pencil-outline"
-                  size={20}
-                  onPress={() => setRenamingFolder({ id: g.folder.id, name: g.folder.name })}
-                  accessibilityLabel="Rename folder"
-                />
-                <IconButton
-                  icon="trash-can-outline"
-                  size={20}
-                  onPress={() =>
-                    setConfirmDelete({ kind: 'folder', id: g.folder.id, name: g.folder.name })
-                  }
-                  accessibilityLabel="Delete folder"
-                />
-              </View>
-            ) : undefined,
-          })}
-          {collapsed[key]
-            ? null
-            : rowCount === 0
-              ? emptyRow(
-                  'Empty folder',
-                  organizing
-                    ? "Drag an item's grip here, or use its ⋮ menu"
-                    : 'Move items here from their ⋮ menu',
-                )
-              : withDividers(rows)}
-        </View>,
-      ];
-    });
+  // The whole Library as one flat list (headers, rows, empty states), built
+  // once per data or view change and virtualized by the FlatList below.
+  const items = useMemo(
+    () =>
+      libraryListItems({
+        maps,
+        trackCount: tracks.length,
+        visibleTracks,
+        sortedWaypoints,
+        hasFolders,
+        grouped,
+        sortedFolderWaypoints,
+        sortedUngroupedWaypoints,
+        showMaps,
+        showTrails,
+        showWaypoints,
+        effectiveType,
+        organizing,
+        collapsed,
+        narrowed,
+        searchText: searching ? appliedQuery.trim() : null,
+        activeFilterCount,
+      }),
+    [
+      maps,
+      tracks.length,
+      visibleTracks,
+      sortedWaypoints,
+      hasFolders,
+      grouped,
+      sortedFolderWaypoints,
+      sortedUngroupedWaypoints,
+      showMaps,
+      showTrails,
+      showWaypoints,
+      effectiveType,
+      organizing,
+      collapsed,
+      narrowed,
+      searching,
+      appliedQuery,
+      activeFilterCount,
+    ],
+  );
 
-  const ungroupedCount =
-    (showMaps ? grouped.ungroupedMaps.length : 0) +
-    (showTrails ? grouped.ungroupedTracks.length : 0) +
-    (showWaypoints ? sortedUngroupedWaypoints.length : 0);
-  // A function, not a value: rows must be built in display order (after the
-  // folders) so the row budget is spent top to bottom.
-  const renderUngroupedRows = () => [
-    ...(showMaps ? grouped.ungroupedMaps.map(renderMapRow) : []),
-    ...(showTrails ? rowBudget.take(grouped.ungroupedTracks).map(renderTrackRow) : []),
-    ...(showWaypoints ? sortedUngroupedWaypoints.map(renderWaypointRow) : []),
-  ];
-
-  // Spent top to bottom while the list below renders (folders, then
-  // ungrouped / the trail section).
-  const rowBudget = createRowBudget(rowLimit);
-  // After the render has spent the budget: are there rows left to mount?
-  useEffect(() => {
-    moreRowsRef.current = rowBudget.hidden > 0;
-  });
-
-  const trailsCount = tracks.length
-    ? narrowed
-      ? `(${visibleTracks.length}/${tracks.length})`
-      : `(${tracks.length})`
-    : '';
-
-  // No folders yet: the familiar Maps / Recorded trails / Waypoints split.
-  const renderTypeSections = () => {
-    const sections: ReactNode[] = [];
-    if (showMaps) {
-      sections.push(
-        <View key="maps">
-          {sectionHeader({
-            key: 'maps',
-            title: 'Maps',
-            count: maps.length ? `(${maps.length})` : '',
-            first: sections.length === 0,
-          })}
-          {collapsed.maps
-            ? null
-            : maps.length === 0
-              ? emptyRow('No maps yet', 'Import a PDF map with +, or find one in Explore')
-              : withDividers(maps.map(renderMapRow))}
-        </View>,
-      );
+  const renderItem: ListRenderItem<LibraryListItem> = ({ item }) => {
+    switch (item.kind) {
+      case 'header':
+        return sectionHeader({
+          key: item.section,
+          title: item.title,
+          count: item.count,
+          first: item.first,
+          dropTarget: item.dropTarget,
+          actions:
+            organizing && item.folderId !== undefined
+              ? folderActions(item.folderId, item.title)
+              : undefined,
+        });
+      case 'empty':
+        return emptyRow(item.title, item.description);
+      case 'map':
+        return (
+          <>
+            {item.divider && <RowDivider />}
+            {renderMapRow(item.map)}
+          </>
+        );
+      case 'waypoint':
+        return (
+          <>
+            {item.divider && <RowDivider />}
+            {renderWaypointRow(item.waypoint)}
+          </>
+        );
+      case 'track': {
+        const t = item.track;
+        const expanded = expandedTrack === t.id;
+        return (
+          <TrackListRow
+            track={t}
+            divider={item.divider}
+            customCategories={customCategories}
+            night={night}
+            units={units}
+            nowMs={nowMs}
+            selecting={selectionMode}
+            selected={selectedSet.has(t.id)}
+            menuOpen={menuTrackId === t.id}
+            elevation={expanded ? (elevationPreview?.points ?? null) : undefined}
+            grip={grip}
+            stravaConnected={stravaConnected}
+            folders={folders}
+            actions={trackActions}
+          />
+        );
+      }
     }
-    if (showTrails) {
-      sections.push(
-        <View key="trails">
-          {sectionHeader({
-            key: 'trails',
-            title: 'Recorded trails',
-            count: trailsCount,
-            first: sections.length === 0,
-          })}
-          {collapsed.trails
-            ? null
-            : tracks.length === 0
-              ? emptyRow('No trails yet', 'Record one on the map, or import a GPX file with +')
-              : visibleTracks.length === 0
-                ? // Two honest empty states, not one: a query that found
-                  // nothing says so, and quotes what was typed, instead of
-                  // blaming filters the user may not have set.
-                  // `library-filter` asserts on the filter wording.
-                  searching
-                  ? emptyRow(
-                      `No trails match “${searchQuery.trim()}”`,
-                      activeFilterCount > 0
-                        ? 'Try another word, or clear the filters too'
-                        : 'Try another word, or a folder name',
-                    )
-                  : emptyRow(
-                      'No trails match the filters',
-                      'Adjust or clear the filters from the sort and filter button',
-                    )
-                : withDividers(rowBudget.take(visibleTracks).map(renderTrackRow))}
-        </View>,
-      );
-    }
-    // Standalone waypoints (map "+" sheet). Hidden entirely while there are
-    // none, unless the Waypoints chip asked for them.
-    if (showWaypoints && (waypoints.length > 0 || effectiveType === 'waypoints')) {
-      sections.push(
-        <View key="waypoints">
-          {sectionHeader({
-            key: 'waypoints',
-            title: 'Waypoints',
-            count: waypoints.length ? `(${waypoints.length})` : '',
-            first: sections.length === 0,
-          })}
-          {collapsed.waypoints
-            ? null
-            : waypoints.length === 0
-              ? emptyRow('No waypoints yet', 'Add one on the map from its + sheet')
-              : withDividers(sortedWaypoints.map(renderWaypointRow))}
-        </View>,
-      );
-    }
-    return sections;
   };
+
+  const folderActions = (id: string, name: string) => (
+    <View style={styles.folderActions}>
+      <IconButton
+        icon="pencil-outline"
+        size={20}
+        onPress={() => setRenamingFolder({ id, name })}
+        accessibilityLabel="Rename folder"
+      />
+      <IconButton
+        icon="trash-can-outline"
+        size={20}
+        onPress={() => setConfirmDelete({ kind: 'folder', id, name })}
+        accessibilityLabel="Delete folder"
+      />
+    </View>
+  );
 
   // First run: nothing at all in the Library.
   const libraryEmpty =
@@ -1346,78 +1184,40 @@ export function LibraryScreen() {
           />
         </>
       ) : (
-        <ScrollView
+        <FlatList
           testID="library-list"
-          ref={dragScrollRef}
+          ref={listRef}
+          data={items}
+          keyExtractor={keyOfItem}
+          renderItem={renderItem}
+          // Only rows near the screen are mounted (#494): ~3 screens above and
+          // below, filled in 10 rows at a time. Rows are mixed (headers, maps
+          // with notices, expandable trails), so heights are measured rather
+          // than declared with getItemLayout.
+          initialNumToRender={14}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          updateCellsBatchingPeriod={40}
+          removeClippedSubviews={Platform.OS === 'android'}
+          ListHeaderComponent={
+            <>
+              <ImportJobCard />
+              {organizing && !hasFolders && (
+                <Text style={[styles.hint, { color: tokens.inkMuted }]}>
+                  Create a folder with + to group trails, maps and waypoints. Grips, rename and
+                  delete for folders appear here.
+                </Text>
+              )}
+            </>
+          }
           scrollEnabled={dragging === null}
-          onScroll={(e) => {
-            const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-            onDragScroll(contentOffset.y);
-            // Mount the next page of trail rows before the end comes into view.
-            if (
-              moreRowsRef.current &&
-              nearScrollEnd(contentOffset.y, layoutMeasurement.height, contentSize.height)
-            ) {
-              showMoreRows();
-            }
-          }}
+          onScroll={(e) => onDragScroll(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={32}
           onLayout={(e) => onDragWindowHeight(e.nativeEvent.layout.height + e.nativeEvent.layout.y)}
           contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-        >
-          <ImportJobCard />
-          {organizing && !hasFolders && (
-            <Text style={[styles.hint, { color: tokens.inkMuted }]}>
-              Create a folder with + to group trails, maps and waypoints. Grips, rename and delete
-              for folders appear here.
-            </Text>
-          )}
-
-          {/* The folder layout has no per-section empty state (each folder just
-              renders its matches), so a search that found nothing needs one row
-              of its own — otherwise the screen is a wall of folder headers with
-              nothing under them and no explanation. */}
-          {hasFolders &&
-            searching &&
-            visibleTracks.length === 0 &&
-            emptyRow(
-              `No trails match “${searchQuery.trim()}”`,
-              'Try another word, or a folder name',
-            )}
-
-          {hasFolders ? (
-            <>
-              {renderFolderGroups()}
-              {/* With folders: one cross-type "Ungrouped" catch-all for leftovers. */}
-              {ungroupedCount > 0 && (
-                <View>
-                  {sectionHeader({
-                    key: 'ungrouped',
-                    title: 'Ungrouped',
-                    count: `(${ungroupedCount})`,
-                    first: grouped.groups.length === 0,
-                    dropTarget: null,
-                  })}
-                  {collapsed.ungrouped ? null : withDividers(renderUngroupedRows())}
-                </View>
-              )}
-            </>
-          ) : (
-            renderTypeSections()
-          )}
-          {rowBudget.hidden > 0 && (
-            <Button
-              mode="text"
-              style={styles.showMore}
-              onPress={showMoreRows}
-              accessibilityLabel="Show more trails"
-            >
-              {`Show ${Math.min(rowBudget.hidden, LIBRARY_ROW_PAGE)} more trails`}
-            </Button>
-          )}
-        </ScrollView>
+        />
       )}
 
       <DragGhost
