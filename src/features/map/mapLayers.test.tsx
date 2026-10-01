@@ -19,7 +19,12 @@ import {
   HILLSHADE_DEM_SOURCE_ID,
   TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
-import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
+import {
+  CONTOURS_ANCHOR,
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
+} from '@core/geo/mapLayerStack';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
 // modules are looked up with TurboModuleRegistry.getEnforcing at import time,
@@ -140,7 +145,11 @@ async function injectedBeforeIds(children: ReactNode): Promise<[string, unknown]
     .map((node) => [String(node.props.id), node.props.beforeId] as [string, unknown]);
 }
 
-describe('overlay layers sit below the position puck (#332)', () => {
+// #492 — the anchors encode the slot table: on-device contours with the
+// contours and the slope over the relief, both UNDER the PDF maps (they used
+// to sit above them — "the contour lines in satellite mode go over the PDF
+// maps"); trails above the PDF maps; everything below the puck (#332).
+describe('overlay layers sit below the position puck (#332) in their slots (#492)', () => {
   it.each([
     ['HEAT_LAYERS.light.glow', HEAT_LAYERS.light.glow, TRAILS_ANCHOR],
     ['HEAT_LAYERS.dark.lines', HEAT_LAYERS.dark.lines, TRAILS_ANCHOR],
@@ -149,8 +158,9 @@ describe('overlay layers sit below the position puck (#332)', () => {
     ['FOCUSED_TRAIL_LAYER', FOCUSED_TRAIL_LAYER, TRAILS_ANCHOR],
     ['INSPECT_MARKER_LAYER', INSPECT_MARKER_LAYER, TRAILS_ANCHOR],
     ['LIVE_TRAIL_LAYERS', LIVE_TRAIL_LAYERS, TRAILS_ANCHOR],
-    ['CONTOUR_LAYERS.plain.minor', CONTOUR_LAYERS.plain.minor, TERRAIN_OVERLAY_ANCHOR],
-    ['CONTOUR_LAYERS.satellite.major', CONTOUR_LAYERS.satellite.major, TERRAIN_OVERLAY_ANCHOR],
+    ['CONTOUR_LAYERS.plain.minor', CONTOUR_LAYERS.plain.minor, CONTOURS_ANCHOR],
+    ['CONTOUR_LAYERS.satellite.major', CONTOUR_LAYERS.satellite.major, CONTOURS_ANCHOR],
+    ['CONTOUR_LAYERS.stoneDark.major', CONTOUR_LAYERS.stoneDark.major, CONTOURS_ANCHOR],
     ['SLOPE_LAYER', SLOPE_LAYER, TERRAIN_OVERLAY_ANCHOR],
     ['pdfOverviewLayer', pdfOverviewLayer('doc:0'), PDF_MAPS_ANCHOR],
     ['pdfDetailLayer', pdfDetailLayer('doc:0-detail-abc'), PDF_MAPS_ANCHOR],

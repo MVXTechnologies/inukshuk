@@ -1,7 +1,7 @@
 import { mapColors } from '@ui/theme';
 import { palette } from '@ui/tokens';
 import { Layer } from '@maplibre/maplibre-react-native';
-import { PDF_MAPS_ANCHOR, TERRAIN_OVERLAY_ANCHOR, TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
+import { overlayAnchor } from '@core/map/layerSlots';
 import {
   HILLSHADE_2D_LAYER_ID,
   HILLSHADE_2D_MIN_ZOOM,
@@ -50,7 +50,19 @@ import {
 // happens to still draw — but that is a native fallback, not the contract.
 // mapLayers.test.tsx renders each of these through the real <GeoJSONSource>
 // and asserts every layer got its `source`.
+//
+// HEIGHT COMES FROM THE SLOT TABLE. Every layer here names its anchor
+// through `overlayAnchor` (`@core/map/layerSlots`), the one place the map's
+// draw order is defined for both base maps (#492).
 // ---------------------------------------------------------------------------
+
+/** Where each runtime overlay mounts (see `@core/map/layerSlots`). */
+const HEAT_ANCHOR = overlayAnchor('heat');
+const TRAIL_LINES_ANCHOR = overlayAnchor('trailLines');
+const MARKERS_ANCHOR = overlayAnchor('markers');
+const DEM_CONTOURS_ANCHOR = overlayAnchor('demContours');
+const SLOPE_ANCHOR = overlayAnchor('slope');
+const PDF_MAP_ANCHOR = overlayAnchor('pdfMap');
 
 /**
  * The personal heatmap (#466), one set per basemap tone. Street zooms draw
@@ -68,7 +80,7 @@ function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
       <Layer
         id="tracks-heat-glow"
         key={`glow-${tone}`}
-        beforeId={TRAILS_ANCHOR}
+        beforeId={HEAT_ANCHOR}
         type="heatmap"
         maxzoom={HEAT_CROSSFADE[1]}
         paint={{
@@ -102,7 +114,7 @@ function heatLayers(ramp: Ramp, tone: 'light' | 'dark') {
       <Layer
         id="tracks-heat-lines"
         key={`lines-${tone}`}
-        beforeId={TRAILS_ANCHOR}
+        beforeId={HEAT_ANCHOR}
         type="line"
         minzoom={HEAT_CROSSFADE[0] - 1}
         layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -145,7 +157,7 @@ export const TRACKS_LINES_LAYER = {
   shown: (
     <Layer
       id="tracks-lines-layer"
-      beforeId={TRAILS_ANCHOR}
+      beforeId={TRAIL_LINES_ANCHOR}
       type="line"
       filter={true}
       layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -155,7 +167,7 @@ export const TRACKS_LINES_LAYER = {
   hidden: (
     <Layer
       id="tracks-lines-layer"
-      beforeId={TRAILS_ANCHOR}
+      beforeId={TRAIL_LINES_ANCHOR}
       type="line"
       filter={false}
       layout={{ 'line-cap': 'round', 'line-join': 'round' }}
@@ -167,7 +179,7 @@ export const TRACKS_LINES_LAYER = {
 export const FOCUSED_TRAIL_LAYER = (
   <Layer
     id="focused-trail-line-layer"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={TRAIL_LINES_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
@@ -177,7 +189,7 @@ export const FOCUSED_TRAIL_LAYER = (
 export const INSPECT_MARKER_LAYER = (
   <Layer
     id="inspect-marker-dot"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={MARKERS_ANCHOR}
     type="circle"
     paint={{
       'circle-radius': 7,
@@ -193,7 +205,7 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="casing"
     id="trail-casing"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={TRAIL_LINES_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trailCasing, 'line-width': 9 }}
@@ -201,21 +213,25 @@ export const LIVE_TRAIL_LAYERS = [
   <Layer
     key="line"
     id="trail-line"
-    beforeId={TRAILS_ANCHOR}
+    beforeId={TRAIL_LINES_ANCHOR}
     type="line"
     layout={{ 'line-cap': 'round', 'line-join': 'round' }}
     paint={{ 'line-color': mapColors.trail, 'line-width': 5 }}
   />,
 ];
 
-/** Contour layers per basemap — only the two colour schemes exist. */
+/**
+ * On-device contour layers per basemap (the raster fallback: map maker open,
+ * or the vector flag off; the vector bases draw served contours in the
+ * style). In the contours slot, under the PDF maps (#492).
+ */
 function contourLayers(satellite: boolean) {
   return {
     minor: [
       <Layer
         key="halo"
         id="contours2d-minor-halo"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -226,7 +242,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-minor-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -239,7 +255,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="halo"
         id="contours2d-major-halo"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#000000' : '#FFFFFF',
@@ -250,7 +266,7 @@ function contourLayers(satellite: boolean) {
       <Layer
         key="line"
         id="contours2d-major-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': satellite ? '#FFFFFF' : '#4a3b2a',
@@ -273,7 +289,7 @@ function stoneContourLayers(dark: boolean) {
       <Layer
         key="line"
         id="contours2d-minor-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{
           'line-color': palette.ochre,
@@ -286,7 +302,7 @@ function stoneContourLayers(dark: boolean) {
       <Layer
         key="line"
         id="contours2d-major-line"
-        beforeId={TERRAIN_OVERLAY_ANCHOR}
+        beforeId={DEM_CONTOURS_ANCHOR}
         type="line"
         paint={{ 'line-color': palette.ochre, 'line-opacity': dark ? 0.6 : 0.8, 'line-width': 1.4 }}
       />,
@@ -301,13 +317,16 @@ export const CONTOUR_LAYERS = {
   stoneDark: stoneContourLayers(true),
 } as const;
 
-/** PDF overview raster (#332): below the terrain overlays, trails and the puck. */
+/**
+ * PDF overview raster (#332): above the contours, the relief and the slope
+ * raster on both base maps (#492), below trails and the puck.
+ */
 export function pdfOverviewLayer(id: string) {
   return (
     <Layer
       id={`${id}-layer`}
       type="raster"
-      beforeId={PDF_MAPS_ANCHOR}
+      beforeId={PDF_MAP_ANCHOR}
       paint={{ 'raster-opacity': 0.92 }}
     />
   );
@@ -319,14 +338,15 @@ export function pdfDetailLayer(id: string) {
     <Layer
       id={`${id}-layer`}
       type="raster"
-      beforeId={PDF_MAPS_ANCHOR}
+      beforeId={PDF_MAP_ANCHOR}
       paint={{ 'raster-opacity': 1, 'raster-fade-duration': 0 }}
     />
   );
 }
 
 /**
- * Slope-angle raster (#332): above the PDF maps, below trails and the puck.
+ * Slope-angle raster: over the relief, under the names and the PDF maps
+ * (#492 — a PDF map is the more specific source wherever it covers).
  * Resampled LINEARLY (#461): the image has fewer pixels than the screen, and
  * 'nearest' drew each one as a hard-edged block — the stepped look the owner
  * reported. Linear blends band edges over a pixel, which is all it changes.
@@ -337,12 +357,7 @@ export const SLOPE_RASTER_PAINT = {
 } as const;
 
 export const SLOPE_LAYER = (
-  <Layer
-    id="slope2d-layer"
-    type="raster"
-    beforeId={TERRAIN_OVERLAY_ANCHOR}
-    paint={SLOPE_RASTER_PAINT}
-  />
+  <Layer id="slope2d-layer" type="raster" beforeId={SLOPE_ANCHOR} paint={SLOPE_RASTER_PAINT} />
 );
 
 /**

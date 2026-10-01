@@ -48,9 +48,10 @@
  * - the anchors sit below `downloaded-mask`, so offline-only mode keeps
  *   masking undownloaded ground.
  *
- * Bottom → top the live stack is:
- *   … marine drape … marine WMS seamarks … weather dim … weather A/B …
- *   spot soundings … water outlines … town labels … city labels … mask.
+ * Bottom → top the live stack is (full table in `@core/map/layerSlots`):
+ *   … on-device contours … marine drape … marine WMS seamarks … relief …
+ *   slope … base-map names … weather dim … weather A/B … spot soundings …
+ *   PDF maps … trails … water outlines … town labels … city labels … mask.
  */
 
 /** Invisible marker the client-rendered depth-band drape draws under. */
@@ -61,33 +62,40 @@ export const WEATHER_DRAPE_ANCHOR = 'drape-weather';
 export const MARINE_SOUNDINGS_ANCHOR = 'drape-soundings';
 
 /**
- * The anchors in the order `buildOsmStyle` must emit them, bottom first.
- * Every live drape anchors against exactly one of these.
- */
-/**
- * The three anchors below are ALWAYS in the style (#332). Everything the map
- * adds as a MapView child after first paint — PDF overviews and detail tiles
+ * The anchors below are ALWAYS in the style (#332). Everything the map adds
+ * as a MapView child after first paint — PDF overviews and detail tiles
  * (whose ids change per image), terrain overlays, trail lines — is inserted
  * `beforeId` one of them, so a late layer can never land on top of the
  * position puck and heading cone, which the map appends above them all.
+ *
+ * Which slot of the map's stack each anchor tops — and therefore which
+ * overlay names which anchor — is defined once, for both base maps, in
+ * `@core/map/layerSlots` (#492).
  */
-export const PDF_MAPS_ANCHOR = 'drape-pdf-maps';
+/** On-device contour lines (raster fallback): with the contours, under roads and relief. */
+export const CONTOURS_ANCHOR = 'drape-contours';
+/** The slope-angle raster: above the relief, under the names and the PDF maps. */
 export const TERRAIN_OVERLAY_ANCHOR = 'drape-terrain';
+/** PDF maps: above every terrain overlay, contours included (#492). */
+export const PDF_MAPS_ANCHOR = 'drape-pdf-maps';
 export const TRAILS_ANCHOR = 'drape-trails';
 
+/** Every anchor, bottom → top, as `buildOsmStyle` emits them. */
 export const DRAPE_ANCHORS_BOTTOM_TO_TOP = [
+  CONTOURS_ANCHOR,
   MARINE_DRAPE_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
   PDF_MAPS_ANCHOR,
-  TERRAIN_OVERLAY_ANCHOR,
   TRAILS_ANCHOR,
 ] as const;
 
 /** Anchors present in every style, whatever the options — the puck depends on them. */
 export const ALWAYS_PRESENT_ANCHORS = [
-  PDF_MAPS_ANCHOR,
+  CONTOURS_ANCHOR,
   TERRAIN_OVERLAY_ANCHOR,
+  PDF_MAPS_ANCHOR,
   TRAILS_ANCHOR,
 ] as const;
 

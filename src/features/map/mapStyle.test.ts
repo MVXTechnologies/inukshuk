@@ -1,11 +1,16 @@
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import {
   ALWAYS_PRESENT_ANCHORS,
+  CONTOURS_ANCHOR,
   DRAPE_ANCHORS_BOTTOM_TO_TOP,
   MARINE_DRAPE_ANCHOR,
   MARINE_SOUNDINGS_ANCHOR,
+  PDF_MAPS_ANCHOR,
+  TERRAIN_OVERLAY_ANCHOR,
+  TRAILS_ANCHOR,
   WEATHER_DRAPE_ANCHOR,
 } from '@core/geo/mapLayerStack';
+import { mapDrawOrder, type MapElement, type MapStackInput } from '@core/map/layerSlots';
 import type {
   RasterDEMSourceSpecification,
   RasterSourceSpecification,
@@ -690,22 +695,26 @@ describe('position-puck anchors (#332)', () => {
     ['labels only', { overlayLabels }],
   ];
 
-  it.each(variants)('%s: carries all three, in order, above every drape anchor', (name, opts) => {
-    const ids = layerIds(
-      buildOsmStyle(TILE, false, name === 'satellite' ? 'satellite' : 'map', true, opts),
-    );
-    const at = (id: string) => ids.indexOf(id);
-    for (const a of ALWAYS_PRESENT_ANCHORS) expect(at(a)).toBeGreaterThanOrEqual(0);
-    expect(at(ALWAYS_PRESENT_ANCHORS[0])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[1]));
-    expect(at(ALWAYS_PRESENT_ANCHORS[1])).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[2]));
-    for (const drape of [MARINE_DRAPE_ANCHOR, WEATHER_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
-      if (at(drape) >= 0) expect(at(drape)).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
-    }
-  });
+  it.each(variants)(
+    '%s: carries every anchor in order, drapes under the PDF maps',
+    (name, opts) => {
+      const ids = layerIds(
+        buildOsmStyle(TILE, false, name === 'satellite' ? 'satellite' : 'map', true, opts),
+      );
+      const at = (id: string) => ids.indexOf(id);
+      for (const a of ALWAYS_PRESENT_ANCHORS) expect(at(a)).toBeGreaterThanOrEqual(0);
+      // Whatever subset is present appears in the table's order.
+      const present = DRAPE_ANCHORS_BOTTOM_TO_TOP.filter((a) => at(a) >= 0).map(at);
+      expect(present).toEqual([...present].sort((a, b) => a - b));
+      for (const drape of [MARINE_DRAPE_ANCHOR, WEATHER_DRAPE_ANCHOR, MARINE_SOUNDINGS_ANCHOR]) {
+        if (at(drape) >= 0) expect(at(drape)).toBeLessThan(at(PDF_MAPS_ANCHOR));
+      }
+    },
+  );
 
   it('keeps the reference labels above the overlays (ink beats maps)', () => {
     const ids = layerIds(buildOsmStyle(TILE, false, 'map', true, { overlayLabels }));
-    const lastAnchor = ids.indexOf(ALWAYS_PRESENT_ANCHORS[2]);
+    const lastAnchor = ids.indexOf(TRAILS_ANCHOR);
     const labelIds = ids.filter((id) => /label|overlay-labels|coast/i.test(id));
     expect(labelIds.length).toBeGreaterThan(0);
     for (const id of labelIds) expect(ids.indexOf(id)).toBeGreaterThan(lastAnchor);
@@ -720,9 +729,12 @@ describe('basemapAttribution', () => {
     expect(basemapAttribution(basemap)).toBe(credit);
   });
 
-  it('credits Protomaps on the vector base map only', () => {
+  it('credits Protomaps on the vector base map', () => {
     expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
-    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar');
+  });
+
+  it('credits OpenStreetMap too when our vector overlays ride the imagery (#492)', () => {
+    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar · © OpenStreetMap');
   });
 });
 
@@ -787,7 +799,7 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     const at = (id: string) => ids.indexOf(id);
     expect(at('stone-water')).toBeLessThan(at('hillshade-2d'));
     expect(at('stone-place-town')).toBeGreaterThan(at('hillshade-2d'));
-    expect(at('stone-place-town')).toBeLessThan(at(ALWAYS_PRESENT_ANCHORS[0]));
+    expect(at('stone-place-town')).toBeLessThan(at(PDF_MAPS_ANCHOR));
     // Every vector layer reads the declared source.
     for (const l of s.layers) {
       if ('source' in l && l.id.startsWith('stone-')) expect(l.source).toBe('basemap-vector');
@@ -1100,7 +1112,7 @@ describe('labels on satellite (#484)', () => {
     const firstStone = ids.findIndex((id) => id.startsWith('stone-'));
     const lastStone = ids.map((id) => id.startsWith('stone-')).lastIndexOf(true);
     expect(firstStone).toBeGreaterThan(ids.indexOf('osm'));
-    expect(lastStone).toBeLessThan(ids.indexOf(ALWAYS_PRESENT_ANCHORS[0]));
+    expect(lastStone).toBeLessThan(ids.indexOf(PDF_MAPS_ANCHOR));
   });
 
   it('reads light ink on a dark halo — the imagery palette, whatever the app theme', () => {
@@ -1136,5 +1148,240 @@ describe('labels on satellite (#484)', () => {
     });
     expect(s.glyphs).toContain('openfreemap');
     expect(s.sources['basemap-peaks']).toBeUndefined();
+  });
+});
+
+describe('contours on satellite (#492)', () => {
+  const imageryContours = {
+    tiles: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
+    glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+  };
+  const imageryLabels = {
+    tiles: ['https://vector.example/{z}/{x}/{y}.mvt'],
+    glyphs: imageryContours.glyphs,
+  };
+
+  it('draws the served contour tiles over the imagery, with their heights', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryContours });
+    expect(s.sources['basemap-contours']).toMatchObject({
+      type: 'vector',
+      tiles: [imageryContours.tiles],
+      maxzoom: 14,
+    });
+    // Contours alone need no base-map source, but the heights need glyphs.
+    expect(s.sources['basemap-vector']).toBeUndefined();
+    expect(s.glyphs).toBe(imageryContours.glyphs);
+    const ids = layerIds(s);
+    for (const id of [
+      'stone-contour-minor-casing',
+      'stone-contour-minor',
+      'stone-contour-major-casing',
+      'stone-contour-major',
+      'stone-contour-label',
+    ]) {
+      expect(ids).toContain(id);
+    }
+    // No roads or names without the labels toggle.
+    expect(ids).not.toContain('stone-path');
+    expect(ids).not.toContain('stone-place-town');
+  });
+
+  it('draws each line over its own dark casing, in the imagery palette', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, { imageryContours });
+    const ids = layerIds(s);
+    const paint = (id: string) =>
+      s.layers.find((l) => l.id === id)?.paint as Record<string, unknown> | undefined;
+    for (const kind of ['minor', 'major']) {
+      expect(ids.indexOf(`stone-contour-${kind}-casing`)).toBe(
+        ids.indexOf(`stone-contour-${kind}`) - 1,
+      );
+      expect(paint(`stone-contour-${kind}`)?.['line-color']).toBe('#F2ECE0');
+      expect(paint(`stone-contour-${kind}-casing`)?.['line-color']).toBe('#14181C');
+    }
+  });
+
+  it('puts the contours under the roads and names, and EVERY contour under the PDF maps', () => {
+    const ids = layerIds(
+      buildOsmStyle(TILE, false, 'satellite', true, { imageryContours, imageryLabels }),
+    );
+    const at = (id: string) => ids.indexOf(id);
+    expect(at('stone-contour-major')).toBeGreaterThan(at('osm'));
+    expect(at('stone-contour-major')).toBeLessThan(at('stone-road-minor'));
+    expect(at('stone-path')).toBeLessThan(at('stone-place-town'));
+    for (const id of ids.filter((x) => x.includes('contour'))) {
+      expect([id, at(id) < at(PDF_MAPS_ANCHOR)]).toEqual([id, true]);
+    }
+  });
+
+  it('is ignored on the Map base (its contours are part of the stone body)', () => {
+    const s = buildOsmStyle(TILE, false, 'map', true, { imageryContours });
+    expect(s.sources['basemap-contours']).toBeUndefined();
+    expect(layerIds(s).some((id) => id.startsWith('stone-contour'))).toBe(false);
+  });
+
+  it('stays under weather — like the map body', () => {
+    const weather = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryContours,
+      weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 },
+    });
+    const ids = layerIds(weather);
+    expect(ids.indexOf('stone-contour-major')).toBeLessThan(ids.indexOf('weather-dim'));
+  });
+
+  it('falls back to Noto from OpenFreeMap without our glyph host', () => {
+    const s = buildOsmStyle(TILE, false, 'satellite', true, {
+      imageryContours: { tiles: imageryContours.tiles },
+    });
+    expect(s.glyphs).toContain('openfreemap');
+    const label = s.layers.find((l) => l.id === 'stone-contour-label');
+    expect((label?.layout as Record<string, unknown>)['text-font']).toEqual(['Noto Sans Regular']);
+  });
+});
+
+// #492 — ONE stack for both base maps. Builds the style the main map would
+// for every combination of toggles, on both base maps, in both themes, and
+// holds it to `mapDrawOrder` (the pure statement of the order in
+// `@core/map/layerSlots`): every element drawn appears in exactly that order.
+describe('one layer order on both base maps (#492)', () => {
+  const VECTOR = ['https://vector.example/{z}/{x}/{y}.pbf'];
+  const CONTOURS = 'https://contours.example/{z}/{x}/{y}.mvt';
+  const GLYPHS = 'https://glyphs.example/{fontstack}/{range}.pbf';
+
+  function withFlag(): typeof buildOsmStyle {
+    let build: typeof buildOsmStyle = buildOsmStyle;
+    jest.isolateModules(() => {
+      jest.doMock('@core/features/flags', () => ({
+        ...jest.requireActual<object>('@core/features/flags'),
+        VECTOR_BASEMAP_ENABLED: true,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      build = (require('./mapStyle') as typeof import('./mapStyle')).buildOsmStyle;
+    });
+    return build;
+  }
+  const build = withFlag();
+  const mask = {
+    data: buildDownloadedMask([{ minLng: -71, minLat: 46, maxLng: -70, maxLat: 47 }]),
+    color: '#FFFFFF',
+  };
+
+  /** The options MapScreen passes for these toggles. */
+  function styleFor(i: MapStackInput) {
+    const satellite = i.basemap === 'satellite';
+    return build(TILE, false, i.basemap, i.shadedRelief, {
+      tiltRelief: i.tiltRelief ? 'natural' : 'off',
+      ...(!satellite
+        ? {
+            vectorBasemap: {
+              tiles: VECTOR,
+              dark: i.dark,
+              glyphs: GLYPHS,
+              ...(i.contours ? { contours: CONTOURS } : {}),
+            },
+          }
+        : {}),
+      ...(satellite && i.satelliteLabels
+        ? { imageryLabels: { tiles: VECTOR, glyphs: GLYPHS } }
+        : {}),
+      ...(satellite && i.contours ? { imageryContours: { tiles: CONTOURS, glyphs: GLYPHS } } : {}),
+      ...(i.weather ? { weatherMuted: { dimColor: '#101418', dimOpacity: 0.45 } } : {}),
+      ...(i.marine ? { marineChart: { wmsFallback: false } } : {}),
+      ...(i.weather || i.marine
+        ? { overlayLabels: { dark: i.dark, tiles: ['https://ofm.example/{z}/{x}/{y}.pbf'] } }
+        : {}),
+      ...(i.offlineMask ? { downloadedMask: mask } : {}),
+    });
+  }
+
+  /** The layer that stands for an element in the style (anchors for runtime ones). */
+  function representative(e: MapElement, i: MapStackInput): string {
+    switch (e) {
+      case 'ground':
+        return i.basemap === 'map' ? 'stone-background' : 'osm';
+      case 'contours':
+        return 'stone-contour-major';
+      case 'linework':
+        return 'stone-path';
+      case 'chart':
+        return 'marine-land-dim';
+      case 'relief':
+        return HILLSHADE_2D_LAYER_ID;
+      case 'tiltRelief':
+        return TILT_RELIEF_LAYER_ID;
+      case 'slope':
+        return TERRAIN_OVERLAY_ANCHOR;
+      case 'labels':
+        return 'stone-place-town';
+      case 'weather':
+        return WEATHER_DRAPE_ANCHOR;
+      case 'pdf':
+        return PDF_MAPS_ANCHOR;
+      case 'heat':
+      case 'trails':
+        return TRAILS_ANCHOR;
+      case 'reference':
+        return 'overlay-town-labels';
+      case 'mask':
+        return 'downloaded-mask';
+    }
+  }
+
+  const inputs: MapStackInput[] = [];
+  for (const basemap of ['map', 'satellite'] as const) {
+    for (let bits = 0; bits < 1 << 8; bits++) {
+      const b = (n: number) => (bits & (1 << n)) !== 0;
+      inputs.push({
+        basemap,
+        vector: true,
+        dark: b(0),
+        shadedRelief: b(1),
+        tiltRelief: b(2),
+        contours: b(3),
+        satelliteLabels: b(4),
+        weather: b(5),
+        marine: b(6),
+        offlineMask: b(7),
+        // Runtime overlays: their anchors are always in the style.
+        slope: true,
+        pdf: true,
+        heat: true,
+        trails: true,
+      });
+    }
+  }
+  const built = inputs.map((i) => ({ i, ids: layerIds(styleFor(i)), order: mapDrawOrder(i) }));
+
+  it(`draws every element in mapDrawOrder's order (${inputs.length} combinations)`, () => {
+    for (const { i, ids, order } of built) {
+      const at = order.map((e) => [e, ids.indexOf(representative(e, i))] as const);
+      for (const [e, n] of at) expect([i, e, n >= 0]).toEqual([i, e, true]);
+      for (let k = 1; k < at.length; k++) {
+        const prev = at[k - 1];
+        const cur = at[k];
+        if (!prev || !cur || representative(prev[0], i) === representative(cur[0], i)) continue;
+        expect([i, prev[0], cur[0], cur[1] > prev[1]]).toEqual([i, prev[0], cur[0], true]);
+      }
+    }
+  });
+
+  it('draws nothing mapDrawOrder leaves out (relief on satellite, names under a drape)', () => {
+    for (const { i, ids, order } of built) {
+      for (const e of ['contours', 'linework', 'relief', 'tiltRelief', 'labels'] as const) {
+        if (!order.includes(e)) {
+          expect([i, e, ids.includes(representative(e, i))]).toEqual([i, e, false]);
+        }
+      }
+    }
+  });
+
+  it('keeps every contour, relief and slope layer under the PDF maps, always', () => {
+    const underPdf = (id: string) =>
+      /contour|hillshade/.test(id) || id === TERRAIN_OVERLAY_ANCHOR || id === CONTOURS_ANCHOR;
+    for (const { i, ids } of built) {
+      const pdf = ids.indexOf(PDF_MAPS_ANCHOR);
+      for (const id of ids.filter(underPdf)) {
+        expect([i.basemap, id, ids.indexOf(id) < pdf]).toEqual([i.basemap, id, true]);
+      }
+    }
   });
 });

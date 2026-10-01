@@ -84,7 +84,8 @@ import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
 import { AttributionChip } from './components/AttributionChip';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
-import { vectorBasemapOption } from '@data/basemapTiles';
+import { imageryContoursOption, vectorBasemapOption } from '@data/basemapTiles';
+import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
 import { useDisplayCondition } from '@ui/displayCondition';
@@ -155,6 +156,9 @@ import { WeatherModelSheet } from './weather/WeatherModelSheet';
 import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+
+/** The heat-tap ring mounts with the other markers (`@core/map/layerSlots`). */
+const MARKERS_ANCHOR = overlayAnchor('markers');
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
 // re-serializes the entire track so far and pushes it across the bridge each
@@ -574,6 +578,12 @@ export function MapScreen() {
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
   const imageryLabels =
     VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
+  // Contours on satellite (#492): the Map base's served contour tiles, drawn
+  // in the style under the roads, names and PDF maps — exactly where the map
+  // draws them — instead of the on-device contours, which mounted ABOVE the
+  // PDF maps. Independent of the labels toggle.
+  const imageryContours =
+    VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && terrainContours && editorStyle === null;
   const overlayTiles = useOverlayLabelTiles(referenceOverlay && !offlineOnly);
   // Tab screens stay mounted, so background work (the terrain pipeline, the
   // marine chart fetch) needs a focus gate — declared here because the style
@@ -634,6 +644,7 @@ export function MapScreen() {
             },
           }
         : {}),
+      ...(imageryContours ? { imageryContours: imageryContoursOption() } : {}),
       hillshadeStrength,
       tiltRelief,
       ...(overlayTiles !== null && referenceOverlay
@@ -738,6 +749,7 @@ export function MapScreen() {
     referenceOverlay,
     vectorBasemap,
     imageryLabels,
+    imageryContours,
   ]);
 
   // The tilted-map relief pass (#480): the style carries it hidden whenever
@@ -927,7 +939,7 @@ export function MapScreen() {
     // mapLoaded: the pipeline opens with getViewState — see the state's
     // declaration comment (native crash if called before the map loads).
     active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
-    contoursFromTiles: vectorBasemap,
+    contoursFromTiles: vectorBasemap || imageryContours,
   });
 
   // Wind particle overlay (weather M3): Windy-style streaks over the wind
@@ -2040,11 +2052,11 @@ export function MapScreen() {
               </Fragment>
             ))}
 
-          {/* Terrain overlays sit above the (near-opaque) PDF maps — they're
-              explicit user toggles — and below trails/markers. The slope
-              raster keeps NEAREST resampling so band edges stay hard when the
-              256-cell grid is stretched over the viewport (the CalTopo look);
-              opacity matches the 3D shader's SLOPE_OPACITY. */}
+          {/* Terrain overlays sit UNDER the PDF maps on both base maps
+              (#492): the slope raster over the relief and under the names,
+              on-device contours (the raster fallback) with the contours.
+              Their heights come from `@core/map/layerSlots`, not from this
+              mount order. Opacity matches the 3D shader's SLOPE_OPACITY. */}
           {terrainOverlays2d.slope && (
             <ImageSource
               id="slope2d"
@@ -2054,12 +2066,14 @@ export function MapScreen() {
               {SLOPE_LAYER}
             </ImageSource>
           )}
-          {/* Contours must contrast with the ground: white over satellite
-              imagery (mostly dark), the warm brown over the light map/relief
-              basemaps — each with a thin opposite-shade halo so lines stay
-              readable across mixed terrain (line layers can't sample the
-              raster beneath, so this is per-basemap, not per-pixel; the 3D
-              shader does the true per-pixel version). */}
+          {/* On-device contours (raster fallback only — both vector bases
+              draw the served ones in the style). They must contrast with the
+              ground: white over satellite imagery (mostly dark), the warm
+              brown over the light map/relief basemaps — each with a thin
+              opposite-shade halo so lines stay readable across mixed terrain
+              (line layers can't sample the raster beneath, so this is
+              per-basemap, not per-pixel; the 3D shader does the true
+              per-pixel version). */}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
               {contourLayerSet.minor}
@@ -2144,6 +2158,7 @@ export function MapScreen() {
             >
               <Layer
                 id="heat-tap-marker-ring"
+                beforeId={MARKERS_ANCHOR}
                 type="circle"
                 paint={{
                   'circle-radius': 9,
@@ -2508,7 +2523,9 @@ export function MapScreen() {
             </View>
             {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-              {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
+              {!terrain3d && (
+                <AttributionChip basemap={basemap} vector={stoneBase || imageryLabels} />
+              )}
             </View>
           </View>
         )}
