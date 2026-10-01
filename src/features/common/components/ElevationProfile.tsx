@@ -63,6 +63,13 @@ interface Props {
   markers?: readonly { distanceM: number; label: string }[];
   /** A persistent dashed cursor, e.g. where a new note will be anchored. */
   selectedDistanceM?: number | null;
+  /**
+   * 'dashed' (default): the red "note goes here" mark. 'solid': the trail
+   * view's scrubber cursor (#511) — an ink line with a dot riding the curve.
+   */
+  cursorStyle?: 'dashed' | 'solid';
+  /** Hide the built-in readout line (the trail view shows its own, with time). */
+  showReadout?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +155,8 @@ export function ElevationProfile({
   onScrub,
   markers = [],
   selectedDistanceM = null,
+  cursorStyle = 'dashed',
+  showReadout = true,
 }: Props) {
   const theme = useTheme();
   const profile = useMemo(() => buildElevationProfile(points), [points]);
@@ -241,6 +250,19 @@ export function ElevationProfile({
     pts.length >= 2
       ? `${linePath} L${pts[pts.length - 1]!.x.toFixed(1)} ${CHART_HEIGHT} L${pts[0]!.x.toFixed(1)} ${CHART_HEIGHT} Z`
       : '';
+
+  /** Plot y of the elevation curve at a distance (lerp between samples). */
+  const yAtDistance = (d: number): number => {
+    const yOf = (e: number) =>
+      CHART_HEIGHT - ((e - minElevationM) / range) * (CHART_HEIGHT - 14) - 6;
+    if (samples.length === 0) return CHART_HEIGHT;
+    const k = samples.findIndex((smp) => smp.distanceM >= d);
+    if (k <= 0) return yOf(samples[k === 0 ? 0 : samples.length - 1]!.elevationM);
+    const a = samples[k - 1]!;
+    const b = samples[k]!;
+    const t = b.distanceM > a.distanceM ? (d - a.distanceM) / (b.distanceM - a.distanceM) : 0;
+    return yOf(a.elevationM + (b.elevationM - a.elevationM) * t);
+  };
 
   /** Grade (%) of the sample segment ending at i, clamped for colouring. */
   const gradeAt = (i: number): number => {
@@ -412,34 +434,36 @@ export function ElevationProfile({
         </View>
       </View>
 
-      <View style={styles.readout}>
-        {active ? (
-          <Text variant="bodySmall">
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurface }}>
-              {formatElevation(active.elevationM)} @ {formatDistance(active.distanceM)}
+      {showReadout && (
+        <View style={styles.readout}>
+          {active ? (
+            <Text variant="bodySmall">
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurface }}>
+                {formatElevation(active.elevationM)} @ {formatDistance(active.distanceM)}
+              </Text>
+              {drawElev && grade !== null && (
+                <Text variant="bodySmall" style={{ color: gradeColor(grade) }}>
+                  {`  ·  ${formatGrade(grade)}`}
+                </Text>
+              )}
+              {drawPace && activeSpeed !== undefined && activeSpeed > 0 && (
+                <Text variant="bodySmall" style={{ color: PACE_COLOR }}>
+                  {`  ·  ${formatPace(activeSpeed)}`}
+                </Text>
+              )}
+              {drawHr && activeHr !== undefined && (
+                <Text variant="bodySmall" style={{ color: HR_COLOR }}>
+                  {`  ·  ${Math.round(activeHr)} bpm`}
+                </Text>
+              )}
             </Text>
-            {drawElev && grade !== null && (
-              <Text variant="bodySmall" style={{ color: gradeColor(grade) }}>
-                {`  ·  ${formatGrade(grade)}`}
-              </Text>
-            )}
-            {drawPace && activeSpeed !== undefined && activeSpeed > 0 && (
-              <Text variant="bodySmall" style={{ color: PACE_COLOR }}>
-                {`  ·  ${formatPace(activeSpeed)}`}
-              </Text>
-            )}
-            {drawHr && activeHr !== undefined && (
-              <Text variant="bodySmall" style={{ color: HR_COLOR }}>
-                {`  ·  ${Math.round(activeHr)} bpm`}
-              </Text>
-            )}
-          </Text>
-        ) : (
-          <Text variant="bodySmall" style={{ color: dim }}>
-            Touch the graph to read elevation
-          </Text>
-        )}
-      </View>
+          ) : (
+            <Text variant="bodySmall" style={{ color: dim }}>
+              Touch the graph to read elevation
+            </Text>
+          )}
+        </View>
+      )}
 
       <View
         style={[styles.chart, { backgroundColor: theme.colors.surfaceVariant }]}
@@ -614,8 +638,9 @@ export function ElevationProfile({
               );
             })}
 
-            {/* Persistent cursor: where a new note will be anchored. */}
-            {selectedDistanceM != null && (
+            {/* Persistent cursor: where a new note will be anchored (dashed),
+                or the trail view's scrubber position (solid, with a dot). */}
+            {selectedDistanceM != null && cursorStyle === 'dashed' && (
               <Line
                 x1={xFor(selectedDistanceM)}
                 y1={0}
@@ -625,6 +650,29 @@ export function ElevationProfile({
                 strokeWidth={1.5}
                 strokeDasharray="3,3"
               />
+            )}
+            {selectedDistanceM != null && cursorStyle === 'solid' && (
+              <>
+                <Line
+                  x1={xFor(selectedDistanceM)}
+                  y1={0}
+                  x2={xFor(selectedDistanceM)}
+                  y2={CHART_HEIGHT}
+                  stroke={theme.colors.onSurface}
+                  strokeWidth={2}
+                  testID="profile-cursor"
+                />
+                {drawElev && (
+                  <Circle
+                    cx={xFor(selectedDistanceM)}
+                    cy={yAtDistance(selectedDistanceM)}
+                    r={5.5}
+                    fill={theme.colors.onSurface}
+                    stroke={theme.colors.surface}
+                    strokeWidth={2}
+                  />
+                )}
+              </>
             )}
 
             {/* Persistent numbered note pins along the trail. */}
