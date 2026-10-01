@@ -4,7 +4,7 @@ import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
 import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
 import {
   PDF_WHITE_KEY_RUNTIME_SOURCE,
-  WHITE_KEY_STRENGTH,
+  whiteKeyStrength,
   type WhiteKeyLevel,
 } from '@core/geo/pdfWhiteKey';
 import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
@@ -1055,7 +1055,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
     }
     const idLiteral = JSON.stringify(id);
-    const lookLiteral = JSON.stringify({ whiteKey: WHITE_KEY_STRENGTH[args.whiteKey] });
+    const lookLiteral = JSON.stringify({ whiteKey: whiteKeyStrength(args.whiteKey) });
     const live = originRef.current;
     if (args.source.url !== undefined && live !== null) {
       let url = args.source.url;
@@ -1452,14 +1452,14 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         idCounterRef.current += 1;
         const id = `req-${idCounterRef.current}`;
-        const whiteKey = args.whiteKey ?? 'off';
+        const whiteKey = args.whiteKey ?? 0;
         const normalized: Required<RasterizeArgs> = {
           source,
           pageIndex: args.pageIndex,
           targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
           crop: args.crop ?? null,
           // Native renderers cannot key white; a keyed render is pdf.js's.
-          nativePage: nativePdfAvailable() && whiteKey === 'off' ? (args.nativePage ?? null) : null,
+          nativePage: nativePdfAvailable() && whiteKey === 0 ? (args.nativePage ?? null) : null,
           whiteKey,
           priority: args.priority ?? 'interactive',
         };

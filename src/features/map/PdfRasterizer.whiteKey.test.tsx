@@ -197,9 +197,9 @@ it('keys the painted paper out in one pass before encoding, keeping ink and colo
   await view.unmount();
 });
 
-it('leaves "some" paper as a partial veil', async () => {
+it('leaves 50 % paper as a partial veil', async () => {
   const { canvas, render, view } = await loadPage();
-  await render('k2', '{"whiteKey":0.55}');
+  await render('k2', '{"whiteKey":0.5}');
   const alpha = pixel(canvas.writes[0], 5)?.[3] ?? -1;
   expect(alpha).toBeGreaterThan(0);
   expect(alpha).toBeLessThan(255);
@@ -241,10 +241,24 @@ it('sends the level as a strength and drops the native page for a keyed request 
   };
   const source = { url: 'http://127.0.0.1:8080/maps/m.pdf' };
   const pending = view.result
-    .current({ source, pageIndex: 0, whiteKey: 'full', nativePage })
+    .current({ source, pageIndex: 0, whiteKey: 4, nativePage })
     .catch(() => undefined);
   const injected = String(mockInject.mock.calls.at(-1)?.[0] ?? '');
   expect(injected).toContain(', null, {"whiteKey":1}); true;');
+  await view.unmount();
+  await pending;
+});
+
+it.each([
+  [1, 0.25],
+  [2, 0.5],
+  [3, 0.75],
+] as const)('sends slider stop %d as strength %d', async (whiteKey, strength) => {
+  const { view } = await loadPage();
+  const source = { url: 'http://127.0.0.1:8080/maps/m.pdf' };
+  const pending = view.result.current({ source, pageIndex: 0, whiteKey }).catch(() => undefined);
+  const injected = String(mockInject.mock.calls.at(-1)?.[0] ?? '');
+  expect(injected).toContain(`{"whiteKey":${strength}}); true;`);
   await view.unmount();
   await pending;
 });

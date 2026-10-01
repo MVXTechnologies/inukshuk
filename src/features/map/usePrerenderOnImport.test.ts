@@ -3,6 +3,7 @@
 // must reach the rasterizer at background priority and end up in the file the
 // overlay hook reads — without a toast, and without ever running while the
 // app is in the background.
+import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { documentRevision, rasterFileName } from '@core/library/overlayRaster';
 import { renderStatusLine } from '@core/library/overlayStatus';
 import { PRERENDER_MAX_ATTEMPTS } from '@core/library/prerenderQueue';
@@ -140,19 +141,19 @@ describe('usePrerenderOnImport', () => {
   });
 
   it('pre-renders at the see-through level the map will ask for', async () => {
-    useSettingsStore.setState({ pdfWhiteKey: 'some' });
+    useSettingsStore.setState({ pdfWhiteKey: 2 });
     const view = await renderHook(usePrerenderOnImport);
     const plain = sheet('plain');
-    const own = { ...sheet('own'), whiteKey: 'full' as const };
+    const own = { ...sheet('own'), whiteKey: 4 as const };
     await act(async () => {
       useLibraryStore.getState().addMaps([plain, own]);
     });
     await settle();
-    expect(mockRasterize.mock.calls.map(([args]) => args.whiteKey)).toEqual(['some', 'full']);
-    const keyed = (map: MapDocument, level: 'some' | 'full') =>
+    expect(mockRasterize.mock.calls.map(([args]) => args.whiteKey)).toEqual([2, 4]);
+    const keyed = (map: MapDocument, level: WhiteKeyLevel) =>
       `file://cache/${rasterFileName(map.id, 0, documentRevision(map), level)}.png`;
-    expect(mockFiles.has(keyed(plain, 'some'))).toBe(true);
-    expect(mockFiles.has(keyed(own, 'full'))).toBe(true);
+    expect(mockFiles.has(keyed(plain, 2))).toBe(true);
+    expect(mockFiles.has(keyed(own, 4))).toBe(true);
     expect(mockFiles.has(fileOf(plain, 0))).toBe(false);
     useSettingsStore.getState().reset();
     await view.unmount();

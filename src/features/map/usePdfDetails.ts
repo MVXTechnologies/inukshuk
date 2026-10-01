@@ -140,7 +140,7 @@ export function usePdfDetails(
     }
     for (const { o, map, pageIndex, geo, plans } of pages) {
       const baseKey = overviewKey(o);
-      const whiteKey = o.whiteKey ?? 'off';
+      const whiteKey = o.whiteKey ?? 0;
       for (const plan of plans) {
         targets.push({
           // The level is in the key: a tile drawn at another level is never

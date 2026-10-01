@@ -61,7 +61,8 @@ four stages:
    (#477). "See-through white" (#489, `core/geo/pdfWhiteKey`) is one more
    pass in the same page: after pdf.js paints, near-white, near-neutral
    pixels are keyed to transparency (colour-to-alpha, so text edges get no
-   halo) at the level chosen globally in the Overlays menu or per map; the
+   halo) at a 5-stop strength (Off, 25–100 %) chosen globally on the Overlays
+   menu slider or per map; the
    level is part of the raster's cache name, and a keyed render never goes
    to a native renderer. If the server cannot
    start, PDFs under 16 MB fall back to the old base64-over-the-bridge path;

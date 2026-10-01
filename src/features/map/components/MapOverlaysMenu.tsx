@@ -1,7 +1,7 @@
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
-import { WHITE_KEY_LABEL, WHITE_KEY_LEVELS } from '@core/geo/pdfWhiteKey';
+import { WHITE_KEY_LEVELS, nearestWhiteKeyLevel, whiteKeyLabel } from '@core/geo/pdfWhiteKey';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import {
   PEAK_DENSITIES,
@@ -27,6 +27,7 @@ import {
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { MapButton } from './MapButton';
 import {
+  ControlRow,
   LevelsRow,
   MapSheet,
   NavRow,
@@ -38,6 +39,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { RangeSlider } from './RangeSlider';
+import { StepSlider } from './StepSlider';
 
 /**
  * THE overlays menu (#484 redesign): everything drawn on top of the base map,
@@ -47,7 +49,8 @@ import { RangeSlider } from './RangeSlider';
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
  * - On the map — Content (folder picker), PDF maps, See-through white
- *   (Off / Some / Full), Personal heatmap, Labels on satellite.
+ *   (a 5-stop slider: Off, 25 / 50 / 75 / 100 %), Personal heatmap, Labels
+ *   on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
  *   Peaks, Elevation tint (3D only).
  * - Live layers — Weather (drills into its list) and Marine, both parked
@@ -66,9 +69,10 @@ import { RangeSlider } from './RangeSlider';
  * 'Weather: <layer>'/'Weather (coming soon)', 'Marine'/'Marine (coming
  * soon)'; the weather list's back row stays 'Back to overlays'.
  *
- * The rows scroll inside a capped height. The slope RangeSlider claims its
- * touches at touch-down and refuses termination, so a drag on a thumb beats
- * the ScrollView; the level pickers are taps.
+ * The rows scroll inside a capped height. The slope RangeSlider and the
+ * see-through StepSlider ('See-through white', one adjustable element) claim
+ * their touches at touch-down and refuse termination, so a drag beats the
+ * ScrollView; the level pickers are taps.
  */
 
 /** Per-layer icon (MaterialCommunityIcons). UI-only mapping — the catalog in
@@ -90,13 +94,8 @@ const BELOW_INSET = 52 + 16;
 
 const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
-// 'Off' is also a 3D relief level: these segments carry the row's name so
-// tests, screen readers and Maestro can tell the two apart.
-const WHITE_KEY = WHITE_KEY_LEVELS.map((l) => ({
-  value: l,
-  label: WHITE_KEY_LABEL[l],
-  accessibilityLabel: `See-through white ${WHITE_KEY_LABEL[l]}`,
-}));
+/** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
+const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
 const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
 const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
   value: m,
@@ -191,15 +190,24 @@ function OverlayRows({
       {/* How see-through the maps' white paper is, so the base map shows
           through open land and margins. The default for every PDF map; a
           map can override it from its Library ⋮ menu. */}
-      <LevelsRow
+      <ControlRow
         icon="circle-opacity"
         label="See-through white"
         hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
-        levels={WHITE_KEY}
-        selected={pdfWhiteKey}
-        onSelect={(level) => set('pdfWhiteKey', level)}
         disabled={!showPdfMaps}
-      />
+      >
+        <StepSlider
+          labels={WHITE_KEY_STOPS}
+          value={pdfWhiteKey}
+          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
+          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+          disabled={!showPdfMaps}
+          accessibilityLabel="See-through white"
+          accentColor={accent}
+          trackColor={tokens.surfaceVariant}
+          tickColor={tokens.inkMuted}
+        />
+      </ControlRow>
       <SwitchRow
         icon="fire"
         label="Personal heatmap"

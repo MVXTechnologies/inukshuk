@@ -252,40 +252,53 @@ describe('Terrain levels', () => {
 });
 
 describe('See-through white (PDF maps)', () => {
-  it('sits under PDF maps, Off by default', async () => {
+  const slider = () => screen.getByLabelText('See-through white');
+  const adjust = (actionName: 'increment' | 'decrement') =>
+    act(async () => {
+      fireEvent(slider(), 'accessibilityAction', { nativeEvent: { actionName } });
+    });
+
+  it('sits under PDF maps as a 5-stop slider, Off by default', async () => {
     await renderMenu();
     expect(screen.getByText('See-through white')).toBeTruthy();
-    expect(selected('See-through white Off')).toBe(true);
-    expect(selected('See-through white Full')).toBe(false);
+    expect(slider().props.accessibilityRole).toBe('adjustable');
+    expect(slider().props.accessibilityValue).toEqual({ min: 0, max: 4, now: 0, text: 'Off' });
   });
 
-  it.each([
-    ['Some', 'some'],
-    ['Full', 'full'],
-  ] as const)('%s sets the global level', async (label, value) => {
+  it('steps through 25 / 50 / 75 / 100 %, each setting the global level', async () => {
     await renderMenu();
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText(`See-through white ${label}`));
-    });
-    expect(useSettingsStore.getState().pdfWhiteKey).toBe(value);
-    expect(selected(`See-through white ${label}`)).toBe(true);
+    const seen: string[] = [];
+    for (const expected of [1, 2, 3, 4]) {
+      await adjust('increment');
+      expect(useSettingsStore.getState().pdfWhiteKey).toBe(expected);
+      seen.push(String(slider().props.accessibilityValue.text));
+    }
+    expect(seen).toEqual(['25 %', '50 %', '75 %', '100 %']);
+    expect(screen.getByText('100 %')).toBeTruthy();
+    // Clamped at Full.
+    await adjust('increment');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(4);
   });
 
-  it('keeps its Off apart from the 3D relief Off', async () => {
-    useSettingsStore.setState({ pdfWhiteKey: 'full', tiltRelief: 'natural' });
+  it('steps back down to Off and leaves the 3D relief Off alone', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 1, tiltRelief: 'natural' });
     await renderMenu();
-    fireEvent.press(screen.getByLabelText('See-through white Off'));
-    expect(useSettingsStore.getState().pdfWhiteKey).toBe('off');
+    expect(slider().props.accessibilityValue).toMatchObject({ now: 1, text: '25 %' });
+    await adjust('decrement');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(0);
+    expect(slider().props.accessibilityValue).toMatchObject({ now: 0, text: 'Off' });
     expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+    // The 3D relief segment owns the plain 'Off' name.
+    expect(screen.getByLabelText('Off')).toBeTruthy();
   });
 
   it('rests while PDF maps are hidden', async () => {
-    useSettingsStore.setState({ showPdfOverlay: false });
+    useSettingsStore.setState({ showPdfOverlay: false, pdfWhiteKey: 2 });
     await renderMenu();
     expect(screen.getByText('Needs PDF maps')).toBeTruthy();
-    expect(screen.getByLabelText('See-through white Some').props.accessibilityState).toMatchObject({
-      disabled: true,
-    });
+    expect(slider().props.accessibilityState).toMatchObject({ disabled: true });
+    await adjust('increment');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(2);
   });
 });
 
