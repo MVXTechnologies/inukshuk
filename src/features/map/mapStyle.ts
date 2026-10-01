@@ -72,6 +72,16 @@ export const MAP_PACK_FORMAT: PackFormat = VECTOR_BASEMAP_ENABLED ? 'vector' : '
 const PROTOMAPS_ATTRIBUTION = '© OpenStreetMap contributors · Protomaps';
 /** Source id of the served contour tiles on the vector base map. */
 export const VECTOR_CONTOURS_SOURCE = 'basemap-contours';
+/**
+ * Zoom range of the served contour tiles (#509). From z8, where the first
+ * contour layer (the major lines) starts — so offline packs no longer store
+ * z0–7 contour tiles nothing draws. Up to z13: the DEM behind them (EU-DEM /
+ * CDEM, ~20–30 m) holds no more detail at z14, so MapLibre overzooms the z13
+ * lines instead of loading 4× the tiles (and packs store a quarter as many).
+ * The Worker still answers z14 for older app versions.
+ */
+export const CONTOUR_SOURCE_MINZOOM = 8;
+export const CONTOUR_SOURCE_MAXZOOM = 13;
 /** Source id of our worldwide named-summits tiles on the vector base map. */
 export const VECTOR_PEAKS_SOURCE = 'basemap-peaks';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */
@@ -625,9 +635,9 @@ export function buildOsmStyle(
       style.sources[VECTOR_CONTOURS_SOURCE] = {
         type: 'vector',
         tiles: [options.vectorBasemap.contours],
-        minzoom: 0,
-        // Generated to z14; the lines overzoom cleanly past it.
-        maxzoom: 14,
+        minzoom: CONTOUR_SOURCE_MINZOOM,
+        // The lines overzoom cleanly past it.
+        maxzoom: CONTOUR_SOURCE_MAXZOOM,
         attribution: 'Elevation: Mapzen Terrain Tiles',
       };
     }
