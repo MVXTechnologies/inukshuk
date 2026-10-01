@@ -24,13 +24,6 @@ updates:
       # pipeline), not a dependency update. See PR #72's closing note.
       - dependency-name: 'pdfjs-dist'
         update-types: ['version-update:semver-major']
-      # three must stay on r162. expo-gl provides a WebGL 1 context, and three
-      # r163+ dropped WebGL 1 support, so the 3D terrain view (expo-three
-      # Renderer over GLView) breaks on newer three. See #39 (the pin) and #62
-      # (the auto-merged 0.184 bump that silently reverted it). Allow 0.162.x
-      # patches only; block anything that crosses r163.
-      - dependency-name: 'three'
-        versions: ['>=0.163.0']
       # Everything below is version-managed by the Expo SDK: CI's
       # `npx expo install --check` gate rejects any independent bump (see the
       # never-mergeable PRs #68/#69), so don't propose them. They move together

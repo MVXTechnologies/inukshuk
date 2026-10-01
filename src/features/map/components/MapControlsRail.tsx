@@ -18,8 +18,6 @@ interface Props {
   /** Shown only when at least one PDF overlay is active. */
   showFitControl: boolean;
   onFit: () => void;
-  /** Still threaded through: gates the hypso row in the overlays menu. */
-  terrain3d: boolean;
   pdfOverlayCount: number;
   trackOverlayCount: number;
   /**
@@ -53,8 +51,7 @@ export function MapControlsRail(props: Props) {
   // here so an outside tap on the backdrop below closes whichever is up.
   const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
 
-  const { top, following, onLocate, onStopFollowing, showFitControl, onFit, terrain3d, actions } =
-    props;
+  const { top, following, onLocate, onStopFollowing, showFitControl, onFit, actions } = props;
 
   // Compact map chrome: everything folded behind one chevron until asked.
   if (compact && !compactOpen) {
@@ -95,10 +92,6 @@ export function MapControlsRail(props: Props) {
         {showFitControl && (
           <MapButton icon="fit-to-page-outline" onPress={onFit} accessibilityLabel="Fit map" />
         )}
-        {/* 3D relief on the MAIN map: rolled back 2026-07-24 (user call — "not
-            working so well ... until we figure it out"). The focused trail
-            viewer keeps its 3D. To restore, re-add a 3D button here —
-            everything behind terrain3d still works. */}
         <MapButtonGroup>
           <MapButton
             icon="layers-outline"
@@ -116,7 +109,6 @@ export function MapControlsRail(props: Props) {
         {openMenu === 'basemap' && <MapTypePanel onClose={() => setOpenMenu(null)} />}
         <MapOverlaysMenu
           hideTrigger
-          showHypso={terrain3d}
           open={openMenu === 'overlays'}
           onToggle={(o) => setOpenMenu(o ? 'overlays' : null)}
         />

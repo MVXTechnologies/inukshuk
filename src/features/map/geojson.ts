@@ -31,12 +31,6 @@ export function toLineFeature(
   };
 }
 
-/** The polylines of a trail feature, one per segment. */
-export function lineStringsOf(feature: TrailLineFeature): LngLat[][] {
-  const g = feature.geometry;
-  return g.type === 'LineString' ? [g.coordinates as LngLat[]] : (g.coordinates as LngLat[][]);
-}
-
 /** Convert our WGS84 bbox to MapLibre's [west, south, east, north] bounds. */
 export function toLngLatBounds(b: BoundingBox): LngLatBounds {
   return [b.minLng, b.minLat, b.maxLng, b.maxLat];

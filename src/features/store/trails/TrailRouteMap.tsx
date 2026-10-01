@@ -39,7 +39,6 @@ export const TrailRouteMap = memo(function TrailRouteMap({
     () =>
       buildOsmStyle(
         tileUrl,
-        false,
         'map',
         showHillshade,
         VECTOR_BASEMAP_ENABLED ? { vectorBasemap: vectorBasemapOption(theme.dark, false) } : {},

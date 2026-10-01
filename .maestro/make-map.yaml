@@ -6,7 +6,7 @@
 #
 # Portability notes:
 # - Needs network (Esri basemap tiles + Terrarium DEM) - same services the
-#   3D-terrain flows already exercise in CI.
+#   map's relief and terrain overlays already use in CI.
 # - Contours stay ON (default) so the compose covers the heightmap path.
 # - The compose is CPU-bound on software-GL emulators: generous timeout on the
 #   success snackbar, then the Library must list the map by its default name

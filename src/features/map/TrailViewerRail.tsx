@@ -7,7 +7,7 @@ import {
   DisclaimerSnackbar,
   TerrainOverlayMenuRows,
   useSlopeDisclaimer,
-} from './terrain3d/overlayControls';
+} from './components/terrainOverlayControls';
 
 /**
  * Right-edge control rail for the focused trail viewer: a layers FAB opening
@@ -42,28 +42,15 @@ interface Props {
   top: number;
   basemap: MapBasemap;
   onSelectBasemap: (bm: MapBasemap) => void;
-  /** Disable the basemap picker while the 3D terrain is loading/rebuilding. */
-  basemapDisabled?: boolean;
-  /** Hide the overlays button when the overlay shader can't run on this device. */
-  overlaysAvailable: boolean;
-  /** Disable the overlay switches while the terrain is rebuilding. */
-  overlaysDisabled?: boolean;
 }
 
-export function TrailViewerRail({
-  top,
-  basemap,
-  onSelectBasemap,
-  basemapDisabled,
-  overlaysAvailable,
-  overlaysDisabled,
-}: Props) {
+export function TrailViewerRail({ top, basemap, onSelectBasemap }: Props) {
   return (
     <View style={[styles.rail, { top }]} pointerEvents="box-none">
       {/* No 2D↔3D toggle any more (#480, owner call): the focused view is the
           MapLibre map, tilted with two fingers like the main map. */}
-      <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} disabled={basemapDisabled} />
-      {overlaysAvailable && <TrailOverlaysMenu disabled={overlaysDisabled} />}
+      <TrailLayersMenu basemap={basemap} onSelect={onSelectBasemap} />
+      <TrailOverlaysMenu />
     </View>
   );
 }
@@ -72,11 +59,9 @@ export function TrailViewerRail({
 function TrailLayersMenu({
   basemap,
   onSelect,
-  disabled,
 }: {
   basemap: MapBasemap;
   onSelect: (bm: MapBasemap) => void;
-  disabled?: boolean;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -90,7 +75,6 @@ function TrailLayersMenu({
           icon="layers"
           size="small"
           variant="surface"
-          disabled={disabled}
           onPress={() => setOpen(true)}
           style={styles.controlFab}
           accessibilityLabel="Trail layers"
@@ -115,12 +99,12 @@ function TrailLayersMenu({
 }
 
 /**
- * The overlays FAB + anchored menu: Slope / Contours / Elevation-tint switches
- * and the contour-interval selector, bound to the settings store (same
- * persistence as the live 3D map's TerrainOverlayButtons). The menu stays open
- * on toggle so several layers can be flipped in one visit.
+ * The overlays FAB + anchored menu: Slope / Contours switches and their
+ * selectors, bound to the settings store (the same settings the main map's
+ * overlays sheet drives). The menu stays open on toggle so several layers can
+ * be flipped in one visit.
  */
-function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
+function TrailOverlaysMenu() {
   const [open, setOpen] = useState(false);
   const { snackbar, onSlopeEnabled } = useSlopeDisclaimer();
 
@@ -134,14 +118,13 @@ function TrailOverlaysMenu({ disabled }: { disabled?: boolean }) {
             icon="gradient-vertical"
             size="small"
             variant="surface"
-            disabled={disabled}
             onPress={() => setOpen(true)}
             style={styles.controlFab}
             accessibilityLabel="Trail overlays"
           />
         }
       >
-        <TerrainOverlayMenuRows showHypso onSlopeEnabled={onSlopeEnabled} />
+        <TerrainOverlayMenuRows onSlopeEnabled={onSlopeEnabled} />
       </Menu>
       <DisclaimerSnackbar snackbar={snackbar} />
     </>
