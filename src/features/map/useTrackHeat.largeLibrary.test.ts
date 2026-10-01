@@ -9,6 +9,8 @@
 import { buildGpx } from '@core/geo/gpx';
 import { simplifyTrack } from '@core/geo/track/simplify';
 import { largeLibrary } from '@core/heat/__fixtures__/quebecLibrary';
+import { getHeatStore, HeatStore, setHeatStoreForTests } from '@data/heatStore';
+import { MemoryHeatIO } from '@data/heatStoreMemoryIO';
 import * as storage from '@data/storage';
 import { clearTrackGeometryMemory, peekTrackGeometry, trackGeometryKey } from '@data/trackGeometry';
 import { act, renderHook } from '@testing-library/react-native';
@@ -35,6 +37,7 @@ jest.mock('@data/storage', () => ({
   }),
 }));
 const mockBuildGpx = buildGpx;
+jest.mock('@data/heatStoreFiles', () => ({ createHeatFileIO: jest.fn() }));
 
 const mockIndexBuilds = jest.fn();
 const mockGridBuilds = jest.fn();
@@ -83,9 +86,27 @@ async function waitUntil(done: () => boolean, maxMs = 60_000) {
 
 const allLoaded = (list = tracks) => list.every((t) => peekTrackGeometry(t) !== undefined);
 
+/** A fresh stored heat over `io` (a new launch when the io is reused). */
+function freshStore(io = new MemoryHeatIO()) {
+  const store = new HeatStore({ io, policy: { maxBatch: 50, debounceMs: 50, costRatio: 4 } });
+  setHeatStoreForTests(store);
+  return store;
+}
+
+/** The stored heat built/synced and its tiles read back by the hook. */
+async function heatSettled() {
+  await act(() => getHeatStore().whenIdle());
+  for (let i = 0; i < 20; i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+  }
+}
+
 beforeAll(() => warmCache());
 
 beforeEach(() => {
+  freshStore();
   clearTrackGeometryMemory();
   mockIndexBuilds.mockClear();
   mockGridBuilds.mockClear();
@@ -94,25 +115,28 @@ beforeEach(() => {
 jest.setTimeout(60_000);
 
 describe('useTrackHeat with 400 trails', () => {
-  it('loads the whole library with a bounded number of rebuilds (not one per trail)', async () => {
+  it('builds the stored heat once, in bounded batches; a warm launch reads no geometry', async () => {
+    const io = new MemoryHeatIO();
+    const store = freshStore(io);
     let renders = 0;
     const t0 = Date.now();
-    const { result } = await renderHook(() => {
+    const cold = await renderHook(() => {
       renders++;
       return useTrackHeat(tracks, [], ids, true);
     });
-    await waitUntil(() => allLoaded());
+    await heatSettled();
     const ms = Date.now() - t0;
-
-    // Batches grow geometrically: ~log2(400) + a couple, never ~400.
-    expect(mockGridBuilds.mock.calls.length).toBeLessThanOrEqual(12);
-    expect(renders).toBeLessThanOrEqual(14);
-    // The warm path never touches a GPX file.
+    expect(store.status()).toEqual({ rebuilding: false, queued: 0, stored: N });
+    // Each trail walked once; written in batches, never once per trail.
+    expect(store.stats.geometryLoads).toBe(N);
+    expect(store.stats.flushes).toBeLessThanOrEqual(N / 20);
+    expect(renders).toBeLessThanOrEqual(3 * store.stats.flushes + 6);
+    // The warm path never touches a GPX file, and keeps no geometry in memory.
     expect(storage.readFileText).not.toHaveBeenCalled();
-    // Generous CI ceiling for 400 trails (≈1 s locally; the O(n²) version took minutes).
-    expect(ms).toBeLessThan(15_000);
+    expect(tracks.filter((t) => peekTrackGeometry(t) !== undefined)).toHaveLength(0);
+    expect(ms).toBeLessThan(30_000);
 
-    const { heatLines, heatGlow } = result.current;
+    const { heatLines, heatGlow } = cold.result.current;
     expect(heatLines).not.toBeNull();
     // Bounded by ground covered, not by fixes: 1 feature per pass bucket and
     // far fewer vertices than the library's raw points.
@@ -124,6 +148,19 @@ describe('useTrackHeat with 400 trails', () => {
     expect(heatVertices).toBeLessThan(rawPoints / 3);
     expect(heatGlow!.features.length).toBeGreaterThan(0);
     expect(heatGlow!.features.length).toBeLessThan(20_000);
+    await cold.unmount();
+
+    // Next launch: same store directory, nothing in memory.
+    clearTrackGeometryMemory();
+    (storage.readTrackGeometryCache as jest.Mock).mockClear();
+    const warmStore = freshStore(io);
+    const warm = await renderHook(() => useTrackHeat(tracks, [], ids, true));
+    await heatSettled();
+    expect(storage.readTrackGeometryCache).not.toHaveBeenCalled();
+    expect(warmStore.stats.geometryLoads).toBe(0);
+    expect(warmStore.stats.flushes).toBe(0);
+    expect(warm.result.current.heatLines).toEqual(heatLines);
+    expect(warm.result.current.heatGlow).toEqual(heatGlow);
   });
 
   it('keeps every source and callback identity across an unrelated re-render', async () => {
@@ -131,7 +168,8 @@ describe('useTrackHeat with 400 trails', () => {
       ({ shown }: { shown: string[] }) => useTrackHeat(tracks, shown, ids, true),
       { initialProps: { shown: ids.slice(0, 50) } },
     );
-    await waitUntil(() => allLoaded());
+    await waitUntil(() => allLoaded(tracks.slice(0, 50)));
+    await heatSettled();
     const before = result.current;
     const builds = mockGridBuilds.mock.calls.length;
     // A GPS tick / selection: the caller rebuilds its id arrays with the same content.
@@ -178,7 +216,7 @@ describe('useTrackHeat with 400 trails', () => {
 
   it('answers a tap in time independent of the library size, newest first', async () => {
     const { result } = await renderHook(() => useTrackHeat(tracks, [], ids, true));
-    await waitUntil(() => allLoaded());
+    await heatSettled();
     // Home (every favourite route starts there): the hottest spot of the library.
     const home = { lng: -71.2, lat: 46.81 };
     const t0 = Date.now();
@@ -218,14 +256,22 @@ describe('useTrackHeat with 400 trails', () => {
         true,
       ),
     );
-    await waitUntil(() => allLoaded(list));
+    await heatSettled();
     const hit = result.current.heatAt({ lng: -70.495, lat: 47.2 }, 10, true);
     expect(hit).toEqual({ trackIds: ['solo'], hot: false });
     // Not drawn → not tappable.
     expect(result.current.heatAt({ lng: -70.495, lat: 47.2 }, 10, false).trackIds).toEqual([]);
-    // lineFor serves the (simplified) highlight for any loaded trail.
-    expect(result.current.lineFor('solo')?.geometry.type).toBe('LineString');
     expect(result.current.lineFor('nope')).toBeNull();
+  });
+
+  it('loads a selected trail for its highlight even when its trace is hidden', async () => {
+    const { result } = await renderHook(() =>
+      useTrackHeat(tracks.slice(0, 20), [], ids.slice(0, 20), true, 'all', ids[7]!),
+    );
+    await waitUntil(() => allLoaded([tracks[7]!]));
+    expect(result.current.lineFor(ids[7]!)?.geometry.type).toMatch(/LineString/);
+    // Only that trail was kept in memory.
+    expect(tracks.slice(0, 20).filter((t) => peekTrackGeometry(t) !== undefined)).toHaveLength(1);
   });
 });
 
@@ -239,6 +285,7 @@ describe('one GPX parse per trail across consumers', () => {
       return useTrackOverlays(some, someIds);
     });
     await waitUntil(() => allLoaded(some));
+    await heatSettled();
     expect((storage.readFileText as jest.Mock).mock.calls.length).toBe(40);
     // …and wrote the cache, so the next launch parses nothing.
     expect(mockCacheFiles.size).toBe(40);

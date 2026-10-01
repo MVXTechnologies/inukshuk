@@ -105,6 +105,7 @@ import { TipBubble } from '@features/support/TipBubble';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
+import { BOTTOM_LAYER, snackbarWrapperStyle, waypointCardDockStyle } from './bottomLayers';
 import { formatLatLng } from '@core/geo/formatCoords';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
@@ -476,7 +477,23 @@ export function MapScreen() {
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
-  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn, cullRegion);
+  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
+    useTrailInspection(tracks);
+  // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
+  // otherwise whichever trail is open in the inspect panel. Its geometry is
+  // loaded even when its trace is hidden (the heatmap itself no longer loads
+  // the library's, #500), so its highlight can be drawn.
+  const focusedTrackId = heatSelection
+    ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
+    : inspectId;
+  const trackHeat = useTrackHeat(
+    tracks,
+    drawnTrackIds,
+    allTrackIds,
+    heatOn,
+    cullRegion,
+    focusedTrackId,
+  );
   // The big sources, serialized once per data change (#465).
   // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
   // — and a selection flips the lines layer's filter, which re-renders it — so
@@ -1082,8 +1099,6 @@ export function MapScreen() {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
 
-  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
-    useTrailInspection(tracks);
   // TrailInspectPanel's real measured height (via its onLayout), so the
   // select-trail camera fit below pads exactly above the panel instead of
   // guessing. Stays set across panel remounts (same trail-inspect layout
@@ -1356,6 +1371,22 @@ export function MapScreen() {
       else removeSavedWaypoint(editWp.id);
     }
     setEditWp(null);
+  };
+  /**
+   * Hold-to-delete straight from the waypoint card (#505) — no detour through
+   * the editor. A failed store commit keeps the card up and says so.
+   */
+  const deleteViewedWaypoint = () => {
+    if (!viewWp) return;
+    try {
+      if (viewWp.source === 'live') removeWaypoint(viewWp.id);
+      else removeSavedWaypoint(viewWp.id);
+    } catch {
+      showSnack('Could not delete the waypoint. Please try again.');
+      return;
+    }
+    setViewWp(null);
+    showSnack('Waypoint deleted');
   };
   /**
    * Pick the pin icon (#350). Applied immediately for a saved waypoint — the
@@ -1717,9 +1748,6 @@ export function MapScreen() {
   // otherwise whichever trail is open in the inspect panel. When ANY trail is
   // selected, every other trail is hidden outright (not dimmed) via the lines
   // layer's filter below — see item 1's selection-visibility rule.
-  const focusedTrackId = heatSelection
-    ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
-    : inspectId;
   const hasSelection = heatSelection !== null || inspectId !== null;
 
   // The focused trail's own geometry, looked up independent of shown-trail
@@ -2466,11 +2494,9 @@ export function MapScreen() {
                           inspect(null);
                           beginRegionSelect();
                         },
-                  // Coordinate readout/entry (#97) — always available; it
-                  // needs neither a GPS fix nor the flat 2D camera.
-                  onGoToCoordinates: () => void openGoToCoordinates(),
-                  // Settings left the tab bar (revamp decision 6).
-                  onOpenSettings: () => router.push('/settings'),
+                  // No "Navigate to coordinates" or "Settings" rows (owner,
+                  // 2026-10-01): tapping the map offers Navigate, Search places
+                  // takes coordinates, and the other tabs carry the gear.
                   // The editor frames the sheet over the live map, so it needs
                   // the flat 2D camera — but no region box and no extra step.
                   onMakeMap: terrain3d
@@ -2793,43 +2819,53 @@ export function MapScreen() {
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
-      {/* Read-only waypoint viewer (pin tap): coordinates/note/photo with copy
-          actions. Hidden while the trail inspector or the editor is up so the
-          bottom edge never stacks two cards. */}
-      {inspectTrack === null && editWaypoint === null && (
-        <WaypointViewerCard
-          waypoint={viewWaypoint}
-          onCopyCoords={() => {
-            if (!viewWaypoint) return;
-            void Clipboard.setStringAsync(
-              formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-            );
-            showSnack('Coordinates copied');
-          }}
-          onCopyNote={() => {
-            if (!viewWaypoint?.note) return;
-            void Clipboard.setStringAsync(viewWaypoint.note);
-            showSnack('Note copied');
-          }}
-          onSharePhoto={() => {
-            const uri = viewWaypoint?.photoUri;
-            if (!uri) return;
-            void (async () => {
-              if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-              else showSnack('Sharing is not available on this device');
-            })();
-          }}
-          onEdit={() => {
-            if (!viewWp) return;
-            discardDraftPhoto(newWp);
-            setNewWp(null);
-            setEditWp(viewWp);
-            setWpName(viewWaypoint?.label ?? '');
-            setWpDraft(viewWaypoint?.note ?? '');
-            setViewWp(null);
-          }}
-          onClose={() => setViewWp(null)}
-        />
+      {/* Waypoint card (pin tap, #505): note/photo at a glance, Edit and
+          hold-to-delete. Hidden while the trail inspector or the editor is up
+          so the bottom edge never stacks two cards. Its dock floats above the
+          recording panel (position AND z/elevation) — it used to be drawn
+          under the panel while recording. */}
+      {inspectTrack === null && editWaypoint === null && viewWaypoint !== null && (
+        <View
+          style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+          pointerEvents="box-none"
+          testID="waypoint-card-dock"
+        >
+          <WaypointViewerCard
+            waypoint={viewWaypoint}
+            floating={recordingPanelUp}
+            onCopyCoords={() => {
+              if (!viewWaypoint) return;
+              void Clipboard.setStringAsync(
+                formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+              );
+              showSnack('Coordinates copied');
+            }}
+            onCopyNote={() => {
+              if (!viewWaypoint?.note) return;
+              void Clipboard.setStringAsync(viewWaypoint.note);
+              showSnack('Note copied');
+            }}
+            onSharePhoto={() => {
+              const uri = viewWaypoint?.photoUri;
+              if (!uri) return;
+              void (async () => {
+                if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                else showSnack('Sharing is not available on this device');
+              })();
+            }}
+            onEdit={() => {
+              if (!viewWp) return;
+              discardDraftPhoto(newWp);
+              setNewWp(null);
+              setEditWp(viewWp);
+              setWpName(viewWaypoint?.label ?? '');
+              setWpDraft(viewWaypoint?.note ?? '');
+              setViewWp(null);
+            }}
+            onDelete={deleteViewedWaypoint}
+            onClose={() => setViewWp(null)}
+          />
+        </View>
       )}
 
       {/* ECCC forecast card (weather long-press): nearest citypage forecast +
@@ -2902,6 +2938,7 @@ export function MapScreen() {
         visible={snack !== null}
         onDismiss={dismissSnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {snack ?? ''}
       </Snackbar>
@@ -2909,11 +2946,17 @@ export function MapScreen() {
         visible={overlaySnack !== null}
         onDismiss={dismissOverlaySnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {overlaySnack ?? ''}
       </Snackbar>
       {downloadProgress !== null && (
-        <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
+        <Snackbar
+          visible
+          onDismiss={() => undefined}
+          duration={Number.POSITIVE_INFINITY}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+        >
           {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
         </Snackbar>
       )}
@@ -2938,7 +2981,7 @@ const styles = StyleSheet.create({
   bottomSide: { flex: 1, alignItems: 'flex-start' },
   bottomSideStart: { gap: 4 },
   bottomSideEnd: { alignItems: 'flex-end' },
-  panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 },
+  panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).
   weatherDock: { gap: 6 },
