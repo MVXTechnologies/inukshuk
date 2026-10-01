@@ -590,6 +590,7 @@ export function MapScreen() {
   // imagery, from the same vector host as the map (and, offline, from any
   // downloaded Map pack of the area — packs share tiles by URL).
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
   const imageryLabels =
     VECTOR_BASEMAP_ENABLED && basemap === 'satellite' && satelliteLabels && editorStyle === null;
   // Contours on satellite (#492): the Map base's served contour tiles, drawn
@@ -661,6 +662,9 @@ export function MapScreen() {
       ...(imageryContours ? { imageryContours: imageryContoursOption() } : {}),
       hillshadeStrength,
       tiltRelief,
+      // #495: the imagery's brightening paint. The map maker's frame shows
+      // the raw tiles, because that is what its sheet prints.
+      imageryLook: editorStyle === null ? satelliteImagery : ('original' as const),
       ...(overlayTiles !== null && referenceOverlay
         ? {
             overlayLabels: {
@@ -764,6 +768,7 @@ export function MapScreen() {
     vectorBasemap,
     imageryLabels,
     imageryContours,
+    satelliteImagery,
   ]);
 
   // The tilted-map relief pass (#480): the style carries it hidden whenever

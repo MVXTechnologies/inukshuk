@@ -35,6 +35,12 @@ import {
   TILT_RELIEF_LAYER_ID,
 } from './mapStyle';
 import { MAP_MAX_PITCH_DEG, tiltReliefLook } from '@core/map/tiltRelief';
+import {
+  DEFAULT_IMAGERY_LOOK,
+  IMAGERY_PAINT,
+  SATELLITE_FADE_MS,
+  SATELLITE_TILE_SIZE,
+} from '@core/map/satelliteImagery';
 
 const TILE = 'https://tile.example/{z}/{x}/{y}.png';
 const layerIds = (s: ReturnType<typeof buildOsmStyle>) => s.layers.map((l) => l.id);
@@ -1457,5 +1463,60 @@ describe('tilted relief over satellite (#492)', () => {
       marineChart: { wmsFallback: false },
     });
     expect(styleHasTiltRelief(chart)).toBe(false);
+  });
+});
+
+describe('satellite imagery look + tile budget (#495)', () => {
+  const osmLayer = (s: ReturnType<typeof buildOsmStyle>) => s.layers.find((l) => l.id === 'osm');
+
+  it('brightens the imagery by default and fades tiles in fast', () => {
+    const osm = osmLayer(buildOsmStyle(TILE, false, 'satellite'));
+    expect(osm?.paint).toEqual({
+      ...IMAGERY_PAINT[DEFAULT_IMAGERY_LOOK],
+      'raster-fade-duration': SATELLITE_FADE_MS,
+    });
+    expect(osm?.paint).toMatchObject({ 'raster-brightness-min': 0.15 });
+  });
+
+  it('applies the chosen look, and Original is the tiles as served', () => {
+    const brighter = osmLayer(
+      buildOsmStyle(TILE, false, 'satellite', false, { imageryLook: 'brighter' }),
+    );
+    expect(brighter?.paint).toMatchObject(IMAGERY_PAINT.brighter);
+    const original = osmLayer(
+      buildOsmStyle(TILE, false, 'satellite', false, { imageryLook: 'original' }),
+    );
+    expect(original?.paint).toEqual({ 'raster-fade-duration': SATELLITE_FADE_MS });
+  });
+
+  it('yields to the night and weather paints', () => {
+    const night = osmLayer(buildOsmStyle(TILE, false, 'satellite', false, { night: true }));
+    expect(night?.paint).not.toHaveProperty('raster-brightness-min');
+    const weather = osmLayer(
+      buildOsmStyle(TILE, false, 'satellite', false, {
+        weatherMuted: { dimColor: '#000', dimOpacity: 0.4 },
+        imageryLook: 'brighter',
+      }),
+    );
+    expect(weather?.paint).toMatchObject({ 'raster-saturation': -0.85 });
+  });
+
+  it('leaves the map basemap paint and tile size alone', () => {
+    const s = buildOsmStyle(TILE, false, 'map', false, { imageryLook: 'brighter' });
+    expect(osmLayer(s)?.paint).toEqual({
+      'raster-saturation': -0.25,
+      'raster-contrast': 0.06,
+      'raster-brightness-min': 0.04,
+      'raster-brightness-max': 0.96,
+    });
+    expect(baseSource(s).tileSize).toBe(256);
+  });
+
+  it('declares the imagery at the satellite tile size, unless a caller overrides it', () => {
+    expect(baseSource(buildOsmStyle(TILE, false, 'satellite')).tileSize).toBe(SATELLITE_TILE_SIZE);
+    // The map maker's editor still under-declares for a sharp sheet (#349).
+    expect(
+      baseSource(buildOsmStyle(TILE, false, 'satellite', false, { rasterTileSize: 128 })).tileSize,
+    ).toBe(128);
   });
 });
