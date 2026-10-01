@@ -231,13 +231,18 @@ ODbL)"; the index carries the attribution string too.
    the interval can only change on that grid, which shows as a density step where it does);
    lines simplified (Douglas–Peucker, ½ px, ¼ px on the deepest tiles); closed rings under 1.5
    DEM pixels, and anything at or below sea level, dropped.
+   Coarsening thins the dark band the old dense lines drew on steep walls, so every feature
+   carries `k` (how many lines of the zoom's own interval a line stands for; 1 = kept) and `s`
+   (steepness class 0–3 of that stretch, from the DEM gradient along it; lines are cut where it
+   changes). The app's style (`contourStroke` in `src/core/map/stoneStyle.ts`) draws `k > 1`
+   stretches heavier and a little toward ink by `s`; `k = 1` tiles draw exactly as before.
 3. The app loads z8–13 (`CONTOUR_SOURCE_*` in `src/features/map/mapStyle.ts`) and overzooms
    past 13; the Worker still answers z14 for older app versions.
 
 Measured 2026-10-01 at z10–13 (Node on an M-series Mac, same V8; Workers' CPUs are slower):
 an Alpine tile (Zermatt, Chamonix, Bernese Oberland, Brienz) went from 15–25 ms cold / 5–11 ms
-warm to ≈ 9–12 ms cold / 2–5 ms warm, and from 26–55 k to 2.4–6.6 k vertices (36–76 KB → 6–14 KB
-gzipped). Québec City and Mont-Sainte-Anne keep their intervals and look the same (fewer
+warm to ≈ 9–11 ms cold / 3–5 ms warm, and from 26–55 k to 3.8–7.3 k vertices (36–76 KB →
+11–19 KB gzipped, with the steepness tags). Québec City and Mont-Sainte-Anne keep their intervals and look the same (fewer
 vertices only).
 
 **Pre-generating dense mountain regions** (optional, NAS): run the same `contourTile` under

@@ -8,6 +8,7 @@ import {
   adaptiveLevels,
   cellReliefAt,
   cleanIsolines,
+  coarsening,
   CONTOUR_VERSION,
   contourLevels,
   contourR2Key,
@@ -17,10 +18,14 @@ import {
   LEVEL_LADDER,
   Lru,
   MAX_CROSSINGS_PER_CELL,
+  MAX_SLOPE_CLASS,
   meanPixelRelief,
-  steepestBlockRelief,
+  MIN_SLOPE_RUN,
   simplifyLine,
   simplifyTolerance,
+  slopeClass,
+  splitBySlope,
+  steepestBlockRelief,
   tinyRingSpan,
   UnsupportedPng,
 } from './contourMath';
@@ -244,6 +249,99 @@ function decodeMvt(buf: Uint8Array) {
   return layer;
 }
 
+describe('steepness tags (k, s)', () => {
+  /** A straight line along x, `n` vertices one grid cell (32 units) apart. */
+  const straight = (n: number) => Array.from({ length: n }, (_, i) => [i * 32, 100]).flat();
+
+  it('classes the old interval density: flat, three steps, cliffs', () => {
+    expect(slopeClass(0)).toBe(0);
+    expect(slopeClass(Number.NaN)).toBe(0);
+    expect(slopeClass(1.49)).toBe(0);
+    expect(slopeClass(1.5)).toBe(1);
+    expect(slopeClass(2.5)).toBe(2);
+    expect(slopeClass(3.5)).toBe(MAX_SLOPE_CLASS);
+    expect(slopeClass(40)).toBe(MAX_SLOPE_CLASS);
+  });
+
+  it('counts how many zoom-interval lines a kept line stands for', () => {
+    expect(coarsening(20, 20)).toBe(1);
+    expect(coarsening(50, 20)).toBe(3); // 2.5 rounds up
+    expect(coarsening(200, 50)).toBe(4);
+    expect(coarsening(10, 20)).toBe(1); // never below 1
+  });
+
+  it('cuts a line where its steepness changes, keeping it continuous', () => {
+    const line = straight(30);
+    // Gentle for x < 320 (vertices 0–9), a cliff beyond: 4 crossings per cell at 20 m.
+    const parts = splitBySlope(line, (x) => (x < 320 ? 10 : 80), 20);
+    expect(parts.map((p) => p.s)).toEqual([0, MAX_SLOPE_CLASS]);
+    // The stretches share the vertex where they meet, and cover the whole line.
+    const [a, b] = parts;
+    expect(a!.line.slice(-2)).toEqual(b!.line.slice(0, 2));
+    expect(a!.line.slice(0, 2)).toEqual(line.slice(0, 2));
+    expect(b!.line.slice(-2)).toEqual(line.slice(-2));
+    expect(a!.line.length / 2 + b!.line.length / 2 - 1).toBe(30);
+  });
+
+  it('folds stretches shorter than the minimum into a neighbour', () => {
+    const line = straight(40);
+    // A steep zone in a gentle line: the window ramps the class 0 → 1 → 2 → 3
+    // and back over a vertex or two each; those blips fold away.
+    const parts = splitBySlope(line, (x) => (x >= 15 * 32 && x < 25 * 32 ? 120 : 5), 20);
+    expect(parts.length).toBeGreaterThan(1);
+    expect(parts.length).toBeLessThanOrEqual(3);
+    parts.forEach((p, i) => {
+      if (i < parts.length - 1) expect(p.line.length / 2 - 1).toBeGreaterThanOrEqual(MIN_SLOPE_RUN);
+      if (i > 0) expect(p.line.slice(0, 2)).toEqual(parts[i - 1]!.line.slice(-2));
+    });
+    expect(parts.some((p) => p.s === MAX_SLOPE_CLASS)).toBe(true);
+    // A short gentle start folds into the steep stretch after it.
+    const start = splitBySlope(line, (x) => (x < 2 * 32 ? 0 : 80), 20);
+    expect(start.map((p) => p.s)).toEqual([MAX_SLOPE_CLASS]);
+    expect(MIN_SLOPE_RUN).toBeGreaterThan(2);
+  });
+
+  it('tags k = 1, s = 0 where the interval was kept — whatever the slope', () => {
+    const features = cleanIsolines(
+      { '100': [straight(20)] },
+      { levels: [20, 100], tolerance: 1, tinySpan: 48, baseMinor: 20, gradientAt: () => 500 },
+    );
+    expect(features).toEqual([{ ele: 100, level: 1, k: 1, s: 0, lines: [[0, 100, 608, 100]] }]);
+  });
+
+  it('splits a coarsened tile’s lines into features per steepness class', () => {
+    const features = cleanIsolines(
+      { '150': [straight(30)] },
+      {
+        levels: [50, 250],
+        tolerance: 1,
+        tinySpan: 48,
+        baseMinor: 20,
+        gradientAt: (x) => (x < 320 ? 10 : 80),
+      },
+    );
+    expect(features.map(({ ele, level, k, s }) => ({ ele, level, k, s }))).toEqual([
+      { ele: 150, level: 0, k: 3, s: 0 },
+      { ele: 150, level: 0, k: 3, s: MAX_SLOPE_CLASS },
+    ]);
+    // Without a gradient (or a base interval) nothing is tagged or split.
+    expect(
+      cleanIsolines({ '150': [straight(30)] }, { levels: [50, 250], tolerance: 1, tinySpan: 48 }),
+    ).toEqual([{ ele: 150, level: 0, lines: [[0, 100, 928, 100]] }]);
+  });
+
+  it('encodes k and s as properties', () => {
+    const layer = decodeMvt(
+      encodeContourMvt([{ ele: 1250, level: 1, k: 3, s: 2, lines: [[0, 0, 9, 9]] }]),
+    );
+    const f = layer.features[0]!;
+    const props = Object.fromEntries(
+      [0, 2, 4, 6].map((i) => [layer.keys[f.tags[i]!], layer.values[f.tags[i + 1]!]]),
+    );
+    expect(props).toEqual({ ele: 1250, level: 1, k: 3, s: 2 });
+  });
+});
+
 describe('encodeContourMvt', () => {
   it('round-trips features, properties and rounded coordinates', () => {
     const mvt = encodeContourMvt([
@@ -261,7 +359,7 @@ describe('encodeContourMvt', () => {
     expect(layer.name).toBe('contours');
     expect(layer.extent).toBe(4096);
     expect(layer.version).toBe(2);
-    expect(layer.keys).toEqual(['ele', 'level']);
+    expect(layer.keys).toEqual(['ele', 'level', 'k', 's']);
     const props = layer.features.map((f) => ({
       [layer.keys[f.tags[0]!]!]: layer.values[f.tags[1]!],
       [layer.keys[f.tags[2]!]!]: layer.values[f.tags[3]!],

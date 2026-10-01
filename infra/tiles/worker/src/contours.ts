@@ -15,7 +15,9 @@
  *   up to 5 per contour tile);
  * - decoded DEM tiles are kept per isolate (LRU) and shared by concurrent
  *   requests, so a viewport's burst decodes each DEM tile once;
- * - steep regions get a coarser interval (adaptiveLevels), lines are
+ * - steep regions get a coarser interval (adaptiveLevels) — each line then
+ *   carries `k` (lines of the zoom's own interval it stands for) and `s` (a
+ *   steepness class), so the style can keep steep walls dark — lines are
  *   simplified, tiny rings and below-sea-level lines dropped.
  *
  * index.ts stores every generated tile in R2, so each is computed once ever.
@@ -27,6 +29,7 @@ import {
   cellReliefAt,
   cleanIsolines,
   CONTOUR_EXTENT,
+  contourLevels,
   decodeTerrariumPng,
   DENSITY_REGION_ZOOMS,
   encodeContourMvt,
@@ -175,10 +178,22 @@ export async function contourTile(z: number, x: number, y: number): Promise<Cont
   }
   tile = tile.averagePixelCentersToGrid().materialize(1);
   const isolines = generateIsolines(levels[0], tile, CONTOUR_EXTENT, BUFFER);
+  // Height change per grid cell where a line runs, for its steepness class.
+  const grid = tile;
+  const cell = CONTOUR_EXTENT / (grid.width - 1);
+  const last = grid.width - 2;
+  const gradientAt = (x: number, y: number): number => {
+    const gx = Math.min(last, Math.max(0, Math.floor(x / cell)));
+    const gy = Math.min(last, Math.max(0, Math.floor(y / cell)));
+    const h = grid.get(gx, gy);
+    return Math.abs(grid.get(gx + 1, gy) - h) + Math.abs(grid.get(gx, gy + 1) - h);
+  };
   const features = cleanIsolines(isolines, {
     levels,
     tolerance: simplifyTolerance(z, OVERZOOMED_FROM),
     tinySpan: tinyRingSpan(tile.width - 1),
+    baseMinor: contourLevels(z)[0],
+    gradientAt,
   });
   return { mvt: encodeContourMvt(features), levels };
 }

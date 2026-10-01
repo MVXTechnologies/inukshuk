@@ -617,6 +617,9 @@ export function buildOsmStyle(
                   sourceLayer: 'contours',
                   field: 'ele',
                   levelField: 'level',
+                  // Steep stretches of coarsened tiles drawn heavier (#509).
+                  coarseField: 'k',
+                  steepField: 's',
                 },
               }
             : {}),

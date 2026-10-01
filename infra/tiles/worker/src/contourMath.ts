@@ -269,36 +269,147 @@ export function isTinyRing(line: readonly number[], span: number): boolean {
 export interface ContourFeature {
   ele: number;
   level: number;
+  /**
+   * Coarsening (#509): how many lines of the zoom's own interval each line of
+   * this tile stands for — 1 where adaptiveLevels kept the interval.
+   */
+  k?: number;
+  /**
+   * Steepness class 0–3 of this stretch of line (always 0 when k = 1): how
+   * dense the zoom's own interval would have been there — see
+   * {@link slopeClass}. Lines are cut where it changes, and the style thickens
+   * and darkens the steep stretches, so a wall that used to be a dark band of
+   * 20 m lines still reads dark with 50 m ones while the slopes around it
+   * stay light.
+   */
+  s?: number;
   lines: number[][];
+}
+
+/** The highest steepness class. */
+export const MAX_SLOPE_CLASS = 3;
+
+/**
+ * Steepness class from the crossings per grid cell the zoom's own interval
+ * would have had there (a cell is ~4 px on screen at the tile's zoom; the old
+ * lines merged into a solid band from ~2). Measured in the Alps at z10–13,
+ * the stretches of line spread over ~1–5: 0 under 1.5, 1 under 2.5, 2 under
+ * 3.5, 3 beyond — the cliffs and walls.
+ */
+export function slopeClass(crossingsPerCell: number): number {
+  if (!(crossingsPerCell >= 1.5)) return 0;
+  if (crossingsPerCell < 2.5) return 1;
+  if (crossingsPerCell < 3.5) return 2;
+  return MAX_SLOPE_CLASS;
+}
+
+/** How many of the zoom's `baseMinor` lines one `minor` line stands for (≥ 1). */
+export function coarsening(minor: number, baseMinor: number): number {
+  return Math.max(1, Math.round(minor / baseMinor));
+}
+
+/** Vertices each side averaged into a vertex's steepness (smooths cell noise). */
+const SLOPE_WINDOW = 3;
+/** Shortest stretch (vertices, ≈ grid cells) kept as its own class. */
+export const MIN_SLOPE_RUN = 6;
+
+/**
+ * Cut a raw isoline into stretches of one steepness class each: the class
+ * of each vertex from the (windowed) `gradientAt` / `baseMinor`, stretches
+ * shorter than {@link MIN_SLOPE_RUN} folded into the one before. Neighbouring
+ * stretches share their joining vertex, so the line stays continuous.
+ */
+export function splitBySlope(
+  line: readonly number[],
+  gradientAt: (x: number, y: number) => number,
+  baseMinor: number,
+): { s: number; line: number[] }[] {
+  const n = line.length / 2;
+  if (n < 2) return [{ s: 0, line: line.slice() }];
+  // Prefix sums of the gradient for the windowed mean.
+  const prefix = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const g = gradientAt(line[i * 2]!, line[i * 2 + 1]!);
+    prefix[i + 1] = prefix[i]! + (Number.isFinite(g) ? g : 0);
+  }
+  const cls = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - SLOPE_WINDOW);
+    const hi = Math.min(n, i + SLOPE_WINDOW + 1);
+    cls[i] = slopeClass((prefix[hi]! - prefix[lo]!) / (hi - lo) / baseMinor);
+  }
+  // Runs of one class: [start, end) vertex ranges.
+  const runs: { s: number; start: number; end: number }[] = [];
+  for (let i = 0; i < n;) {
+    let j = i + 1;
+    while (j < n && cls[j] === cls[i]) j++;
+    const prev = runs[runs.length - 1];
+    if (prev && (j - i < MIN_SLOPE_RUN || prev.s === cls[i])) prev.end = j;
+    else runs.push({ s: cls[i]!, start: i, end: j });
+    i = j;
+  }
+  // A short first run folds into the next one.
+  const first = runs[0];
+  const second = runs[1];
+  if (first && second && first.end - first.start < MIN_SLOPE_RUN) {
+    second.start = first.start;
+    runs.shift();
+  }
+  return runs.map(({ s, start, end }) => ({
+    s,
+    // Each stretch runs on to the next one's first vertex.
+    line: line.slice(start * 2, Math.min(n, end + 1) * 2),
+  }));
 }
 
 export interface CleanOptions {
   levels: ContourLevels;
   tolerance: number;
   tinySpan: number;
+  /** The zoom's own minor interval (contourLevels): sets `k`, and with it `s`. */
+  baseMinor?: number;
+  /** Height change (m) per grid cell at a point in tile units: sets `s`. */
+  gradientAt?: (x: number, y: number) => number;
 }
 
 /**
  * From generateIsolines' `{ele: lines}` to the features we encode: sea level
  * and below dropped (the style never draws them, and Terrarium's bathymetry
  * made coastal tiles heavy for nothing), tiny rings dropped, lines simplified,
- * `level` = 1 on major lines.
+ * `level` = 1 on major lines. With `baseMinor`, every feature carries `k` and
+ * `s`; where the tile was coarsened (k > 1) and `gradientAt` is given, lines
+ * are cut into stretches by steepness, one feature per elevation and class.
  */
 export function cleanIsolines(
   isolines: Record<string, number[][]>,
-  { levels, tolerance, tinySpan }: CleanOptions,
+  { levels, tolerance, tinySpan, baseMinor, gradientAt }: CleanOptions,
 ): ContourFeature[] {
+  const k = baseMinor === undefined ? undefined : coarsening(levels[0], baseMinor);
   const out: ContourFeature[] = [];
   for (const [key, raw] of Object.entries(isolines)) {
     const ele = Number(key);
     if (!(ele > 0)) continue;
-    const lines: number[][] = [];
+    const level = ele % levels[1] === 0 ? 1 : 0;
+    const byClass = new Map<number, number[][]>();
+    const add = (s: number, part: readonly number[]) => {
+      const simple = simplifyLine(part, tolerance);
+      if (simple.length < 4) return;
+      const group = byClass.get(s);
+      if (group) group.push(simple);
+      else byClass.set(s, [simple]);
+    };
     for (const line of raw) {
       if (isTinyRing(line, tinySpan)) continue;
-      const simple = simplifyLine(line, tolerance);
-      if (simple.length >= 4) lines.push(simple);
+      if (k !== undefined && k > 1 && gradientAt && baseMinor) {
+        // Measured on the raw line: its vertices sit on the grid cells it crosses.
+        for (const part of splitBySlope(line, gradientAt, baseMinor)) add(part.s, part.line);
+      } else {
+        add(0, line);
+      }
     }
-    if (lines.length > 0) out.push({ ele, level: ele % levels[1] === 0 ? 1 : 0, lines });
+    for (const [s, lines] of [...byClass].sort((a, b) => a[0] - b[0])) {
+      out.push(k === undefined ? { ele, level, lines } : { ele, level, k, s, lines });
+    }
   }
   return out;
 }
@@ -371,8 +482,9 @@ function encodeValue(v: number): Uint8Array {
 }
 
 /**
- * One layer of LineString features (one MultiLineString per elevation),
- * properties `{eleKey: ele, levelKey: level}`, coordinates rounded to the grid.
+ * One layer of LineString features (a MultiLineString per elevation, or per
+ * elevation and steepness class), properties `{eleKey: ele, levelKey: level}`
+ * plus `k` and `s` when set, coordinates rounded to the grid.
  */
 export function encodeContourMvt(
   features: readonly ContourFeature[],
@@ -431,6 +543,14 @@ export function encodeContourMvt(
     tags.varint(indexOf(f.ele));
     tags.varint(1);
     tags.varint(indexOf(f.level));
+    if (f.k !== undefined) {
+      tags.varint(2);
+      tags.varint(indexOf(f.k));
+    }
+    if (f.s !== undefined) {
+      tags.varint(3);
+      tags.varint(indexOf(f.s));
+    }
     fw.bytes(2, tags.finish()); // packed tags
     fw.tag(3, 0); // type LINESTRING
     fw.varint(2);
@@ -439,8 +559,11 @@ export function encodeContourMvt(
     fw.bytes(4, g.finish()); // packed geometry
     layerW.bytes(2, fw.finish());
   }
+  // Keys by index: 0 ele, 1 level, 2 k, 3 s (unused keys cost a few bytes).
   layerW.string(3, eleKey);
   layerW.string(3, levelKey);
+  layerW.string(3, 'k');
+  layerW.string(3, 's');
   for (const v of values) layerW.bytes(4, encodeValue(v));
   layerW.tag(5, 0);
   layerW.varint(extent);
