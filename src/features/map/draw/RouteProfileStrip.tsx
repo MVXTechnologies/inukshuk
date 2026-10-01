@@ -123,10 +123,16 @@ export function RouteProfileStrip({ profile, units, dimmed = false, onScrub }: P
           )}
         </Svg>
       )}
-      <Text style={[styles.edge, styles.max, { color: t.inkMuted }]} pointerEvents="none">
+      <Text
+        style={[styles.edge, styles.max, { color: t.inkMuted, backgroundColor: t.surface }]}
+        pointerEvents="none"
+      >
         {top}
       </Text>
-      <Text style={[styles.edge, styles.min, { color: t.inkMuted }]} pointerEvents="none">
+      <Text
+        style={[styles.edge, styles.min, { color: t.inkMuted, backgroundColor: t.surface }]}
+        pointerEvents="none"
+      >
         {bottom}
       </Text>
       {scrub !== null && (
@@ -147,7 +153,17 @@ export function RouteProfileStrip({ profile, units, dimmed = false, onScrub }: P
 const styles = StyleSheet.create({
   wrap: { height: PROFILE_HEIGHT, width: '100%' },
   dimmed: { opacity: 0.45 },
-  edge: { position: 'absolute', left: 2, fontSize: 10.5, lineHeight: 13, fontWeight: '700' },
+  // On a paper chip, so a label never sits illegibly on the line.
+  edge: {
+    position: 'absolute',
+    left: 0,
+    paddingHorizontal: 3,
+    borderRadius: 4,
+    overflow: 'hidden',
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontWeight: '700',
+  },
   max: { top: 0 },
   min: { bottom: 0 },
   readout: {
