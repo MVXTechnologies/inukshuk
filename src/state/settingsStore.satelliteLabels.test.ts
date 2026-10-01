@@ -65,3 +65,25 @@ it('set("satelliteLabels") writes the file', async () => {
     expect.objectContaining({ satelliteLabels: false }),
   );
 });
+
+describe('satelliteImagery (#495)', () => {
+  it('defaults to Bright', () => {
+    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+  });
+
+  it('keeps a saved look and drops junk to the default', async () => {
+    storage.readJson.mockResolvedValue({
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      satelliteImagery: 'original',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().satelliteImagery).toBe('original');
+
+    storage.readJson.mockResolvedValue({
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      satelliteImagery: 'neon',
+    });
+    await useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+  });
+});

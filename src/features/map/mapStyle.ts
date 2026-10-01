@@ -37,6 +37,13 @@ import {
   type PeakDensity,
 } from '@core/map/terrainOptions';
 import { MAP_MAX_PITCH_DEG, tiltReliefLook, type TiltRelief } from '@core/map/tiltRelief';
+import {
+  DEFAULT_IMAGERY_LOOK,
+  IMAGERY_PAINT,
+  SATELLITE_FADE_MS,
+  SATELLITE_TILE_SIZE,
+  type ImageryLook,
+} from '@core/map/satelliteImagery';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -125,7 +132,8 @@ export function basemapTileUrl(basemap: MapBasemap, tileUrl: string): string {
 /**
  * Per-basemap raster colour tuning, toward a muted outdoor/topographic look
  * (think AllTrails/Gaia): desaturate the neon OSM palette into natural tones and
- * lift contrast a touch. Satellite is left alone — imagery shouldn't be muted.
+ * lift contrast a touch. Satellite is never muted — it gets its own
+ * brightening paint instead (`IMAGERY_PAINT`, #495).
  */
 const RASTER_PAINT: Partial<Record<MapBasemap, Record<string, number>>> = {
   map: {
@@ -249,14 +257,24 @@ export interface OsmStyleOptions {
    * fetch deeper: 256 fetches one level past the camera, 128 fetches two —
    * four times the tiles and four times the pixels.
    *
-   * Default 256, which is right for a 1x screen and soft on a 3x one: MapLibre
-   * does not raise RASTER tile zoom for device pixel ratio the way it does for
-   * vector, so one 256-point tile is stretched over ~768 device pixels and the
-   * baked-in labels go mushy. The map maker's editor passes 128 while it is
+   * Default 256 for the `map` raster, which is right for a 1x screen and soft
+   * on a 3x one: MapLibre does not raise RASTER tile zoom for device pixel
+   * ratio the way it does for vector, so one 256-point tile is stretched over
+   * ~768 device pixels and the baked-in labels go mushy. Satellite defaults to
+   * {@link SATELLITE_TILE_SIZE} (#495: a third fewer imagery requests, same
+   * tiles at whole zooms). The map maker's editor passes 128 while it is
    * open — sharpness is the whole point of a WYSIWYG sheet — and the rest of
    * the app keeps today's tile budget.
    */
   rasterTileSize?: number;
+  /**
+   * How the satellite imagery is toned (#495, overlays menu → Imagery):
+   * a client-side brightness/contrast/saturation paint. Defaults to
+   * {@link DEFAULT_IMAGERY_LOOK}; ignored on the `map` basemap and yielding
+   * to the night/weather/chart paints. The map maker passes `original` so
+   * its frame matches the raw tiles the sheet prints.
+   */
+  imageryLook?: ImageryLook;
   /**
    * "Locally downloaded only" mask: an opaque fill drawn ABOVE the raster/
    * hillshade layers (but below everything added at runtime — trails, markers,
@@ -501,7 +519,7 @@ export function buildOsmStyle(
       osm: {
         type: 'raster',
         tiles: base.tiles,
-        tileSize: options.rasterTileSize ?? 256,
+        tileSize: options.rasterTileSize ?? (basemap === 'satellite' ? SATELLITE_TILE_SIZE : 256),
         maxzoom: Math.min(NATIVE_MAX_ZOOM[basemap], options.rasterMaxZoom ?? Infinity),
         attribution: base.attribution,
       },
@@ -540,11 +558,18 @@ export function buildOsmStyle(
         source: 'osm',
         // Chart mode mutes the raster exactly like weather mode: the chart
         // colours own the palette; streets/labels ghost through the tan dim.
-        paint: options.night
-          ? NIGHT_RASTER_PAINT
-          : options.weatherMuted || options.marineChart
-            ? WEATHER_MUTED_PAINT
-            : (RASTER_PAINT[basemap] ?? {}),
+        paint: {
+          ...(options.night
+            ? NIGHT_RASTER_PAINT
+            : options.weatherMuted || options.marineChart
+              ? WEATHER_MUTED_PAINT
+              : basemap === 'satellite'
+                ? IMAGERY_PAINT[options.imageryLook ?? DEFAULT_IMAGERY_LOOK]
+                : (RASTER_PAINT[basemap] ?? {})),
+          // #495: imagery tiles fade in fast, so a screen reads as loaded as
+          // soon as the bytes land (MapLibre's default is 300 ms per tile).
+          ...(basemap === 'satellite' ? { 'raster-fade-duration': SATELLITE_FADE_MS } : {}),
+        },
       },
       // Chart-tan land dim (marine chart mode): a semi-opaque warm screen
       // over the muted basemap — the paper-chart ground. `background` paints

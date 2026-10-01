@@ -68,6 +68,7 @@ describe('Overlays sheet layout (#484)', () => {
       'PDF maps',
       'Personal heatmap',
       'Labels on satellite',
+      'Imagery',
       'Shading',
       '3D relief',
       'Contours',
@@ -182,9 +183,33 @@ describe('Labels on satellite (#484)', () => {
     await renderMenu();
     const row = screen.getByLabelText('Labels on satellite');
     expect(row.props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByText('For the Satellite map type')).toBeTruthy();
+    // Both satellite-only rows (labels, imagery) say where they apply.
+    expect(screen.getAllByText('For the Satellite map type')).toHaveLength(2);
     fireEvent.press(row);
     expect(useSettingsStore.getState().satelliteLabels).toBe(true);
+  });
+});
+
+describe('Imagery brightness (#495)', () => {
+  it('defaults to Bright and sets the look while the base map is Satellite', async () => {
+    useMapStore.setState({ basemap: 'satellite' });
+    await renderMenu();
+    expect(screen.getByText('Satellite brightness')).toBeTruthy();
+    expect(selected('Bright')).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Brighter'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
+    await fireEvent.press(screen.getByLabelText('Original'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('original');
+  });
+
+  it('is greyed and inert on the Map base', async () => {
+    useMapStore.setState({ basemap: 'map' });
+    await renderMenu();
+    expect(screen.getByLabelText('Brighter').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    await fireEvent.press(screen.getByLabelText('Brighter'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
   });
 });
 
