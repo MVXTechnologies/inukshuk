@@ -20,7 +20,7 @@ export type ImageryLook = 'original' | 'bright' | 'brighter';
 export const IMAGERY_LOOKS: readonly ImageryLook[] = ['original', 'bright', 'brighter'];
 
 /**
- * Bright by default: the owner's complaint is that the imagery reads dark
+ * Brighter by default: the owner's complaint is that the imagery reads dark
  * (forest and north-facing slopes go near-black in Esri's Vantor/Maxar
  * mosaics), and Bright fixes that without washing out snow or rock.
  */

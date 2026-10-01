@@ -198,7 +198,7 @@ function OverlayRows({
         onToggle={() => set('satelliteLabels', !satelliteLabels)}
       />
       {/* #495: Esri's imagery reads dark under forest and in shadow; a
-          client-side lift (Bright by default) or the tiles as served. */}
+          client-side lift (Brighter by default) or the tiles as served. */}
       <LevelsRow
         icon="brightness-6"
         label="Imagery"
