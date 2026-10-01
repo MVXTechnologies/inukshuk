@@ -24,7 +24,9 @@ async function mount(basemap: 'map' | 'satellite', vector = true, osmLabels = fa
 it.each([
   ['map', true, false, '© OpenStreetMap · Protomaps'],
   ['map', false, false, '© OpenStreetMap'],
-  ['satellite', true, false, '© Esri, Maxar'],
+  // MapScreen passes vector = stoneBase, false on satellite (#493: a `true`
+  // there already means OSM data rides the imagery).
+  ['satellite', false, false, '© Esri, Maxar'],
   // "Labels on satellite" draws OSM data over the imagery: credit it too.
   ['satellite', true, true, '© Esri, Maxar · © OpenStreetMap'],
   // Never twice.
