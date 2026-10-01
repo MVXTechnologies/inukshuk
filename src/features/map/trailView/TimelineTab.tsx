@@ -29,7 +29,7 @@ function dotColor(kind: TimelineEventKind, t: SchemeTokens): string {
     case 'steep':
       return t.explore.trail;
     case 'summit':
-      return t.data.ascent;
+      return palette.ochre;
     case 'stop':
     case 'pause':
       return t.status.pausedInk;

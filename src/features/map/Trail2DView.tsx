@@ -129,7 +129,8 @@ export function Trail2DView({
     if (!bbox) return;
     cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
       duration: 0,
-      padding: { top: 60, right: 40, bottom: 60, left: 40 },
+      // Top clears the floating title card (#511), right the layer rail.
+      padding: { top: 110, right: 64, bottom: 36, left: 36 },
     });
   }, [bbox]);
 
