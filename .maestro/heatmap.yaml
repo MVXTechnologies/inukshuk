@@ -469,9 +469,10 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     notVisible: 'Export PDF'
     timeout: 15000
-# The departing 3D trail viewer's three.js/GL teardown starves the JS thread
-# for several seconds after the screen itself is gone from the hierarchy —
-# NOT a fixed-length transition animation. Verified on-device: reverting
+# The JS thread can stay busy for a few seconds after the departing trail
+# viewer is gone from the hierarchy (this wait dates from the old three.js/GL
+# 3D viewer's teardown; the viewer has been 2D since #480, but the widened
+# waits are kept as cheap insurance on slow CI emulators). Reverting
 # visibility can't be moved BEFORE the viewer trip instead (the obvious fix),
 # because 'type'/"Everything" mode only shows `activeTrackIds` — see
 # visibility.ts's `visibleTrackIds` — and a fresh recording's save path never
