@@ -1121,7 +1121,7 @@ it('retains a null PDF.js crop when a native overview is unsupported', async () 
   expect(renders().at(-1)?.[0]).toContain('expectedPageWidthPt');
   await handoff();
   expect(renders()).toHaveLength(2);
-  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null)');
+  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null, {"whiteKey":0})');
   await view.unmount();
   await pending;
 });
@@ -1131,7 +1131,7 @@ it('keeps an overview on the original PDF.js budget when native is unavailable',
   const view = await renderHook(usePdfRasterizer, { wrapper });
   await ready();
   const pending = view.result.current({ ...nativeRequest, crop: null }).catch(() => undefined);
-  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null)');
+  expect(renders().at(-1)?.[0]).toContain('2048, null, null, null, {"whiteKey":0})');
   expect(renderNativePdfCrop).not.toHaveBeenCalled();
   await view.unmount();
   await pending;

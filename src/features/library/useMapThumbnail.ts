@@ -1,4 +1,5 @@
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
+import { WHITE_KEY_LEVELS } from '@core/geo/pdfWhiteKey';
 import { documentRevision, rasterFileName } from '@core/library/overlayRaster';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
@@ -17,7 +18,7 @@ export interface MapThumbnail {
  *
  * The thumbnail is the first georeferenced page's overlay raster — the PNG
  * the map's overlay pipeline and the import-time pre-render already write
- * (`@core/library/overlayRaster`). Nothing new is rendered here; a map whose
+ * (`@core/library/overlayRaster`), at whichever see-through level exists. Nothing new is rendered here; a map whose
  * page has not been drawn yet shows the neutral sheet placeholder.
  */
 export function useMapThumbnail(map: MapDocument, rendering: boolean): MapThumbnail | undefined {
@@ -32,8 +33,11 @@ export function useMapThumbnail(map: MapDocument, rendering: boolean): MapThumbn
       let uri: string | null = null;
       let bytes = 0;
       try {
-        if (pageIndex !== undefined) {
-          uri = storage.existingOverlayPng(rasterFileName(map.id, pageIndex, revision));
+        // The plain render first; a map only ever drawn see-through (the
+        // level was set before it was imported) still gets its keyed raster.
+        for (const level of WHITE_KEY_LEVELS) {
+          if (pageIndex === undefined || uri !== null) break;
+          uri = storage.existingOverlayPng(rasterFileName(map.id, pageIndex, revision, level));
         }
         bytes = storage.fileSizeAt(map.fileUri);
       } catch {

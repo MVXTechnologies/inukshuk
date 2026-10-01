@@ -1,3 +1,4 @@
+import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import type { GeoReference } from './georeference';
 
 /** An imported georeferenced PDF map and its resolved georeferencing. */
@@ -32,4 +33,9 @@ export interface MapDocument {
    * than this shows an "Update" action in the store.
    */
   sourceUpdatedAt?: string;
+  /**
+   * This map's own "See-through white" level, overriding the global one from
+   * the Overlays menu (`@core/geo/pdfWhiteKey`). Absent = follow the global.
+   */
+  whiteKey?: WhiteKeyLevel;
 }

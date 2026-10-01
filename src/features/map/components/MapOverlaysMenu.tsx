@@ -1,6 +1,7 @@
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
+import { WHITE_KEY_LABEL, WHITE_KEY_LEVELS } from '@core/geo/pdfWhiteKey';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import {
   PEAK_DENSITIES,
@@ -46,8 +47,8 @@ import { RangeSlider } from './RangeSlider';
  * checkboxes, segmented pickers where a row has levels. It replaces the
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * - On the map — Content (folder picker), PDF maps, Personal heatmap,
- *   Labels on satellite.
+ * - On the map — Content (folder picker), PDF maps, See-through white
+ *   (Off / Some / Full), Personal heatmap, Labels on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
  *   Peaks, Elevation tint (3D only).
  * - Live layers — Weather (drills into its list) and Marine, both parked
@@ -91,6 +92,13 @@ const BELOW_INSET = 52 + 16;
 const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
 const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
+// 'Off' is also a 3D relief level: these segments carry the row's name so
+// tests, screen readers and Maestro can tell the two apart.
+const WHITE_KEY = WHITE_KEY_LEVELS.map((l) => ({
+  value: l,
+  label: WHITE_KEY_LABEL[l],
+  accessibilityLabel: `See-through white ${WHITE_KEY_LABEL[l]}`,
+}));
 const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
 const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
   value: m,
@@ -129,6 +137,7 @@ function OverlayRows({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
+  const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
   const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
@@ -181,6 +190,18 @@ function OverlayRows({
         hint={showPdfMaps ? 'Your imported and made maps' : 'Hidden on the map'}
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
+      />
+      {/* How see-through the maps' white paper is, so the base map shows
+          through open land and margins. The default for every PDF map; a
+          map can override it from its Library ⋮ menu. */}
+      <LevelsRow
+        icon="circle-opacity"
+        label="See-through white"
+        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
+        levels={WHITE_KEY}
+        selected={pdfWhiteKey}
+        onSelect={(level) => set('pdfWhiteKey', level)}
+        disabled={!showPdfMaps}
       />
       <SwitchRow
         icon="fire"

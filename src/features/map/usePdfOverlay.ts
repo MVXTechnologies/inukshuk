@@ -12,6 +12,7 @@ import {
   renderedPageCorners,
 } from '@core/geo/geopdf/pageBox';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
+import { WHITE_KEY_LEVELS, effectiveWhiteKey, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { unsupportedProjectionNotice } from '@core/library/overlayPages';
 import {
   OVERLAY_TARGET_WIDTH_PX,
@@ -43,6 +44,12 @@ export interface PdfOverlay {
   /** MapLibre ImageSource ordering: top-left, top-right, bottom-right, bottom-left. */
   coordinates: [LngLat, LngLat, LngLat, LngLat];
   bbox: BoundingBox;
+  /**
+   * The "See-through white" level this raster was drawn at. Detail tiles are
+   * rendered at the same level as the overview they refine, so a level switch
+   * never mixes keyed tiles over an unkeyed sheet (or the reverse).
+   */
+  whiteKey?: WhiteKeyLevel;
 }
 
 export interface PdfOverlaysState {
@@ -57,6 +64,8 @@ interface Target {
   revision: string;
   importedAt: number;
   geo: GeoReference;
+  /** Effective "See-through white" level: the map's override, else the global. */
+  whiteKey: WhiteKeyLevel;
 }
 
 /**
@@ -120,18 +129,26 @@ export function describeSourceCrs(geo: GeoReference): string {
  * otherwise push three identical targets — three stacked copies of the same
  * raster, compounded opacity and three native layers for one map.
  */
-export function activeTargets(maps: MapDocument[]): Target[] {
+export function activeTargets(maps: MapDocument[], whiteKey: WhiteKeyLevel = 'off'): Target[] {
   const targets: Target[] = [];
   for (const m of maps) {
     if (!m.fileUri) continue;
     const revision = documentRevision(m);
+    const level = effectiveWhiteKey(m.whiteKey, whiteKey);
     for (const pageIndex of new Set(m.activePages)) {
       // The PRIMARY viewport, not the first one listed: AUSTopo sheets put a
       // whole-of-Australia locator inset ahead of the map, and taking the
       // first georeference draws the sheet stretched across the continent.
       const geo = primaryGeoreferenceForPage(m.georeferences, pageIndex);
       if (geo)
-        targets.push({ docId: m.id, fileUri: m.fileUri, revision, importedAt: m.importedAt, geo });
+        targets.push({
+          docId: m.id,
+          fileUri: m.fileUri,
+          revision,
+          importedAt: m.importedAt,
+          geo,
+          whiteKey: level,
+        });
     }
   }
   return targets;
@@ -141,16 +158,37 @@ export function activeTargets(maps: MapDocument[]): Target[] {
  * A page's raster, from the in-memory cache, then from disk, or `undefined`
  * when it has to be rendered. Both are verified against the filesystem.
  */
-function cachedRaster(docId: string, pageIndex: number, revision: string): string | undefined {
-  const key = rasterCacheKey(docId, pageIndex, revision);
+function cachedRaster(
+  docId: string,
+  pageIndex: number,
+  revision: string,
+  whiteKey: WhiteKeyLevel,
+): string | undefined {
+  const key = rasterCacheKey(docId, pageIndex, revision, whiteKey);
   // Even an in-memory hit must validate the persisted PNG: an interrupted
   // write from an earlier run must not become a permanently blank overlay.
-  const onDisk = storage.existingOverlayPng(rasterFileName(docId, pageIndex, revision));
+  const onDisk = storage.existingOverlayPng(rasterFileName(docId, pageIndex, revision, whiteKey));
   if (onDisk !== null) {
     rasterCache.set(key, onDisk);
     return onDisk;
   }
   rasterCache.delete(key);
+  return undefined;
+}
+
+/**
+ * The page's raster at some OTHER "See-through white" level, if one is on
+ * disk: shown while the requested level renders, so switching levels swaps
+ * the sheet in place instead of blanking it for the length of a render.
+ */
+function standInRaster(t: Target): { uri: string; level: WhiteKeyLevel } | undefined {
+  for (const level of WHITE_KEY_LEVELS) {
+    if (level === t.whiteKey) continue;
+    const uri = storage.existingOverlayPng(
+      rasterFileName(t.docId, t.geo.pageIndex, t.revision, level),
+    );
+    if (uri !== null) return { uri, level };
+  }
   return undefined;
 }
 
@@ -177,7 +215,11 @@ function cachedRaster(docId: string, pageIndex: number, revision: string): strin
  * N: …" (#269) — the snackbar on the map is gone in four seconds, the card
  * line stays until the page renders or is deactivated.
  */
-export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlaysState {
+export function usePdfOverlays(
+  maps: MapDocument[],
+  enabled = true,
+  whiteKey: WhiteKeyLevel = 'off',
+): PdfOverlaysState {
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
   const setStatus = useOverlayStatusStore((s) => s.setStatus);
@@ -192,7 +234,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
-  const targets = enabled ? activeTargets(maps) : [];
+  const targets = enabled ? activeTargets(maps, whiteKey) : [];
   // A stable key over the active set; the effect re-runs only when it changes.
   const key = JSON.stringify(targets);
 
@@ -231,6 +273,29 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
       overlays.sort((a, b) => (stackingOrder.get(a.id) ?? 0) - (stackingOrder.get(b.id) ?? 0));
       setState({ overlays: [...overlays], loading: remaining > 0, error: firstError });
     };
+    // A page's stand-in (its raster at another see-through level) leaves the
+    // snapshot when the page settles, either way.
+    const dropStandIn = (id: string) => {
+      const at = overlays.findIndex((o) => o.id === id);
+      if (at !== -1) overlays.splice(at, 1);
+    };
+    const place = (
+      t: Target,
+      corners: CornerCoordinates,
+      bbox: BoundingBox,
+      imageUri: string,
+      level: WhiteKeyLevel,
+    ) => {
+      const id = `${t.docId}:${t.geo.pageIndex}`;
+      dropStandIn(id);
+      overlays.push({
+        id,
+        imageUri,
+        coordinates: [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft],
+        bbox,
+        whiteKey: level,
+      });
+    };
     const settled = (
       t: Target,
       corners: CornerCoordinates,
@@ -238,12 +303,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
       imageUri: string,
     ) => {
       setStatus(overlayStatusKey(t.docId, t.geo.pageIndex), { phase: 'rendered' });
-      overlays.push({
-        id: `${t.docId}:${t.geo.pageIndex}`,
-        imageUri,
-        coordinates: [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft],
-        bbox,
-      });
+      place(t, corners, bbox, imageUri, t.whiteKey);
       remaining -= 1;
     };
 
@@ -301,9 +361,16 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
         // The raster is geo-independent (the whole page at a fixed width),
         // so a cached PNG stays valid even if the georeference changes;
         // only the corners above are recomputed.
-        const imageUri = cachedRaster(t.docId, geo.pageIndex, t.revision);
+        const imageUri = cachedRaster(t.docId, geo.pageIndex, t.revision, t.whiteKey);
         if (imageUri) settled(t, corners, bbox, imageUri);
-        else cold.push({ target: t, corners, bbox });
+        else {
+          // Only a level switch leaves another level's raster behind; draw
+          // it until this one is ready (no stale detail tiles ride along —
+          // they are keyed to the overview they refine).
+          const standIn = standInRaster(t);
+          if (standIn) place(t, corners, bbox, standIn.uri, standIn.level);
+          cold.push({ target: t, corners, bbox });
+        }
       } catch (err) {
         reportError(err, 'pdf-overlay-render');
         const reason = err instanceof Error ? err.message : 'Failed to place a PDF page';
@@ -339,7 +406,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
             // Served over loopback when the engine has a server; the bridge
             // only for small files without one; a clear refusal otherwise —
             // never a 45 s hang on a file that was always going to OOM.
-            const cacheKey = rasterCacheKey(t.docId, geo.pageIndex, t.revision);
+            const cacheKey = rasterCacheKey(t.docId, geo.pageIndex, t.revision, t.whiteKey);
             let pending = pendingRasters.get(cacheKey);
             if (!pending) {
               pending = (async () => {
@@ -368,6 +435,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                   source,
                   pageIndex: geo.pageIndex,
                   targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
+                  whiteKey: t.whiteKey,
                   nativePage: nativeGeometry && {
                     fileUri: storage.resolveDocumentPath(t.fileUri),
                     revision: t.revision,
@@ -381,6 +449,9 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                 console.log(
                   `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
                     `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
+                    (raster.keyMs !== undefined
+                      ? `see-through ${t.whiteKey} ${raster.keyMs} ms, `
+                      : '') +
                     `${raster.widthPx}x${raster.heightPx})`,
                 );
                 // MapLibre's ImageSource needs a file:// url, not a data: URI — write
@@ -388,7 +459,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                 // Done even if this run was superseded: the raster is still
                 // valid, and the next run finds it in the cache instead of
                 // paying for the render twice.
-                const name = rasterFileName(t.docId, geo.pageIndex, t.revision);
+                const name = rasterFileName(t.docId, geo.pageIndex, t.revision, t.whiteKey);
                 const renderedUri =
                   raster.fileUri !== undefined
                     ? storage.adoptOverlayPng(name, raster.fileUri)
@@ -396,7 +467,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
                         name,
                         raster.pngDataUri.replace(/^data:image\/png;base64,/, ''),
                       );
-                rasterCache.set(rasterCacheKey(t.docId, geo.pageIndex, t.revision), renderedUri);
+                rasterCache.set(cacheKey, renderedUri);
                 return renderedUri;
               })().finally(() => pendingRasters.delete(cacheKey));
               pendingRasters.set(cacheKey, pending);
@@ -418,6 +489,7 @@ export function usePdfOverlays(maps: MapDocument[], enabled = true): PdfOverlays
             }
             firstError ??= reason;
             setStatus(statusKey, { phase: 'failed', reason });
+            dropStandIn(`${t.docId}:${geo.pageIndex}`);
             remaining -= 1;
           }
           // Do not hold ready pages behind another page's slow render — or

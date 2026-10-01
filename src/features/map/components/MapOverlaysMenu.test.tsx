@@ -276,6 +276,44 @@ describe('Terrain levels', () => {
   });
 });
 
+describe('See-through white (PDF maps)', () => {
+  it('sits under PDF maps, Off by default', async () => {
+    await renderMenu();
+    expect(screen.getByText('See-through white')).toBeTruthy();
+    expect(selected('See-through white Off')).toBe(true);
+    expect(selected('See-through white Full')).toBe(false);
+  });
+
+  it.each([
+    ['Some', 'some'],
+    ['Full', 'full'],
+  ] as const)('%s sets the global level', async (label, value) => {
+    await renderMenu();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(`See-through white ${label}`));
+    });
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(value);
+    expect(selected(`See-through white ${label}`)).toBe(true);
+  });
+
+  it('keeps its Off apart from the 3D relief Off', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 'full', tiltRelief: 'natural' });
+    await renderMenu();
+    fireEvent.press(screen.getByLabelText('See-through white Off'));
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe('off');
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+  });
+
+  it('rests while PDF maps are hidden', async () => {
+    useSettingsStore.setState({ showPdfOverlay: false });
+    await renderMenu();
+    expect(screen.getByText('Needs PDF maps')).toBeTruthy();
+    expect(screen.getByLabelText('See-through white Some').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+});
+
 describe('Live layers', () => {
   describe('with weather and marine parked', () => {
     it('keeps both rows visible, greyed and labelled "Coming soon"', async () => {

@@ -58,7 +58,12 @@ four stages:
    off (`core/geo/pdfLayers`), and the bundled worker is patched
    (`core/geo/pdfWorkerPatch`) to skip hidden images and forms instead of
    decoding them. That hidden decoding was ~80 % of a US Topo sheet's render
-   (#477). If the server cannot
+   (#477). "See-through white" (#489, `core/geo/pdfWhiteKey`) is one more
+   pass in the same page: after pdf.js paints, near-white, near-neutral
+   pixels are keyed to transparency (colour-to-alpha, so text edges get no
+   halo) at the level chosen globally in the Overlays menu or per map; the
+   level is part of the raster's cache name, and a keyed render never goes
+   to a native renderer. If the server cannot
    start, PDFs under 16 MB fall back to the old base64-over-the-bridge path;
    bigger ones fail with a message instead of hanging. Requests are queued,
    with a watchdog that falls back to pdf.js's main-thread fake worker if the
