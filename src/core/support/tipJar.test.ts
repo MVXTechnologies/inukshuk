@@ -17,9 +17,12 @@ import {
   mugPaths,
   TIP_BUTTON_MOTION,
   TIP_BUTTON_VARIANTS,
+  TIP_JAR_HIDE_MS,
+  TIP_JAR_HIDE_RECHECK_MS,
   TIP_JAR_REST_MS,
   TIP_JAR_WOBBLE_INTERVAL_MS,
   tipJarAnimates,
+  tipJarHideUntil,
   tipJarVisible,
   type BubbleContext,
 } from './tipJar';
@@ -188,6 +191,53 @@ describe('tipJarVisible', () => {
 
   it('comes back once the 12 months are over', () => {
     expect(tipJarVisible({ ...base, restingUntil: NOW })).toBe(true);
+  });
+});
+
+describe('"Hide for an hour" (fake clock)', () => {
+  const MIN = 60_000;
+  const base = {
+    enabled: true,
+    recording: false,
+    navigating: false,
+    blocked: false,
+    restingUntil: 0,
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-01T09:00:00Z'));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('is exactly one hour', () => {
+    expect(TIP_JAR_HIDE_MS).toBe(60 * MIN);
+    expect(tipJarHideUntil(1_000)).toBe(1_000 + 60 * MIN);
+    expect(TIP_JAR_HIDE_RECHECK_MS).toBeLessThanOrEqual(MIN);
+  });
+
+  it('hides now, is still hidden at 59 min, and is back at 60 min', () => {
+    const hiddenUntil = tipJarHideUntil(Date.now());
+    expect(tipJarVisible({ ...base, hiddenUntil, now: Date.now() })).toBe(false);
+    jest.advanceTimersByTime(59 * MIN);
+    expect(tipJarVisible({ ...base, hiddenUntil, now: Date.now() })).toBe(false);
+    jest.advanceTimersByTime(MIN);
+    expect(tipJarVisible({ ...base, hiddenUntil, now: Date.now() })).toBe(true);
+  });
+
+  it('never brings back a button switched off in Settings', () => {
+    const hiddenUntil = tipJarHideUntil(Date.now());
+    jest.advanceTimersByTime(2 * 60 * MIN);
+    expect(tipJarVisible({ ...base, enabled: false, hiddenUntil, now: Date.now() })).toBe(false);
+  });
+
+  it('never cuts the 12-month rest after a gift short', () => {
+    const restingUntil = Date.now() + TIP_JAR_REST_MS;
+    const hiddenUntil = tipJarHideUntil(Date.now());
+    jest.advanceTimersByTime(2 * 60 * MIN);
+    expect(tipJarVisible({ ...base, restingUntil, hiddenUntil, now: Date.now() })).toBe(false);
   });
 });
 

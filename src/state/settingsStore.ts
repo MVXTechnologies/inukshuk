@@ -226,8 +226,18 @@ export interface Settings {
    * on (see `@core/support/nudge`).
    */
   supportNudgeAnsweredAt: number;
-  /** The floating tip-jar button on the main tabs (#476; Settings › App settings, or long-press › Hide). */
+  /**
+   * The Map's tip button (#476): Settings › App settings switch. Off = hidden
+   * until switched back on. (Long-press › "Hide for an hour" does NOT touch
+   * it; see `tipJarHiddenUntil`.)
+   */
   showTipJar: boolean;
+  /**
+   * Epoch ms until which the tip button is hidden after long-press › "Hide for
+   * an hour"; 0 = not hidden. Wall-clock: it comes back once that time has
+   * passed, whether or not the app was open meanwhile.
+   */
+  tipJarHiddenUntil: number;
   /**
    * Epoch ms until which the tip button rests (12 months after a tip in the
    * app or a verified "I already donated"); 0 = not resting. It comes back after.
@@ -276,6 +286,7 @@ const DEFAULTS: Settings = {
   lastKnownPosition: null,
   supportNudgeAnsweredAt: 0,
   showTipJar: true,
+  tipJarHiddenUntil: 0,
   tipJarRestingUntil: 0,
 };
 
@@ -352,6 +363,7 @@ function snapshot(s: SettingsState): Settings {
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
+    tipJarHiddenUntil,
     tipJarRestingUntil,
   } = s;
   return {
@@ -395,6 +407,7 @@ function snapshot(s: SettingsState): Settings {
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
+    tipJarHiddenUntil,
     tipJarRestingUntil,
   };
 }

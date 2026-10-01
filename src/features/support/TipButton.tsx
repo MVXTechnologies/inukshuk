@@ -10,7 +10,9 @@ import {
   MUG_LAYOUT,
   mugPaths,
   TIP_BUTTON_MOTION,
+  TIP_JAR_HIDE_RECHECK_MS,
   TIP_JAR_WOBBLE_INTERVAL_MS,
+  tipJarHideUntil,
   tipJarAnimates,
   tipJarVisible,
   type TipButtonVariant,
@@ -63,7 +65,8 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
  *   at its root (so it can be tapped on Android) from `tipMascotStore`.
  * - Hidden while recording, following a destination, when the map's corner
  *   is taken, when switched off in Settings, and for 12 months after a tip or
- *   a verified "I already donated". Long-press offers "Hide".
+ *   a verified "I already donated". Long-press offers "Hide for an hour"
+ *   (wall clock: it comes back an hour later, app open or not).
  */
 export function TipButton({
   variant = DEFAULT_TIP_BUTTON_VARIANT,
@@ -75,6 +78,7 @@ export function TipButton({
   onAnimate,
   intervalMs = TIP_JAR_WOBBLE_INTERVAL_MS,
   bubbleCheckMs = BUBBLE_CHECK_MS,
+  hideRecheckMs = TIP_JAR_HIDE_RECHECK_MS,
   clock = Date.now,
 }: {
   variant?: TipButtonVariant;
@@ -90,24 +94,29 @@ export function TipButton({
   gestureActive?: boolean;
   /** The Map tab is in front. */
   focused?: boolean;
-  /** Test hooks: called when the UI-thread loop (re)starts; the loop and bubble-check periods; the clock. */
+  /** Test hooks: called when the UI-thread loop (re)starts; the loop, bubble-check and hide-recheck periods; the clock. */
   onAnimate?: () => void;
   intervalMs?: number;
   bubbleCheckMs?: number;
+  hideRecheckMs?: number;
   clock?: () => number;
 }) {
   const router = useRouter();
   const t = useSchemeTokens();
   const enabled = useSettingsStore((s) => s.showTipJar);
   const restingUntil = useSettingsStore((s) => s.tipJarRestingUntil);
+  const hiddenUntil = useSettingsStore((s) => s.tipJarHiddenUntil);
   const setSetting = useSettingsStore((s) => s.set);
   const recording = useRecorderStore((s) => s.status !== 'idle');
   const hasTipped = useSupportStore((s) => s.tipCount > 0);
   const bubbleUp = useTipMascotStore((s) => s.bubbleFact !== null);
   const reduceMotion = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Mount time: the 12-month window, and "the Map opened" for the bubble.
+  // Mount time: "the Map opened" for the bubble.
   const [openedAt] = useState(clock);
+  // The wall clock for the hour-long hide and the 12-month rest: refreshed on
+  // return to the foreground, and every minute while the hour is running.
+  const [now, setNow] = useState(clock);
   const steps = TIP_BUTTON_MOTION[variant];
   const rest = steps[steps.length - 1]?.to ?? 0;
   const progress = useSharedValue(rest);
@@ -121,9 +130,20 @@ export function TipButton({
   // Backgrounded apps don't animate (and resume on return).
   const [foreground, setForeground] = useState(AppState.currentState !== 'background');
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => setForeground(s === 'active'));
+    const sub = AppState.addEventListener('change', (s) => {
+      setForeground(s === 'active');
+      if (s === 'active') setNow(clock());
+    });
     return () => sub.remove();
-  }, []);
+  }, [clock]);
+
+  // "Hide for an hour": watch the clock until the hour is over.
+  const hiddenForAnHour = hiddenUntil > now;
+  useEffect(() => {
+    if (!hiddenForAnHour) return;
+    const timer = setInterval(() => setNow(clock()), hideRecheckMs);
+    return () => clearInterval(timer);
+  }, [hiddenForAnHour, hideRecheckMs, clock]);
 
   const visible = tipJarVisible({
     enabled,
@@ -131,7 +151,8 @@ export function TipButton({
     navigating,
     blocked,
     restingUntil,
-    now: openedAt,
+    hiddenUntil,
+    now,
   });
   const animates = visible && tipJarAnimates({ reduceMotion, hasTipped });
   const active = focused && foreground;
@@ -235,9 +256,12 @@ export function TipButton({
       {menuOpen && (
         <Pressable
           accessibilityRole="button"
+          accessibilityHint="The tip button comes back in an hour"
           onPress={() => {
             setMenuOpen(false);
-            setSetting('showTipJar', false);
+            const at = clock();
+            setSetting('tipJarHiddenUntil', tipJarHideUntil(at));
+            setNow(at);
           }}
           style={({ pressed }) => [
             styles.hide,
@@ -245,13 +269,13 @@ export function TipButton({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[styles.hideLabel, { color: t.ink }]}>Hide tip button</Text>
+          <Text style={[styles.hideLabel, { color: t.ink }]}>Hide for an hour</Text>
         </Pressable>
       )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Support Inukshuk"
-        accessibilityHint="Opens the tip jar. Long-press to hide."
+        accessibilityHint="Opens the tip jar. Long-press to hide it for an hour."
         onPress={() => {
           setMenuOpen(false);
           useTipMascotStore.getState().hide();

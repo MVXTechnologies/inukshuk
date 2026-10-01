@@ -50,7 +50,7 @@ const wait = (ms: number) =>
   });
 
 beforeEach(() => {
-  useSettingsStore.setState({ showTipJar: true, tipJarRestingUntil: 0 });
+  useSettingsStore.setState({ showTipJar: true, tipJarRestingUntil: 0, tipJarHiddenUntil: 0 });
   useSupportStore.setState({ tipCount: 0, totalCents: 0 });
   useRecorderStore.setState({ status: 'idle' });
   jest.mocked(useReducedMotion).mockReturnValue(false);
@@ -75,7 +75,7 @@ it('keeps animating while the map is being moved (owner: no gesture pause)', asy
   const onAnimate = jest.fn();
   const view = await mount({ onAnimate, gestureActive: true });
   expect(onAnimate).toHaveBeenCalledTimes(1);
-  view.unmount();
+  await view.unmount();
 });
 
 it('never stops or restarts the loop for map gestures, however many', async () => {
@@ -93,7 +93,7 @@ it('never stops or restarts the loop for map gestures, however many', async () =
   }
   // Started once on mount; pans, pinches and taps leave it alone.
   expect(onAnimate).toHaveBeenCalledTimes(1);
-  view.unmount();
+  await view.unmount();
 });
 
 it('holds the animation while the app is in the background, and resumes after', async () => {
@@ -115,7 +115,7 @@ it('holds the animation while the app is in the background, and resumes after', 
   });
   await wait(PERIOD * 4);
   expect(onAnimate).toHaveBeenCalled();
-  view.unmount();
+  await view.unmount();
 });
 
 it.each(TIP_BUTTON_VARIANTS)(
@@ -128,7 +128,7 @@ it.each(TIP_BUTTON_VARIANTS)(
       fireEvent.press(screen.getByTestId(`tip-button-${variant}`));
     });
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/support', params: { from: 'jar' } });
-    view.unmount();
+    await view.unmount();
   },
 );
 
@@ -139,7 +139,7 @@ it.each(TIP_BUTTON_VARIANTS)('%s stays still with reduce motion on', async (vari
   await wait(PERIOD * 4);
   expect(onAnimate).not.toHaveBeenCalled();
   expect(screen.getByTestId(`tip-button-${variant}`)).toBeTruthy();
-  view.unmount();
+  await view.unmount();
 });
 
 it('stays still for someone who has tipped before', async () => {
@@ -148,7 +148,7 @@ it('stays still for someone who has tipped before', async () => {
   const view = await mount({ onAnimate });
   await wait(PERIOD * 4);
   expect(onAnimate).not.toHaveBeenCalled();
-  view.unmount();
+  await view.unmount();
 });
 
 it.each([
@@ -165,26 +165,111 @@ it.each([
   arrange();
   const view = await mount(props);
   expect(screen.queryByTestId(`tip-button-${DEFAULT_TIP_BUTTON_VARIANT}`)).toBeNull();
-  view.unmount();
+  await view.unmount();
 });
 
 it('comes back once the rest is over', async () => {
   useSettingsStore.setState({ tipJarRestingUntil: Date.now() - 1 });
   const view = await mount();
   expect(screen.getByTestId(`tip-button-${DEFAULT_TIP_BUTTON_VARIANT}`)).toBeTruthy();
-  view.unmount();
+  await view.unmount();
 });
 
-it('long-press offers Hide, which turns the setting off', async () => {
-  const view = await mount();
-  await act(async () => {
-    fireEvent(screen.getByTestId(`tip-button-${DEFAULT_TIP_BUTTON_VARIANT}`), 'longPress');
+describe('long-press › "Hide for an hour" (injected clock)', () => {
+  const MIN = 60_000;
+  const T0 = 1_800_000_000_000;
+  let mockNow = T0;
+  const clock = () => mockNow;
+  const RECHECK = 10;
+  const ID = `tip-button-${DEFAULT_TIP_BUTTON_VARIANT}`;
+  type View = Awaited<ReturnType<typeof render>>;
+  const ui = (recheck = RECHECK) => (
+    <PaperProvider>
+      <TipButton intervalMs={PERIOD} clock={clock} hideRecheckMs={recheck} />
+    </PaperProvider>
+  );
+  /** Move the wall clock and let the Map's recheck run. */
+  const at = async (ms: number) => {
+    mockNow = T0 + ms;
+    await wait(RECHECK * 4);
+  };
+  async function hide(view: View) {
+    await act(async () => {
+      fireEvent(view.getByTestId(ID), 'longPress');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Hide for an hour'));
+    });
+  }
+  beforeEach(() => {
+    mockNow = T0;
   });
-  await act(async () => {
-    fireEvent.press(screen.getByText('Hide tip button'));
+
+  it('hides it, still hidden at 59 min, back at 60 min; the Settings switch untouched', async () => {
+    const view = await render(ui());
+    await hide(view);
+    expect(view.queryByTestId(ID)).toBeNull();
+    expect(useSettingsStore.getState()).toMatchObject({
+      showTipJar: true,
+      tipJarHiddenUntil: T0 + 60 * MIN,
+    });
+    await at(59 * MIN);
+    expect(view.queryByTestId(ID)).toBeNull();
+    await at(60 * MIN);
+    expect(view.getByTestId(ID)).toBeTruthy();
+    await view.unmount();
   });
-  expect(useSettingsStore.getState().showTipJar).toBe(false);
-  view.unmount();
+
+  it('keeps counting across an app restart (wall clock, not time open)', async () => {
+    const first = await render(ui());
+    await hide(first);
+    await first.unmount();
+    // The app was closed; it is relaunched 30 min later, then 61 min later.
+    mockNow = T0 + 30 * MIN;
+    const second = await render(ui());
+    expect(second.queryByTestId(ID)).toBeNull();
+    await second.unmount();
+    mockNow = T0 + 61 * MIN;
+    const third = await render(ui());
+    expect(third.getByTestId(ID)).toBeTruthy();
+    await third.unmount();
+  });
+
+  it('comes back on return to the foreground once the hour is over', async () => {
+    let listener: ((state: string) => void) | undefined;
+    jest.spyOn(AppState, 'addEventListener').mockImplementationOnce((_type, l) => {
+      listener = l as (state: string) => void;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    // A recheck far too slow to matter: the foreground event alone brings it back.
+    const view = await render(ui(10 * MIN));
+    await hide(view);
+    await act(async () => {
+      listener?.('background');
+    });
+    mockNow = T0 + 65 * MIN;
+    await act(async () => {
+      listener?.('active');
+    });
+    expect(view.getByTestId(ID)).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('never overrides the Settings switch or the 12-month rest after a gift', async () => {
+    useSettingsStore.setState({ showTipJar: false, tipJarHiddenUntil: T0 - 1 });
+    const off = await render(ui());
+    expect(off.queryByTestId(ID)).toBeNull();
+    await off.unmount();
+    useSettingsStore.setState({
+      showTipJar: true,
+      tipJarHiddenUntil: T0 - 1,
+      tipJarRestingUntil: T0 + TIP_JAR_REST_MS,
+    });
+    const resting = await render(ui());
+    await at(2 * 60 * MIN);
+    expect(resting.queryByTestId(ID)).toBeNull();
+    await resting.unmount();
+  });
 });
 
 it('stops while the Map tab is not in front, and starts again when it is', async () => {
@@ -200,5 +285,5 @@ it('stops while the Map tab is not in front, and starts again when it is', async
     await view.rerender(as(true));
   });
   expect(onAnimate).toHaveBeenCalledTimes(1);
-  view.unmount();
+  await view.unmount();
 });

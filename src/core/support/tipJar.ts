@@ -256,13 +256,36 @@ export interface TipJarContext {
   blocked: boolean;
   /** Epoch ms until which the button rests after a tip / verified donation (0 = never). */
   restingUntil: number;
+  /** Epoch ms until which the button is hidden by long-press › "Hide for an hour" (0 = not). */
+  hiddenUntil?: number;
   now: number;
 }
 
 export function tipJarVisible(ctx: TipJarContext): boolean {
   return (
-    ctx.enabled && !ctx.recording && !ctx.navigating && !ctx.blocked && ctx.now >= ctx.restingUntil
+    ctx.enabled &&
+    !ctx.recording &&
+    !ctx.navigating &&
+    !ctx.blocked &&
+    ctx.now >= ctx.restingUntil &&
+    ctx.now >= (ctx.hiddenUntil ?? 0)
   );
+}
+
+/**
+ * Long-press › "Hide for an hour" (owner): the button comes back this long
+ * after it was hidden, by the wall clock — whether or not the app was open.
+ * Separate from the Settings switch (off until switched back on) and from the
+ * 12-month rest after a gift ({@link TIP_JAR_REST_MS}).
+ */
+export const TIP_JAR_HIDE_MS = 60 * 60 * 1000;
+
+/** While hidden for the hour, the Map re-checks the clock this often (and on foreground). */
+export const TIP_JAR_HIDE_RECHECK_MS = 60 * 1000;
+
+/** The `tipJarHiddenUntil` to store when the person hides the button at `now`. */
+export function tipJarHideUntil(now: number): number {
+  return now + TIP_JAR_HIDE_MS;
 }
 
 export function tipJarAnimates(opts: { reduceMotion: boolean; hasTipped: boolean }): boolean {

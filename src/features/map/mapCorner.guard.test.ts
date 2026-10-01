@@ -59,8 +59,10 @@ describe('tip mug vs map interaction', () => {
     expect(button).toMatch(
       /withRepeat\(withDelay\(gap, withSequence\(first, \.\.\.others\)\), -1, false\)/,
     );
-    // The only JS interval left is the bubble's 1 s check.
-    expect(button.match(/setInterval\(/g) ?? []).toHaveLength(1);
+    // The only JS intervals left: the bubble's 1 s check, and the clock
+    // recheck that runs only while the button is hidden for an hour.
+    expect(button.match(/setInterval\(/g) ?? []).toHaveLength(2);
+    expect(button).toMatch(/setInterval\(\(\) => setNow\(clock\(\)\), hideRecheckMs\)/);
     expect(button).toMatch(
       /setInterval\(\(\) => \{\s*const store = useTipMascotStore\.getState\(\)/,
     );
