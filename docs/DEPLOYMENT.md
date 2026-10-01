@@ -333,6 +333,65 @@ update_). Regenerating the secret on Strava only needs a new
 - Nothing is uploaded without an explicit user action, and _Disconnect_ in
   Settings also revokes the grant via `/oauth/deauthorize`.
 
+## Place search (Photon through the tile Worker)
+
+The map's _Search places_ box (#496) asks the tile Worker's
+`GET /search?q=&lang=&alt=&lat=&lon=&limit=` (`infra/tiles/worker/src/search.ts`),
+which forwards to a [Photon](https://github.com/komoot/photon) geocoder —
+OpenStreetMap data, by komoot. The app never calls Photon directly, so the
+upstream can change without an app release.
+
+### Photon's API, as we use it
+
+- Endpoint `/api` (the `PHOTON_URL` var; default `https://photon.komoot.io/api/`),
+  answering GeoJSON. Parameters we send: `q` (made for search-as-you-type),
+  `limit`, `lang` (the public instance indexes `default`, `en`, `fr`, `de`,
+  `it`; omitted = local `name`) and `lat`/`lon` (location bias; we round to
+  0.01°, about 1 km). Photon also offers `osm_tag` (`key:value`, `!key:value`,
+  `:value`) and `layer` filters, `bbox`, `zoom` and `location_bias_scale`; we
+  filter and rank in the app instead (`src/core/search`), so one cached answer
+  serves every filter.
+- Each feature's `properties` carry `osm_key`/`osm_value` (mapped to our place
+  types in `src/core/search/placeTypes.ts`), `type` (Photon's layer), `name`,
+  `city`/`county`/`state`/`country`, and for areas an `extent` of
+  `[minLon, maxLat, maxLon, minLat]`. `extra` (extra OSM tags) is empty on the
+  public instance, so summits show no elevation there; a self-hosted Photon
+  imported with extra tags `ele` lights the elevation up with no app change.
+- `alt=en|fr` makes the Worker ask a second language too and merge it as
+  `alt_name` (shown in grey). That doubles upstream calls for a cache miss;
+  set `PHOTON_ALT_NAMES = "0"` to turn it off.
+
+### Fair-use policy of photon.komoot.io
+
+komoot's public instance is free "as long as the number of requests stay in a
+reasonable limit. Extensive usage will be throttled or completely banned", with
+no availability guarantee and changes without notice; for larger volumes they
+ask you to run your own instance. Hence the Worker:
+
+- sends an identifying `User-Agent` (`SEARCH_USER_AGENT` in `search.ts`);
+- caches every answer at the edge for a day (`SEARCH_CACHE_CONTROL`), keyed on
+  the case- and space-folded query, so every phone typing "Mont-Sainte-Anne"
+  costs Photon one request a day;
+- limits upstream calls per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
+  per isolate; for a global limit, enable the commented `[[ratelimits]]`
+  binding `SEARCH_LIMITER` in `wrangler.toml`);
+- the app debounces 250 ms, needs 2 characters, and aborts stale requests.
+
+If traffic grows past "reasonable", self-host Photon on the NAS (Docker image
+`rtuszik/photon-docker` or the release JAR with a Nominatim/OSM dump; North
+America is tens of GB) and set `PHOTON_URL` to it.
+
+### Deploying the route
+
+```sh
+cd infra/tiles/worker
+npx wrangler deploy          # ships GET /search with the [vars] above
+curl -s "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/search?q=Katahdin&lang=en&alt=fr&limit=3" | head -c 400
+```
+
+Until it is deployed the app shows "Search is unavailable right now" and still
+answers coordinates and on-device matches.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for                                        |

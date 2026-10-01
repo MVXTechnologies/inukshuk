@@ -110,7 +110,7 @@
       ><a href="./" lang="fr" hreflang="fr" aria-current="page">FR</a>
     </div>
     <h1>Inukshuk — Politique de confidentialité</h1>
-    <p class="updated">Dernière mise à jour : 29 septembre 2026</p>
+    <p class="updated">Dernière mise à jour : 1er octobre 2026</p>
 
     <p>
       Inukshuk est une application gratuite et libre de navigation de sentiers hors ligne : elle
@@ -297,6 +297,25 @@
         >) depuis notre propre serveur de tuiles et, quand vous ouvrez un sentier, son tracé. Seul
         l'identifiant du sentier est demandé — jamais votre identité ni votre position ; les
         sentiers près de vous sont déterminés sur votre téléphone.
+      </li>
+      <li>
+        <strong>Rechercher un lieu.</strong> Quand vous tapez un nom de lieu dans la case
+        <em>Search places</em> de la carte, l'application envoie ce que vous avez tapé, la langue de
+        votre téléphone (français ou anglais) et une position approximative — la vôtre, ou le centre
+        de la carte si l'application n'a pas de position, <em>arrondie à environ 1 km</em> — à notre
+        propre serveur de tuiles, afin que les lieux proches apparaissent en premier. Notre serveur
+        transmet ces trois mêmes éléments à <a href="https://photon.komoot.io/">Photon</a>, un
+        moteur de recherche de lieux OpenStreetMap exploité par
+        <a href="https://www.komoot.com/privacy">komoot</a>, qui répond avec les lieux
+        correspondants ; Photon voit l'adresse de notre serveur, pas la vôtre. Les réponses sont
+        mises en cache sur notre serveur pendant une journée, pour que les recherches répétées ne
+        retournent pas chez Photon, et notre serveur compte les requêtes par adresse IP pendant une
+        minute pour prévenir les abus ; rien n'est journalisé ni conservé au-delà. Les coordonnées
+        que vous tapez dans la case ne sont jamais envoyées. Sans connexion, ou avec
+        <em>Locally downloaded only</em> activé, rien n'est envoyé : la case cherche dans vos
+        propres sentiers, points de repère et cartes, sur l'appareil. Les dix derniers lieux choisis
+        sont conservés sur votre téléphone seulement, et <em>Clear</em> dans la case de recherche
+        les efface.
       </li>
       <li>
         <strong>Explorer (le catalogue de cartes).</strong> L'onglet Explorer télécharge un
