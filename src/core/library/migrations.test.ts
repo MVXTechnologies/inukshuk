@@ -750,6 +750,44 @@ describe('malformed nested library records', () => {
     expect(index.tracks[0]?.origin).toEqual(origin);
   });
 
+  it('upgrades a v10 index: maps follow the global see-through white', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: 10,
+      maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], activePages: [0] }],
+    });
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.maps[0]).not.toHaveProperty('whiteKey');
+  });
+
+  it("carries a map's see-through white override and drops junk", () => {
+    const withKey = (whiteKey: unknown) =>
+      migrateLibraryIndex({
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        maps: [{ id: 'm1', fileUri: 'maps/m1.pdf', georeferences: [geoRef(0)], whiteKey }],
+      }).maps[0];
+    for (const level of [0, 1, 2, 3, 4]) {
+      expect(withKey(level)?.whiteKey).toBe(level);
+    }
+    for (const junk of ['half', '', 5, -1, 2.5, null, {}]) {
+      expect(withKey(junk)).not.toHaveProperty('whiteKey');
+    }
+  });
+
+  it('migrates the 3-level override onto the slider: off → 0, some → 2, full → 4', () => {
+    const migrated = migrateLibraryIndex({
+      schemaVersion: LIBRARY_SCHEMA_VERSION,
+      maps: (['off', 'some', 'full'] as const).map((whiteKey, i) => ({
+        id: `m${i}`,
+        fileUri: `maps/m${i}.pdf`,
+        georeferences: [geoRef(0)],
+        whiteKey,
+      })),
+    });
+    expect(migrated.maps.map((m) => m.whiteKey)).toEqual([0, 2, 4]);
+    // Idempotent: a second pass keeps the stops.
+    expect(migrateLibraryIndex(migrated).maps.map((m) => m.whiteKey)).toEqual([0, 2, 4]);
+  });
+
   it('drops a junk trail origin but keeps the trail (#432)', () => {
     for (const origin of [
       null,

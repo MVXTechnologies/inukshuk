@@ -6,6 +6,7 @@ import type {
   TrackNote,
   Waypoint,
 } from '@core/models';
+import { parseWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
@@ -24,7 +25,7 @@ import { isWaypointIcon } from './waypointIcons';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 10;
+export const LIBRARY_SCHEMA_VERSION = 11;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -196,6 +197,18 @@ function normalizeNotes(raw: unknown): TrackNote[] {
 }
 
 /**
+ * A map's persisted "See-through white" override: a slider stop (0–4) kept,
+ * a name from the feature's first, 3-level cut migrated (off → 0, some → 2,
+ * full → 4), junk dropped (= follow the global level). Done here in the
+ * sanitize pass rather than as a version step, so it holds whatever version
+ * stamp a file carries.
+ */
+function whiteKeyOverride(v: unknown): Pick<MapDocument, 'whiteKey'> {
+  const level = parseWhiteKeyLevel(v);
+  return level === undefined ? {} : { whiteKey: level };
+}
+
+/**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
  * `georeferences[]` + `activePages[]` (defaulting to every georeferenced page
@@ -258,6 +271,7 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     ...(typeof legacy.sourceUpdatedAt === 'string'
       ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
       : {}),
+    ...whiteKeyOverride(raw.whiteKey),
   };
 }
 
@@ -317,6 +331,11 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // (nothing imported from a source before), so a pure version stamp; the
   // sanitize pass below validates the field wherever it IS present.
   9: (doc) => ({ ...doc, schemaVersion: 10 }),
+  // v10 → v11: maps gained the optional per-map "See-through white" override
+  // (`whiteKey`). Absent means "follow the global level" — what every pre-v11
+  // map did — so a pure version stamp; the sanitize pass validates the field
+  // wherever it IS present.
+  10: (doc) => ({ ...doc, schemaVersion: 11 }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */

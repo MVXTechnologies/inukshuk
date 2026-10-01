@@ -241,13 +241,36 @@ export function LevelsRow<V extends string | number>({
   disabled?: boolean;
 }) {
   return (
+    <ControlRow icon={icon} label={label} hint={hint} disabled={disabled}>
+      <Segmented levels={levels} selected={selected} onSelect={onSelect} disabled={disabled} />
+    </ControlRow>
+  );
+}
+
+/**
+ * A row whose control sits underneath (no on/off of its own) — a slider or
+ * any other control that brings its own accessibility. The header is plain
+ * text (dimmed with the control when `disabled`).
+ */
+export function ControlRow({
+  icon,
+  label,
+  hint,
+  disabled = false,
+  children,
+}: {
+  icon: string;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
     <View>
       <View style={[styles.row, styles.rowStatic, disabled && styles.dimmed]}>
         <RowText icon={icon} label={label} hint={hint} />
       </View>
-      <View style={styles.below}>
-        <Segmented levels={levels} selected={selected} onSelect={onSelect} disabled={disabled} />
-      </View>
+      <View style={styles.below}>{children}</View>
     </View>
   );
 }

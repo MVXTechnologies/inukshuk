@@ -286,6 +286,7 @@ export function MapScreen() {
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
   const activeTrackIds = useLibraryStore((s) => s.activeTrackIds);
   const showPdfOverlay = useSettingsStore((s) => s.showPdfOverlay);
+  const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const shownMaps = useMemo(
     () => pdfOverlayMaps(showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps),
     [showPdfOverlay, mapVisibilityMode, visibleFolderIds, maps],
@@ -296,7 +297,7 @@ export function MapScreen() {
   );
   // `enabled` is passed as well as the (already empty) target list so a page
   // mid-render when the switch flips off is abandoned, not drawn late.
-  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
+  const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay, pdfWhiteKey);
   // The trail-overlays master switch (map store): off, no trail or heat
   // geometry is drawn, so none is loaded or built either (#465).
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
