@@ -347,10 +347,12 @@ upstream can change without an app release.
   answering GeoJSON. Parameters we send: `q` (made for search-as-you-type),
   `limit`, `lang` (the public instance indexes `default`, `en`, `fr`, `de`,
   `it`; omitted = local `name`) and `lat`/`lon` (location bias; we round to
-  0.01°, about 1 km). Photon also offers `osm_tag` (`key:value`, `!key:value`,
-  `:value`) and `layer` filters, `bbox`, `zoom` and `location_bias_scale`; we
-  filter and rank in the app instead (`src/core/search`), so one cached answer
-  serves every filter.
+  0.01°, about 1 km), plus `osm_tag` exclusions from `PHOTON_OSM_TAGS`
+  (default `!shop,!office,!craft`: a furniture store named "Katahdin" must not
+  take the peak's slot). Photon also offers `osm_tag` inclusions (`key:value`,
+  `:value`), `layer`, `bbox`, `zoom` and `location_bias_scale`; the rest of
+  the filtering and the ranking happen in the app (`src/core/search`), so one
+  cached answer serves every view.
 - Each feature's `properties` carry `osm_key`/`osm_value` (mapped to our place
   types in `src/core/search/placeTypes.ts`), `type` (Photon's layer), `name`,
   `city`/`county`/`state`/`country`, and for areas an `extent` of

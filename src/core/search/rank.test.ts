@@ -125,6 +125,24 @@ describe('dedupePlaces', () => {
   });
 });
 
+describe('dedupePlaces — linear features', () => {
+  it('merges same-named stream segments a few km apart, but not two far streams', () => {
+    const stream = (id: string, latitude: number) => ({
+      place: place({ id, name: 'Katahdin Stream', type: 'river', latitude, longitude: -68.97 }),
+    });
+    const kept = dedupePlaces([stream('a', 45.85), stream('b', 45.87), stream('c', 46.2)]);
+    expect(kept.map((k) => k.place.id)).toEqual(['a', 'c']);
+  });
+
+  it('keeps a peak and a lake of the same name a few km apart', () => {
+    const kept = dedupePlaces([
+      { place: place({ id: 'p', name: 'Lac Noir', type: 'peak', latitude: 47 }) },
+      { place: place({ id: 'l', name: 'Lac Noir', type: 'lake', latitude: 47.02 }) },
+    ]);
+    expect(kept).toHaveLength(2);
+  });
+});
+
 describe('rankAndDedupe', () => {
   it('ranks, dedupes and caps', () => {
     const many = Array.from({ length: 20 }, (_, i) =>

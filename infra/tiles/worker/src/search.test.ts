@@ -136,23 +136,40 @@ describe('handleSearch', () => {
     expect(h.calls).toHaveLength(2);
     const [fr, en] = h.calls;
     expect(fr?.url.origin + fr!.url.pathname).toBe(DEFAULT_PHOTON_URL);
-    expect(Object.fromEntries(fr!.url.searchParams)).toEqual({
-      q: 'Mont-Sainte-Anne',
-      limit: '5',
-      lang: 'fr',
-      lat: '46.81',
-      lon: '-71.21',
-    });
+    const params = fr!.url.searchParams;
+    expect(params.get('q')).toBe('Mont-Sainte-Anne');
+    expect(params.get('limit')).toBe('5');
+    expect(params.get('lang')).toBe('fr');
+    expect(params.get('lat')).toBe('46.81');
+    expect(params.get('lon')).toBe('-71.21');
+    // Shops, offices and workshops never take a result slot.
+    expect(params.getAll('osm_tag')).toEqual(['!shop', '!office', '!craft']);
     expect(en?.url.searchParams.get('lang')).toBe('en');
+    expect(en?.url.searchParams.getAll('osm_tag')).toEqual(['!shop', '!office', '!craft']);
     expect(fr?.headers.get('User-Agent')).toBe(SEARCH_USER_AGENT);
   });
 
   it('uses PHOTON_URL, omits lang=default, and can skip the second language', async () => {
     const h = harness(() => Response.json(fc()));
-    const env: SearchEnv = { PHOTON_URL: 'http://nas.local:2322/api', PHOTON_ALT_NAMES: '0' };
+    const env: SearchEnv = {
+      PHOTON_URL: 'http://nas.local:2322/api',
+      PHOTON_ALT_NAMES: '0',
+      PHOTON_OSM_TAGS: '',
+    };
     await handleSearch(get('q=Chamonix&alt=fr'), env, h.deps, CORS);
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0]?.url.toString()).toBe('http://nas.local:2322/api?q=Chamonix&limit=10');
+  });
+
+  it('takes its osm_tag filters from PHOTON_OSM_TAGS, dropping malformed ones', async () => {
+    const h = harness(() => Response.json(fc()));
+    const env: SearchEnv = { PHOTON_OSM_TAGS: ' !shop , natural:peak, bad tag, !x&y=1 ' };
+    await handleSearch(get('q=Chamonix'), env, h.deps, CORS);
+    expect(h.calls[0]?.url.searchParams.getAll('osm_tag')).toEqual(['!shop', 'natural:peak']);
+    // A different filter set is a different cache entry.
+    await h.settle();
+    await handleSearch(get('q=Chamonix'), {}, h.deps, CORS);
+    expect(h.calls).toHaveLength(2);
   });
 
   it('answers a repeat (any case or spacing) from the cache without going upstream', async () => {

@@ -20,6 +20,8 @@ STRAVA_CLIENT_ID = "283079"
 PHOTON_URL = "https://photon.komoot.io/api/"
 SEARCH_CACHE_CONTROL = "public, max-age=86400"
 SEARCH_RATE_PER_MIN = "60"
+# Photon osm_tag filters on every query: shops, offices and workshops never take a slot.
+PHOTON_OSM_TAGS = "!shop,!office,!craft"
 
 # Optional global rate limit for /search (otherwise a per-isolate counter):
 # [[ratelimits]]

@@ -32,6 +32,8 @@ export interface SearchEnv {
   SEARCH_RATE_PER_MIN?: string;
   /** "0" disables the second-language request. */
   PHOTON_ALT_NAMES?: string;
+  /** Photon `osm_tag` filters, comma separated (see {@link DEFAULT_OSM_TAGS}). */
+  PHOTON_OSM_TAGS?: string;
   /**
    * Optional Cloudflare rate-limiting binding (`[[ratelimits]]` in
    * wrangler.toml), global across isolates. Without it, a per-isolate counter
@@ -107,8 +109,28 @@ export function parseSearchParams(url: URL): SearchParams | string {
   };
 }
 
+/**
+ * Photon `osm_tag` filters sent with every query (`PHOTON_OSM_TAGS`, comma
+ * separated; "" sends none). By default shops, offices and workshops are left
+ * out: a trail app never wants the furniture store named "Katahdin", and each
+ * one takes a slot the peak needed.
+ */
+export const DEFAULT_OSM_TAGS = '!shop,!office,!craft';
+
+export function osmTagFilters(env: SearchEnv): string[] {
+  return (env.PHOTON_OSM_TAGS ?? DEFAULT_OSM_TAGS)
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => /^!?[a-z0-9_:]+$/i.test(t));
+}
+
 /** Upstream URL for one language. */
-export function photonUrl(base: string, p: SearchParams, lang: string): string {
+export function photonUrl(
+  base: string,
+  p: SearchParams,
+  lang: string,
+  osmTags: readonly string[] = [],
+): string {
   const u = new URL(base);
   u.searchParams.set('q', p.q);
   u.searchParams.set('limit', String(p.limit));
@@ -117,12 +139,19 @@ export function photonUrl(base: string, p: SearchParams, lang: string): string {
     u.searchParams.set('lat', p.lat.toFixed(2));
     u.searchParams.set('lon', p.lon.toFixed(2));
   }
+  for (const tag of osmTags) u.searchParams.append('osm_tag', tag);
   return u.toString();
 }
 
 /** Canonical cache key: case- and whitespace-folded, parameters in a fixed order. */
-export function searchCacheKey(p: SearchParams, alt: string | null): Request {
+export function searchCacheKey(
+  p: SearchParams,
+  alt: string | null,
+  osmTags: readonly string[] = [],
+): Request {
   const u = new URL('https://search-cache.inukshuk.invalid/v' + SEARCH_CACHE_VERSION);
+  // A filter change is a different answer: never serve one cached under another.
+  if (osmTags.length > 0) u.searchParams.set('tags', osmTags.join(','));
   u.searchParams.set('q', p.q.toLowerCase());
   u.searchParams.set('lang', p.lang);
   if (alt !== null) u.searchParams.set('alt', alt);
@@ -236,7 +265,8 @@ export async function handleSearch(
   if (typeof params === 'string') return jsonError(400, params, cors);
   const alt = env.PHOTON_ALT_NAMES === '0' ? null : params.alt;
 
-  const key = searchCacheKey(params, alt);
+  const tags = osmTagFilters(env);
+  const key = searchCacheKey(params, alt, tags);
   const hit = await deps.cache.match(key);
   if (hit !== undefined) {
     const headers = new Headers(hit.headers);
@@ -256,11 +286,11 @@ export async function handleSearch(
   let body: Record<string, unknown>;
   try {
     const [primary, second] = await Promise.all([
-      fetchPhoton(deps, photonUrl(base, params, params.lang)),
+      fetchPhoton(deps, photonUrl(base, params, params.lang, tags)),
       // The second language is a nicety: its failure never fails the search.
       alt === null
         ? Promise.resolve(null)
-        : fetchPhoton(deps, photonUrl(base, params, alt)).catch(() => null),
+        : fetchPhoton(deps, photonUrl(base, params, alt, tags)).catch(() => null),
     ]);
     body = second === null ? primary : mergeAltNames(primary, second);
   } catch (e) {
