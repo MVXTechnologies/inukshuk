@@ -9,6 +9,8 @@ import { simplifyTrack } from '@core/geo/track/simplify';
 import { largeLibrary } from '@core/heat/__fixtures__/quebecLibrary';
 import { nextCullRegion, type CullRegion } from '@core/map/viewportCull';
 import type { BoundingBox, TrackSummary } from '@core/models';
+import { getHeatStore, HeatStore, setHeatStoreForTests } from '@data/heatStore';
+import { MemoryHeatIO } from '@data/heatStoreMemoryIO';
 import * as storage from '@data/storage';
 import { clearTrackGeometryMemory, peekTrackGeometry, trackGeometryKey } from '@data/trackGeometry';
 import { act, renderHook } from '@testing-library/react-native';
@@ -23,6 +25,7 @@ jest.mock('@data/storage', () => ({
   readTrackGeometryCache: jest.fn(async (id: string) => mockCacheFiles.get(id) ?? null),
   writeTrackGeometryCache: jest.fn(),
 }));
+jest.mock('@data/heatStoreFiles', () => ({ createHeatFileIO: jest.fn() }));
 
 const lib = largeLibrary(80, { stepSec: 10 });
 /** The fixture's trails, each with its stored bbox and a warm geometry cache. */
@@ -96,6 +99,13 @@ async function settle() {
     } else quiet = 0;
     lastReads = (storage.readTrackGeometryCache as jest.Mock).mock.calls.length;
   }
+  // The stored heat: built and written, and its tiles read back.
+  await act(() => getHeatStore().whenIdle());
+  for (let i = 0; i < 10; i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+  }
 }
 let lastReads = -1;
 let quiet = 0;
@@ -114,6 +124,12 @@ function mount(
 }
 
 beforeEach(() => {
+  setHeatStoreForTests(
+    new HeatStore({
+      io: new MemoryHeatIO(),
+      policy: { maxBatch: 50, debounceMs: 50, costRatio: 4 },
+    }),
+  );
   clearTrackGeometryMemory();
   (storage.readTrackGeometryCache as jest.Mock).mockClear();
   lastReads = -1;

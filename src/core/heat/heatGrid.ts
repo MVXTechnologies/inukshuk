@@ -71,6 +71,17 @@ export class CellGrid {
     const col = Math.min(half - 1, Math.floor(((lng === 180 ? -180 : lng) / 180) * half));
     return row * ROW_STRIDE + (col + COL_OFFSET);
   }
+  /** Centre `[lng, lat]` of the cell `key` (the inverse of {@link key}, to the cell). */
+  center(key: number): [number, number] {
+    const { row, col } = CellGrid.unkey(key);
+    const lat = ((row + 0.5) * this.cellM) / M_PER_DEG;
+    return [((col + 0.5) / this.halfColumns(row)) * 180, lat];
+  }
+  /** Size `[lng, lat]` of the cell `key`, in degrees. */
+  spanDeg(key: number): [number, number] {
+    const { row } = CellGrid.unkey(key);
+    return [180 / this.halfColumns(row), this.cellM / M_PER_DEG];
+  }
   /** Row/col of a key (for neighbourhood lookups and tests). */
   static unkey(key: number): { row: number; col: number } {
     const row = Math.floor(key / ROW_STRIDE);
@@ -506,6 +517,14 @@ export function heatGlowPoints(
 /** cell → categoryId → trail ids through that cell (in input order). */
 export type GridIndex = Map<number, Map<string, string[]>>;
 
+/**
+ * What the tap lookups read: a {@link GridIndex}, or anything that answers
+ * the same per-cell question (e.g. the stored heat's tiles, #500).
+ */
+export interface GridIndexLike {
+  get(cell: number): ReadonlyMap<string, readonly string[]> | undefined;
+}
+
 /** One trail for the tap index: its visited cells (see {@link walkTrackCells}). */
 export interface GridIndexInput {
   id: string;
@@ -543,7 +562,7 @@ export const TAP_REACH_CELLS = 2;
  * order) and whether any single category has ≥ 2 distinct trails there.
  */
 export function gridTrailsNear(
-  index: GridIndex,
+  index: GridIndexLike,
   grid: CellGrid,
   cell: number,
   reach: number = TAP_REACH_CELLS,
@@ -589,7 +608,7 @@ export const MAX_GRID_TAP_RADIUS_M = 3000;
  * The work is bounded by the radius, never by the library's size.
  */
 export function gridTrailsNearWithin(
-  index: GridIndex,
+  index: GridIndexLike,
   grid: CellGrid,
   lng: number,
   lat: number,

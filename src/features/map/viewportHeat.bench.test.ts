@@ -33,6 +33,13 @@ jest.mock('@data/storage', () => ({
   }),
 }));
 
+// Heat-on scenarios read the stored heat (#500) from an in-memory directory;
+// `persistedHeat.bench` separates its cold build from a warm open.
+jest.mock('@data/heatStoreFiles', () => {
+  const { MemoryHeatIO } = jest.requireActual('@data/heatStoreMemoryIO');
+  return { createHeatFileIO: () => new MemoryHeatIO() };
+});
+
 const mockGridLines = jest.fn();
 const mockIndexBuilds = jest.fn();
 jest.mock('@core/heat/heatGrid', () => {
