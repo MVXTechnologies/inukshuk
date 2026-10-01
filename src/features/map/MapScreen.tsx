@@ -489,7 +489,23 @@ export function MapScreen() {
   // What the trail lines and heatmap are built for (#494): the settled
   // viewport plus a margin, sticky across small moves (see useCullRegion).
   const cullRegion = useCullRegion(settledBounds, scaleAt?.zoom ?? null);
-  const trackHeat = useTrackHeat(tracks, drawnTrackIds, allTrackIds, heatOn, cullRegion);
+  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
+    useTrailInspection(tracks);
+  // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
+  // otherwise whichever trail is open in the inspect panel. Its geometry is
+  // loaded even when its trace is hidden (the heatmap itself no longer loads
+  // the library's, #500), so its highlight can be drawn.
+  const focusedTrackId = heatSelection
+    ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
+    : inspectId;
+  const trackHeat = useTrackHeat(
+    tracks,
+    drawnTrackIds,
+    allTrackIds,
+    heatOn,
+    cullRegion,
+    focusedTrackId,
+  );
   // The big sources, serialized once per data change (#465).
   // <GeoJSONSource> stringifies an object `data` on EVERY render of the source
   // — and a selection flips the lines layer's filter, which re-renders it — so
@@ -1146,8 +1162,6 @@ export function MapScreen() {
     if (terrainOverlays2d.error) showOverlaySnack(`Terrain overlay: ${terrainOverlays2d.error}`);
   }, [terrainOverlays2d.error, showOverlaySnack]);
 
-  const { inspectId, inspectTrack, inspectPoints, markerAt, setMarkerAt, inspect } =
-    useTrailInspection(tracks);
   // TrailInspectPanel's real measured height (via its onLayout), so the
   // select-trail camera fit below pads exactly above the panel instead of
   // guessing. Stays set across panel remounts (same trail-inspect layout
@@ -1783,9 +1797,6 @@ export function MapScreen() {
   // otherwise whichever trail is open in the inspect panel. When ANY trail is
   // selected, every other trail is hidden outright (not dimmed) via the lines
   // layer's filter below — see item 1's selection-visibility rule.
-  const focusedTrackId = heatSelection
-    ? (heatSelection.trackIds[heatSelection.focusedIdx] ?? null)
-    : inspectId;
   const hasSelection = heatSelection !== null || inspectId !== null;
 
   // The focused trail's own geometry, looked up independent of shown-trail
