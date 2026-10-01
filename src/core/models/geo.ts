@@ -22,10 +22,3 @@ export interface BoundingBox {
   maxLat: number;
   maxLng: number;
 }
-
-export const latLngToLngLat = (p: LatLng): LngLat => [p.longitude, p.latitude];
-
-export const lngLatToLatLng = ([longitude, latitude]: LngLat): LatLng => ({
-  latitude,
-  longitude,
-});

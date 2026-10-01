@@ -1,6 +1,5 @@
-import { createHeadingFilter, signedDeltaDeg } from '@core/signal/heading';
+import { createHeadingFilter } from '@core/signal/heading';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
 
 /** One smoothed compass update delivered to subscribers. */
 export interface CompassSample {
@@ -89,40 +88,4 @@ export function subscribeHeading(listener: Listener): () => void {
     listeners.delete(listener);
     if (listeners.size === 0) stopWatching();
   };
-}
-
-/**
- * Minimum circular change (deg) before a new value is pushed to React state.
- * The filter already holds the heading perfectly still at rest, so this is not
- * a jitter defence — it just keeps a stationary sensor from re-rendering. Keep
- * it well under a degree or it re-introduces visible stepping while turning.
- */
-const MIN_EMIT_DELTA_DEG = 0.1;
-
-/**
- * Device compass heading (filtered, [0, 360)) plus sensor accuracy, or null
- * until the first reading. Prefers true heading, falling back to magnetic.
- * Requires location permission to already be granted.
- *
- * Re-renders are gated: state only updates when the filtered heading moves by
- * at least MIN_EMIT_DELTA_DEG or the reported accuracy changes.
- */
-export function useCompass(enabled = true): CompassSample | null {
-  const [sample, setSample] = useState<CompassSample | null>(null);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const unsubscribe = subscribeHeading((next) => {
-      setSample((prev) =>
-        prev !== null &&
-        prev.accuracy === next.accuracy &&
-        Math.abs(signedDeltaDeg(prev.headingDeg, next.headingDeg)) < MIN_EMIT_DELTA_DEG
-          ? prev
-          : next,
-      );
-    });
-    return unsubscribe;
-  }, [enabled]);
-
-  return enabled ? sample : null;
 }

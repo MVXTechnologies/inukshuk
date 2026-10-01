@@ -39,11 +39,6 @@ export async function requestHealthPermissions(): Promise<HealthPermissionOutcom
   return healthPlatform ? healthPlatform.requestPermissions() : 'denied';
 }
 
-/** True when `openHealthInstall` does something (Android: the Play Store). */
-export function canOpenHealthInstall(): boolean {
-  return healthPlatform?.openInstall != null;
-}
-
 /** Open the store page that installs Health Connect; no-op elsewhere. */
 export async function openHealthInstall(): Promise<void> {
   await healthPlatform?.openInstall?.();

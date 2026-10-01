@@ -30,7 +30,7 @@ const MIN_EMIT_INTERVAL_MS = 80;
  * where the Camera is rendered) keeps a real rotation fluid. When the setting
  * is off the hook subscribes to nothing.
  *
- * Like `useCompass`, this expects location permission to already be granted.
+ * Like `subscribeHeading`, this expects location permission to already be granted.
  */
 export function useHeadingCamera(): number | undefined {
   const enabled = useSettingsStore((s) => s.rotateMapWithHeading);
