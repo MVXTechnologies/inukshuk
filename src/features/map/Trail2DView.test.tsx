@@ -9,7 +9,7 @@ import { TILT_RELIEF_LAYER_ID } from './mapStyle';
 
 /**
  * #480: the focused trail view is the MapLibre map, tilted with two fingers
- * like the main map (its three.js 3D button is gone), and it deepens the
+ * like the main map, and it deepens the
  * relief as it tilts. MapLibre is stubbed: the stubs record the props the
  * view hands the native components.
  */

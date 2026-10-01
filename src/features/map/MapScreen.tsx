@@ -108,8 +108,7 @@ import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
-import { Terrain3DLiveView } from './Terrain3DLiveView';
-import { lineStringsOf, toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson';
+import { toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
@@ -137,7 +136,6 @@ import { useTerrainOverlays2D } from './useTerrainOverlays2D';
 import { useCullRegion } from './useCullRegion';
 import { useTrackHeat } from './useTrackHeat';
 import { useGeoJsonString } from './useGeoJsonString';
-import { useTrackOverlays } from './useTrackOverlays';
 import { MarineDisclaimerChip } from './marine/MarineDisclaimerChip';
 import { MarinePackBanner } from './marine/MarinePackBanner';
 import { DepthPointLine } from './marine/DepthPointLine';
@@ -247,8 +245,8 @@ export function MapScreen() {
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
   // True only between onDidFinishLoadingMap and the next onWillStartLoadingMap
-  // (which also fires when a remounted <Map> — e.g. back from 3D — starts
-  // loading, re-arming the gate). Every mapRef.getViewState() must be gated on
+  // (which also fires when a remounted <Map> starts loading, re-arming the
+  // gate). Every mapRef.getViewState() must be gated on
   // this: called before the native view is initialized, MLRNMapView.getCenter
   // NPEs on the native thread — a process crash a JS .catch() cannot intercept
   // (the launch-race crash behind the 07-30 nightly and local blank screens).
@@ -299,17 +297,10 @@ export function MapScreen() {
   // `enabled` is passed as well as the (already empty) target list so a page
   // mid-render when the switch flips off is abandoned, not drawn late.
   const { overlays, error: overlayError } = usePdfOverlays(shownMaps, showPdfOverlay);
-  // useTrackOverlays still backs the 3D drape (trail3dLines below) and the
-  // controls-rail overlay count — only the 2D per-trail render block was
-  // replaced by the combined heat source (trackHeat), so this call stays.
   // The trail-overlays master switch (map store): off, no trail or heat
   // geometry is drawn, so none is loaded or built either (#465).
   const showTrackOverlays = useMapStore((s) => s.showTrackOverlays);
   const drawnTrackIds = showTrackOverlays ? shownTrackIds : NO_IDS;
-  const terrain3dOn = useMapStore((s) => s.terrain3d);
-  // Only the 3D drape needs every drawn trail's line; the 2D map culls to
-  // the viewport (useTrackHeat), so nothing loads off-screen trails here.
-  const trackOverlays = useTrackOverlays(tracks, terrain3dOn ? drawnTrackIds : NO_IDS);
   const drawnTrackCount = useMemo(() => {
     const ids = new Set(tracks.map((t) => t.id));
     return drawnTrackIds.filter((id) => ids.has(id)).length;
@@ -338,7 +329,6 @@ export function MapScreen() {
 
   const followUser = useMapStore((s) => s.followUser);
   const setFollowUser = useMapStore((s) => s.setFollowUser);
-  const terrain3d = useMapStore((s) => s.terrain3d);
   const basemap = useMapStore((s) => s.basemap);
   const shownTrail = useLongTrailsStore((s) => s.shown);
   const [trailSheetHeight, setTrailSheetHeight] = useState(0);
@@ -362,8 +352,7 @@ export function MapScreen() {
           : CONTOUR_LAYERS.stoneLight
         : CONTOUR_LAYERS.plain;
   const offlineRegions = useOfflineStore((s) => s.regions);
-  // 2D base style with shaded-relief hillshade for the outdoor/topo look;
-  // hillshade-3D was replaced by the real 3D terrain surface.
+  // 2D base style with shaded-relief hillshade for the outdoor/topo look.
   //
   // With "Locally downloaded only" on, the style also (a) caps the raster
   // source at the packs' top stored zoom so zooming past it overscales the
@@ -607,11 +596,11 @@ export function MapScreen() {
   // marine chart fetch) needs a focus gate — declared here because the style
   // memo below already depends on it through the marine chart.
   const [screenFocused, setScreenFocused] = useState(true);
-  // Re-arm the getViewState gate whenever <Map> itself is NOT mounted (3D,
-  // or before the persisted camera seed). This replaces the old
+  // Re-arm the getViewState gate whenever <Map> itself is NOT mounted
+  // (before the persisted camera seed). This replaces the old
   // onWillStartLoadingMap reset, which also fired on every style reload —
   // see the handler's note on the reload storm that caused.
-  const mapMounted = !terrain3d && settingsHydrated;
+  const mapMounted = settingsHydrated;
   useEffect(() => {
     if (mapMounted) return;
     const t = setTimeout(() => setMapLoaded(false), 0);
@@ -629,7 +618,7 @@ export function MapScreen() {
   // simply re-enables the legacy WMS drape below.
   const units = useSettingsStore((s) => s.units);
   const marineChart = useMarineChart(
-    marineActive && !terrain3d && screenFocused && mapLoaded,
+    marineActive && screenFocused && mapLoaded,
     settledBounds,
     units === 'imperial',
     installedPacks,
@@ -732,7 +721,6 @@ export function MapScreen() {
     const editor = editorStyle === null ? null : printStyleById(editorStyle);
     return buildOsmStyle(
       editor ? editor.tileUrl : tileUrl,
-      false,
       editor ? editor.drape : basemap,
       showHillshade,
       // Under-declare the tile size while the editor is open so the sheet gets
@@ -942,7 +930,6 @@ export function MapScreen() {
   // boundsVersion only advances for a flat north-up camera (its offline-select
   // contract), which froze the overlays on a rotated/pitched map: pan all you
   // want, nothing recomputed until the layer was toggled off and on.
-  // In 3D the terrain shader draws the same analysis from the same settings.
   const [regionVersion, setRegionVersion] = useState(0);
   // `screenFocused` (declared above with the marine chart) is the focus gate:
   // without it the overlay pipeline kept fetching DEM tiles and contouring in
@@ -954,7 +941,7 @@ export function MapScreen() {
     // downloaded-only mask's blank void, which reads as garbage.
     // mapLoaded: the pipeline opens with getViewState — see the state's
     // declaration comment (native crash if called before the map loads).
-    active: !terrain3d && settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
+    active: settingsHydrated && screenFocused && !offlineOnly && mapLoaded,
     contoursFromTiles: vectorBasemap,
   });
 
@@ -965,12 +952,7 @@ export function MapScreen() {
   // AppState background gate itself; unmounting is what stops the GL loop.
   const windParticles = useSettingsStore((s) => s.windParticles);
   const windEnabled =
-    weatherLayer === 'wind' &&
-    !offlineOnly &&
-    windParticles &&
-    !terrain3d &&
-    screenFocused &&
-    mapLoaded;
+    weatherLayer === 'wind' && !offlineOnly && windParticles && screenFocused && mapLoaded;
   // Camera state at gesture rate lives in a REF (the GL loop reads it per
   // frame) — pushing 30–60 Hz onRegionIsChanging payloads through setState
   // would re-render the whole screen per frame. React state only carries the
@@ -1707,16 +1689,10 @@ export function MapScreen() {
   const trailFeature = useThrottledLineFeature(points, segmentStarts);
 
   // Camera seed: live fix → persisted last known position → MapLibre default.
-  // `location` covers the 3D→2D remount (the live fix is already in hand);
+  // `location` covers a remount with the live fix already in hand;
   // `lastKnownPosition` covers the cold start, where the first fix may be
   // minutes away (indoors) — without it the map opened on [0,0], null island.
   const initialCenter = resolveInitialCenter(location, lastKnownPosition);
-
-  // Active saved-trail polylines (lng/lat) to drape on the 3D terrain.
-  const trail3dLines = useMemo<readonly LngLat[][]>(
-    () => (showTrackOverlays ? trackOverlays.flatMap((t) => lineStringsOf(t.feature)) : []),
-    [showTrackOverlays, trackOverlays],
-  );
 
   // Which trail is "selected": a tap-selected heat spot (the carousel) wins,
   // otherwise whichever trail is open in the inspect panel. When ANY trail is
@@ -1780,7 +1756,7 @@ export function MapScreen() {
   const marinePackOfferState = useMemo(
     () =>
       marinePackOffer({
-        active: marineActive && !terrain3d && !selecting && makeMapState === null,
+        active: marineActive && !selecting && makeMapState === null,
         view: settledBounds,
         activeSourceId: marineChart.sourceId,
         installed: installedPacks,
@@ -1788,7 +1764,6 @@ export function MapScreen() {
       }),
     [
       marineActive,
-      terrain3d,
       selecting,
       makeMapState,
       settledBounds,
@@ -1837,22 +1812,11 @@ export function MapScreen() {
     !selecting &&
     makeMapState === null &&
     !inspectId &&
-    heatSelection === null &&
-    !terrain3d;
+    heatSelection === null;
 
   return (
     <View style={styles.fill}>
-      {terrain3d ? (
-        <Terrain3DLiveView
-          center={location}
-          basemap={basemap}
-          permission={permission}
-          trails={trail3dLines}
-          recordPoints={points}
-          recordSegmentStarts={segmentStarts}
-          waypoints={waypoints}
-        />
-      ) : !settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
+      {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
         <Map
           ref={mapRef}
           style={styles.fill}
@@ -1976,7 +1940,7 @@ export function MapScreen() {
         >
           <Camera
             ref={cameraRef}
-            // Cold launch and leaving 3D both mount <Map>/<Camera> fresh;
+            // A cold launch mounts <Map>/<Camera> fresh;
             // without a centre here MapLibre defaults to [0,0] (null island,
             // "middle of the Atlantic"). Seed from the live location when we
             // have one, else the persisted last known position. Once the first
@@ -2082,8 +2046,7 @@ export function MapScreen() {
           {/* Terrain overlays sit above the (near-opaque) PDF maps — they're
               explicit user toggles — and below trails/markers. The slope
               raster keeps NEAREST resampling so band edges stay hard when the
-              256-cell grid is stretched over the viewport (the CalTopo look);
-              opacity matches the 3D shader's SLOPE_OPACITY. */}
+              256-cell grid is stretched over the viewport (the CalTopo look). */}
           {terrainOverlays2d.slope && (
             <ImageSource
               id="slope2d"
@@ -2097,8 +2060,7 @@ export function MapScreen() {
               imagery (mostly dark), the warm brown over the light map/relief
               basemaps — each with a thin opposite-shade halo so lines stay
               readable across mixed terrain (line layers can't sample the
-              raster beneath, so this is per-basemap, not per-pixel; the 3D
-              shader does the true per-pixel version). */}
+              raster beneath, so this is per-basemap, not per-pixel). */}
           {terrainOverlays2d.contours && (
             <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
               {contourLayerSet.minor}
@@ -2332,7 +2294,7 @@ export function MapScreen() {
       )}
 
       {/* Region select overlay for offline download */}
-      {selecting && !terrain3d && (
+      {selecting && (
         <RegionSelectOverlay
           toGeo={toGeo}
           boundsVersion={boundsVersion}
@@ -2347,7 +2309,7 @@ export function MapScreen() {
       {/* Map maker (#349): a full-screen editor over the LIVE map. There is no
           region-box step any more — the sheet on screen IS the selection, and
           the bbox is read off the camera when Create is tapped. */}
-      {makeMapState !== null && !terrain3d && (
+      {makeMapState !== null && (
         <MapMakerEditor
           camera={editorCamera}
           progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
@@ -2367,7 +2329,7 @@ export function MapScreen() {
           Phase 1 is coordinates-first: it opens the coordinates dialog. Same
           gates as the rail, plus the offline-area selector, whose box
           starts right under it; 2D only, like the dialog's fly-to. */}
-      {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
+      {makeMapState === null && heatSelection === null && !selecting && (
         <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
           {/* A shown long-distance trail takes the pill's place (#467). */}
           {shownTrail !== null ? (
@@ -2381,9 +2343,8 @@ export function MapScreen() {
       {/* Mandatory marine notice (marine M3): whenever a marine layer is
           draped, the "Not for navigation" chip pins top-centre — between the
           compass (left) and the controls rail (right). A plain overlay chip
-          like the GPS warning, never a Portal/Dialog. 2D only: the 3D view
-          doesn't drape marine layers. */}
-      {marineActive && !terrain3d && (
+          like the GPS warning, never a Portal/Dialog. */}
+      {marineActive && (
         <View
           style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
           pointerEvents="none"
@@ -2396,7 +2357,7 @@ export function MapScreen() {
           stack (left) and the controls rail (right) — the same free lane the
           marine notice uses, so the two are mutually exclusive. Only while a
           destination exists; the ✕ on it is the way out. */}
-      {destination !== null && !marineActive && !terrain3d && (
+      {destination !== null && !marineActive && (
         <View
           style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
           pointerEvents="box-none"
@@ -2433,9 +2394,8 @@ export function MapScreen() {
             fitCycleRef.current += 1;
             if (overlay) fitOverlayBounds(overlay.bbox);
           }}
-          terrain3d={terrain3d}
           pdfOverlayCount={overlays.length}
-          trackOverlayCount={terrain3dOn ? trackOverlays.length : drawnTrackCount}
+          trackOverlayCount={drawnTrackCount}
           // "+" map actions (wave A item 6): moved out of the bottom-right
           // FAB.Group into the rail, directly below Map overlays. Hidden
           // (undefined) while a recording is under way (the active controls
@@ -2450,7 +2410,7 @@ export function MapScreen() {
                   onAddWaypoint,
                   // A second download would stop the first's loopback server.
                   onDownload:
-                    terrain3d || downloadProgress !== null
+                    downloadProgress !== null
                       ? undefined
                       : () => {
                           // Close any open trail inspector first: the download
@@ -2463,12 +2423,10 @@ export function MapScreen() {
                   // takes coordinates, and the other tabs carry the gear.
                   // The editor frames the sheet over the live map, so it needs
                   // the flat 2D camera — but no region box and no extra step.
-                  onMakeMap: terrain3d
-                    ? undefined
-                    : () => {
-                        inspect(null);
-                        setMakeMapState({ phase: 'editing' });
-                      },
+                  onMakeMap: () => {
+                    inspect(null);
+                    setMakeMapState({ phase: 'editing' });
+                  },
                 }
               : undefined
           }
@@ -2528,8 +2486,7 @@ export function MapScreen() {
             COLUMN rather than absolutely positioned in the corner, so it
             stacks ABOVE the recording bar, the marine legend and the weather
             dock instead of colliding with them; with none of those up it sits
-            just above the tab bar, in the cartographic corner. 2D only; the
-            3D view has no Mercator zoom. */}
+            just above the tab bar, in the cartographic corner. */}
         {/* Scale bar (left) and the basemap credit (right) share one row.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
@@ -2539,13 +2496,13 @@ export function MapScreen() {
         {!selecting && makeMapState === null && (
           <View style={styles.bottomRow} pointerEvents="box-none">
             <View style={styles.bottomSide} pointerEvents="none">
-              {showScaleBar && !terrain3d && scaleAt !== null && (
+              {showScaleBar && scaleAt !== null && (
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
               )}
             </View>
             {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-              {!terrain3d && <AttributionChip basemap={basemap} vector={stoneBase} />}
+              <AttributionChip basemap={basemap} vector={stoneBase} />
             </View>
           </View>
         )}
@@ -2555,7 +2512,7 @@ export function MapScreen() {
             chart drape can actually be on screen — and never while the
             region selector or the map maker owns the bottom edge, the same
             gates the weather dock carries. */}
-        {marineActive && !terrain3d && !selecting && makeMapState === null && (
+        {marineActive && !selecting && makeMapState === null && (
           <MarineLegend
             source={marineChartSource(marineChart.sourceId)}
             offline={marineChart.chart?.offline ?? false}

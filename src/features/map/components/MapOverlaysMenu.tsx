@@ -22,7 +22,7 @@ import {
   contourIntervalLabel,
   DisclaimerSnackbar,
   useSlopeDisclaimer,
-} from '../terrain3d/overlayControls';
+} from './terrainOverlayControls';
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { MapButton } from './MapButton';
 import {
@@ -48,7 +48,7 @@ import { RangeSlider } from './RangeSlider';
  * - On the map — Content (folder picker), PDF maps, Personal heatmap,
  *   Labels on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
- *   Peaks, Elevation tint (3D only).
+ *   Peaks.
  * - Live layers — Weather (drills into its list) and Marine, both parked
  *   this release (greyed "Coming soon", never removed: a feature that
  *   silently disappears reads as a bug).
@@ -100,12 +100,10 @@ const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
  * into the weather list.
  */
 function OverlayRows({
-  showHypso,
   onSlopeEnabled,
   onOpenFolders,
   onOpenWeather,
 }: {
-  showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onOpenWeather: () => void;
@@ -121,7 +119,6 @@ function OverlayRows({
   const marineLayers = useSettingsStore((s) => s.marineLayers);
   const slope = useSettingsStore((s) => s.terrainSlope);
   const contours = useSettingsStore((s) => s.terrainContours);
-  const hypso = useSettingsStore((s) => s.terrainHypso);
   const intervalM = useSettingsStore((s) => s.terrainContourIntervalM);
   const slopeMinDeg = useSettingsStore((s) => s.terrainSlopeMinDeg);
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
@@ -264,14 +261,6 @@ function OverlayRows({
         selected={peakDensity}
         onSelect={(d) => set('peakDensity', d)}
       />
-      {showHypso && (
-        <SwitchRow
-          icon="palette-outline"
-          label="Elevation tint"
-          value={hypso}
-          onToggle={() => set('terrainHypso', !hypso)}
-        />
-      )}
 
       <SectionTitle>Live layers</SectionTitle>
       {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
@@ -406,13 +395,10 @@ function WeatherList({ onBack }: { onBack: () => void }) {
  * list). Mounted only while the menu is open, so it always opens at the top.
  */
 export function OverlaysPanel({
-  showHypso,
   onSlopeEnabled,
   onOpenFolders,
   onClose,
 }: {
-  /** Show the 3D-only Elevation tint row (when the 3D view is active). */
-  showHypso: boolean;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onClose: () => void;
@@ -432,7 +418,6 @@ export function OverlaysPanel({
           <WeatherList onBack={() => setWeatherOpen(false)} />
         ) : (
           <OverlayRows
-            showHypso={showHypso}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
             onOpenWeather={() => setWeatherOpen(true)}
@@ -469,12 +454,10 @@ export function OverlaysDialogs({
  * one pill (revamp `Main.html`); the sheet and dialogs still live here.
  */
 export function MapOverlaysMenu({
-  showHypso = false,
   open,
   onToggle,
   hideTrigger = false,
 }: {
-  showHypso?: boolean;
   open: boolean;
   onToggle: (open: boolean) => void;
   hideTrigger?: boolean;
@@ -494,7 +477,6 @@ export function MapOverlaysMenu({
       {open && (
         <MapSheet>
           <OverlaysPanel
-            showHypso={showHypso}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={() => {
               onToggle(false);

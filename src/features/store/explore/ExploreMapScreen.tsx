@@ -158,8 +158,7 @@ export function ExploreMapScreen({
     [theme.dark, contours],
   );
   const style = useMemo(
-    () =>
-      buildOsmStyle(tileUrl, false, 'map', showHillshade, vector ? { vectorBasemap: vector } : {}),
+    () => buildOsmStyle(tileUrl, 'map', showHillshade, vector ? { vectorBasemap: vector } : {}),
     [tileUrl, showHillshade, vector],
   );
   // Cluster counts need glyphs: only the vector style declares them.

@@ -6,20 +6,17 @@ import {
   withDemElevations,
   type TrackPointAt,
 } from '@core/geo/track';
-import { numberNotesOnTrack, orderNotes, type NumberedTrailNote } from '@core/library/notes';
+import { orderNotes } from '@core/library/notes';
 import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
-import type { ExpoWebGLRenderingContext } from 'expo-gl';
 import { formatDistance, formatElevation, formatSpeed } from '@state/formatters';
-import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
-import type { Settings } from '@state/settingsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
@@ -36,55 +33,12 @@ import { useIosKeyboardHeight } from '../common/useIosKeyboardHeight';
 import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
-import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as THREE from 'three';
-import { fetchHeightmap, type Heightmap } from './dem';
+import { fetchHeightmap } from './dem';
 import { SharingUnavailableError, exportTrailPdf } from '../common/exportTrailPdf';
-import { rayGroundHit, zoomTowardPoint } from '@core/geo/terrainRay';
-import { createCameraDynamics } from './terrain3d/cameraDynamics';
-import {
-  disposeGroup,
-  runRenderLoop,
-  ManagedGLView,
-  type GlLifetime,
-} from './terrain3d/glLifecycle';
-import {
-  ORBIT_PHI_PER_PX,
-  ORBIT_THETA_PER_PX,
-  clamp,
-  createTerrainPanResponder,
-  groundPanDelta,
-  positionCameraFromOrbit,
-  screenPointRay,
-} from './terrain3d/orbitGestures';
-import { TapQueryChip, queryMarkerOpacity, useTapQuery } from './terrain3d/queryChip';
-import {
-  addSkyAndFog,
-  addTerrainLights,
-  buildMarkerPin,
-  buildQueryMarker,
-  createTerrainCamera,
-  createTerrainRenderer,
-  fetchDrapeTexture,
-} from './terrain3d/sceneSetup';
-import { currentOverlaySettings, useTerrainOverlaySync } from './terrain3d/overlayControls';
 import { NameDialog } from '../library/NameDialog';
 import { TrailViewerRail } from './TrailViewerRail';
-import {
-  applyTerrainOverlaySettings,
-  overlayRenderFailed,
-  supportsStandardDerivatives,
-  type TerrainOverlayHandle,
-} from './terrain3d/terrainMaterial';
-import {
-  buildTerrain,
-  markerScaleForDistance,
-  type HeightSampler,
-  type TerrainBuild,
-} from './terrainScene';
 import { ElevationProfile } from '../common/components/ElevationProfile';
-import { NoteNumberBadge } from './components/NoteNumberBadge';
 import { TrimRangeSlider } from './components/TrimRangeSlider';
 import { Trail2DView } from './Trail2DView';
 import { overwriteWithTrim, saveTrimmedCopy, type TrimRange } from './trimTrack';
@@ -97,42 +51,11 @@ interface Props {
   trackId: string;
 }
 
-// 3D note-pin geometry: 24dp badge + 14dp stem, tip anchored on the trail.
-const NOTE_BADGE_HALF_W = 12;
-const NOTE_BADGE_COL_H = 24 + 14;
-
-/** Build a terrain group for a basemap choice, draping its tiles. */
-async function buildGroupFor(
-  hm: Heightmap,
-  pts: readonly TrackPoint[],
-  segmentStarts: readonly number[],
-  bm: MapBasemap,
-  maxAnisotropy = 1,
-  injectOverlays = true,
-): Promise<TerrainBuild> {
-  return buildTerrain(hm, pts, await fetchDrapeTexture(hm.range, bm), maxAnisotropy, {
-    injectOverlays,
-    segmentStarts,
-  });
-}
-
 /**
- * The focused view's mode: always the 2D MapLibre map since #480 (owner:
- * "Remove the 3D button from the focused view. Just allow the 2-finger 3D
- * mode movements like on the main map"). The three.js terrain branch below
- * is kept but UNREACHABLE — nothing else routes into it, and the persisted
- * `trailViewMode` setting is no longer read. A function (not a literal) so
- * the type stays the full union and the dormant branches still typecheck.
- */
-function focusedTrailViewMode(): Settings['trailViewMode'] {
-  return '2d';
-}
-
-/**
- * The unified trail view: real 3D terrain (expo-gl + Three.js) on top, then the
- * elevation profile and notes/photos + PDF export below in one scroll. Scrubbing
- * the profile drives a marker on the 3D terrain. One finger orbits; two fingers
- * pinch to zoom and drag to tilt/rotate.
+ * The focused trail view (route `/trail3d/[id]`, name kept for deep links and
+ * Maestro): the MapLibre trail map on top — tilted with two fingers like the
+ * main map (#480) — then the elevation profile and notes/photos + PDF export
+ * below in one scroll. Scrubbing the profile drives a marker on the map.
  */
 export function Trail3DGLScreen({ trackId }: Props) {
   const insets = useSafeAreaInsets();
@@ -150,40 +73,31 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const updateTrackNote = useLibraryStore((s) => s.updateTrackNote);
   const removeTrackNote = useLibraryStore((s) => s.removeTrackNote);
 
-  const trailViewMode = focusedTrailViewMode();
-
   const [points, setPoints] = useState<TrackPoint[] | null>(null);
-  // Pause boundaries in `points` (one per extra <trkseg>): the 2D/3D traces
-  // are drawn per segment and the summary stats never bridge a pause.
+  // Pause boundaries in `points` (one per extra <trkseg>): the trace is
+  // drawn per segment and the summary stats never bridge a pause.
   const [segmentStarts, setSegmentStarts] = useState<readonly number[]>([]);
-  // Same points but with each altitude replaced by the terrain (DEM) height the
-  // 3D view drapes the trail on, so the elevation profile always matches the 3D.
+  // Same points but with each altitude replaced by the terrain (DEM) height, so
+  // the elevation profile reads the same surface as the map's relief.
   const [demPoints, setDemPoints] = useState<TrackPoint[] | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [errMsg, setErrMsg] = useState('');
-  // Viewer-local basemap (drives both the 2D map and the 3D drape), seeded from
+  // Viewer-local basemap, seeded from
   // the main map's choice so opening the viewer looks like the map you came
   // from; picking in the rail never repaints the main map.
   const [basemap, setBasemap] = useState<MapBasemap>(() => useMapStore.getState().basemap);
-  const [switching, setSwitching] = useState(false);
   // Measured summary-card height so the control rail sits just below it.
   const [summaryH, setSummaryH] = useState(64);
   const [scrub, setScrub] = useState<TrackPointAt | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
-  // Note badge tapped on the trail (2D pin or 3D projected circle): shows the
+  // Note badge tapped on the trail: shows the
   // note text + photo in place, without hunting for its row in the list below.
   const [viewingNoteId, setViewingNoteId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   // True while a finger is down on the map/terrain box. The whole screen lives
   // in a ScrollView, which intercepts vertical drags before they reach the
   // native MapLibre view — pans "sort of" worked, stuttering against the page
-  // scroll (the 3D GLView was immune only because its PanResponder claims the
-  // JS responder). Disabling the scroll for the duration of a touch inside the
+  // scroll. Disabling the scroll for the duration of a touch inside the
   // box gives the map the full gesture, matching how the main map feels.
   const [mapGesturing, setMapGesturing] = useState(false);
-  // False once the overlay shader is unavailable (no derivatives / compile
-  // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
-  const [overlaysAvailable, setOverlaysAvailable] = useState(true);
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(2500);
   // Note dialog state + single-flight save (#307): a failed save keeps the
   // draft and the dialog; a slow photo copy can't be submitted twice.
@@ -213,150 +127,9 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   // Rename-this-trail prompt, opened by tapping the summary card's title.
   const [renaming, setRenaming] = useState(false);
-  // Bumped after an overwrite trim to force the GLView to remount and rebuild
-  // the terrain from the freshly-trimmed GPX file (onContextCreate re-reads
-  // fileUri from disk on every mount).
-  const [glReloadGen, setGlReloadGen] = useState(0);
-  const pendingTrimRef = useRef(trimParam === '1');
-
-  const orbit = useRef({
-    theta: 0.6,
-    phi: 0.85,
-    radius: 4,
-    center: new THREE.Vector3(),
-    // Trail centre the camera was framed on, and how far the look-at point may be
-    // panned from it (two-finger drag) so you can move around, not fly off.
-    // 1.6: enough to reach the terrain tile's corners when zoomed in (the old
-    // 1.0 hit the clamp mid-slide, which read as the pan "not working").
-    home: new THREE.Vector3(),
-    maxPan: 1.6,
-  });
-  const projectRef = useRef<((lng: number, lat: number) => THREE.Vector3) | null>(null);
-  const maxAnisoRef = useRef(1);
-  const scrubRef = useRef<TrackPointAt | null>(null);
-  // Numbered note badges floated over the GL surface (parity with the 2D
-  // view's Marker pins). The badge VIEWS mount once per note; their screen
-  // positions are Animated.Values the render loop writes EVERY FRAME with
-  // setValue — no setState, no React reconciliation, so the pins glide with
-  // the camera instead of snapping at a throttled tick (the old 8 Hz state
-  // commit read as lag).
-  const numberedNotesRef = useRef<NumberedTrailNote[]>([]);
-  // Held in (never-replaced) state, not a ref: entries are lazily created
-  // during render, which the ref-hygiene lint rightly bans for refs.
-  const [badgeAnims] = useState(
-    () => new Map<string, { tx: Animated.Value; ty: Animated.Value; op: Animated.Value }>(),
-  );
-  const badgeAnimFor = (id: string) => {
-    let a = badgeAnims.get(id);
-    if (!a) {
-      a = {
-        tx: new Animated.Value(-1000),
-        ty: new Animated.Value(-1000),
-        op: new Animated.Value(0),
-      };
-      badgeAnims.set(id, a);
-    }
-    return a;
-  };
-  // P2 interaction polish: inertia + fly-to springs, view size for tap/pinch
-  // picking, terrain samplers for zoom-anchoring, collision and tap-to-query.
-  const dyn = useMemo(() => createCameraDynamics(), []);
-  const viewSizeRef = useRef({ w: 0, h: 0 });
-  const heightAtRef = useRef<HeightSampler | null>(null);
-  const queryAtRef = useRef<TerrainBuild['queryAt'] | null>(null);
-  const queryMarkerRef = useRef<ReturnType<typeof buildQueryMarker> | null>(null);
-  const queryElapsedMsRef = useRef<number | null>(null);
-  const { info: tapInfo, show: showTapInfo } = useTapQuery();
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const groupRef = useRef<THREE.Group | null>(null);
-  // Analytical-overlay shader state: whether injection is usable on this device
-  // (derivatives support, no compile failure) and the live uniforms handle.
-  const injectOkRef = useRef(true);
-  const overlayRef = useRef<TerrainOverlayHandle | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  useTerrainOverlaySync(overlayRef);
+  // DEM heightmap cache for the profile's terrain-sampled elevations.
   const hmRef = useRef<Awaited<ReturnType<typeof fetchHeightmap>> | null>(null);
-  const ptsRef = useRef<readonly TrackPoint[]>([]);
-  const segmentStartsRef = useRef<readonly number[]>([]);
-  const basemapRef = useRef<MapBasemap>(basemap);
-
-  const pan = useMemo(() => {
-    // The ground point under a view-local screen position (tap / pinch
-    // centroid), ray-marched against the terrain heightfield.
-    const groundHitAt = (x: number, y: number) => {
-      const camera = cameraRef.current;
-      const heightAt = heightAtRef.current;
-      if (!camera || !heightAt) return null;
-      const { w, h } = viewSizeRef.current;
-      const ray = screenPointRay(camera, x, y, w, h);
-      return ray && rayGroundHit(ray.origin, ray.dir, heightAt);
-    };
-    const clampPan = (v: number, home: number, maxPan: number) =>
-      clamp(v, home - maxPan, home + maxPan);
-    // Refs are read on touch events only, never during render.
-    // eslint-disable-next-line react-hooks/refs
-    return createTerrainPanResponder({
-      orbit,
-      // Two-finger drag (beyond the shared pinch-zoom) pans the look-at point
-      // across the ground (move around the trail a bit), bounded to maxPan
-      // from the trail centre.
-      onTwoFinger: (curr, prev) => {
-        const o = orbit.current;
-        const { dx, dz } = groundPanDelta(o.theta, o.radius, curr.cx - prev.cx, curr.cy - prev.cy);
-        o.center.x = clampPan(o.center.x + dx, o.home.x, o.maxPan);
-        o.center.z = clampPan(o.center.z + dz, o.home.z, o.maxPan);
-      },
-      // One finger orbits: drag sideways to rotate, up/down to tilt.
-      onSingle: (dxPx, dyPx) => {
-        const o = orbit.current;
-        o.theta -= dxPx * ORBIT_THETA_PER_PX;
-        o.phi = clamp(o.phi - dyPx * ORBIT_PHI_PER_PX, 0.12, 1.45);
-      },
-      // A new touch always wins over coasting/flying camera motion.
-      onGestureStart: () => dyn.interrupt(),
-      // Release inertia: keep orbiting with the drag's velocity, decayed in
-      // onFrame (dyn.stepMomentum).
-      onRelease: (vel) => dyn.launchMomentum(vel),
-      // Anchor the pinch-zoom on the ground under the fingers: scale the
-      // centre's offset from the hit by the same factor as the radius.
-      onPinch: (scale, cx, cy) => {
-        const hit = groundHitAt(cx, cy);
-        if (!hit) return;
-        const o = orbit.current;
-        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, scale);
-        o.center.x = clampPan(c.x, o.home.x, o.maxPan);
-        o.center.z = clampPan(c.z, o.home.z, o.maxPan);
-      },
-      // Tap-to-query: elevation + slope chip and a fading crosshair.
-      onTap: (x, y) => {
-        const hit = groundHitAt(x, y);
-        const query = queryAtRef.current;
-        if (!hit || !query) return;
-        showTapInfo(query(hit.x, hit.z));
-        const m = queryMarkerRef.current;
-        if (m) {
-          m.group.position.set(hit.x, hit.y + 0.004, hit.z);
-          m.setOpacity(1);
-          queryElapsedMsRef.current = 0;
-        }
-      },
-      // Double-tap: fly toward the tapped ground point (same anchored-zoom
-      // maths as the pinch, eased by the spring instead of applied raw).
-      onDoubleTap: (x, y) => {
-        const hit = groundHitAt(x, y);
-        if (!hit) return;
-        const o = orbit.current;
-        const s = 0.55;
-        const c = zoomTowardPoint({ x: o.center.x, z: o.center.z }, hit, s);
-        dyn.flyTo(o, {
-          radius: clamp(o.radius * s, 0.8, 9),
-          centerX: clampPan(c.x, o.home.x, o.maxPan),
-          centerZ: clampPan(c.z, o.home.z, o.maxPan),
-        });
-      },
-    });
-  }, [dyn, showTapInfo]);
+  const pendingTrimRef = useRef(trimParam === '1');
 
   const notes = track?.notes;
   const ordered = useMemo(() => orderNotes(notes ?? []), [notes]);
@@ -368,8 +141,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const fileUri = track?.fileUri;
   const bbox = track?.stats.bbox;
 
-  // Load the trail points up front so the 2D view (and the profile/notes section
-  // below) work even when the GL context — which also loads them — is not mounted.
+  // Load the trail points for the map and the profile/notes section below.
   useEffect(() => {
     if (!fileUri) return;
     let cancelled = false;
@@ -382,7 +154,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
           setSegmentStarts(doc.segmentStarts);
         }
       } catch {
-        /* the 3D path surfaces load errors via status; 2D simply shows no line */
+        /* an unreadable file simply shows no line */
       }
     })();
     return () => {
@@ -406,7 +178,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   }, [points, showSnack]);
 
   // Re-read the (possibly just-overwritten) GPX file from disk — used after
-  // an overwrite trim so the 2D trace/profile reflect the new geometry
+  // an overwrite trim so the trace/profile reflect the new geometry
   // without a full screen remount.
   const reloadPoints = async (uri = fileUri) => {
     if (!uri) return;
@@ -460,7 +232,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
         (next) => updateTrack(track.id, next),
       );
       await reloadPoints(patch.fileUri);
-      if (trailViewMode === '3d') setGlReloadGen((g) => g + 1);
       showSnack(`Trimmed "${track.name}"`);
       setTrimRange(null);
     } catch (err) {
@@ -469,22 +240,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
     setTrimSaving(false);
   };
 
-  // Note→coordinate resolution for the 3D badges; mirrored into a ref because
-  // the render loop (a long-lived closure) is what projects them each frame.
-  const numberedNotes = useMemo(
-    () => numberNotesOnTrack(points ?? [], notes ?? []),
-    [points, notes],
-  );
-  useEffect(() => {
-    numberedNotesRef.current = numberedNotes;
-  }, [numberedNotes]);
-  // Stale positions from a torn-down scene are hidden by the render gate below
-  // (badges draw only while 3D is up and ready); the loop overwrites them
-  // within one throttle tick when 3D resumes.
-
   // Sample the terrain (DEM) under each point so the profile reads the same
-  // surface the 3D view drapes the trail on. Reuses the heightmap the GL context
-  // loads when available; in 2D mode it fetches it here.
+  // surface the map's relief shows. The heightmap is fetched once and cached.
   useEffect(() => {
     if (!points || points.length === 0 || !bbox) return;
     let cancelled = false;
@@ -503,7 +260,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   }, [points, bbox]);
 
   // Drive the profile + summary from the DEM-sampled points when available, so
-  // the elevation chart and ↑/↓ totals match the 3D drape and the displayed view.
+  // the elevation chart and ↑/↓ totals match the displayed terrain.
   const profilePoints = demPoints ?? points ?? [];
   const category = track?.category;
   const profileStats = useMemo(
@@ -532,283 +289,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const keptM = trimRange ? (cumM[trimRange.end] ?? 0) - (cumM[trimRange.start] ?? 0) : 0;
   const totalM = cumM.length > 0 ? (cumM[cumM.length - 1] ?? 0) : 0;
 
-  const onContextCreate = async (gl: ExpoWebGLRenderingContext, lifetime: GlLifetime) => {
-    try {
-      const gpx = fileUri ? await storage.readFileText(fileUri) : '';
-      const doc = gpx ? parseGpx(gpx) : null;
-      const pts = doc?.points ?? [];
-      if (!lifetime.isCurrent()) return; // superseded while loading
-      setPoints(pts);
-      setSegmentStarts(doc?.segmentStarts ?? []);
-      segmentStartsRef.current = doc?.segmentStarts ?? [];
-      if (!bbox) {
-        setStatus('error');
-        return;
-      }
-      // Pad the trail's box so the terrain extends past the trace and fills the
-      // viewport, instead of rendering as a tight floating slab.
-      const hm = await fetchHeightmap(padBbox(bbox));
-      if (!lifetime.isCurrent()) return;
-      hmRef.current = hm;
-      ptsRef.current = pts;
-
-      // Renderer first, so the drape texture can use the GL context's max
-      // anisotropy and stay sharp at grazing angles.
-      const { renderer, maxAnisotropy } = createTerrainRenderer(gl);
-      lifetime.onDispose(() => {
-        if (rendererRef.current === renderer) rendererRef.current = null;
-        renderer.dispose();
-      });
-      maxAnisoRef.current = maxAnisotropy;
-      rendererRef.current = renderer;
-      // fwidth() needs derivatives (contour anti-aliasing); skip the overlay
-      // shader entirely on the rare device without them.
-      injectOkRef.current = supportsStandardDerivatives(gl, renderer.capabilities.isWebGL2);
-      if (!injectOkRef.current) setOverlaysAvailable(false);
-
-      let build = await buildGroupFor(
-        hm,
-        pts,
-        segmentStartsRef.current,
-        basemapRef.current,
-        maxAnisoRef.current,
-        injectOkRef.current,
-      );
-      if (!lifetime.isCurrent()) {
-        disposeGroup(build.group);
-        return;
-      }
-
-      const scene = new THREE.Scene();
-      scene.add(build.group);
-      sceneRef.current = scene;
-      lifetime.onDispose(() => {
-        if (sceneRef.current === scene) {
-          sceneRef.current = null;
-          groupRef.current = null;
-          overlayRef.current = null;
-          rendererRef.current = null;
-          cameraRef.current = null;
-          queryMarkerRef.current = null;
-        }
-        disposeGroup(scene);
-      });
-      // Warm key light + soft hemisphere fill (matches the live 3D map), plus
-      // the gradient sky dome and horizon fog so the slab edge never shows.
-      addTerrainLights(scene);
-      addSkyAndFog(scene, build.radius, 1.2, 3.8);
-
-      const camera = createTerrainCamera(gl);
-      cameraRef.current = camera;
-      orbit.current.center = build.center.clone();
-      orbit.current.home = build.center.clone();
-      orbit.current.maxPan = Math.max(build.trailRadius * 1.8, 0.5);
-      // Frame the trail (not the whole padded slab) so the surrounding terrain
-      // fills the screen with the trace prominent in the middle.
-      orbit.current.radius = clamp(build.trailRadius * 2.6, 0.8, 9);
-      positionCameraFromOrbit(camera, orbit.current);
-
-      // Device-only blind spot: shader compile failures don't throw in three —
-      // render one guarded frame and fall back to the un-injected material if
-      // the overlay shader can't run on this GPU.
-      if (build.overlay && overlayRenderFailed(renderer, scene, camera)) {
-        reportError(new Error('terrain overlay shader failed — using fallback'), 'trail3d-overlay');
-        injectOkRef.current = false;
-        setOverlaysAvailable(false);
-        scene.remove(build.group);
-        disposeGroup(build.group);
-        build = await buildGroupFor(
-          hm,
-          pts,
-          segmentStartsRef.current,
-          basemapRef.current,
-          maxAnisoRef.current,
-          false,
-        );
-        if (!lifetime.isCurrent()) {
-          disposeGroup(build.group);
-          return;
-        }
-        scene.add(build.group);
-      }
-      groupRef.current = build.group;
-      projectRef.current = build.project;
-      heightAtRef.current = build.heightAt;
-      queryAtRef.current = build.queryAt;
-      overlayRef.current = build.overlay;
-      if (build.overlay) applyTerrainOverlaySettings(build.overlay, currentOverlaySettings());
-
-      // A small pin above the surface so the highlighted point is visible
-      // without dwarfing the draped trail line.
-      const marker = buildMarkerPin({
-        headRadius: 0.013,
-        headColor: 0xffd166,
-        headEmissive: 0x7a5200,
-        height: 0.055,
-      });
-      marker.visible = false;
-      scene.add(marker);
-      // Tap-to-query crosshair (hidden until a tap, faded out in onFrame).
-      const queryMarker = buildQueryMarker();
-      queryMarkerRef.current = queryMarker;
-      scene.add(queryMarker.group);
-      setStatus('ready');
-
-      runRenderLoop({
-        lifetime,
-        gl,
-        scene,
-        camera,
-        renderer,
-        onError: (error) => {
-          reportError(error, 'trail3d-terrain');
-          setErrMsg(error instanceof Error ? error.message : String(error));
-          setStatus('error');
-        },
-        onFrame: () => {
-          const o = orbit.current;
-          const dt = dyn.frameDt(performance.now());
-          // Release inertia: keep orbiting after the finger lifts, decaying.
-          const m = dyn.stepMomentum(dt);
-          if (m) {
-            o.theta -= m.dx * ORBIT_THETA_PER_PX;
-            o.phi = clamp(o.phi - m.dy * ORBIT_PHI_PER_PX, 0.12, 1.45);
-          }
-          // Double-tap fly-to easing.
-          dyn.stepFly(o, dt);
-          // heightAt clamps the eye above the surface (camera-terrain collision).
-          positionCameraFromOrbit(camera, o, heightAtRef.current ?? undefined);
-          // Fade the tap-to-query crosshair in step with the chip (aged by
-          // accumulated frame time — no wall clock in render-scoped code).
-          if (queryElapsedMsRef.current !== null) {
-            queryElapsedMsRef.current += dt * 1000;
-            const op = queryMarkerOpacity(queryElapsedMsRef.current);
-            queryMarker.setOpacity(op);
-            if (op <= 0) queryElapsedMsRef.current = null;
-          }
-          const sc = scrubRef.current;
-          if (sc && projectRef.current) {
-            marker.position.copy(projectRef.current(sc.longitude, sc.latitude));
-            // Shrink the marker as the camera closes in so it never balloons.
-            marker.scale.setScalar(
-              markerScaleForDistance(camera.position.distanceTo(marker.position)),
-            );
-            marker.visible = true;
-          } else {
-            marker.visible = false;
-          }
-          // Numbered note badges: project trail-note anchors to screen space at
-          // ~8 Hz and commit only real movement (idle camera → no re-renders).
-          {
-            // Note badges: project each anchor and push the position straight
-            // into its Animated.Values — cheap (a few matrix multiplies per
-            // note) and render-free, so it runs every frame.
-            const pr = projectRef.current;
-            const { w, h } = viewSizeRef.current;
-            const list = numberedNotesRef.current;
-            if (pr && w > 0 && list.length > 0) {
-              camera.updateMatrixWorld();
-              for (const n of list) {
-                const anim = badgeAnims.get(n.note.id);
-                if (!anim) continue;
-                const v = pr(n.longitude, n.latitude);
-                v.project(camera);
-                // Hide points behind the camera or well outside the frustum.
-                if (v.z < 1 && Math.abs(v.x) <= 1.05 && Math.abs(v.y) <= 1.05) {
-                  // The badge column's bottom tip (stem end) sits ON the anchor.
-                  anim.tx.setValue(((v.x + 1) / 2) * w - NOTE_BADGE_HALF_W);
-                  anim.ty.setValue(((1 - v.y) / 2) * h - NOTE_BADGE_COL_H);
-                  anim.op.setValue(1);
-                } else {
-                  anim.op.setValue(0);
-                }
-              }
-            }
-          }
-        },
-      });
-    } catch (e) {
-      const wasCurrent = lifetime.isCurrent();
-      lifetime.dispose();
-      if (!wasCurrent) return; // superseded — don't set state after unmount
-      reportError(e, 'trail3d-terrain');
-      setErrMsg(e instanceof Error ? e.message : String(e));
-      setStatus('error');
-    }
-  };
-
   const onScrub = (at: TrackPointAt | null) => {
     // Keep the last scrubbed point selected when the finger lifts (the profile
     // reports null on release). Otherwise the selection clears instantly and the
     // "Add note" button — gated on a selected point — can never be tapped.
     if (!at) return;
-    scrubRef.current = at;
     setScrub(at);
-  };
-
-  const applyBasemap = async (bm: MapBasemap) => {
-    if (bm === basemap || switching) return;
-    setBasemap(bm);
-    basemapRef.current = bm;
-    const scene = sceneRef.current;
-    const hm = hmRef.current;
-    // No live 3D scene (2D mode, or 3D not built yet): the 2D map restyles from
-    // state and the next 3D build reads basemapRef — nothing to rebuild now.
-    if (!scene || !hm) return;
-    setSwitching(true);
-    try {
-      let built = await buildGroupFor(
-        hm,
-        ptsRef.current,
-        segmentStartsRef.current,
-        bm,
-        maxAnisoRef.current,
-        injectOkRef.current,
-      );
-      if (sceneRef.current !== scene) {
-        disposeGroup(built.group);
-        return;
-      }
-      if (groupRef.current) {
-        scene.remove(groupRef.current);
-        disposeGroup(groupRef.current);
-      }
-      scene.add(built.group);
-      // A basemap switch rebuilds the terrain with a new overlay program, so it
-      // can hit a fresh device-only shader failure: validate the new build too and fall back to the plain material if it can't run.
-      const renderer = rendererRef.current;
-      const camera = cameraRef.current;
-      if (built.overlay && renderer && camera && overlayRenderFailed(renderer, scene, camera)) {
-        reportError(new Error('terrain overlay shader failed — using fallback'), 'trail3d-overlay');
-        injectOkRef.current = false;
-        setOverlaysAvailable(false);
-        scene.remove(built.group);
-        disposeGroup(built.group);
-        built = await buildGroupFor(
-          hm,
-          ptsRef.current,
-          segmentStartsRef.current,
-          bm,
-          maxAnisoRef.current,
-          false,
-        );
-        if (sceneRef.current !== scene) {
-          disposeGroup(built.group);
-          return;
-        }
-        scene.add(built.group);
-      }
-      groupRef.current = built.group;
-      projectRef.current = built.project;
-      heightAtRef.current = built.heightAt;
-      queryAtRef.current = built.queryAt;
-      overlayRef.current = built.overlay;
-      if (built.overlay) applyTerrainOverlaySettings(built.overlay, currentOverlaySettings());
-    } catch {
-      if (sceneRef.current === scene) showSnack('Could not load that basemap');
-    } finally {
-      setSwitching(false);
-    }
   };
 
   const pickPhoto = async (fromCamera: boolean) => {
@@ -885,7 +371,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
         scrollEnabled={!mapGesturing}
       >
         <View
-          style={[styles.glBox, { paddingTop: insets.top }]}
+          style={[styles.mapBox, { paddingTop: insets.top }]}
           onTouchStart={() => setMapGesturing(true)}
           onTouchEnd={(e) => {
             if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
@@ -894,22 +380,10 @@ export function Trail3DGLScreen({ trackId }: Props) {
             if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
           }}
         >
-          {trailViewMode === '3d' ? (
-            <ManagedGLView
-              key={`gl-${glReloadGen}`}
-              style={styles.fill}
-              onContextCreate={onContextCreate}
-              onLayout={(e) => {
-                const { width, height } = e.nativeEvent.layout;
-                viewSizeRef.current = { w: width, h: height };
-              }}
-              {...pan.panHandlers}
-            />
-          ) : points && points.length > 0 ? (
-            // Mount the 2D map only once points are loaded — a MapLibre GeoJSON
+          {points && points.length > 0 ? (
+            // Mount the map only once points are loaded — a MapLibre GeoJSON
             // source created with empty data doesn't reliably pick up a later
-            // update, which is why the trace previously appeared only after a
-            // 2D/3D toggle forced a remount.
+            // update.
             <Trail2DView
               points={points}
               segmentStarts={segmentStarts}
@@ -923,59 +397,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
               <ActivityIndicator size="large" />
             </View>
           )}
-          {/* Numbered note pins over the 3D terrain. Each pin is a badge with
-              a short stem whose TIP sits on the trail anchor (the stem is the
-              "where exactly" cue). Mounted once; the render loop drives their
-              position via Animated setValue every frame — see badgeAnims.
-              They sit above the GL pan-responder surface, so their touches win
-              over camera gestures. */}
-          {trailViewMode === '3d' &&
-            status === 'ready' &&
-            numberedNotes.map((n) => {
-              const anim = badgeAnimFor(n.note.id);
-              return (
-                <Animated.View
-                  key={n.note.id}
-                  style={[
-                    styles.noteBadge3d,
-                    {
-                      opacity: anim.op,
-                      transform: [{ translateX: anim.tx }, { translateY: anim.ty }],
-                    },
-                  ]}
-                >
-                  <Pressable
-                    onPress={() => setViewingNoteId(n.note.id)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Note ${n.num}`}
-                    style={styles.noteBadgeCol}
-                  >
-                    <NoteNumberBadge num={n.num} />
-                    <View style={styles.noteStem} />
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
-          {trailViewMode === '3d' && status === 'loading' && (
-            <View style={styles.center} pointerEvents="none">
-              {/* The GL surface clears to the light sky (SKY_COLOR) in both
-                  themes, so the stones keep their day tone here. */}
-              <InukshukLoader tone="day" />
-              <Text style={styles.loadingText}>Building 3D terrain…</Text>
-            </View>
-          )}
-          {trailViewMode === '3d' && status === 'error' && (
-            <View style={styles.center} pointerEvents="none">
-              <Text>Couldn&apos;t load 3D terrain.</Text>
-              {errMsg ? (
-                <Text variant="bodySmall" style={[styles.errDetail, hintColor]}>
-                  {errMsg}
-                </Text>
-              ) : null}
-            </View>
-          )}
-          {/* Floating over the map/terrain — needs its own dark disc to stay
+          {/* Floating over the map — needs its own dark disc to stay
               visible on light tiles (user call; the bare arrow disappeared). */}
           <Appbar.BackAction
             onPress={() => router.back()}
@@ -1030,13 +452,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
           <TrailViewerRail
             top={insets.top + 2 + summaryH + 10}
             basemap={basemap}
-            onSelectBasemap={applyBasemap}
-            basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
-            overlaysAvailable={overlaysAvailable}
-            overlaysDisabled={switching}
+            onSelectBasemap={setBasemap}
           />
-          {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
-          {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
         </View>
 
         {points && (
@@ -1052,8 +469,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
                 </Text>
               ) : (
                 <Text variant="bodySmall" style={hintColor}>
-                  Drag the profile to move the marker on the{' '}
-                  {trailViewMode === '3d' ? 'terrain' : 'map'}.
+                  Drag the profile to move the marker on the map.
                 </Text>
               )}
             </View>
@@ -1290,7 +706,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
           </Dialog.Actions>
         </Dialog>
 
-        {/* Viewer for a note badge tapped on the trail (2D pin / 3D circle). */}
+        {/* Viewer for a note pin tapped on the trail. */}
         {(() => {
           const idx = ordered.findIndex((n) => n.id === viewingNoteId);
           const note = idx >= 0 ? ordered[idx] : undefined;
@@ -1346,9 +762,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   pad: { paddingHorizontal: 16 },
-  // Matches SKY_COLOR (the sky dome's horizon stop) so the box never flashes a
-  // mismatched blue while the GL context loads.
-  glBox: { height: 420, backgroundColor: '#dfe9f2' },
+  mapBox: { height: 420, backgroundColor: '#dfe9f2' },
   center: {
     position: 'absolute',
     top: 0,
@@ -1359,8 +773,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  loadingText: { opacity: 0.8 },
-  errDetail: { paddingHorizontal: 24, textAlign: 'center' },
   back: {
     position: 'absolute',
     left: 4,
@@ -1383,15 +795,6 @@ const styles = StyleSheet.create({
   // card, and pull it into the card's right padding to sit flush with the edge.
   summaryTrim: { margin: 0, marginRight: -8, marginVertical: -4 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  // Small basemap-rebuild spinner, bottom-centred where the old pills sat.
-  switchSpin: { position: 'absolute', bottom: 14, alignSelf: 'center', pointerEvents: 'none' },
-  // Centred near the bottom of the viewport — clear of the rail on the right.
-  queryChip: { position: 'absolute', left: 0, right: 0, bottom: 40 },
-  noteBadge3d: { position: 'absolute', left: 0, top: 0 },
-  noteBadgeCol: { alignItems: 'center' },
-  // Stem linking the floating badge to its exact trail point; matches the
-  // badge's white ring so the pair reads as one pin.
-  noteStem: { width: 2, height: 14, backgroundColor: '#FFFFFF', opacity: 0.9 },
   scrubRow: { paddingHorizontal: 16, paddingTop: 10 },
   trimBody: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 6, gap: 6 },
   trimActions: {

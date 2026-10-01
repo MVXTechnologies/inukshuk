@@ -336,10 +336,10 @@ Every decision with a number in it comes from `@core`.
   weak (0.30) precisely _because_ the streaks carry the reading on device.
 - **No 3D terrain, no offline packs, no marine chart mode, no recording, no
   Strava.** The map itself is pan/zoom/tilt only.
-- **No 3D trail viewer.** The app's trail focus IS a 3D screen
-  (`Trail3DGLScreen.tsx`, an `expo-gl` terrain render with the profile docked
-  under it). Here the map box is the shared 2D MapLibre map. The stat block,
-  the profile and the trim are reproduced; the terrain render is not.
+- **Trail viewer.** The app's trail focus (`Trail3DGLScreen.tsx`) is the 2D
+  MapLibre map with the profile docked under it, like here; the stat block, the
+  profile and the trim are reproduced. (Its old `expo-gl` terrain render was
+  removed.)
 - **No maps in the Library.** The app's Library also lists `MapDocument`s
   (imported GeoPDFs) with their per-page overlay checkboxes, and its trail
   filter hides that whole section while active. There is no GeoPDF pipeline

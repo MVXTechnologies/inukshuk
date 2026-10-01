@@ -72,13 +72,6 @@ export interface Settings {
   minDisplacementM: number;
   /** Preferred elevation-profile chart style. */
   elevationProfileStyle: ElevationProfileStyle;
-  /**
-   * Trail detail view: real 3D terrain or a flat 2D map. DORMANT since #480:
-   * the focused view is always the 2D map (two-finger tilt), and nothing
-   * reads this — kept so settings files round-trip and the three.js view can
-   * come back without a migration.
-   */
-  trailViewMode: '2d' | '3d';
   /** Use only offline maps; don't fetch from OSM. */
   offlineOnly: boolean;
   /** Display units for distances, elevation, speed and pace. */
@@ -184,16 +177,14 @@ export interface Settings {
   tiltRelief: TiltRelief;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
-  /** 3D terrain: CalTopo-style slope-angle shading overlay. */
+  /** Terrain overlay: CalTopo-style slope-angle shading. */
   terrainSlope: boolean;
-  /** 3D terrain: contour lines overlay. */
+  /** Terrain overlay: contour lines. */
   terrainContours: boolean;
-  /** 3D terrain: hypsometric elevation-tint bands overlay. */
-  terrainHypso: boolean;
-  /** 3D terrain: minor contour interval in metres; 0 = auto (span-based). */
+  /** Terrain overlay: minor contour interval in metres; 0 = auto (span-based). */
   terrainContourIntervalM: number;
   /**
-   * Slope overlay window, in degrees (2D raster and 3D shader): only slopes
+   * Slope overlay window, in degrees: only slopes
    * within [min, max] are painted. 27–90 = every CalTopo band (default look).
    */
   terrainSlopeMinDeg: number;
@@ -228,7 +219,6 @@ const DEFAULTS: Settings = {
   rotateMapWithHeading: false,
   minDisplacementM: 5,
   elevationProfileStyle: 'gradient',
-  trailViewMode: '3d',
   offlineOnly: false,
   units: 'metric',
   themeMode: 'system',
@@ -253,7 +243,6 @@ const DEFAULTS: Settings = {
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
-  terrainHypso: false,
   terrainContourIntervalM: 0,
   terrainSlopeMinDeg: 27,
   terrainSlopeMaxDeg: 90,
@@ -301,7 +290,6 @@ function snapshot(s: SettingsState): Settings {
     rotateMapWithHeading,
     minDisplacementM,
     elevationProfileStyle,
-    trailViewMode,
     offlineOnly,
     units,
     themeMode,
@@ -326,7 +314,6 @@ function snapshot(s: SettingsState): Settings {
     errorReporting,
     terrainSlope,
     terrainContours,
-    terrainHypso,
     terrainContourIntervalM,
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
@@ -341,7 +328,6 @@ function snapshot(s: SettingsState): Settings {
     rotateMapWithHeading,
     minDisplacementM,
     elevationProfileStyle,
-    trailViewMode,
     offlineOnly,
     units,
     themeMode,
@@ -366,7 +352,6 @@ function snapshot(s: SettingsState): Settings {
     errorReporting,
     terrainSlope,
     terrainContours,
-    terrainHypso,
     terrainContourIntervalM,
     terrainSlopeMinDeg,
     terrainSlopeMaxDeg,
@@ -392,7 +377,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       next.lastKnownPosition = sanitizeLastKnownPosition(next.lastKnownPosition);
       // `markedTrailsNetworks` (the retired Waymarked Trails overlay, #467) is
       // not a Settings key any more: the ladder copies only known keys, so an
-      // old file's value is dropped here and gone at the next write.
+      // old file's value is dropped here and gone at the next write. Same for
+      // `trailViewMode` and `terrainHypso`, left behind when the parked
+      // three.js 3D views were removed: dropped on read, gone at next write.
       next.marineLayers = sanitizeMarineLayers(next.marineLayers);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration

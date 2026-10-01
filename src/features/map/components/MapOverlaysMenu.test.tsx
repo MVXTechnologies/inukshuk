@@ -31,11 +31,10 @@ const noop = (): void => undefined;
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
 // populates `screen`, exactly as mapLayers.test.tsx does.
 async function renderMenu(
-  props: Partial<{ showHypso: boolean; onClose: () => void; onOpenFolders: () => void }> = {},
+  props: Partial<{ onClose: () => void; onOpenFolders: () => void }> = {},
 ): Promise<void> {
   await render(
     <OverlaysPanel
-      showHypso={props.showHypso ?? false}
       onSlopeEnabled={noop}
       onOpenFolders={props.onOpenFolders ?? noop}
       onClose={props.onClose ?? noop}
@@ -102,15 +101,9 @@ describe('Overlays sheet layout (#484)', () => {
     }
   });
 
-  it('hides Elevation tint in 2D', async () => {
+  it('has no Elevation tint row (it was drawn only by the removed three.js 3D view)', async () => {
     await renderMenu();
     expect(screen.queryByText('Elevation tint')).toBeNull();
-  });
-
-  it('shows Elevation tint in 3D, driving the same setting', async () => {
-    await renderMenu({ showHypso: true });
-    fireEvent.press(screen.getByLabelText('Elevation tint'));
-    expect(useSettingsStore.getState().terrainHypso).toBe(true);
   });
 });
 
@@ -141,12 +134,7 @@ describe('switches drive the same settings as the old checkboxes', () => {
   it('turning Slope on fires the one-time disclaimer hook', async () => {
     const onSlopeEnabled = jest.fn();
     await render(
-      <OverlaysPanel
-        showHypso={false}
-        onSlopeEnabled={onSlopeEnabled}
-        onOpenFolders={noop}
-        onClose={noop}
-      />,
+      <OverlaysPanel onSlopeEnabled={onSlopeEnabled} onOpenFolders={noop} onClose={noop} />,
     );
     fireEvent.press(screen.getByLabelText('Slope'));
     expect(onSlopeEnabled).toHaveBeenCalledTimes(1);
