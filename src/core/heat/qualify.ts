@@ -11,7 +11,9 @@ import type { TrackSummary } from '@core/models';
  * excluded, exactly as before.
  */
 export function qualifiesForHeat(
-  track: Pick<TrackSummary, 'category'> & { stats: Pick<TrackSummary['stats'], 'durationS'> },
+  track: Pick<TrackSummary, 'category' | 'plan'> & {
+    stats: Pick<TrackSummary['stats'], 'durationS'>;
+  },
 ): boolean {
   return isPerformedActivity(track) || track.stats.durationS > 0;
 }

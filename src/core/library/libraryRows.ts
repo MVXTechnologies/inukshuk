@@ -5,7 +5,7 @@
  *   compact enough never to truncate (pace and descent live in the trail view);
  * - the caption, `Aug 29 · Hike`, which names the activity type in words so
  *   the category never rests on colour alone (decision 7);
- * - the All · Trails · Maps · Waypoints type filter.
+ * - the All · Trails · Maps · Waypoints · Areas type filter.
  *
  * Pure: units and "now" are arguments.
  */
@@ -73,13 +73,14 @@ export function trailCaption(startedAt: number, typeName: string | null, nowMs: 
 }
 
 /** The Library's type chips. */
-export type LibraryTypeFilter = 'all' | 'trails' | 'maps' | 'waypoints';
+export type LibraryTypeFilter = 'all' | 'trails' | 'maps' | 'waypoints' | 'areas';
 
 export const LIBRARY_TYPE_FILTERS: readonly { id: LibraryTypeFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'trails', label: 'Trails' },
   { id: 'maps', label: 'Maps' },
   { id: 'waypoints', label: 'Waypoints' },
+  { id: 'areas', label: 'Areas' },
 ];
 
 /** Whether items of `kind` are listed under the `filter` chip. */
@@ -92,6 +93,9 @@ export function typeCounts(counts: {
   trails: number;
   maps: number;
   waypoints: number;
+  /** Drawn areas (#503); absent counts as none. */
+  areas?: number;
 }): Record<LibraryTypeFilter, number> {
-  return { ...counts, all: counts.trails + counts.maps + counts.waypoints };
+  const areas = counts.areas ?? 0;
+  return { ...counts, areas, all: counts.trails + counts.maps + counts.waypoints + areas };
 }

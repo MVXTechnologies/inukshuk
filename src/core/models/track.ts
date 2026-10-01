@@ -1,6 +1,6 @@
 import type { TrackOrigin } from '@core/import/sources';
 
-import type { BoundingBox } from './geo';
+import type { BoundingBox, LngLat } from './geo';
 
 /** A single recorded GPS fix. */
 export interface TrackPoint {
@@ -58,6 +58,20 @@ export interface TrackNote {
 
 export type TrackStatus = 'recording' | 'paused' | 'finished';
 
+/**
+ * A route drawn on the map rather than recorded (#502) — a plan to follow.
+ * Its presence is what makes a trail a "planned route": no timestamps, never
+ * counted as an activity (dashboard, heatmap), and editable again from the
+ * vertices the user placed (the GPX holds the densified, elevation-sampled
+ * line; these are the handles the drawing tool reopens with).
+ */
+export interface RoutePlan {
+  /** How the line between vertices was made. Only freehand exists today. */
+  mode: 'freehand';
+  /** The vertices the user placed, `[lng, lat]`, ≥ 2. */
+  vertices: LngLat[];
+}
+
 /** A recorded route, persisted as GPX. */
 export interface Track {
   id: string;
@@ -71,6 +85,8 @@ export interface Track {
   category?: string;
   /** The connected source it was imported from (#432/#435); absent for everything else. */
   origin?: TrackOrigin;
+  /** Set when the trail is a route drawn on the map (#502); absent for recordings/imports. */
+  plan?: RoutePlan;
 }
 
 /**
@@ -102,4 +118,10 @@ export interface TrackSummary {
    * Absent for recordings and file imports.
    */
   origin?: TrackOrigin;
+  /**
+   * The drawn route's plan (#502): present only on routes drawn on the map.
+   * Marks the trail as a plan (not a performed activity) and holds the
+   * vertices "Edit route" reopens the drawing tool with.
+   */
+  plan?: RoutePlan;
 }

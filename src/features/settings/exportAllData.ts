@@ -87,6 +87,14 @@ export async function exportAllData(
     checkZip();
 
     let files = 1; // library.json
+    // Generated files (the drawn areas' GeoJSON, #503): small text, deflated.
+    for (const extra of plan.textEntries) {
+      const entry = new ZipDeflate(extra.zipPath, { level: 6 });
+      zip.add(entry);
+      entry.push(strToU8(extra.text), true);
+      checkZip();
+      files++;
+    }
     const total = plan.entries.length;
     for (let i = 0; i < total; i++) {
       const entry = plan.entries[i]!;

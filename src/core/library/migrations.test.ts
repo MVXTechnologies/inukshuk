@@ -2,6 +2,7 @@ import type { GeoReference } from '@core/models';
 import {
   LIBRARY_SCHEMA_VERSION,
   SETTINGS_SCHEMA_VERSION,
+  mapLibraryIndexPaths,
   migrateLibraryIndex,
   migrateSettings,
   type LibraryIndex,
@@ -154,6 +155,22 @@ describe('migrateLibraryIndex', () => {
       customCategories: [{ id: 'cat1', name: 'Canoe', color: '#C74FA0', createdAt: 10 }],
       waypoints: [
         { id: 'w1', latitude: 46.5, longitude: -70.5, label: 'Waypoint 1', createdAt: 10 },
+      ],
+      areas: [
+        {
+          id: 'a1',
+          name: 'Blueberry slope',
+          ring: [
+            [-71.2, 46.8],
+            [-71.19, 46.8],
+            [-71.19, 46.81],
+          ],
+          color: '#2563EB',
+          note: 'Mid-August',
+          photoUris: ['photos/a1.jpg'],
+          tags: ['Berries'],
+          createdAt: 12,
+        },
       ],
     };
     expect(migrateLibraryIndex(current)).toEqual(current);
@@ -321,6 +338,7 @@ describe('migrateLibraryIndex', () => {
         activeTrackIds: [],
         customCategories: [],
         waypoints: [],
+        areas: [],
       });
     }
   });
@@ -810,4 +828,69 @@ it('bounds persisted render-failed messages and keeps their pages paused', () =>
   expect(index.maps[0]?.renderRecoveryErrors).toEqual([
     { pageIndex: 0, reason: 'render-failed', message: 'x'.repeat(400) },
   ]);
+});
+
+describe('library v10 → v11: drawn routes and areas (#502/#503)', () => {
+  const ring = [
+    [-71.2, 46.8],
+    [-71.19, 46.8],
+    [-71.19, 46.81],
+  ];
+
+  it('starts a v10 index with no areas', () => {
+    const index = migrateLibraryIndex({ schemaVersion: 10, maps: [], tracks: [] });
+    expect(index.schemaVersion).toBe(LIBRARY_SCHEMA_VERSION);
+    expect(index.areas).toEqual([]);
+  });
+
+  it('keeps valid areas, drops undrawable ones, cleans junk fields', () => {
+    const index = migrateLibraryIndex({
+      schemaVersion: 11,
+      areas: [
+        { id: 'a1', name: 'Slope', ring, color: '#3E8E5A', createdAt: 1 },
+        { id: 'a2', name: 'Two points', ring: ring.slice(0, 2), color: '#3E8E5A', createdAt: 1 },
+        { id: 'a3', name: 'Bad colour', ring, color: 'blue', tags: ['x', 'X'], createdAt: 2 },
+        'junk',
+      ],
+    });
+    expect(index.areas.map((a) => a.id)).toEqual(['a1', 'a3']);
+    expect(index.areas[1]).toMatchObject({ color: '#2563EB', tags: ['x'] });
+  });
+
+  it('relativises area photo paths like every other stored path (#247)', () => {
+    const doc = 'file:///var/mobile/Containers/Data/Application/ABC/Documents/';
+    const index = migrateLibraryIndex(
+      {
+        schemaVersion: 11,
+        areas: [
+          {
+            id: 'a1',
+            name: 'Slope',
+            ring,
+            color: '#3E8E5A',
+            photoUris: [`${doc}photos/p1.jpg`],
+            createdAt: 1,
+          },
+        ],
+      },
+      doc,
+    );
+    expect(index.areas[0]?.photoUris).toEqual(['photos/p1.jpg']);
+    const back = mapLibraryIndexPaths(index, (p) => `${doc}${p}`);
+    expect(back.areas[0]?.photoUris).toEqual([`${doc}photos/p1.jpg`]);
+  });
+
+  it("keeps a drawn route's plan and drops a junk one (never the trail)", () => {
+    const base = { ...track('t1'), fileUri: 'tracks/t1.gpx' };
+    const index = migrateLibraryIndex({
+      schemaVersion: 11,
+      tracks: [
+        { ...base, plan: { mode: 'freehand', vertices: ring } },
+        { ...base, id: 't2', plan: { vertices: [[1, 2]] } },
+      ],
+    });
+    expect(index.tracks[0]?.plan).toEqual({ mode: 'freehand', vertices: ring });
+    expect(index.tracks[1]?.id).toBe('t2');
+    expect(index.tracks[1]).not.toHaveProperty('plan');
+  });
 });

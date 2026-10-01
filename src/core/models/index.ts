@@ -4,3 +4,4 @@ export * from './track';
 export * from './document';
 export * from './folder';
 export * from './waypoint';
+export * from './area';
