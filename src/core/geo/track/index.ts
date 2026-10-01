@@ -41,6 +41,31 @@ export {
   trailTiming,
 } from './movingTime';
 export { refreshMovingStats } from './refreshMoving';
+export {
+  classifyMovingSteps,
+  classifySegmentedSteps,
+  STEP_BREAK,
+  STEP_GAP,
+  STEP_INVALID,
+  STEP_MOVING,
+  STEP_STOPPED,
+} from './movingTime';
+export {
+  buildTrackAxis,
+  gradeAtDistance,
+  indexAtDistance,
+  interpolateOnAxis,
+  pointAtIndex,
+} from './trackAxis';
+export type { TrackAxis } from './trackAxis';
+export { computeSplits } from './splits';
+export type { Split, SplitOpts } from './splits';
+export { detectStops, findElevationExtremes, findSteepestStretch } from './highlights';
+export type { ElevationExtremes, SteepStretch, Stop } from './highlights';
+export { buildOutingTimeline } from './timeline';
+export type { TimelineEvent, TimelineEventKind, TimelineNote } from './timeline';
+export { analyzeOuting, isTimedTrack } from './outing';
+export type { OutingAnalysis } from './outing';
 export type { MovingProfile, MovingProfileId, MovingTimeOpts, TrailTiming } from './movingTime';
 
 const DEFAULT_ELEVATION_THRESHOLD_M = 3;
