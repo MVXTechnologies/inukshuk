@@ -8,7 +8,7 @@ import type { LngLat } from '@core/models';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 
-import { formatGrade, RouteProfileStrip } from './RouteProfileStrip';
+import { formatGrade, ProfileStrip } from './ProfileStrip';
 
 // ~1.1 km north, climbing 10 m every 111 m (≈ 9 %).
 const N = 11;
@@ -40,11 +40,11 @@ const touch = (x: number) => ({
   },
 });
 
-async function mount(props: Partial<Parameters<typeof RouteProfileStrip>[0]> = {}) {
+async function mount(props: Partial<Parameters<typeof ProfileStrip>[0]> = {}) {
   const onScrub = jest.fn();
   await render(
     <PaperProvider>
-      <RouteProfileStrip profile={PROFILE} units="metric" onScrub={onScrub} {...props} />
+      <ProfileStrip profile={PROFILE} units="metric" onScrub={onScrub} {...props} />
     </PaperProvider>,
   );
   const strip = screen.getByTestId('route-profile');
@@ -54,7 +54,7 @@ async function mount(props: Partial<Parameters<typeof RouteProfileStrip>[0]> = {
   return { strip, onScrub };
 }
 
-describe('RouteProfileStrip', () => {
+describe('ProfileStrip', () => {
   it('charts the N samples, labels min and max, and says so to a screen reader', async () => {
     expect(PROFILE.points).toHaveLength(N);
     await mount();

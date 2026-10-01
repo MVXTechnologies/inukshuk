@@ -1,7 +1,14 @@
-import type { LngLat } from '@core/models';
+import type { LngLat, TrackPoint } from '@core/models';
 import { haversineM } from '@core/trails/geometry';
 
-import { buildDrawProfile, profilePaths, scrubProfile, thinProfile } from './profile';
+import {
+  buildDrawProfile,
+  profilePaths,
+  scrubPointToTrackAt,
+  scrubProfile,
+  thinProfile,
+  trackPointsProfile,
+} from './profile';
 
 // A straight line north, ~111 m per 0.001° of latitude.
 const line = (n: number): LngLat[] => Array.from({ length: n }, (_, i) => [-70.9, 47 + i * 0.001]);
@@ -81,5 +88,42 @@ describe('scrubProfile', () => {
     // A descent reads negative.
     const down = buildDrawProfile(line(3), [300, 280, 260])!;
     expect(scrubProfile(down, 0.5)!.gradePct).toBeLessThan(0);
+  });
+});
+
+describe('trackPointsProfile / scrubPointToTrackAt', () => {
+  const pt = (i: number, altitude?: number): TrackPoint => ({
+    latitude: 47 + i * 0.001,
+    longitude: -70.9,
+    time: i * 1000,
+    ...(altitude !== undefined ? { altitude } : {}),
+  });
+
+  it('charts a saved trail from its points and altitudes', () => {
+    const profile = trackPointsProfile([pt(0, 200), pt(1, 260), pt(2, 230)]);
+    expect(profile).not.toBeNull();
+    expect(profile?.points.map((p) => p.elevationM)).toEqual([200, 260, 230]);
+    expect(profile?.minM).toBe(200);
+    expect(profile?.maxM).toBe(260);
+    expect(profile?.points[2]?.at).toEqual([-70.9, 47.002]);
+    expect(profile?.totalM).toBeCloseTo(222.4, 0);
+  });
+
+  it('keeps distance across points without altitude; null with fewer than two', () => {
+    const gappy = trackPointsProfile([pt(0, 200), pt(1), pt(2, 220)]);
+    expect(gappy?.points).toHaveLength(2);
+    expect(gappy?.points[1]?.distanceM).toBeCloseTo(222.4, 0);
+    expect(trackPointsProfile([pt(0, 200), pt(1)])).toBeNull();
+    expect(trackPointsProfile([pt(0), pt(1)])).toBeNull();
+  });
+
+  it('turns a scrubbed point into the map marker position', () => {
+    const profile = trackPointsProfile([pt(0, 200), pt(2, 220)])!;
+    const mid = scrubProfile(profile, 0.5)!;
+    const at = scrubPointToTrackAt(mid);
+    expect(at.longitude).toBe(-70.9);
+    expect(at.latitude).toBeCloseTo(47.001, 9);
+    expect(at.distanceM).toBe(mid.distanceM);
+    expect(at.elevation).toBeCloseTo(210, 6);
   });
 });

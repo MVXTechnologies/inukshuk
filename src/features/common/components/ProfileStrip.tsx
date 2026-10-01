@@ -20,10 +20,11 @@ import { Text } from 'react-native-paper';
 import Svg, { Line, Path } from 'react-native-svg';
 
 /**
- * The route's elevation profile WHILE drawing (#515): a compact strip in the
- * "Draw a route" panel, from the same DEM samples as the climb stat and the
- * saved GPX. Ochre line on a light ochre fill, the min and max elevation at
- * the left edge.
+ * The app's compact elevation strip: an ochre line on a light ochre fill, the
+ * min and max elevation on paper chips at the left edge. First built for the
+ * "Draw a route" panel (#515), where it charts the same DEM samples as the
+ * climb stat and the saved GPX; the map's tap-a-trail sheet uses it too (any
+ * trail, via `trackPointsProfile`), so the map has one profile look.
  *
  * Dragging a finger along it scrubs: a cursor on the strip, a readout
  * (distance · elevation · grade) and, through `onScrub`, a marker on the drawn
@@ -31,8 +32,8 @@ import Svg, { Line, Path } from 'react-native-svg';
  * first contact and never gives it up, so a drag here neither pans the map nor
  * scrolls the panel.
  *
- * The big trail-view chart (`ElevationProfile`) is 140 dp with axes and pace
- * curves — too much for a 68 dp strip — so this one is its own small chart.
+ * Same palette and stroke as the trail view's `TrailChart` (#511): the strip
+ * is its map-side, label-on-the-chart sibling.
  */
 
 export const PROFILE_HEIGHT = 68;
@@ -53,14 +54,17 @@ interface Props {
   turnaroundRatio?: number;
   /** The scrubbed point (null when released), for the map marker. */
   onScrub?: (point: ProfileScrubPoint | null) => void;
+  /** Root testID; the readout and turnaround tick derive theirs from it. */
+  testID?: string;
 }
 
-export function RouteProfileStrip({
+export function ProfileStrip({
   profile,
   units,
   dimmed = false,
   turnaroundRatio,
   onScrub,
+  testID = 'route-profile',
 }: Props) {
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
@@ -106,7 +110,7 @@ export function RouteProfileStrip({
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={`Elevation profile, ${compactDistance(profile.totalM, units)}, ${bottom} to ${top}${turnaroundRatio !== undefined ? ', out and back' : ''}${dimmed ? ', updating' : ''}`}
-      testID="route-profile"
+      testID={testID}
       {...responder.panHandlers}
     >
       {paths !== null && (
@@ -121,7 +125,7 @@ export function RouteProfileStrip({
           />
           {turnaroundRatio !== undefined && (
             <Line
-              testID="route-profile-turnaround"
+              testID={`${testID}-turnaround`}
               x1={turnaroundRatio * width}
               x2={turnaroundRatio * width}
               y1={PROFILE_HEIGHT * 0.15}
@@ -159,7 +163,7 @@ export function RouteProfileStrip({
         <View
           style={[styles.readout, { backgroundColor: t.surface, borderColor: t.outlineVariant }]}
           pointerEvents="none"
-          testID="route-profile-readout"
+          testID={`${testID}-readout`}
         >
           <Text style={[styles.readoutText, { color: t.ink }]} accessibilityLiveRegion="polite">
             {`${compactDistance(scrub.distanceM, units)} · ${formatElevation(scrub.elevationM, units)} · ${formatGrade(scrub.gradePct)}`}

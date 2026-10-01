@@ -2817,12 +2817,17 @@ export function MapScreen() {
         <TrailInspectPanel
           track={inspectTrack}
           points={inspectPoints}
+          units={units}
           onClose={() => {
             inspect(null);
             restoreCameraOnDeselect();
           }}
           onScrub={setMarkerAt}
           onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
+          // A drawn route reopens in the drawing tool, which closes this panel.
+          onEditRoute={() =>
+            useMapStore.getState().setDrawRequest({ kind: 'edit-route', trackId: inspectTrack.id })
+          }
           onLayout={setInspectPanelHeight}
         />
       )}
