@@ -1,8 +1,10 @@
 import { ROUTE_SAMPLE_STEP_M } from '@core/draw/elevation';
 import { densifyLine } from '@core/draw/geometry';
+import type { LegMode } from '@core/draw/legs';
 import {
   areaFileStem,
   areasToGeoJson,
+  buildRoutePlan,
   plannedRouteGpx,
   plannedRoutePoints,
 } from '@core/draw/serialize';
@@ -20,17 +22,28 @@ import type { RouteElevationResult } from './useRouteElevation';
  */
 
 export interface DrawnRouteInput {
+  /** The control points the user placed (the plan "Edit route" reopens). */
   vertices: readonly LngLat[];
+  /**
+   * The line as drawn — Trails/Roads legs as routed (#515) — which the GPX
+   * holds, densified. Absent: straight lines through `vertices`.
+   */
+  line?: readonly LngLat[];
+  /** Per leg: how it was drawn. Absent: all Freehand. */
+  legModes?: readonly LegMode[];
+  /** The chip the tool was on (it reopens on it). */
+  mode?: LegMode;
   name: string;
   /** Activity id, or null for a plain Navigation trail. */
   category: string | null;
-  /** The DEM elevation for exactly these vertices, when it could be had. */
+  /** The DEM elevation for exactly this line, when it could be had. */
   elevation: RouteElevationResult | null;
 }
 
 /** The trail (points, stats, plan) for a drawn route; pure apart from the clock. */
 export function buildDrawnTrack(id: string, input: DrawnRouteInput): Track {
-  const samples = input.elevation?.plan.samples ?? densifyLine(input.vertices, ROUTE_SAMPLE_STEP_M);
+  const samples =
+    input.elevation?.plan.samples ?? densifyLine(input.line ?? input.vertices, ROUTE_SAMPLE_STEP_M);
   const points = plannedRoutePoints(samples, input.elevation?.elevation.elevations);
   const track = buildImportedTrack({
     id,
@@ -49,7 +62,7 @@ export function buildDrawnTrack(id: string, input: DrawnRouteInput): Track {
     };
   }
   track.category = input.category ?? 'navigation';
-  track.plan = { mode: 'freehand', vertices: input.vertices.map((v) => [v[0], v[1]]) };
+  track.plan = buildRoutePlan(input.vertices, input.legModes ?? [], input.mode ?? 'freehand');
   return track;
 }
 

@@ -1,6 +1,7 @@
 import { TRAILS_ANCHOR } from '@core/geo/mapLayerStack';
-import { midpointHandles } from '@core/draw/geometry';
+import { midpointHandles, type MidpointHandle } from '@core/draw/geometry';
 import type { DrawKind } from '@core/draw/editor';
+import { halfwayAlong, type LegView } from '@core/draw/legs';
 import type { LngLat } from '@core/models';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useMemo } from 'react';
@@ -14,6 +15,11 @@ import { useMemo } from 'react';
  * draggable annotation never received the finger on Android (the map's own
  * gestures won), so taps are hit-tested in JS (`@core/draw/hitTest`) and a
  * selected vertex is dragged through an RN overlay (`DragHandle`).
+ *
+ * A route is drawn leg by leg (#515): a leg snapped to trails or roads is a
+ * solid line (it is real ground); a Freehand leg, or one still being routed,
+ * is dashed (a plan); a leg that could not be routed is dashed in amber with
+ * a warning dot on its middle.
  */
 
 interface Props {
@@ -29,6 +35,12 @@ interface Props {
   ink: string;
   /** The selected handle's ring. */
   selectedColor: string;
+  /** A route's legs as drawn (routed or straight); without them, one straight line. */
+  legs?: readonly LegView[];
+  /** Insert handles; default: the straight segments' middles. */
+  mids?: readonly MidpointHandle[];
+  /** Failed legs' line and warning dot. */
+  warnColor?: string;
 }
 
 /** The GeoJSON for the drawn shape and its handles. */
@@ -36,6 +48,8 @@ export function drawShapeGeoJson(
   kind: DrawKind,
   shown: readonly LngLat[],
   selected: number | null = null,
+  legs?: readonly LegView[],
+  mids?: readonly MidpointHandle[],
 ) {
   const coords = shown.map((p) => [p[0], p[1]]);
   const first = coords[0];
@@ -51,14 +65,30 @@ export function drawShapeGeoJson(
       properties: { role: 'line' },
       geometry: { type: 'LineString', coordinates: [...coords, first] },
     });
+  } else if (kind === 'route' && legs !== undefined) {
+    for (const leg of legs) {
+      features.push({
+        type: 'Feature',
+        properties: { role: 'line', leg: leg.status },
+        geometry: { type: 'LineString', coordinates: leg.coords.map((p) => [p[0], p[1]]) },
+      });
+      const mid = leg.status === 'failed' ? halfwayAlong(leg.coords) : null;
+      if (mid !== null) {
+        features.push({
+          type: 'Feature',
+          properties: { role: 'warn' },
+          geometry: { type: 'Point', coordinates: [mid[0], mid[1]] },
+        });
+      }
+    }
   } else if (shown.length >= 2) {
     features.push({
       type: 'Feature',
-      properties: { role: 'line' },
+      properties: { role: 'line', leg: 'straight' },
       geometry: { type: 'LineString', coordinates: coords },
     });
   }
-  for (const m of midpointHandles(shown, kind === 'area')) {
+  for (const m of mids ?? midpointHandles(shown, kind === 'area')) {
     features.push({
       type: 'Feature',
       properties: { role: 'mid' },
@@ -79,10 +109,24 @@ export function drawShapeGeoJson(
 
 const role = (r: string) => ['==', ['get', 'role'], r] as never;
 
-export function DrawLayers({ kind, shown, selected, color, halo, ink, selectedColor }: Props) {
+const legIs = (...states: string[]) =>
+  ['all', role('line'), ['in', ['get', 'leg'], ['literal', states]]] as never;
+
+export function DrawLayers({
+  kind,
+  shown,
+  selected,
+  color,
+  halo,
+  ink,
+  selectedColor,
+  legs,
+  mids,
+  warnColor = color,
+}: Props) {
   const data = useMemo(
-    () => JSON.stringify(drawShapeGeoJson(kind, shown, selected)),
-    [kind, shown, selected],
+    () => JSON.stringify(drawShapeGeoJson(kind, shown, selected, legs, mids)),
+    [kind, shown, selected, legs, mids],
   );
   const shape =
     kind === 'route'
@@ -101,10 +145,42 @@ export function DrawLayers({ kind, shown, selected, color, halo, ink, selectedCo
             id="draw-route-line"
             beforeId={TRAILS_ANCHOR}
             type="line"
-            filter={role('line')}
+            filter={legIs('straight', 'loading')}
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            // Freehand reads as a plan, not a recorded trace: dashed.
+            // Freehand reads as a plan, not a recorded trace: dashed. A leg
+            // still being routed shows the same way until it snaps.
             paint={{ 'line-color': color, 'line-width': 4.5, 'line-dasharray': [2.2, 1.4] }}
+          />,
+          <Layer
+            key="routed"
+            id="draw-route-routed"
+            beforeId={TRAILS_ANCHOR}
+            type="line"
+            filter={legIs('routed')}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': color, 'line-width': 4.5 }}
+          />,
+          <Layer
+            key="failed"
+            id="draw-route-failed"
+            beforeId={TRAILS_ANCHOR}
+            type="line"
+            filter={legIs('failed')}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': warnColor, 'line-width': 4.5, 'line-dasharray': [1.2, 1.2] }}
+          />,
+          <Layer
+            key="warn"
+            id="draw-route-warn"
+            beforeId={TRAILS_ANCHOR}
+            type="circle"
+            filter={role('warn')}
+            paint={{
+              'circle-radius': 8,
+              'circle-color': warnColor,
+              'circle-stroke-width': 2.5,
+              'circle-stroke-color': halo,
+            }}
           />,
         ]
       : [

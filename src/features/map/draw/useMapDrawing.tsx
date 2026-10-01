@@ -5,9 +5,22 @@ import {
   midpointHandles,
   polygonAreaM2,
   polygonPerimeterM,
-  polylineLengthM,
 } from '@core/draw/geometry';
 import { hitHandle, type ScreenPoint } from '@core/draw/hitTest';
+import {
+  failedLegs,
+  fitModes,
+  isRoutedMode,
+  legMidpointHandles,
+  legViews,
+  mergeLegs,
+  routeLengthM,
+  routingEngines,
+  seedResultsFromLine,
+  type LegMode,
+  type LegView,
+} from '@core/draw/legs';
+import { failureNotice } from '@core/draw/routing';
 import { estimateDurationS, formatEstimate } from '@core/draw/timeEstimate';
 import { formatElevation, type Units } from '@core/format';
 import {
@@ -19,6 +32,7 @@ import {
 } from '@core/library/areas';
 import { compactDistance } from '@core/library/libraryRows';
 import type { Area, LngLat } from '@core/models';
+import { loadTrackGeometry } from '@data/trackGeometry';
 import { reportError } from '@lib/errorReporting';
 import type { MapRef } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
@@ -46,7 +60,9 @@ import {
   DrawHint,
   DrawNotice,
   DrawPanel,
+  DrawStatus,
   RouteModeChips,
+  RoutingCredit,
   SelectedPointRow,
   type DrawStat,
 } from './DrawPanels';
@@ -54,6 +70,7 @@ import { discardPhotos, pickAreaPhoto } from './areaPhotos';
 import { overwriteDrawnRoute, writeAreaGeoJson, writeNewDrawnRoute } from './saveDrawn';
 import { SaveRouteSheet } from './SaveRouteSheet';
 import { useDrawSession, type DrawTarget } from './useDrawSession';
+import { useLegRouting } from './useLegRouting';
 import { computeRouteElevation, shownElevation, useRouteElevation } from './useRouteElevation';
 
 /**
@@ -65,6 +82,8 @@ import { computeRouteElevation, shownElevation, useRouteElevation } from './useR
  */
 
 const NO_VERTICES: readonly LngLat[] = [];
+const NO_MODES: readonly LegMode[] = [];
+const NO_LEGS: readonly LegView[] = [];
 /** A long-press within this many px of a vertex deletes it. */
 const LONG_PRESS_HIT_PX = 32;
 /** A second ✕ within this window discards an unsaved drawing. */
@@ -141,7 +160,36 @@ export function useMapDrawing({
   const kind = state?.kind ?? null;
   const vertices = state?.vertices ?? NO_VERTICES;
   const routeVertices = kind === 'route' ? vertices : NO_VERTICES;
-  const elevationState = useRouteElevation(routeVertices, kind === 'route');
+  const routeModes = kind === 'route' ? (state?.modes ?? NO_MODES) : NO_MODES;
+
+  // --- Route legs (#515): Trails/Roads legs snapped by the routing proxy -------
+  const routing = useLegRouting(routeVertices, routeModes, kind === 'route');
+  const seedLegs = routing.seed;
+  const committedLegs = useMemo(
+    () => (kind === 'route' ? legViews(routeVertices, routeModes, routing.results) : NO_LEGS),
+    [kind, routeVertices, routeModes, routing.results],
+  );
+  /** The whole line as drawn (routed legs included): stats, climb and the saved GPX. */
+  const routeLine = useMemo(
+    () => (committedLegs.length > 0 ? mergeLegs(committedLegs) : routeVertices),
+    [committedLegs, routeVertices],
+  );
+  // While a point is dragged, its two legs show straight until the drop.
+  const shownLegs = useMemo(
+    () =>
+      kind !== 'route'
+        ? NO_LEGS
+        : draw.shown === routeVertices
+          ? committedLegs
+          : legViews(draw.shown, routeModes, routing.results),
+    [kind, draw.shown, routeVertices, committedLegs, routeModes, routing.results],
+  );
+  const legMids = useMemo(() => legMidpointHandles(shownLegs), [shownLegs]);
+  const legsLoading = committedLegs.some((l) => l.status === 'loading');
+  const failed = failedLegs(committedLegs);
+  const engines = routingEngines(committedLegs);
+
+  const elevationState = useRouteElevation(routeLine, kind === 'route');
   const elevation = shownElevation(elevationState);
 
   const editedTrackId = draw.target?.kind === 'route' ? (draw.target.trackId ?? null) : null;
@@ -155,13 +203,18 @@ export function useMapDrawing({
   );
 
   const begin = useCallback(
-    (target: DrawTarget, initial: readonly LngLat[] = []) => {
+    (
+      target: DrawTarget,
+      initial: readonly LngLat[] = [],
+      modes?: readonly LegMode[],
+      mode?: LegMode,
+    ) => {
       onBeforeStart();
       setViewAreaId(null);
       setRouteSaveOpen(false);
       setAreaEditor(null);
       discardArmedAt.current = 0;
-      draw.start(target, initial);
+      draw.start(target, initial, modes, mode);
     },
     [draw, onBeforeStart],
   );
@@ -179,8 +232,19 @@ export function useMapDrawing({
           showSnack('This trail was not drawn on the map, so it has no route to edit');
           return;
         }
-        begin({ kind: 'route', trackId: t.id }, t.plan.vertices);
-        const box = boundsOfVertices(t.plan.vertices);
+        const plan = t.plan;
+        const modes = fitModes(plan.legModes, plan.vertices.length);
+        // Snapped legs come back from the saved line (no request, works
+        // offline); the routing proxy is asked only for what can't be cut out.
+        if (modes.some(isRoutedMode)) {
+          void loadTrackGeometry(t)
+            .then((g) => {
+              if (g) seedLegs(seedResultsFromLine(g.parts.flat(), plan.vertices, modes));
+            })
+            .catch(() => undefined);
+        }
+        begin({ kind: 'route', trackId: t.id }, plan.vertices, modes, plan.mode);
+        const box = boundsOfVertices(plan.vertices);
         if (box) setFocusBounds(box, { top: 140, right: 60, bottom: 300, left: 60 });
         return;
       }
@@ -196,7 +260,7 @@ export function useMapDrawing({
         if (box) setFocusBounds(box, { top: 120, right: 60, bottom: 360, left: 60 });
       }
     },
-    [tracks, areas, begin, setFocusBounds, showSnack, onBeforeStart],
+    [tracks, areas, begin, setFocusBounds, showSnack, onBeforeStart, seedLegs],
   );
   useEffect(() => {
     if (drawRequest === null) return;
@@ -271,13 +335,16 @@ export function useMapDrawing({
         draw.tap(lngLat, null);
         return true;
       }
-      const mids = midpointHandles(state.vertices, state.kind === 'area').map((m) => m.at);
+      // A route's insert handles sit on its legs as drawn (on the trail).
+      const handles =
+        state.kind === 'route' ? legMids : midpointHandles(state.vertices, state.kind === 'area');
+      const mids = handles.map((m) => m.at);
       void Promise.all([projectAll(state.vertices), projectAll(mids)]).then(([v, m]) =>
-        draw.tap(lngLat, hitHandle(v, m, point)),
+        draw.tap(lngLat, hitHandle(v, m, point), state.kind === 'route' ? handles : undefined),
       );
       return true;
     },
-    [state, draw, routeSaveOpen, areaEditor, projectAll],
+    [state, draw, routeSaveOpen, areaEditor, projectAll, legMids],
   );
 
   // The selected vertex's grip sits over it on screen: re-projected whenever
@@ -371,7 +438,7 @@ export function useMapDrawing({
   );
 
   // --- Route stats ------------------------------------------------------------
-  const distanceM = kind === 'route' ? polylineLengthM(draw.shown) : 0;
+  const distanceM = kind === 'route' ? routeLengthM(shownLegs) : 0;
   const climb =
     elevation !== null
       ? `↑ ${formatElevation(elevation.elevation.ascentM, units)}`
@@ -383,18 +450,22 @@ export function useMapDrawing({
     `≈ ${formatEstimate(estimateDurationS(distanceM, ascentForEstimate, category))}`;
 
   const saveRoute = async (name: string, category: string | null) => {
-    if (state === null || !canSave(state)) return;
+    if (state === null || !canSave(state) || legsLoading) return;
     setSavingRoute(true);
     try {
       const current = state.vertices;
+      const line = routeLine;
       // The debounced numbers may trail the last edit: compute for exactly
       // what is being saved (cached tiles make this quick).
       const fresh =
-        elevation !== null && elevation.vertices === current
+        elevation !== null && elevation.vertices === line
           ? elevation
-          : await computeRouteElevation(current).catch(() => null);
+          : await computeRouteElevation(line).catch(() => null);
       const input = {
         vertices: current,
+        line,
+        legModes: state.modes,
+        mode: state.mode,
         name: name || editedTrack?.name || `Route ${tracks.filter((t) => t.plan).length + 1}`,
         category,
         elevation: fresh,
@@ -525,6 +596,9 @@ export function useMapDrawing({
           kind={state.kind}
           shown={draw.shown}
           selected={state.selected}
+          legs={state.kind === 'route' ? shownLegs : undefined}
+          mids={state.kind === 'route' ? legMids : undefined}
+          warnColor={tokens.status.pausedInk}
           color={
             state.kind === 'route' ? lineColor : (areaEditor?.initial.color ?? DEFAULT_AREA_COLOR)
           }
@@ -572,13 +646,27 @@ export function useMapDrawing({
           stats={stats}
           notice={
             selectedRow ??
-            (elevationState.status === 'unavailable' && vertices.length >= 2 ? (
+            (failed.length > 0 ? (
+              <DrawNotice
+                text={failureNotice(failed.map((l) => l.reason ?? 'error')) ?? ''}
+                action={{ label: 'Retry', onPress: routing.retry }}
+              />
+            ) : legsLoading ? (
+              <DrawStatus
+                text={
+                  committedLegs.some((l) => l.status === 'loading' && l.mode === 'roads')
+                    ? 'Finding the road…'
+                    : 'Finding the trail…'
+                }
+              />
+            ) : elevationState.status === 'unavailable' && vertices.length >= 2 ? (
               <DrawNotice text="Climb unavailable here (offline, or the route is too long)" />
             ) : null)
           }
+          footer={engines !== null ? <RoutingCredit engines={engines} /> : undefined}
           canUndo={canUndo(state)}
           canClear={state.vertices.length > 0}
-          canSave={canSave(state)}
+          canSave={canSave(state) && !legsLoading}
           saveLabel={editedTrack ? 'Save changes' : 'Save route'}
           onUndo={() => draw.dispatch({ type: 'undo' })}
           onClear={() => draw.dispatch({ type: 'clear' })}
@@ -622,7 +710,13 @@ export function useMapDrawing({
   const laneTop = topInset + 64;
   const chrome = (
     <>
-      {state !== null && state.kind === 'route' && <RouteModeChips mode="freehand" top={laneTop} />}
+      {state !== null && state.kind === 'route' && (
+        <RouteModeChips
+          mode={state.mode}
+          top={laneTop}
+          onChange={(mode) => draw.dispatch({ type: 'mode', mode })}
+        />
+      )}
       {state !== null && !routeSaveOpen && areaEditor === null && (
         <DrawHint
           text={drawHint(state)}

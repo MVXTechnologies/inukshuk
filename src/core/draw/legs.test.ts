@@ -16,6 +16,7 @@ import {
   mergeLegs,
   pendingLegs,
   routeLengthM,
+  routingEngines,
   seedResultsFromLine,
   withoutFailures,
   type LegMode,
@@ -253,5 +254,31 @@ describe('seedResultsFromLine', () => {
   it('seeds nothing from too little', () => {
     expect(seedResultsFromLine([A], [A, B], ['trails']).size).toBe(0);
     expect(seedResultsFromLine([A, B], [A], []).size).toBe(0);
+  });
+});
+
+describe('routingEngines', () => {
+  it('credits each engine once, from the proxy attribution, OSM part removed', () => {
+    const osm = '© OpenStreetMap contributors · routing ';
+    const results = new Map<string, LegResult>([
+      [
+        legKey('trails', A, B),
+        { status: 'routed', coords: bend(A, B), attribution: `${osm}BRouter` },
+      ],
+      [
+        legKey('roads', B, C),
+        { status: 'routed', coords: bend(B, C), attribution: `${osm}Valhalla (FOSSGIS)` },
+      ],
+      [
+        legKey('trails', C, D),
+        { status: 'routed', coords: bend(C, D), attribution: `${osm}BRouter` },
+      ],
+    ]);
+    const views = legViews([A, B, C, D], ['trails', 'roads', 'trails'], results);
+    expect(routingEngines(views)).toEqual(['BRouter', 'Valhalla (FOSSGIS)']);
+    // Seeded legs (no attribution) still count as routed: the OSM credit alone.
+    const seeded = new Map([[legKey('trails', A, B), routed(A, B)]]);
+    expect(routingEngines(legViews([A, B], ['trails'], seeded))).toEqual([]);
+    expect(routingEngines(legViews([A, B], ['freehand'], new Map()))).toBeNull();
   });
 });

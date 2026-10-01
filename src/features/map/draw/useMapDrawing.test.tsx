@@ -5,6 +5,7 @@
  * card's hold-to-delete removes it. The native map is stood in for by a
  * `project` stub; the drag handles' callbacks are exercised directly.
  */
+import type { LegResult } from '@core/draw/legs';
 import type { LngLat } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -15,6 +16,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { HOLD_MS } from '../components/HoldButton';
+import { resetRouteModeMemory } from './useDrawSession';
 import { useMapDrawing, type MapDrawing } from './useMapDrawing';
 
 const mockWriteTrackGpx = jest.fn((id: string, _xml: string) => `file:///doc/tracks/${id}.gpx`);
@@ -30,7 +32,18 @@ jest.mock('@data/storage', () => ({
   importPhoto: jest.fn(),
   createCacheFileWriter: jest.fn(),
 }));
-jest.mock('@data/trackGeometry', () => ({ primeTrackGeometry: jest.fn() }));
+const mockLoadGeometry = jest.fn();
+jest.mock('@data/trackGeometry', () => ({
+  primeTrackGeometry: jest.fn(),
+  loadTrackGeometry: (...a: unknown[]) => mockLoadGeometry(...a),
+}));
+/** The routing proxy (#515): each call waits for the test to answer it. */
+type Answer = (result: LegResult) => void;
+const mockRouteCalls: { mode: string; from: LngLat; to: LngLat; answer: Answer }[] = [];
+jest.mock('@data/routing', () => ({
+  routeLeg: (mode: string, from: LngLat, to: LngLat) =>
+    new Promise((resolve) => mockRouteCalls.push({ mode, from, to, answer: resolve })),
+}));
 // Offline: no DEM tile can be read, so the climb is unavailable (never guessed).
 jest.mock('@features/map/dem', () => ({
   fetchDemTile: jest.fn(() => Promise.reject(new Error('offline'))),
@@ -137,6 +150,9 @@ jest.useFakeTimers();
 
 beforeEach(() => {
   mockId = 0;
+  mockRouteCalls.length = 0;
+  mockLoadGeometry.mockReset();
+  resetRouteModeMemory();
   api = null;
   mockGrip.current = null;
   snack.mockReset();
@@ -168,10 +184,10 @@ describe('route drawing (#502)', () => {
     expect(drawing().active).toBe(true);
     expect(drawing().onMapTap(null)).toBe(true);
     expect(screen.getByText('Draw a route')).toBeOnTheScreen();
-    // Trails and Roads are promised but not yet available.
-    expect(screen.getByLabelText('Trails, coming soon')).toBeDisabled();
-    expect(screen.getByLabelText('Roads, coming soon')).toBeDisabled();
-    expect(screen.getByText('Freehand')).toBeOnTheScreen();
+    // Trails · Roads · Freehand, all available; a new route starts Freehand.
+    expect(screen.getByLabelText('Trails')).not.toBeDisabled();
+    expect(screen.getByLabelText('Roads')).not.toBeDisabled();
+    expect(screen.getByLabelText('Freehand')).toBeSelected();
   });
 
   it('adds, undoes, clears and saves an untimed planned route', async () => {
@@ -477,5 +493,154 @@ describe('area drawing (#503)', () => {
     await fireEvent.changeText(screen.getByLabelText('Area name'), 'Renamed');
     await press('Save area');
     expect(useLibraryStore.getState().areas[0]?.name).toBe('Renamed');
+  });
+});
+
+/** A routed answer: a dog-leg off the straight chord (so it is longer). */
+const bent = (from: LngLat, to: LngLat): LegResult => ({
+  status: 'routed',
+  coords: [from, [from[0], to[1]], to],
+  attribution: '© OpenStreetMap contributors · routing BRouter',
+});
+
+/** Answer the oldest pending routing call. */
+async function answer(result: (from: LngLat, to: LngLat) => LegResult) {
+  const call = mockRouteCalls.shift();
+  if (!call) throw new Error('no routing call pending');
+  await act(async () => {
+    call.answer(result(call.from, call.to));
+  });
+  await flush(0);
+}
+
+const distanceLabel = () =>
+  Number(
+    /^distance ([\d.]+) (k?m)$/.exec(
+      screen.getByLabelText(/^distance /).props.accessibilityLabel,
+    )?.[1],
+  );
+
+describe('route snapping (#515)', () => {
+  it('Trails: a new leg shows straight while routing, then snaps; stats use the routed line', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await press('Trails');
+    expect(screen.getByLabelText('Trails')).toBeSelected();
+    await tap(P1);
+    expect(screen.getByText(/follows trails/)).toBeOnTheScreen();
+    await tap(P2);
+    // Loading: the leg is a straight placeholder, and the route can't be saved yet.
+    expect(screen.getByText('Finding the trail…')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Save route')).toBeDisabled();
+    const straight = distanceLabel();
+    await flush(400); // debounce
+    expect(mockRouteCalls.map((c) => [c.mode, c.from, c.to])).toEqual([['trails', P1, P2]]);
+    await answer(bent);
+    expect(screen.queryByText('Finding the trail…')).toBeNull();
+    expect(distanceLabel()).toBeGreaterThan(straight);
+    expect(screen.getByText(/Routing BRouter · © OpenStreetMap/)).toBeOnTheScreen();
+    expect(screen.getByLabelText('Report a map error')).toBeOnTheScreen();
+
+    await press('Save route');
+    await press('Save route to Library');
+    await flush(0);
+    const [saved] = useLibraryStore.getState().tracks;
+    expect(saved?.plan).toEqual({ mode: 'trails', vertices: [P1, P2], legModes: ['trails'] });
+    // The GPX holds the routed line: it passes the dog-leg's corner.
+    const xml = mockWriteTrackGpx.mock.calls[0]?.[1] ?? '';
+    expect(xml).toContain(`lat="${P2[1]}" lon="${P1[0]}"`);
+  });
+
+  it('a leg that cannot be routed falls back straight with a warning; Retry asks again', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await press('Roads');
+    await tap(P1);
+    await tap(P2);
+    expect(screen.getByText('Finding the road…')).toBeOnTheScreen();
+    await flush(400);
+    await answer(() => ({ status: 'failed', reason: 'offline' }));
+    expect(screen.getByText('One leg drawn straight (no connection)')).toBeOnTheScreen();
+    // A straight fallback still saves.
+    expect(screen.getByLabelText('Save route')).not.toBeDisabled();
+    expect(mockRouteCalls).toHaveLength(0);
+
+    await press('Retry');
+    await flush(400);
+    expect(mockRouteCalls).toHaveLength(1);
+    expect(mockRouteCalls[0]?.mode).toBe('roads');
+    await answer(bent);
+    expect(screen.queryByText(/drawn straight/)).toBeNull();
+  });
+
+  it('switching modes keeps the legs drawn; undo restores routed legs without a request', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await press('Trails');
+    await tap(P1);
+    await tap(P2);
+    await flush(400);
+    await answer(bent);
+    await press('Freehand');
+    await tap(P3);
+    await flush(400);
+    // The new leg is straight (no request); the trail leg stays snapped.
+    expect(mockRouteCalls).toHaveLength(0);
+    expect(screen.getByText(/Routing BRouter/)).toBeOnTheScreen();
+    await press('Undo');
+    await press('Undo');
+    await press('Undo');
+    await press('Undo'); // back to nothing, then redo by hand
+    await press('Trails');
+    await tap(P1);
+    await tap(P2);
+    await flush(400);
+    // P1→P2 by trail was answered before: drawn snapped at once.
+    expect(mockRouteCalls).toHaveLength(0);
+    expect(screen.queryByText(/Finding the/)).toBeNull();
+    await press('Save route');
+    await press('Save route to Library');
+    await flush(0);
+    expect(useLibraryStore.getState().tracks[0]?.plan?.legModes).toEqual(['trails']);
+  });
+
+  it('"Edit route" reopens snapped legs from the saved line, without asking the proxy', async () => {
+    mockLoadGeometry.mockResolvedValue({
+      parts: [[P1, [P1[0], P2[1]], P2, P3]],
+    });
+    await mount();
+    await act(async () => {
+      useLibraryStore.setState({
+        tracks: [
+          {
+            id: 'r2',
+            name: 'Snapped',
+            startedAt: 1,
+            fileUri: 'file:///doc/tracks/r2.gpx',
+            stats: {
+              distanceM: 1,
+              ascentM: 0,
+              descentM: 0,
+              durationS: 0,
+              movingTimeS: 0,
+              avgSpeedMps: 0,
+              maxSpeedMps: 0,
+              pointCount: 4,
+            },
+            plan: { mode: 'roads', vertices: [P1, P2, P3], legModes: ['trails', 'freehand'] },
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      useMapStore.getState().setDrawRequest({ kind: 'edit-route', trackId: 'r2' });
+    });
+    await flush(0);
+    await flush(400);
+    expect(screen.getByText('Edit route · Snapped')).toBeOnTheScreen();
+    // The chip it was saved on, the trail leg snapped from the saved line.
+    expect(screen.getByLabelText('Roads')).toBeSelected();
+    expect(mockRouteCalls).toHaveLength(0);
+    expect(screen.getByText(/© OpenStreetMap/)).toBeOnTheScreen();
   });
 });

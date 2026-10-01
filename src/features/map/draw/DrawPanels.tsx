@@ -1,7 +1,8 @@
+import type { LegMode } from '@core/draw/legs';
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Linking, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
 
 /**
@@ -14,20 +15,28 @@ import { Icon, Text, useTheme } from 'react-native-paper';
  * Stone & Paper tokens, so they follow light, dark and the display modes.
  */
 
-export type RouteMode = 'trails' | 'roads' | 'freehand';
+export type RouteMode = LegMode;
 
-const MODES: readonly { id: RouteMode; label: string; available: boolean }[] = [
-  { id: 'trails', label: 'Trails', available: false },
-  { id: 'roads', label: 'Roads', available: false },
-  { id: 'freehand', label: 'Freehand', available: true },
+const MODES: readonly { id: RouteMode; label: string; hint: string }[] = [
+  { id: 'trails', label: 'Trails', hint: 'new legs follow hiking trails' },
+  { id: 'roads', label: 'Roads', hint: 'new legs follow roads and streets' },
+  { id: 'freehand', label: 'Freehand', hint: 'new legs are straight lines' },
 ];
 
 /**
- * Trails · Roads · Freehand. Only Freehand draws today; snapping to trails or
- * roads needs the routing engine (coming with the NAS router), so those two
- * are shown — the board's promise — but disabled, with "Coming soon".
+ * Trails · Roads · Freehand (#515): the mode the NEXT leg is drawn in. Legs
+ * already drawn keep theirs, so one route can mix a road approach, a trail
+ * and a straight off-trail bit.
  */
-export function RouteModeChips({ mode, top }: { mode: RouteMode; top: number }) {
+export function RouteModeChips({
+  mode,
+  top,
+  onChange,
+}: {
+  mode: RouteMode;
+  top: number;
+  onChange: (mode: RouteMode) => void;
+}) {
   const t = useSchemeTokens();
   return (
     <View
@@ -40,21 +49,16 @@ export function RouteModeChips({ mode, top }: { mode: RouteMode; top: number }) 
         return (
           <Pressable
             key={m.id}
-            disabled={!m.available}
+            onPress={() => onChange(m.id)}
             accessibilityRole="radio"
-            accessibilityState={{ selected: on, disabled: !m.available }}
-            accessibilityLabel={m.available ? m.label : `${m.label}, coming soon`}
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={m.label}
+            accessibilityHint={m.hint}
             style={[styles.mode, on && { backgroundColor: t.library.chipOn }]}
           >
-            <Text
-              style={[
-                styles.modeLabel,
-                { color: on ? t.library.chipOnInk : m.available ? t.ink : t.inkMuted },
-              ]}
-            >
+            <Text style={[styles.modeLabel, { color: on ? t.library.chipOnInk : t.ink }]}>
               {m.label}
             </Text>
-            {!m.available && <Text style={[styles.soon, { color: t.inkMuted }]}>Coming soon</Text>}
           </Pressable>
         );
       })}
@@ -89,6 +93,8 @@ interface PanelProps {
   stats: readonly DrawStat[];
   /** Below the stats: a warning or the selected point's delete row. */
   notice?: ReactNode;
+  /** Under the buttons: the routing credit while snapped legs are shown. */
+  footer?: ReactNode;
   canUndo: boolean;
   canClear: boolean;
   canSave: boolean;
@@ -105,6 +111,7 @@ export function DrawPanel({
   title,
   stats,
   notice,
+  footer,
   canUndo,
   canClear,
   canSave,
@@ -189,6 +196,7 @@ export function DrawPanel({
           <Text style={[styles.saveLabel, { color: theme.colors.onPrimary }]}>{saveLabel}</Text>
         </Pressable>
       </View>
+      {footer}
     </View>
   );
 }
@@ -233,13 +241,71 @@ export function SelectedPointRow({
   );
 }
 
-/** An amber note under the stats (a crossing polygon, an unavailable climb). */
-export function DrawNotice({ text }: { text: string }) {
+/**
+ * An amber note under the stats (a crossing polygon, an unavailable climb, a
+ * leg that could not snap), with an optional action ("Retry").
+ */
+export function DrawNotice({
+  text,
+  action,
+}: {
+  text: string;
+  action?: { label: string; onPress: () => void };
+}) {
   const t = useSchemeTokens();
   return (
     <View style={styles.notice} accessibilityLiveRegion="polite">
       <Icon source="alert-outline" size={16} color={t.status.pausedInk} />
       <Text style={[styles.noticeText, { color: t.status.pausedInk }]}>{text}</Text>
+      {action && (
+        <Pressable
+          onPress={action.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          hitSlop={6}
+          style={[styles.chipButton, { borderColor: t.outlineVariant }, styles.outlined]}
+        >
+          <Icon source="refresh" size={16} color={t.ink} />
+          <Text style={[styles.chipButtonLabel, { color: t.ink }]}>{action.label}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+/** A quiet status line under the stats ("Snapping to trails…"). */
+export function DrawStatus({ text }: { text: string }) {
+  const t = useSchemeTokens();
+  return (
+    <View style={styles.notice} accessibilityLiveRegion="polite">
+      <Icon source="map-marker-path" size={16} color={t.inkMuted} />
+      <Text style={[styles.noticeText, { color: t.inkMuted }]}>{text}</Text>
+    </View>
+  );
+}
+
+/**
+ * The routing credit the engines' terms ask for (OSM data + the engine), with
+ * the "report a map error" link FOSSGIS asks apps to carry.
+ */
+export function RoutingCredit({ engines }: { engines: readonly string[] }) {
+  const t = useSchemeTokens();
+  return (
+    <View style={styles.credit}>
+      <Text style={[styles.creditText, styles.creditBody, { color: t.inkMuted }]} numberOfLines={2}>
+        {engines.length > 0 ? `Routing ${engines.join(' + ')} · ` : 'Routing · '}© OpenStreetMap
+        contributors
+      </Text>
+      <Pressable
+        onPress={() => void Linking.openURL('https://www.openstreetmap.org/fixthemap')}
+        accessibilityRole="link"
+        accessibilityLabel="Report a map error"
+        hitSlop={8}
+      >
+        <Text style={[styles.creditText, styles.creditLink, { color: t.inkVariant }]}>
+          Report a map error
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -269,7 +335,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   modeLabel: { fontSize: 14.5, lineHeight: 18, fontWeight: '800' },
-  soon: { fontSize: 10.5, lineHeight: 13, fontWeight: '700' },
   hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
   hint: {
     fontSize: 13,
@@ -334,5 +399,10 @@ const styles = StyleSheet.create({
   },
   chipButtonLabel: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
   notice: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  outlined: { borderWidth: 1.5, minHeight: 32 },
+  credit: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -2 },
+  creditText: { fontSize: 11, lineHeight: 14 },
+  creditBody: { flex: 1 },
+  creditLink: { textDecorationLine: 'underline', fontWeight: '700' },
   noticeText: { flex: 1, fontSize: 13, lineHeight: 17 },
 });

@@ -36,7 +36,13 @@ export const isRoutedMode = (mode: LegMode): boolean => mode !== 'freehand';
 export type LegFailure = 'offline' | 'no_route' | 'busy' | 'too_long' | 'error';
 
 export type LegResult =
-  { status: 'routed'; coords: readonly LngLat[] } | { status: 'failed'; reason: LegFailure };
+  | {
+      status: 'routed';
+      coords: readonly LngLat[];
+      /** The proxy's credit line for the engine that made it (absent for a seeded leg). */
+      attribution?: string;
+    }
+  | { status: 'failed'; reason: LegFailure };
 
 /** How a leg is shown right now. */
 export type LegStatus = 'straight' | 'loading' | 'routed' | 'failed';
@@ -51,6 +57,8 @@ export interface LegView {
   coords: readonly LngLat[];
   /** Set when `status` is `failed`. */
   reason?: LegFailure;
+  /** Set when `status` is `routed` and the proxy credited an engine. */
+  attribution?: string;
 }
 
 /** A leg the routing proxy has to answer. */
@@ -132,6 +140,7 @@ export function legViews(
         to,
         status: 'routed',
         coords: anchorLeg(from, result.coords, to),
+        ...(result.attribution !== undefined ? { attribution: result.attribution } : {}),
       });
     }
   }
@@ -288,4 +297,24 @@ export function fitModes(
     const m = modes?.[i];
     return isLegMode(m) ? m : fill;
   });
+}
+
+/**
+ * The routing engines to credit for the legs shown ("BRouter", "Valhalla
+ * (FOSSGIS)"), from the proxy's attribution lines with the OSM part (shown
+ * once by the caller) taken out; null when no leg is routed.
+ */
+export function routingEngines(views: readonly LegView[]): string[] | null {
+  const routed = views.filter((v) => v.status === 'routed');
+  if (routed.length === 0) return null;
+  const engines = new Set<string>();
+  for (const v of routed) {
+    const name = v.attribution
+      ?.replace(/©\s*OpenStreetMap contributors/i, '')
+      .replace(/^[\s·]+|[\s·]+$/g, '')
+      .replace(/^routing\s+/i, '')
+      .trim();
+    if (name) engines.add(name);
+  }
+  return [...engines];
 }
