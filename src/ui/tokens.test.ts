@@ -143,6 +143,21 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['trail line on its thumbnail', t.explore.trail, t.explore.trailThumb, GRAPHIC],
     ['trail line on its halo', t.explore.trail, t.explore.trailHalo, GRAPHIC],
     ['selected stage on its halo', t.explore.trailStage, t.explore.trailHalo, GRAPHIC],
+    // Support Inukshuk (#476).
+    ['support card / Tip button label', t.support.onAccent, t.support.accent, TEXT],
+    ['support link on background', t.support.link, t.background, TEXT],
+    ['tip icon on a tier', t.support.link, t.surface, GRAPHIC],
+    ['tip icon on the chosen tier', t.support.link, t.support.selected, GRAPHIC],
+    ['tier name on the chosen tier', t.ink, t.support.selected, TEXT],
+    ['tier blurb on the chosen tier', t.inkMuted, t.support.selected, TEXT],
+    ['chosen tier border', t.support.selectedBorder, t.surface, GRAPHIC],
+    ['progress fill on its track', t.support.progress, t.support.progressTrack, GRAPHIC],
+    ['thank-you stones on background', t.support.stone, t.background, GRAPHIC],
+    ['thank-you deep stones on background', t.support.stoneDeep, t.background, GRAPHIC],
+    ['tip button cairn on stone', t.support.cairnLight, palette.stone, GRAPHIC],
+    ['tip button coin on stone', t.support.coin, palette.stone, GRAPHIC],
+    ['tip button heart on surface', t.support.heart, t.surface, GRAPHIC],
+    ['tip button stone heart on surface', t.support.stone, t.surface, GRAPHIC],
   ];
 }
 

@@ -78,6 +78,7 @@ import { MoveToFolderItems } from './components/MoveToFolderItems';
 import { TrackListRow, type TrackRowActions } from './components/TrackListRow';
 import { useDebouncedValue } from '@features/common/useDebouncedValue';
 import { ImportJobCard } from '../import/ImportJobCard';
+import { SupportNudgeCard } from '../support/SupportNudgeCard';
 import { ImportSheet } from '../import/ImportSheet';
 import { activityImportMessage, pickAndImportActivityFiles } from './importActivities';
 import { pickAndImportMaps } from './importMap';
@@ -1202,6 +1203,8 @@ export function LibraryScreen() {
           ListHeaderComponent={
             <>
               <ImportJobCard />
+              {/* Once a year, behind SUPPORT_NUDGE_ENABLED (off): renders nothing otherwise. */}
+              {!organizing && <SupportNudgeCard />}
               {organizing && !hasFolders && (
                 <Text style={[styles.hint, { color: tokens.inkMuted }]}>
                   Create a folder with + to group trails, maps and waypoints. Grips, rename and

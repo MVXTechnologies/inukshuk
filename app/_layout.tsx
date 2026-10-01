@@ -14,10 +14,12 @@ import { installStravaAutoImport } from '@features/import/autoImport';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
+import { sweepUnfinishedTips } from '@lib/iap';
 import { useImportStore } from '@state/importStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useStravaStore } from '@state/stravaStore';
+import { useSupportStore } from '@state/supportStore';
 import { DisplayConditionContext } from '@ui/displayCondition';
 import { resolveTheme } from '@ui/theme';
 import { useAndroidImmersive } from '@ui/useAndroidImmersive';
@@ -57,6 +59,10 @@ export default function RootLayout() {
     hydrateSettings().catch((err) => reportError(err, 'settings-hydrate'));
     hydrateStrava().catch((err) => reportError(err, 'strava-hydrate'));
     hydrateImports().catch((err) => reportError(err, 'imports-hydrate'));
+    useSupportStore
+      .getState()
+      .hydrate()
+      .catch((err) => reportError(err, 'support-hydrate'));
   }, [hydrateLibrary, hydrateSettings, hydrateStrava, hydrateImports]);
 
   // A launch hydration that fails (an I/O error — a corrupt file hydrates
@@ -81,6 +87,19 @@ export default function RootLayout() {
   // each return to the foreground (at most every 15 minutes).
   useEffect(() => installStravaAutoImport(), []);
 
+  // Tips (#476) are consumables: one left unfinished by a killed session, or
+  // an Android payment that cleared while the app was closed, is consumed
+  // here — Play refunds what stays unacknowledged for three days. Deferred so
+  // it never competes with launch; a no-op in builds without the store module.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      sweepUnfinishedTips((tip) => useSupportStore.getState().recordTip(tip)).catch((err) =>
+        reportError(err, 'tip-sweep'),
+      );
+    }, 15_000);
+    return () => clearTimeout(timer);
+  }, []);
+
   useAndroidImmersive();
 
   // Files opened via the OS "Open with" flow are handled in app/+native-intent.tsx
@@ -103,6 +122,11 @@ export default function RootLayout() {
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="trail3d/[id]" />
                   <Stack.Screen name="settings" />
+                  {/* Support Inukshuk: the tip jar and its thank-you (#476). */}
+                  <Stack.Screen name="support/index" />
+                  <Stack.Screen name="support/thanks" />
+                  <Stack.Screen name="support/donor" />
+                  <Stack.Screen name="support/verify" />
                   {/* The Explore tab's secondary screens (#447). */}
                   <Stack.Screen name="explore/list" />
                   <Stack.Screen name="explore/map" />
