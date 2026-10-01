@@ -217,8 +217,8 @@ Then the iPad tab, from `store/screenshots/ipad/13-inch/` (2064 × 2752), same n
 The demo data in the new shots (20 Québec City runs and rides, routed along
 real paths with real elevation) comes from `scripts/store/gen-demo-runs.py`.
 
-The old 6.1-inch set is kept, unused, in `store/screenshots/ios/legacy-6.1-inch/`
-— **do not upload it**, Apple no longer accepts 1170 × 2532 as a primary size.
+There is no 6.1-inch set: Apple no longer accepts 1170 × 2532 as a primary size. The old one
+was deleted in the October 2026 cleanup (it is still in git history).
 
 ### 6.2 Text fields
 
