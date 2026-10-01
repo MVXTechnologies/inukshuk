@@ -21,6 +21,8 @@ import { peakDueFilter } from '@core/map/stoneStyle';
 import {
   basemapAttribution,
   buildOsmStyle,
+  CONTOUR_SOURCE_MAXZOOM,
+  CONTOUR_SOURCE_MINZOOM,
   HILLSHADE_2D_DEM_TILE_SIZE,
   HILLSHADE_2D_LAYER_ID,
   HILLSHADE_2D_MIN_ZOOM,
@@ -823,10 +825,34 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
         contours: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
       },
     });
-    expect(withContours.sources['basemap-contours']).toMatchObject({ type: 'vector', maxzoom: 14 });
+    expect(withContours.sources['basemap-contours']).toMatchObject({
+      type: 'vector',
+      minzoom: CONTOUR_SOURCE_MINZOOM,
+      maxzoom: CONTOUR_SOURCE_MAXZOOM,
+    });
     const ids = layerIds(withContours);
     expect(ids).toContain('stone-contour-major');
     expect(ids).toContain('stone-contour-minor');
+  });
+
+  it('flag on: contour tiles load z8–13 only — overzoomed past 13, nothing drawn below 8 (#509)', () => {
+    expect(CONTOUR_SOURCE_MAXZOOM).toBe(13);
+    const style = withFlag(true)(TILE, false, 'map', false, {
+      vectorBasemap: {
+        ...vectorBasemap,
+        contours: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
+      },
+    });
+    const contourLayers = style.layers.filter(
+      (l) => 'source' in l && l.source === 'basemap-contours',
+    );
+    expect(contourLayers.length).toBeGreaterThanOrEqual(3);
+    // Every contour layer starts at or after the source's first zoom, and the
+    // earliest one starts exactly there (no tiles fetched that nothing draws).
+    const starts = contourLayers.map((l) => l.minzoom ?? 0);
+    expect(Math.min(...starts)).toBe(CONTOUR_SOURCE_MINZOOM);
+    // None stops at the source's maxzoom: they keep drawing overzoomed tiles.
+    for (const l of contourLayers) expect(l.maxzoom).toBeUndefined();
   });
 
   it('flag on: labels peaks from our summit tiles when given, else from Protomaps', () => {
