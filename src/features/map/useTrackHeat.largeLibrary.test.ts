@@ -16,7 +16,6 @@ import { clearTrackGeometryMemory, peekTrackGeometry, trackGeometryKey } from '@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useTrackHeat } from './useTrackHeat';
-import { useTrackOverlays } from './useTrackOverlays';
 
 const mockLib = largeLibrary(400, { stepSec: 10 });
 const mockIndexOf = (s: string) => Number(/trk-(\d+)/.exec(s)?.[1] ?? -1);
@@ -275,14 +274,13 @@ describe('useTrackHeat with 400 trails', () => {
   });
 });
 
-describe('one GPX parse per trail across consumers', () => {
-  it('shares geometry between the heat, the overlays and a cold cache', async () => {
+describe('one GPX parse per trail', () => {
+  it('parses each trail once and fills the cold cache', async () => {
     mockCacheFiles.clear();
     const some = tracks.slice(0, 40);
     const someIds = some.map((t) => t.id);
     await renderHook(() => {
-      useTrackHeat(some, someIds, someIds, true);
-      return useTrackOverlays(some, someIds);
+      return useTrackHeat(some, someIds, someIds, true);
     });
     await waitUntil(() => allLoaded(some));
     await heatSettled();

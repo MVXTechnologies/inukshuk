@@ -10,10 +10,9 @@ export interface DemGrid {
 
 /**
  * Replace each point's altitude with the terrain (DEM) height sampled directly
- * under it, so the elevation profile reads the SAME surface the 3D view drapes
- * the trail on — the two always agree, and it works even for GPX with no
- * recorded elevation. Sampling matches `terrainScene`'s `project`: fx from
- * longitude, fy from latitude measured down from the north edge. Points outside
+ * under it, so the elevation profile reads the terrain surface itself, and it
+ * works even for GPX with no recorded elevation. Sampling: fx from longitude,
+ * fy from latitude measured down from the north edge. Points outside
  * the grid clamp to the edge (`sampleGridBilinear` clamps).
  */
 export function withDemElevations(points: readonly TrackPoint[], dem: DemGrid): TrackPoint[] {

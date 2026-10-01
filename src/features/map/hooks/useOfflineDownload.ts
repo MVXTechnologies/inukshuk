@@ -305,10 +305,10 @@ export function useOfflineDownload({
  * references our vector tiles (and glyphs), not the OSM raster.
  */
 export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat) {
-  if (format !== 'vector') return buildOsmStyle(tileUrl, false, basemap);
+  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap);
   // Packs always keep the contours, so they work offline whichever way the
   // Contours toggle is set later.
-  return buildOsmStyle(tileUrl, false, basemap, false, {
+  return buildOsmStyle(tileUrl, basemap, false, {
     vectorBasemap: vectorBasemapOption(false, true),
   });
 }

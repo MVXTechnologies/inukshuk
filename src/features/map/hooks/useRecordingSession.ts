@@ -1,7 +1,6 @@
 import { gpsQualityLevel } from '@core/geo/track/gpsQuality';
 import { liveSpeed } from '@core/geo/track/liveSpeed';
 import { LibraryNotHydratedError } from '@state/libraryStore';
-import { useMapStore } from '@state/mapStore';
 import { initRecorderRecovery, useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -16,8 +15,6 @@ import { useBackgroundRecording } from './useBackgroundRecording';
  */
 export function useRecordingSession({ showSnack }: { showSnack: (message: string) => void }) {
   const keepAwake = useSettingsStore((s) => s.keepAwakeWhileRecording);
-  const terrain3d = useMapStore((s) => s.terrain3d);
-  const toggleTerrain3d = useMapStore((s) => s.toggleTerrain3d);
 
   const status = useRecorderStore((s) => s.status);
   const name = useRecorderStore((s) => s.name);
@@ -118,12 +115,9 @@ export function useRecordingSession({ showSnack }: { showSnack: (message: string
     return undefined;
   }, [status, keepAwake]);
 
-  // Recording and 3D don't mix (3D can crash mid-record), so drop out of 3D when
-  // a recording starts — the 3D button is disabled for the duration anyway.
   // `category` is the activity category picked in the pre-record sheet; it rides
   // the recorder store through stop() into the saved trail's summary.
   const startRecording = (category?: string) => {
-    if (terrain3d) toggleTerrain3d();
     start(undefined, category);
   };
 

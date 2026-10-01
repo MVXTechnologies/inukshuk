@@ -7,13 +7,12 @@
 # - Runs after category-record.yaml (needs >= 1 saved trail). Cards' a11y
 #   label is "<name> — open trail view, long-press to select" (em dash).
 # - #480 removed the rail's 2D/3D toggle (owner call): the focused view is the
-#   MapLibre map, tilted with two fingers like the main map. The three.js
-#   terrain view is no longer reachable, so this flow no longer builds it.
+#   MapLibre map, tilted with two fingers like the main map. (The old GL
+#   terrain view has since been deleted outright.)
 # - #140's right-edge rail: a "Trail layers" FAB (basemap menu: Map/
-#   Satellite — Relief retired in #484) and a "Trail overlays" FAB (Slope / Contours / Elevation tint
-#   switches + contour-interval picker). Both a11y labels are identical on
-#   both platforms. The overlays FAB renders ONLY when overlaysAvailable, so
-#   it's exercised conditionally.
+#   Satellite — Relief retired in #484) and a "Trail overlays" FAB (Slope /
+#   Contours switches + their selectors; Elevation tint left with the GL
+#   view). Both a11y labels are identical on both platforms.
 # - The rail menus are Paper Menus: a tap anywhere outside lands on the
 #   dismiss backdrop and only closes the menu (it does NOT reach what's
 #   underneath), so a far-left point tap is a safe dual-platform dismissal.
@@ -61,17 +60,18 @@ appId: com.inukshuk.app
 - assertNotVisible: 'Relief'
 - tapOn:
     point: 50%,8%
-# Overlay switches live in the overlays FAB's menu (#134 fallback keeps the
-# FAB off screen when the shaders can't compile): exercise them when present,
-# skip silently otherwise. The menu stays open across toggles.
+# Overlay switches live in the overlays FAB's menu. The menu stays open
+# across toggles. (Still wrapped in a `when` so a slow first frame that hasn't
+# drawn the rail yet skips rather than fails, as before.)
 - runFlow:
     when:
       visible: 'Trail overlays'
     commands:
       - tapOn: 'Trail overlays'
       - extendedWaitUntil:
-          visible: 'Elevation tint'
+          visible: 'Slope'
           timeout: 60000
+      - assertNotVisible: 'Elevation tint'
       - tapOn: 'Slope'
       # First-ever Slope enable fires the one-time disclaimer snackbar; its
       # Portal mount can transiently hide the menu from the a11y tree on a
@@ -83,10 +83,8 @@ appId: com.inukshuk.app
       # (The contour-interval rows that appear with Contours are not
       # exercised: on software-GL Android a single hierarchy fetch can take
       # minutes, so waiting on the sub-items here is pure flake.)
-      - tapOn: 'Elevation tint'
-      # All three on and the app is still responsive; turn them back off so
+      # Both on and the app is still responsive; turn them back off so
       # reruns start clean, then close the menu via the backdrop.
-      - tapOn: 'Elevation tint'
       - tapOn: 'Contours'
       - tapOn: 'Slope'
       - tapOn:

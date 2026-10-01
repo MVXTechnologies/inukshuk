@@ -40,8 +40,8 @@ import { MAP_MAX_PITCH_DEG, tiltReliefLook, type TiltRelief } from '@core/map/ti
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
- * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade relief
- * and 3D terrain. Terrarium-encoded PNGs; ~zoom 15 max.
+ * Open, key-free DEM tiles (Mapzen/AWS Terrain Tiles) used for hillshade
+ * relief. Terrarium-encoded PNGs; ~zoom 15 max.
  */
 const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
@@ -219,8 +219,6 @@ export function styleHasTiltRelief(style: StyleSpecification): boolean {
  * true size restores the full sample rate; the z11 gate still keeps the
  * zoomed-out views (where the tile count bites) free of DEM traffic, and iOS
  * — where #230's stutter was seen — defaults the shading off.
- *
- * Same as the 3D terrain DEM below, where the DEM is the geometry.
  */
 export const HILLSHADE_2D_DEM_TILE_SIZE = 256;
 
@@ -484,14 +482,9 @@ function peaksSource(tiles: string): StyleSpecification['sources'][string] {
  * or satellite imagery — see {@link baseSource}).
  * Raster (not vector) keeps us free of any API key or paid tile service. The OSM
  * tile URL is injected from settings so it can be swapped without touching code.
- *
- * When `terrain3d` is on, a free Terrarium DEM source is added with a hillshade
- * relief layer and a `terrain` spec so the map can be pitched into a 3D relief
- * view (needs network for the DEM tiles).
  */
 export function buildOsmStyle(
   tileUrl: string,
-  terrain3d = false,
   basemap: MapBasemap = 'map',
   shadedRelief = false,
   options: OsmStyleOptions = {},
@@ -663,11 +656,9 @@ export function buildOsmStyle(
   // A shaded-relief hillshade derived from the free Terrarium DEM, blended under
   // the live 2D map for the warm topographic look. Kept OFF for offline packs
   // (shadedRelief=false) so the DEM source doesn't bloat downloaded tile pyramids
-  // — relief just degrades to flat tiles offline. Skipped in 3D (the real terrain
-  // surface adds its own DEM/hillshade below) and for satellite imagery.
+  // — relief just degrades to flat tiles offline. Skipped for satellite imagery.
   if (
     shadedRelief &&
-    !terrain3d &&
     SHADE_BASEMAPS.has(basemap) &&
     !options.weatherMuted &&
     // Chart mode: terrain shading under a nautical chart is noise.
@@ -731,28 +722,6 @@ export function buildOsmStyle(
         },
       });
     }
-  }
-
-  if (terrain3d) {
-    style.sources.dem = {
-      type: 'raster-dem',
-      tiles: [TERRAIN_DEM_URL],
-      encoding: 'terrarium',
-      tileSize: 256,
-      maxzoom: 15,
-      attribution: 'Elevation © Mapzen / AWS Terrain Tiles',
-    };
-    style.layers.push({
-      id: 'hillshade',
-      type: 'hillshade',
-      source: 'dem',
-      paint: { 'hillshade-exaggeration': 0.7 },
-    });
-    // NOTE (#480): MapLibre Native as bundled (Android 13.6.1 / iOS 6.31.0)
-    // does not parse `terrain` — it is dropped, and the map stays a flat
-    // sheet. Only a MapLibre GL JS host would drape this. The main map never
-    // passes terrain3d=true (its 3D is the three.js Terrain3DLiveView).
-    style.terrain = { source: 'dem', exaggeration: 2.2 };
   }
 
   // Stone labels above the map body and its hillshade.

@@ -296,9 +296,6 @@ Not blockers for this submission, but worth doing:
 - The Dashboard's distance chart clips its y-axis labels once weekly totals
   reach two digits ("0.00 km" instead of "10.00 km"), which is why no Dashboard
   screenshot is in the store set.
-- 3D terrain does not render in the iOS Simulator (expo-gl), so the 3D screen
-  could not be captured here. If you want a 3D screenshot in the listing, take
-  it on a device and drop it into `store/screenshots/ios/6.9-inch/`.
 - Weather and marine are parked behind `WEATHER_ENABLED` / `MARINE_ENABLED` on
   `release/park-weather-marine`. Nothing in the listing copy or the screenshots
   mentions either — but make sure the branch you actually build from is the one

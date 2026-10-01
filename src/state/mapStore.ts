@@ -8,7 +8,7 @@ export type MapBasemap = Basemap;
 
 /**
  * Transient map view state that isn't persisted: whether the camera follows the
- * user, the trails visibility toggle, basemap and 3D flags. Which overlays are
+ * user, the trails visibility toggle and the basemap. Which overlays are
  * *active* (PDF pages and trail ids) is persisted state and lives in the
  * library store; the "PDF maps" master switch is persisted too and lives in
  * the settings store (`showPdfOverlay`, #233).
@@ -17,8 +17,6 @@ interface MapState {
   followUser: boolean;
   /** Whether trail overlays are drawn. */
   showTrackOverlays: boolean;
-  /** Whether the map shows a 3D relief (DEM hillshade + terrain + pitch). */
-  terrain3d: boolean;
   /** Base layer: our map or satellite imagery (Relief was retired, #484). */
   basemap: MapBasemap;
   /**
@@ -59,7 +57,6 @@ interface MapState {
   setRecordRequested: (requested: boolean) => void;
   setFollowUser: (follow: boolean) => void;
   toggleTrackOverlays: () => void;
-  toggleTerrain3d: () => void;
   setBasemap: (b: MapBasemap) => void;
   toggleWeatherAnimation: () => void;
   setMapCenter: (c: { latitude: number; longitude: number } | null) => void;
@@ -73,7 +70,6 @@ interface MapState {
 export const useMapStore = create<MapState>((set) => ({
   followUser: true,
   showTrackOverlays: true,
-  terrain3d: false,
   basemap: 'map',
   weatherAnimating: false,
   mapCenter: null,
@@ -86,7 +82,6 @@ export const useMapStore = create<MapState>((set) => ({
   setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),
   toggleTrackOverlays: () => set((s) => ({ showTrackOverlays: !s.showTrackOverlays })),
-  toggleTerrain3d: () => set((s) => ({ terrain3d: !s.terrain3d })),
   // Normalised: a stale `relief` (retired as a base map, #484) from any
   // caller — an older deep link, a trail viewer seeded before the update —
   // lands on `map` instead of a base map the style can no longer draw.

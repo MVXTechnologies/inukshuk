@@ -2,8 +2,6 @@
 # for the #484 single-sheet redesign): open the Overlays sheet, enable Slope +
 # Contours with their selectors (slope window, contour density) and confirm
 # the 2D map stays alive. Crash-detection focus, like trail-view.yaml.
-# (The main-map 3D segment was removed with the 2026-07-24 rollback — the
-# focused trail viewer's 3D is covered by trail-view.yaml.)
 #
 # Portability notes:
 # - Runs standalone (needs no saved trail); geo comes from the launch
