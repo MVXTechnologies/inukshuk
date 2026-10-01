@@ -8,7 +8,7 @@ import {
 import { midpointHandles, type MidpointHandle } from '@core/draw/geometry';
 import type { HandleHit } from '@core/draw/hitTest';
 import type { LegMode } from '@core/draw/legs';
-import type { LngLat } from '@core/models';
+import type { RouteFinish, LngLat } from '@core/models';
 import { useCallback, useMemo, useState } from 'react';
 
 /**
@@ -35,7 +35,7 @@ export interface DrawSession {
     vertices?: readonly LngLat[],
     modes?: readonly LegMode[],
     mode?: LegMode,
-    backAndForth?: boolean,
+    finish?: RouteFinish,
   ) => void;
   exit: () => void;
   dispatch: (action: DrawAction) => void;
@@ -56,9 +56,17 @@ export interface DrawSession {
 /** The route chip last chosen: the next route opens on it (session memory). */
 let lastMode: LegMode = 'freehand';
 
-/** Test hook: forget the remembered chip. */
+/**
+ * The "Tap the start to close the loop" tip is a one-time teacher: once a
+ * loop has been closed by tapping the start, it never shows again (session).
+ */
+let loopTipRetired = false;
+export const isLoopTipRetired = (): boolean => loopTipRetired;
+
+/** Test hook: forget the remembered chip and the retired tip. */
 export function resetRouteModeMemory(): void {
   lastMode = 'freehand';
+  loopTipRetired = false;
 }
 
 /**
@@ -82,7 +90,7 @@ export function useDrawSession(): DrawSession {
       vertices: readonly LngLat[] = [],
       modes?: readonly LegMode[],
       mode?: LegMode,
-      backAndForth = false,
+      finish: RouteFinish = 'oneway',
     ) => {
       setTarget(next);
       setPreview(null);
@@ -93,7 +101,7 @@ export function useDrawSession(): DrawSession {
           vertices,
           modes,
           mode ?? s?.mode ?? lastMode,
-          backAndForth,
+          finish,
         ),
       );
     },
@@ -110,6 +118,14 @@ export function useDrawSession(): DrawSession {
     setState((s) => {
       if (s === null) return s;
       if (hit?.kind === 'vertex') {
+        // "Close the loop" (#515): with 3+ points, the start closes the
+        // route — and tapping it again in Loop does nothing (the Return
+        // chip goes back to One way).
+        if (hit.index === 0 && s.kind === 'route' && s.vertices.length >= 3) {
+          if (s.finish === 'loop') return s;
+          loopTipRetired = true;
+          return drawReducer({ ...s, selected: null }, { type: 'finish', finish: 'loop' });
+        }
         return drawReducer(s, {
           type: 'select',
           index: s.selected === hit.index ? null : hit.index,

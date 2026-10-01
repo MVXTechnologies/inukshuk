@@ -16,6 +16,8 @@ import {
   mergeLegs,
   outAndBack,
   outboundOf,
+  canLoop,
+  nearStart,
   routeLengthM,
   routingEngines,
   seedResultsFromLine,
@@ -34,7 +36,7 @@ import {
   nextAreaName,
 } from '@core/library/areas';
 import { compactDistance } from '@core/library/libraryRows';
-import type { Area, LngLat } from '@core/models';
+import type { Area, LngLat, RouteFinish } from '@core/models';
 import { loadTrackGeometry } from '@data/trackGeometry';
 import { reportError } from '@lib/errorReporting';
 import type { MapRef } from '@maplibre/maplibre-react-native';
@@ -51,7 +53,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 import { AreaCard } from './AreaCard';
@@ -61,11 +63,12 @@ import { DragHandle } from './DragHandle';
 import { DrawChooser } from './DrawChooser';
 import { DrawLayers } from './DrawLayers';
 import {
-  BackAndForthChip,
   DrawHint,
   DrawNotice,
   DrawPanel,
   DrawStatus,
+  ReturnChip,
+  ReturnMenu,
   RouteModeChips,
   RoutingCredit,
   SelectedPointRow,
@@ -74,7 +77,7 @@ import {
 import { discardPhotos, pickAreaPhoto } from './areaPhotos';
 import { overwriteDrawnRoute, writeAreaGeoJson, writeNewDrawnRoute } from './saveDrawn';
 import { SaveRouteSheet } from './SaveRouteSheet';
-import { useDrawSession, type DrawTarget } from './useDrawSession';
+import { isLoopTipRetired, useDrawSession, type DrawTarget } from './useDrawSession';
 import { useLegRouting } from './useLegRouting';
 import { RouteProfileStrip } from './RouteProfileStrip';
 import { computeRouteElevation, shownElevation, useRouteElevation } from './useRouteElevation';
@@ -162,6 +165,7 @@ export function useMapDrawing({
   } | null>(null);
   const [viewAreaId, setViewAreaId] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [returnMenuOpen, setReturnMenuOpen] = useState(false);
   const discardArmedAt = useRef(0);
 
   const state = draw.state;
@@ -172,11 +176,16 @@ export function useMapDrawing({
   const routeModes = kind === 'route' ? (state?.modes ?? NO_MODES) : NO_MODES;
 
   // --- Route legs (#515): Trails/Roads legs snapped by the routing proxy -------
-  const routing = useLegRouting(routeVertices, routeModes, kind === 'route');
+  // How the route ends (#515): one way, back & forth, or a loop whose closing
+  // leg (last point → first, in the last leg's mode) is a leg like the others.
+  const finish = kind === 'route' ? (state?.finish ?? 'oneway') : 'oneway';
+  const loop = finish === 'loop';
+  const routing = useLegRouting(routeVertices, routeModes, kind === 'route', { loop });
   const seedLegs = routing.seed;
   const committedLegs = useMemo(
-    () => (kind === 'route' ? legViews(routeVertices, routeModes, routing.results) : NO_LEGS),
-    [kind, routeVertices, routeModes, routing.results],
+    () =>
+      kind === 'route' ? legViews(routeVertices, routeModes, routing.results, { loop }) : NO_LEGS,
+    [kind, routeVertices, routeModes, routing.results, loop],
   );
   /** The whole line as drawn (routed legs included): stats, climb and the saved GPX. */
   const routeLine = useMemo(
@@ -190,8 +199,8 @@ export function useMapDrawing({
         ? NO_LEGS
         : draw.shown === routeVertices
           ? committedLegs
-          : legViews(draw.shown, routeModes, routing.results),
-    [kind, draw.shown, routeVertices, committedLegs, routeModes, routing.results],
+          : legViews(draw.shown, routeModes, routing.results, { loop }),
+    [kind, draw.shown, routeVertices, committedLegs, routeModes, routing.results, loop],
   );
   const legMids = useMemo(() => legMidpointHandles(shownLegs), [shownLegs]);
   const legsLoading = committedLegs.some((l) => l.status === 'loading');
@@ -200,7 +209,7 @@ export function useMapDrawing({
 
   // Back & forth: the return is the outbound line reversed — derived live, so
   // every outbound edit carries over, and never routed again.
-  const backAndForth = kind === 'route' && (state?.backAndForth ?? false);
+  const backAndForth = finish === 'backforth';
   const fullLine = useMemo(
     () => (backAndForth ? outAndBack(routeLine) : routeLine),
     [backAndForth, routeLine],
@@ -238,7 +247,7 @@ export function useMapDrawing({
       initial: readonly LngLat[] = [],
       modes?: readonly LegMode[],
       mode?: LegMode,
-      backAndForth = false,
+      finish: RouteFinish = 'oneway',
     ) => {
       onBeforeStart();
       setViewAreaId(null);
@@ -246,7 +255,7 @@ export function useMapDrawing({
       setRouteSaveOpen(false);
       setAreaEditor(null);
       discardArmedAt.current = 0;
-      draw.start(target, initial, modes, mode, backAndForth);
+      draw.start(target, initial, modes, mode, finish);
     },
     [draw, onBeforeStart],
   );
@@ -278,10 +287,20 @@ export function useMapDrawing({
             .then((g) => {
               if (!g) return;
               const saved = g.parts.flat();
+              const first = plan.vertices[0];
               const last = plan.vertices[plan.vertices.length - 1];
+              if (first === undefined || last === undefined) return;
+              if (plan.finish === 'loop') {
+                // A loop's line ends back at the start: its last stretch is
+                // the closing leg, in the last leg's mode.
+                const closing = modes[modes.length - 1] ?? 'freehand';
+                seedLegs(
+                  seedResultsFromLine(saved, [...plan.vertices, first], [...modes, closing]),
+                );
+                return;
+              }
               // An out-and-back's saved line comes back: cut at the turnaround.
-              const outbound =
-                plan.backAndForth && last !== undefined ? outboundOf(saved, last) : saved;
+              const outbound = plan.finish === 'backforth' ? outboundOf(saved, last) : saved;
               seedLegs(seedResultsFromLine(outbound, plan.vertices, modes));
             })
             .catch(() => undefined);
@@ -291,7 +310,7 @@ export function useMapDrawing({
           plan.vertices,
           modes,
           plan.mode,
-          plan.backAndForth === true,
+          plan.finish ?? 'oneway',
         );
         const box = boundsOfVertices(plan.vertices);
         if (box) setFocusBounds(box, { top: 140, right: 60, bottom: 300, left: 60 });
@@ -324,6 +343,7 @@ export function useMapDrawing({
 
   const exit = useCallback(() => {
     draw.exit();
+    setReturnMenuOpen(false);
     setRouteSaveOpen(false);
     setPanelHeight(0);
   }, [draw]);
@@ -388,6 +408,11 @@ export function useMapDrawing({
         return true;
       }
       if (state === null) return false;
+      // A tap on the map beside the Return menu closes it, nothing else.
+      if (returnMenuOpen) {
+        setReturnMenuOpen(false);
+        return true;
+      }
       if (routeSaveOpen || areaEditor !== null || lngLat === null) return true;
       if (point === null) {
         draw.tap(lngLat, null);
@@ -398,11 +423,19 @@ export function useMapDrawing({
         state.kind === 'route' ? legMids : midpointHandles(state.vertices, state.kind === 'area');
       const mids = handles.map((m) => m.at);
       void Promise.all([projectAll(state.vertices), projectAll(mids)]).then(([v, m]) =>
-        draw.tap(lngLat, hitHandle(v, m, point), state.kind === 'route' ? handles : undefined),
+        draw.tap(
+          lngLat,
+          // The start closes the loop: a bigger target, ahead of a new point.
+          hitHandle(v, m, point, {
+            startFirst:
+              state.kind === 'route' && state.vertices.length >= 3 && state.finish !== 'loop',
+          }),
+          state.kind === 'route' ? handles : undefined,
+        ),
       );
       return true;
     },
-    [state, draw, routeSaveOpen, areaEditor, projectAll, legMids, chooserOpen],
+    [state, draw, routeSaveOpen, areaEditor, projectAll, legMids, chooserOpen, returnMenuOpen],
   );
 
   // The selected vertex's grip sits over it on screen: re-projected whenever
@@ -524,7 +557,7 @@ export function useMapDrawing({
         line,
         legModes: state.modes,
         mode: state.mode,
-        backAndForth: state.backAndForth,
+        finish: state.finish,
         name: name || editedTrack?.name || `Route ${tracks.filter((t) => t.plan).length + 1}`,
         category,
         elevation: fresh,
@@ -741,11 +774,36 @@ export function useMapDrawing({
             ) : undefined
           }
           toggle={
-            <BackAndForthChip
-              on={state.backAndForth}
+            <ReturnChip
+              finish={state.finish}
               disabled={state.vertices.length < 2}
-              onToggle={() => draw.dispatch({ type: 'backAndForth', on: !state.backAndForth })}
+              open={returnMenuOpen}
+              onPress={() => setReturnMenuOpen((o) => !o)}
             />
+          }
+          overlay={
+            returnMenuOpen
+              ? (bottom) => (
+                  <>
+                    {/* A tap anywhere else on the panel closes the menu. */}
+                    <Pressable
+                      style={StyleSheet.absoluteFill}
+                      onPress={() => setReturnMenuOpen(false)}
+                      accessibilityLabel="Close return options"
+                      testID="return-menu-backdrop"
+                    />
+                    <ReturnMenu
+                      finish={state.finish}
+                      bottom={bottom}
+                      loopHint={canLoop(state.vertices) ? null : 'Add a third point first'}
+                      onPick={(f) => {
+                        setReturnMenuOpen(false);
+                        draw.dispatch({ type: 'finish', finish: f });
+                      }}
+                    />
+                  </>
+                )
+              : undefined
           }
           footer={engines !== null ? <RoutingCredit engines={engines} /> : undefined}
           canUndo={canUndo(state)}
@@ -803,7 +861,18 @@ export function useMapDrawing({
         />
       )}
       {state !== null && !routeSaveOpen && areaEditor === null && (
-        <DrawHint text={drawHint(state)} top={laneTop} />
+        <DrawHint
+          text={drawHint(state)}
+          top={laneTop}
+          tip={
+            state.kind === 'route' &&
+            state.finish !== 'loop' &&
+            nearStart(state.vertices) &&
+            !isLoopTipRetired()
+              ? 'Tap the start to close the loop'
+              : undefined
+          }
+        />
       )}
       {chooserOpen && state === null && (
         <View style={styles.dock} pointerEvents="box-none">

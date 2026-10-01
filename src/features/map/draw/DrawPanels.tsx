@@ -2,7 +2,7 @@ import type { LegMode } from '@core/draw/legs';
 import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
 
@@ -77,9 +77,13 @@ export function RouteModeChips({
   );
 }
 
-/** The one-line instruction under the chips (or alone, for an area). */
-export function DrawHint({ text, top }: { text: string; top: number }) {
+/**
+ * The one-line instruction under the chips (or alone, for an area), and an
+ * optional tip under it ("Tap the start to close the loop").
+ */
+export function DrawHint({ text, top, tip }: { text: string; top: number; tip?: string }) {
   const t = useSchemeTokens();
+  const theme = useTheme();
   return (
     <View style={[styles.hintWrap, { top }]} pointerEvents="none">
       <Text
@@ -88,6 +92,20 @@ export function DrawHint({ text, top }: { text: string; top: number }) {
       >
         {text}
       </Text>
+      {tip !== undefined && (
+        <View
+          style={[styles.tip, { backgroundColor: theme.colors.secondaryContainer }]}
+          testID="loop-tip"
+        >
+          <Icon source="autorenew" size={15} color={theme.colors.onSecondaryContainer} />
+          <Text
+            style={[styles.tipText, { color: theme.colors.onSecondaryContainer }]}
+            accessibilityLiveRegion="polite"
+          >
+            {tip}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -106,8 +124,13 @@ interface PanelProps {
   chart?: ReactNode;
   /** Below the stats: a warning or the selected point's delete row. */
   notice?: ReactNode;
-  /** Beside Undo/Clear: a route's Back & forth toggle. */
+  /** Beside Undo/Clear: a route's Return chip. */
   toggle?: ReactNode;
+  /**
+   * Drawn over the panel last (a menu anchored above the buttons row): gets
+   * the distance from the panel's bottom edge to the top of that row.
+   */
+  overlay?: (buttonsBottom: number) => ReactNode;
   /** Under the buttons: the routing credit while snapped legs are shown. */
   footer?: ReactNode;
   canUndo: boolean;
@@ -128,6 +151,7 @@ export function DrawPanel({
   chart,
   notice,
   toggle,
+  overlay,
   footer,
   canUndo,
   canClear,
@@ -141,10 +165,15 @@ export function DrawPanel({
 }: PanelProps) {
   const t = useSchemeTokens();
   const theme = useTheme();
+  const [panelH, setPanelH] = useState(0);
+  const [buttonsY, setButtonsY] = useState(0);
   return (
     <View
       style={[styles.panel, { backgroundColor: t.surface, shadowColor: palette.shadow }]}
-      onLayout={onLayout}
+      onLayout={(e) => {
+        setPanelH(e.nativeEvent.layout.height);
+        onLayout?.(e);
+      }}
       testID="draw-panel"
     >
       <View style={styles.titleRow}>
@@ -178,7 +207,7 @@ export function DrawPanel({
       </View>
       {chart}
       {notice}
-      <View style={styles.actions}>
+      <View style={styles.actions} onLayout={(e) => setButtonsY(e.nativeEvent.layout.y)}>
         <Pressable
           onPress={onUndo}
           disabled={!canUndo}
@@ -216,48 +245,141 @@ export function DrawPanel({
         </Pressable>
       </View>
       {footer}
+      {overlay?.(Math.max(0, panelH - buttonsY) + 6)}
     </View>
   );
 }
 
+export type RouteFinish = 'oneway' | 'backforth' | 'loop';
+
+const FINISHES: readonly { id: RouteFinish; icon: string; label: string; spoken: string }[] = [
+  { id: 'oneway', icon: 'arrow-right', label: 'One way', spoken: 'One way' },
+  { id: 'backforth', icon: 'arrow-u-left-top', label: 'Back & forth', spoken: 'Back and forth' },
+  { id: 'loop', icon: 'autorenew', label: 'Loop', spoken: 'Loop' },
+];
+
+const finishOf = (id: RouteFinish) => FINISHES.find((f) => f.id === id) ?? FINISHES[0]!;
+
 /**
- * Back & forth (#515): the route returns to its start the same way. A toggle
- * chip beside Undo/Clear; disabled until there is a line to come back along.
+ * "Return" (#515): how the route ends — one way, back & forth along the same
+ * line, or a loop closed back to the start. One compact chip beside
+ * Undo/Clear showing the current option; it opens {@link ReturnMenu}.
+ * Disabled until there is a line (two points).
  */
-export function BackAndForthChip({
-  on,
+export function ReturnChip({
+  finish,
   disabled,
-  onToggle,
+  open,
+  onPress,
 }: {
-  on: boolean;
+  finish: RouteFinish;
   disabled: boolean;
-  onToggle: () => void;
+  open: boolean;
+  onPress: () => void;
 }) {
   const t = useSchemeTokens();
   const theme = useTheme();
-  // "On" is the sage selected pill (like the active tab), never the dark Save
-  // button's fill: the two sit side by side and must not read as one kind.
+  const f = finishOf(finish);
+  // Anything but One way is a choice made: the sage selected pill (like the
+  // active tab), never the dark Save button's fill right next to it.
+  const on = finish !== 'oneway';
   const ink = on ? theme.colors.onSecondaryContainer : t.ink;
   return (
     <Pressable
-      onPress={onToggle}
+      onPress={onPress}
       disabled={disabled}
-      accessibilityRole="togglebutton"
-      accessibilityLabel="Back and forth"
-      accessibilityHint="The route returns to its start along the same way"
-      accessibilityState={{ selected: on, checked: on, disabled }}
+      accessibilityRole="button"
+      accessibilityLabel={`Return, ${f.spoken}`}
+      accessibilityHint="Choose one way, back and forth, or a loop"
+      accessibilityState={{ expanded: open, disabled }}
       style={[
         styles.toggle,
         { borderColor: on ? theme.colors.secondaryContainer : t.outlineVariant },
         on && { backgroundColor: theme.colors.secondaryContainer },
         disabled && styles.disabled,
       ]}
+      testID="return-chip"
     >
-      <Icon source="arrow-u-left-top" size={20} color={ink} />
+      <Icon source={f.icon} size={20} color={ink} />
       <Text numberOfLines={1} style={[styles.toggleLabel, { color: ink }]}>
-        Back & forth
+        {f.label}
       </Text>
+      <Icon source={open ? 'chevron-down' : 'chevron-up'} size={16} color={ink} />
     </Pressable>
+  );
+}
+
+/**
+ * The Return options, one line each, anchored above the chip inside the
+ * panel. A plain themed View (no Paper Menu/Portal: an invisible overlay
+ * swallows touches on One UI). The caller closes it on any tap outside.
+ */
+export function ReturnMenu({
+  finish,
+  loopHint,
+  bottom,
+  onPick,
+}: {
+  finish: RouteFinish;
+  /** Why Loop is not available yet; null = it is. */
+  loopHint: string | null;
+  /** Distance from the panel's bottom edge to the top of the buttons row. */
+  bottom: number;
+  onPick: (finish: RouteFinish) => void;
+}) {
+  const t = useSchemeTokens();
+  const theme = useTheme();
+  return (
+    <View
+      style={[styles.menu, { bottom, backgroundColor: t.surface, borderColor: t.outlineVariant }]}
+      accessibilityRole="menu"
+      testID="return-menu"
+    >
+      {FINISHES.map((f) => {
+        const selected = f.id === finish;
+        const disabled = f.id === 'loop' && loopHint !== null;
+        return (
+          <Pressable
+            key={f.id}
+            onPress={() => onPick(f.id)}
+            disabled={disabled}
+            accessibilityRole="menuitem"
+            accessibilityLabel={f.spoken}
+            accessibilityHint={disabled ? (loopHint ?? undefined) : undefined}
+            accessibilityState={{ selected, disabled }}
+            style={({ pressed }) => [
+              styles.menuRow,
+              (selected || pressed) && { backgroundColor: theme.colors.secondaryContainer },
+              disabled && styles.disabled,
+            ]}
+          >
+            <Icon
+              source={f.icon}
+              size={20}
+              color={selected ? theme.colors.onSecondaryContainer : t.ink}
+            />
+            <View style={styles.menuText}>
+              <Text
+                style={[
+                  styles.menuLabel,
+                  { color: selected ? theme.colors.onSecondaryContainer : t.ink },
+                ]}
+              >
+                {f.label}
+              </Text>
+              {disabled && loopHint !== null && (
+                <Text style={[styles.menuHint, { color: t.inkMuted }]} numberOfLines={1}>
+                  {loopHint}
+                </Text>
+              )}
+            </View>
+            {selected && (
+              <Icon source="check" size={18} color={theme.colors.onSecondaryContainer} />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -452,6 +574,42 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   toggleLabel: { fontSize: 13, lineHeight: 16, fontWeight: '800' },
+  menu: {
+    position: 'absolute',
+    left: 138,
+    minWidth: 220,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 6,
+    gap: 2,
+    elevation: 10,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  menuText: { flex: 1 },
+  menuLabel: { fontSize: 15, lineHeight: 19, fontWeight: '700' },
+  menuHint: { fontSize: 12, lineHeight: 15 },
+  tip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  tipText: { fontSize: 13, lineHeight: 17, fontWeight: '700' },
   disabled: { opacity: 0.4 },
   selectedRow: {
     flexDirection: 'row',

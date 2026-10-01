@@ -80,11 +80,17 @@ export interface RoutePlan {
    */
   legModes?: RouteLegMode[];
   /**
-   * Back & forth: the saved line returns to the start along the same way.
-   * `vertices` are the outbound points only. Absent = a one-way route.
+   * How the route ends (#515): back along the same way ('backforth'), or
+   * closed into a loop by a leg from the last point to the first ('loop').
+   * `vertices` are the points placed (the outbound / the loop's corners); the
+   * GPX holds the whole line. Absent = one way. Plans saved with the older
+   * `backAndForth: true` read as 'backforth'.
    */
-  backAndForth?: true;
+  finish?: 'backforth' | 'loop';
 }
+
+/** How a drawn route ends: where the user stopped, back the same way, or a loop. */
+export type RouteFinish = 'oneway' | 'backforth' | 'loop';
 
 /** A recorded route, persisted as GPX. */
 export interface Track {

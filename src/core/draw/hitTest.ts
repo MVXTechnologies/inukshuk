@@ -16,6 +16,8 @@ export type HandleHit = { kind: 'vertex'; index: number } | { kind: 'midpoint'; 
 /** Finger-sized tolerance (px) around a vertex; midpoints get a little less. */
 export const VERTEX_HIT_PX = 26;
 export const MIDPOINT_HIT_PX = 20;
+/** The start point's target while it can close a loop: a little bigger, and first. */
+export const START_HIT_PX = 38;
 
 function nearest(
   points: readonly (ScreenPoint | null)[],
@@ -44,7 +46,18 @@ export function hitHandle(
   vertices: readonly (ScreenPoint | null)[],
   midpoints: readonly (ScreenPoint | null)[],
   tap: ScreenPoint,
+  { startFirst = false }: { startFirst?: boolean } = {},
 ): HandleHit | null {
+  // "Close the loop" (#515): the start wins within its larger radius, even
+  // over a nearer last point placed on top of it.
+  const start = vertices[0];
+  if (
+    startFirst &&
+    start != null &&
+    Math.hypot(start[0] - tap[0], start[1] - tap[1]) <= START_HIT_PX
+  ) {
+    return { kind: 'vertex', index: 0 };
+  }
   const v = nearest(vertices, tap, VERTEX_HIT_PX);
   if (v !== null) return { kind: 'vertex', index: v };
   const m = nearest(midpoints, tap, MIDPOINT_HIT_PX);

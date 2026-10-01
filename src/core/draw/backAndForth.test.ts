@@ -75,35 +75,53 @@ describe('the out-and-back profile', () => {
 describe('editing and saving', () => {
   it('is a setting of the route tool, kept by undo and by load, never on an area', () => {
     let s = initialDrawState('route', [A, B]);
-    expect(s.backAndForth).toBe(false);
-    s = drawReducer(s, { type: 'backAndForth', on: true });
-    expect(s.backAndForth).toBe(true);
+    expect(s.finish).toBe('oneway');
+    s = drawReducer(s, { type: 'finish', finish: 'backforth' });
+    expect(s.finish).toBe('backforth');
     expect(s.past).toHaveLength(0); // not an edit
-    expect(drawReducer(s, { type: 'backAndForth', on: true })).toBe(s);
+    expect(drawReducer(s, { type: 'finish', finish: 'backforth' })).toBe(s);
     s = drawReducer(s, { type: 'add', at: C });
-    expect(drawReducer(s, { type: 'undo' }).backAndForth).toBe(true);
-    expect(drawReducer(s, { type: 'load', vertices: [A, B] }).backAndForth).toBe(true);
-    const area = initialDrawState('area', [A, B, C], undefined, 'freehand', true);
-    expect(area.backAndForth).toBe(false);
-    expect(drawReducer(area, { type: 'backAndForth', on: true })).toBe(area);
+    expect(drawReducer(s, { type: 'undo' }).finish).toBe('backforth');
+    expect(drawReducer(s, { type: 'load', vertices: [A, B] }).finish).toBe('backforth');
+    const area = initialDrawState('area', [A, B, C], undefined, 'freehand', 'loop');
+    expect(area.finish).toBe('oneway');
+    expect(drawReducer(area, { type: 'finish', finish: 'loop' })).toBe(area);
   });
 
-  it('the plan keeps the flag and the OUTBOUND points; old plans read as one-way', () => {
-    const plan = buildRoutePlan([A, B, C], ['trails', 'trails'], 'trails', true);
+  it('the plan keeps the finish and the placed points; old plans read as one way', () => {
+    const plan = buildRoutePlan([A, B, C], ['trails', 'trails'], 'trails', 'backforth');
     expect(plan).toEqual({
       mode: 'trails',
       vertices: [A, B, C],
       legModes: ['trails', 'trails'],
-      backAndForth: true,
+      finish: 'backforth',
     });
     expect(sanitizeRoutePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan);
-    expect(buildRoutePlan([A, B], [], 'freehand')).not.toHaveProperty('backAndForth');
-    expect(sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B] })).not.toHaveProperty(
-      'backAndForth',
-    );
+    const loop = buildRoutePlan([A, B, C], [], 'freehand', 'loop');
+    expect(loop).toEqual({ mode: 'freehand', vertices: [A, B, C], finish: 'loop' });
+    expect(sanitizeRoutePlan(JSON.parse(JSON.stringify(loop)))).toEqual(loop);
+    expect(buildRoutePlan([A, B], [], 'freehand')).not.toHaveProperty('finish');
+    expect(buildRoutePlan([A, B], [], 'freehand', 'oneway')).not.toHaveProperty('finish');
+    expect(sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B] })).not.toHaveProperty('finish');
+    expect(
+      sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B], finish: 'spiral' }),
+    ).not.toHaveProperty('finish');
+  });
+
+  it('reads the older backAndForth: true as back & forth (and nothing else turns it on)', () => {
+    expect(sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B], backAndForth: true })).toEqual({
+      mode: 'freehand',
+      vertices: [A, B],
+      finish: 'backforth',
+    });
     expect(
       sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B], backAndForth: 'yes' }),
-    ).not.toHaveProperty('backAndForth');
+    ).not.toHaveProperty('finish');
+    // An explicit finish wins over the legacy flag.
+    expect(
+      sanitizeRoutePlan({ mode: 'freehand', vertices: [A, B], finish: 'loop', backAndForth: true })
+        ?.finish,
+    ).toBe('loop');
   });
 
   it('"Edit route" cuts the saved out-and-back at the turnaround before re-seeding legs', () => {

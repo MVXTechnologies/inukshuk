@@ -39,7 +39,11 @@ export function useLegRouting(
   vertices: readonly LngLat[],
   modes: readonly LegMode[],
   enabled: boolean,
-  { debounceMs = 350, route = routeLeg }: { debounceMs?: number; route?: Route } = {},
+  {
+    debounceMs = 350,
+    route = routeLeg,
+    loop = false,
+  }: { debounceMs?: number; route?: Route; loop?: boolean } = {},
 ): LegRouting {
   const [results, setResults] = useState<ReadonlyMap<string, LegResult>>(() => new Map());
   const asked = useRef(new Set<string>());
@@ -74,7 +78,7 @@ export function useLegRouting(
 
   useEffect(() => {
     if (!enabled) return;
-    const needed = pendingLegs(legViews(vertices, modes, results)).filter(
+    const needed = pendingLegs(legViews(vertices, modes, results, { loop })).filter(
       (p) => !asked.current.has(p.key),
     );
     if (needed.length === 0) return;
@@ -86,21 +90,23 @@ export function useLegRouting(
       void drain();
     }, debounceMs);
     return () => clearTimeout(t);
-  }, [vertices, modes, results, enabled, debounceMs, drain]);
+  }, [vertices, modes, results, enabled, debounceMs, drain, loop]);
 
   // A queued leg the route no longer has must not hold its "asked" mark.
   useEffect(() => {
-    const live = new Set(pendingLegs(legViews(vertices, modes, results)).map((p) => p.key));
+    const live = new Set(
+      pendingLegs(legViews(vertices, modes, results, { loop })).map((p) => p.key),
+    );
     queue.current = queue.current.filter((q) => {
       if (live.has(q.key)) return true;
       asked.current.delete(q.key);
       return false;
     });
-  }, [vertices, modes, results]);
+  }, [vertices, modes, results, loop]);
 
   const retry = useCallback(() => {
-    setResults((prev) => withoutFailures(prev, legViews(vertices, modes, prev)));
-  }, [vertices, modes]);
+    setResults((prev) => withoutFailures(prev, legViews(vertices, modes, prev, { loop })));
+  }, [vertices, modes, loop]);
 
   const seed = useCallback((known: ReadonlyMap<string, LegResult>) => {
     if (known.size === 0) return;

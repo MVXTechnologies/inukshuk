@@ -9,7 +9,7 @@ import {
   plannedRoutePoints,
 } from '@core/draw/serialize';
 import { buildImportedTrack } from '@core/geo/track';
-import type { Area, LngLat, Track, TrackSummary } from '@core/models';
+import type { Area, LngLat, RouteFinish, Track, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { primeTrackGeometry } from '@data/trackGeometry';
 import { strToU8 } from 'fflate';
@@ -33,8 +33,8 @@ export interface DrawnRouteInput {
   legModes?: readonly LegMode[];
   /** The chip the tool was on (it reopens on it). */
   mode?: LegMode;
-  /** Back & forth: `line` already returns to the start; the plan says so. */
-  backAndForth?: boolean;
+  /** How it ends: `line` already includes the return or the closing leg. */
+  finish?: RouteFinish;
   name: string;
   /** Activity id, or null for a plain Navigation trail. */
   category: string | null;
@@ -68,7 +68,7 @@ export function buildDrawnTrack(id: string, input: DrawnRouteInput): Track {
     input.vertices,
     input.legModes ?? [],
     input.mode ?? 'freehand',
-    input.backAndForth ?? false,
+    input.finish ?? 'oneway',
   );
   return track;
 }

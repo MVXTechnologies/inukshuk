@@ -59,6 +59,8 @@ export interface LegView {
   reason?: LegFailure;
   /** Set when `status` is `routed` and the proxy credited an engine. */
   attribution?: string;
+  /** The loop's closing leg (last point → first): drawn, measured, never edited. */
+  closing?: true;
 }
 
 /** A leg the routing proxy has to answer. */
@@ -107,21 +109,27 @@ export function legViews(
   vertices: readonly LngLat[],
   modes: readonly LegMode[],
   results: ReadonlyMap<string, LegResult>,
+  { loop = false }: { loop?: boolean } = {},
 ): LegView[] {
   const views: LegView[] = [];
-  for (let i = 0; i + 1 < vertices.length; i++) {
+  // A loop adds the closing leg (last → first) in the last leg's mode.
+  const closes = loop && canLoop(vertices);
+  const count = closes ? vertices.length : vertices.length - 1;
+  for (let i = 0; i < count; i++) {
+    const closing = i === vertices.length - 1;
     const from = vertices[i];
-    const to = vertices[i + 1];
+    const to = closing ? vertices[0] : vertices[i + 1];
     if (from === undefined || to === undefined) continue;
-    const mode = modes[i] ?? 'freehand';
+    const mode = (closing ? modes[i - 1] : modes[i]) ?? 'freehand';
+    const tag = closing ? { closing: true as const } : {};
     const straight = [from, to];
     if (!isRoutedMode(mode)) {
-      views.push({ index: i, mode, from, to, status: 'straight', coords: straight });
+      views.push({ index: i, mode, from, to, status: 'straight', coords: straight, ...tag });
       continue;
     }
     const result = results.get(legKey(mode, from, to));
     if (result === undefined) {
-      views.push({ index: i, mode, from, to, status: 'loading', coords: straight });
+      views.push({ index: i, mode, from, to, status: 'loading', coords: straight, ...tag });
     } else if (result.status === 'failed') {
       views.push({
         index: i,
@@ -131,6 +139,7 @@ export function legViews(
         status: 'failed',
         coords: straight,
         reason: result.reason,
+        ...tag,
       });
     } else {
       views.push({
@@ -141,6 +150,7 @@ export function legViews(
         status: 'routed',
         coords: anchorLeg(from, result.coords, to),
         ...(result.attribution !== undefined ? { attribution: result.attribution } : {}),
+        ...tag,
       });
     }
   }
@@ -206,6 +216,8 @@ export function halfwayAlong(line: readonly LngLat[]): LngLat | null {
 export function legMidpointHandles(views: readonly LegView[]): MidpointHandle[] {
   const out: MidpointHandle[] = [];
   for (const v of views) {
+    // The closing leg follows the points it joins; it takes no new point.
+    if (v.closing) continue;
     const at = halfwayAlong(v.coords);
     if (at !== null) out.push({ at, insertAt: v.index + 1 });
   }
@@ -337,4 +349,37 @@ export function outAndBack(line: readonly LngLat[]): LngLat[] {
 export function outboundOf(line: readonly LngLat[], turnaround: LngLat): LngLat[] {
   if (line.length < 2) return [...line];
   return line.slice(0, nearestIndex(line, turnaround, 0) + 1);
+}
+
+/** A loop needs this far between the last point and the start with only two points. */
+export const LOOP_MIN_GAP_M = 50;
+/** The "tap the start to close the loop" hint shows within this of the start. */
+export const LOOP_HINT_M = 150;
+
+/**
+ * Whether the route can close into a loop: three points or more, or two that
+ * are far enough apart for the closing leg to be a real way back.
+ */
+export function canLoop(vertices: readonly LngLat[]): boolean {
+  if (vertices.length >= 3) return true;
+  const first = vertices[0];
+  const last = vertices[vertices.length - 1];
+  return (
+    vertices.length === 2 &&
+    first !== undefined &&
+    last !== undefined &&
+    haversineM(first, last) > LOOP_MIN_GAP_M
+  );
+}
+
+/** The last point is near the start (and there are 3+ points): offer "tap the start". */
+export function nearStart(vertices: readonly LngLat[]): boolean {
+  const first = vertices[0];
+  const last = vertices[vertices.length - 1];
+  return (
+    vertices.length >= 3 &&
+    first !== undefined &&
+    last !== undefined &&
+    haversineM(first, last) <= LOOP_HINT_M
+  );
 }

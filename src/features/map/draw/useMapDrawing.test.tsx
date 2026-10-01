@@ -835,6 +835,12 @@ const estimateMin = () => {
   return (h ? Number(h[1]) * 60 : 0) + (min ? Number(min[1]) : 0);
 };
 
+/** Open the Return chip's menu and pick an option. */
+async function chooseFinish(label: 'One way' | 'Back and forth' | 'Loop') {
+  await fireEvent.press(screen.getByTestId('return-chip'));
+  await press(label);
+}
+
 describe('Back & forth (#515)', () => {
   it('doubles the route from the outbound line: stats, profile, no new routing; edits carry over', async () => {
     mockFetchDem.mockImplementation(slopingTile);
@@ -843,7 +849,7 @@ describe('Back & forth (#515)', () => {
     await press('Trails');
     await tap(P1);
     // One point: nothing to come back along yet.
-    expect(screen.getByLabelText('Back and forth')).toBeDisabled();
+    expect(screen.getByTestId('return-chip')).toBeDisabled();
     await tap(P2);
     await flush(400);
     await answer(bent);
@@ -852,8 +858,8 @@ describe('Back & forth (#515)', () => {
     const oneWayMin = estimateMin();
     expect(screen.queryByTestId('route-profile-turnaround')).toBeNull();
 
-    await press('Back and forth');
-    expect(screen.getByLabelText('Back and forth')).toBeSelected();
+    await chooseFinish('Back and forth');
+    expect(screen.getByLabelText('Return, Back and forth')).toBeOnTheScreen();
     await settleElevation();
     // The return is the snapped outbound reversed: no routing request for it.
     expect(mockRouteCalls).toHaveLength(0);
@@ -889,7 +895,7 @@ describe('Back & forth (#515)', () => {
       mode: 'trails',
       vertices: [P1, P2],
       legModes: ['trails'],
-      backAndForth: true,
+      finish: 'backforth',
     });
     // The GPX holds the whole there-and-back: it ends where it started.
     const xml = mockWriteTrackGpx.mock.calls[0]?.[1] ?? '';
@@ -920,7 +926,7 @@ describe('Back & forth (#515)', () => {
               maxSpeedMps: 0,
               pointCount: 5,
             },
-            plan: { mode: 'trails', vertices: [P1, P2], legModes: ['trails'], backAndForth: true },
+            plan: { mode: 'trails', vertices: [P1, P2], legModes: ['trails'], finish: 'backforth' },
           },
         ],
       });
@@ -931,13 +937,13 @@ describe('Back & forth (#515)', () => {
     await flush(0);
     await flush(400);
     expect(screen.getByText('Edit route · There and back')).toBeOnTheScreen();
-    expect(screen.getByLabelText('Back and forth')).toBeSelected();
+    expect(screen.getByLabelText('Return, Back and forth')).toBeOnTheScreen();
     expect(mockRouteCalls).toHaveLength(0);
     // The leg came back snapped (via the corner), counted out and back.
     const legM = polylineLengthM([P1, corner, P2]);
     expect(distanceM()).toBeCloseTo(2 * legM, -2); // the stat rounds (1.2 km)
     // Turning it off: one way again.
-    await press('Back and forth');
+    await chooseFinish('One way');
     expect(distanceM()).toBeCloseTo(legM, -2); // the stat rounds (1.2 km)
   });
 
@@ -947,6 +953,196 @@ describe('Back & forth (#515)', () => {
     await tap(P1);
     await tap(P2);
     await tap(P3);
-    expect(screen.queryByLabelText('Back and forth')).toBeNull();
+    expect(screen.queryByTestId('return-chip')).toBeNull();
+  });
+});
+
+/** ~45 m east of P1: a last point near the start. */
+const NEAR_P1: LngLat = [P1[0] + 0.0006, P1[1] + 0.0001];
+/** ~30 m from P1 (40 px here, off its handle): too close for a two-point loop. */
+const BY_P1: LngLat = [P1[0] + 0.0004, P1[1]];
+
+describe('Return menu and Loop (#515)', () => {
+  it('the Return chip opens a menu of three; Loop waits for a real way back', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    expect(screen.getByTestId('return-chip')).toBeDisabled();
+    await tap(BY_P1);
+    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('return-chip'));
+    expect(screen.getByTestId('return-menu')).toBeOnTheScreen();
+    expect(screen.getByLabelText('One way')).toBeSelected();
+    expect(screen.getByLabelText('Back and forth')).not.toBeDisabled();
+    // Two points ~20 m apart: no loop yet, and the menu says why.
+    expect(screen.getByLabelText('Loop')).toBeDisabled();
+    expect(screen.getByText('Add a third point first')).toBeOnTheScreen();
+    // A tap elsewhere on the panel closes it; so does a map tap.
+    await fireEvent.press(screen.getByTestId('return-menu-backdrop'));
+    expect(screen.queryByTestId('return-menu')).toBeNull();
+    await fireEvent.press(screen.getByTestId('return-chip'));
+    expect(drawing().onMapTap(P3, [P3[0] * 1e5, P3[1] * 1e5])).toBe(true);
+    await flush(0);
+    expect(screen.queryByTestId('return-menu')).toBeNull();
+    // The map tap only closed the menu: no point was added.
+    await tap(P3);
+    await chooseFinish('Loop');
+    expect(screen.queryByTestId('return-menu')).toBeNull();
+    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    await chooseFinish('One way');
+    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+  });
+
+  it('a Freehand loop closes with a straight leg, counted in the stats and the profile', async () => {
+    mockFetchDem.mockImplementation(slopingTile);
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    await tap(P3);
+    await settleElevation();
+    const open = distanceM();
+    const openProfile = profileLabel();
+    await chooseFinish('Loop');
+    await settleElevation();
+    expect(mockRouteCalls).toHaveLength(0);
+    expect(distanceM()).toBeCloseTo(open + polylineLengthM([P3, P1]), -2);
+    expect(profileLabel()).not.toBe(openProfile);
+    await press('Save route');
+    await press('Save route to Library');
+    await flush(0);
+    const [saved] = useLibraryStore.getState().tracks;
+    expect(saved?.plan).toEqual({ mode: 'freehand', vertices: [P1, P2, P3], finish: 'loop' });
+    // The GPX closes the loop.
+    const xml = mockWriteTrackGpx.mock.calls[0]?.[1] ?? '';
+    const pts = [...xml.matchAll(/<trkpt lat="([-\d.]+)" lon="([-\d.]+)"/g)];
+    expect(pts[pts.length - 1]?.slice(1)).toEqual(pts[0]?.slice(1));
+  });
+
+  it('a Trails loop routes its closing leg; failed, it is straight with Retry; edits re-route only it', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await press('Trails');
+    await tap(P1);
+    await tap(P2);
+    await tap(P3);
+    await flush(400);
+    await answer(bent);
+    await answer(bent);
+    await chooseFinish('Loop');
+    await flush(400);
+    expect(mockRouteCalls.map((c) => [c.mode, c.from, c.to])).toEqual([['trails', P3, P1]]);
+    await answer(() => ({ status: 'failed', reason: 'offline' }));
+    expect(screen.getByText('One leg drawn straight (no connection)')).toBeOnTheScreen();
+    await press('Retry');
+    await flush(400);
+    expect(mockRouteCalls.map((c) => [c.from, c.to])).toEqual([[P3, P1]]);
+    await answer(bent);
+    expect(screen.queryByText(/drawn straight/)).toBeNull();
+
+    // Moving a middle point re-routes its two legs, not the closing leg.
+    const mid: LngLat = [P2[0] + 0.001, P2[1] + 0.0005];
+    await tap(P2);
+    await act(async () => {
+      mockGrip.current?.onMove?.(mid[0] * 1e5, mid[1] * 1e5);
+      mockGrip.current?.onEnd?.(mid[0] * 1e5, mid[1] * 1e5);
+    });
+    await flush(400);
+    // One at a time: P1→mid, then mid→P3 — and never the closing leg P3→P1.
+    expect(mockRouteCalls.map((c) => [c.from, c.to])).toEqual([[P1, mid]]);
+    await answer(bent);
+    expect(mockRouteCalls.map((c) => [c.from, c.to])).toEqual([[mid, P3]]);
+    await answer(bent);
+    await flush(400);
+    expect(mockRouteCalls).toHaveLength(0);
+  });
+
+  it('tapping the start closes the loop (not a new point); again does nothing; the tip shows once', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    expect(screen.queryByTestId('loop-tip')).toBeNull();
+    await tap(NEAR_P1);
+    // The last point is near the start: the one-time tip.
+    expect(screen.getByText('Tap the start to close the loop')).toBeOnTheScreen();
+    await tap(P1);
+    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.queryByTestId('loop-tip')).toBeNull();
+    // No fourth point was added, and nothing got selected.
+    expect(screen.queryByText(/selected$/)).toBeNull();
+    await tap(P1);
+    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(screen.queryByText(/selected$/)).toBeNull();
+    await press('Undo'); // undoes the last point, not the loop
+    await press('Save route');
+    await press('Save route to Library');
+    await flush(0);
+    expect(useLibraryStore.getState().tracks[0]?.plan).toMatchObject({
+      vertices: [P1, P2],
+      finish: 'loop',
+    });
+    // Retired: a new near-start route shows no tip.
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    await tap(NEAR_P1);
+    expect(screen.queryByTestId('loop-tip')).toBeNull();
+  });
+
+  it('with fewer than 3 points, tapping the start selects it as before', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    await tap(P1);
+    expect(screen.getByText('Point 1 selected')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return, One way')).toBeOnTheScreen();
+  });
+
+  it('"Edit route" restores a loop with its snapped closing leg, asking for nothing', async () => {
+    const c1: LngLat = [P1[0], P2[1]];
+    const c2: LngLat = [P2[0], P3[1]];
+    const c3: LngLat = [P3[0], P1[1]];
+    mockLoadGeometry.mockResolvedValue({ parts: [[P1, c1, P2, c2, P3, c3, P1]] });
+    await mount();
+    await act(async () => {
+      useLibraryStore.setState({
+        tracks: [
+          {
+            id: 'r4',
+            name: 'Round',
+            startedAt: 1,
+            fileUri: 'file:///doc/tracks/r4.gpx',
+            stats: {
+              distanceM: 1,
+              ascentM: 0,
+              descentM: 0,
+              durationS: 0,
+              movingTimeS: 0,
+              avgSpeedMps: 0,
+              maxSpeedMps: 0,
+              pointCount: 7,
+            },
+            plan: {
+              mode: 'trails',
+              vertices: [P1, P2, P3],
+              legModes: ['trails', 'trails'],
+              finish: 'loop',
+            },
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      useMapStore.getState().setDrawRequest({ kind: 'edit-route', trackId: 'r4' });
+    });
+    await flush(0);
+    await flush(400);
+    expect(screen.getByText('Edit route · Round')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Return, Loop')).toBeOnTheScreen();
+    expect(mockRouteCalls).toHaveLength(0);
+    const loopM = polylineLengthM([P1, c1, P2, c2, P3, c3, P1]);
+    expect(distanceM()).toBeCloseTo(loopM, -2);
   });
 });

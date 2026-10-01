@@ -1,5 +1,5 @@
 import { buildGpx } from '@core/geo/gpx';
-import type { Area, LngLat, RoutePlan, TrackPoint } from '@core/models';
+import type { Area, LngLat, RouteFinish, RoutePlan, TrackPoint } from '@core/models';
 
 import { polygonAreaM2, polygonPerimeterM } from './geometry';
 import { fitModes, isLegMode, type LegMode } from './legs';
@@ -65,6 +65,7 @@ export function sanitizeRoutePlan(raw: unknown): RoutePlan | null {
     vertices: rawVertices,
     mode: rawMode,
     legModes: rawLegs,
+    finish,
     backAndForth,
   } = raw as Record<string, unknown>;
   const vertices = sanitizeVertices(rawVertices);
@@ -78,8 +79,15 @@ export function sanitizeRoutePlan(raw: unknown): RoutePlan | null {
     legModes !== null && legModes.some((m) => m !== 'freehand')
       ? { mode, vertices, legModes: [...legModes] }
       : { mode, vertices };
-  // Only an explicit true turns it on: older plans are one-way.
-  return backAndForth === true ? { ...plan, backAndForth: true } : plan;
+  // Only a known finish counts; the older `backAndForth: true` is 'backforth';
+  // anything else (and every older plan) is one way.
+  const end =
+    finish === 'backforth' || finish === 'loop'
+      ? finish
+      : backAndForth === true
+        ? 'backforth'
+        : null;
+  return end !== null ? { ...plan, finish: end } : plan;
 }
 
 /** The plan saved with a drawn route: leg modes only when some leg is not Freehand. */
@@ -87,14 +95,14 @@ export function buildRoutePlan(
   vertices: readonly LngLat[],
   legModes: readonly LegMode[],
   mode: LegMode,
-  backAndForth = false,
+  finish: RouteFinish = 'oneway',
 ): RoutePlan {
   const copy = vertices.map((v) => [v[0], v[1]] as LngLat);
   const legs = fitModes(legModes, vertices.length);
   const plan: RoutePlan = legs.some((m) => m !== 'freehand')
     ? { mode, vertices: copy, legModes: legs }
     : { mode, vertices: copy };
-  return backAndForth ? { ...plan, backAndForth: true } : plan;
+  return finish === 'oneway' ? plan : { ...plan, finish };
 }
 
 /** Signed planar area (shoelace, degrees²): > 0 when counter-clockwise. */

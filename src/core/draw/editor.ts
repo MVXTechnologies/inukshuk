@@ -1,4 +1,4 @@
-import type { LngLat } from '@core/models';
+import type { LngLat, RouteFinish } from '@core/models';
 
 import { fitModes, type LegMode } from './legs';
 
@@ -32,11 +32,12 @@ export interface DrawState {
   /** The mode the next leg gets (the selected chip). */
   mode: LegMode;
   /**
-   * Back & forth: the route returns to its start along the same line,
-   * reversed. Derived, never edited — only the outbound vertices are. A
-   * setting like the chip, not an undo step.
+   * How the route ends: one way, back & forth (the outbound reversed back to
+   * the start) or a loop (a closing leg from the last point to the first).
+   * Both are derived, never edited — only the placed vertices are. A setting
+   * like the chip, not an undo step.
    */
-  backAndForth: boolean;
+  finish: RouteFinish;
   /** Earlier shapes, newest last (capped at {@link MAX_UNDO}). */
   past: readonly DrawSnapshot[];
   /** The tapped vertex (its delete button shows), or null. */
@@ -52,7 +53,7 @@ export type DrawAction =
   | { type: 'undo' }
   | { type: 'clear' }
   | { type: 'mode'; mode: LegMode }
-  | { type: 'backAndForth'; on: boolean }
+  | { type: 'finish'; finish: RouteFinish }
   | { type: 'load'; vertices: readonly LngLat[]; modes?: readonly LegMode[] };
 
 /** Undo depth: plenty for a hand-drawn line, bounded so memory is too. */
@@ -66,14 +67,14 @@ export function initialDrawState(
   vertices: readonly LngLat[] = [],
   modes?: readonly LegMode[],
   mode: LegMode = 'freehand',
-  backAndForth = false,
+  finish: RouteFinish = 'oneway',
 ): DrawState {
   return {
     kind,
     vertices: [...vertices],
     modes: kind === 'route' ? fitModes(modes, vertices.length) : fitModes([], vertices.length),
     mode,
-    backAndForth: kind === 'route' && backAndForth,
+    finish: kind === 'route' ? finish : 'oneway',
     past: [],
     selected: null,
   };
@@ -176,9 +177,9 @@ export function drawReducer(state: DrawState, action: DrawAction): DrawState {
       return commit(state, [], [], null);
     case 'mode':
       return state.mode === action.mode ? state : { ...state, mode: action.mode };
-    case 'backAndForth':
-      if (state.kind !== 'route' || state.backAndForth === action.on) return state;
-      return { ...state, backAndForth: action.on };
+    case 'finish':
+      if (state.kind !== 'route' || state.finish === action.finish) return state;
+      return { ...state, finish: action.finish };
     case 'load': {
       // Drop junk vertices together with the legs they start.
       const kept = action.vertices.map((v, i) => ({ v, m: action.modes?.[i] }));
@@ -188,7 +189,7 @@ export function drawReducer(state: DrawState, action: DrawAction): DrawState {
         ok.map((k) => k.v),
         ok.slice(0, -1).map((k) => k.m ?? 'freehand'),
         state.mode,
-        state.backAndForth,
+        state.finish,
       );
     }
   }
