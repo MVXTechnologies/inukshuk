@@ -5,6 +5,7 @@ import {
   areaFileStem,
   areasToGeoJson,
   areaToFeature,
+  buildRoutePlan,
   closedCcwRing,
   plannedRouteGpx,
   plannedRoutePoints,
@@ -63,6 +64,40 @@ describe('sanitizeVertices / sanitizeRoutePlan', () => {
     expect(sanitizeRoutePlan({ vertices: [SAMPLES[0]] })).toBeNull();
     expect(sanitizeRoutePlan(null)).toBeNull();
     expect(sanitizeRoutePlan('x')).toBeNull();
+  });
+
+  it('keeps the chip mode and one mode per leg (#515)', () => {
+    expect(
+      sanitizeRoutePlan({ mode: 'roads', vertices: SAMPLES, legModes: ['trails', 'roads'] }),
+    ).toEqual({ mode: 'roads', vertices: SAMPLES, legModes: ['trails', 'roads'] });
+    // Wrong count or an unknown mode: every leg reads as Freehand (never mis-paired).
+    expect(sanitizeRoutePlan({ mode: 'trails', vertices: SAMPLES, legModes: ['trails'] })).toEqual({
+      mode: 'trails',
+      vertices: SAMPLES,
+    });
+    expect(
+      sanitizeRoutePlan({ mode: 'ski', vertices: SAMPLES, legModes: ['trails', 'ski'] }),
+    ).toEqual({ mode: 'freehand', vertices: SAMPLES });
+    // All-Freehand legs are not stored: the pre-#515 shape.
+    expect(
+      sanitizeRoutePlan({
+        mode: 'freehand',
+        vertices: SAMPLES,
+        legModes: ['freehand', 'freehand'],
+      }),
+    ).toEqual({ mode: 'freehand', vertices: SAMPLES });
+  });
+
+  it('buildRoutePlan writes leg modes only when some leg is snapped', () => {
+    expect(buildRoutePlan(SAMPLES, ['freehand', 'freehand'], 'freehand')).toEqual({
+      mode: 'freehand',
+      vertices: SAMPLES,
+    });
+    const plan = buildRoutePlan(SAMPLES, ['trails'], 'roads');
+    expect(plan).toEqual({ mode: 'roads', vertices: SAMPLES, legModes: ['trails', 'freehand'] });
+    // A copy, not the editor's arrays; and it round-trips through the sanitizer.
+    expect(plan.vertices[0]).not.toBe(SAMPLES[0]);
+    expect(sanitizeRoutePlan(JSON.parse(JSON.stringify(plan)))).toEqual(plan);
   });
 });
 

@@ -65,11 +65,20 @@ export type TrackStatus = 'recording' | 'paused' | 'finished';
  * vertices the user placed (the GPX holds the densified, elevation-sampled
  * line; these are the handles the drawing tool reopens with).
  */
+/** How one leg of a drawn route was made (#515): snapped to trails or roads, or straight. */
+export type RouteLegMode = 'freehand' | 'trails' | 'roads';
+
 export interface RoutePlan {
-  /** How the line between vertices was made. Only freehand exists today. */
-  mode: 'freehand';
+  /** The mode the drawing tool was in when saved (the chip it reopens on). */
+  mode: RouteLegMode;
   /** The vertices the user placed, `[lng, lat]`, ≥ 2. */
   vertices: LngLat[];
+  /**
+   * Per leg (`vertices.length - 1`): how the line between vertex i and i+1
+   * was made. Absent = every leg Freehand (routes drawn before #515, and
+   * all-Freehand routes, which keep their original shape on disk).
+   */
+  legModes?: RouteLegMode[];
 }
 
 /** A recorded route, persisted as GPX. */

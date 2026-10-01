@@ -97,6 +97,58 @@ describe('drawReducer', () => {
     expect(loaded.kind).toBe('route');
   });
 
+  it('load keeps leg modes, dropping the leg of a junk vertex (#515)', () => {
+    const s = drawReducer(initialDrawState('route'), { type: 'mode', mode: 'roads' });
+    const loaded = drawReducer(s, {
+      type: 'load',
+      vertices: [A, B, [Number.NaN, 1], C],
+      modes: ['trails', 'roads', 'freehand'],
+    });
+    expect(loaded.vertices).toEqual([A, B, C]);
+    expect(loaded.modes).toEqual(['trails', 'roads']);
+    expect(loaded.mode).toBe('roads');
+  });
+
+  it('modes: new legs take the chip; undo restores modes with vertices; areas stay freehand', () => {
+    const s = run(
+      initialDrawState('route'),
+      { type: 'mode', mode: 'trails' },
+      add(A),
+      add(B),
+      { type: 'mode', mode: 'roads' },
+      add(C),
+    );
+    expect(s.modes).toEqual(['trails', 'roads']);
+    expect(drawReducer(s, { type: 'mode', mode: 'roads' })).toBe(s);
+    expect(drawReducer(s, { type: 'undo' }).modes).toEqual(['trails']);
+    expect(drawReducer(s, { type: 'clear' }).modes).toEqual([]);
+    // Prepending a point (index 0) and appending (index n) add a leg in the chip's mode.
+    expect(drawReducer(s, { type: 'insert', index: 0, at: D }).modes).toEqual([
+      'roads',
+      'trails',
+      'roads',
+    ]);
+    expect(drawReducer(s, { type: 'insert', index: 3, at: D }).modes).toEqual([
+      'trails',
+      'roads',
+      'roads',
+    ]);
+    expect(drawReducer(s, { type: 'remove', index: 0 }).modes).toEqual(['roads']);
+    expect(drawReducer(initialDrawState('route', [A]), { type: 'remove', index: 0 }).modes).toEqual(
+      [],
+    );
+    expect(initialDrawState('area', [A, B, C], ['trails', 'trails']).modes).toEqual([
+      'freehand',
+      'freehand',
+    ]);
+    expect(
+      drawHint(run(initialDrawState('route'), { type: 'mode', mode: 'trails' }, add(A))),
+    ).toMatch(/follows trails/);
+    expect(
+      drawHint(run(initialDrawState('route'), { type: 'mode', mode: 'roads' }, add(A))),
+    ).toMatch(/follows roads/);
+  });
+
   it('caps the undo history', () => {
     let s = initialDrawState('route');
     for (let i = 0; i < MAX_UNDO + 20; i++) s = drawReducer(s, add([i * 0.001, 46]));

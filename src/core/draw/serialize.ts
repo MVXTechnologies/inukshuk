@@ -2,6 +2,7 @@ import { buildGpx } from '@core/geo/gpx';
 import type { Area, LngLat, RoutePlan, TrackPoint } from '@core/models';
 
 import { polygonAreaM2, polygonPerimeterM } from './geometry';
+import { fitModes, isLegMode, type LegMode } from './legs';
 
 /**
  * Serialization for drawn routes and areas (#502/#503).
@@ -53,11 +54,41 @@ export function sanitizeVertices(raw: unknown): LngLat[] {
   return Array.isArray(raw) ? raw.filter(isLngLat).map((p) => [p[0], p[1]] as LngLat) : [];
 }
 
-/** A persisted route plan, sanitized; null for junk or fewer than 2 vertices. */
+/**
+ * A persisted route plan, sanitized; null for junk or fewer than 2 vertices.
+ * Leg modes survive only when there is exactly one valid mode per leg (a
+ * mismatch would pair modes with the wrong legs: Freehand is the safe reading).
+ */
 export function sanitizeRoutePlan(raw: unknown): RoutePlan | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const vertices = sanitizeVertices((raw as { vertices?: unknown }).vertices);
-  return vertices.length >= 2 ? { mode: 'freehand', vertices } : null;
+  const {
+    vertices: rawVertices,
+    mode: rawMode,
+    legModes: rawLegs,
+  } = raw as Record<string, unknown>;
+  const vertices = sanitizeVertices(rawVertices);
+  if (vertices.length < 2) return null;
+  const mode = isLegMode(rawMode) ? rawMode : 'freehand';
+  const legModes =
+    Array.isArray(rawLegs) && rawLegs.length === vertices.length - 1 && rawLegs.every(isLegMode)
+      ? (rawLegs as LegMode[])
+      : null;
+  return legModes !== null && legModes.some((m) => m !== 'freehand')
+    ? { mode, vertices, legModes: [...legModes] }
+    : { mode, vertices };
+}
+
+/** The plan saved with a drawn route: leg modes only when some leg is not Freehand. */
+export function buildRoutePlan(
+  vertices: readonly LngLat[],
+  legModes: readonly LegMode[],
+  mode: LegMode,
+): RoutePlan {
+  const copy = vertices.map((v) => [v[0], v[1]] as LngLat);
+  const legs = fitModes(legModes, vertices.length);
+  return legs.some((m) => m !== 'freehand')
+    ? { mode, vertices: copy, legModes: legs }
+    : { mode, vertices: copy };
 }
 
 /** Signed planar area (shoelace, degrees²): > 0 when counter-clockwise. */
