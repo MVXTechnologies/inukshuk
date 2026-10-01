@@ -22,7 +22,7 @@ const raster = (tag: string): RasterResult => ({
   loadMs: 1,
   renderMs: 1,
 });
-const mockRasterize = jest.fn(async (args: RasterizeArgs) => raster(args.whiteKey ?? 'off'));
+const mockRasterize = jest.fn(async (args: RasterizeArgs) => raster(String(args.whiteKey ?? 0)));
 jest.mock('./PdfRasterizer', () => ({
   usePdfRasterizer: () => mockRasterize,
   usePdfRasterizerServer: () => async () => null,
@@ -83,42 +83,42 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 it('renders at the global level, under a name that carries it', async () => {
-  const view = await mount({ maps: [map], level: 'full' });
+  const view = await mount({ maps: [map], level: 4 });
   expect(mockRasterize).toHaveBeenCalledTimes(1);
-  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 'full' });
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 4 });
   const overlay = view.result.current.overlays[0];
-  expect(overlay?.whiteKey).toBe('full');
-  expect(overlay?.imageUri).toMatch(/_wk-full\.png$/);
-  expect(mockFiles.get(overlay?.imageUri ?? '')).toBe('full');
+  expect(overlay?.whiteKey).toBe(4);
+  expect(overlay?.imageUri).toMatch(/_wk-100\.png$/);
+  expect(mockFiles.get(overlay?.imageUri ?? '')).toBe('4');
 });
 
 it('keeps the pre-feature name at Off, so existing caches stay valid', async () => {
-  const view = await mount({ maps: [map], level: 'off' });
+  const view = await mount({ maps: [map], level: 0 });
   expect(view.result.current.overlays[0]?.imageUri).toMatch(/_2048\.png$/);
-  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 'off' });
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 0 });
 });
 
 it("lets a map's own level override the global one", async () => {
-  const view = await mount({ maps: [{ ...map, whiteKey: 'some' }], level: 'full' });
-  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 'some' });
-  expect(view.result.current.overlays[0]?.whiteKey).toBe('some');
+  const view = await mount({ maps: [{ ...map, whiteKey: 2 }], level: 4 });
+  expect(mockRasterize.mock.calls[0]?.[0]).toMatchObject({ whiteKey: 2 });
+  expect(view.result.current.overlays[0]?.whiteKey).toBe(2);
 });
 
 it('renders once per level, then switches instantly both ways', async () => {
-  const view = await mount({ maps: [map], level: 'off' });
-  await act(async () => view.rerender({ maps: [map], level: 'full' }));
+  const view = await mount({ maps: [map], level: 0 });
+  await act(async () => view.rerender({ maps: [map], level: 4 }));
   expect(mockRasterize).toHaveBeenCalledTimes(2);
   const full = view.result.current.overlays[0]?.imageUri;
 
-  await act(async () => view.rerender({ maps: [map], level: 'off' }));
-  await act(async () => view.rerender({ maps: [map], level: 'full' }));
+  await act(async () => view.rerender({ maps: [map], level: 0 }));
+  await act(async () => view.rerender({ maps: [map], level: 4 }));
   expect(mockRasterize).toHaveBeenCalledTimes(2);
   expect(view.result.current.overlays[0]?.imageUri).toBe(full);
   expect(view.result.current.overlays).toHaveLength(1);
 });
 
 it('shows the old level while the new one renders, then swaps it in place', async () => {
-  const view = await mount({ maps: [map], level: 'off' });
+  const view = await mount({ maps: [map], level: 0 });
   const plain = view.result.current.overlays[0]?.imageUri;
   let finish!: (value: RasterResult) => void;
   mockRasterize.mockImplementationOnce(
@@ -127,23 +127,52 @@ it('shows the old level while the new one renders, then swaps it in place', asyn
         finish = resolve;
       }),
   );
-  await act(async () => view.rerender({ maps: [map], level: 'some' }));
+  await act(async () => view.rerender({ maps: [map], level: 2 }));
   // Still drawn — at the old level, never blank and never a stale keyed tile.
   expect(view.result.current.overlays).toHaveLength(1);
-  expect(view.result.current.overlays[0]).toMatchObject({ imageUri: plain, whiteKey: 'off' });
+  expect(view.result.current.overlays[0]).toMatchObject({ imageUri: plain, whiteKey: 0 });
   expect(view.result.current.loading).toBe(true);
 
-  await act(async () => finish(raster('some')));
+  await act(async () => finish(raster('2')));
   expect(view.result.current.overlays).toHaveLength(1);
-  expect(view.result.current.overlays[0]?.whiteKey).toBe('some');
-  expect(view.result.current.overlays[0]?.imageUri).toMatch(/_wk-some\.png$/);
+  expect(view.result.current.overlays[0]?.whiteKey).toBe(2);
+  expect(view.result.current.overlays[0]?.imageUri).toMatch(/_wk-50\.png$/);
   expect(view.result.current.loading).toBe(false);
 });
 
+it('renders each of the five stops once, under its own name', async () => {
+  const view = await mount({ maps: [map], level: 0 });
+  const names = new Set<string>();
+  for (const level of [1, 2, 3, 4, 0, 2, 4] as const) {
+    await act(async () => view.rerender({ maps: [map], level }));
+    names.add(view.result.current.overlays[0]?.imageUri ?? '');
+  }
+  expect(mockRasterize).toHaveBeenCalledTimes(5);
+  expect(names.size).toBe(5);
+});
+
+it('stands in with the nearest stop on the slider while a new one renders', async () => {
+  const view = await mount({ maps: [map], level: 0 });
+  await act(async () => view.rerender({ maps: [map], level: 3 }));
+  const at75 = view.result.current.overlays[0]?.imageUri;
+  let finish!: (value: RasterResult) => void;
+  mockRasterize.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => view.rerender({ maps: [map], level: 4 }));
+  // 75 % (one stop away) stands in, not Off.
+  expect(view.result.current.overlays[0]).toMatchObject({ imageUri: at75, whiteKey: 3 });
+  await act(async () => finish(raster('4')));
+  expect(view.result.current.overlays[0]?.imageUri).toMatch(/_wk-100\.png$/);
+});
+
 it('drops the stand-in when the new level fails to render', async () => {
-  const view = await mount({ maps: [map], level: 'off' });
+  const view = await mount({ maps: [map], level: 0 });
   mockRasterize.mockRejectedValueOnce(new Error('boom'));
-  await act(async () => view.rerender({ maps: [map], level: 'full' }));
+  await act(async () => view.rerender({ maps: [map], level: 4 }));
   expect(view.result.current.overlays).toHaveLength(0);
   expect(view.result.current.error).toBe('boom');
 });

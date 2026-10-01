@@ -27,33 +27,67 @@
  * page and the tests run one implementation.
  */
 
-/** The user's choice: how see-through a PDF map's white paper is. */
-export type WhiteKeyLevel = 'off' | 'some' | 'full';
+/**
+ * The user's choice: how see-through a PDF map's white paper is, as a stop on
+ * a 5-position slider — 0 = Off, 1 / 2 / 3 = 25 / 50 / 75 %, 4 = Full (100 %).
+ */
+export type WhiteKeyLevel = 0 | 1 | 2 | 3 | 4;
 
-export const WHITE_KEY_LEVELS: readonly WhiteKeyLevel[] = ['off', 'some', 'full'];
+export const WHITE_KEY_LEVELS: readonly WhiteKeyLevel[] = [0, 1, 2, 3, 4];
+
+/** The top stop (Full, 100 %). */
+export const WHITE_KEY_MAX: WhiteKeyLevel = 4;
 
 /** Nothing changes until the user picks a level. */
-export const DEFAULT_WHITE_KEY: WhiteKeyLevel = 'off';
+export const DEFAULT_WHITE_KEY: WhiteKeyLevel = 0;
 
-export const WHITE_KEY_LABEL: Readonly<Record<WhiteKeyLevel, string>> = {
-  off: 'Off',
-  some: 'Some',
-  full: 'Full',
+/**
+ * Keying strength of a stop: the share of pure white that is removed — 0,
+ * 0.25, 0.5, 0.75, 1. Strength only scales HOW MUCH white goes; WHICH pixels
+ * count as white (the lightness ramp and the colour cut-off below) is the
+ * same at every stop, so a light printed tint such as the 2024 US Topo
+ * woodland green (228, 240, 215) stays fully solid all the way to 100 %.
+ */
+export function whiteKeyStrength(level: WhiteKeyLevel): number {
+  return level / WHITE_KEY_MAX;
+}
+
+/** What a stop reads as: "Off", "25 %", "50 %", "75 %", "100 %". */
+export function whiteKeyLabel(level: WhiteKeyLevel): string {
+  return level === 0 ? 'Off' : `${level * 25} %`;
+}
+
+export function isWhiteKeyLevel(v: unknown): v is WhiteKeyLevel {
+  return typeof v === 'number' && (WHITE_KEY_LEVELS as readonly number[]).includes(v);
+}
+
+/**
+ * The first cut of this feature stored three named levels (never shipped to
+ * a store build, but on test devices): Off → 0, Some → 2 (50 %), Full → 4
+ * (100 %).
+ */
+export const LEGACY_WHITE_KEY: Readonly<Record<'off' | 'some' | 'full', WhiteKeyLevel>> = {
+  off: 0,
+  some: 2,
+  full: 4,
 };
 
 /**
- * Keying strength per level: the share of pure white that is removed. "Some"
- * leaves the paper as a half-transparent veil, which keeps the sheet's look
- * while the base map reads through; "Full" removes it entirely.
+ * A persisted level read back: a stop as-is, a legacy name migrated onto its
+ * stop, anything else `undefined` (the caller picks the fallback — the
+ * default for the global setting, "follow the global" for a map override).
  */
-export const WHITE_KEY_STRENGTH: Readonly<Record<WhiteKeyLevel, number>> = {
-  off: 0,
-  some: 0.55,
-  full: 1,
-};
+export function parseWhiteKeyLevel(v: unknown): WhiteKeyLevel | undefined {
+  if (isWhiteKeyLevel(v)) return v;
+  if (v === 'off' || v === 'some' || v === 'full') return LEGACY_WHITE_KEY[v];
+  return undefined;
+}
 
-export function isWhiteKeyLevel(v: unknown): v is WhiteKeyLevel {
-  return typeof v === 'string' && (WHITE_KEY_LEVELS as readonly string[]).includes(v);
+/** The stop nearest a continuous slider position (snapped and clamped). */
+export function nearestWhiteKeyLevel(position: number): WhiteKeyLevel {
+  if (!Number.isFinite(position)) return DEFAULT_WHITE_KEY;
+  const n = Math.round(Math.min(WHITE_KEY_MAX, Math.max(0, position)));
+  return WHITE_KEY_LEVELS[n] ?? DEFAULT_WHITE_KEY;
 }
 
 /**

@@ -317,22 +317,44 @@ describe('per-map See-through white (⋮ Map options)', () => {
   afterEach(() => useSettingsStore.getState().reset());
 
   it('follows the global level by default and names it', async () => {
-    useSettingsStore.setState({ pdfWhiteKey: 'some' });
+    useSettingsStore.setState({ pdfWhiteKey: 2 });
     const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
     await press(view, 'Map options');
     const def = await view.findByLabelText('See-through white: Default');
     expect(def.props.accessibilityState).toMatchObject({ selected: true });
-    expect(view.getByText('Default (Some)')).toBeTruthy();
+    expect(view.getByText('Default (global: 50 %)')).toBeTruthy();
   });
 
-  it('overrides the global level for this map, and Default clears the override', async () => {
+  it('offers Default plus the five slider stops', async () => {
     const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
     await press(view, 'Map options');
-    await press(view, 'See-through white: Full');
-    expect(whiteKeyOf('m1')).toBe('full');
+    await view.findByLabelText('See-through white: Default');
+    for (const stop of ['Off', '25 %', '50 %', '75 %', '100 %']) {
+      expect(view.getByLabelText(`See-through white: ${stop}`)).toBeTruthy();
+    }
+  });
+
+  it.each([
+    ['Off', 0],
+    ['25 %', 1],
+    ['50 %', 2],
+    ['75 %', 3],
+    ['100 %', 4],
+  ] as const)('%s overrides the global level for this map', async (stop, level) => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    await press(view, `See-through white: ${stop}`);
+    expect(whiteKeyOf('m1')).toBe(level);
+  });
+
+  it('shows the override as chosen, and Default clears it', async () => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    await press(view, 'See-through white: 100 %');
+    expect(whiteKeyOf('m1')).toBe(4);
 
     await press(view, 'Map options');
-    const full = await view.findByLabelText('See-through white: Full');
+    const full = await view.findByLabelText('See-through white: 100 %');
     expect(full.props.accessibilityState).toMatchObject({ selected: true });
     await press(view, 'See-through white: Default');
     expect(whiteKeyOf('m1')).toBeUndefined();

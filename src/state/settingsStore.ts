@@ -15,7 +15,7 @@ import {
   type HillshadeStrength,
   type PeakDensity,
 } from '@core/map/terrainOptions';
-import { DEFAULT_WHITE_KEY, isWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
+import { DEFAULT_WHITE_KEY, parseWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
 import { DEFAULT_IMAGERY_LOOK, isImageryLook, type ImageryLook } from '@core/map/satelliteImagery';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
@@ -157,7 +157,8 @@ export interface Settings {
    * transparent the near-white paper of every PDF map is drawn, so the base
    * map shows through open land and the collar (`@core/geo/pdfWhiteKey`).
    * The global default; a map can override it from its Library ⋮ menu
-   * (`MapDocument.whiteKey`). Off by default — no change until chosen.
+   * (`MapDocument.whiteKey`). A slider stop: 0 = Off … 4 = 100 %. Off by
+   * default — no change until chosen.
    */
   pdfWhiteKey: WhiteKeyLevel;
   /**
@@ -459,7 +460,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
-      if (!isWhiteKeyLevel(next.pdfWhiteKey)) next.pdfWhiteKey = DEFAULT_WHITE_KEY;
+      // See-through white is a slider stop (0–4) now; the feature's first cut
+      // stored names, which the ladder's typeof check would DROP against the
+      // numeric default. Recover the raw value: a stop is kept, the names
+      // migrate (off → 0, some → 2, full → 4), anything else is Off.
+      next.pdfWhiteKey =
+        parseWhiteKeyLevel(
+          typeof saved === 'object' && saved !== null
+            ? (saved as { pdfWhiteKey?: unknown }).pdfWhiteKey
+            : undefined,
+        ) ?? DEFAULT_WHITE_KEY;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

@@ -12,7 +12,12 @@ import {
   renderedPageCorners,
 } from '@core/geo/geopdf/pageBox';
 import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
-import { WHITE_KEY_LEVELS, effectiveWhiteKey, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
+import {
+  WHITE_KEY_LEVELS,
+  effectiveWhiteKey,
+  whiteKeyLabel,
+  type WhiteKeyLevel,
+} from '@core/geo/pdfWhiteKey';
 import { unsupportedProjectionNotice } from '@core/library/overlayPages';
 import {
   OVERLAY_TARGET_WIDTH_PX,
@@ -129,7 +134,7 @@ export function describeSourceCrs(geo: GeoReference): string {
  * otherwise push three identical targets — three stacked copies of the same
  * raster, compounded opacity and three native layers for one map.
  */
-export function activeTargets(maps: MapDocument[], whiteKey: WhiteKeyLevel = 'off'): Target[] {
+export function activeTargets(maps: MapDocument[], whiteKey: WhiteKeyLevel = 0): Target[] {
   const targets: Target[] = [];
   for (const m of maps) {
     if (!m.fileUri) continue;
@@ -179,11 +184,14 @@ function cachedRaster(
 /**
  * The page's raster at some OTHER "See-through white" level, if one is on
  * disk: shown while the requested level renders, so switching levels swaps
- * the sheet in place instead of blanking it for the length of a render.
+ * the sheet in place instead of blanking it for the length of a render. The
+ * nearest level on the slider wins, so a one-stop nudge shows the closest look.
  */
 function standInRaster(t: Target): { uri: string; level: WhiteKeyLevel } | undefined {
-  for (const level of WHITE_KEY_LEVELS) {
-    if (level === t.whiteKey) continue;
+  const byDistance = WHITE_KEY_LEVELS.filter((l) => l !== t.whiteKey).sort(
+    (a, b) => Math.abs(a - t.whiteKey) - Math.abs(b - t.whiteKey),
+  );
+  for (const level of byDistance) {
     const uri = storage.existingOverlayPng(
       rasterFileName(t.docId, t.geo.pageIndex, t.revision, level),
     );
@@ -218,7 +226,7 @@ function standInRaster(t: Target): { uri: string; level: WhiteKeyLevel } | undef
 export function usePdfOverlays(
   maps: MapDocument[],
   enabled = true,
-  whiteKey: WhiteKeyLevel = 'off',
+  whiteKey: WhiteKeyLevel = 0,
 ): PdfOverlaysState {
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
@@ -450,7 +458,7 @@ export function usePdfOverlays(
                   `PdfOverlay: ${t.docId} page ${geo.pageIndex + 1} rasterized via ${choice.kind} ` +
                     `in ${Date.now() - startedAt} ms (open ${raster.loadMs} ms, render ${raster.renderMs} ms, ` +
                     (raster.keyMs !== undefined
-                      ? `see-through ${t.whiteKey} ${raster.keyMs} ms, `
+                      ? `see-through ${whiteKeyLabel(t.whiteKey)} ${raster.keyMs} ms, `
                       : '') +
                     `${raster.widthPx}x${raster.heightPx})`,
                 );

@@ -1,6 +1,10 @@
 import {
   DEFAULT_WHITE_KEY,
-  WHITE_KEY_STRENGTH,
+  WHITE_KEY_LEVELS,
+  nearestWhiteKeyLevel,
+  parseWhiteKeyLevel,
+  whiteKeyLabel,
+  whiteKeyStrength,
   effectiveWhiteKey,
   isWhiteKeyLevel,
   keyWhiteAlpha,
@@ -8,8 +12,8 @@ import {
 } from './pdfWhiteKey';
 
 const { keyWhite, keyPixel } = loadWhiteKeyRuntime();
-const FULL = WHITE_KEY_STRENGTH.full;
-const SOME = WHITE_KEY_STRENGTH.some;
+const FULL = whiteKeyStrength(4);
+const SOME = whiteKeyStrength(2);
 
 /** Composite an RGBA pixel over an opaque background channel value. */
 const over = (c: number, a: number, bg: number) => (c * a + bg * (255 - a)) / 255;
@@ -19,7 +23,7 @@ describe('keyWhiteAlpha', () => {
     expect(keyWhiteAlpha(255, 255, 255, 255, FULL)).toBe(0);
   });
 
-  it('leaves pure white partly opaque at "some"', () => {
+  it('leaves pure white partly opaque at 50 %', () => {
     const alpha = keyWhiteAlpha(255, 255, 255, 255, SOME);
     expect(alpha).toBeGreaterThan(80);
     expect(alpha).toBeLessThan(160);
@@ -131,21 +135,70 @@ describe('keyWhite (buffer pass)', () => {
   });
 });
 
-describe('levels', () => {
-  it('defaults to off, with no keying', () => {
-    expect(DEFAULT_WHITE_KEY).toBe('off');
-    expect(WHITE_KEY_STRENGTH.off).toBe(0);
+describe('levels (5-stop slider)', () => {
+  it('defaults to Off, with no keying', () => {
+    expect(DEFAULT_WHITE_KEY).toBe(0);
+    expect(whiteKeyStrength(DEFAULT_WHITE_KEY)).toBe(0);
   });
 
-  it('validates persisted values', () => {
-    expect(isWhiteKeyLevel('some')).toBe(true);
-    expect(isWhiteKeyLevel('half')).toBe(false);
-    expect(isWhiteKeyLevel(1)).toBe(false);
+  it('maps the five stops onto 0 / 25 / 50 / 75 / 100 % strength', () => {
+    expect(WHITE_KEY_LEVELS).toEqual([0, 1, 2, 3, 4]);
+    expect(WHITE_KEY_LEVELS.map(whiteKeyStrength)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+  });
+
+  it('labels the stops Off, 25 %, 50 %, 75 %, 100 %', () => {
+    expect(WHITE_KEY_LEVELS.map(whiteKeyLabel)).toEqual(['Off', '25 %', '50 %', '75 %', '100 %']);
+  });
+
+  it('keys pure white more at every stop, to fully clear at 100 %', () => {
+    const alphas = WHITE_KEY_LEVELS.map((l) =>
+      keyWhiteAlpha(255, 255, 255, 255, whiteKeyStrength(l)),
+    );
+    expect(alphas[0]).toBe(255);
+    expect(alphas[4]).toBe(0);
+    for (let i = 1; i < alphas.length; i++) {
+      expect(alphas[i]).toBeLessThan(alphas[i - 1] ?? 0);
+    }
+    // 50 % leaves half the paper as a veil.
+    expect(Math.abs((alphas[2] ?? 0) - 128)).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps the US Topo woodland tint (228, 240, 215) fully solid at every stop', () => {
+    for (const l of WHITE_KEY_LEVELS) {
+      expect(keyWhiteAlpha(228, 240, 215, 255, whiteKeyStrength(l))).toBe(255);
+    }
+  });
+
+  it('validates persisted stops', () => {
+    expect(isWhiteKeyLevel(2)).toBe(true);
+    expect(isWhiteKeyLevel(0)).toBe(true);
+    expect(isWhiteKeyLevel(5)).toBe(false);
+    expect(isWhiteKeyLevel(1.5)).toBe(false);
+    expect(isWhiteKeyLevel('some')).toBe(false);
+  });
+
+  it('migrates the old named levels: off → 0, some → 2 (50 %), full → 4 (100 %)', () => {
+    expect(parseWhiteKeyLevel('off')).toBe(0);
+    expect(parseWhiteKeyLevel('some')).toBe(2);
+    expect(parseWhiteKeyLevel('full')).toBe(4);
+    expect(parseWhiteKeyLevel(3)).toBe(3);
+    for (const junk of ['half', 'toString', 'constructor', 7, -1, 2.5, null, undefined, {}]) {
+      expect(parseWhiteKeyLevel(junk)).toBeUndefined();
+    }
+  });
+
+  it('snaps a slider position to the nearest stop, clamped', () => {
+    expect(nearestWhiteKeyLevel(0.4)).toBe(0);
+    expect(nearestWhiteKeyLevel(1.6)).toBe(2);
+    expect(nearestWhiteKeyLevel(3.5)).toBe(4);
+    expect(nearestWhiteKeyLevel(9)).toBe(4);
+    expect(nearestWhiteKeyLevel(-3)).toBe(0);
+    expect(nearestWhiteKeyLevel(Number.NaN)).toBe(0);
   });
 
   it('lets a per-map override win over the global level', () => {
-    expect(effectiveWhiteKey(undefined, 'some')).toBe('some');
-    expect(effectiveWhiteKey('off', 'full')).toBe('off');
-    expect(effectiveWhiteKey('full', 'off')).toBe('full');
+    expect(effectiveWhiteKey(undefined, 2)).toBe(2);
+    expect(effectiveWhiteKey(0, 4)).toBe(0);
+    expect(effectiveWhiteKey(4, 0)).toBe(4);
   });
 });

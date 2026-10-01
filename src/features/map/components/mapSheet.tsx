@@ -235,39 +235,50 @@ export function LevelsRow<V extends string | number>({
   icon: string;
   label: string;
   hint?: string;
-  levels: readonly SegmentLevel<V>[];
+  levels: readonly { value: V; label: string }[];
   selected: V;
   onSelect: (value: V) => void;
   disabled?: boolean;
+}) {
+  return (
+    <ControlRow icon={icon} label={label} hint={hint} disabled={disabled}>
+      <Segmented levels={levels} selected={selected} onSelect={onSelect} disabled={disabled} />
+    </ControlRow>
+  );
+}
+
+/**
+ * A row whose control sits underneath (no on/off of its own) — a slider or
+ * any other control that brings its own accessibility. The header is plain
+ * text (dimmed with the control when `disabled`).
+ */
+export function ControlRow({
+  icon,
+  label,
+  hint,
+  disabled = false,
+  children,
+}: {
+  icon: string;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+  children: ReactNode;
 }) {
   return (
     <View>
       <View style={[styles.row, styles.rowStatic, disabled && styles.dimmed]}>
         <RowText icon={icon} label={label} hint={hint} />
       </View>
-      <View style={styles.below}>
-        <Segmented levels={levels} selected={selected} onSelect={onSelect} disabled={disabled} />
-      </View>
+      <View style={styles.below}>{children}</View>
     </View>
   );
 }
 
 /**
- * One segment: its value, its visible label, and — when that label alone
- * would be ambiguous in the sheet (two rows both offering 'Off') — the
- * accessible name to use instead.
- */
-export interface SegmentLevel<V extends string | number> {
-  value: V;
-  label: string;
-  accessibilityLabel?: string;
-}
-
-/**
  * A segmented level picker: equal segments on a quiet track, the selection
  * filled with the accent. Each segment is its own accessible button named by
- * its level (the Maestro flows and tests key on 'Heavy', '50 m', 'Auto', …),
- * or by the level's own `accessibilityLabel` when it has one.
+ * its level (the Maestro flows and tests key on 'Heavy', '50 m', 'Auto', …).
  */
 export function Segmented<V extends string | number>({
   levels,
@@ -275,7 +286,7 @@ export function Segmented<V extends string | number>({
   onSelect,
   disabled = false,
 }: {
-  levels: readonly SegmentLevel<V>[];
+  levels: readonly { value: V; label: string }[];
   selected: V;
   onSelect: (value: V) => void;
   disabled?: boolean;
@@ -299,7 +310,7 @@ export function Segmented<V extends string | number>({
             disabled={disabled}
             hitSlop={SEGMENT_SLOP}
             accessibilityRole="button"
-            accessibilityLabel={l.accessibilityLabel ?? l.label}
+            accessibilityLabel={l.label}
             accessibilityState={{ selected: on, disabled }}
             style={[styles.seg, on && { backgroundColor: accent }]}
           >

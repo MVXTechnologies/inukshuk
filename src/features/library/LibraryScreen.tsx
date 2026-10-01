@@ -1,6 +1,6 @@
 import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import { WHITE_KEY_LABEL, WHITE_KEY_LEVELS, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
+import { WHITE_KEY_LEVELS, whiteKeyLabel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
 import { reportError } from '@lib/errorReporting';
@@ -610,18 +610,19 @@ export function LibraryScreen() {
 
   // This map's own "See-through white" level (#489): Default follows the
   // Overlays menu's global level (named, so the choice is never a mystery);
-  // Off / Some / Full override it for this map only.
+  // Off / 25 / 50 / 75 / 100 % (the slider's five stops) override it for
+  // this map only.
   const seeThroughWhiteItems = (m: MapDocument) => {
     const choices: { level: WhiteKeyLevel | undefined; title: string; name: string }[] = [
       {
         level: undefined,
-        title: `Default (${WHITE_KEY_LABEL[globalWhiteKey]})`,
+        title: `Default (global: ${whiteKeyLabel(globalWhiteKey)})`,
         name: 'Default',
       },
       ...WHITE_KEY_LEVELS.map((level) => ({
         level,
-        title: WHITE_KEY_LABEL[level],
-        name: WHITE_KEY_LABEL[level],
+        title: whiteKeyLabel(level),
+        name: whiteKeyLabel(level),
       })),
     ];
     return (

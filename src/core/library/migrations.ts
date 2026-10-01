@@ -6,7 +6,7 @@ import type {
   TrackNote,
   Waypoint,
 } from '@core/models';
-import { isWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
+import { parseWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
@@ -197,6 +197,18 @@ function normalizeNotes(raw: unknown): TrackNote[] {
 }
 
 /**
+ * A map's persisted "See-through white" override: a slider stop (0–4) kept,
+ * a name from the feature's first, 3-level cut migrated (off → 0, some → 2,
+ * full → 4), junk dropped (= follow the global level). Done here in the
+ * sanitize pass rather than as a version step, so it holds whatever version
+ * stamp a file carries.
+ */
+function whiteKeyOverride(v: unknown): Pick<MapDocument, 'whiteKey'> {
+  const level = parseWhiteKeyLevel(v);
+  return level === undefined ? {} : { whiteKey: level };
+}
+
+/**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
  * `georeferences[]` + `activePages[]` (defaulting to every georeferenced page
@@ -259,7 +271,7 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     ...(typeof legacy.sourceUpdatedAt === 'string'
       ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
       : {}),
-    ...(isWhiteKeyLevel(legacy.whiteKey) ? { whiteKey: legacy.whiteKey } : {}),
+    ...whiteKeyOverride(raw.whiteKey),
   };
 }
 
