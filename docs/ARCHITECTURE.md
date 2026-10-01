@@ -161,7 +161,8 @@ quietly imports "since last import" on launch/foreground at most every
   stall watchdog rejects if progress stops (MapLibre can hang without erroring).
 - "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
   only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches
-  bypass this — see docs/CODE-REVIEW-2026-07-02.md.) The live style also caps
+  bypass this — see the 2026-07-02 code review, archived on the
+  `archive/docs-2026-10` branch.) The live style also caps
   the raster source's `maxzoom` at the packs' top stored zoom (recorded in
   pack metadata; legacy packs assume z15) so zooming deeper overscales the
   deepest downloaded tiles instead of going blank, and draws an opaque
