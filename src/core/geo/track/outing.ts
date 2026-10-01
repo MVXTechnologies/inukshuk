@@ -1,10 +1,10 @@
 import type { TrackPoint } from '@core/models';
 import {
   findElevationExtremes,
-  findSteepestStretch,
+  findSteepestStretches,
   detectStops,
   type ElevationExtremes,
-  type SteepStretch,
+  type SteepestStretches,
   type Stop,
 } from './highlights';
 import { classifySegmentedSteps, movingProfileFor } from './movingTime';
@@ -24,7 +24,8 @@ export interface OutingAnalysis {
   timed: boolean;
   splits: Split[];
   stops: Stop[];
-  steepest: SteepStretch | null;
+  /** Steepest climb and descent (smoothed, noise-capped). */
+  steepest: SteepestStretches;
   extremes: ElevationExtremes | null;
 }
 
@@ -64,7 +65,7 @@ export function analyzeOuting(points: readonly TrackPoint[], opts: OutingOpts): 
     stops: steps
       ? detectStops(points, steps, { minStopS: opts.minStopS, stopSpeedMps: profile.stopSpeedMps })
       : [],
-    steepest: findSteepestStretch(points, axis, { segmentStarts }),
+    steepest: findSteepestStretches(points, axis, { segmentStarts }),
     extremes: findElevationExtremes(points),
   };
 }

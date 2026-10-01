@@ -1,6 +1,6 @@
 import { analyzeOuting } from '@core/geo/track';
 import { walk } from '@core/geo/track/__fixtures__/walk';
-import { jumpMarks } from './TrailScrubber';
+import { jumpMarks } from './JumpChips';
 
 describe('jumpMarks', () => {
   it('offers Start · Steepest · Summit · End on a climb', () => {

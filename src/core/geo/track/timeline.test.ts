@@ -26,7 +26,7 @@ const build = (over: {
     axis,
     notes: over.notes ?? [],
     stops: over.stops ?? [],
-    steepest: over.steepest ?? null,
+    steepest: over.steepest ?? { climb: null, descent: null },
     extremes: over.extremes === undefined ? extremes : over.extremes,
   });
 
@@ -37,9 +37,20 @@ describe('buildOutingTimeline', () => {
         { id: 'a', distanceM: 1000, text: 'Spring', photoUri: 'file:///a.jpg' },
         { id: 'b', distanceM: 4500, text: 'Lookout' },
       ],
-      steepest: { startIndex: idxAt(2000), endIndex: idxAt(2400), gradePct: 18, lengthM: 400 },
+      steepest: {
+        climb: { startIndex: idxAt(2000), endIndex: idxAt(2400), gradePct: 18, lengthM: 400 },
+        descent: { startIndex: idxAt(5000), endIndex: idxAt(5300), gradePct: -14, lengthM: 300 },
+      },
     });
-    expect(ev.map((e) => e.kind)).toEqual(['start', 'note', 'steep', 'summit', 'note', 'finish']);
+    expect(ev.map((e) => e.kind)).toEqual([
+      'start',
+      'note',
+      'steep',
+      'summit',
+      'note',
+      'steep',
+      'finish',
+    ]);
     expect(ev[1]).toMatchObject({
       noteId: 'a',
       noteNum: 1,
@@ -50,7 +61,8 @@ describe('buildOutingTimeline', () => {
     expect(ev[2]).toMatchObject({ gradePct: 18, lengthM: 400 });
     expect(ev[3]!.highPointM).toBe(500);
     expect(ev[4]!.noteNum).toBe(2);
-    expect(ev[5]!.at.time).toBe(pts[pts.length - 1]!.time);
+    expect(ev[5]).toMatchObject({ gradePct: -14 });
+    expect(ev[6]!.at.time).toBe(pts[pts.length - 1]!.time);
   });
 
   it('folds a stop at the summit into the summit', () => {
@@ -126,7 +138,7 @@ describe('buildOutingTimeline', () => {
       axis: buildTrackAxis(route),
       notes: [{ id: 'x', distanceM: 500, text: 'Bridge' }],
       stops: [],
-      steepest: null,
+      steepest: { climb: null, descent: null },
       extremes: { highIndex: route.length - 1, lowIndex: 0, highM: 400, lowM: 200 },
     });
     expect(ev.map((e) => e.kind)).toEqual(['start', 'note', 'finish']);
@@ -141,7 +153,7 @@ describe('buildOutingTimeline', () => {
         axis: buildTrackAxis(one),
         notes: [],
         stops: [],
-        steepest: null,
+        steepest: { climb: null, descent: null },
         extremes: null,
       }),
     ).toEqual([]);

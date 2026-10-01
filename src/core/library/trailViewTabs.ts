@@ -1,33 +1,35 @@
 /**
- * The trail view's tabs (#511): Overview · Timeline · Splits · Notes. The
- * last one picked is remembered (settings), and an untimed trail (a planned
- * route) has no Timeline — there is no "when" to tell.
+ * The trail view's tabs (#511, board C2): Overview · Charts · Timeline ·
+ * Splits. The last one picked is remembered (settings). Notes live in the
+ * Timeline, so every trail — planned routes included — has all four tabs.
  */
-export type TrailViewTab = 'overview' | 'timeline' | 'splits' | 'notes';
+export type TrailViewTab = 'overview' | 'charts' | 'timeline' | 'splits';
 
-export const TRAIL_VIEW_TABS: readonly TrailViewTab[] = ['overview', 'timeline', 'splits', 'notes'];
+export const TRAIL_VIEW_TABS: readonly TrailViewTab[] = [
+  'overview',
+  'charts',
+  'timeline',
+  'splits',
+];
 
 export const DEFAULT_TRAIL_VIEW_TAB: TrailViewTab = 'overview';
 
 export const TRAIL_VIEW_TAB_LABELS: Readonly<Record<TrailViewTab, string>> = {
   overview: 'Overview',
+  charts: 'Charts',
   timeline: 'Timeline',
   splits: 'Splits',
-  notes: 'Notes',
 };
 
 export function isTrailViewTab(v: unknown): v is TrailViewTab {
   return typeof v === 'string' && (TRAIL_VIEW_TABS as readonly string[]).includes(v);
 }
 
-/** The tabs a trail shows: no Timeline without timestamps. */
-export function trailViewTabsFor(timed: boolean): TrailViewTab[] {
-  return TRAIL_VIEW_TABS.filter((t) => timed || t !== 'timeline');
-}
-
-/** The remembered tab when this trail has it, else Overview. */
-export function effectiveTrailViewTab(saved: unknown, timed: boolean): TrailViewTab {
-  return isTrailViewTab(saved) && trailViewTabsFor(timed).includes(saved)
-    ? saved
-    : DEFAULT_TRAIL_VIEW_TAB;
+/**
+ * A persisted tab, sanitized: the retired Notes tab (first #511 iteration)
+ * now lives in the Timeline; anything else unknown opens Overview.
+ */
+export function effectiveTrailViewTab(saved: unknown): TrailViewTab {
+  if (saved === 'notes') return 'timeline';
+  return isTrailViewTab(saved) ? saved : DEFAULT_TRAIL_VIEW_TAB;
 }

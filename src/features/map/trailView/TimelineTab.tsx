@@ -3,7 +3,8 @@ import type { TimelineText } from '@core/library/trailViewText';
 import { palette, type SchemeTokens } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Button, Icon, IconButton, Text, useTheme } from 'react-native-paper';
+import { HoldButton } from '../components/HoldButton';
 
 export interface TimelineItem {
   event: TimelineEvent;
@@ -17,6 +18,13 @@ interface Props {
   onSelect: (event: TimelineEvent) => void;
   /** Still computing (first open of a long trail). */
   loading?: boolean;
+  /** Where "Add a note here" anchors ("2.73 km"), or null with no cursor yet. */
+  addAt: string | null;
+  onAddNote: () => void;
+  onEditNote: (noteId: string) => void;
+  /** Fired only after a completed hold (or a screen-reader action). */
+  onDeleteNote: (noteId: string) => void;
+  onViewPhoto: (uri: string) => void;
 }
 
 function dotColor(kind: TimelineEventKind, t: SchemeTokens): string {
@@ -41,17 +49,50 @@ function dotColor(kind: TimelineEventKind, t: SchemeTokens): string {
  * event is a button — tapping it moves the profile cursor and the map
  * marker to that spot.
  */
-export function TimelineTab({ items, selectedDistanceM, onSelect, loading }: Props) {
+export function TimelineTab({
+  items,
+  selectedDistanceM,
+  onSelect,
+  loading,
+  addAt,
+  onAddNote,
+  onEditNote,
+  onDeleteNote,
+  onViewPhoto,
+}: Props) {
   const t = useSchemeTokens();
+  const theme = useTheme();
+  const add = (
+    <View style={styles.addRow}>
+      <Button
+        mode="contained-tonal"
+        icon="map-marker-plus"
+        disabled={addAt === null}
+        onPress={onAddNote}
+        compact
+      >
+        {addAt === null ? 'Add a note here' : `Add a note at ${addAt}`}
+      </Button>
+      {addAt === null && (
+        <Text variant="bodySmall" style={[styles.addHint, { color: t.inkMuted }]}>
+          Move the cursor first: drag a chart, tap a chip or an event.
+        </Text>
+      )}
+    </View>
+  );
   if (loading) {
     return (
-      <Text variant="bodySmall" style={[styles.pad, { color: t.inkMuted }]}>
-        Reading the outing…
-      </Text>
+      <View>
+        {add}
+        <Text variant="bodySmall" style={[styles.pad, { color: t.inkMuted }]}>
+          Reading the outing…
+        </Text>
+      </View>
     );
   }
   return (
     <View style={styles.list} testID="trail-timeline">
+      {add}
       {items.map(({ event, text }, i) => {
         const last = i === items.length - 1;
         const on =
@@ -94,9 +135,38 @@ export function TimelineTab({ items, selectedDistanceM, onSelect, loading }: Pro
                 </Text>
               )}
               {event.photoUri ? (
-                <Image source={{ uri: event.photoUri }} style={styles.photo} />
+                <Pressable
+                  onPress={() => onViewPhoto(event.photoUri ?? '')}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="View photo"
+                >
+                  <Image source={{ uri: event.photoUri }} style={styles.photo} />
+                </Pressable>
               ) : null}
             </View>
+            {event.kind === 'note' && event.noteId !== undefined && (
+              <View style={styles.noteActions}>
+                <IconButton
+                  icon="pencil-outline"
+                  size={20}
+                  onPress={() => onEditNote(event.noteId ?? '')}
+                  accessibilityLabel={`Edit note ${event.noteNum ?? ''}`.trim()}
+                  style={styles.tight}
+                />
+                <HoldButton
+                  size={36}
+                  onConfirm={() => onDeleteNote(event.noteId ?? '')}
+                  accessibilityLabel={`Delete note ${event.noteNum ?? ''}`.trim()}
+                  accessibilityHint="Press and hold to delete"
+                  accessibilityConfirmAction={{ name: 'delete', label: 'Delete note' }}
+                  trackColor={t.outlineVariant}
+                  fillColor={theme.colors.error}
+                  background="transparent"
+                >
+                  <Icon source="trash-can-outline" size={19} color={theme.colors.error} />
+                </HoldButton>
+              </View>
+            )}
           </Pressable>
         );
       })}
@@ -106,6 +176,10 @@ export function TimelineTab({ items, selectedDistanceM, onSelect, loading }: Pro
 
 const styles = StyleSheet.create({
   pad: { padding: 16 },
+  addRow: { paddingHorizontal: 16, paddingBottom: 12, gap: 4, alignItems: 'flex-start' },
+  addHint: { paddingLeft: 4 },
+  noteActions: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
+  tight: { margin: 0 },
   list: { paddingTop: 10, paddingBottom: 4 },
   row: { flexDirection: 'row', gap: 12, paddingHorizontal: 16 },
   rail: { width: 22, alignItems: 'center' },

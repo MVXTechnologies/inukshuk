@@ -1,5 +1,5 @@
 import { walk } from './__fixtures__/walk';
-import { detectStops, findElevationExtremes, findSteepestStretch } from './highlights';
+import { detectStops, findElevationExtremes, findSteepestStretches } from './highlights';
 import { classifySegmentedSteps, STEP_GAP, STEP_MOVING } from './movingTime';
 import { buildTrackAxis } from './trackAxis';
 
@@ -68,7 +68,7 @@ describe('detectStops', () => {
   });
 });
 
-describe('findSteepestStretch', () => {
+describe('findSteepestStretches', () => {
   it('finds the steep climb and reports its grade and full length', () => {
     const pts = walk(
       [
@@ -79,47 +79,74 @@ describe('findSteepestStretch', () => {
       { stepS: 10 },
     );
     const axis = buildTrackAxis(pts);
-    const s = findSteepestStretch(pts, axis)!;
-    expect(s.gradePct).toBeGreaterThan(21);
-    expect(s.gradePct).toBeLessThan(24.5);
-    expect(s.lengthM).toBeGreaterThan(380);
-    expect(s.lengthM).toBeLessThan(460);
-    expect(axis.cumM[s.startIndex]!).toBeGreaterThan(950);
+    const { climb, descent } = findSteepestStretches(pts, axis);
+    // Smoothing rounds the corners a little.
+    expect(climb!.gradePct).toBeGreaterThan(19);
+    expect(climb!.gradePct).toBeLessThan(24.5);
+    expect(climb!.lengthM).toBeGreaterThan(330);
+    expect(climb!.lengthM).toBeLessThan(500);
+    expect(axis.cumM[climb!.startIndex]!).toBeGreaterThan(900);
+    expect(descent).toBeNull();
   });
 
-  it('reports a steeper descent with its sign', () => {
+  it('reports the steepest descent separately, with its sign', () => {
     const pts = walk(
       [
         { m: 500, s: 500, rise: 50 },
-        { m: 300, s: 300, rise: -90 },
+        { m: 400, s: 400, rise: -100 },
+        { m: 300, s: 300 },
       ],
       { stepS: 10 },
     );
-    const s = findSteepestStretch(pts, buildTrackAxis(pts))!;
-    expect(s.gradePct).toBeLessThan(-25);
+    const { climb, descent } = findSteepestStretches(pts, buildTrackAxis(pts));
+    expect(descent!.gradePct).toBeLessThan(-18);
+    expect(descent!.gradePct).toBeGreaterThan(-25.5);
+    expect(climb!.gradePct).toBeGreaterThan(5);
   });
 
-  it('returns null on flat or short or elevation-less trails', () => {
+  it('ignores a DEM cliff edge: one sample 150 m off does not make a −51 % stretch', () => {
+    const pts = walk([{ m: 3000, s: 3000, rise: 150 }], { stepS: 10 });
+    const spiked = pts.map((p, i) => (i === 150 ? { ...p, altitude: (p.altitude ?? 0) - 150 } : p));
+    const { climb, descent } = findSteepestStretches(spiked, buildTrackAxis(spiked));
+    expect(descent === null || descent.gradePct > -20).toBe(true);
+    expect(climb === null || climb.gradePct < 20).toBe(true);
+  });
+
+  it('discards grades past the cap as noise', () => {
+    const pts = walk(
+      [
+        { m: 500, s: 500 },
+        { m: 300, s: 600, rise: 240 }, // 80 %: not a trail
+        { m: 500, s: 500 },
+      ],
+      { stepS: 10 },
+    );
+    const { climb } = findSteepestStretches(pts, buildTrackAxis(pts), { smoothHalfWindowM: 0 });
+    expect(climb === null || climb.gradePct <= 60).toBe(true);
+  });
+
+  it('returns nothing on flat or short or elevation-less trails', () => {
+    const none = { climb: null, descent: null };
     const flat = walk([{ m: 2000, s: 2000, rise: 10 }]);
-    expect(findSteepestStretch(flat, buildTrackAxis(flat))).toBeNull();
+    expect(findSteepestStretches(flat, buildTrackAxis(flat))).toEqual(none);
     const short = walk([{ m: 150, s: 150, rise: 50 }]);
-    expect(findSteepestStretch(short, buildTrackAxis(short))).toBeNull();
+    expect(findSteepestStretches(short, buildTrackAxis(short))).toEqual(none);
     const noAlt = walk([{ m: 1000, s: 1000, rise: 200 }]).map((p) => ({
       ...p,
       altitude: undefined,
     }));
-    expect(findSteepestStretch(noAlt, buildTrackAxis(noAlt))).toBeNull();
+    expect(findSteepestStretches(noAlt, buildTrackAxis(noAlt))).toEqual(none);
   });
 
   it('never measures across a pause', () => {
     const a = walk([{ m: 150, s: 150 }], { startAlt: 100 });
-    const b = walk([{ m: 150, s: 150 }], { startAlt: 400, t0: a[a.length - 1]!.time + 1e6 }).map(
+    const b = walk([{ m: 150, s: 150 }], { startAlt: 140, t0: a[a.length - 1]!.time + 1e6 }).map(
       (p) => ({ ...p, latitude: p.latitude + 0.0014 }),
     );
     const pts = [...a, ...b];
     const axis = buildTrackAxis(pts);
-    expect(findSteepestStretch(pts, axis, { segmentStarts: [a.length] })).toBeNull();
-    expect(findSteepestStretch(pts, axis)).not.toBeNull();
+    expect(findSteepestStretches(pts, axis, { segmentStarts: [a.length] }).climb).toBeNull();
+    expect(findSteepestStretches(pts, axis).climb).not.toBeNull();
   });
 });
 

@@ -1,20 +1,43 @@
+import { sampleIndexAt, type ChartSeries } from '@core/geo/track';
 import type { StatTile } from '@core/library/trailViewText';
 import type { TrackNote } from '@core/models';
-import { formatDistance } from '@state/formatters';
+import { formatDistance, formatElevation } from '@state/formatters';
+import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import { NoteNumberBadge } from '../components/NoteNumberBadge';
+import { JumpChips, type JumpMark } from './JumpChips';
+import { TrailChart } from './TrailChart';
 
 interface Props {
   tiles: readonly StatTile[];
+  /** The compact elevation chart (null while computing / without altitude). */
+  series: ChartSeries | null;
+  cursorDistanceM: number | null;
+  onScrub: (distanceM: number) => void;
+  marks: readonly JumpMark[];
+  onJump: (distanceM: number) => void;
   /** Notes in trail order (numbered 1..N). */
   notes: readonly TrackNote[];
   onOpenNote: (noteId: string) => void;
 }
 
-/** Overview tab (#511): the stat tiles, then the photos & waypoints strip. */
-export function OverviewTab({ tiles, notes, onOpenNote }: Props) {
+/**
+ * Overview tab (#511, board C2): the stat tiles, a compact elevation chart
+ * to drag (it moves the map marker), the Start/Steepest/Summit/End chips and
+ * the photos & waypoints strip.
+ */
+export function OverviewTab({
+  tiles,
+  series,
+  cursorDistanceM,
+  onScrub,
+  marks,
+  onJump,
+  notes,
+  onOpenNote,
+}: Props) {
   const t = useSchemeTokens();
   return (
     <View testID="trail-overview">
@@ -41,10 +64,33 @@ export function OverviewTab({ tiles, notes, onOpenNote }: Props) {
         ))}
       </View>
 
+      <View style={styles.block}>
+        {series?.elevation && (
+          <TrailChart
+            title="Elevation"
+            valueText={
+              cursorDistanceM === null
+                ? 'drag to explore'
+                : formatElevation(series.elevation[sampleIndexAt(series, cursorDistanceM)] ?? 0)
+            }
+            distances={series.distances}
+            totalM={series.totalM}
+            values={series.elevation}
+            color={palette.ochre}
+            area
+            plotHeight={84}
+            cursorDistanceM={cursorDistanceM}
+            onScrub={onScrub}
+            testID="overview-elevation"
+          />
+        )}
+        <JumpChips marks={marks} cursorDistanceM={cursorDistanceM} onJump={onJump} />
+      </View>
+
       <Text style={[styles.heading, { color: t.ink }]}>Photos and waypoints</Text>
       {notes.length === 0 ? (
         <Text variant="bodySmall" style={[styles.empty, { color: t.inkMuted }]}>
-          None yet. Scrub the profile to a spot, then add a note with a photo in the Notes tab.
+          None yet. Move the cursor to a spot, then add a note with a photo in the Timeline.
         </Text>
       ) : (
         <ScrollView
@@ -100,7 +146,8 @@ const styles = StyleSheet.create({
   value: { fontSize: 18, fontWeight: '800' },
   sub: { fontSize: 12 },
   label: { fontSize: 12, marginTop: 1 },
-  heading: { fontSize: 15, fontWeight: '800', paddingHorizontal: 16, paddingTop: 20 },
+  block: { paddingHorizontal: 16, paddingTop: 14, gap: 10 },
+  heading: { fontSize: 15, fontWeight: '800', paddingHorizontal: 16, paddingTop: 18 },
   empty: { paddingHorizontal: 16, paddingTop: 6 },
   strip: { gap: 10, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
   card: { width: 132, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },

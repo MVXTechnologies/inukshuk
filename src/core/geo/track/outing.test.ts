@@ -18,7 +18,7 @@ describe('analyzeOuting', () => {
     expect(a.splits).toHaveLength(4);
     expect(a.splits[0]!.speedMps!).toBeCloseTo(1, 1);
     expect(a.stops).toHaveLength(1);
-    expect(a.steepest!.gradePct).toBeGreaterThan(20);
+    expect(a.steepest.climb!.gradePct).toBeGreaterThan(15);
     expect(a.extremes!.highM).toBeCloseTo(330, 0);
   });
 

@@ -1,7 +1,7 @@
 import type { TrackPoint } from '@core/models';
 import { haversineMeters } from '@core/geo/geomath';
 import { STEP_BREAK, STEP_GAP, STEP_STOPPED } from './movingTime';
-import type { TrackAxis } from './trackAxis';
+import { indexAtDistance, type TrackAxis } from './trackAxis';
 
 /**
  * The landmarks of an outing for the trail view's Timeline and jump chips
@@ -91,81 +91,154 @@ export interface SteepStretch {
 }
 
 export interface SteepOpts {
-  /** Shortest stretch measured, metres (default 200): one steep step is noise. */
+  /** Shortest stretch measured, metres of ground (default 200): one steep step is noise. */
   minLengthM?: number;
   /** Below this |grade| (%) the trail is flat and nothing is reported. */
   minGradePct?: number;
+  /**
+   * A stretch steeper than this (%) is treated as noise and ignored — a DEM
+   * cliff edge or a GPS altitude jump, not a trail (default 60 %).
+   */
+  maxGradePct?: number;
+  /** Elevation smoothing: moving average over ± this many metres (default 50). */
+  smoothHalfWindowM?: number;
   /** Pause boundaries: a stretch never spans two segments. */
   segmentStarts?: readonly number[];
 }
 
+export interface SteepestStretches {
+  /** The steepest climb (positive grade), or null on a trail that never climbs steeply. */
+  climb: SteepStretch | null;
+  /** The steepest descent (negative grade), or null. */
+  descent: SteepStretch | null;
+}
+
+/** A segment's elevation resampled every `step` metres of ground, then smoothed. */
+interface Grid {
+  /** Axis distance of sample 0. */
+  startM: number;
+  step: number;
+  ele: Float64Array;
+}
+
+function smoothedGrid(
+  dist: readonly number[],
+  alt: readonly number[],
+  step: number,
+  halfWindowM: number,
+): Grid | null {
+  const startM = dist[0]!;
+  const endM = dist[dist.length - 1]!;
+  const n = Math.floor((endM - startM) / step) + 1;
+  if (n < 2) return null;
+  const raw = new Float64Array(n);
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const d = startM + i * step;
+    while (k + 1 < dist.length - 1 && dist[k + 1]! < d) k += 1;
+    const d0 = dist[k]!;
+    const d1 = dist[k + 1] ?? d0;
+    const t = d1 > d0 ? Math.min(1, Math.max(0, (d - d0) / (d1 - d0))) : 0;
+    raw[i] = alt[k]! + ((alt[k + 1] ?? alt[k]!) - alt[k]!) * t;
+  }
+  // Centred moving average (prefix sums), shrinking at the ends.
+  const h = Math.max(0, Math.round(halfWindowM / step));
+  const pre = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) pre[i + 1] = pre[i]! + raw[i]!;
+  const ele = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - h);
+    const hi = Math.min(n - 1, i + h);
+    ele[i] = (pre[hi + 1]! - pre[lo]!) / (hi - lo + 1);
+  }
+  return { startM, step, ele };
+}
+
 /**
- * The steepest stretch at least `minLengthM` long (by |grade|, climbs and
- * descents alike), widened while the grade holds within 90 % of its peak so
- * the Timeline can say "+24 % over 400 m" rather than always "over 200 m".
+ * The steepest climb and the steepest descent at least `minLengthM` long.
+ *
+ * Robust to GPS and DEM noise (#511 review: a test hike reported "−51 % over
+ * 362 m" off a DEM cliff edge): elevation is resampled every few metres of
+ * ground and smoothed over ±50 m before any grade is measured, windows are at
+ * least 200 m of ground, and anything steeper than `maxGradePct` is
+ * discarded as noise. The winner is widened over neighbouring windows that
+ * hold 90 % of its grade, so a long wall reads as "+24 % over 400 m".
  */
-export function findSteepestStretch(
+export function findSteepestStretches(
   points: readonly TrackPoint[],
   axis: TrackAxis,
   opts?: SteepOpts,
-): SteepStretch | null {
+): SteepestStretches {
   const minLen = opts?.minLengthM ?? 200;
   const minGrade = opts?.minGradePct ?? 3;
-  // Altitude-bearing points only, tagged with their segment.
-  const idx: number[] = [];
-  const seg: number[] = [];
+  const maxGrade = opts?.maxGradePct ?? 60;
+  const halfWindowM = opts?.smoothHalfWindowM ?? 50;
+  const step = Math.max(10, axis.totalM / 20_000);
+  const win = Math.max(1, Math.ceil(minLen / step));
   const starts = new Set(opts?.segmentStarts ?? []);
-  let s = 0;
+
+  type Best = { grid: Grid; i: number; g: number };
+  let climb: Best | null = null;
+  let descent: Best | null = null;
+  const grids: Grid[] = [];
+
+  // One grid per segment, from its altitude-bearing points.
+  let dist: number[] = [];
+  let alt: number[] = [];
+  const flush = () => {
+    if (dist.length >= 2) {
+      const g = smoothedGrid(dist, alt, step, halfWindowM);
+      if (g) grids.push(g);
+    }
+    dist = [];
+    alt = [];
+  };
   for (let i = 0; i < points.length; i++) {
-    if (starts.has(i)) s += 1;
+    if (starts.has(i)) flush();
     const a = points[i]!.altitude;
-    if (a !== undefined && Number.isFinite(a)) {
-      idx.push(i);
-      seg.push(s);
+    if (a === undefined || !Number.isFinite(a)) continue;
+    const d = axis.cumM[i]!;
+    if (dist.length > 0 && d <= dist[dist.length - 1]!) continue; // no ground covered
+    dist.push(d);
+    alt.push(a);
+  }
+  flush();
+
+  const gradeAt = (grid: Grid, i: number, j: number) =>
+    ((grid.ele[j]! - grid.ele[i]!) / ((j - i) * grid.step)) * 100;
+  for (const grid of grids) {
+    for (let i = 0; i + win < grid.ele.length; i++) {
+      const g = gradeAt(grid, i, i + win);
+      if (Math.abs(g) > maxGrade) continue;
+      if (g > 0 && (climb === null || g > climb.g)) climb = { grid, i, g };
+      if (g < 0 && (descent === null || g < descent.g)) descent = { grid, i, g };
     }
   }
-  if (idx.length < 2) return null;
-  const d = (k: number) => axis.cumM[idx[k]!]!;
-  const e = (k: number) => points[idx[k]!]!.altitude!;
-  const grade = (i: number, j: number) => ((e(j) - e(i)) / (d(j) - d(i))) * 100;
 
-  // Best window starting at each altitude point (end index, grade), O(n)
-  // with two pointers since the window end only moves forward.
-  const winEnd = new Int32Array(idx.length).fill(-1);
-  const winGrade = new Float64Array(idx.length);
-  let best = -1;
-  let j = 0;
-  for (let i = 0; i < idx.length; i++) {
-    if (j < i) j = i;
-    while (j < idx.length && seg[j] === seg[i] && d(j) - d(i) < minLen) j += 1;
-    if (j >= idx.length) break;
-    if (seg[j] !== seg[i]) continue; // the rest of this segment is too short
-    winEnd[i] = j;
-    winGrade[i] = grade(i, j);
-    if (best < 0 || Math.abs(winGrade[i]!) > Math.abs(winGrade[best]!)) best = i;
-  }
-  if (best < 0 || Math.abs(winGrade[best]!) < minGrade) return null;
-
-  // Widen over the neighbouring windows that stay within 90 % of the peak, so
-  // a long steep wall reads as one stretch ("+24 % over 400 m").
-  const peak = winGrade[best]!;
-  const steep = (i: number) =>
-    winEnd[i]! >= 0 &&
-    seg[i] === seg[best] &&
-    winGrade[i]! * Math.sign(peak) >= Math.abs(peak) * 0.9;
-  let first = best;
-  let last = best;
-  while (first > 0 && steep(first - 1)) first -= 1;
-  while (last + 1 < idx.length && steep(last + 1)) last += 1;
-  const lo = first;
-  const hi = winEnd[last]!;
-
-  return {
-    startIndex: idx[lo]!,
-    endIndex: idx[hi]!,
-    gradePct: grade(lo, hi),
-    lengthM: d(hi) - d(lo),
+  const widen = (b: Best | null): SteepStretch | null => {
+    if (b === null || Math.abs(b.g) < minGrade) return null;
+    const { grid } = b;
+    const holds = (i: number) => {
+      if (i < 0 || i + win >= grid.ele.length) return false;
+      const g = gradeAt(grid, i, i + win);
+      return Math.abs(g) <= maxGrade && g * Math.sign(b.g) >= Math.abs(b.g) * 0.9;
+    };
+    let first = b.i;
+    let last = b.i;
+    while (holds(first - 1)) first -= 1;
+    while (holds(last + 1)) last += 1;
+    const lo = first;
+    const hi = last + win;
+    const fromM = grid.startM + lo * grid.step;
+    const toM = grid.startM + hi * grid.step;
+    return {
+      startIndex: indexAtDistance(axis, fromM),
+      endIndex: Math.min(points.length - 1, indexAtDistance(axis, toM) + 1),
+      gradePct: gradeAt(grid, lo, hi),
+      lengthM: toM - fromM,
+    };
   };
+  return { climb: widen(climb), descent: widen(descent) };
 }
 
 export interface ElevationExtremes {

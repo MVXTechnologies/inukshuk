@@ -1,5 +1,5 @@
 import type { TrackPoint } from '@core/models';
-import type { ElevationExtremes, SteepStretch, Stop } from './highlights';
+import type { ElevationExtremes, SteepestStretches, Stop } from './highlights';
 import { indexAtDistance, interpolateOnAxis, pointAtIndex, type TrackAxis } from './trackAxis';
 import type { TrackPointAt } from './interpolate';
 
@@ -45,7 +45,7 @@ export interface TimelineInput {
   /** Notes in trail order (`orderNotes`); numbered 1..N in this order. */
   notes: readonly TimelineNote[];
   stops: readonly Stop[];
-  steepest: SteepStretch | null;
+  steepest: SteepestStretches;
   extremes: ElevationExtremes | null;
   /** Stops and a high point this close (m) to another event fold into it. */
   mergeM?: number;
@@ -63,7 +63,7 @@ const ANCHORS: readonly TimelineEventKind[] = ['summit', 'note', 'start', 'finis
  * Build the Timeline. Rules:
  * - start and finish always (unless the trail has fewer than 2 points);
  * - every note, at its anchor;
- * - the steepest stretch, at its start;
+ * - the steepest climb and steepest descent, each at its start;
  * - the high point as a "summit" when it rises at least `minSummitRiseM`
  *   above the low point — folded into start/finish when it's within
  *   `mergeM` of them (a climb that ends on top has no separate summit);
@@ -97,12 +97,13 @@ export function buildOutingTimeline(input: TimelineInput): TimelineEvent[] {
     });
   });
 
-  if (steepest) {
+  for (const s of [steepest.climb, steepest.descent]) {
+    if (!s) continue;
     events.push({
       kind: 'steep',
-      at: at(steepest.startIndex),
-      gradePct: steepest.gradePct,
-      lengthM: steepest.lengthM,
+      at: at(s.startIndex),
+      gradePct: s.gradePct,
+      lengthM: s.lengthM,
     });
   }
 

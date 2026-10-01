@@ -1,8 +1,11 @@
 import { parseGpx } from '@core/geo/gpx';
 import {
+  averageHeartRate,
+  buildChartSeries,
   buildOutingTimeline,
   computeSegmentedTrackStats,
   haversineMeters,
+  gradeAtDistance,
   interpolateOnAxis,
   interpolateTrackAtDistance,
   trailTiming,
@@ -14,10 +17,11 @@ import { formatLatLng } from '@core/geo/formatCoords';
 import { findCategory } from '@core/library/categories';
 import {
   effectiveTrailViewTab,
-  trailViewTabsFor,
+  TRAIL_VIEW_TABS,
   type TrailViewTab,
 } from '@core/library/trailViewTabs';
 import {
+  cursorReadout,
   overviewTiles,
   splitRows,
   splitUnit,
@@ -57,6 +61,7 @@ import { KeyboardDismissArea } from '@ui/components/KeyboardDismissArea';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
 import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as THREE from 'three';
 import { fetchHeightmap, type Heightmap } from './dem';
@@ -112,17 +117,20 @@ import { useTrailNoteEditor } from './hooks/useTrailNoteEditor';
 import { useLazyMovingStats } from './hooks/useLazyMovingStats';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 import { useOutingAnalysis } from './trailView/useOutingAnalysis';
-import { TrailScrubber } from './trailView/TrailScrubber';
+import { jumpMarks } from './trailView/JumpChips';
+import { ChartsTab } from './trailView/ChartsTab';
 import { TrailTabBar } from './trailView/TrailTabBar';
 import { OverviewTab } from './trailView/OverviewTab';
 import { TimelineTab, type TimelineItem } from './trailView/TimelineTab';
 import { SplitsTab } from './trailView/SplitsTab';
-import { NotesTab } from './trailView/NotesTab';
 import { TRAIL_ACTION_BAR_H, TrailActionBar, type TrailAction } from './trailView/TrailActionBar';
 
 interface Props {
   trackId: string;
 }
+
+/** Height of the map at the top of the trail view, below the status bar (board C2). */
+const MAP_H = 290;
 
 // 3D note-pin geometry: 24dp badge + 14dp stem, tip anchored on the trail.
 const NOTE_BADGE_HALF_W = 12;
@@ -164,6 +172,7 @@ function focusedTrailViewMode(): Settings['trailViewMode'] {
 export function Trail3DGLScreen({ trackId }: Props) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const hintColor = { color: theme.colors.onSurfaceVariant };
   const router = useRouter();
   // Library's "Trim" menu item routes here with ?trim=1 to enter trim mode
@@ -205,19 +214,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const [scrub, setScrub] = useState<TrackPointAt | null>(null);
   // Where the map should re-centre after a jump chip / Timeline tap (#511).
   const [focusAt, setFocusAt] = useState<{ latitude: number; longitude: number } | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   // Note badge tapped on the trail (2D pin or 3D projected circle): shows the
   // note text + photo in place, without hunting for its row in the list below.
   const [viewingNoteId, setViewingNoteId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  // True while a finger is down on the map/terrain box. The whole screen lives
-  // in a ScrollView, which intercepts vertical drags before they reach the
-  // native MapLibre view — pans "sort of" worked, stuttering against the page
-  // scroll (the 3D GLView was immune only because its PanResponder claims the
-  // JS responder). Disabling the scroll for the duration of a touch inside the
-  // box gives the map the full gesture, matching how the main map feels.
-  const [mapGesturing, setMapGesturing] = useState(false);
   // False once the overlay shader is unavailable (no derivatives / compile
   // failure) so the Slope/Contours/Tint toggles hide instead of doing nothing.
   const [overlaysAvailable, setOverlaysAvailable] = useState(true);
@@ -397,10 +398,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   const notes = track?.notes;
   const ordered = useMemo(() => orderNotes(notes ?? []), [notes]);
-  const markers = useMemo(
-    () => ordered.map((n, i) => ({ distanceM: n.distanceM, label: String(i + 1) })),
-    [ordered],
-  );
 
   const fileUri = track?.fileUri;
   const bbox = track?.stats.bbox;
@@ -585,8 +582,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
   const timing = summaryStats ? trailTiming(summaryStats, category) : null;
   // Before the analysis lands, trust the stored stats' time; after, the points.
   const timed = analysis ? analysis.timed : timing !== null;
-  const tabs = trailViewTabsFor(timed);
-  const tab = effectiveTrailViewTab(savedTab, timed);
+  const tab = effectiveTrailViewTab(savedTab);
   const selectTab = (next: TrailViewTab) => setSetting('trailViewTab', next);
 
   const timelineItems = useMemo<TimelineItem[]>(() => {
@@ -603,7 +599,31 @@ export function Trail3DGLScreen({ trackId }: Props) {
     return events.map((event) => ({ event, text: timelineEventText(event, units, totals) }));
   }, [analysis, profilePoints, ordered, summaryStats, timing, units]);
 
-  // Move the cursor (profile + map marker) to a distance and centre the map on it.
+  // The Charts tab's synced series and the Overview's compact chart (#511 C2).
+  const chartSeries = useMemo(
+    () =>
+      analysis
+        ? buildChartSeries(profilePoints, analysis.axis, { stops: analysis.stops, timed })
+        : null,
+    [analysis, profilePoints, timed],
+  );
+  const avgHeartRate = useMemo(() => averageHeartRate(points ?? []), [points]);
+  const marks = useMemo(() => jumpMarks(analysis), [analysis]);
+
+  // Dragging a chart: every chart's cursor, the map marker and the readout follow.
+  const scrubTo = useCallback(
+    (distanceM: number) => {
+      const at = analysis
+        ? interpolateOnAxis(profilePoints, analysis.axis, distanceM)
+        : interpolateTrackAtDistance(profilePoints, distanceM);
+      if (!at) return;
+      scrubRef.current = at;
+      setScrub(at);
+    },
+    [analysis, profilePoints],
+  );
+
+  // Move the cursor (charts + map marker) to a distance and centre the map on it.
   const jumpTo = useCallback(
     (distanceM: number) => {
       const at = analysis
@@ -616,11 +636,7 @@ export function Trail3DGLScreen({ trackId }: Props) {
     },
     [analysis, profilePoints],
   );
-  const onTimelineSelect = (e: TimelineEvent) => {
-    jumpTo(e.at.distanceM);
-    // The map and profile sit above the tabs: bring them into view.
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  };
+  const onTimelineSelect = (e: TimelineEvent) => jumpTo(e.at.distanceM);
   // A note opened from its map pin or the photo strip: the cursor moves to it
   // and the waypoint card shows it.
   const openNote = (noteId: string) => {
@@ -842,15 +858,6 @@ export function Trail3DGLScreen({ trackId }: Props) {
     }
   };
 
-  const onScrub = (at: TrackPointAt | null) => {
-    // Keep the last scrubbed point selected when the finger lifts (the profile
-    // reports null on release). Otherwise the selection clears instantly and the
-    // "Add note" button — gated on a selected point — can never be tapped.
-    if (!at) return;
-    scrubRef.current = at;
-    setScrub(at);
-  };
-
   const applyBasemap = async (bm: MapBasemap) => {
     if (bm === basemap || switching) return;
     setBasemap(bm);
@@ -989,6 +996,19 @@ export function Trail3DGLScreen({ trackId }: Props) {
     timed,
   );
   const viewedNote = numberedNotes.find((n) => n.note.id === viewingNoteId) ?? null;
+  // The cursor badge on the map: "2.73 km · 800 m · +4 %" (or "· summit").
+  const highM = analysis?.extremes ? analysis.axis.cumM[analysis.extremes.highIndex] : undefined;
+  const readout =
+    scrub === null
+      ? null
+      : cursorReadout(
+          scrub,
+          analysis ? gradeAtDistance(profilePoints, analysis.axis, scrub.distanceM) : null,
+          highM !== undefined &&
+            Math.abs(highM - scrub.distanceM) < 15 &&
+            jumpMarks(analysis).some((m) => m.id === 'summit'),
+          units,
+        );
 
   const onShareGpx = async () => {
     if (await Sharing.isAvailableAsync()) {
@@ -1019,116 +1039,104 @@ export function Trail3DGLScreen({ trackId }: Props) {
 
   return (
     <View style={styles.fill}>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={{ paddingBottom: insets.bottom + TRAIL_ACTION_BAR_H + 24 }}
-        scrollEnabled={!mapGesturing}
-      >
-        <View
-          style={[styles.glBox, { paddingTop: insets.top }]}
-          onTouchStart={() => setMapGesturing(true)}
-          onTouchEnd={(e) => {
-            if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
-          }}
-          onTouchCancel={(e) => {
-            if (e.nativeEvent.touches.length === 0) setMapGesturing(false);
-          }}
-        >
-          {trailViewMode === '3d' ? (
-            <ManagedGLView
-              key={`gl-${glReloadGen}`}
-              style={styles.fill}
-              onContextCreate={onContextCreate}
-              onLayout={(e) => {
-                const { width, height } = e.nativeEvent.layout;
-                viewSizeRef.current = { w: width, h: height };
-              }}
-              {...pan.panHandlers}
-            />
-          ) : points && points.length > 0 ? (
-            // Mount the 2D map only once points are loaded — a MapLibre GeoJSON
-            // source created with empty data doesn't reliably pick up a later
-            // update, which is why the trace previously appeared only after a
-            // 2D/3D toggle forced a remount.
-            <Trail2DView
-              points={points}
-              segmentStarts={segmentStarts}
-              notes={notes}
-              scrubAt={scrub}
-              basemap={basemap}
-              onNotePress={openNote}
-              focus={focusAt}
-            />
-          ) : (
-            <View style={styles.center} pointerEvents="none">
-              <ActivityIndicator size="large" />
-            </View>
-          )}
-          {/* Numbered note pins over the 3D terrain. Each pin is a badge with
+      {/* The map keeps a fixed height at the top (board C2): switching tabs
+          or scrolling the content below never shrinks or hides it. */}
+      <View style={[styles.glBox, { height: MAP_H + insets.top, paddingTop: insets.top }]}>
+        {trailViewMode === '3d' ? (
+          <ManagedGLView
+            key={`gl-${glReloadGen}`}
+            style={styles.fill}
+            onContextCreate={onContextCreate}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              viewSizeRef.current = { w: width, h: height };
+            }}
+            {...pan.panHandlers}
+          />
+        ) : points && points.length > 0 ? (
+          // Mount the 2D map only once points are loaded — a MapLibre GeoJSON
+          // source created with empty data doesn't reliably pick up a later
+          // update, which is why the trace previously appeared only after a
+          // 2D/3D toggle forced a remount.
+          <Trail2DView
+            points={points}
+            segmentStarts={segmentStarts}
+            notes={notes}
+            scrubAt={scrub}
+            basemap={basemap}
+            onNotePress={openNote}
+            focus={focusAt}
+          />
+        ) : (
+          <View style={styles.center} pointerEvents="none">
+            <ActivityIndicator size="large" />
+          </View>
+        )}
+        {/* Numbered note pins over the 3D terrain. Each pin is a badge with
               a short stem whose TIP sits on the trail anchor (the stem is the
               "where exactly" cue). Mounted once; the render loop drives their
               position via Animated setValue every frame — see badgeAnims.
               They sit above the GL pan-responder surface, so their touches win
               over camera gestures. */}
-          {trailViewMode === '3d' &&
-            status === 'ready' &&
-            numberedNotes.map((n) => {
-              const anim = badgeAnimFor(n.note.id);
-              return (
-                <Animated.View
-                  key={n.note.id}
-                  style={[
-                    styles.noteBadge3d,
-                    {
-                      opacity: anim.op,
-                      transform: [{ translateX: anim.tx }, { translateY: anim.ty }],
-                    },
-                  ]}
+        {trailViewMode === '3d' &&
+          status === 'ready' &&
+          numberedNotes.map((n) => {
+            const anim = badgeAnimFor(n.note.id);
+            return (
+              <Animated.View
+                key={n.note.id}
+                style={[
+                  styles.noteBadge3d,
+                  {
+                    opacity: anim.op,
+                    transform: [{ translateX: anim.tx }, { translateY: anim.ty }],
+                  },
+                ]}
+              >
+                <Pressable
+                  onPress={() => openNote(n.note.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Note ${n.num}`}
+                  style={styles.noteBadgeCol}
                 >
-                  <Pressable
-                    onPress={() => openNote(n.note.id)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Note ${n.num}`}
-                    style={styles.noteBadgeCol}
-                  >
-                    <NoteNumberBadge num={n.num} />
-                    <View style={styles.noteStem} />
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
-          {trailViewMode === '3d' && status === 'loading' && (
-            <View style={styles.center} pointerEvents="none">
-              {/* The GL surface clears to the light sky (SKY_COLOR) in both
+                  <NoteNumberBadge num={n.num} />
+                  <View style={styles.noteStem} />
+                </Pressable>
+              </Animated.View>
+            );
+          })}
+        {trailViewMode === '3d' && status === 'loading' && (
+          <View style={styles.center} pointerEvents="none">
+            {/* The GL surface clears to the light sky (SKY_COLOR) in both
                   themes, so the stones keep their day tone here. */}
-              <InukshukLoader tone="day" />
-              <Text style={styles.loadingText}>Building 3D terrain…</Text>
-            </View>
-          )}
-          {trailViewMode === '3d' && status === 'error' && (
-            <View style={styles.center} pointerEvents="none">
-              <Text>Couldn&apos;t load 3D terrain.</Text>
-              {errMsg ? (
-                <Text variant="bodySmall" style={[styles.errDetail, hintColor]}>
-                  {errMsg}
-                </Text>
-              ) : null}
-            </View>
-          )}
-          {/* Floating over the map/terrain — needs its own dark disc to stay
+            <InukshukLoader tone="day" />
+            <Text style={styles.loadingText}>Building 3D terrain…</Text>
+          </View>
+        )}
+        {trailViewMode === '3d' && status === 'error' && (
+          <View style={styles.center} pointerEvents="none">
+            <Text>Couldn&apos;t load 3D terrain.</Text>
+            {errMsg ? (
+              <Text variant="bodySmall" style={[styles.errDetail, hintColor]}>
+                {errMsg}
+              </Text>
+            ) : null}
+          </View>
+        )}
+        {/* Floating over the map/terrain — needs its own dark disc to stay
               visible on light tiles (user call; the bare arrow disappeared). */}
-          <Appbar.BackAction
-            onPress={() => router.back()}
-            color="#E6EAEF"
-            style={[styles.back, { top: insets.top + 2 }]}
-          />
-          <Surface
-            style={[styles.summary, { top: insets.top + 2 }]}
-            elevation={3}
-            onLayout={(e) => setSummaryH(e.nativeEvent.layout.height)}
-          >
-            {/* Title row: the name doubles as the rename affordance (the
+        <Appbar.BackAction
+          onPress={() => router.back()}
+          color="#E6EAEF"
+          style={[styles.back, { top: insets.top + 2 }]}
+        />
+        <Surface
+          style={[styles.summary, { top: insets.top + 2 }]}
+          elevation={3}
+          onLayout={(e) => setSummaryH(e.nativeEvent.layout.height)}
+        >
+          {/* Title row: the name doubles as the rename affordance (the
                 Library's ⋮ → Rename, reachable without going back to the
                 list), and trim sits beside it because it EDITS the GPX —
                 it isn't a map-viewing control like the rail's FABs.
@@ -1139,155 +1147,175 @@ export function Trail3DGLScreen({ trackId }: Props) {
                 collapse hits flex COLUMNS, which need a height the inner
                 shadow wrapper doesn't inherit. Same shape as
                 WaypointViewerCard's header, which already ships this way. */}
-            <View style={styles.summaryTitleRow}>
-              <Pressable
-                onPress={() => setRenaming(true)}
-                accessibilityRole="button"
-                accessibilityLabel={`Rename trail ${track.name}`}
-                style={styles.summaryTitle}
-              >
-                <Text variant="titleMedium" numberOfLines={1} style={styles.titleText}>
-                  {track.name}
-                </Text>
-              </Pressable>
-              {canTrim && (
-                <IconButton
-                  icon="content-cut"
-                  size={18}
-                  onPress={beginTrim}
-                  style={styles.summaryTrim}
-                  accessibilityLabel="Trim trail"
-                />
-              )}
-            </View>
-            {subtitle !== '' && (
-              <Text variant="bodySmall" numberOfLines={1} style={hintColor} testID="trail-subtitle">
-                {subtitle}
+          <View style={styles.summaryTitleRow}>
+            <Pressable
+              onPress={() => setRenaming(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Rename trail ${track.name}`}
+              style={styles.summaryTitle}
+            >
+              <Text variant="titleMedium" numberOfLines={1} style={styles.titleText}>
+                {track.name}
               </Text>
+            </Pressable>
+            {canTrim && (
+              <IconButton
+                icon="content-cut"
+                size={18}
+                onPress={beginTrim}
+                style={styles.summaryTrim}
+                accessibilityLabel="Trim trail"
+              />
             )}
-          </Surface>
+          </View>
+          {subtitle !== '' && (
+            <Text variant="bodySmall" numberOfLines={1} style={hintColor} testID="trail-subtitle">
+              {subtitle}
+            </Text>
+          )}
+        </Surface>
 
-          <TrailViewerRail
-            top={insets.top + 2 + summaryH + 10}
-            basemap={basemap}
-            onSelectBasemap={applyBasemap}
-            basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
-            overlaysAvailable={overlaysAvailable}
-            overlaysDisabled={switching}
-          />
-          {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
-          {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
-        </View>
+        <TrailViewerRail
+          top={insets.top + 2 + summaryH + 10}
+          basemap={basemap}
+          onSelectBasemap={applyBasemap}
+          basemapDisabled={switching || (trailViewMode === '3d' && status === 'loading')}
+          overlaysAvailable={overlaysAvailable}
+          overlaysDisabled={switching}
+        />
+        {switching && <ActivityIndicator size={18} style={styles.switchSpin} />}
+        {trailViewMode === '3d' && <TapQueryChip info={tapInfo} style={styles.queryChip} />}
+        {readout !== null && (
+          <View
+            style={[styles.readout, { backgroundColor: tokens.surface }]}
+            pointerEvents="none"
+            testID="map-readout"
+          >
+            <Text style={[styles.readoutText, { color: tokens.ink }]}>{readout}</Text>
+          </View>
+        )}
+      </View>
 
-        {points && (
-          <>
-            {trimRange ? (
-              <View style={styles.trimBody}>
-                <Text variant="titleSmall">Trim trail</Text>
-                <Text variant="bodySmall" style={hintColor}>
-                  Drag the handles to shorten the trail from either end. The highlighted segment is
-                  kept.
-                </Text>
-                <TrimRangeSlider
-                  count={points.length}
-                  start={trimRange.start}
-                  end={trimRange.end}
-                  onChange={changeTrim}
-                />
-                <Text variant="labelMedium">
-                  Keeping {formatDistance(keptM)} of {formatDistance(totalM)} ·{' '}
-                  {trimRange.end - trimRange.start + 1} of {points.length} points
-                </Text>
-                <View style={styles.trimActions}>
-                  <Button onPress={cancelTrim} disabled={trimSaving}>
-                    Cancel
+      {points && (
+        <>
+          {trimRange ? (
+            <View style={styles.trimBody}>
+              <Text variant="titleSmall">Trim trail</Text>
+              <Text variant="bodySmall" style={hintColor}>
+                Drag the handles to shorten the trail from either end. The highlighted segment is
+                kept.
+              </Text>
+              <TrimRangeSlider
+                count={points.length}
+                start={trimRange.start}
+                end={trimRange.end}
+                onChange={changeTrim}
+              />
+              <Text variant="labelMedium">
+                Keeping {formatDistance(keptM)} of {formatDistance(totalM)} ·{' '}
+                {trimRange.end - trimRange.start + 1} of {points.length} points
+              </Text>
+              <View style={styles.trimActions}>
+                <Button onPress={cancelTrim} disabled={trimSaving}>
+                  Cancel
+                </Button>
+                <View style={styles.trimSaveActions}>
+                  <Button
+                    mode="outlined"
+                    icon="content-save-plus-outline"
+                    onPress={() => void onSaveTrimCopy()}
+                    disabled={trimSaving}
+                    loading={trimSaving}
+                  >
+                    Save as copy
                   </Button>
-                  <View style={styles.trimSaveActions}>
-                    <Button
-                      mode="outlined"
-                      icon="content-save-plus-outline"
-                      onPress={() => void onSaveTrimCopy()}
-                      disabled={trimSaving}
-                      loading={trimSaving}
-                    >
-                      Save as copy
-                    </Button>
-                    <Button
-                      mode="contained"
-                      icon="content-save-outline"
-                      onPress={() => setConfirmOverwrite(true)}
-                      disabled={trimSaving}
-                    >
-                      Overwrite
-                    </Button>
-                  </View>
+                  <Button
+                    mode="contained"
+                    icon="content-save-outline"
+                    onPress={() => setConfirmOverwrite(true)}
+                    disabled={trimSaving}
+                  >
+                    Overwrite
+                  </Button>
                 </View>
               </View>
-            ) : (
-              <TrailScrubber
-                points={profilePoints}
-                analysis={analysis}
-                ascentM={s.ascentM}
-                descentM={s.descentM}
-                scrub={scrub}
-                onScrub={onScrub}
-                onJump={jumpTo}
-                markers={markers}
-                timed={timed}
-              />
-            )}
-
-            <TrailTabBar tabs={tabs} active={tab} onChange={selectTab} />
-
-            {tab === 'overview' && (
-              <OverviewTab
-                tiles={overviewTiles(s, timing, analysis?.extremes ?? null, units)}
-                notes={ordered}
-                onOpenNote={openNote}
-              />
-            )}
-            {tab === 'timeline' && (
-              <TimelineTab
-                items={timelineItems}
-                selectedDistanceM={scrub?.distanceM ?? null}
-                onSelect={onTimelineSelect}
-                loading={analysis === null}
-              />
-            )}
-            {tab === 'splits' && (
-              <SplitsTab
-                rows={analysis ? splitRows(analysis.splits, units, timing?.display ?? 'pace') : []}
-                unitLabel={splitUnitLabel}
-                measure={timed ? (timing?.display ?? 'pace') : null}
-                loading={analysis === null}
-              />
-            )}
-            {tab === 'notes' && (
-              <NotesTab
-                notes={ordered}
-                canAdd={scrub !== null}
-                onAdd={() => {
-                  if (!scrub) return;
-                  setDraft('');
-                  setDraftPhoto(null);
-                  setEditing({ mode: 'add', distanceM: scrub.distanceM });
-                }}
-                onFocus={(n) => jumpTo(n.distanceM)}
-                onViewPhoto={setViewingPhoto}
-                onEdit={(n) => {
-                  setDraft(n.text);
-                  setDraftPhoto(n.photoUri ?? null);
-                  setEditing({ mode: 'edit', noteId: n.id });
-                }}
-                onDelete={(n) => {
-                  removeTrackNote(trackId, n.id);
-                  showSnack('Note deleted');
-                }}
-              />
-            )}
-          </>
-        )}
-      </ScrollView>
+            </View>
+          ) : (
+            <>
+              <TrailTabBar tabs={TRAIL_VIEW_TABS} active={tab} onChange={selectTab} />
+              <ScrollView
+                style={styles.fill}
+                contentContainerStyle={{ paddingBottom: insets.bottom + TRAIL_ACTION_BAR_H + 24 }}
+                testID="trail-tab-content"
+              >
+                {tab === 'overview' && (
+                  <OverviewTab
+                    tiles={overviewTiles(
+                      s,
+                      timing,
+                      analysis?.extremes ?? null,
+                      units,
+                      avgHeartRate,
+                    )}
+                    series={chartSeries}
+                    cursorDistanceM={scrub?.distanceM ?? null}
+                    onScrub={scrubTo}
+                    marks={marks}
+                    onJump={jumpTo}
+                    notes={ordered}
+                    onOpenNote={openNote}
+                  />
+                )}
+                {tab === 'charts' && (
+                  <ChartsTab
+                    series={chartSeries}
+                    display={timing?.display ?? 'pace'}
+                    cursorDistanceM={scrub?.distanceM ?? null}
+                    onScrub={scrubTo}
+                  />
+                )}
+                {tab === 'timeline' && (
+                  <TimelineTab
+                    items={timelineItems}
+                    selectedDistanceM={scrub?.distanceM ?? null}
+                    onSelect={onTimelineSelect}
+                    loading={analysis === null}
+                    addAt={scrub ? formatDistance(scrub.distanceM) : null}
+                    onAddNote={() => {
+                      if (!scrub) return;
+                      setDraft('');
+                      setDraftPhoto(null);
+                      setEditing({ mode: 'add', distanceM: scrub.distanceM });
+                    }}
+                    onEditNote={(id) => {
+                      const n = notes?.find((x) => x.id === id);
+                      if (!n) return;
+                      setDraft(n.text);
+                      setDraftPhoto(n.photoUri ?? null);
+                      setEditing({ mode: 'edit', noteId: n.id });
+                    }}
+                    onDeleteNote={(id) => {
+                      removeTrackNote(trackId, id);
+                      showSnack('Note deleted');
+                    }}
+                    onViewPhoto={setViewingPhoto}
+                  />
+                )}
+                {tab === 'splits' && (
+                  <SplitsTab
+                    rows={
+                      analysis ? splitRows(analysis.splits, units, timing?.display ?? 'pace') : []
+                    }
+                    unitLabel={splitUnitLabel}
+                    measure={timed ? (timing?.display ?? 'pace') : null}
+                    loading={analysis === null}
+                  />
+                )}
+              </ScrollView>
+            </>
+          )}
+        </>
+      )}
 
       <Portal>
         <NameDialog
@@ -1464,7 +1492,16 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 16 },
   // Matches SKY_COLOR (the sky dome's horizon stop) so the box never flashes a
   // mismatched blue while the GL context loads.
-  glBox: { height: 340, backgroundColor: '#dfe9f2' },
+  glBox: { backgroundColor: '#dfe9f2' },
+  readout: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  readoutText: { fontSize: 12.5, fontWeight: '700' },
   center: {
     position: 'absolute',
     top: 0,

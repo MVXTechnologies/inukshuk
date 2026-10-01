@@ -60,8 +60,8 @@ export {
 export type { TrackAxis } from './trackAxis';
 export { computeSplits } from './splits';
 export type { Split, SplitOpts } from './splits';
-export { detectStops, findElevationExtremes, findSteepestStretch } from './highlights';
-export type { ElevationExtremes, SteepStretch, Stop } from './highlights';
+export { detectStops, findElevationExtremes, findSteepestStretches } from './highlights';
+export type { ElevationExtremes, SteepestStretches, SteepStretch, Stop } from './highlights';
 export { buildOutingTimeline } from './timeline';
 export type { TimelineEvent, TimelineEventKind, TimelineNote } from './timeline';
 export { analyzeOuting, isTimedTrack } from './outing';
@@ -454,3 +454,5 @@ function extentsWith(
       };
   return { minAltitudeM, maxAltitudeM, bbox };
 }
+export { averageHeartRate, buildChartSeries, heartRateBands, sampleIndexAt } from './chartSeries';
+export type { ChartSeries, HeartRateBand } from './chartSeries';

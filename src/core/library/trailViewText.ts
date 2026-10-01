@@ -39,12 +39,14 @@ export interface StatTile {
  * Overview tiles. Recorded trail: Distance, Climb / descent, Moving time (of
  * total), Moving pace or speed (by activity), Highest point, Total time.
  * Untimed route: Distance, Climb / descent, Highest and Lowest point.
+ * With heart-rate data, Avg heart rate takes the last slot (#511, board C2).
  */
 export function overviewTiles(
   stats: Pick<TrackStats, 'distanceM' | 'ascentM' | 'descentM'>,
   timing: TrailTiming | null,
   extremes: ElevationExtremes | null,
   units: Units,
+  avgHeartRateBpm: number | null = null,
 ): StatTile[] {
   const fmt = createFormatters(units);
   const tiles: StatTile[] = [
@@ -59,11 +61,14 @@ export function overviewTiles(
     label: 'Highest point',
     value: extremes ? fmt.formatElevation(extremes.highM) : '—',
   };
+  const hr: StatTile | null =
+    avgHeartRateBpm !== null ? { label: 'Avg heart rate', value: `${avgHeartRateBpm} bpm` } : null;
   if (!timing) {
     tiles.push(high, {
       label: 'Lowest point',
       value: extremes ? fmt.formatElevation(extremes.lowM) : '—',
     });
+    if (hr) tiles.push(hr);
     return tiles;
   }
   const speed = timing.display === 'speed';
@@ -80,7 +85,8 @@ export function overviewTiles(
       sub: `${avg(timing.elapsedSpeedMps)} overall`,
     },
     high,
-    { label: 'Total time', value: formatDuration(timing.elapsedS) },
+    // The total already rides under Moving time; with a watch, HR earns the slot.
+    hr ?? { label: 'Total time', value: formatDuration(timing.elapsedS) },
   );
   return tiles;
 }
@@ -210,7 +216,7 @@ export function timelineEventText(
       return { title: `Paused ${formatSpan(e.pausedS ?? 0)}`, sub: join(where, elev), time };
     case 'steep':
       return {
-        title: 'Steepest stretch',
+        title: (e.gradePct ?? 0) < 0 ? 'Steepest descent' : 'Steepest climb',
         sub: join(
           `${formatGradePct(e.gradePct ?? 0)} over ${fmt.formatDistance(e.lengthM ?? 0)}`,
           where,
@@ -262,5 +268,25 @@ export function trailSubtitle(
   } else if (!timed) {
     parts.push('Route');
   }
+  return parts.join(' · ');
+}
+
+/**
+ * The cursor badge on the map: "2.73 km · 800 m · +4 %", or "· summit" when
+ * the cursor sits on the high point. Parts that don't exist are left out.
+ */
+export function cursorReadout(
+  at: { distanceM: number; elevation?: number },
+  gradePct: number | null,
+  atSummit: boolean,
+  units: Units,
+): string {
+  const fmt = createFormatters(units);
+  const parts = [fmt.formatDistance(at.distanceM)];
+  if (at.elevation !== undefined && Number.isFinite(at.elevation)) {
+    parts.push(fmt.formatElevation(at.elevation));
+  }
+  if (atSummit) parts.push('summit');
+  else if (gradePct !== null) parts.push(formatGradePct(gradePct));
   return parts.join(' · ');
 }

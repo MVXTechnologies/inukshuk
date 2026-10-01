@@ -20,7 +20,13 @@ it('keeps the tab picked across a restart', async () => {
   expect(useSettingsStore.getState().trailViewTab).toBe('timeline');
 });
 
-it('drops a retired or junk tab', async () => {
+it('moves the retired Notes tab to the Timeline', async () => {
+  mockSaved = { schemaVersion: 2, trailViewTab: 'notes' };
+  await useSettingsStore.getState().hydrate();
+  expect(useSettingsStore.getState().trailViewTab).toBe('timeline');
+});
+
+it('drops a junk tab', async () => {
   mockSaved = { schemaVersion: 2, trailViewTab: 'points' };
   await useSettingsStore.getState().hydrate();
   expect(useSettingsStore.getState().trailViewTab).toBe('overview');

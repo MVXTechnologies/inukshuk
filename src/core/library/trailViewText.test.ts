@@ -1,5 +1,6 @@
 import type { Split, TimelineEvent, TrailTiming } from '@core/geo/track';
 import {
+  cursorReadout,
   formatGradePct,
   overviewTiles,
   splitRows,
@@ -34,6 +35,14 @@ describe('overviewTiles', () => {
     expect(tiles[2]).toMatchObject({ value: '3:42:00', sub: 'of 4:28:00 total' });
     expect(tiles[3]!.value).toMatch(/\/km$/);
     expect(tiles[4]!.value).toBe('885 m');
+  });
+
+  it('gives the last slot to the average heart rate when there is one', () => {
+    const tiles = overviewTiles(stats, timing, extremes, 'metric', 142);
+    expect(tiles[5]).toEqual({ label: 'Avg heart rate', value: '142 bpm' });
+    expect(overviewTiles(stats, null, extremes, 'metric', 120).map((t) => t.label)).toContain(
+      'Avg heart rate',
+    );
   });
 
   it('shows speed for a ride and imperial units', () => {
@@ -192,8 +201,15 @@ describe('timelineEventText', () => {
         { kind: 'steep', at: at(4100), gradePct: 24.4, lengthM: 400 },
         'metric',
         totals,
-      ).sub,
-    ).toBe('+24 % over 400 m · 4.10 km');
+      ),
+    ).toMatchObject({ title: 'Steepest climb', sub: '+24 % over 400 m · 4.10 km' });
+    expect(
+      timelineEventText(
+        { kind: 'steep', at: at(5000), gradePct: -18, lengthM: 300 },
+        'metric',
+        totals,
+      ).title,
+    ).toBe('Steepest descent');
     const summit = timelineEventText(
       { kind: 'summit', at: at(6300), highPointM: 885, stoppedS: 1080 },
       'metric',
@@ -234,5 +250,17 @@ describe('trailSubtitle', () => {
   it('calls an untimed trail a route', () => {
     expect(trailSubtitle('Hike', 0, undefined, false)).toBe('Hike · Route');
     expect(trailSubtitle(null, undefined, undefined, true)).toBe('');
+  });
+});
+
+describe('cursorReadout', () => {
+  it('reads distance, elevation and grade, or summit', () => {
+    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, false, 'metric')).toBe(
+      '2.73 km · 800 m · +4 %',
+    );
+    expect(cursorReadout({ distanceM: 2730, elevation: 800 }, 4.2, true, 'metric')).toBe(
+      '2.73 km · 800 m · summit',
+    );
+    expect(cursorReadout({ distanceM: 50 }, null, false, 'imperial')).toBe('164 ft');
   });
 });

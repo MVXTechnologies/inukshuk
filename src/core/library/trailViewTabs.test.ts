@@ -2,28 +2,29 @@ import {
   effectiveTrailViewTab,
   isTrailViewTab,
   TRAIL_VIEW_TAB_LABELS,
-  trailViewTabsFor,
+  TRAIL_VIEW_TABS,
 } from './trailViewTabs';
 
 describe('trail view tabs', () => {
-  it('shows all four tabs for a recording, no Timeline for a route', () => {
-    expect(trailViewTabsFor(true)).toEqual(['overview', 'timeline', 'splits', 'notes']);
-    expect(trailViewTabsFor(false)).toEqual(['overview', 'splits', 'notes']);
-    expect(TRAIL_VIEW_TAB_LABELS.splits).toBe('Splits');
+  it('has Overview · Charts · Timeline · Splits', () => {
+    expect(TRAIL_VIEW_TABS.map((t) => TRAIL_VIEW_TAB_LABELS[t])).toEqual([
+      'Overview',
+      'Charts',
+      'Timeline',
+      'Splits',
+    ]);
   });
 
   it('recognises only real tab ids', () => {
-    expect(isTrailViewTab('notes')).toBe(true);
-    expect(isTrailViewTab('points')).toBe(false);
+    expect(isTrailViewTab('charts')).toBe(true);
+    expect(isTrailViewTab('notes')).toBe(false);
     expect(isTrailViewTab(3)).toBe(false);
-    expect(isTrailViewTab(null)).toBe(false);
   });
 
-  it('reopens the remembered tab, falling back to Overview', () => {
-    expect(effectiveTrailViewTab('splits', true)).toBe('splits');
-    expect(effectiveTrailViewTab('timeline', true)).toBe('timeline');
-    expect(effectiveTrailViewTab('timeline', false)).toBe('overview');
-    expect(effectiveTrailViewTab('junk', true)).toBe('overview');
-    expect(effectiveTrailViewTab(undefined, false)).toBe('overview');
+  it('reopens the remembered tab; the old Notes tab maps to the Timeline', () => {
+    expect(effectiveTrailViewTab('splits')).toBe('splits');
+    expect(effectiveTrailViewTab('notes')).toBe('timeline');
+    expect(effectiveTrailViewTab('junk')).toBe('overview');
+    expect(effectiveTrailViewTab(undefined)).toBe('overview');
   });
 });
