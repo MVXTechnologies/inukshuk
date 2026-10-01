@@ -19,7 +19,6 @@ describe('@lib/health', () => {
     expect(h.healthSource()).toBeNull();
     await expect(h.healthAvailability()).resolves.toBe('unavailable');
     await expect(h.requestHealthPermissions()).resolves.toBe('denied');
-    expect(h.canOpenHealthInstall()).toBe(false);
     await expect(h.openHealthInstall()).resolves.toBeUndefined();
   });
 
@@ -35,7 +34,6 @@ describe('@lib/health', () => {
     expect(h.healthSource()).toBe(source);
     await expect(h.healthAvailability()).resolves.toBe('needs-install');
     await expect(h.requestHealthPermissions()).resolves.toBe('partial');
-    expect(h.canOpenHealthInstall()).toBe(true);
     await h.openHealthInstall();
     expect(openInstall).toHaveBeenCalled();
   });

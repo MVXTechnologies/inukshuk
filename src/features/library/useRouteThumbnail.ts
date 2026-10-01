@@ -61,13 +61,6 @@ function load(track: TrackSummary, key: string): Promise<RouteThumbnail | null> 
   return next;
 }
 
-/** Test hook: forget every cached thumbnail. */
-export function clearRouteThumbnailCache() {
-  cache.clear();
-  inflight.clear();
-  queue = Promise.resolve();
-}
-
 /**
  * The trail's thumbnail: `undefined` while loading, `null` when the GPX has
  * nothing drawable (or could not be read).
