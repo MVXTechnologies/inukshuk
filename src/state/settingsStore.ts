@@ -17,6 +17,7 @@ import {
 } from '@core/map/terrainOptions';
 import { DEFAULT_WHITE_KEY, parseWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
+import { DEFAULT_IMAGERY_LOOK, isImageryLook, type ImageryLook } from '@core/map/satelliteImagery';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import {
@@ -166,6 +167,11 @@ export interface Settings {
    */
   satelliteLabels: boolean;
   /**
+   * "Imagery" (overlays menu → On the map, #495): how the Satellite base map
+   * is toned — the tiles as served, or a brightening paint over them.
+   */
+  satelliteImagery: ImageryLook;
+  /**
    * Shaded-relief hillshade blended under the `map` basemap (the
    * `hillshade-2d` layer in `mapStyle.ts`). Platform-defaulted — see
    * {@link DEFAULT_SHOW_HILLSHADE} and #230.
@@ -247,6 +253,7 @@ const DEFAULTS: Settings = {
   pdfWhiteKey: DEFAULT_WHITE_KEY,
   showScaleBar: true,
   satelliteLabels: true,
+  satelliteImagery: DEFAULT_IMAGERY_LOOK,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
@@ -319,6 +326,7 @@ function snapshot(s: SettingsState): Settings {
     pdfWhiteKey,
     showScaleBar,
     satelliteLabels,
+    satelliteImagery,
     showHillshade,
     hillshadeStrength,
     peakDensity,
@@ -358,6 +366,7 @@ function snapshot(s: SettingsState): Settings {
     pdfWhiteKey,
     showScaleBar,
     satelliteLabels,
+    satelliteImagery,
     showHillshade,
     hillshadeStrength,
     peakDensity,
@@ -425,6 +434,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             ? (saved as { pdfWhiteKey?: unknown }).pdfWhiteKey
             : undefined,
         ) ?? DEFAULT_WHITE_KEY;
+      if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

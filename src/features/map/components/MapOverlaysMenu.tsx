@@ -11,6 +11,7 @@ import {
   type ShadingLevel,
 } from '@core/map/terrainOptions';
 import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
+import { IMAGERY_LOOK_LABEL, IMAGERY_LOOKS } from '@core/map/satelliteImagery';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -96,6 +97,7 @@ const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
 /** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
 const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
+const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
 const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
 const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
   value: m,
@@ -133,6 +135,7 @@ function OverlayRows({
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
   const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
@@ -219,6 +222,17 @@ function OverlayRows({
         value={satelliteLabels}
         disabled={!onSatellite}
         onToggle={() => set('satelliteLabels', !satelliteLabels)}
+      />
+      {/* #495: Esri's imagery reads dark under forest and in shadow; a
+          client-side lift (Brighter by default) or the tiles as served. */}
+      <LevelsRow
+        icon="brightness-6"
+        label="Imagery"
+        hint={onSatellite ? 'Satellite brightness' : 'For the Satellite map type'}
+        levels={IMAGERY}
+        selected={satelliteImagery}
+        onSelect={(l) => set('satelliteImagery', l)}
+        disabled={!onSatellite}
       />
 
       <SectionTitle>Terrain</SectionTitle>
