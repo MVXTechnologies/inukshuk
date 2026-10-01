@@ -1,4 +1,5 @@
 import { zoomForVisibleWidth } from '@core/geo/zoomForVisibleWidth';
+import type { CameraTarget } from '@core/search/camera';
 import type { BoundingBox } from '@core/models';
 import type { CameraRef, MapRef } from '@maplibre/maplibre-react-native';
 import { useMapStore } from '@state/mapStore';
@@ -81,6 +82,22 @@ export function useCameraControls({
     });
   };
 
+  /**
+   * Fly to a place-search result (#496): a fixed zoom on its point, or its
+   * outline framed below the search pill.
+   */
+  const flyToPlace = (target: CameraTarget) => {
+    setFollowUser(false);
+    if (target.kind === 'bounds') {
+      cameraRef.current?.fitBounds(target.bbox, {
+        duration: 800,
+        padding: { top: 120, right: 48, bottom: 96, left: 48 },
+      });
+    } else {
+      cameraRef.current?.flyTo({ center: target.center, zoom: target.zoom, duration: 800 });
+    }
+  };
+
   /** Fly the camera to one overlay's bounds (the fit FAB's PDF tour). */
   const fitOverlayBounds = (bbox: BoundingBox) => {
     setFollowUser(false);
@@ -133,5 +150,5 @@ export function useCameraControls({
     }
   };
 
-  return { fitOverlayBounds, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel };
+  return { fitOverlayBounds, flyToPlace, flyToPoint, resetNorth, snapToNorth, zoomToLocateLevel };
 }

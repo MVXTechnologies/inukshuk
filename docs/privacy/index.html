@@ -110,7 +110,7 @@
       ><a href="../fr/privacy/" lang="fr" hreflang="fr">FR</a>
     </div>
     <h1>Inukshuk — Privacy Policy</h1>
-    <p class="updated">Last updated: 29 September 2026</p>
+    <p class="updated">Last updated: 1 October 2026</p>
 
     <p>
       Inukshuk is a free, open-source app for offline trail navigation: it displays georeferenced
@@ -273,6 +273,22 @@
         our own tile server, and, when you open a trail, that trail's route. Only the trail's id is
         requested — never your identity or your location; which trails are near you is worked out on
         your phone.
+      </li>
+      <li>
+        <strong>Searching for a place.</strong> When you type a place name into the map's
+        <em>Search places</em> box, the app sends what you typed, your phone's language (English or
+        French), and an approximate location — your position, or the map's centre if the app has no
+        position, <em>rounded to about 1 km</em> — to our own tile server, so nearby places come
+        first. Our server passes the same three things on to
+        <a href="https://photon.komoot.io/">Photon</a>, an OpenStreetMap place search run by
+        <a href="https://www.komoot.com/privacy">komoot</a>, which answers with matching places;
+        Photon sees our server's address, not yours. Answers are cached on our server for a day so
+        repeated searches do not reach Photon again, and our server counts requests per IP address
+        for a minute to prevent abuse; nothing is logged or kept beyond that. Coordinates you type
+        into the box are never sent anywhere. With no connection, or with
+        <em>Locally downloaded only</em> on, nothing is sent: the box searches your own trails,
+        waypoints and maps on the device. The last ten places you picked are kept on your phone
+        only, and <em>Clear</em> in the search box removes them.
       </li>
       <li>
         <strong>Explore (the map catalogue).</strong> The Explore tab downloads a catalogue of free

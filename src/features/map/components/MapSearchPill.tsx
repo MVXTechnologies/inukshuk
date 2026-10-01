@@ -6,9 +6,9 @@ import { Icon, Text } from 'react-native-paper';
 
 /**
  * "Search places" (revamp `Main.html`): the stone pill between the compass and
- * the right rail. Phase 1 is coordinates-first — it opens the existing
- * coordinates dialog; a real place index (peaks, lakes, trailheads) is a later
- * milestone, and this pill is where it will land.
+ * the right rail. Opens the place search (#496, `../search/PlaceSearchSheet`):
+ * towns, villages, peaks, lakes, campgrounds and parks by name, or a pasted
+ * coordinate.
  */
 export function MapSearchPill({ onPress }: { onPress: () => void }) {
   const tokens = useSchemeTokens();
@@ -18,7 +18,7 @@ export function MapSearchPill({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Search places"
-      accessibilityHint="Opens coordinate entry"
+      accessibilityHint="Find towns, peaks, lakes and campgrounds by name, or go to coordinates"
       style={({ pressed }) => [
         styles.pill,
         { backgroundColor: tokens.map.chrome },
