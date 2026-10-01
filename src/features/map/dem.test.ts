@@ -7,7 +7,7 @@ import {
 } from '@core/mapmaker/tilePlan';
 import * as storage from '@data/storage';
 import UPNG from 'upng-js';
-import { fetchBasemapTexture, fetchHeightmap, fetchPrintBasemap } from './dem';
+import { fetchHeightmap, fetchPrintBasemap } from './dem';
 
 jest.mock('@data/storage', () => ({ downloadBytes: jest.fn() }));
 
@@ -169,15 +169,4 @@ describe('fetchHeightmap', () => {
     const unique = new Set(names);
     expect(names.length).toBe(unique.size * 3);
   }, 20000);
-});
-
-describe('fetchBasemapTexture (3D drape)', () => {
-  it('still throws when a tile is missing, so the 3D view falls back to its relief tint', async () => {
-    download.mockImplementation(async (_url, name) => {
-      throw offlineError(name);
-    });
-    await expect(
-      fetchBasemapTexture({ z: 12, minX: 1234, maxX: 1235, minY: 1438, maxY: 1438 }, 'satellite'),
-    ).rejects.toThrow(/offline-only mode is on/);
-  });
 });

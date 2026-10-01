@@ -53,14 +53,14 @@ export function Trail2DView({
   const theme = useTheme();
   const contours = useSettingsStore((s) => s.terrainContours);
   // The main map's shading strength and "3D relief" (#461/#480): the focused
-  // view tilts with two fingers like the main map (owner call, #480 — its
-  // three.js 3D button is gone), so it deepens the relief the same way.
+  // view tilts with two fingers like the main map (owner call, #480), so it
+  // deepens the relief the same way.
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   // The Stone & Paper vector map here too (flag-gated), with served contours.
   const style = useMemo(
     () =>
-      buildOsmStyle(tileUrl, false, bm, showHillshade, {
+      buildOsmStyle(tileUrl, bm, showHillshade, {
         ...(VECTOR_BASEMAP_ENABLED && bm === 'map'
           ? { vectorBasemap: vectorBasemapOption(theme.dark, contours) }
           : {}),

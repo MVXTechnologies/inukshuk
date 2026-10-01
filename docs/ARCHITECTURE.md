@@ -15,7 +15,7 @@ a thin shell around it.**
 - `src/state/**` — Zustand stores. They orchestrate `core` + `data`; they hold
   no business math themselves.
 - `src/features/**` — screens and hooks. Composition and platform APIs
-  (location, sensors, WebView, expo-gl).
+  (location, sensors, WebView, expo-gl for the parked wind-particle overlay).
 - `src/ui/**`, `src/lib/**` — theme, shared components, native-only glue
   (background location, Strava, error reporting). Value formatting is pure and
   lives in `@core/format`; `src/state/formatters.ts` binds it to the user's
@@ -160,7 +160,7 @@ quietly imports "since last import" on launch/foreground at most every
   also used by the PDF rasterizer) for the duration of the download. A
   stall watchdog rejects if progress stops (MapLibre can hang without erroring).
 - "Locally downloaded only" flips MapLibre's `NetworkManager.setConnected` so
-  only cached/pack tiles are served. (Known gap: the 3D DEM/texture fetches
+  only cached/pack tiles are served. (Known gap: the DEM fetches
   bypass this — see the 2026-07-02 code review, archived on the
   `archive/docs-2026-10` branch.) The live style also caps
   the raster source's `maxzoom` at the packs' top stored zoom (recorded in
@@ -199,17 +199,18 @@ selected stage, a name pill and a stage sheet); the Library's trails and the
 map's own overlays are unaffected. It replaced the old Waymarked Trails raster
 overlay ("Marked trails"), whose persisted setting is dropped on hydration.
 
-## 3D terrain
+## Terrain
 
-- Elevation comes from free Terrarium DEM tiles; drape textures from Esri tile
-  services (`features/map/dem.ts`, tile math in `core/geo/terrain.ts` — tile
-  ranges are budget-clamped so huge track bboxes can't OOM). The mesh is built
-  in `features/map/terrainScene.ts` (three r162 — expo-gl is WebGL 1; never
-  bump three past r162).
-- Two GL screens share that plumbing: `Trail3DGLScreen` (per-trail view,
-  reachable from the Library) and `Terrain3DLiveView` (live main-map 3D,
-  currently gated off behind the `terrain3d` flag). Render loops carry a GL
-  "generation" and dispose their scene when the GLView remounts.
+- Elevation comes from free Terrarium DEM tiles (`features/map/dem.ts`, tile
+  math in `core/geo/terrain.ts` — tile ranges are budget-clamped so huge track
+  bboxes can't OOM). It feeds the 2D slope/contour overlays
+  (`useTerrainOverlays2D`), the map maker's relief, and the trail view's
+  terrain-sampled elevation profile.
+- Relief on the maps is MapLibre's own: the hillshade layer, plus the "3D
+  relief" setting that deepens it when the map is tilted with two fingers
+  (`hooks/useTiltRelief`). There is no three.js / GL terrain renderer any more;
+  the focused trail view (`Trail3DGLScreen`, route `/trail3d/[id]` — name kept
+  for deep links) is the 2D MapLibre map.
 
 ## Error reporting ("no silent fails")
 
@@ -243,7 +244,7 @@ overlay ("Marked trails"), whose persisted setting is dropped on hydration.
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes + activity categories, custom categories, bundles, folders, active map, active trail overlays |
 | `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                                                                     |
 | `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                                                                  |
-| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                                                             |
+| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, focus bounds                                                                                             |
 | `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                                                           |
 | `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                                                                                |
 | `longTrailsStore`     | no (files cached)     | long-distance trail index, opened trail details, the trail shown on the map and its selected stage                                                         |
@@ -252,7 +253,7 @@ overlay ("Marked trails"), whose persisted setting is dropped on hydration.
 | `libraryStore`        | yes (`library.json`)  | maps (georeferences + active pages), track summaries + notes, bundles, folders, standalone waypoints, active map, active trail overlays                    |
 | `settingsStore`       | yes (`settings.json`) | tile URL, keep-awake, point spacing, offline-only, view prefs, error-reporting opt-out                                                                     |
 | `recorderStore`       | no (transient)        | live recording state + points + stats + pending waypoints                                                                                                  |
-| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, terrain3d flag, focus bounds                                                                             |
+| `mapStore`            | no (transient)        | follow-user, overlay visibility toggles, basemap, focus bounds                                                                                             |
 | `offlineStore`        | no (native packs)     | offline region list + download progress (packs live in MapLibre)                                                                                           |
 | `importFeedbackStore` | no (transient)        | cross-screen import result snackbar message                                                                                                                |
 

@@ -4,9 +4,7 @@ import { autoContourInterval } from './terrainAnalysis';
 
 /**
  * Marching-squares contour extraction over a metre-space heightmap grid,
- * producing GeoJSON for the 2D map's contour overlay. The 3D map draws the
- * same isolines analytically in its fragment shader; this module is the
- * vector-space equivalent for MapLibre line layers.
+ * producing GeoJSON for the map's contour overlay (MapLibre line layers).
  *
  * Grid convention matches {@link import('@features/map/dem').Heightmap}:
  * row-major `grid × grid`, row 0 = the NORTH edge of `bbox`.
@@ -29,7 +27,7 @@ export interface ContourFeatures {
   intervalM: number;
 }
 
-/** Every 5th line is a major (bolder) contour — same as the 3D shader. */
+/** Every 5th line is a major (bolder) contour. */
 export const CONTOUR_MAJOR_EVERY = 5;
 
 /**
