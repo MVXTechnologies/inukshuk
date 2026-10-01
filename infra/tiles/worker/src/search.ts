@@ -14,10 +14,16 @@
  * - **Privacy.** Only the query, the language and a location rounded to
  *   0.01° (~1 km) go upstream; the app already rounds, we round again.
  *
- * `alt` asks for the same results' names in a second language (EN ↔ FR): one
- * extra upstream call (cached the same way), merged into the first answer as
- * `properties.alt_name` where the two names differ. `PHOTON_ALT_NAMES = "0"`
- * turns it off.
+ * One search is up to three upstream queries, run in parallel and merged
+ * (`searchPlan.ts`): what the user typed; the same restricted to summits (or
+ * water) with a generic word ("mount katadhin" finds Mount Katahdin where
+ * "katadhin" finds nothing); and the distinctive words alone, restricted to
+ * summits, water and towns. `PHOTON_VARIANTS = "0"` turns the last two off.
+ *
+ * `alt` asks for names in a second language (EN ↔ FR): the third query runs
+ * in that language, and its names are merged into the others as
+ * `properties.alt_name` where they differ. `PHOTON_ALT_NAMES = "0"` turns it
+ * off.
  *
  * Written against the standard fetch API (Request/Response/Cache) with its
  * platform pieces injected, so it is unit-tested in Node (`search.test.ts`).
@@ -32,6 +38,8 @@ export interface SearchEnv {
   SEARCH_RATE_PER_MIN?: string;
   /** "0" disables the second-language request. */
   PHOTON_ALT_NAMES?: string;
+  /** "0" sends only the query as typed (no summit/water variants, see searchPlan.ts). */
+  PHOTON_VARIANTS?: string;
   /** Photon `osm_tag` filters, comma separated (see {@link DEFAULT_OSM_TAGS}). */
   PHOTON_OSM_TAGS?: string;
   /**
@@ -41,6 +49,14 @@ export interface SearchEnv {
    */
   SEARCH_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
+
+import {
+  MAX_UPSTREAM_CALLS,
+  planSearch,
+  queryShape,
+  tagsFor,
+  type PlannedQuery,
+} from './searchPlan';
 
 export interface SearchDeps {
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
@@ -64,7 +80,7 @@ const DEFAULT_LIMIT = 10;
 /** Languages the public Photon instance indexes names in. */
 const LANGS = new Set(['default', 'en', 'fr', 'de', 'it']);
 /** Bump to stop reusing cached answers (the key changes, old entries go cold). */
-const SEARCH_CACHE_VERSION = '1';
+const SEARCH_CACHE_VERSION = '2';
 
 export interface SearchParams {
   q: string;
@@ -130,9 +146,10 @@ export function photonUrl(
   p: SearchParams,
   lang: string,
   osmTags: readonly string[] = [],
+  text: string = p.q,
 ): string {
   const u = new URL(base);
-  u.searchParams.set('q', p.q);
+  u.searchParams.set('q', text);
   u.searchParams.set('limit', String(p.limit));
   if (lang !== 'default') u.searchParams.set('lang', lang);
   if (p.lat !== null && p.lon !== null) {
@@ -143,16 +160,22 @@ export function photonUrl(
   return u.toString();
 }
 
-/** Canonical cache key: case- and whitespace-folded, parameters in a fixed order. */
+/**
+ * Canonical cache key: case- and whitespace-folded, the generic word moved to
+ * the front ("Katahdin mount" and "mount katahdin" are one entry, as they are
+ * one upstream plan), parameters in a fixed order.
+ */
 export function searchCacheKey(
   p: SearchParams,
   alt: string | null,
   osmTags: readonly string[] = [],
+  variants = true,
 ): Request {
   const u = new URL('https://search-cache.inukshuk.invalid/v' + SEARCH_CACHE_VERSION);
   // A filter change is a different answer: never serve one cached under another.
   if (osmTags.length > 0) u.searchParams.set('tags', osmTags.join(','));
-  u.searchParams.set('q', p.q.toLowerCase());
+  if (!variants) u.searchParams.set('plain', '1');
+  u.searchParams.set('q', queryShape(p.q).canonical.toLowerCase());
   u.searchParams.set('lang', p.lang);
   if (alt !== null) u.searchParams.set('alt', alt);
   u.searchParams.set('limit', String(p.limit));
@@ -242,6 +265,43 @@ export function mergeAltNames(
   return { ...primary, features };
 }
 
+/**
+ * Merge the answers of one plan: features interleaved (each query's best
+ * first, so no query's answers all sink to the end of the list), duplicates
+ * (the same OSM object) dropped, the copy in the user's language kept.
+ * Answers in another language give their names as `alt_name` to the features
+ * they share with the others, and add the ones only they found (whose
+ * address lines are then in that language).
+ */
+export function mergeAnswers(
+  answers: readonly { query: PlannedQuery; body: Record<string, unknown> }[],
+  lang: string,
+): Record<string, unknown> {
+  const listOf = (a: { body: Record<string, unknown> }) => a.body.features as Feature[];
+  const own = answers.filter((a) => a.query.lang === lang);
+  const other = answers.filter((a) => a.query.lang !== lang);
+  const ownKeys = new Set(own.flatMap((a) => listOf(a).map(featureKey)));
+  const lists = answers.map((a) =>
+    a.query.lang === lang ? listOf(a) : listOf(a).filter((f) => !ownKeys.has(featureKey(f))),
+  );
+  const seen = new Set<string>();
+  const features: Feature[] = [];
+  const longest = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < longest; i++) {
+    for (const list of lists) {
+      const f = list[i];
+      if (f === undefined) continue;
+      const key = featureKey(f);
+      if (key !== '' && seen.has(key)) continue;
+      if (key !== '') seen.add(key);
+      features.push(f);
+    }
+  }
+  let merged: Record<string, unknown> = { type: 'FeatureCollection', features };
+  for (const a of other) merged = mergeAltNames(merged, a.body);
+  return merged;
+}
+
 function jsonError(
   status: number,
   message: string,
@@ -266,7 +326,8 @@ export async function handleSearch(
   const alt = env.PHOTON_ALT_NAMES === '0' ? null : params.alt;
 
   const tags = osmTagFilters(env);
-  const key = searchCacheKey(params, alt, tags);
+  const variants = env.PHOTON_VARIANTS !== '0';
+  const key = searchCacheKey(params, alt, tags, variants);
   const hit = await deps.cache.match(key);
   if (hit !== undefined) {
     const headers = new Headers(hit.headers);
@@ -283,17 +344,27 @@ export async function handleSearch(
   }
 
   const base = env.PHOTON_URL ?? DEFAULT_PHOTON_URL;
-  let body: Record<string, unknown>;
-  try {
-    const [primary, second] = await Promise.all([
-      fetchPhoton(deps, photonUrl(base, params, params.lang, tags)),
-      // The second language is a nicety: its failure never fails the search.
-      alt === null
-        ? Promise.resolve(null)
-        : fetchPhoton(deps, photonUrl(base, params, alt, tags)).catch(() => null),
-    ]);
-    body = second === null ? primary : mergeAltNames(primary, second);
-  } catch (e) {
+  const plan = planSearch(params.q, params.lang, alt, variants).slice(0, MAX_UPSTREAM_CALLS);
+  const settled = await Promise.allSettled(
+    plan.map((query) =>
+      fetchPhoton(
+        deps,
+        photonUrl(
+          base,
+          params,
+          query.lang,
+          query.tags === 'general' ? tags : tagsFor(query.tags),
+          query.text,
+        ),
+      ).then((body) => ({ query, body })),
+    ),
+  );
+  const answers = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  // The general query decides failure: the variants are extras, and an
+  // answer without the user's own query is no answer.
+  const generalFailed = settled[0]?.status === 'rejected';
+  if (answers.length === 0 || generalFailed) {
+    const e = settled[0]?.status === 'rejected' ? (settled[0].reason as unknown) : null;
     if (e instanceof UpstreamError) {
       if (e.status === 429) {
         return jsonError(503, 'search is busy, try again shortly', cors, { 'Retry-After': '60' });
@@ -304,14 +375,18 @@ export async function handleSearch(
     // Network failure or our timeout.
     return jsonError(504, 'search timed out', cors);
   }
+  const body = mergeAnswers(answers, params.lang);
+  // A variant that failed would lock a poorer answer in for a day: serve it, don't cache it.
+  const partial = answers.length < plan.length;
 
   const response = Response.json(body, {
     headers: {
       ...cors,
-      'Cache-Control': env.SEARCH_CACHE_CONTROL ?? DEFAULT_CACHE_CONTROL,
+      'Cache-Control': partial ? 'no-store' : (env.SEARCH_CACHE_CONTROL ?? DEFAULT_CACHE_CONTROL),
       'X-Search-Cache': 'MISS',
+      'X-Search-Upstream': `${answers.length}/${plan.length}`,
     },
   });
-  deps.waitUntil(deps.cache.put(key, response.clone()));
+  if (!partial) deps.waitUntil(deps.cache.put(key, response.clone()));
   return response;
 }

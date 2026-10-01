@@ -22,6 +22,7 @@ SEARCH_CACHE_CONTROL = "public, max-age=86400"
 SEARCH_RATE_PER_MIN = "60"
 # Photon osm_tag filters on every query: shops, offices and workshops never take a slot.
 PHOTON_OSM_TAGS = "!shop,!office,!craft"
+PHOTON_VARIANTS = "1"
 # "I already donated" code email (#476). Secrets: `wrangler secret put
 # RESEND_API_KEY` and `wrangler secret put DONOR_VERIFY_SALT` (any long random
 # string); without both, /donor-verify/* answers 404.

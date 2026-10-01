@@ -1,0 +1,631 @@
+{
+  "request": "q=katadhin&lang=en&alt=fr&limit=15&lat=46.81&lon=-71.21",
+  "upstream": {
+    "https://photon.komoot.io/api/?q=katadhin&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=%21shop&osm_tag=%21office&osm_tag=%21craft": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.265131, 42.4560967] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1119918831,
+            "osm_key": "building",
+            "osm_value": "yes",
+            "type": "house",
+            "name": "Katadhin Hill 1A",
+            "city": "Lexington",
+            "county": "Middlesex",
+            "state": "Massachusetts",
+            "country": "United States",
+            "extent": [-71.2652783, 42.4562064, -71.2649837, 42.455987]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.2252658, 36.7723157] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 4196299,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan",
+            "extent": [139.139093, 36.964523, 139.406701, 36.709633]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [36.9166667, 36.3333333] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 571209305,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kabashin",
+            "county": "Afrin Subdistrict",
+            "state": "Aleppo Governorate",
+            "country": "Syria"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.879759, 40.43792] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2282325506,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Karatekin",
+            "city": "Iznik",
+            "state": "Bursa",
+            "country": "Turkey"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.281689, 48.321903] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1092129588,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Katashyn",
+            "county": "Haisyn Raion",
+            "state": "Vinnytsya Oblast",
+            "country": "Ukraine",
+            "extent": [29.2661663, 48.3260295, 29.3011487, 48.3072998]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [81.0141492, 28.4713509] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 11846515435,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kadadhik",
+            "county": "Kailali",
+            "state": "Sudurpashchim Province",
+            "country": "Nepal"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [69.3522417, 34.6108242] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 5403018976,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kata Khil",
+            "county": "Deh-e Sabz",
+            "state": "Kabul Province",
+            "country": "Afghanistan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [62.7888552, 27.4873822] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2269787695,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Kaladin",
+            "city": "دهستان کله گان",
+            "county": "Golshan County",
+            "state": "Sistan and Baluchestan",
+            "country": "Iran"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-4.5397756, 5.6693567] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 7196925300,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Katadji",
+            "county": "Agnéby-Tiassa",
+            "state": "Lagunes",
+            "country": "Côte d'Ivoire"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.4068782, 45.5033282] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1575646801,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Gumanačka",
+            "city": "Klana",
+            "county": "Primorje-Gorski Kotar County",
+            "country": "Croatia"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [138.340146, 36.742355] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8671903399,
+            "osm_key": "place",
+            "osm_value": "quarter",
+            "type": "locality",
+            "name": "Katashio",
+            "city": "Nakano",
+            "state": "Nagano Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [76.5070081, 19.4597945] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 10077751625,
+            "osm_key": "place",
+            "osm_value": "hamlet",
+            "type": "district",
+            "name": "Kawadhan",
+            "city": "Rajwadi",
+            "county": "Selu",
+            "state": "Maharashtra",
+            "country": "India"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-2.9296072, 43.0965319] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 4431029496,
+            "osm_key": "place",
+            "osm_value": "hamlet",
+            "type": "district",
+            "name": "Katadio",
+            "city": "Orozko",
+            "county": "Biscay",
+            "state": "Basque Country",
+            "country": "Spain"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [76.803596, 31.4351811] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8862778072,
+            "osm_key": "place",
+            "osm_value": "hamlet",
+            "type": "district",
+            "name": "Katahan",
+            "city": "Dahar",
+            "county": "Sundarnagar",
+            "state": "Himachal Pradesh",
+            "country": "India"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [76.8199038, 31.4563615] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8862778053,
+            "osm_key": "place",
+            "osm_value": "hamlet",
+            "type": "district",
+            "name": "Katahan",
+            "county": "Sundarnagar",
+            "state": "Himachal Pradesh",
+            "country": "India"
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=mount+katadhin&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9145397, 45.9038468] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358226210,
+            "osm_key": "natural",
+            "osm_value": "massif",
+            "type": "other",
+            "name": "Mount Katahdin",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.3759219, 36.798614] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 3260851383,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Nikko-Shirane",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9147604, 45.8870718] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358223609,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Rum Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9198959, 45.8652223] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358210891,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Abol Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.8506969, 45.9412293] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358224297,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "South Turner Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.3530392, 36.7736633] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 3698340269,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Suzu",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.2687413, 36.8968936] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 5630760560,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Shirao",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.3492654, 36.9129467] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8735611494,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Hakamagoshi",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.3240428, 36.9205628] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 10147469071,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Hinokitaka",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.2718357, 36.8864199] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8735611509,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Nigura",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.2779916, 36.9146528] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 5630760563,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Sarabuse",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.1462787, 36.7899618] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 12700531527,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Mae-Hotaka",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.3323909, 36.7736682] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8602444728,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Kasa",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.144335, 36.7919786] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 12700531526,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mount Ken",
+            "city": "Katashina",
+            "county": "Tone County",
+            "state": "Gunma Prefecture",
+            "country": "Japan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.2197696, 45.4283821] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358220835,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Houston Mountain",
+            "city": "Katahdin Iron Works Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=katadhin&limit=15&lang=fr&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill&osm_tag=natural%3Awater&osm_tag=water&osm_tag=natural%3Abay&osm_tag=landuse%3Areservoir&osm_tag=waterway%3Ariver&osm_tag=place%3Acity&osm_tag=place%3Atown&osm_tag=place%3Avillage": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [36.9166667, 36.3333333] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 571209305,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kabachin",
+            "county": "Sous-district d'Afrine",
+            "state": "Gouvernorat d'Alep",
+            "country": "Syrie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [139.2252658, 36.7723157] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 4196299,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "片品村",
+            "county": "District de Tone",
+            "state": "Préfecture de Gunma",
+            "country": "Japon",
+            "extent": [139.139093, 36.964523, 139.406701, 36.709633]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.281689, 48.321903] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1092129588,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Каташин",
+            "county": "Гайсинський район",
+            "state": "Oblast de Vinnitsa",
+            "country": "Ukraine",
+            "extent": [29.2661663, 48.3260295, 29.3011487, 48.3072998]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.879759, 40.43792] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2282325506,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Karatekin",
+            "city": "İznik",
+            "state": "Bursa",
+            "country": "Turquie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [81.0141492, 28.4713509] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 11846515435,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kadadhik",
+            "county": "कैलाली",
+            "state": "Sudurpashchim",
+            "country": "Népal"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [69.3522417, 34.6108242] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 5403018976,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "کته خیل",
+            "county": "ده سبز",
+            "state": "Kaboul",
+            "country": "Afghanistan"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [62.7888552, 27.4873822] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2269787695,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "کله دین",
+            "city": "دهستان کله گان",
+            "county": "شهرستان گلشن",
+            "state": "Sistan-Baloutchistan",
+            "country": "Iran"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-4.5397756, 5.6693567] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 7196925300,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Katadji",
+            "county": "Agnéby-Tiassa",
+            "state": "Lagunes",
+            "country": "Côte d’Ivoire"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.4068782, 45.5033282] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1575646801,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Gumanačka",
+            "city": "Klana",
+            "county": "Comitat de Primorje-Gorski Kotar",
+            "country": "Croatie"
+          }
+        }
+      ]
+    }
+  }
+}

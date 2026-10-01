@@ -1,6 +1,14 @@
 import type { Place } from './place';
 import {
+  BAND_OTHER,
+  BAND_OUTDOOR,
+  BAND_PEAK,
+  BAND_SETTLEMENT,
+  BAND_TRAIL,
+  BAND_UNMATCHED,
+  BAND_WATER,
   dedupePlaces,
+  placeBand,
   normalizeName,
   proximityFactor,
   rankAndDedupe,
@@ -20,14 +28,12 @@ describe('normalizeName / textScore', () => {
     expect(normalizeName("L'Île-d'Orléans")).toBe('l ile d orleans');
   });
 
-  it('prefers exact, then prefix, then word prefix, then substring', () => {
-    const q = normalizeName('mont sainte anne');
-    expect(textScore('Mont-Sainte-Anne', q)).toBe(1);
-    expect(textScore('Mont Sainte-Anne Resort', q)).toBe(0.9);
-    expect(textScore('Parc du Mont-Sainte-Anne', q)).toBe(0.65);
-    expect(textScore('Le Grand Lac', 'lac')).toBe(0.8);
-    expect(textScore('Something else', q)).toBe(0.4);
-    expect(textScore('Anything', '')).toBe(0.4);
+  it('scores whole names above partial ones, and 0 when a word is missing', () => {
+    expect(textScore('Mont-Sainte-Anne', 'mont sainte anne')).toBe(1);
+    expect(textScore('Mont Sainte-Anne Resort', 'mont sainte anne')).toBeLessThan(1);
+    expect(textScore('Mont Sainte-Anne Resort', 'mont sainte anne')).toBeGreaterThan(0.8);
+    expect(textScore('Something else', 'mont sainte anne')).toBe(0);
+    expect(textScore('Anything', '')).toBe(0);
   });
 });
 
@@ -94,7 +100,7 @@ describe('rankPlaces', () => {
       'mont washington',
       null,
     );
-    expect(r?.score).toBe(1);
+    expect(r?.score).toBe(BAND_PEAK + 1);
     expect(r?.distanceM).toBeNull();
   });
 
@@ -171,6 +177,115 @@ describe('dedupePlaces — linear features', () => {
   });
 });
 
+describe('placeBand', () => {
+  const weak = { score: 0.7, strong: false };
+  const strong = { score: 1, strong: true };
+
+  it('orders peaks, water, trails, parks, towns, then roads', () => {
+    expect(placeBand('peak', weak, null)).toBe(BAND_PEAK);
+    expect(placeBand('mountain', weak, null)).toBe(BAND_PEAK);
+    expect(placeBand('range', weak, null)).toBe(BAND_PEAK);
+    expect(placeBand('volcano', weak, null)).toBe(BAND_PEAK);
+    expect(placeBand('lake', weak, null)).toBe(BAND_WATER);
+    expect(placeBand('river', weak, null)).toBe(BAND_WATER);
+    expect(placeBand('trail', weak, null)).toBe(BAND_TRAIL);
+    expect(placeBand('trailhead', weak, null)).toBe(BAND_TRAIL);
+    expect(placeBand('campground', weak, null)).toBe(BAND_OUTDOOR);
+    expect(placeBand('hut', weak, null)).toBe(BAND_OUTDOOR);
+    expect(placeBand('village', weak, null)).toBe(BAND_SETTLEMENT);
+    expect(placeBand('road', weak, null)).toBe(BAND_OTHER);
+    expect(placeBand('poi', weak, null)).toBe(BAND_OTHER);
+  });
+
+  it('lifts a strong match one band, never above the top', () => {
+    expect(placeBand('road', strong, null)).toBe(BAND_SETTLEMENT);
+    expect(placeBand('lake', strong, null)).toBe(BAND_PEAK);
+    expect(placeBand('peak', strong, null)).toBe(BAND_PEAK);
+  });
+
+  it('puts water first for a water word', () => {
+    expect(placeBand('lake', weak, 'water')).toBe(BAND_PEAK);
+    expect(placeBand('peak', weak, 'water')).toBe(BAND_WATER);
+    expect(placeBand('trail', weak, 'water')).toBe(BAND_TRAIL);
+  });
+
+  it('sinks a name that does not match', () => {
+    expect(placeBand('peak', { score: 0, strong: false }, null)).toBe(BAND_UNMATCHED);
+  });
+});
+
+describe('rankPlaces — bands', () => {
+  it('peak, lake, trail, park, town, road — whatever the index order', () => {
+    const ranked = rankPlaces(
+      [
+        place({ id: 'road', name: 'Katahdin Avenue', type: 'road' }),
+        place({ id: 'town', name: 'Katahdin Village', type: 'village' }),
+        place({ id: 'park', name: 'Katahdin Woods', type: 'park' }),
+        place({ id: 'trail', name: 'Katahdin Ridge Trail', type: 'trail' }),
+        place({ id: 'lake', name: 'Katahdin Pond East', type: 'lake' }),
+        place({ id: 'peak', name: 'Katahdin North Peak', type: 'peak' }),
+      ],
+      'katahdin',
+      QUEBEC,
+    );
+    expect(ranked.map((r) => r.place.id)).toEqual([
+      'peak',
+      'lake',
+      'trail',
+      'park',
+      'town',
+      'road',
+    ]);
+  });
+
+  it('finds the mountain without its generic word, in any order, with a typo', () => {
+    const places = [
+      place({ id: 'stream', name: 'Katahdin Stream', type: 'river' }),
+      place({ id: 'mtn', name: 'Mount Katahdin', type: 'mountain', latitude: 45.9 }),
+      place({ id: 'road', name: 'Katahdin Avenue', type: 'road' }),
+    ];
+    for (const q of ['katahdin', 'katadhin', 'katahdin mount', 'mt katadhin']) {
+      expect(rankPlaces(places, q, QUEBEC)[0]?.place.id).toBe('mtn');
+    }
+  });
+
+  it('lets a whole-name match lift one band, but not past an equal match there', () => {
+    // A lake called exactly what was typed lifts into the peak band…
+    const ranked = rankPlaces(
+      [
+        place({ id: 'peak', name: 'Noir Ouest', type: 'peak' }),
+        place({ id: 'lake', name: 'Lac Noir', type: 'lake' }),
+        place({ id: 'summit', name: 'Mont Noir', type: 'peak', latitude: 47.0801 }),
+      ],
+      'noir',
+      null,
+    );
+    // …where the peak of the same name still comes first; the partial peak last.
+    expect(ranked.map((r) => r.place.id)).toEqual(['summit', 'lake', 'peak']);
+  });
+
+  it('keeps proximity as the tie-break inside a band', () => {
+    const ranked = rankPlaces(
+      [
+        place({ id: 'far', name: 'Mont Blanc', type: 'peak', latitude: 45.83, longitude: 6.86 }),
+        place({ id: 'near', name: 'Mont Blanc', type: 'peak', latitude: 46.2, longitude: -74.3 }),
+      ],
+      'mont blanc',
+      QUEBEC,
+    );
+    expect(ranked.map((r) => r.place.id)).toEqual(['near', 'far']);
+  });
+
+  it('a water word puts the lake above the peak of the same name', () => {
+    const places = [
+      place({ id: 'peak', name: 'Mont Jacques-Cartier', type: 'peak' }),
+      place({ id: 'lake', name: 'Lac Jacques-Cartier', type: 'lake' }),
+    ];
+    expect(rankPlaces(places, 'lac jacques cartier', null)[0]?.place.id).toBe('lake');
+    expect(rankPlaces(places, 'jacques cartier', null)[0]?.place.id).toBe('peak');
+  });
+});
+
 describe('rankAndDedupe', () => {
   it('ranks, dedupes and caps', () => {
     const many = Array.from({ length: 20 }, (_, i) =>
@@ -184,5 +299,26 @@ describe('rankAndDedupe', () => {
     );
     expect(out).toHaveLength(5);
     expect(out.some((r) => r.place.id === 'dup')).toBe(false);
+  });
+
+  it('drops names that do not match when something does', () => {
+    const out = rankAndDedupe(
+      [
+        place({ id: 'suzu', name: 'Mount Suzu', type: 'peak' }),
+        place({ id: 'k', name: 'Mount Katahdin', type: 'mountain' }),
+      ],
+      'katadhin',
+      null,
+    );
+    expect(out.map((r) => r.place.id)).toEqual(['k']);
+  });
+
+  it('keeps the index answers when none matches (a name we do not see)', () => {
+    const out = rankAndDedupe(
+      [place({ id: 'x', name: 'Cervin', type: 'peak' })],
+      'matterhorn',
+      null,
+    );
+    expect(out.map((r) => r.place.id)).toEqual(['x']);
   });
 });

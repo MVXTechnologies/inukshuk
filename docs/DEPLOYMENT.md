@@ -359,9 +359,21 @@ upstream can change without an app release.
   `[minLon, maxLat, maxLon, minLat]`. `extra` (extra OSM tags) is empty on the
   public instance, so summits show no elevation there; a self-hosted Photon
   imported with extra tags `ele` lights the elevation up with no app change.
-- `alt=en|fr` makes the Worker ask a second language too and merge it as
-  `alt_name` (shown in grey). That doubles upstream calls for a cache miss;
-  set `PHOTON_ALT_NAMES = "0"` to turn it off.
+- **One search, up to three upstream queries** (`infra/tiles/worker/src/searchPlan.ts`),
+  run in parallel and merged (same OSM object once): the query as typed (a
+  trailing generic word moved to the front, "katahdin mount" → "mount
+  katahdin"); the same restricted to summits (`osm_tag=natural:peak`,
+  `natural:massif`, …) or to water for a water word, with "mount"/"mont"
+  added when the user typed no generic word; and the distinctive words alone,
+  restricted to summits, water and towns. Why: Photon has no "Katahdin" peak
+  (OSM's is "Mount Katahdin", `natural=massif`), and its typo tolerance needs
+  a second word to anchor on ("mount katadhin" finds it, "katadhin" finds
+  villages in Japan). The query as typed decides failure; a failed variant
+  is served but not cached. `PHOTON_VARIANTS = "0"` goes back to one query.
+- `alt=en|fr` runs the third query in the second language; its names are
+  merged as `alt_name` (shown in grey) on the results it shares with the
+  others. Results only it found keep their address line in that language.
+  `PHOTON_ALT_NAMES = "0"` turns it off.
 
 ### Fair-use policy of photon.komoot.io
 
@@ -373,8 +385,8 @@ ask you to run your own instance. Hence the Worker:
 - sends an identifying `User-Agent` (`SEARCH_USER_AGENT` in `search.ts`);
 - caches every answer at the edge for a day (`SEARCH_CACHE_CONTROL`), keyed on
   the case- and space-folded query, so every phone typing "Mont-Sainte-Anne"
-  costs Photon one request a day;
-- limits upstream calls per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
+  costs Photon three requests a day (at most `MAX_UPSTREAM_CALLS` per search);
+- limits searches that miss the cache per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
   per isolate; for a global limit, enable the commented `[[ratelimits]]`
   binding `SEARCH_LIMITER` in `wrangler.toml`);
 - the app debounces 250 ms, needs 2 characters, and aborts stale requests.
