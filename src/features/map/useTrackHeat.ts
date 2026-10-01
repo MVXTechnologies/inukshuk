@@ -5,17 +5,13 @@ import {
   CellGrid,
   gridTrailsNearWithin,
   HEAT_LINE_CELL_M,
-  HeatGridSync,
-  heatGlowPoints,
-  heatGridLines,
   walkTrackCells,
-  type GridIndex,
   type GridIndexInput,
+  type GridIndexLike,
   type HeatGlowProps,
   type HeatLineProps,
   type TrackCellWalk,
 } from '@core/heat/heatGrid';
-import { glowWithin, heatLinesWithin, indexHeatLines } from '@core/heat/heatViewport';
 import { qualifiesForHeat } from '@core/heat/qualify';
 import { categoryColor } from '@core/library/categories';
 import {
@@ -35,8 +31,9 @@ import { peekTrackGeometry } from '@data/trackGeometry';
 import { useLibraryStore } from '@state/libraryStore';
 import { mapColors } from '@ui/theme';
 import type { Feature, FeatureCollection, LineString, MultiLineString, Point } from 'geojson';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
+import { useStoredHeat } from './useStoredHeat';
 import { indexTracks, useTrackGeometries } from './useTrackGeometries';
 
 /** Properties carried by each rendered trail line (data-driven styling). */
@@ -141,25 +138,17 @@ function asLine(parts: [number, number][][]): LineString | MultiLineString | nul
     : { type: 'MultiLineString', coordinates: parts };
 }
 
-const WORLD: BoundingBox = { minLat: -90, minLng: -180, maxLat: 90, maxLng: 180 };
 /** A box that meets nothing: the region of a viewport not known yet. */
 const NOWHERE: BoundingBox = { minLat: 91, maxLat: 91, minLng: 0, maxLng: 0 };
 /** An invalid box: the spatial index returns its trail for every region. */
 const NO_BOX: BoundingBox = { minLat: NaN, maxLat: NaN, minLng: NaN, maxLng: NaN };
-const EMPTY_GLOW: FeatureCollection<Point, HeatGlowProps> = {
-  type: 'FeatureCollection',
-  features: [],
-};
-const EMPTY_HEAT_LINES: FeatureCollection<MultiLineString, HeatLineProps> = {
-  type: 'FeatureCollection',
-  features: [],
-};
 const ALL_HEAT_LAYERS = { glow: true, lines: true } as const;
+const NO_TRACKS: readonly TrackSummary[] = [];
 /** Street-level detail: no culling ('all') builds at this zoom. */
 const FULL_DETAIL_ZOOM = 22;
 
 /**
- * Trail lines and the personal heatmap for the map (#465, #466, #494).
+ * Trail lines and the personal heatmap for the map (#465, #466, #494, #500).
  *
  * - `lines`: one category-coloured line per SHOWN trail (visibility rules
  *   unchanged) that meets the cull region, cut to the region and simplified
@@ -167,18 +156,19 @@ const FULL_DETAIL_ZOOM = 22;
  *   `MAX_TRAIL_LINE_VERTICES` coordinates, newest first.
  * - `heatLines` / `heatGlow`: the personal heatmap over EVERY qualifying
  *   trail in `allTrackIds` (the caller widens it to the whole library while
- *   the heatmap is on), from a distinct-pass grid kept up to date trail by
- *   trail — crisp lines at street zooms, a glow when zoomed out — built only
- *   for the zooms that draw them and clipped to the cull region. Only
- *   computed while `heatEnabled`.
- * - `heatAt`: the tap lookup (hot = 2+ qualifying trails of one category);
- *   a plain trail tap resolves against the trails actually drawn.
+ *   the heatmap is on), read from the STORED heat product (`useStoredHeat`,
+ *   `@data/heatStore`): computed once in the background, updated only for
+ *   trails that appear, change or go, and read back tile by tile for the
+ *   cull region — crisp lines at street zooms, a glow when zoomed out, only
+ *   the layers the zoom draws. Only while `heatEnabled`.
+ * - `heatAt`: the tap lookup (hot = 2+ qualifying trails of one category,
+ *   from the stored grid while the heatmap is on); a plain trail tap
+ *   resolves against the trails actually drawn.
  *
  * Culling never reads geometry: trails are matched to the region by their
  * `stats.bbox` (computed at import) through a spatial index. Only the drawn
- * trails — and, heatmap on, the qualifying ones, visible first — have their
- * geometry loaded (`@data/trackGeometry`, in batches by
- * `useTrackGeometries`). Everything is memoized against the actual inputs,
+ * trails have their geometry loaded (`@data/trackGeometry`, in batches by
+ * `useTrackGeometries`); the heatmap never loads the library's. Everything is memoized against the actual inputs,
  * and the caller's region is sticky (see `nextCullRegion`), so GPS ticks,
  * small pans and selection changes never rebuild (or re-upload) a source.
  */
@@ -188,6 +178,8 @@ export function useTrackHeat(
   allTrackIds: readonly string[],
   heatEnabled = true,
   viewport: TrackHeatViewport = 'all',
+  /** A selected trail whose highlight (`lineFor`) must be loadable even when its trace is hidden. */
+  focusedTrackId: string | null = null,
 ): TrackHeat {
   const customCategories = useLibraryStore((s) => s.customCategories);
   const tracksById = useMemo(() => indexTracks(tracks), [tracks]);
@@ -217,23 +209,32 @@ export function useTrackHeat(
   }, [shownKey, inRegion, tracksById]);
   const drawKey = drawIds.join('|');
 
-  // What to load: the drawn trails, plus (heatmap on) every qualifying
-  // trail — those in the region first, so the visible heat fills in first.
-  const loadIds = useMemo(() => {
-    if (!heatEnabled) return drawIds;
-    const first: string[] = [...drawIds];
-    const later: string[] = [];
-    const seen = new Set(first);
+  // The trails the heatmap counts (heatmap on): every qualifying trail,
+  // those in the region first so the visible heat fills in first on a cold
+  // build. Their geometry is NOT loaded here: the stored heat (#500) walks a
+  // trail once, when it first appears or changes, and the map reads tiles.
+  const heatTracks = useMemo(() => {
+    if (!heatEnabled) return NO_TRACKS;
+    const first: TrackSummary[] = [];
+    const later: TrackSummary[] = [];
+    const seen = new Set<string>();
     for (const id of allTrackIds) {
       if (seen.has(id)) continue;
       seen.add(id);
       const t = tracksById.get(id);
       if (!t || !qualifiesForHeat(t)) continue;
-      (inRegion === null || inRegion.has(id) ? first : later).push(id);
+      (inRegion === null || inRegion.has(id) ? first : later).push(t);
     }
     return first.concat(later);
+    // The region only orders the work: a pan must not re-sync the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawKey, allKey, heatEnabled, inRegion, tracksById]);
+  }, [allKey, heatEnabled, tracksById]);
+  // What to load: the drawn trails, and a selected trail's highlight.
+  const loadIds = useMemo(
+    () =>
+      focusedTrackId && !drawIds.includes(focusedTrackId) ? [...drawIds, focusedTrackId] : drawIds,
+    [drawIds, focusedTrackId],
+  );
   const version = useTrackGeometries(tracksById, loadIds);
 
   // The drawn trails whose geometry is in: the lines rebuild only when this
@@ -303,54 +304,35 @@ export function useTrackHeat(
     };
   }, [loadedDrawKey, anyShown, toleranceM, regionBounds, tracksById, customCategories]);
 
-  // All qualifying trails: the hot/tap index (always — it backs hot-spot
-  // detection among shown trails too) and, while the heatmap is on, the
-  // pass-count grid, updated trail by trail.
-  const [gridSync] = useState(() => new HeatGridSync(LINE_GRID));
-  const { heatIndex, heatGrid, gridStamp } = useMemo(() => {
+  // Heatmap off: the hot/tap index over the (drawn) qualifying trails whose
+  // geometry is loaded. Heatmap on: the stored heat answers instead.
+  const loadedIndex = useMemo(() => {
+    if (heatEnabled) return null;
     const heatInputs: GridIndexInput[] = [];
-    const target = new Map<string, TrackCellWalk>();
     for (const id of allTrackIds) {
       const t = tracksById.get(id);
       if (!t || !qualifiesForHeat(t)) continue;
       const g = peekTrackGeometry(t);
       if (!g) continue;
-      const walk = cellWalk(g);
-      heatInputs.push({ id, categoryId: t.category ?? 'uncategorized', cells: walk.cells });
-      target.set(id, walk);
+      heatInputs.push({ id, categoryId: t.category ?? 'uncategorized', cells: cellWalk(g).cells });
     }
-    const index = buildGridIndex(heatInputs);
-    // Off: drop the grid (memory); it is rebuilt if the heatmap comes back.
-    if (!heatEnabled) gridSync.clear();
-    else gridSync.sync(target);
-    return { heatIndex: index, heatGrid: gridSync.heat, gridStamp: gridSync.stamp };
+    return buildGridIndex(heatInputs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, allKey, tracksById, heatEnabled]);
 
+  // The personal heatmap, from the stored tiles meeting the region: crisp
+  // lines at street zooms, a glow when zoomed out — only the layers this
+  // zoom draws.
   const needs = viewport === 'all' ? ALL_HEAT_LAYERS : heatLayersAt(zoomLevel);
-  // The whole library's glow points / heat chains: once per grid change, and
-  // only at zooms that draw them. A settle then only clips.
-  const glowAll = useMemo(
-    () => (heatGrid && needs.glow ? heatGlowPoints(heatGrid) : null),
-    // `gridStamp` changes whenever the (mutable) grid does.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gridStamp, heatGrid, needs.glow],
+  const stored = useStoredHeat(
+    heatEnabled,
+    tracksById,
+    heatTracks,
+    viewport === 'all' ? null : (viewport?.bounds ?? undefined),
+    needs,
   );
-  const chains = useMemo(
-    () => (heatGrid && needs.lines ? indexHeatLines(heatGridLines(heatGrid)) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gridStamp, heatGrid, needs.lines],
-  );
-  const heatGlow = useMemo(() => {
-    if (!heatEnabled) return null;
-    if (!glowAll) return EMPTY_GLOW;
-    return regionBounds ? glowWithin(glowAll, regionBounds) : glowAll;
-  }, [heatEnabled, glowAll, regionBounds]);
-  const heatLines = useMemo(() => {
-    if (!heatEnabled) return null;
-    if (!chains) return EMPTY_HEAT_LINES;
-    return heatLinesWithin(chains, regionBounds ?? WORLD);
-  }, [heatEnabled, chains, regionBounds]);
+  const heatIndex: GridIndexLike = loadedIndex ?? stored.index;
+  const { heatLines, heatGlow } = stored;
 
   const lineFor = useCallback(
     (trackId: string): HeatLineFeature | null => {
@@ -374,7 +356,7 @@ export function useTrackHeat(
       radiusM = 0,
       glowTappable = false,
     ): { trackIds: string[]; hot: boolean } => {
-      const near = (index: GridIndex) =>
+      const near = (index: GridIndexLike) =>
         gridTrailsNearWithin(index, LINE_GRID, lngLat.lng, lngLat.lat, radiusM);
       // Newest first. A Map lookup per id: a hot corridor can hold hundreds
       // of trails, and `tracks.find` in the comparator made this
