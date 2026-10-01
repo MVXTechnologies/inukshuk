@@ -24,5 +24,3 @@ preview sheet, and commit the regenerated files.
 - **`favicon.png`** (48²) and **`store/play/icon-512.png`** (512², RGB) are downscaled from `icon.png`.
 
 `figure-compact@2x.png` is the only step that PIL can't do. To regenerate it after editing the SVG, render it headless: with Playwright + Chromium, set the viewport and the SVG `width`/`height` to 1568 × 1740 and take a screenshot with `omitBackground: true`.
-
-`assets/icon-source.png` is the previous painted logo. It stays because `src/ui/theme.ts` documents its palette as sampled from that file.
