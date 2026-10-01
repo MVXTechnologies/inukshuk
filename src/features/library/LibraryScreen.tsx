@@ -1,6 +1,8 @@
 import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
-import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
+import type { Area, MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
+import { polygonAreaM2 } from '@core/draw/geometry';
+import { formatAreaSize, sortAreasNewestFirst } from '@core/library/areas';
 import { describeUploadOutcome } from '@core/strava/upload';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
@@ -73,7 +75,8 @@ import {
   SectionHeader,
   TypeFilterChips,
 } from './components/LibraryChrome';
-import { MapRow, OnMapChip, RowDivider, WaypointRow } from './components/LibraryRows';
+import { AreaRow, MapRow, OnMapChip, RowDivider, WaypointRow } from './components/LibraryRows';
+import { writeAreaGeoJson } from '../map/draw/saveDrawn';
 import { MoveToFolderItems } from './components/MoveToFolderItems';
 import { TrackListRow, type TrackRowActions } from './components/TrackListRow';
 import { useDebouncedValue } from '@features/common/useDebouncedValue';
@@ -97,7 +100,7 @@ const keyOfItem = (item: LibraryListItem) => item.key;
 // One confirm flow covers every destructive delete in the Library; the copy
 // spells out exactly what is (and is not) lost for each kind.
 type DeleteTarget = {
-  kind: 'map' | 'track' | 'folder' | 'waypoint';
+  kind: 'map' | 'track' | 'folder' | 'waypoint' | 'area';
   id: string;
   name: string;
 };
@@ -120,6 +123,10 @@ const DELETE_COPY: Record<DeleteTarget['kind'], { title: string; body: (name: st
     waypoint: {
       title: 'Delete waypoint',
       body: (name) => `Delete waypoint "${name}"? Its note and photo are permanently deleted.`,
+    },
+    area: {
+      title: 'Delete area',
+      body: (name) => `Delete area "${name}"? Its note and photos are permanently deleted.`,
     },
   };
 
@@ -162,6 +169,10 @@ export function LibraryScreen() {
   const updateWaypoint = useLibraryStore((s) => s.updateWaypoint);
   const removeWaypoint = useLibraryStore((s) => s.removeWaypoint);
   const renameWaypoint = useLibraryStore((s) => s.renameWaypoint);
+  // Drawn areas (#503) and the map's drawing-tool requests (#502/#503).
+  const areas = useLibraryStore((s) => s.areas);
+  const removeArea = useLibraryStore((s) => s.removeArea);
+  const setDrawRequest = useMapStore((s) => s.setDrawRequest);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
   const setFocusWaypoint = useMapStore((s) => s.setFocusWaypoint);
   const setRecordRequested = useMapStore((s) => s.setRecordRequested);
@@ -190,7 +201,7 @@ export function LibraryScreen() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const [cardMenu, setCardMenu] = useState<{
-    kind: 'map' | 'track' | 'waypoint';
+    kind: 'map' | 'track' | 'waypoint' | 'area';
     id: string;
   } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -299,16 +310,19 @@ export function LibraryScreen() {
       ),
     [grouped],
   );
+  const sortedAreas = useMemo(() => sortAreasNewestFirst(areas), [areas]);
   const chipCounts = typeCounts({
     trails: tracks.length,
     maps: maps.length,
     waypoints: waypoints.length,
+    areas: areas.length,
   });
   // A source chip shows that source's trails only (like the Trails chip).
   const effectiveType: LibraryTypeFilter = activeSource ? 'trails' : typeFilter;
   const showMaps = showsKind(effectiveType, 'maps') && !narrowed;
   const showTrails = showsKind(effectiveType, 'trails');
   const showWaypoints = showsKind(effectiveType, 'waypoints');
+  const showAreas = showsKind(effectiveType, 'areas');
   const sourceChips = (Object.keys(sourceCounts) as ActivitySourceId[]).map((id) => ({
     id,
     label: `From ${sourceLabel(id)}`,
@@ -502,6 +516,7 @@ export function LibraryScreen() {
     else if (kind === 'track') removeTrack(id);
     else if (kind === 'waypoint')
       removeWaypoint(id); // photo cleanup is the store's job
+    else if (kind === 'area') removeArea(id);
     else removeFolder(id);
   };
 
@@ -781,6 +796,11 @@ export function LibraryScreen() {
     share: (t: TrackSummary) => void shareTrack(t.fileUri),
     sendToStrava: (t: TrackSummary) => void sendToStrava(t),
     trim: (t: TrackSummary) => trimTrack(t.id),
+    // A route drawn on the map reopens in the drawing tool (#502).
+    editRoute: (t: TrackSummary) => {
+      setDrawRequest({ kind: 'edit-route', trackId: t.id });
+      router.navigate('/');
+    },
     merge: (t: TrackSummary) => {
       if (!selectedTrackIds.includes(t.id)) toggleTrackSelected(t.id);
     },
@@ -805,6 +825,7 @@ export function LibraryScreen() {
     share: (t) => trackHandlersRef.current.share(t),
     sendToStrava: (t) => trackHandlersRef.current.sendToStrava(t),
     trim: (t) => trackHandlersRef.current.trim(t),
+    editRoute: (t) => trackHandlersRef.current.editRoute(t),
     merge: (t) => trackHandlersRef.current.merge(t),
     setCategory: (t) => trackHandlersRef.current.setCategory(t),
     moveToFolder: (t, folderId) => trackHandlersRef.current.moveToFolder(t, folderId),
@@ -878,6 +899,97 @@ export function LibraryScreen() {
     );
   };
 
+  // Drawn areas (#503): the row opens the area's card on the map; the ⋮ menu
+  // reshapes it, shares it as GeoJSON, or deletes it (the shared confirm).
+  const showAreaOnMap = (a: Area) => {
+    setDrawRequest({ kind: 'show-area', areaId: a.id });
+    router.navigate('/');
+  };
+  const shareArea = async (a: Area) => {
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        showSnack('Sharing is not available on this device');
+        return;
+      }
+      await Sharing.shareAsync(writeAreaGeoJson(a), {
+        mimeType: 'application/geo+json',
+        UTI: 'public.json',
+      });
+    } catch (err) {
+      reportError(err, 'area-share');
+      showSnack('Could not share the area');
+    }
+  };
+  const areaMenu = (a: Area) => (
+    <Menu
+      visible={cardMenu?.kind === 'area' && cardMenu.id === a.id}
+      onDismiss={() => setCardMenu(null)}
+      anchor={
+        <IconButton
+          icon="dots-vertical"
+          size={22}
+          iconColor={tokens.inkMuted}
+          style={styles.menuButton}
+          onPress={() => setCardMenu({ kind: 'area', id: a.id })}
+          accessibilityLabel="Area options"
+        />
+      }
+    >
+      <Menu.Item
+        leadingIcon="map-marker-radius-outline"
+        title="Show on map"
+        onPress={() => {
+          setCardMenu(null);
+          showAreaOnMap(a);
+        }}
+      />
+      <Menu.Item
+        leadingIcon="vector-polygon"
+        title="Edit shape"
+        onPress={() => {
+          setCardMenu(null);
+          setDrawRequest({ kind: 'edit-area-shape', areaId: a.id });
+          router.navigate('/');
+        }}
+      />
+      <Menu.Item
+        leadingIcon="share-variant"
+        title="Share GeoJSON"
+        onPress={() => {
+          setCardMenu(null);
+          void shareArea(a);
+        }}
+      />
+      <Divider />
+      <Menu.Item
+        leadingIcon="trash-can-outline"
+        title="Delete area"
+        onPress={() => {
+          setCardMenu(null);
+          setConfirmDelete({ kind: 'area', id: a.id, name: a.name });
+        }}
+      />
+    </Menu>
+  );
+  const renderAreaRow = (a: Area) => {
+    const preview = notePreview(a.note);
+    const size = formatAreaSize(polygonAreaM2(a.ring), units);
+    return (
+      <AreaRow
+        key={a.id}
+        name={a.name}
+        detail={preview !== null ? `${size} · ${preview}` : size}
+        caption={[shortDate(a.createdAt, nowMs), ...(a.tags ?? [])].join(' · ')}
+        color={a.color}
+        photoUri={a.photoUris?.[0]}
+        accessibilityLabel={`${a.name}, area ${size} — show on map, long-press for more options`}
+        onPress={() => showAreaOnMap(a)}
+        onLongPress={() => setCardMenu({ kind: 'area', id: a.id })}
+        trailing={areaMenu(a)}
+      />
+    );
+  };
+
   const emptyRow = (title: string, description: string) => (
     <List.Item title={title} description={description} titleStyle={styles.emptyRowTitle} />
   );
@@ -904,6 +1016,8 @@ export function LibraryScreen() {
         narrowed,
         searchText: searching ? appliedQuery.trim() : null,
         activeFilterCount,
+        sortedAreas,
+        showAreas,
       }),
     [
       maps,
@@ -924,6 +1038,8 @@ export function LibraryScreen() {
       searching,
       appliedQuery,
       activeFilterCount,
+      sortedAreas,
+      showAreas,
     ],
   );
 
@@ -955,6 +1071,13 @@ export function LibraryScreen() {
           <>
             {item.divider && <RowDivider />}
             {renderWaypointRow(item.waypoint)}
+          </>
+        );
+      case 'area':
+        return (
+          <>
+            {item.divider && <RowDivider />}
+            {renderAreaRow(item.area)}
           </>
         );
       case 'track': {
@@ -1001,7 +1124,11 @@ export function LibraryScreen() {
 
   // First run: nothing at all in the Library.
   const libraryEmpty =
-    maps.length === 0 && tracks.length === 0 && waypoints.length === 0 && !hasFolders;
+    maps.length === 0 &&
+    tracks.length === 0 &&
+    waypoints.length === 0 &&
+    areas.length === 0 &&
+    !hasFolders;
 
   const importMenu = (
     <Menu

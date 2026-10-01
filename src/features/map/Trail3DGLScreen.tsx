@@ -1008,6 +1008,21 @@ export function Trail3DGLScreen({ trackId }: Props) {
                   {track.name}
                 </Text>
               </Pressable>
+              {/* A route drawn on the map reopens in the drawing tool (#502). */}
+              {track.plan !== undefined && (
+                <IconButton
+                  icon="vector-polyline-edit"
+                  size={18}
+                  onPress={() => {
+                    useMapStore
+                      .getState()
+                      .setDrawRequest({ kind: 'edit-route', trackId: track.id });
+                    router.navigate('/');
+                  }}
+                  style={styles.summaryTrim}
+                  accessibilityLabel="Edit route"
+                />
+              )}
               {canTrim && (
                 <IconButton
                   icon="content-cut"

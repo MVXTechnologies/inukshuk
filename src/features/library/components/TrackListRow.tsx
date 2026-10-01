@@ -31,6 +31,8 @@ export interface TrackRowActions {
   share: (t: TrackSummary) => void;
   sendToStrava: (t: TrackSummary) => void;
   trim: (t: TrackSummary) => void;
+  /** Reopen a route drawn on the map in the drawing tool (#502). */
+  editRoute: (t: TrackSummary) => void;
   merge: (t: TrackSummary) => void;
   setCategory: (t: TrackSummary) => void;
   moveToFolder: (t: TrackSummary, folderId: string | null) => void;
@@ -86,10 +88,16 @@ export const TrackListRow = memo(function TrackListRow({
   // Night red (decision 4) allows no other hue: the badge takes the ink red.
   const category = found && night ? { ...found, color: tokens.ink } : found;
   const stats = trailStatsLine(t.stats, units);
-  const caption = trailCaption(t.startedAt, category?.name ?? null, nowMs);
+  // A route drawn on the map says so (#502): it is a plan, not an outing.
+  const typeName = t.plan
+    ? ['Planned route', category && category.id !== 'navigation' ? category.name : null]
+        .filter((part): part is string => part !== null)
+        .join(' · ')
+    : (category?.name ?? null);
+  const caption = trailCaption(t.startedAt, typeName, nowMs);
   const spoken = [
     t.name,
-    category?.name,
+    typeName ?? undefined,
     shortDate(t.startedAt, nowMs),
     stats,
     t.origin ? `from ${sourceLabel(t.origin.source)}` : undefined,
@@ -133,6 +141,13 @@ export const TrackListRow = memo(function TrackListRow({
           leadingIcon="cloud-upload-outline"
           title="Send to Strava"
           onPress={run(actions.sendToStrava)}
+        />
+      )}
+      {t.plan !== undefined && (
+        <Menu.Item
+          leadingIcon="vector-polyline-edit"
+          title="Edit route"
+          onPress={run(actions.editRoute)}
         />
       )}
       <Menu.Item leadingIcon="content-cut" title="Trim" onPress={run(actions.trim)} />
