@@ -102,7 +102,7 @@ it.each<[string, () => void, ButtonProps]>([
   ['recording', () => useRecorderStore.setState({ status: 'recording' }), {}],
   ['following a destination', () => undefined, { navigating: true }],
   ['a sheet, menu or search is open', () => undefined, { bubbleBlocked: true }],
-  ['the person is moving the map', () => undefined, { paused: true }],
+  ['the person is moving the map', () => undefined, { gestureActive: true }],
   ['the Map tab is not in front', () => undefined, { focused: false }],
   ['switched off in Settings', () => useSettingsStore.setState({ showTipJar: false }), {}],
   [
@@ -120,10 +120,10 @@ it.each<[string, () => void, ButtonProps]>([
 });
 
 it('waits 5 s of calm after the person’s own map gesture', async () => {
-  const view = await mount({ paused: true });
+  const view = await mount({ gestureActive: true });
   await at(BUBBLE_FIRST_DELAY_MS + 10_000);
   await act(async () => {
-    await view.rerender(ui({ paused: false }));
+    await view.rerender(ui({ gestureActive: false }));
   });
   await at(BUBBLE_FIRST_DELAY_MS + 12_000);
   expect(screen.queryByTestId('tip-bubble')).toBeNull();

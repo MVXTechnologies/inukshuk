@@ -28,11 +28,10 @@ export const MUG_LOOP_INTERVAL_MS = 12_000;
 /** The same period for every variant (the four unused ones included). */
 export const TIP_JAR_WOBBLE_INTERVAL_MS = MUG_LOOP_INTERVAL_MS;
 /**
- * After a pause (a pan, another tab, the background) that swallowed a loop
- * tick, the scene plays again this soon after the map settles instead of
- * waiting up to a whole loop.
+ * The mug's loop runs regardless of map interaction (owner): no pause on taps,
+ * pans, pinches, rotation, tilt or camera animations. Only the bubble waits
+ * for the map to be still (BUBBLE_IDLE_MS).
  */
-export const MUG_RESUME_DELAY_MS = 1_000;
 
 /** The mascot bubble: at most one every two minutes (owner; was one a minute)… */
 export const BUBBLE_INTERVAL_MS = 120_000;

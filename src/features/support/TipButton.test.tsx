@@ -1,8 +1,9 @@
 /**
- * The Map's tip button (#476, round 3): five swappable looks, one set of
- * rules. Real timers with a short test period (fake timers leave this
- * renderer's scheduler on the wrong clock between renders); the 15 s period
- * itself is pinned in `@core/support/tipJar`.
+ * The Map's tip button (#476): five swappable looks, one set of rules. The
+ * loop runs on the UI thread (Reanimated `withRepeat`); `onAnimate` reports
+ * each time that loop is (re)started, so these tests pin WHEN it runs and
+ * what never stops it. The 12 s period itself is pinned in
+ * `@core/support/tipJar`.
  */
 import {
   DEFAULT_TIP_BUTTON_VARIANT,
@@ -22,6 +23,25 @@ import { TipButton } from './TipButton';
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: jest.fn(async () => null) }));
+// The stock Reanimated mock hands out a NEW shared value on every render; the
+// real hook returns the same one. Here it is stable like the real thing, so
+// "a re-render does not restart the loop" is tested for what it is.
+jest.mock('react-native-reanimated', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const mock = require('react-native-reanimated/mock');
+  const { useState } = require('react');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  return {
+    __esModule: true,
+    ...mock,
+    useReducedMotion: jest.fn(() => false),
+    cancelAnimation: jest.fn(),
+    useSharedValue: (init: unknown) => {
+      const [value] = useState(() => mock.useSharedValue(init));
+      return value;
+    },
+  };
+});
 
 const PERIOD = 25;
 const wait = (ms: number) =>
@@ -51,12 +71,28 @@ it('defaults to the coffee mug the owner picked, with its steam heart', async ()
   expect(screen.getByTestId('tip-steam-heart')).toBeTruthy();
 });
 
-it('holds the animation while the map is being panned or zoomed', async () => {
+it('keeps animating while the map is being moved (owner: no gesture pause)', async () => {
   const onAnimate = jest.fn();
-  const view = await mount({ onAnimate, paused: true });
-  await wait(PERIOD * 4);
-  expect(onAnimate).not.toHaveBeenCalled();
-  expect(screen.getByTestId('tip-button-coffeeSteam')).toBeTruthy();
+  const view = await mount({ onAnimate, gestureActive: true });
+  expect(onAnimate).toHaveBeenCalledTimes(1);
+  view.unmount();
+});
+
+it('never stops or restarts the loop for map gestures, however many', async () => {
+  const onAnimate = jest.fn();
+  const as = (gestureActive: boolean) => (
+    <PaperProvider>
+      <TipButton intervalMs={PERIOD} onAnimate={onAnimate} gestureActive={gestureActive} />
+    </PaperProvider>
+  );
+  const view = await render(as(false));
+  for (let i = 0; i < 8; i++) {
+    await act(async () => {
+      await view.rerender(as(i % 2 === 0));
+    });
+  }
+  // Started once on mount; pans, pinches and taps leave it alone.
+  expect(onAnimate).toHaveBeenCalledTimes(1);
   view.unmount();
 });
 
@@ -87,8 +123,7 @@ it.each(TIP_BUTTON_VARIANTS)(
   async (variant) => {
     const onAnimate = jest.fn();
     const view = await mount({ variant, onAnimate });
-    await wait(PERIOD * 4);
-    expect(onAnimate.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(onAnimate).toHaveBeenCalledTimes(1);
     await act(async () => {
       fireEvent.press(screen.getByTestId(`tip-button-${variant}`));
     });
@@ -152,45 +187,18 @@ it('long-press offers Hide, which turns the setting off', async () => {
   view.unmount();
 });
 
-it('plays again soon after a pan that swallowed a tick, not a whole loop later', async () => {
+it('stops while the Map tab is not in front, and starts again when it is', async () => {
   const onAnimate = jest.fn();
-  const LOOP = 300;
-  const as = (paused: boolean) => (
+  const as = (focused: boolean) => (
     <PaperProvider>
-      <TipButton intervalMs={LOOP} resumeDelayMs={20} onAnimate={onAnimate} paused={paused} />
+      <TipButton intervalMs={PERIOD} onAnimate={onAnimate} focused={focused} />
     </PaperProvider>
   );
-  const view = await render(as(true));
-  await wait(LOOP + 60); // a tick lands mid-pan: skipped
+  const view = await render(as(false));
   expect(onAnimate).not.toHaveBeenCalled();
   await act(async () => {
-    await view.rerender(as(false)); // the map settles
+    await view.rerender(as(true));
   });
-  await wait(90); // well before the next tick (at 2 × LOOP)
   expect(onAnimate).toHaveBeenCalledTimes(1);
-  view.unmount();
-});
-
-it('keeps its schedule through short pauses (small pans cannot postpone it forever)', async () => {
-  const onAnimate = jest.fn();
-  const view = await mount({ onAnimate });
-  const as = (paused: boolean) => (
-    <PaperProvider>
-      <TipButton intervalMs={PERIOD} onAnimate={onAnimate} paused={paused} />
-    </PaperProvider>
-  );
-  // Flip paused faster than the period for a while: ticks that land paused are
-  // skipped, but the timer is never restarted, so a quiet tick still comes.
-  for (let i = 0; i < 6; i++) {
-    await act(async () => {
-      await view.rerender(as(i % 2 === 0));
-    });
-    await wait(PERIOD / 2);
-  }
-  await act(async () => {
-    await view.rerender(as(false));
-  });
-  await wait(PERIOD * 3);
-  expect(onAnimate).toHaveBeenCalled();
   view.unmount();
 });
