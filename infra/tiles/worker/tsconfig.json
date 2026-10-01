@@ -10,5 +10,7 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Unit tests run under the app's Jest (Node environment), not the Workers types.
+  "exclude": ["src/**/*.test.ts"]
 }

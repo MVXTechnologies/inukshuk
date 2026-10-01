@@ -9,6 +9,8 @@
  *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
  *   GET /trails/v1/d/{version}/{id}.json  one trail's detail, range-read from
  *                                         trails-{version}.details.bin (../nas/trails.sh)
+ *   POST /route {mode, profile, points}   route snapping for the drawing tool, proxied to
+ *                                         BRouter (trails) / Valhalla (roads) (./route.ts)
  *
  * Each archive is ONE PMTiles file in R2 (see ../nas/). The pmtiles library
  * reads only the byte ranges a tile needs, and every response is cached at
@@ -25,8 +27,9 @@ import {
   type Source,
 } from 'pmtiles';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
+import { handleRoute, type RouteEnv } from './route';
 
-export interface Env {
+export interface Env extends RouteEnv {
   BUCKET: R2Bucket;
   /** Comma-separated origins for CORS, or "*" (the app is native; browsers are for debugging). */
   ALLOWED_ORIGINS?: string;
@@ -421,8 +424,27 @@ export default {
     }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: { ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET' },
+        headers: {
+          ...corsHeaders(request, env),
+          'Access-Control-Allow-Methods': 'GET, POST',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
       });
+    }
+    // Route snapping: POST, its own cache key, rate limit and error answers.
+    if (url.pathname === '/route') {
+      return handleRoute(
+        request,
+        env,
+        {
+          fetch: (input, init) => fetch(input, init),
+          cache: caches.default,
+          waitUntil: (p) => ctx.waitUntil(p),
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        },
+        corsHeaders(request, env),
+      );
     }
     if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
 
