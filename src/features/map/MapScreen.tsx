@@ -167,6 +167,7 @@ import { WeatherModelSheet } from './weather/WeatherModelSheet';
 import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
+import { useMapDrawing } from './draw/useMapDrawing';
 
 /** The heat-tap ring mounts with the other markers (`@core/map/layerSlots`). */
 const MARKERS_ANCHOR = overlayAnchor('markers');
@@ -1395,6 +1396,35 @@ export function MapScreen() {
       : findWp(editWp);
   const viewWaypoint = findWp(viewWp);
 
+  // --- Drawing tools (#502 routes, #503 areas) -------------------------------
+  // While a tool is open every map tap and long-press belongs to it (handled
+  // first in onMapPress / onLongPress below), and whatever else owned the
+  // screen — the inspect panel, the carousel, a card, the point chip — is
+  // closed as it opens. Starting is gated on an idle recorder (the "+" sheet
+  // only exists while idle), so drawing never interferes with a recording.
+  const closeForDrawing = useCallback(() => {
+    inspect(null);
+    setHeatSelection(null);
+    setViewWp(null);
+    setPointAt(null);
+    setForecastAt(null);
+    setCompactControlsOpen(false);
+    setSearchOpen(false);
+  }, [inspect]);
+  const drawing = useMapDrawing({
+    mapRef,
+    showSnack,
+    units,
+    topInset: insets.top,
+    onBeforeStart: closeForDrawing,
+  });
+  // The tap handlers below are memoized; they read the drawing tools through
+  // a ref so a fresh session object never has to rebuild them.
+  const drawingRef = useRef(drawing);
+  useEffect(() => {
+    drawingRef.current = drawing;
+  });
+
   const saveWaypoint = () => {
     if (newWp) {
       // Create WITH the typed name (blank falls back to the auto number the
@@ -1597,6 +1627,15 @@ export function MapScreen() {
       // #232 — the chip's action row already took this touch (see
       // chipTouchAtRef); the map must not act on it a second time.
       if (Date.now() - chipTouchAtRef.current < CHIP_ACTION_TOUCH_MS) return;
+      // A drawing tool owns every tap while it is open (#502/#503): pins,
+      // trails and the point chip all wait until it closes.
+      if (drawingRef.current.active) {
+        drawingRef.current.onMapTap(lngLatArr ? [lngLatArr[0], lngLatArr[1]] : null, [
+          point[0],
+          point[1],
+        ]);
+        return;
+      }
       const [px, py] = point;
 
       // The open chip, measured up front: routeMapTap puts it ahead of the
@@ -1690,6 +1729,7 @@ export function MapScreen() {
       }
       if (route.kind === 'pin') {
         const { pin } = route;
+        drawingRef.current.closeAreaCard();
         // Pin tap opens the read-only viewer; a second tap on the same pin
         // (or the card's ✕) closes it. Editing is the card's explicit step.
         setViewWp((cur) =>
@@ -1721,6 +1761,7 @@ export function MapScreen() {
             )
           : { trackIds: [], hot: false };
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {
+        drawingRef.current.closeAreaCard();
         inspect(null); // opening the carousel hides the inspect panel
         setHeatSelection({
           lngLat: { lng: lngLatArr[0], lat: lngLatArr[1] },
@@ -1728,6 +1769,7 @@ export function MapScreen() {
           focusedIdx: 0,
         });
       } else if (at.trackIds.length === 1) {
+        drawingRef.current.closeAreaCard();
         setHeatSelection(null); // a single-trail tap hides the carousel
         inspect(at.trackIds[0] ?? null);
       } else {
@@ -1746,6 +1788,16 @@ export function MapScreen() {
         setHeatSelection(null);
         inspect(null);
         restoreCameraOnDeselect();
+        // A drawn area under the tap (#503) opens its card — ahead of the
+        // point chip, behind every pin, trail and heat spot (a trail inside
+        // an area stays tappable). A second tap on the same area closes the
+        // card and falls through to the chip.
+        if (lngLatArr && drawingRef.current.onAreaTap([lngLatArr[0], lngLatArr[1]])) {
+          setPointAt(null);
+          setViewWp(null);
+          setForecastAt(null);
+          return;
+        }
         // Point-chip tap (wave A item 7, widened by wave D §D1/D-5),
         // slotted between the dot route and plain deselect: a bare tap
         // drops the readout chip at the tapped spot; a tap ON the chip (or
@@ -1930,6 +1982,7 @@ export function MapScreen() {
     makeMapState === null &&
     !inspectId &&
     heatSelection === null &&
+    !drawing.ownsBottom &&
     !terrain3d;
 
   return (
@@ -1965,8 +2018,16 @@ export function MapScreen() {
           // forecast + CHS tides) for that point. Gated on an active weather
           // OR marine layer (and online) so the map behaves exactly like
           // today when both are off.
-          onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
+          onLongPress={(e: {
+            nativeEvent?: { lngLat?: [number, number]; point?: [number, number] };
+          }) => {
             gesturePause.tap();
+            // Drawing (#502/#503): a long-press on a vertex deletes it, and
+            // never drops a destination pin under the tool.
+            if (drawingRef.current.active) {
+              void drawingRef.current.onMapLongPress(e.nativeEvent?.point ?? null);
+              return;
+            }
             const lngLat = e.nativeEvent?.lngLat;
             if (!lngLat) return;
             const at = { longitude: lngLat[0], latitude: lngLat[1] };
@@ -2039,6 +2100,8 @@ export function MapScreen() {
             // contour overlays. React bails out when it is already true.
             setMapLoaded(true);
             setRegionVersion((v) => v + 1);
+            // The selected drawing point's grip follows the camera (#502/#503).
+            drawingRef.current.onCameraSettled();
             // The map-maker frame's scale and bbox come straight off the
             // settled camera (#349) — it is the only source of truth for both.
             if (makeMapOpen) readEditorCamera();
@@ -2213,6 +2276,11 @@ export function MapScreen() {
               {contourLayerSet.major}
             </GeoJSONSource>
           )}
+
+          {/* Drawn areas (#503) and the shape being drawn (#502/#503): user
+              content, above the PDF maps and terrain overlays, at the
+              trails' anchor (see useMapDrawing / DrawLayers). */}
+          {drawing.mapLayers}
 
           {/* The personal heatmap (#470), over EVERY qualifying trail in the
               library while the toggle is on (independent of visibility
@@ -2485,18 +2553,22 @@ export function MapScreen() {
           Opens the place search (#496): towns, peaks, lakes, campgrounds by
           name, or a coordinate. Same gates as the rail, plus the offline-area
           selector, whose box starts right under it; 2D only, like the
-          fly-to. */}
-      {makeMapState === null && heatSelection === null && !selecting && !terrain3d && (
-        <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-          {/* A shown long-distance trail takes the pill's place (#467). */}
-          {shownTrail !== null ? (
-            <ShownTrailPill shown={shownTrail} />
-          ) : (
-            !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
-          )}
-        </View>
-      )}
-      {searchOpen && !terrain3d && (
+          fly-to. Stands aside while a drawing tool owns the top (#502/#503). */}
+      {makeMapState === null &&
+        heatSelection === null &&
+        !selecting &&
+        !terrain3d &&
+        !drawing.active && (
+          <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+            {/* A shown long-distance trail takes the pill's place (#467). */}
+            {shownTrail !== null ? (
+              <ShownTrailPill shown={shownTrail} />
+            ) : (
+              !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
+            )}
+          </View>
+        )}
+      {searchOpen && !terrain3d && !drawing.active && (
         <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
           <PlaceSearchSheet
             origin={location}
@@ -2573,7 +2645,7 @@ export function MapScreen() {
           // bottom-corner-specific gates (#131 inspect overlap, the model
           // sheet's perch, the weather-dock lift) are gone with the corner.
           actions={
-            status === 'idle' && !selecting && !pickingCategory
+            status === 'idle' && !selecting && !pickingCategory && !drawing.active
               ? {
                   onRecord: () => setPickingCategory(true),
                   onAddWaypoint,
@@ -2587,11 +2659,9 @@ export function MapScreen() {
                           inspect(null);
                           beginRegionSelect();
                         },
-                  // Coordinate readout/entry (#97) — always available; it
-                  // needs neither a GPS fix nor the flat 2D camera.
-                  onGoToCoordinates: () => void openGoToCoordinates(),
-                  // Settings left the tab bar (revamp decision 6).
-                  onOpenSettings: () => router.push('/settings'),
+                  // No "Navigate to coordinates" or "Settings" rows (owner,
+                  // 2026-10-01): tapping the map offers Navigate, Search places
+                  // takes coordinates, and the other tabs carry the gear.
                   // The editor frames the sheet over the live map, so it needs
                   // the flat 2D camera — but no region box and no extra step.
                   onMakeMap: terrain3d
@@ -2600,6 +2670,9 @@ export function MapScreen() {
                         inspect(null);
                         setMakeMapState({ phase: 'editing' });
                       },
+                  // Drawing (#502/#503) taps the flat 2D map.
+                  onDrawRoute: terrain3d ? undefined : drawing.startRoute,
+                  onDrawArea: terrain3d ? undefined : drawing.startArea,
                 }
               : undefined
           }
@@ -2649,6 +2722,7 @@ export function MapScreen() {
           styles.bottom,
           recordingPanelUp && { bottom: panelHeight },
           trailSheetUp && { bottom: trailSheetHeight },
+          drawing.panelHeight > 0 && { bottom: drawing.panelHeight },
         ]}
         pointerEvents="box-none"
         onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
@@ -2736,7 +2810,7 @@ export function MapScreen() {
             — the column stacks them, so they never overlap it. Hidden with
             the recording UI while the region-select overlay owns the bottom
             edge, and offline-only parks weather entirely. */}
-        {weatherDockVisible && weatherTl.timeline !== null && (
+        {weatherDockVisible && !drawing.active && weatherTl.timeline !== null && (
           <View style={styles.weatherDock} pointerEvents="box-none">
             {/* M2: the model sheet floats above the legend+scrubber in the
                 same dock column (right-aligned over the chevron that opened
@@ -2900,7 +2974,7 @@ export function MapScreen() {
       {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}
       <CategoryStartSheet
-        visible={(pickingCategory || recordRequested) && status === 'idle'}
+        visible={(pickingCategory || recordRequested) && status === 'idle' && !drawing.active}
         onStart={(categoryId) => {
           setPickingCategory(false);
           setRecordRequested(false);
@@ -2919,49 +2993,56 @@ export function MapScreen() {
           so the bottom edge never stacks two cards. Its dock floats above the
           recording panel (position AND z/elevation) — it used to be drawn
           under the panel while recording. */}
-      {inspectTrack === null && editWaypoint === null && viewWaypoint !== null && (
-        <View
-          style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-          pointerEvents="box-none"
-          testID="waypoint-card-dock"
-        >
-          <WaypointViewerCard
-            waypoint={viewWaypoint}
-            floating={recordingPanelUp}
-            onCopyCoords={() => {
-              if (!viewWaypoint) return;
-              void Clipboard.setStringAsync(
-                formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-              );
-              showSnack('Coordinates copied');
-            }}
-            onCopyNote={() => {
-              if (!viewWaypoint?.note) return;
-              void Clipboard.setStringAsync(viewWaypoint.note);
-              showSnack('Note copied');
-            }}
-            onSharePhoto={() => {
-              const uri = viewWaypoint?.photoUri;
-              if (!uri) return;
-              void (async () => {
-                if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-                else showSnack('Sharing is not available on this device');
-              })();
-            }}
-            onEdit={() => {
-              if (!viewWp) return;
-              discardDraftPhoto(newWp);
-              setNewWp(null);
-              setEditWp(viewWp);
-              setWpName(viewWaypoint?.label ?? '');
-              setWpDraft(viewWaypoint?.note ?? '');
-              setViewWp(null);
-            }}
-            onDelete={deleteViewedWaypoint}
-            onClose={() => setViewWp(null)}
-          />
-        </View>
-      )}
+      {/* Drawing tools' chrome (#502/#503): mode chips + hint, the bottom
+          panel, the save/edit sheets, and a tapped area's card. */}
+      {drawing.chrome}
+
+      {inspectTrack === null &&
+        editWaypoint === null &&
+        viewWaypoint !== null &&
+        !drawing.active && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+            testID="waypoint-card-dock"
+          >
+            <WaypointViewerCard
+              waypoint={viewWaypoint}
+              floating={recordingPanelUp}
+              onCopyCoords={() => {
+                if (!viewWaypoint) return;
+                void Clipboard.setStringAsync(
+                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+                );
+                showSnack('Coordinates copied');
+              }}
+              onCopyNote={() => {
+                if (!viewWaypoint?.note) return;
+                void Clipboard.setStringAsync(viewWaypoint.note);
+                showSnack('Note copied');
+              }}
+              onSharePhoto={() => {
+                const uri = viewWaypoint?.photoUri;
+                if (!uri) return;
+                void (async () => {
+                  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                  else showSnack('Sharing is not available on this device');
+                })();
+              }}
+              onEdit={() => {
+                if (!viewWp) return;
+                discardDraftPhoto(newWp);
+                setNewWp(null);
+                setEditWp(viewWp);
+                setWpName(viewWaypoint?.label ?? '');
+                setWpDraft(viewWaypoint?.note ?? '');
+                setViewWp(null);
+              }}
+              onDelete={deleteViewedWaypoint}
+              onClose={() => setViewWp(null)}
+            />
+          </View>
+        )}
 
       {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as

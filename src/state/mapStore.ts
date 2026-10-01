@@ -7,6 +7,17 @@ import { create } from 'zustand';
 export type MapBasemap = Basemap;
 
 /**
+ * A one-shot request for the map's drawing tools (#502/#503), from outside
+ * the map: the trail view's / Library's "Edit route" (reopen the route tool on
+ * a saved route's vertices), "Edit shape" on an area, or the Library opening
+ * an area's card on the map.
+ */
+export type DrawRequest =
+  | { kind: 'edit-route'; trackId: string }
+  | { kind: 'edit-area-shape'; areaId: string }
+  | { kind: 'show-area'; areaId: string };
+
+/**
  * Transient map view state that isn't persisted: whether the camera follows the
  * user, the trails visibility toggle, basemap and 3D flags. Which overlays are
  * *active* (PDF pages and trail ids) is persisted state and lives in the
@@ -57,6 +68,9 @@ interface MapState {
    */
   recordRequested: boolean;
   setRecordRequested: (requested: boolean) => void;
+  /** One-shot drawing-tool request (see {@link DrawRequest}); the map clears it. */
+  drawRequest: DrawRequest | null;
+  setDrawRequest: (request: DrawRequest | null) => void;
   setFollowUser: (follow: boolean) => void;
   toggleTrackOverlays: () => void;
   toggleTerrain3d: () => void;
@@ -82,6 +96,8 @@ export const useMapStore = create<MapState>((set) => ({
   focusWaypoint: null,
   recordRequested: false,
   setRecordRequested: (requested) => set({ recordRequested: requested }),
+  drawRequest: null,
+  setDrawRequest: (request) => set({ drawRequest: request }),
   setFocusBounds: (b, padding) => set({ focusBounds: b, focusPadding: padding ?? null }),
   setFocusWaypoint: (target) => set({ focusWaypoint: target }),
   setFollowUser: (follow) => set({ followUser: follow }),

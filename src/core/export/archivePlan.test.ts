@@ -1,4 +1,4 @@
-import type { Folder, MapDocument, TrackStats, TrackSummary, Waypoint } from '@core/models';
+import type { Area, Folder, MapDocument, TrackStats, TrackSummary, Waypoint } from '@core/models';
 import { dataArchiveName, describeDataArchive, planDataArchive } from './archivePlan';
 
 const stats: TrackStats = {
@@ -355,7 +355,15 @@ describe('planDataArchive — standalone waypoints (#288)', () => {
 });
 
 describe('describeDataArchive', () => {
-  const empty = { entries: [], mapCount: 0, trackCount: 0, waypointCount: 0, photoCount: 0 };
+  const empty = {
+    entries: [],
+    mapCount: 0,
+    trackCount: 0,
+    waypointCount: 0,
+    photoCount: 0,
+    areaCount: 0,
+    textEntries: [],
+  };
   const photo = {
     zipPath: 'photos/p.jpg',
     sourceUri: 'file:///p.jpg',
@@ -376,9 +384,56 @@ describe('describeDataArchive', () => {
   it('lists waypoints and photos when present, with the estimated zip size', () => {
     expect(
       describeDataArchive(
-        { entries: [photo], mapCount: 1, trackCount: 2, waypointCount: 1, photoCount: 1 },
+        { ...empty, entries: [photo], mapCount: 1, trackCount: 2, waypointCount: 1, photoCount: 1 },
         2_500_000,
       ),
     ).toBe('2 trails, 1 map, 1 waypoint, 1 photo · ~3 MB zip');
+  });
+
+  it('counts drawn areas, and an area-only library is not "empty" (#503)', () => {
+    expect(describeDataArchive({ ...empty, areaCount: 2 }, 0)).toBe(
+      '0 trails, 0 maps, 2 areas · index only',
+    );
+  });
+});
+
+describe('planDataArchive — drawn areas (#503)', () => {
+  const area = (id: string, photoUris?: string[]): Area => ({
+    id,
+    name: id,
+    ring: [
+      [-71.2, 46.8],
+      [-71.19, 46.8],
+      [-71.19, 46.81],
+    ],
+    color: '#2563EB',
+    createdAt: 0,
+    ...(photoUris ? { photoUris } : {}),
+  });
+
+  it('packs area photos under areas/photos and the shapes as areas.geojson', () => {
+    const plan = planDataArchive({
+      folders: [],
+      maps: [],
+      tracks: [],
+      waypoints: [],
+      areas: [area('Slope', ['file:///doc/photos/a.jpg', 'file:///doc/photos/b.jpg'])],
+    });
+    expect(plan.areaCount).toBe(1);
+    expect(plan.photoCount).toBe(2);
+    expect(plan.entries.map((e) => e.zipPath)).toEqual([
+      'areas/photos/a.jpg',
+      'areas/photos/b.jpg',
+    ]);
+    expect(plan.textEntries).toHaveLength(1);
+    expect(plan.textEntries[0]?.zipPath).toBe('areas.geojson');
+    const fc = JSON.parse(plan.textEntries[0]?.text ?? '{}') as { features: unknown[] };
+    expect(fc.features).toHaveLength(1);
+  });
+
+  it('adds no GeoJSON when there are no areas', () => {
+    const plan = planDataArchive({ folders: [], maps: [], tracks: [], waypoints: [] });
+    expect(plan.textEntries).toEqual([]);
+    expect(plan.areaCount).toBe(0);
   });
 });

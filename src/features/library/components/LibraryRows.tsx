@@ -343,7 +343,82 @@ export function WaypointRow({
   );
 }
 
+/**
+ * A drawn area (#503): its first photo, or a swatch of its colour, then the
+ * name, its size and note preview, and the date. Same frame as a waypoint.
+ */
+export function AreaRow({
+  name,
+  detail,
+  caption,
+  color,
+  photoUri,
+  accessibilityLabel,
+  onPress,
+  onLongPress,
+  trailing,
+}: {
+  name: string;
+  detail: string;
+  caption: string;
+  color: string;
+  photoUri?: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+  onLongPress: () => void;
+  trailing?: ReactNode;
+}) {
+  const t = useSchemeTokens();
+  return (
+    <RowFrame
+      trailing={trailing}
+      main={
+        <Pressable
+          style={styles.main}
+          onPress={onPress}
+          onLongPress={onLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          <View
+            style={[
+              styles.glyphTile,
+              { backgroundColor: t.library.thumb, borderColor: t.library.thumbEdge },
+            ]}
+          >
+            {photoUri !== undefined ? (
+              <Image source={{ uri: photoUri }} style={styles.photo} resizeMethod="resize" />
+            ) : (
+              <View
+                style={[styles.areaSwatch, { borderColor: color, backgroundColor: `${color}33` }]}
+              />
+            )}
+          </View>
+          <View style={styles.text}>
+            <Text numberOfLines={1} style={[styles.name, { color: t.ink }]}>
+              {name}
+            </Text>
+            <Text numberOfLines={1} style={[styles.stats, { color: t.ink }]}>
+              {detail}
+            </Text>
+            <Text numberOfLines={1} style={[styles.caption, { color: t.inkMuted }]}>
+              {caption}
+            </Text>
+          </View>
+        </Pressable>
+      }
+    />
+  );
+}
+
 const styles = StyleSheet.create({
+  areaSwatch: {
+    width: 32,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2.5,
+    transform: [{ rotate: '-8deg' }],
+  },
   row: {
     minHeight: ROW_HEIGHT,
     flexDirection: 'row',

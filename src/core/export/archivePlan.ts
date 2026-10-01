@@ -1,7 +1,8 @@
 import { sanitizeEntryName, uniquePath } from '@core/export/zipPaths';
 import { formatBytes } from '@core/format';
 import { groupByFolder } from '@core/library/folders';
-import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import { areasToGeoJson } from '@core/draw/serialize';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 /**
  * Pure planning for Settings' "Download your data" ZIP — the full-fat export:
@@ -52,8 +53,16 @@ export interface ArchivePlan {
    * `library.json` rather than as entries, so this is a summary count only.
    */
   waypointCount: number;
-  /** Number of photo entries planned (trail notes and waypoints, deduped by source). */
+  /** Number of photo entries planned (trail notes, waypoints and areas, deduped by source). */
   photoCount: number;
+  /** Number of drawn areas (#503); they travel in `library.json` and `areas.geojson`. */
+  areaCount: number;
+  /**
+   * Generated text files packed alongside the stored ones — today the drawn
+   * areas as one GeoJSON FeatureCollection, so they open in any GIS tool
+   * without the app. Built here (pure) so the caller only zips them.
+   */
+  textEntries: { zipPath: string; text: string }[];
 }
 
 /** Name for the exported archive, e.g. `inukshuk-data-2026-07-14.zip`. */
@@ -100,6 +109,8 @@ export interface DataArchiveInput {
   tracks: readonly TrackSummary[];
   /** Standalone waypoints; only their photos become entries. */
   waypoints: readonly Waypoint[];
+  /** Drawn areas (#503): photos under `areas/photos/`, shapes in `areas.geojson`. */
+  areas?: readonly Area[];
 }
 
 /**
@@ -118,7 +129,10 @@ export function planDataArchive(input: DataArchiveInput): ArchivePlan {
   );
 
   const entries: ArchiveEntry[] = [];
-  const takenPaths = new Set<string>(['library.json']);
+  const areas = input.areas ?? [];
+  const textEntries =
+    areas.length > 0 ? [{ zipPath: 'areas.geojson', text: areasToGeoJson(areas) }] : [];
+  const takenPaths = new Set<string>(['library.json', ...textEntries.map((e) => e.zipPath)]);
   const takenDirs = new Set<string>();
   const seenSources = new Set<string>();
   let mapCount = 0;
@@ -178,8 +192,17 @@ export function planDataArchive(input: DataArchiveInput): ArchivePlan {
   for (const map of ungroupedMaps) addMap(map, '');
   for (const track of ungroupedTracks) addTrack(track, '');
   for (const waypoint of ungroupedWaypoints) addPhoto(waypoint.photoUri, '');
+  for (const area of areas) for (const uri of area.photoUris ?? []) addPhoto(uri, 'areas/');
 
-  return { entries, mapCount, trackCount, waypointCount: input.waypoints.length, photoCount };
+  return {
+    entries,
+    mapCount,
+    trackCount,
+    waypointCount: input.waypoints.length,
+    photoCount,
+    areaCount: areas.length,
+    textEntries,
+  };
 }
 
 /**
@@ -193,11 +216,12 @@ export function planDataArchive(input: DataArchiveInput): ArchivePlan {
  */
 export function describeDataArchive(plan: ArchivePlan, sizeBytes: number): string {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  if (plan.entries.length === 0 && plan.waypointCount === 0) {
+  if (plan.entries.length === 0 && plan.waypointCount === 0 && plan.areaCount === 0) {
     return 'Your library is empty · exports the index only';
   }
   const parts = [plural(plan.trackCount, 'trail'), plural(plan.mapCount, 'map')];
   if (plan.waypointCount > 0) parts.push(plural(plan.waypointCount, 'waypoint'));
+  if (plan.areaCount > 0) parts.push(plural(plan.areaCount, 'area'));
   if (plan.photoCount > 0) parts.push(plural(plan.photoCount, 'photo'));
   // No files to pack (waypoints without photos): the size would read "0 KB",
   // which misdescribes a small-but-real index — say what the zip holds instead.

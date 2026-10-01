@@ -18,4 +18,10 @@ describe('qualifiesForHeat', () => {
   it('includes navigation trails that have real timing data', () => {
     expect(qualifiesForHeat(track('navigation', 1))).toBe(true);
   });
+
+  it('excludes routes drawn on the map, whatever their activity (#502)', () => {
+    expect(
+      qualifiesForHeat({ ...track('hike', 0), plan: { mode: 'freehand', vertices: [] } }),
+    ).toBe(false);
+  });
 });

@@ -108,6 +108,14 @@ describe('isPerformedActivity / matchesCategoryFilter', () => {
     expect(matchesCategoryFilter({}, 'run')).toBe(false);
     expect(matchesCategoryFilter({ category: 'navigation' }, 'navigation')).toBe(true);
   });
+
+  it('a route drawn on the map is a plan, never an activity (#502)', () => {
+    const plan = { mode: 'freehand' as const, vertices: [] };
+    expect(isPerformedActivity({ category: 'hike', plan })).toBe(false);
+    expect(matchesCategoryFilter({ category: 'hike', plan }, null)).toBe(false);
+    expect(matchesCategoryFilter({ category: 'hike', plan }, 'hike')).toBe(false);
+    expect(matchesCategoryFilter({ category: 'hike', plan }, 'navigation')).toBe(true);
+  });
 });
 
 describe('aggregateBuckets', () => {
