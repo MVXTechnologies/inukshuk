@@ -24,8 +24,8 @@ const CLEARING: Rgb = [0.45, 0.5, 0.3];
 const SNOW: Rgb = [0.94, 0.95, 0.97];
 
 describe('imagery looks (#495)', () => {
-  it('defaults to Bright, and every look has a label and a paint', () => {
-    expect(DEFAULT_IMAGERY_LOOK).toBe('bright');
+  it('defaults to Brighter, and every look has a label and a paint', () => {
+    expect(DEFAULT_IMAGERY_LOOK).toBe('brighter');
     for (const look of IMAGERY_LOOKS) {
       expect(IMAGERY_LOOK_LABEL[look]).toBeTruthy();
       expect(IMAGERY_PAINT[look]).toBeDefined();

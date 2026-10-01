@@ -67,8 +67,8 @@ it('set("satelliteLabels") writes the file', async () => {
 });
 
 describe('satelliteImagery (#495)', () => {
-  it('defaults to Bright', () => {
-    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+  it('defaults to Brighter', () => {
+    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
   });
 
   it('keeps a saved look and drops junk to the default', async () => {
@@ -84,6 +84,6 @@ describe('satelliteImagery (#495)', () => {
       satelliteImagery: 'neon',
     });
     await useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
   });
 });

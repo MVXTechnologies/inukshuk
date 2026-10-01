@@ -24,7 +24,7 @@ export const IMAGERY_LOOKS: readonly ImageryLook[] = ['original', 'bright', 'bri
  * (forest and north-facing slopes go near-black in Esri's Vantor/Maxar
  * mosaics), and Bright fixes that without washing out snow or rock.
  */
-export const DEFAULT_IMAGERY_LOOK: ImageryLook = 'bright';
+export const DEFAULT_IMAGERY_LOOK: ImageryLook = 'brighter';
 
 export const IMAGERY_LOOK_LABEL: Readonly<Record<ImageryLook, string>> = {
   original: 'Original',

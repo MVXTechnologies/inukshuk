@@ -191,13 +191,13 @@ describe('Labels on satellite (#484)', () => {
 });
 
 describe('Imagery brightness (#495)', () => {
-  it('defaults to Bright and sets the look while the base map is Satellite', async () => {
+  it('defaults to Brighter and sets the look while the base map is Satellite', async () => {
     useMapStore.setState({ basemap: 'satellite' });
     await renderMenu();
     expect(screen.getByText('Satellite brightness')).toBeTruthy();
-    expect(selected('Bright')).toBe(true);
-    await fireEvent.press(screen.getByLabelText('Brighter'));
-    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
+    expect(selected('Brighter')).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Bright'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
     await fireEvent.press(screen.getByLabelText('Original'));
     expect(useSettingsStore.getState().satelliteImagery).toBe('original');
   });
@@ -205,11 +205,11 @@ describe('Imagery brightness (#495)', () => {
   it('is greyed and inert on the Map base', async () => {
     useMapStore.setState({ basemap: 'map' });
     await renderMenu();
-    expect(screen.getByLabelText('Brighter').props.accessibilityState).toMatchObject({
+    expect(screen.getByLabelText('Original').props.accessibilityState).toMatchObject({
       disabled: true,
     });
-    await fireEvent.press(screen.getByLabelText('Brighter'));
-    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+    await fireEvent.press(screen.getByLabelText('Original'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
   });
 });
 
