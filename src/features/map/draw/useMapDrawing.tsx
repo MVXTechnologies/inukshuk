@@ -79,7 +79,7 @@ import { overwriteDrawnRoute, writeAreaGeoJson, writeNewDrawnRoute } from './sav
 import { SaveRouteSheet } from './SaveRouteSheet';
 import { isLoopTipRetired, useDrawSession, type DrawTarget } from './useDrawSession';
 import { useLegRouting } from './useLegRouting';
-import { RouteProfileStrip } from './RouteProfileStrip';
+import { ProfileStrip } from '../../common/components/ProfileStrip';
 import { computeRouteElevation, shownElevation, useRouteElevation } from './useRouteElevation';
 
 /**
@@ -758,7 +758,7 @@ export function useMapDrawing({
           }
           chart={
             profile !== null && vertices.length >= 2 ? (
-              <RouteProfileStrip
+              <ProfileStrip
                 profile={profile}
                 units={units}
                 // Newer numbers on the way (a leg added, snapped, dragged or

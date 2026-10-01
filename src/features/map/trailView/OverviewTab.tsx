@@ -8,6 +8,7 @@ import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import { NoteNumberBadge } from '../components/NoteNumberBadge';
 import { JumpChips, type JumpMark } from './JumpChips';
+import { StatTiles } from './StatTiles';
 import { TrailChart } from './TrailChart';
 
 interface Props {
@@ -41,28 +42,7 @@ export function OverviewTab({
   const t = useSchemeTokens();
   return (
     <View testID="trail-overview">
-      <View style={styles.grid}>
-        {tiles.map((tile) => (
-          <View
-            key={tile.label}
-            style={styles.tile}
-            accessible
-            accessibilityLabel={`${tile.label} ${tile.value}${tile.sub ? `, ${tile.sub}` : ''}`}
-          >
-            <Text style={[styles.value, { color: t.ink }]} numberOfLines={1} adjustsFontSizeToFit>
-              {tile.value}
-            </Text>
-            {tile.sub ? (
-              <Text style={[styles.sub, { color: t.inkVariant }]} numberOfLines={1}>
-                {tile.sub}
-              </Text>
-            ) : null}
-            <Text style={[styles.label, { color: t.inkMuted }]} numberOfLines={1}>
-              {tile.label}
-            </Text>
-          </View>
-        ))}
-      </View>
+      <StatTiles tiles={tiles} style={styles.grid} />
 
       <View style={styles.block}>
         {series?.elevation && (
@@ -135,17 +115,7 @@ export function OverviewTab({
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    rowGap: 14,
-  },
-  tile: { width: '33.33%', paddingRight: 8 },
-  value: { fontSize: 18, fontWeight: '800' },
-  sub: { fontSize: 12 },
-  label: { fontSize: 12, marginTop: 1 },
+  grid: { paddingHorizontal: 16, paddingTop: 14 },
   block: { paddingHorizontal: 16, paddingTop: 14, gap: 10 },
   heading: { fontSize: 15, fontWeight: '800', paddingHorizontal: 16, paddingTop: 18 },
   empty: { paddingHorizontal: 16, paddingTop: 6 },

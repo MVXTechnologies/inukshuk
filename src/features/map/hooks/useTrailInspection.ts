@@ -2,7 +2,7 @@ import { parseGpx } from '@core/geo/gpx';
 import type { TrackPointAt } from '@core/geo/track';
 import type { TrackPoint, TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * Trail inspection: tap a trail trace to open its elevation profile; scrubbing
@@ -18,11 +18,14 @@ export function useTrailInspection(tracks: readonly TrackSummary[]) {
   const inspectFileUri = inspectTrack?.fileUri ?? null;
 
   // Enter/leave inspection; clears any previously-loaded points + marker.
-  const inspect = (id: string | null) => {
+  // Stable across renders: the drawing tool's `onBeforeStart` closes the panel
+  // through it, and a fresh function each render re-armed (and so cancelled)
+  // the deferred "Edit route" request on every map re-render.
+  const inspect = useCallback((id: string | null) => {
     setInspectId(id);
     setInspectPoints(null);
     setMarkerAt(null);
-  };
+  }, []);
 
   // Load the inspected trail's GPX points once selected.
   useEffect(() => {

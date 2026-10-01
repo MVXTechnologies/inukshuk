@@ -1,4 +1,5 @@
-import type { LngLat } from '@core/models';
+import type { TrackPointAt } from '@core/geo/track';
+import type { LngLat, TrackPoint } from '@core/models';
 import { haversineM } from '@core/trails/geometry';
 
 /**
@@ -147,5 +148,28 @@ export function scrubProfile(profile: DrawProfile, ratio: number): ProfileScrubP
     gradePct,
     at: here.at,
     ratio: profile.totalM > 0 ? here.distanceM / profile.totalM : r,
+  };
+}
+
+/**
+ * The same profile for any saved trail (recorded, imported, drawn): its GPX
+ * points and their `<ele>`, so the map's tap-a-trail sheet charts with the
+ * drawing panel's strip. Points without an altitude still count for distance;
+ * null when fewer than two carry one (nothing to chart).
+ */
+export function trackPointsProfile(points: readonly TrackPoint[]): DrawProfile | null {
+  return buildDrawProfile(
+    points.map((p): LngLat => [p.longitude, p.latitude]),
+    points.map((p) => p.altitude),
+  );
+}
+
+/** A scrubbed profile point as the map's track marker reads it. */
+export function scrubPointToTrackAt(point: ProfileScrubPoint): TrackPointAt {
+  return {
+    longitude: point.at[0],
+    latitude: point.at[1],
+    distanceM: point.distanceM,
+    elevation: point.elevationM,
   };
 }
