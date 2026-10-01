@@ -1,3 +1,4 @@
+import { overlayAnchor } from '@core/map/layerSlots';
 import { trailMarkers } from '@core/trails/stages';
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import type { ShownTrail } from '@state/longTrailsStore';
@@ -8,9 +9,12 @@ import { useMemo } from 'react';
  * A long-distance trail shown on the main map (#467, board `OnMap.dc.html`):
  * the whole trail as an orange line over a halo, the selected stage drawn
  * heavier on top, and the start / finish / stage-join dots. Mounted as MapView
- * children (no style reload), with no anchor layer, so it sits above the base
- * map and overlays like the Library's trails.
+ * children (no style reload), in the trails slot like the Library's trails:
+ * above the base map, the PDF maps and the terrain overlays, and — anchored,
+ * not appended — always under the position puck (#492).
  */
+const ANCHOR = overlayAnchor('longTrail');
+
 export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
   const t = useSchemeTokens();
   const { detail, stageIndex } = shown;
@@ -57,12 +61,14 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
       <GeoJSONSource id="long-trail-shown" data={line}>
         <Layer
           id="long-trail-shown-halo"
+          beforeId={ANCHOR}
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           paint={{ 'line-color': t.explore.trailHalo, 'line-width': 10, 'line-opacity': 0.9 }}
         />
         <Layer
           id="long-trail-shown-line"
+          beforeId={ANCHOR}
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           paint={{ 'line-color': t.explore.trail, 'line-width': 5 }}
@@ -72,6 +78,7 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
         <GeoJSONSource id="long-trail-shown-stage" data={stageLine}>
           <Layer
             id="long-trail-shown-stage-line"
+            beforeId={ANCHOR}
             type="line"
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             paint={{ 'line-color': t.explore.trailStage, 'line-width': 7 }}
@@ -81,6 +88,7 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
       <GeoJSONSource id="long-trail-shown-marks" data={marks}>
         <Layer
           id="long-trail-shown-marks-dot"
+          beforeId={ANCHOR}
           type="circle"
           paint={{
             // Stage joins stay small at a continental zoom (the Appalachian

@@ -1,6 +1,7 @@
 import { hillshadeLook } from './terrainOptions';
 import {
   DEFAULT_TILT_RELIEF,
+  IMAGERY_TILT_RELIEF_SCALE,
   isTiltRelief,
   MAP_MAX_PITCH_DEG,
   pitchBucket,
@@ -154,5 +155,30 @@ describe('tiltReliefExaggeration', () => {
         expect(tiltReliefExaggeration(mode, p)).toBe(tiltReliefLook(mode, p, true)!.exaggeration);
       }
     }
+  });
+});
+
+describe('over satellite imagery (#492)', () => {
+  it.each(['natural', 'dramatic'] as const)('%s: lighter than on the map, same ramp', (mode) => {
+    for (const pitch of [0, 10, 20, 30, 45, 60]) {
+      const map = tiltReliefExaggeration(mode, pitch);
+      const imagery = tiltReliefExaggeration(mode, pitch, true);
+      // Both are rounded to 0.01, so compare to within a rounding step.
+      expect(Math.abs(imagery - map * IMAGERY_TILT_RELIEF_SCALE)).toBeLessThanOrEqual(0.011);
+      if (map > 0) expect(imagery).toBeLessThan(map);
+      else expect(imagery).toBe(0);
+    }
+  });
+
+  it('is off when the setting is off, at any pitch', () => {
+    expect(tiltReliefExaggeration('off', 60, true)).toBe(0);
+    expect(tiltReliefLook('off', 60, false, true)).toBeNull();
+  });
+
+  it('shades in the night palette whatever the app theme (no umber on a photo)', () => {
+    const light = tiltReliefLook('natural', 60, false, true);
+    const dark = tiltReliefLook('natural', 60, true, true);
+    expect(light?.shadowColor).toBe(dark?.shadowColor);
+    expect(light?.shadowColor).toMatch(/^rgba\(0, 0, 0,/);
   });
 });

@@ -49,8 +49,9 @@ export function stoneScheme(dark: boolean): StoneBasemapScheme {
  * on satellite", #484). One palette in both app themes: imagery is dark in
  * both (the same reasoning that gives satellite the dark heat ramp), so ink
  * is paper-light on a near-black halo, roads are paper ribbons in a shadow
- * casing and trails are paper dashes. Only the colours the imagery layers
- * read matter (`buildStoneImageryLayers`); the fills are set for completeness.
+ * casing, trails are paper dashes and contours (#492) paper lines in a
+ * shadow casing. Only the colours the imagery layers read matter
+ * (`buildStoneImagerySlots`); the fills are set for completeness.
  * Every colour is an existing token.
  */
 export function imageryStoneScheme(): StoneBasemapScheme {
@@ -60,6 +61,9 @@ export function imageryStoneScheme(): StoneBasemapScheme {
     roadFill: palette.surface,
     roadCasing: palette.shadow,
     path: palette.paper,
+    // Contours (#492): a light line over a shadow casing, not the map's
+    // ochre, which sinks into dark forest.
+    contour: palette.paper,
     waterInk: night.data.info,
     ink: palette.surface,
     inkMuted: night.ink,
