@@ -15,6 +15,8 @@
  *                                         place search, proxied to Photon (./search.ts)
  *   POST /donors                         opt-in donor name, filed as pending in R2 (./donors.ts)
  *   POST /donor-verify/start|check      "I already donated" email code (./donorVerify.ts)
+ *   POST /route {mode, profile, points}   route snapping for the drawing tool, proxied to
+ *                                         BRouter (trails) / Valhalla (roads) (./route.ts)
  *
  * Each archive is ONE PMTiles file in R2 (see ../nas/). The pmtiles library
  * reads only the byte ranges a tile needs, and every response is cached at
@@ -43,7 +45,9 @@ import {
   type PendingCode,
 } from './donorVerify';
 
-export interface Env extends SearchEnv {
+import { handleRoute, type RouteEnv } from './route';
+
+export interface Env extends SearchEnv, RouteEnv {
   BUCKET: R2Bucket;
   /** Comma-separated origins for CORS, or "*" (the app is native; browsers are for debugging). */
   ALLOWED_ORIGINS?: string;
@@ -619,8 +623,27 @@ export default {
     }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: { ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET' },
+        headers: {
+          ...corsHeaders(request, env),
+          'Access-Control-Allow-Methods': 'GET, POST',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
       });
+    }
+    // Route snapping: POST, its own cache key, rate limit and error answers.
+    if (url.pathname === '/route') {
+      return handleRoute(
+        request,
+        env,
+        {
+          fetch: (input, init) => fetch(input, init),
+          cache: caches.default,
+          waitUntil: (p) => ctx.waitUntil(p),
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        },
+        corsHeaders(request, env),
+      );
     }
     if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
 

@@ -12,7 +12,7 @@
  * Pure.
  */
 
-import type { MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type { Area, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { folderItemCount, type FolderGrouping } from './folders';
 import type { LibraryTypeFilter } from './libraryRows';
@@ -34,7 +34,8 @@ export type LibraryListItem =
   | { kind: 'empty'; key: string; title: string; description: string }
   | { kind: 'map'; key: string; map: MapDocument; divider: boolean }
   | { kind: 'track'; key: string; track: TrackSummary; divider: boolean }
-  | { kind: 'waypoint'; key: string; waypoint: Waypoint; divider: boolean };
+  | { kind: 'waypoint'; key: string; waypoint: Waypoint; divider: boolean }
+  | { kind: 'area'; key: string; area: Area; divider: boolean };
 
 export interface LibraryListInput {
   maps: readonly MapDocument[];
@@ -61,6 +62,10 @@ export interface LibraryListInput {
   /** Trimmed search text when a search is active, else null. */
   searchText: string | null;
   activeFilterCount: number;
+  /** Drawn areas, newest first (#503) — one flat "Areas" section at the end. */
+  sortedAreas?: readonly Area[];
+  /** Whether the type chip shows areas (defaults to off when absent). */
+  showAreas?: boolean;
 }
 
 type Row = Extract<LibraryListItem, { kind: 'map' | 'track' | 'waypoint' }>;
@@ -91,7 +96,39 @@ const empty = (key: string, title: string, description: string): LibraryListItem
 
 /** The Library's list items, in display order (see the module comment). */
 export function libraryListItems(input: LibraryListInput): LibraryListItem[] {
-  return input.hasFolders ? folderItems(input) : typeItems(input);
+  const items = input.hasFolders ? folderItems(input) : typeItems(input);
+  return [...items, ...areaItems(input, items.length === 0)];
+}
+
+/**
+ * Drawn areas (#503): their own section after everything else, in both
+ * layouts (areas are not filed into folders yet). Hidden while there are
+ * none, unless the Areas chip asked for them; a trail search or filter is
+ * about trails, so it stands the section down like it does Maps.
+ */
+function areaItems(input: LibraryListInput, first: boolean): LibraryListItem[] {
+  const areas = input.sortedAreas ?? [];
+  if (!input.showAreas || input.narrowed) return [];
+  if (areas.length === 0 && input.effectiveType !== 'areas') return [];
+  const items: LibraryListItem[] = [
+    {
+      kind: 'header',
+      key: 'header:areas',
+      section: 'areas',
+      title: 'Areas',
+      count: areas.length ? `(${areas.length})` : '',
+      first,
+    },
+  ];
+  if (input.collapsed.areas) return items;
+  if (areas.length === 0) {
+    items.push(empty('areas', 'No areas yet', 'Draw one on the map from its + sheet'));
+    return items;
+  }
+  areas.forEach((area, i) => {
+    items.push({ kind: 'area', key: `area:${area.id}`, area, divider: i > 0 });
+  });
+  return items;
 }
 
 /** Folders first (cross-type groups), then one "Ungrouped" catch-all. */

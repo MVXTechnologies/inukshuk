@@ -145,6 +145,7 @@ export function SettingsScreen() {
   const tracks = useLibraryStore((s) => s.tracks);
   const folders = useLibraryStore((s) => s.folders);
   const waypoints = useLibraryStore((s) => s.waypoints);
+  const areas = useLibraryStore((s) => s.areas);
   const customCategories = useLibraryStore((s) => s.customCategories);
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
@@ -183,8 +184,8 @@ export function SettingsScreen() {
   };
 
   const exportPlan = useMemo(
-    () => planDataArchive({ folders, maps, tracks, waypoints }),
-    [folders, maps, tracks, waypoints],
+    () => planDataArchive({ folders, maps, tracks, waypoints, areas }),
+    [folders, maps, tracks, waypoints, areas],
   );
   // Uncompressed total of every planned file — a good upper-bound estimate for
   // the zip (maps/photos are stored, only the small GPX/JSON parts deflate).
@@ -215,6 +216,7 @@ export function SettingsScreen() {
         activeTrackIds,
         customCategories,
         waypoints,
+        areas,
       },
       {
         onProgress: (done, total) => setExportProgress({ done, total }),

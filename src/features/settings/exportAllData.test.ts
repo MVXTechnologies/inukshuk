@@ -58,6 +58,8 @@ const plan: ArchivePlan = {
   trackCount: 1,
   waypointCount: 0,
   photoCount: 0,
+  areaCount: 0,
+  textEntries: [],
 };
 
 function waypoint(id: string, photoUri?: string, folderId?: string): Waypoint {

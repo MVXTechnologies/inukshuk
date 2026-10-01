@@ -101,6 +101,11 @@ describe('type filter', () => {
       trails: 9,
       maps: 2,
       waypoints: 2,
+      areas: 0,
+    });
+    expect(typeCounts({ trails: 1, maps: 0, waypoints: 0, areas: 3 })).toMatchObject({
+      all: 4,
+      areas: 3,
     });
   });
 });

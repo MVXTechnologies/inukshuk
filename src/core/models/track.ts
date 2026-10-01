@@ -1,6 +1,6 @@
 import type { TrackOrigin } from '@core/import/sources';
 
-import type { BoundingBox } from './geo';
+import type { BoundingBox, LngLat } from './geo';
 
 /** A single recorded GPS fix. */
 export interface TrackPoint {
@@ -68,6 +68,40 @@ export interface TrackNote {
 
 export type TrackStatus = 'recording' | 'paused' | 'finished';
 
+/**
+ * A route drawn on the map rather than recorded (#502) — a plan to follow.
+ * Its presence is what makes a trail a "planned route": no timestamps, never
+ * counted as an activity (dashboard, heatmap), and editable again from the
+ * vertices the user placed (the GPX holds the densified, elevation-sampled
+ * line; these are the handles the drawing tool reopens with).
+ */
+/** How one leg of a drawn route was made (#515): snapped to trails or roads, or straight. */
+export type RouteLegMode = 'freehand' | 'trails' | 'roads';
+
+export interface RoutePlan {
+  /** The mode the drawing tool was in when saved (the chip it reopens on). */
+  mode: RouteLegMode;
+  /** The vertices the user placed, `[lng, lat]`, ≥ 2. */
+  vertices: LngLat[];
+  /**
+   * Per leg (`vertices.length - 1`): how the line between vertex i and i+1
+   * was made. Absent = every leg Freehand (routes drawn before #515, and
+   * all-Freehand routes, which keep their original shape on disk).
+   */
+  legModes?: RouteLegMode[];
+  /**
+   * How the route ends (#515): back along the same way ('backforth'), or
+   * closed into a loop by a leg from the last point to the first ('loop').
+   * `vertices` are the points placed (the outbound / the loop's corners); the
+   * GPX holds the whole line. Absent = one way. Plans saved with the older
+   * `backAndForth: true` read as 'backforth'.
+   */
+  finish?: 'backforth' | 'loop';
+}
+
+/** How a drawn route ends: where the user stopped, back the same way, or a loop. */
+export type RouteFinish = 'oneway' | 'backforth' | 'loop';
+
 /** A recorded route, persisted as GPX. */
 export interface Track {
   id: string;
@@ -81,6 +115,8 @@ export interface Track {
   category?: string;
   /** The connected source it was imported from (#432/#435); absent for everything else. */
   origin?: TrackOrigin;
+  /** Set when the trail is a route drawn on the map (#502); absent for recordings/imports. */
+  plan?: RoutePlan;
 }
 
 /**
@@ -112,4 +148,10 @@ export interface TrackSummary {
    * Absent for recordings and file imports.
    */
   origin?: TrackOrigin;
+  /**
+   * The drawn route's plan (#502): present only on routes drawn on the map.
+   * Marks the trail as a plan (not a performed activity) and holds the
+   * vertices "Edit route" reopens the drawing tool with.
+   */
+  plan?: RoutePlan;
 }

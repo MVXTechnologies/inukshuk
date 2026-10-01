@@ -176,9 +176,11 @@
     <p>
       Les seules requêtes qui atteignent nos serveurs sont les demandes de tuiles de carte (voir «
       Notre serveur de tuiles » ci-dessous), le catalogue de cartes d'Explorer téléchargé depuis
-      notre site web et, si vous connectez Strava, les jetons de connexion qui transitent par notre
-      serveur de tuiles en route vers Strava. Aucune ne porte votre identité ni votre position, et
-      les jetons ne sont pas conservés.
+      notre site web, les points d'un itinéraire que vous tracez en mode Trails ou Roads (voir «
+      Aligner un itinéraire tracé sur les sentiers ou les routes » ci-dessous) et, si vous connectez
+      Strava, les jetons de connexion qui transitent par notre serveur de tuiles en route vers
+      Strava. Aucune ne porte votre identité ni votre position GPS, et les jetons ne sont pas
+      conservés.
     </p>
     <p>
       <strong>Pourboires.</strong> Un pourboire facultatif (Réglages → Support Inukshuk) est traité
@@ -282,6 +284,25 @@
         journal qui lui soit propre et ne conserve rien à votre sujet ; il met seulement les tuiles
         de carte en cache. Les requêtes sont traitées par Cloudflare, qui héberge le serveur, selon
         la politique de confidentialité de Cloudflare.
+      </li>
+      <li>
+        <strong>Aligner un itinéraire tracé sur les sentiers ou les routes.</strong> Lorsque vous
+        tracez un itinéraire sur la carte en mode <em>Trails</em> (sentiers) ou
+        <em>Roads</em> (routes), chaque tronçon entre deux points que vous avez placés est envoyé à
+        notre serveur de tuiles, qui demande à un service de calcul d'itinéraire le chemin qui suit
+        les vrais sentiers ou les vraies routes :
+        <a href="https://brouter.de/privacypolicy.html">BRouter</a> (brouter.de) pour les sentiers,
+        et le serveur Valhalla de
+        <a href="https://www.fossgis.de/datenschutzerklaerung/">FOSSGIS e.V.</a>
+        (valhalla1.openstreetmap.de) pour les routes. Seuls sont envoyés les coordonnées des deux
+        points touchés (arrondies à environ un mètre) et le mode — pas votre position GPS, aucune
+        identité, rien d'autre sur vos sentiers. Le service de calcul voit l'adresse de notre
+        serveur, pas la vôtre, mais peut conserver ces coordonnées dans ses journaux pendant une
+        courte période (deux semaines selon BRouter). Notre serveur garde la réponse dans le cache
+        de Cloudflare jusqu'à 7 jours, sous une empreinte de la requête, pour ne pas redemander le
+        même tronçon ; il ne tient aucun journal de qui a demandé. Le mode <em>Freehand</em> (main
+        levée) n'envoie rien : ses lignes droites sont tracées sur votre appareil. Les itinéraires
+        proviennent des données d'OpenStreetMap (© les contributeurs d'OpenStreetMap).
       </li>
       <li>
         <strong>Autres fonds de carte.</strong> Les fonds satellite et relief, la carte drapée sur

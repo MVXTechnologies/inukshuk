@@ -170,9 +170,10 @@
     </p>
     <p>
       The only requests that reach servers of ours are map tile requests (see "Our tile server"
-      below), the Explore map catalogue downloaded from our website, and, if you connect Strava, the
-      sign-in tokens that pass through our tile server on their way to Strava. None of them carry
-      your identity or your position, and the tokens are not stored.
+      below), the Explore map catalogue downloaded from our website, the points of a route you draw
+      in Trails or Roads mode (see "Snapping a drawn route to trails or roads" below), and, if you
+      connect Strava, the sign-in tokens that pass through our tile server on their way to Strava.
+      None of them carry your identity or your GPS position, and the tokens are not stored.
     </p>
     <p>
       <strong>Tips.</strong> An optional tip (Settings → Support Inukshuk) is processed entirely by
@@ -261,6 +262,21 @@
         no logs of its own and stores nothing about you; it only caches the map tiles themselves.
         The requests are processed by Cloudflare, which hosts the server, under Cloudflare's privacy
         policy.
+      </li>
+      <li>
+        <strong>Snapping a drawn route to trails or roads.</strong> When you draw a route on the map
+        in <em>Trails</em> or <em>Roads</em> mode, each stretch between two points you placed is
+        sent to our tile server, which asks a routing service for the path along real trails or
+        roads: <a href="https://brouter.de/privacypolicy.html">BRouter</a> (brouter.de) for trails,
+        and the <a href="https://www.fossgis.de/datenschutzerklaerung/">FOSSGIS e.V.</a> Valhalla
+        server (valhalla1.openstreetmap.de) for roads. What is sent is only the coordinates of the
+        two points you tapped (rounded to about a metre) and the mode — not your GPS position, no
+        identity, and nothing else about your trails. The routing service sees our server's address,
+        not yours, but it may keep those coordinates in its logs for a short time (BRouter states
+        two weeks). Our server keeps the answer in Cloudflare's cache for up to 7 days, under a
+        fingerprint of the request, so that the same stretch is not asked twice; it keeps no log of
+        who asked. <em>Freehand</em> mode sends nothing: its straight lines are drawn on your
+        device. Routes come from OpenStreetMap data (© OpenStreetMap contributors).
       </li>
       <li>
         <strong>Other base maps.</strong> The satellite and relief base maps, the map draped over

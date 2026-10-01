@@ -58,12 +58,13 @@ export function addLocalDays(t: number, days: number): number {
 }
 
 /**
- * Performed = anything except category 'navigation': untimed imported routes
- * are plans, not activities — their `startedAt` is the import time and would
- * fabricate training volume. Uncategorized counts as performed.
+ * Performed = anything except category 'navigation' and routes drawn on the
+ * map (#502): untimed imported routes and drawn plans are plans, not
+ * activities — their `startedAt` is the import/draw time and would fabricate
+ * training volume. Uncategorized counts as performed.
  */
-export function isPerformedActivity(track: Pick<TrackSummary, 'category'>): boolean {
-  return track.category !== 'navigation';
+export function isPerformedActivity(track: Pick<TrackSummary, 'category' | 'plan'>): boolean {
+  return track.category !== 'navigation' && track.plan === undefined;
 }
 
 /**
@@ -73,10 +74,12 @@ export function isPerformedActivity(track: Pick<TrackSummary, 'category'>): bool
  * any other id = strict equality with track.category.
  */
 export function matchesCategoryFilter(
-  track: Pick<TrackSummary, 'category'>,
+  track: Pick<TrackSummary, 'category' | 'plan'>,
   categoryId: string | null,
 ): boolean {
   if (categoryId === null) return isPerformedActivity(track);
+  // A drawn route is a plan whatever activity it was drawn for (#502).
+  if (track.plan !== undefined) return categoryId === 'navigation';
   return track.category === categoryId;
 }
 

@@ -1,4 +1,4 @@
-import type { Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
+import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { groupByFolder } from './folders';
 import { libraryListItems, type LibraryListInput, type LibraryListItem } from './libraryListItems';
@@ -70,7 +70,9 @@ const shape = (items: LibraryListItem[]) =>
           ? `${i.divider ? '-' : ''}track ${i.track.id}`
           : i.kind === 'map'
             ? `${i.divider ? '-' : ''}map ${i.map.id}`
-            : `${i.divider ? '-' : ''}wp ${i.waypoint.id}`,
+            : i.kind === 'area'
+              ? `${i.divider ? '-' : ''}area ${i.area.id}`
+              : `${i.divider ? '-' : ''}wp ${i.waypoint.id}`,
   );
 
 describe('libraryListItems without folders', () => {
@@ -215,5 +217,86 @@ describe('libraryListItems with folders', () => {
       '~ Empty folder',
       '# Ungrouped (1)',
     ]);
+  });
+});
+
+describe('libraryListItems — drawn areas (#503)', () => {
+  const area = (id: string): Area => ({
+    id,
+    name: id,
+    ring: [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ],
+    color: '#2563EB',
+    createdAt: 0,
+  });
+
+  it('adds an Areas section with its count after everything else', () => {
+    const items = libraryListItems(
+      input({
+        tracks: [track(1)],
+        sortedAreas: [area('a1'), area('a2')],
+        showAreas: true,
+      }),
+    );
+    expect(shape(items)).toEqual([
+      '# Maps',
+      '~ No maps yet',
+      '# Recorded trails (1)',
+      'track t1',
+      '# Areas (2)',
+      'area a1',
+      '-area a2',
+    ]);
+  });
+
+  it('hides an empty section unless the Areas chip asked for it', () => {
+    expect(shape(libraryListItems(input({ showAreas: true }))).join('|')).not.toContain('Areas');
+    expect(
+      shape(
+        libraryListItems(
+          input({
+            showAreas: true,
+            showMaps: false,
+            showTrails: false,
+            showWaypoints: false,
+            effectiveType: 'areas',
+          }),
+        ),
+      ),
+    ).toEqual(['# Areas', '~ No areas yet']);
+  });
+
+  it('collapses, and stands down under a trail search or filter', () => {
+    const areas = [area('a1')];
+    expect(
+      shape(
+        libraryListItems(
+          input({ sortedAreas: areas, showAreas: true, collapsed: { areas: true } }),
+        ),
+      ).slice(-1),
+    ).toEqual(['# Areas (1)']);
+    expect(
+      shape(libraryListItems(input({ sortedAreas: areas, showAreas: true, narrowed: true }))),
+    ).not.toContain('area a1');
+    expect(shape(libraryListItems(input({ sortedAreas: areas, showAreas: false })))).not.toContain(
+      'area a1',
+    );
+  });
+
+  it('an areas-only list puts the header first', () => {
+    const items = libraryListItems(
+      input({
+        sortedAreas: [area('a1')],
+        showAreas: true,
+        showMaps: false,
+        showTrails: false,
+        showWaypoints: false,
+        effectiveType: 'areas',
+      }),
+    );
+    expect(items[0]).toMatchObject({ kind: 'header', first: true, section: 'areas' });
   });
 });
