@@ -46,8 +46,8 @@ const PAD_Y = 6;
  * One chart of the trail view (#511, board C2): a line over the trail's
  * distance with a shared cursor. Touch and drag anywhere on it to move the
  * cursor — the screen moves every chart's cursor, the map marker and the
- * readout with it. The responder claims the touch and won't hand it to the
- * page scroll, so a slightly diagonal drag keeps scrubbing.
+ * readout with it. A drag that is mostly vertical is handed to the page
+ * scroll instead, so the tab still scrolls over its charts.
  */
 export function TrailChart({
   title,
@@ -137,17 +137,32 @@ export function TrailChart({
     // eslint-disable-next-line react-hooks/refs
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
+      // A mostly vertical drag is the page scrolling (the Charts tab can be
+      // taller than the screen): hand it over. Sideways drags keep scrubbing.
+      onPanResponderTerminationRequest: (_e, g) => Math.abs(g.dy) > 2 * Math.abs(g.dx),
+      onShouldBlockNativeResponder: () => false,
       onPanResponderGrant: at,
       onPanResponderMove: at,
     });
   }, []);
 
   const cx = cursorDistanceM !== null && width > 0 ? xFor(cursorDistanceM) : null;
+
+  // Stop labels: right of their line (left of it near the right edge), and a
+  // row lower when they would overlap the label before (~5.6 px per glyph).
+  const placed: { x0: number; x1: number; row: number }[] = [];
+  const labelRows = marks.map((m) => {
+    const x = xFor(m.distanceM);
+    const right = x > width * 0.7;
+    const w = m.label.length * 5.6;
+    const x0 = right ? x - 4 - w : x + 4;
+    const x1 = x0 + w;
+    let row = 0;
+    while (placed.some((p) => p.row === row && p.x0 < x1 + 4 && x0 < p.x1 + 4) && row < 3) row += 1;
+    placed.push({ x0, x1, row });
+    return { m, x, right, row };
+  });
 
   return (
     <View style={[styles.card, { backgroundColor: t.surface }]} testID={testID}>
@@ -186,32 +201,28 @@ export function TrailChart({
             {paths.line !== '' && (
               <Path d={paths.line} stroke={color} strokeWidth={2} fill="none" />
             )}
-            {marks.map((m) => {
-              const x = xFor(m.distanceM);
-              const right = x > width * 0.7;
-              return (
-                <Fragment key={`m${m.distanceM}`}>
-                  <Line
-                    x1={x}
-                    y1={0}
-                    x2={x}
-                    y2={plotHeight}
-                    stroke={t.outline}
-                    strokeWidth={1}
-                    strokeDasharray="3,3"
-                  />
-                  <SvgText
-                    x={right ? x - 4 : x + 4}
-                    y={11}
-                    fontSize={10}
-                    fill={t.inkMuted}
-                    textAnchor={right ? 'end' : 'start'}
-                  >
-                    {m.label}
-                  </SvgText>
-                </Fragment>
-              );
-            })}
+            {labelRows.map(({ m, x, right, row }) => (
+              <Fragment key={`m${m.distanceM}`}>
+                <Line
+                  x1={x}
+                  y1={0}
+                  x2={x}
+                  y2={plotHeight}
+                  stroke={t.outline}
+                  strokeWidth={1}
+                  strokeDasharray="3,3"
+                />
+                <SvgText
+                  x={right ? x - 4 : x + 4}
+                  y={11 + row * 12}
+                  fontSize={10}
+                  fill={t.inkMuted}
+                  textAnchor={right ? 'end' : 'start'}
+                >
+                  {m.label}
+                </SvgText>
+              </Fragment>
+            ))}
             {cx !== null && (
               <Line x1={cx} y1={0} x2={cx} y2={plotHeight} stroke={t.ink} strokeWidth={2} />
             )}

@@ -63,7 +63,9 @@ export function buildChartSeries(
 
   let speed: (number | null)[] | null = null;
   if (opts.timed && totalM > 0) {
-    const w = Math.max(30, (totalM / (n - 1)) * 1.5);
+    // ±75 m (or two samples) of ground: steady enough to read, short enough
+    // to show a steep pitch slowing you down.
+    const w = Math.max(75, (totalM / (n - 1)) * 2);
     speed = distances.map((d) => {
       const d0 = Math.max(0, d - w);
       const d1 = Math.min(totalM, d + w);
