@@ -5,6 +5,8 @@
  *                                         (/basemap/… via basemap.index.json pieces,
  *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
+ *   GET /contours/{z}/{x}/{y}.mvt         contour lines from DEM tiles, generated once
+ *                                         and kept in R2 (./contours.ts)
  *   GET /fonts/{fontstack}/{range}.pbf    MapLibre glyphs (static objects)
  *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
  *   GET /trails/v1/d/{version}/{id}.json  one trail's detail, range-read from
@@ -28,6 +30,7 @@ import {
   type RangeResponse,
   type Source,
 } from 'pmtiles';
+import { contourR2Key } from './contourMath';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
 import { handleSearch, type SearchEnv } from './search';
 import { handleDonor, memoryLimiter } from './donors';
@@ -335,7 +338,59 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
   return {};
 }
 
-async function serve(request: Request, env: Env, url: URL): Promise<Response> {
+/** Terrain doesn't change: contour tiles are cached for 30 days. */
+const CONTOUR_CACHE_CONTROL = 'public, max-age=2592000';
+
+/**
+ * A contour tile (#509): from R2 when it was generated before, else generated
+ * now and written to R2 after the response — so each tile costs its CPU once
+ * ever, not once per edge location per 30 days. The edge cache in `fetch`
+ * still answers most requests before we get here.
+ */
+async function serveContours(
+  env: Env,
+  ctx: ExecutionContext,
+  cors: Record<string, string>,
+  z: number,
+  x: number,
+  y: number,
+): Promise<Response> {
+  const headers = {
+    ...cors,
+    'Content-Type': 'application/x-protobuf',
+    'Content-Encoding': 'gzip',
+    'Cache-Control': CONTOUR_CACHE_CONTROL,
+  };
+  const key = contourR2Key(z, x, y);
+  // A storage hiccup must not cost the tile: fall through to generating it.
+  const stored = await env.BUCKET.get(key).catch(() => null);
+  if (stored !== null) {
+    return new Response(stored.body, {
+      headers: { ...headers, 'X-Contour-Source': 'r2' },
+      encodeBody: 'manual',
+    });
+  }
+  const { mvt } = await contourTile(z, x, y);
+  const gzipped = await new Response(
+    new Response(mvt).body!.pipeThrough(new CompressionStream('gzip')),
+  ).arrayBuffer();
+  ctx.waitUntil(
+    env.BUCKET.put(key, gzipped, {
+      httpMetadata: { contentType: 'application/x-protobuf', contentEncoding: 'gzip' },
+    }).catch(() => undefined),
+  );
+  return new Response(gzipped, {
+    headers: { ...headers, 'X-Contour-Source': 'generated' },
+    encodeBody: 'manual',
+  });
+}
+
+async function serve(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  url: URL,
+): Promise<Response> {
   const cacheControl = env.CACHE_CONTROL ?? 'public, max-age=86400';
   const cors = corsHeaders(request, env);
 
@@ -344,20 +399,7 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
     const [z, x, y] = [Number(cz), Number(cx), Number(cy)];
     if (z > CONTOUR_MAX_ZOOM || x >= 2 ** z || y >= 2 ** z)
       return new Response('bad tile', { status: 400, headers: cors });
-    const mvt = await contourTile(z, x, y);
-    const gzipped = await new Response(
-      new Response(mvt).body!.pipeThrough(new CompressionStream('gzip')),
-    ).arrayBuffer();
-    return new Response(gzipped, {
-      headers: {
-        ...cors,
-        'Content-Type': 'application/x-protobuf',
-        'Content-Encoding': 'gzip',
-        // Terrain doesn't change: cache contour tiles for 30 days.
-        'Cache-Control': 'public, max-age=2592000',
-      },
-      encodeBody: 'manual',
-    });
+    return serveContours(env, ctx, cors, z, x, y);
   }
 
   const tile = TILE_PATH.exec(url.pathname);
@@ -617,7 +659,7 @@ export default {
 
     let response: Response;
     try {
-      response = await serve(request, env, url);
+      response = await serve(request, env, ctx, url);
     } catch (e) {
       return new Response(`tile error: ${(e as Error).message}`, { status: 502 });
     }

@@ -121,6 +121,99 @@ export interface StoneContourSource {
   levelField?: string;
   intervalM?: number;
   majorEvery?: number;
+  /**
+   * Our Worker's steepness tags (#509): `coarseField` = how many lines of the
+   * zoom's own interval a line stands for (1 = interval kept), `steepField` =
+   * the steepness class 0–3 of that stretch. Where the Worker coarsened the
+   * interval, steep stretches are drawn heavier (see {@link contourStroke}),
+   * so walls read dark again; where it didn't (k = 1), nothing changes.
+   */
+  coarseField?: string;
+  steepField?: string;
+}
+
+/** The steepest class our contour tiles carry (`s`, Worker `MAX_SLOPE_CLASS`). */
+export const CONTOUR_MAX_STEEP = 3;
+
+/**
+ * How a contour line is stroked at emphasis `e` (0 = as always, up to
+ * {@link CONTOUR_MAX_STEEP} on a coarsened tile's steepest walls): opacity,
+ * width (px) and how far its colour moves toward the scheme's ink (0–1;
+ * darker on paper, brighter on the night map and on imagery — more contrast
+ * either way). At e = 0 these are exactly the pre-#509 values.
+ */
+export function contourStroke(
+  e: number,
+  major: boolean,
+  dark: boolean,
+): { opacity: number; width: number; inkMix: number } {
+  const t = Math.max(0, Math.min(1, e / CONTOUR_MAX_STEEP));
+  const lerp = (a: number, b: number) => a + (b - a) * t;
+  return major
+    ? {
+        opacity: lerp(dark ? 0.7 : 0.75, dark ? 0.9 : 0.92),
+        width: lerp(1.25, 1.7),
+        inkMix: lerp(0, 0.15),
+      }
+    : {
+        opacity: lerp(dark ? 0.5 : 0.55, dark ? 0.8 : 0.85),
+        width: lerp(0.7, 1.2),
+        inkMix: lerp(0, 0.15),
+      };
+}
+
+/**
+ * The emphasis a contour feature gets: its steepness class where its tile
+ * was coarsened, else 0 — so tiles that kept their interval (Québec, any
+ * gentle terrain) draw exactly as before.
+ */
+export function contourEmphasis(c: StoneContourSource): ExpressionSpecification | null {
+  if (!c.coarseField || !c.steepField) return null;
+  return [
+    'case',
+    ['>', ['to-number', ['get', c.coarseField], 1], 1],
+    ['min', ['max', ['to-number', ['get', c.steepField], 0], 0], CONTOUR_MAX_STEEP],
+    0,
+  ];
+}
+
+/** Line paint for the minor or major contours, data-driven when the tiles carry steepness. */
+function contourPaint(
+  c: StoneContourSource,
+  major: boolean,
+  scheme: StoneBasemapScheme,
+): LineLayerSpecification['paint'] {
+  const flat = contourStroke(0, major, scheme.dark);
+  const e = contourEmphasis(c);
+  if (e === null) {
+    return { 'line-color': scheme.contour, 'line-opacity': flat.opacity, 'line-width': flat.width };
+  }
+  const steep = contourStroke(CONTOUR_MAX_STEEP, major, scheme.dark);
+  return {
+    // Linear in e from the contour colour toward ink; the ink stop sits where
+    // the mix would reach 1, so e = max lands at `steep.inkMix`. Stops are
+    // explicit colours: a bare string stop is typed as a string by the
+    // reference parser ("Type string is not interpolatable").
+    'line-color': [
+      'interpolate',
+      ['linear'],
+      e,
+      0,
+      ['to-color', scheme.contour],
+      CONTOUR_MAX_STEEP / steep.inkMix,
+      ['to-color', scheme.ink],
+    ],
+    'line-opacity': [
+      'interpolate',
+      ['linear'],
+      e,
+      0,
+      flat.opacity,
+      CONTOUR_MAX_STEEP,
+      steep.opacity,
+    ],
+    'line-width': ['interpolate', ['linear'], e, 0, flat.width, CONTOUR_MAX_STEEP, steep.width],
+  };
 }
 
 /**
@@ -625,11 +718,7 @@ export function buildStoneLayers(
         'source-layer': c.sourceLayer,
         minzoom: c.levelField ? 10 : 12,
         filter: ['all', aboveSea, ['!', isMajor]],
-        paint: {
-          'line-color': scheme.contour,
-          'line-opacity': dark ? 0.5 : 0.55,
-          'line-width': 0.7,
-        },
+        paint: contourPaint(c, false, scheme),
       },
       {
         id: id('contour-major'),
@@ -638,11 +727,7 @@ export function buildStoneLayers(
         'source-layer': c.sourceLayer,
         minzoom: c.levelField ? 8 : 10,
         filter: ['all', aboveSea, isMajor],
-        paint: {
-          'line-color': scheme.contour,
-          'line-opacity': dark ? 0.7 : 0.75,
-          'line-width': 1.25,
-        },
+        paint: contourPaint(c, true, scheme),
       },
     );
     // The height written along the major lines, the way a paper topo map

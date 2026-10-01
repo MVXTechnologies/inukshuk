@@ -14,6 +14,9 @@ import {
   buildStoneImageryLayers,
   buildStoneImagerySlots,
   buildStoneLayers,
+  CONTOUR_MAX_STEEP,
+  contourEmphasis,
+  contourStroke,
   elevationLabel,
   IMAGERY_CONTOUR_PAINT,
   IMAGERY_ROAD_OPACITY,
@@ -653,5 +656,135 @@ describe('buildStoneImagerySlots (contours on satellite, #492)', () => {
       layers: [...contours, ...linework, ...labels],
     };
     expect(validateStyleMin(style as never)).toEqual([]);
+  });
+});
+
+describe('contour steepness emphasis (#509)', () => {
+  const TAGGED = {
+    source: 'contours',
+    sourceLayer: 'contours',
+    field: 'ele',
+    levelField: 'level',
+    coarseField: 'k',
+    steepField: 's',
+  };
+  const UNTAGGED = {
+    source: 'contours',
+    sourceLayer: 'contours',
+    field: 'ele',
+    levelField: 'level',
+  };
+  const layersOf = (scheme: StoneBasemapScheme, contours: typeof UNTAGGED) =>
+    buildStoneLayers(scheme, { source: SOURCE, contours }).base;
+  const paintOf = (layers: LayerSpecification[], which: 'minor' | 'major') =>
+    (layers.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-${which}`)?.paint ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+  const SPEC = {
+    'line-color': { type: 'color' },
+    'line-opacity': { type: 'number' },
+    'line-width': { type: 'number' },
+  } as const;
+  /** Evaluate a (possibly data-driven) line paint value for one feature. */
+  function evaluate(
+    prop: keyof typeof SPEC,
+    value: unknown,
+    properties: Record<string, unknown>,
+  ): unknown {
+    // A constant colour is a string, which the parser reads as a string literal.
+    const expr = typeof value === 'string' ? ['to-color', value] : value;
+    const parsed = createExpression(expr, {
+      ...SPEC[prop],
+      'property-type': 'data-driven',
+      expression: { interpolated: true, parameters: ['zoom', 'feature'] },
+    } as never);
+    if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+    const out: unknown = parsed.value.evaluate({ zoom: 12 }, {
+      type: 'LineString',
+      properties,
+    } as unknown as Parameters<typeof parsed.value.evaluate>[1]);
+    return typeof out === 'object' && out !== null ? String(out) : out;
+  }
+
+  it('keeps the pre-#509 stroke at emphasis 0', () => {
+    expect(contourStroke(0, false, false)).toEqual({ opacity: 0.55, width: 0.7, inkMix: 0 });
+    expect(contourStroke(0, false, true)).toEqual({ opacity: 0.5, width: 0.7, inkMix: 0 });
+    expect(contourStroke(0, true, false)).toEqual({ opacity: 0.75, width: 1.25, inkMix: 0 });
+    expect(contourStroke(0, true, true)).toEqual({ opacity: 0.7, width: 1.25, inkMix: 0 });
+  });
+
+  it('grows heavier with steepness, capped at the top class', () => {
+    for (const major of [false, true]) {
+      for (const dark of [false, true]) {
+        const strokes = [0, 1, 2, 3].map((e) => contourStroke(e, major, dark));
+        for (let i = 1; i < strokes.length; i++) {
+          expect(strokes[i]!.opacity).toBeGreaterThan(strokes[i - 1]!.opacity);
+          expect(strokes[i]!.width).toBeGreaterThan(strokes[i - 1]!.width);
+          expect(strokes[i]!.inkMix).toBeGreaterThan(strokes[i - 1]!.inkMix);
+        }
+        expect(contourStroke(9, major, dark)).toEqual(strokes[3]);
+        expect(strokes[3]!.opacity).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('only emphasises tiles the Worker coarsened', () => {
+    expect(contourEmphasis(UNTAGGED)).toBeNull();
+    const e = contourEmphasis(TAGGED);
+    const at = (properties: Record<string, unknown>) => evaluate('line-width', e, properties);
+    expect(at({ k: 1, s: 3 })).toBe(0);
+    expect(at({ s: 3 })).toBe(0);
+    expect(at({ k: 3, s: 2 })).toBe(2);
+    expect(at({ k: 4, s: 7 })).toBe(CONTOUR_MAX_STEEP);
+    expect(at({ k: 4 })).toBe(0);
+  });
+
+  it.each([
+    ['light', LIGHT],
+    ['dark', DARK],
+  ])(
+    'draws k = 1 tiles (Québec) exactly as before, steep coarsened walls heavier (%s)',
+    (_, scheme) => {
+      const plain = layersOf(scheme, UNTAGGED);
+      const tagged = layersOf(scheme, TAGGED);
+      for (const which of ['minor', 'major'] as const) {
+        const before = paintOf(plain, which);
+        const after = paintOf(tagged, which);
+        // Untagged sources keep constant paint.
+        expect(before['line-color']).toBe(scheme.contour);
+        for (const prop of ['line-color', 'line-opacity', 'line-width'] as const) {
+          const asBefore = evaluate(prop, before[prop], {});
+          // k = 1 (interval kept), whatever the class — and flat stretches: identical.
+          expect(evaluate(prop, after[prop], { k: 1, s: 0 })).toEqual(asBefore);
+          expect(evaluate(prop, after[prop], { k: 1, s: 3 })).toEqual(asBefore);
+          expect(evaluate(prop, after[prop], { k: 3, s: 0 })).toEqual(asBefore);
+        }
+        const steep = { k: 3, s: 3 };
+        const want = contourStroke(3, which === 'major', scheme.dark);
+        expect(evaluate('line-opacity', after['line-opacity'], steep)).toBeCloseTo(want.opacity);
+        expect(evaluate('line-width', after['line-width'], steep)).toBeCloseTo(want.width);
+        expect(evaluate('line-color', after['line-color'], steep)).not.toEqual(
+          evaluate('line-color', before['line-color'], {}),
+        );
+        // Toward the scheme's ink: only the contour and ink colours appear.
+        expect(JSON.stringify(after['line-color'])).toContain(scheme.contour);
+        expect(JSON.stringify(after['line-color'])).toContain(scheme.ink);
+      }
+    },
+  );
+
+  it('validates against the MapLibre style spec with the steepness tags', () => {
+    const errors = validateStyleMin({
+      version: 8,
+      sources: {
+        [SOURCE]: { type: 'vector', tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+        contours: { type: 'vector', tiles: ['https://contours.example/{z}/{x}/{y}.pbf'] },
+      },
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      layers: layersOf(DARK, TAGGED),
+    });
+    expect(errors.map((e) => e.message)).toEqual([]);
   });
 });
