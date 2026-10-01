@@ -213,26 +213,133 @@ export interface HeatGrid {
   edgeCounts: Map<string, number>;
 }
 
-/** Merge per-trail walks (each trail counted once per cell/edge). */
-export function buildHeatGrid(walks: readonly TrackCellWalk[], grid: CellGrid): HeatGrid {
-  const cellCounts = new Map<number, number>();
-  const edgeCounts = new Map<string, number>();
-  const acc = new Map<number, [number, number, number]>();
-  for (const w of walks) {
+/**
+ * A {@link HeatGrid} kept up to date one trail at a time (#494): counts and
+ * centroid sums are additive, so adding or removing a trail's walk touches
+ * only that trail's cells and edges instead of re-merging the library. A
+ * 2,000-trail library that loads in batches pays for each trail once, not
+ * once per batch.
+ */
+export class HeatGridAccumulator {
+  /** The live grid (mutated in place by {@link add} / {@link remove}). */
+  readonly heat: HeatGrid;
+  private readonly acc = new Map<number, [number, number, number]>();
+
+  constructor(grid: CellGrid) {
+    this.heat = { grid, cellCounts: new Map(), centroids: new Map(), edgeCounts: new Map() };
+  }
+
+  add(w: TrackCellWalk): void {
+    const { cellCounts, edgeCounts, centroids } = this.heat;
     for (const c of w.cells) cellCounts.set(c, (cellCounts.get(c) ?? 0) + 1);
     for (const e of w.edges) edgeCounts.set(e, (edgeCounts.get(e) ?? 0) + 1);
     for (const [c, s] of w.sums) {
-      const a = acc.get(c);
+      let a = this.acc.get(c);
       if (a) {
         a[0] += s[0];
         a[1] += s[1];
         a[2] += s[2];
-      } else acc.set(c, [s[0], s[1], s[2]]);
+      } else {
+        a = [s[0], s[1], s[2]];
+        this.acc.set(c, a);
+      }
+      centroids.set(c, [a[0] / a[2], a[1] / a[2]]);
     }
   }
-  const centroids = new Map<number, [number, number]>();
-  for (const [c, [x, y, n]] of acc) centroids.set(c, [x / n, y / n]);
-  return { grid, cellCounts, centroids, edgeCounts };
+
+  /** Undo an {@link add} of the same walk. */
+  remove(w: TrackCellWalk): void {
+    const { cellCounts, edgeCounts, centroids } = this.heat;
+    for (const c of w.cells) {
+      const n = (cellCounts.get(c) ?? 0) - 1;
+      if (n > 0) cellCounts.set(c, n);
+      else cellCounts.delete(c);
+    }
+    for (const e of w.edges) {
+      const n = (edgeCounts.get(e) ?? 0) - 1;
+      if (n > 0) edgeCounts.set(e, n);
+      else edgeCounts.delete(e);
+    }
+    for (const [c, s] of w.sums) {
+      const a = this.acc.get(c);
+      if (!a) continue;
+      a[0] -= s[0];
+      a[1] -= s[1];
+      a[2] -= s[2];
+      if (a[2] <= 0) {
+        this.acc.delete(c);
+        centroids.delete(c);
+      } else centroids.set(c, [a[0] / a[2], a[1] / a[2]]);
+    }
+  }
+}
+
+/**
+ * Keeps a {@link HeatGridAccumulator} in step with a changing set of trails
+ * (#494): {@link sync} takes the wanted id → walk map and applies only the
+ * difference — a trail gone (or re-walked after an edit) comes out, a new one
+ * goes in. `stamp` changes exactly when the grid does, so derived output
+ * (lines, glow) can be memoized on it.
+ */
+export class HeatGridSync {
+  private acc: HeatGridAccumulator;
+  private readonly added = new Map<string, TrackCellWalk>();
+  private stampValue = 0;
+
+  constructor(private readonly grid: CellGrid) {
+    this.acc = new HeatGridAccumulator(grid);
+  }
+
+  /** Changes whenever the grid does (starts at 0: empty, never synced). */
+  get stamp(): number {
+    return this.stampValue;
+  }
+
+  /** Trails currently in the grid. */
+  get size(): number {
+    return this.added.size;
+  }
+
+  /** The live grid (mutated by later syncs), or null when it holds no trail. */
+  get heat(): HeatGrid | null {
+    return this.added.size > 0 ? this.acc.heat : null;
+  }
+
+  /** Bring the grid to exactly `target`; returns whether anything changed. */
+  sync(target: ReadonlyMap<string, TrackCellWalk>): boolean {
+    let changed = false;
+    for (const [id, w] of this.added) {
+      if (target.get(id) !== w) {
+        this.acc.remove(w);
+        this.added.delete(id);
+        changed = true;
+      }
+    }
+    for (const [id, w] of target) {
+      if (!this.added.has(id)) {
+        this.acc.add(w);
+        this.added.set(id, w);
+        changed = true;
+      }
+    }
+    if (changed) this.stampValue += 1;
+    return changed;
+  }
+
+  /** Drop everything (frees the grid's memory). */
+  clear(): void {
+    if (this.added.size === 0) return;
+    this.added.clear();
+    this.acc = new HeatGridAccumulator(this.grid);
+    this.stampValue += 1;
+  }
+}
+
+/** Merge per-trail walks (each trail counted once per cell/edge). */
+export function buildHeatGrid(walks: readonly TrackCellWalk[], grid: CellGrid): HeatGrid {
+  const acc = new HeatGridAccumulator(grid);
+  for (const w of walks) acc.add(w);
+  return acc.heat;
 }
 
 /**
