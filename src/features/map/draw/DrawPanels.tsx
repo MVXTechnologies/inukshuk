@@ -234,6 +234,10 @@ export function BackAndForthChip({
   onToggle: () => void;
 }) {
   const t = useSchemeTokens();
+  const theme = useTheme();
+  // "On" is the sage selected pill (like the active tab), never the dark Save
+  // button's fill: the two sit side by side and must not read as one kind.
+  const ink = on ? theme.colors.onSecondaryContainer : t.ink;
   return (
     <Pressable
       onPress={onToggle}
@@ -244,16 +248,13 @@ export function BackAndForthChip({
       accessibilityState={{ selected: on, checked: on, disabled }}
       style={[
         styles.toggle,
-        { borderColor: on ? t.library.chipOn : t.outlineVariant },
-        on && { backgroundColor: t.library.chipOn },
+        { borderColor: on ? theme.colors.secondaryContainer : t.outlineVariant },
+        on && { backgroundColor: theme.colors.secondaryContainer },
         disabled && styles.disabled,
       ]}
     >
-      <Icon source="arrow-u-left-top" size={20} color={on ? t.library.chipOnInk : t.ink} />
-      <Text
-        numberOfLines={1}
-        style={[styles.toggleLabel, { color: on ? t.library.chipOnInk : t.ink }]}
-      >
+      <Icon source="arrow-u-left-top" size={20} color={ink} />
+      <Text numberOfLines={1} style={[styles.toggleLabel, { color: ink }]}>
         Back & forth
       </Text>
     </Pressable>
