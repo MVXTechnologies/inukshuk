@@ -48,10 +48,11 @@ export interface MapActions {
   onGoToCoordinates?: () => void;
   /** Open Settings (a stack route since Settings left the tab bar). */
   onOpenSettings?: () => void;
-  /** Open the route drawing tool (#502). Omitted in 3D. */
-  onDrawRoute?: () => void;
-  /** Open the area drawing tool (#503). Omitted in 3D. */
-  onDrawArea?: () => void;
+  /**
+   * "Draw": opens the chooser between a route (#502) and an area (#503) —
+   * one row for both drawing tools. Omitted in 3D.
+   */
+  onDraw?: () => void;
 }
 
 export function MapActionsMenu({
@@ -104,10 +105,7 @@ export function MapActionsMenu({
             row('crosshairs', 'Navigate to coordinates', run(actions.onGoToCoordinates))}
           {actions.onOpenSettings !== undefined &&
             row('cog-outline', 'Settings', run(actions.onOpenSettings))}
-          {actions.onDrawRoute !== undefined &&
-            row('vector-polyline', 'Draw a route', run(actions.onDrawRoute))}
-          {actions.onDrawArea !== undefined &&
-            row('vector-polygon', 'Draw an area', run(actions.onDrawArea))}
+          {actions.onDraw !== undefined && row('draw', 'Draw', run(actions.onDraw))}
         </View>
       )}
     </>

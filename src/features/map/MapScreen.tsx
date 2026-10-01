@@ -2540,9 +2540,9 @@ export function MapScreen() {
                         inspect(null);
                         setMakeMapState({ phase: 'editing' });
                       },
-                  // Drawing (#502/#503) taps the flat 2D map.
-                  onDrawRoute: terrain3d ? undefined : drawing.startRoute,
-                  onDrawArea: terrain3d ? undefined : drawing.startArea,
+                  // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
+                  // route or area first.
+                  onDraw: terrain3d ? undefined : drawing.openChooser,
                 }
               : undefined
           }

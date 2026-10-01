@@ -1,5 +1,6 @@
 import type { LegMode } from '@core/draw/legs';
-import { palette } from '@ui/tokens';
+import { palette, target } from '@ui/tokens';
+import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -27,6 +28,11 @@ const MODES: readonly { id: RouteMode; label: string; hint: string }[] = [
  * Trails · Roads · Freehand (#515): the mode the NEXT leg is drawn in. Legs
  * already drawn keep theirs, so one route can mix a road approach, a trail
  * and a straight off-trail bit.
+ *
+ * A compact segmented pill in the top bar, in the search pill's slot (the
+ * search pill is hidden while drawing) and in its style: the map-chrome
+ * stone with its ink, the chosen segment inverted, so it reads on light and
+ * dark maps alike, with the sunlight outline.
  */
 export function RouteModeChips({
   mode,
@@ -38,11 +44,13 @@ export function RouteModeChips({
   onChange: (mode: RouteMode) => void;
 }) {
   const t = useSchemeTokens();
+  const outline = useChromeOutline();
   return (
     <View
-      style={[styles.modes, { top, backgroundColor: t.surface }]}
+      style={[styles.modes, { top, backgroundColor: t.map.chrome }, outline]}
       accessibilityRole="radiogroup"
       accessibilityLabel="Route mode"
+      testID="route-mode-picker"
     >
       {MODES.map((m) => {
         const on = m.id === mode;
@@ -54,9 +62,12 @@ export function RouteModeChips({
             accessibilityState={{ selected: on }}
             accessibilityLabel={m.label}
             accessibilityHint={m.hint}
-            style={[styles.mode, on && { backgroundColor: t.library.chipOn }]}
+            style={[styles.mode, on && { backgroundColor: t.map.chromeInk }]}
           >
-            <Text style={[styles.modeLabel, { color: on ? t.library.chipOnInk : t.ink }]}>
+            <Text
+              numberOfLines={1}
+              style={[styles.modeLabel, { color: on ? t.map.chrome : t.map.chromeInk }]}
+            >
               {m.label}
             </Text>
           </Pressable>
@@ -312,29 +323,31 @@ export function RoutingCredit({ engines }: { engines: readonly string[] }) {
 
 const styles = StyleSheet.create({
   // Below the compass, clear of the controls rail on the right (16 + 48 + 12).
+  // The search pill's slot: between the compass (16 + 48) and the rail, 12 dp
+  // either side, the pill's height and shadow.
   modes: {
     position: 'absolute',
-    left: 16,
+    left: 76,
     right: 76,
-    padding: 6,
-    borderRadius: 26,
+    height: target.min,
+    padding: 4,
+    borderRadius: target.min / 2,
     flexDirection: 'row',
-    gap: 6,
+    gap: 2,
     elevation: 4,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   mode: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 22,
+    borderRadius: (target.min - 8) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingHorizontal: 4,
   },
-  modeLabel: { fontSize: 14.5, lineHeight: 18, fontWeight: '800' },
+  modeLabel: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
   hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
   hint: {
     fontSize: 13,

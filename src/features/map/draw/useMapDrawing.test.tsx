@@ -176,6 +176,41 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('route drawing (#502)', () => {
+  it('"Draw" opens a Route / Area chooser; picking one starts that tool', async () => {
+    await mount();
+    await act(async () => drawing().openChooser());
+    expect(beforeStart).toHaveBeenCalled();
+    expect(screen.getByTestId('draw-chooser')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Route')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Area')).toBeOnTheScreen();
+    expect(screen.getByText('A line to follow, snapped to trails or roads')).toBeOnTheScreen();
+    expect(drawing().ownsBottom).toBe(true);
+    expect(drawing().active).toBe(false);
+    // A tap on the map beside it closes it, and is not a map tap.
+    expect(drawing().onMapTap(P1)).toBe(true);
+    await flush(0);
+    expect(screen.queryByTestId('draw-chooser')).toBeNull();
+
+    await act(async () => drawing().openChooser());
+    await press('Close');
+    expect(screen.queryByTestId('draw-chooser')).toBeNull();
+
+    await act(async () => drawing().openChooser());
+    await press('Route');
+    expect(screen.queryByTestId('draw-chooser')).toBeNull();
+    expect(screen.getByText('Draw a route')).toBeOnTheScreen();
+    // The mode picker sits in the top bar (the search pill's slot), right of the compass.
+    const picker = screen.getByTestId('route-mode-picker');
+    expect(picker).toHaveStyle({ top: 47 + 8, left: 76, right: 76 });
+    await press('Exit drawing');
+
+    await act(async () => drawing().openChooser());
+    await press('Area');
+    expect(screen.getByText('Draw an area')).toBeOnTheScreen();
+    // An area has no modes: the slot stays empty.
+    expect(screen.queryByTestId('route-mode-picker')).toBeNull();
+  });
+
   it('owns map taps only while open', async () => {
     await mount();
     expect(drawing().onMapTap(P1)).toBe(false);

@@ -55,6 +55,7 @@ import { AreaCard } from './AreaCard';
 import { AreaEditorSheet, type AreaDraft } from './AreaEditorSheet';
 import { AreaLayers } from './AreaLayers';
 import { DragHandle } from './DragHandle';
+import { DrawChooser } from './DrawChooser';
 import { DrawLayers } from './DrawLayers';
 import {
   DrawHint,
@@ -110,6 +111,8 @@ export interface MapDrawing {
   closeAreaCard: () => void;
   startRoute: () => void;
   startArea: () => void;
+  /** "Draw" in the "+" menu: the Route / Area chooser. */
+  openChooser: () => void;
   /** A map tap while a tool is open; true = consumed. */
   onMapTap: (lngLat: LngLat | null, point?: [number, number] | null) => boolean;
   /** The camera settled: the selected point's grip must follow it. */
@@ -153,6 +156,7 @@ export function useMapDrawing({
     initial: AreaDraft;
   } | null>(null);
   const [viewAreaId, setViewAreaId] = useState<string | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
   const discardArmedAt = useRef(0);
 
   const state = draw.state;
@@ -211,6 +215,7 @@ export function useMapDrawing({
     ) => {
       onBeforeStart();
       setViewAreaId(null);
+      setChooserOpen(false);
       setRouteSaveOpen(false);
       setAreaEditor(null);
       discardArmedAt.current = 0;
@@ -221,6 +226,11 @@ export function useMapDrawing({
 
   const startRoute = useCallback(() => begin({ kind: 'route' }), [begin]);
   const startArea = useCallback(() => begin({ kind: 'area' }), [begin]);
+  const openChooser = useCallback(() => {
+    onBeforeStart();
+    setViewAreaId(null);
+    setChooserOpen(true);
+  }, [onBeforeStart]);
 
   // One-shot requests from the trail view / Library ("Edit route", "Edit
   // shape", an area row's "Show on map").
@@ -302,6 +312,10 @@ export function useMapDrawing({
         else requestExit();
         return true;
       }
+      if (chooserOpen) {
+        setChooserOpen(false);
+        return true;
+      }
       if (viewAreaId !== null) {
         setViewAreaId(null);
         return true;
@@ -329,6 +343,11 @@ export function useMapDrawing({
 
   const onMapTap = useCallback(
     (lngLat: LngLat | null, point: [number, number] | null = null): boolean => {
+      // A tap on the map beside the Draw chooser closes it (and does nothing else).
+      if (chooserOpen) {
+        setChooserOpen(false);
+        return true;
+      }
       if (state === null) return false;
       if (routeSaveOpen || areaEditor !== null || lngLat === null) return true;
       if (point === null) {
@@ -344,7 +363,7 @@ export function useMapDrawing({
       );
       return true;
     },
-    [state, draw, routeSaveOpen, areaEditor, projectAll, legMids],
+    [state, draw, routeSaveOpen, areaEditor, projectAll, legMids, chooserOpen],
   );
 
   // The selected vertex's grip sits over it on screen: re-projected whenever
@@ -710,18 +729,24 @@ export function useMapDrawing({
   const laneTop = topInset + 64;
   const chrome = (
     <>
+      {/* The mode picker takes the search pill's slot, right of the compass. */}
       {state !== null && state.kind === 'route' && (
         <RouteModeChips
           mode={state.mode}
-          top={laneTop}
+          top={topInset + 8}
           onChange={(mode) => draw.dispatch({ type: 'mode', mode })}
         />
       )}
       {state !== null && !routeSaveOpen && areaEditor === null && (
-        <DrawHint
-          text={drawHint(state)}
-          top={state.kind === 'route' ? laneTop + 56 + 8 : laneTop}
-        />
+        <DrawHint text={drawHint(state)} top={laneTop} />
+      )}
+      {chooserOpen && state === null && (
+        <View style={styles.dock} pointerEvents="box-none">
+          <DrawChooser
+            onPick={(kind) => (kind === 'route' ? startRoute() : startArea())}
+            onClose={() => setChooserOpen(false)}
+          />
+        </View>
       )}
       {state !== null && gripAt !== null && !routeSaveOpen && areaEditor === null && (
         <DragHandle
@@ -800,11 +825,12 @@ export function useMapDrawing({
   return {
     active,
     panelHeight: panel !== null ? panelHeight : 0,
-    ownsBottom: active || areaEditor !== null || viewArea !== null,
+    ownsBottom: active || chooserOpen || areaEditor !== null || viewArea !== null,
     viewAreaId,
     closeAreaCard: () => setViewAreaId(null),
     startRoute,
     startArea,
+    openChooser,
     onMapTap,
     onCameraSettled: () => setCameraVersion((v) => v + 1),
     onMapLongPress,
