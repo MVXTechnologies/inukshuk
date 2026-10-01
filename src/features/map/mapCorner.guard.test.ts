@@ -44,21 +44,39 @@ describe('tip button is Map-only', () => {
   });
 });
 
-describe('tip button pause', () => {
+describe('tip mug vs map interaction', () => {
   const map = read('src/features/map/MapScreen.tsx');
+  const button = read('src/features/support/TipButton.tsx');
 
-  it('pauses only for the person panning or zooming, not for follow-location moves', () => {
+  it('never pauses the mug for map interaction (owner): no pause prop at all', () => {
+    expect(map).not.toMatch(/<TipButton[^>]*\bpaused=/);
+    expect(button).not.toMatch(/\bpaused\??:/);
+    // The gesture state reaches the button only as the bubble's guard.
+    expect(map).toMatch(/gestureActive=\{cameraMoving\}/);
+  });
+
+  it('runs the loop on the UI thread, not on a JS timer', () => {
+    expect(button).toMatch(
+      /withRepeat\(withDelay\(gap, withSequence\(first, \.\.\.others\)\), -1, false\)/,
+    );
+    // The only JS interval left is the bubble's 1 s check.
+    expect(button.match(/setInterval\(/g) ?? []).toHaveLength(1);
+    expect(button).toMatch(
+      /setInterval\(\(\) => \{\s*const store = useTipMascotStore\.getState\(\)/,
+    );
+  });
+
+  it('tracks the person’s own pans and zooms (for the bubble) robustly', () => {
     expect(map).toMatch(/useState\(\(\) => createGesturePause\(setCameraMoving\)\)/);
     expect(map).toMatch(
       /onRegionWillChange=\{\(e\) => \{\s*gesturePause\.willChange\(e\.nativeEvent\.userInteraction === true\);/,
     );
     expect(map).toMatch(/onRegionDidChange=\{\(e\) => \{\s*gesturePause\.didChange\(\);/);
-    expect(map).toMatch(/paused=\{cameraMoving\}/);
-    // Nothing else may set the pause: only the controller (with its 3 s cap).
+    // Nothing else may set it: only the controller (with its 3 s cap).
     expect(map.match(/setCameraMoving\(/g) ?? []).toHaveLength(0);
   });
 
-  it('never lets a tap pause the mug (the iOS will-without-did trap)', () => {
+  it('never counts a tap as a gesture (the iOS will-without-did trap)', () => {
     expect(map).toMatch(
       /const onMapPress = useCallback\(\s*\(e: MapPressEvent\) => \{\s*gesturePause\.tap\(\);/,
     );

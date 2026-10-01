@@ -541,9 +541,11 @@ export function MapScreen() {
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
   const [destination, setDestination] = useState<LatLng | null>(null);
-  // True while the PERSON pans or zooms (tip button pauses, #476). Driven by
-  // createGesturePause: taps never pause, a settle or a tap ends it, and it
-  // clears itself after 3 s even when iOS drops the matching "did change".
+  // True while the PERSON pans or zooms. Only the mascot BUBBLE waits on it
+  // (none pops mid-gesture or for 5 s after, #476); the mug's loop ignores
+  // map interaction entirely (owner). Driven by createGesturePause: taps
+  // never count, a settle or a tap ends it, and it clears itself after 3 s
+  // even when iOS drops the matching "did change".
   const [cameraMoving, setCameraMoving] = useState(false);
   const [gesturePause] = useState(() => createGesturePause(setCameraMoving));
   useEffect(() => () => gesturePause.dispose(), [gesturePause]);
@@ -1991,10 +1993,11 @@ export function MapScreen() {
           // Wind particles track the camera at gesture rate; the handler is
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
-          // Once per camera move (not per frame): pauses the tip button's
-          // animation while the PERSON pans or zooms (#476). Programmatic moves
-          // (follow-my-location nudges every fix) never do; see gesturePause
-          // for the iOS tap trap this guards against.
+          // Once per camera move (not per frame): marks the PERSON's pans and
+          // zooms so the mascot bubble waits for a still map (#476); the mug
+          // keeps animating regardless. Programmatic moves (follow-my-location
+          // nudges every fix) never count; see gesturePause for the iOS tap
+          // trap this guards against.
           onRegionWillChange={(e) => {
             gesturePause.willChange(e.nativeEvent.userInteraction === true);
           }}
@@ -2661,7 +2664,7 @@ export function MapScreen() {
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
               <TipButton
                 navigating={destination !== null}
-                paused={cameraMoving}
+                gestureActive={cameraMoving}
                 focused={isFocused}
                 bubbleBlocked={
                   railMenuOpen ||

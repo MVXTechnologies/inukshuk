@@ -1,6 +1,8 @@
 /**
- * "Is the person moving the map?" for the tip mug (#476), robust to the
- * native map's event quirks.
+ * "Is the person moving the map?" for the mascot bubble's guard (#476: no
+ * fun-fact bubble pops during a gesture or for 5 s after), robust to the
+ * native map's event quirks. The mug's own loop does NOT use it: the owner
+ * wants it running through any map interaction.
  *
  * The map reports a camera move as `regionWillChange` (with a
  * `userInteraction` flag) then `regionDidChange`. Two traps, both seen in the
@@ -12,10 +14,10 @@
  * - `regionDidChange` is dropped when the reason is "transition cancelled"
  *   without a pan — so that tap's "will" never gets its "did".
  *
- * Trusting the pair left the mug paused for good after one tap. Here:
- * - only a user move pauses; programmatic moves never do;
- * - a settled camera, or a tap (the map's `onPress`), ends the pause at once;
- * - and whatever the map forgets to send, the pause clears itself after
+ * Trusting the pair would block the bubble for good after one tap. Here:
+ * - only a user move counts; programmatic moves never do;
+ * - a settled camera, or a tap (the map's `onPress`), ends it at once;
+ * - and whatever the map forgets to send, it clears itself after
  *   {@link GESTURE_PAUSE_MAX_MS} with no further move events.
  *
  * Pure: plain timers, no React Native.

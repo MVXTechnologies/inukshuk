@@ -6,8 +6,8 @@ import {
   DEFAULT_TIP_BUTTON_VARIANT,
   MASCOT_FACE_MS,
   MASCOT_FACE_PHASES,
+  motionDurationMs,
   MUG_LAYOUT,
-  MUG_RESUME_DELAY_MS,
   mugPaths,
   TIP_BUTTON_MOTION,
   TIP_JAR_WOBBLE_INTERVAL_MS,
@@ -33,6 +33,8 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
+  withRepeat,
   withSequence,
   withTiming,
   type SharedValue,
@@ -48,10 +50,13 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
  * mug) lives in `@core/support/tipJar` with every timing, so choosing is a
  * one-line change.
  *
- * - The loop: one short scene every 12 s; none with the OS "reduce motion"
- *   setting or after a tip; held (a tick is skipped, the schedule kept)
- *   while the person pans or zooms, while the Map tab is not in front and
- *   while the app is in the background.
+ * - The loop: one short scene every 12 s, scheduled AND played on the UI
+ *   thread (Reanimated `withRepeat` + `withDelay`), so no JS timer and no
+ *   busy JS thread during map moves can delay or starve it. Map interaction
+ *   never pauses it (owner: taps, pans, pinches, rotation, tilt and camera
+ *   animations all leave it running). It stops only while the Map tab is not
+ *   in front or the app is in the background, and never runs with the OS
+ *   "reduce motion" setting or after a tip.
  * - The mascot (round 4): about every two minutes, when `bubbleDue` allows, the
  *   mug shows a face and the Map's `TipBubble` pops a fun fact. This
  *   component decides and animates the face; the bubble is drawn by the Map
@@ -65,11 +70,10 @@ export function TipButton({
   navigating = false,
   blocked = false,
   bubbleBlocked = false,
-  paused = false,
+  gestureActive = false,
   focused = true,
   onAnimate,
   intervalMs = TIP_JAR_WOBBLE_INTERVAL_MS,
-  resumeDelayMs = MUG_RESUME_DELAY_MS,
   bubbleCheckMs = BUBBLE_CHECK_MS,
   clock = Date.now,
 }: {
@@ -79,14 +83,16 @@ export function TipButton({
   blocked?: boolean;
   /** A sheet, dialog, menu or search is open: no bubble (the button stays). */
   bubbleBlocked?: boolean;
-  /** The person is panning or zooming the map. */
-  paused?: boolean;
+  /**
+   * The person is moving the map. For the BUBBLE only (none pops during a
+   * gesture or for 5 s after); the mug's loop ignores it.
+   */
+  gestureActive?: boolean;
   /** The Map tab is in front. */
   focused?: boolean;
-  /** Test hooks: called at each loop scene; the loop, catch-up and bubble-check periods; the clock. */
+  /** Test hooks: called when the UI-thread loop (re)starts; the loop and bubble-check periods; the clock. */
   onAnimate?: () => void;
   intervalMs?: number;
-  resumeDelayMs?: number;
   bubbleCheckMs?: number;
   clock?: () => number;
 }) {
@@ -129,85 +135,49 @@ export function TipButton({
   });
   const animates = visible && tipJarAnimates({ reduceMotion, hasTipped });
   const active = focused && foreground;
-  const held = paused || !active;
-  const heldRef = useRef(held);
-  useEffect(() => {
-    heldRef.current = held;
-  }, [held]);
 
   // When the person's last map gesture ended (for the 5 s calm before a bubble).
   const lastGestureEndAt = useRef<number | null>(null);
-  const wasPaused = useRef(paused);
+  const wasGesture = useRef(gestureActive);
   useEffect(() => {
-    if (wasPaused.current && !paused) lastGestureEndAt.current = clock();
-    wasPaused.current = paused;
-  }, [paused, clock]);
+    if (wasGesture.current && !gestureActive) lastGestureEndAt.current = clock();
+    wasGesture.current = gestureActive;
+  }, [gestureActive, clock]);
 
-  // Holding (a pan or zoom, another tab, the background) stops a scene at
-  // once and puts the icon back at rest — without touching the loop's
-  // schedule, so a burst of short pans cannot keep postponing it forever.
+  // The loop, entirely on the UI thread: wait, play the scene, repeat — one
+  // scene every `intervalMs`. Started once and left alone; only another tab,
+  // the background, reduce motion or a tip stop it (icon back at rest).
+  const loops = animates && active;
   useEffect(() => {
-    if (!held) return;
-    cancelAnimation(progress);
-    progress.set(rest);
-  }, [held, progress, rest]);
-
-  // The loop: one JS timer per scene (every 12 s); the scene itself runs on
-  // the UI thread. A tick that lands while held is skipped but remembered:
-  // once the hold ends, the scene plays after MUG_RESUME_DELAY_MS rather than
-  // waiting up to a whole loop — so after a pan it is back within ~1 s.
-  const missedTick = useRef(false);
-  const lastPlayAt = useRef(-Infinity);
-  const playRef = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    if (!animates) {
+    if (!loops) {
       cancelAnimation(progress);
       progress.set(rest);
-      playRef.current = () => undefined;
       return;
     }
-    playRef.current = () => {
-      // Never two scenes on top of each other (a catch-up then the tick).
-      const now = clock();
-      if (now - lastPlayAt.current < intervalMs / 2) return;
-      lastPlayAt.current = now;
-      const [first, ...others] = steps.map((step) =>
-        withTiming(step.to, {
-          duration: step.ms,
-          easing: step.easing === 'linear' ? Easing.linear : Easing.inOut(Easing.quad),
-        }),
-      );
-      if (first !== undefined) progress.set(withSequence(first, ...others));
-      onAnimateRef.current?.();
+    const [first, ...others] = steps.map((step) =>
+      withTiming(step.to, {
+        duration: step.ms,
+        easing: step.easing === 'linear' ? Easing.linear : Easing.inOut(Easing.quad),
+      }),
+    );
+    if (first === undefined) return;
+    const gap = Math.max(0, intervalMs - motionDurationMs(steps));
+    progress.set(rest);
+    progress.set(withRepeat(withDelay(gap, withSequence(first, ...others)), -1, false));
+    onAnimateRef.current?.();
+    return () => {
+      cancelAnimation(progress);
+      progress.set(rest);
     };
-    const timer = setInterval(() => {
-      if (heldRef.current) {
-        missedTick.current = true;
-        return;
-      }
-      playRef.current();
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [animates, intervalMs, progress, rest, steps, clock]);
-
-  // The catch-up after a hold that swallowed a tick.
-  useEffect(() => {
-    if (held || !missedTick.current) return;
-    const timer = setTimeout(() => {
-      if (heldRef.current) return;
-      missedTick.current = false;
-      playRef.current();
-    }, resumeDelayMs);
-    return () => clearTimeout(timer);
-  }, [held, resumeDelayMs]);
+  }, [loops, intervalMs, progress, rest, steps]);
 
   // The mascot bubble: a cheap 1 s check against `bubbleDue`. Thanked people
   // (who have tipped before) are not nudged, so they get no bubble either.
   const mayBubble = visible && !hasTipped;
-  const bubbleInputs = useRef({ active, bubbleBlocked, paused, mayBubble });
+  const bubbleInputs = useRef({ active, bubbleBlocked, gestureActive, mayBubble });
   useEffect(() => {
-    bubbleInputs.current = { active, bubbleBlocked, paused, mayBubble };
-  }, [active, bubbleBlocked, paused, mayBubble]);
+    bubbleInputs.current = { active, bubbleBlocked, gestureActive, mayBubble };
+  }, [active, bubbleBlocked, gestureActive, mayBubble]);
   useEffect(() => {
     if (!mayBubble) return;
     const timer = setInterval(() => {
@@ -220,7 +190,7 @@ export function TipButton({
         buttonVisible: input.mayBubble,
         active: input.active,
         blocked: input.bubbleBlocked,
-        gestureActive: input.paused,
+        gestureActive: input.gestureActive,
         lastGestureEndAt: lastGestureEndAt.current,
         mapOpenedAt: openedAt,
         lastBubbleAt: store.lastBubbleAt,
@@ -233,10 +203,10 @@ export function TipButton({
 
   // A bubble never outlives the conditions that allowed it.
   useEffect(() => {
-    if (bubbleUp && (!mayBubble || !active || bubbleBlocked || paused)) {
+    if (bubbleUp && (!mayBubble || !active || bubbleBlocked || gestureActive)) {
       useTipMascotStore.getState().hide();
     }
-  }, [bubbleUp, mayBubble, active, bubbleBlocked, paused]);
+  }, [bubbleUp, mayBubble, active, bubbleBlocked, gestureActive]);
 
   // The face: eyes, a blink, then happy arcs while the bubble is up. Reduce
   // motion: no face at all (the bubble still appears).
