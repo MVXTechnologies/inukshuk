@@ -173,6 +173,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    'expo-iap',
     // Android: the system navigation bar starts hidden (swipe up to reveal);
     // src/ui/useAndroidImmersive keeps it that way.
     ['expo-navigation-bar', { hidden: true }],

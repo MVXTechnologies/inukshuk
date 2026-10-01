@@ -19,6 +19,7 @@
     "expo-file-system": "~56.0.11",
     "expo-font": "~56.0.7",
     "expo-gl": "~56.0.6",
+    "expo-iap": "^5.8.2",
     "expo-image-picker": "~56.0.25",
     "expo-keep-awake": "~56.0.3",
     "expo-linking": "~56.0.18",

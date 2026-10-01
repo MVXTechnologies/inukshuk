@@ -24,6 +24,12 @@
     },
     "production": {
       "channel": "production"
+    },
+    "sim": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {
