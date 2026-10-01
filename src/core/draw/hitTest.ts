@@ -17,7 +17,7 @@ export type HandleHit = { kind: 'vertex'; index: number } | { kind: 'midpoint'; 
 export const VERTEX_HIT_PX = 26;
 export const MIDPOINT_HIT_PX = 20;
 /** The start point's target while it can close a loop: a little bigger, and first. */
-export const START_HIT_PX = 38;
+export const START_HIT_PX = 34;
 
 function nearest(
   points: readonly (ScreenPoint | null)[],
