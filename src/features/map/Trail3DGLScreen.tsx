@@ -11,13 +11,7 @@ import { padBbox } from '@core/geo/terrain';
 import type { TrackPoint } from '@core/models';
 import * as storage from '@data/storage';
 import type { ExpoWebGLRenderingContext } from 'expo-gl';
-import {
-  formatDistance,
-  formatDuration,
-  formatElevation,
-  formatPace,
-  formatSpeed,
-} from '@state/formatters';
+import { formatDistance, formatElevation, formatSpeed } from '@state/formatters';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
@@ -96,6 +90,8 @@ import { Trail2DView } from './Trail2DView';
 import { overwriteWithTrim, saveTrimmedCopy, type TrimRange } from './trimTrack';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 import { useTrailNoteEditor } from './hooks/useTrailNoteEditor';
+import { useLazyMovingStats } from './hooks/useLazyMovingStats';
+import { TrailTimeStats } from './components/TrailTimeStats';
 
 interface Props {
   trackId: string;
@@ -509,10 +505,15 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Drive the profile + summary from the DEM-sampled points when available, so
   // the elevation chart and ↑/↓ totals match the 3D drape and the displayed view.
   const profilePoints = demPoints ?? points ?? [];
+  const category = track?.category;
   const profileStats = useMemo(
-    () => (demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts) : null),
-    [demPoints, segmentStarts],
+    () => (demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts, { category }) : null),
+    [demPoints, segmentStarts, category],
   );
+  // Trails saved before moving time existed (#504), or re-filed under another
+  // activity, get their moving stats recomputed here — once, from the points
+  // this screen loads anyway — instead of a library-wide pass at launch.
+  useLazyMovingStats(track, points, segmentStarts);
 
   // Cumulative distance at each point for the trim tool's "keeping X of Y"
   // readout — O(n) once per point-set, then a subtraction per slider move.
@@ -1022,9 +1023,8 @@ export function Trail3DGLScreen({ trackId }: Props) {
               <Text variant="labelMedium">{formatDistance(s.distanceM)}</Text>
               <Text variant="labelMedium">↑ {formatElevation(s.ascentM)}</Text>
               <Text variant="labelMedium">↓ {formatElevation(s.descentM)}</Text>
-              <Text variant="labelMedium">{formatDuration(s.durationS)}</Text>
-              <Text variant="labelMedium">{formatPace(s.avgSpeedMps)}</Text>
             </View>
+            <TrailTimeStats stats={s} category={track.category} />
           </Surface>
 
           <TrailViewerRail

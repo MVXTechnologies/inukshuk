@@ -1,5 +1,6 @@
 import type { BoundingBox, TrackPoint, TrackStats } from '@core/models';
 import { haversineMeters } from '@core/geo/geomath';
+import { computeMovingTime, movingModelKey, movingProfileFor } from './movingTime';
 
 /**
  * Pure track-statistics math: distance, elevation gain/loss with GPS-noise
@@ -31,6 +32,16 @@ export {
   totalPausedMs,
 } from './segments';
 export type { PauseInterval, SegmentStarts } from './segments';
+export {
+  computeMovingTime,
+  hasCurrentMovingStats,
+  MOVING_MODEL_VERSION,
+  movingModelKey,
+  movingProfileFor,
+  trailTiming,
+} from './movingTime';
+export { refreshMovingStats } from './refreshMoving';
+export type { MovingProfile, MovingProfileId, MovingTimeOpts, TrailTiming } from './movingTime';
 
 const DEFAULT_ELEVATION_THRESHOLD_M = 3;
 const DEFAULT_MOVING_SPEED_THRESHOLD_MPS = 0.5;
@@ -143,11 +154,21 @@ export function elevationGainLoss(
 
 interface ComputeOpts {
   elevationThresholdM?: number;
+  /** Overrides the category's stop threshold (m/s); the result then carries no `movingModel`. */
   movingSpeedThresholdMps?: number;
   maxAccuracyM?: number;
+  /** The trail's activity category: picks the moving-time stop threshold (#504). */
+  category?: string | null;
 }
 
-const emptyStats = (): TrackStats => ({
+/** The `movingModel` stamp for these options (none when the threshold is overridden). */
+function movingModelOf(opts?: ComputeOpts): Pick<TrackStats, 'movingModel'> {
+  return opts?.movingSpeedThresholdMps === undefined
+    ? { movingModel: movingModelKey(opts?.category) }
+    : {};
+}
+
+const emptyStats = (opts?: ComputeOpts): TrackStats => ({
   distanceM: 0,
   ascentM: 0,
   descentM: 0,
@@ -159,13 +180,14 @@ const emptyStats = (): TrackStats => ({
   maxAltitudeM: undefined,
   bbox: undefined,
   pointCount: 0,
+  ...movingModelOf(opts),
 });
 
 /** Full statistics for an ordered series of track points. */
 export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeOpts): TrackStats {
   const elevationThresholdM = opts?.elevationThresholdM ?? DEFAULT_ELEVATION_THRESHOLD_M;
   const movingSpeedThresholdMps =
-    opts?.movingSpeedThresholdMps ?? DEFAULT_MOVING_SPEED_THRESHOLD_MPS;
+    opts?.movingSpeedThresholdMps ?? movingProfileFor(opts?.category).stopSpeedMps;
   const maxAccuracyM = opts?.maxAccuracyM;
 
   // Optionally drop low-quality fixes before any math.
@@ -174,11 +196,9 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
       ? points
       : points.filter((p) => p.accuracy === undefined || p.accuracy <= maxAccuracyM);
 
-  if (pts.length === 0) return emptyStats();
+  if (pts.length === 0) return emptyStats(opts);
 
   let distanceM = 0;
-  let movingTimeS = 0;
-  let movingDistanceM = 0;
   let firstTime: number | undefined;
   let lastTime: number | undefined;
   let maxSpeedMps = 0;
@@ -218,13 +238,8 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
       const dt = (p.time - prev.time) / 1000;
       if (hasTime && prev.hasTime !== false && Number.isFinite(prev.time) && dt > 0) {
         const speed = segDist / dt;
-        // Spike guard: only count physically plausible ground speeds toward
-        // the max. dt<=0 segments are already excluded.
+        // dt<=0 segments are already excluded.
         if (speed > maxSpeedMps) maxSpeedMps = speed;
-        if (speed >= movingSpeedThresholdMps) {
-          movingTimeS += dt;
-          movingDistanceM += segDist;
-        }
       }
     }
   }
@@ -237,6 +252,10 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
     firstTime !== undefined && lastTime !== undefined
       ? Math.max(0, (lastTime - firstTime) / 1000)
       : 0;
+  // Sustained stops, stationary GPS drift and long fix gaps are not moving.
+  const { movingTimeS, movingDistanceM } = computeMovingTime(pts, {
+    stopSpeedMps: movingSpeedThresholdMps,
+  });
   const avgSpeedMps = movingTimeS > 0 ? movingDistanceM / movingTimeS : 0;
 
   const bbox: BoundingBox = { minLat, minLng, maxLat, maxLng };
@@ -253,6 +272,7 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
     maxAltitudeM,
     bbox,
     pointCount: pts.length,
+    ...movingModelOf(opts),
   };
 }
 
@@ -279,7 +299,10 @@ interface ReduceOpts {
  * accumulator's totals. Any other caller that folds points one at a time
  * should do the same rather than trust the fields below.
  *
- * For distance / duration / moving time / max speed this folding is exact.
+ * For distance / duration / max speed this folding is exact. Moving time is
+ * a live APPROXIMATION too: it uses the simple per-step speed rule, while the
+ * saved trail's moving time comes from `computeMovingTime` (smoothed speed,
+ * sustained stops, gaps — #504), recomputed in batch when recording stops.
  *
  * `prevPoint` is the previous point OF THE SAME SEGMENT. Passing `undefined`
  * on a track that already has points opens a new segment (a resume after a

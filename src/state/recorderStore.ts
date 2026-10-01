@@ -511,7 +511,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     if (preStop) checkpoint.writeCheckpoint(preStop);
 
     const endedAt = Date.now();
-    const finalStats = computeSegmentedTrackStats(points, segmentStarts);
+    // The category picks the moving-time stop threshold (#504).
+    const finalStats = computeSegmentedTrackStats(points, segmentStarts, { category });
     const track: Track = {
       id: storage.newId(),
       name,
