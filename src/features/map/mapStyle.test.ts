@@ -1154,7 +1154,7 @@ describe('satellite imagery look + tile budget (#495)', () => {
       ...IMAGERY_PAINT[DEFAULT_IMAGERY_LOOK],
       'raster-fade-duration': SATELLITE_FADE_MS,
     });
-    expect(osm?.paint).toMatchObject({ 'raster-brightness-min': 0.1 });
+    expect(osm?.paint).toMatchObject({ 'raster-brightness-min': 0.15 });
   });
 
   it('applies the chosen look, and Original is the tiles as served', () => {
