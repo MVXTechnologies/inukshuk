@@ -107,6 +107,25 @@ export function formatTimestamp(epochMs: number): string {
   });
 }
 
+/** Epoch ms -> local clock time, e.g. "9:12" / "09:12" / "9:12 AM" per the device locale. */
+export function formatClockTime(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * Seconds -> a spoken-style span for stops: "45 s", "18 min", "1 h 05 min".
+ * Rounded to the minute from one minute up.
+ */
+export function formatSpan(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  const totalMin = Math.round(seconds / 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h} h ${m.toString().padStart(2, '0')} min`;
+}
+
 /** Bytes -> human-readable size, e.g. "840 KB", "12 MB" or "1.2 GB". */
 export function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '0 KB';

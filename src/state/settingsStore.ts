@@ -4,6 +4,7 @@ import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
+import { effectiveTrailViewTab, type TrailViewTab } from '@core/library/trailViewTabs';
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
@@ -218,6 +219,8 @@ export interface Settings {
    * persisted. Junk hydrates back to the default via `isSortKey`.
    */
   librarySortKey: SortKey;
+  /** The trail view's last-picked tab (#511): Overview · Timeline · Splits · Notes. */
+  trailViewTab: TrailViewTab;
   /**
    * Last known map position, used to seed the camera on a cold launch so the
    * map opens where the user last was instead of MapLibre's [0,0] default
@@ -290,6 +293,7 @@ const DEFAULTS: Settings = {
   slopeDisclaimerShown: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   librarySortKey: DEFAULT_SORT,
+  trailViewTab: 'overview',
   lastKnownPosition: null,
   supportNudgeAnsweredAt: 0,
   showTipJar: true,
@@ -367,6 +371,7 @@ function snapshot(s: SettingsState): Settings {
     slopeDisclaimerShown,
     lastActivityCategory,
     librarySortKey,
+    trailViewTab,
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
@@ -411,6 +416,7 @@ function snapshot(s: SettingsState): Settings {
     slopeDisclaimerShown,
     lastActivityCategory,
     librarySortKey,
+    trailViewTab,
     lastKnownPosition,
     supportNudgeAnsweredAt,
     showTipJar,
@@ -453,6 +459,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Same story for the Library sort: the ladder keeps any string, so a key
       // retired by a later build would survive as an unmatched switch case.
       if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
+      next.trailViewTab = effectiveTrailViewTab(next.trailViewTab);
       if (!isDisplayCondition(next.displayCondition)) next.displayCondition = 'normal';
       if (!isHillshadeStrength(next.hillshadeStrength)) {
         next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;

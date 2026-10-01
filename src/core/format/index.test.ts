@@ -2,6 +2,8 @@ import {
   formatElevationChange,
   createFormatters,
   formatBytes,
+  formatClockTime,
+  formatSpan,
   formatDistance,
   formatDuration,
   formatElevation,
@@ -189,5 +191,22 @@ describe('createFormatters', () => {
     expect(imperial.formatPace(1609.344 / 360)).toBe('6:00/mi');
     // Creating the imperial one must not have disturbed the metric one.
     expect(metric.formatDistance(1609.344)).toBe('1.61 km');
+  });
+});
+
+describe('formatSpan', () => {
+  it('reads a stop length the way people say it', () => {
+    expect(formatSpan(45)).toBe('45 s');
+    expect(formatSpan(18 * 60 + 10)).toBe('18 min');
+    expect(formatSpan(65 * 60)).toBe('1 h 05 min');
+    expect(formatSpan(-3)).toBe('0 s');
+    expect(formatSpan(Number.NaN)).toBe('0 s');
+  });
+});
+
+describe('formatClockTime', () => {
+  it('shows hours and minutes of the local time', () => {
+    const t = new Date(2026, 8, 28, 9, 7).getTime();
+    expect(formatClockTime(t)).toMatch(/9:07/);
   });
 });

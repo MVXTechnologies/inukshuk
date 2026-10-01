@@ -2,11 +2,17 @@ import type { TrackPoint } from '@core/models';
 
 import { computeTrackStats, haversineMeters } from './index';
 import {
+  classifyMovingSteps,
+  classifySegmentedSteps,
   computeMovingTime,
   hasCurrentMovingStats,
   MOVING_MODEL_VERSION,
   movingModelKey,
   movingProfileFor,
+  STEP_BREAK,
+  STEP_GAP,
+  STEP_INVALID,
+  STEP_MOVING,
   trailTiming,
 } from './movingTime';
 import { computeSegmentedTrackStats } from './segments';
@@ -317,5 +323,35 @@ describe('trailTiming', () => {
       elapsedSpeedMps: 0,
       movingSpeedMps: 0,
     });
+  });
+});
+
+describe('classifySegmentedSteps (#511)', () => {
+  it('marks the step into each segment as a break and classifies the rest per segment', () => {
+    const mk = (t: number, lat: number) => ({ latitude: lat, longitude: -71.2, time: t * 1000 });
+    const pts = [mk(0, 46.8), mk(10, 46.8001), mk(20, 46.8002), mk(4000, 46.81), mk(4010, 46.8101)];
+    const steps = classifySegmentedSteps(pts, [3, 3, 0, 99]);
+    expect(Array.from(steps)).toEqual([
+      STEP_INVALID,
+      STEP_MOVING,
+      STEP_MOVING,
+      STEP_BREAK,
+      STEP_MOVING,
+    ]);
+  });
+
+  it('flags a long fix gap and a backwards step', () => {
+    const mk = (t: number, lat: number) => ({ latitude: lat, longitude: -71.2, time: t * 1000 });
+    const pts = [
+      mk(0, 46.8),
+      mk(10, 46.8001),
+      mk(20, 46.8002),
+      mk(30, 46.8003),
+      mk(500, 46.801),
+      mk(400, 46.8011),
+    ];
+    const steps = classifyMovingSteps(pts);
+    expect(steps[4]).toBe(STEP_GAP);
+    expect(steps[5]).toBe(STEP_INVALID);
   });
 });
