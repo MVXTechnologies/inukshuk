@@ -1,0 +1,10 @@
+{
+  "year": 2026,
+  "goals": [
+    { "id": "keepUp", "percent": 0 },
+    { "id": "features", "percent": 0 }
+  ],
+  "supporters": 0,
+  "updated": "2026-09-30",
+  "donors": []
+}

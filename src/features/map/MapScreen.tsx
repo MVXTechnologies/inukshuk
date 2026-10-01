@@ -64,6 +64,7 @@ import { useMarinePackStore } from '@state/marinePackStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { createGesturePause } from '@core/support/gesturePause';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
@@ -81,7 +82,7 @@ import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
-import { AttributionChip } from './components/AttributionChip';
+import { MapCreditText } from './components/MapCreditText';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
 import { PlaceSearchSheet } from './search/PlaceSearchSheet';
@@ -105,6 +106,8 @@ import { metersPerPixel } from '@core/geo/scaleBar';
 import { heatTapRadiusPx } from '@core/heat/heatStyle';
 import { RecordingPanel } from './components/RecordingPanel';
 import { TrailInspectPanel } from './components/TrailInspectPanel';
+import { TipButton } from '@features/support/TipButton';
+import { TipBubble } from '@features/support/TipBubble';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
@@ -203,6 +206,15 @@ const TOP_CHIP_OFFSET = 8 + 48 + 8;
 
 // Breathing room between the panel's top edge and the fitted trail.
 const INSPECT_PANEL_PAD = 24;
+
+// Where the coffee mascot's bubble sits (#476): ABOVE the whole bottom row
+// (scale bar, credit caption and tip button, measured live so a wrapped
+// credit, a bigger font or a toast never ends up under it), right-aligned with
+// the button (the column's 16 dp margin), its tail pointing down at the mug's
+// centre (16 + 48 / 2 from the edge).
+const TIP_BUBBLE_RIGHT = 16;
+const TIP_BUBBLE_GAP = 8;
+const TIP_BUBBLE_TAIL_RIGHT = 48 / 2;
 
 /**
  * Throttled `toLineFeature(points, segmentStarts)`. Between rebuilds the
@@ -535,6 +547,19 @@ export function MapScreen() {
   // This is emphatically NOT route following: no legs, no turns, no ETA, no
   // snapping to a trail. That is issue #95.
   const [destination, setDestination] = useState<LatLng | null>(null);
+  // True while the PERSON pans or zooms. Only the mascot BUBBLE waits on it
+  // (none pops mid-gesture or for 5 s after, #476); the mug's loop ignores
+  // map interaction entirely (owner). Driven by createGesturePause: taps
+  // never count, a settle or a tap ends it, and it clears itself after 3 s
+  // even when iOS drops the matching "did change".
+  const [cameraMoving, setCameraMoving] = useState(false);
+  const [gesturePause] = useState(() => createGesturePause(setCameraMoving));
+  useEffect(() => () => gesturePause.dispose(), [gesturePause]);
+  // A rail sheet (map type, overlays, "+" actions) is open: no mascot bubble (#476).
+  const [railMenuOpen, setRailMenuOpen] = useState(false);
+  // The bottom column's height and the row's top inside it, for the bubble.
+  const [bottomColumnH, setBottomColumnH] = useState<number | null>(null);
+  const [bottomRowY, setBottomRowY] = useState<number | null>(null);
   // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
   // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
   // than tracked per settle — nothing else needs a metre-accurate centre, and
@@ -1744,12 +1769,13 @@ export function MapScreen() {
   );
   const onMapPress = useCallback(
     (e: MapPressEvent) => {
+      gesturePause.tap();
       const press = readMapPress(e); // synchronously, before anything awaits
       // The search highlight (#496) is temporary: any tap on the map clears it.
       setSearchHit(null);
       if (press) void handleMapPress(press);
     },
-    [handleMapPress],
+    [gesturePause, handleMapPress],
   );
 
   const trailFeature = useThrottledLineFeature(points, segmentStarts);
@@ -1904,6 +1930,7 @@ export function MapScreen() {
           // OR marine layer (and online) so the map behaves exactly like
           // today when both are off.
           onLongPress={(e: { nativeEvent?: { lngLat?: [number, number] } }) => {
+            gesturePause.tap();
             const lngLat = e.nativeEvent?.lngLat;
             if (!lngLat) return;
             const at = { longitude: lngLat[0], latitude: lngLat[1] };
@@ -1958,8 +1985,17 @@ export function MapScreen() {
           // Wind particles track the camera at gesture rate; the handler is
           // only attached while the overlay is live (zero event traffic
           // otherwise — the map stays byte-identical to a windless one).
+          // Once per camera move (not per frame): marks the PERSON's pans and
+          // zooms so the mascot bubble waits for a still map (#476); the mug
+          // keeps animating regardless. Programmatic moves (follow-my-location
+          // nudges every fix) never count; see gesturePause for the iOS tap
+          // trap this guards against.
+          onRegionWillChange={(e) => {
+            gesturePause.willChange(e.nativeEvent.userInteraction === true);
+          }}
           onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
           onRegionDidChange={(e) => {
+            gesturePause.didChange();
             // A settled camera is proof the native map is up: in some sessions
             // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
             // never fires, which left every mapLoaded-gated feature dead — the
@@ -2525,6 +2561,7 @@ export function MapScreen() {
           }
           compactOpen={compactControlsOpen}
           onCompactOpenChange={setCompactControlsOpen}
+          onMenuOpenChange={setRailMenuOpen}
         />
       )}
 
@@ -2570,6 +2607,7 @@ export function MapScreen() {
           trailSheetUp && { bottom: trailSheetHeight },
         ]}
         pointerEvents="box-none"
+        onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
       >
         {/* Pages still in the rasterizer, one dismissible row each (#269).
             First in the column so they stack above the scale bar. */}
@@ -2580,22 +2618,48 @@ export function MapScreen() {
             stacks ABOVE the recording bar, the marine legend and the weather
             dock instead of colliding with them; with none of those up it sits
             just above the tab bar, in the cartographic corner. */}
-        {/* Scale bar (left) and the basemap credit (right) share one row.
+        {/* Scale bar + the basemap credit as quiet text (left) and the tip button
+            (right, Map only, #476) share one row. The ⓘ credit button is gone:
+            its corner holds the tip button, and the full roll is in Settings ›
+            System info. The short credit STAYS on the map as text because
+            OpenStreetMap's attribution guideline and Esri's terms expect it
+            on the map view itself.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
         {/* Not while the region selector or the map maker owns the bottom
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
         {!selecting && makeMapState === null && (
-          <View style={styles.bottomRow} pointerEvents="box-none">
-            <View style={styles.bottomSide} pointerEvents="none">
+          <View
+            style={styles.bottomRow}
+            pointerEvents="box-none"
+            onLayout={(e) => setBottomRowY(e.nativeEvent.layout.y)}
+          >
+            <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
               {showScaleBar && scaleAt !== null && (
                 <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
               )}
+              <MapCreditText basemap={basemap} vector={stoneBase} osmLabels={imageryLabels} />
             </View>
-            {/* box-none: the credit is a tappable ⓘ now (owner call, 2026-09-28). */}
+            {/* The tip button hides itself while recording, while a destination is
+                followed, and while a trail sheet, heat carousel or the coordinate
+                dialog is up. */}
             <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-              <AttributionChip basemap={basemap} vector={stoneBase || imageryLabels} />
+              <TipButton
+                navigating={destination !== null}
+                gestureActive={cameraMoving}
+                focused={isFocused}
+                bubbleBlocked={
+                  railMenuOpen ||
+                  trailSheetUp ||
+                  pickingCategory ||
+                  recordRequested ||
+                  modelSheetOpen ||
+                  selecting ||
+                  makeMapState !== null
+                }
+                blocked={inspectId !== null || heatSelection !== null || goToOpen}
+              />
             </View>
           </View>
         )}
@@ -2772,6 +2836,19 @@ export function MapScreen() {
             restoreCameraOnDeselect();
           }}
           topInset={insets.top}
+        />
+      )}
+
+      {/* The coffee mascot's speech bubble (#476), over the tip button in the
+          bottom-right corner: at the root so it can be tapped on Android, and
+          above the whole bottom row so it never covers the scale bar or the
+          credit caption. The bubble only shows with no panel or sheet up, so
+          the column sits at the bottom edge. */}
+      {bottomColumnH !== null && bottomRowY !== null && (
+        <TipBubble
+          right={TIP_BUBBLE_RIGHT}
+          bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
+          tailRight={TIP_BUBBLE_TAIL_RIGHT}
         />
       )}
 
@@ -2954,6 +3031,7 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
+  bottomSideStart: { gap: 4 },
   bottomSideEnd: { alignItems: 'flex-end' },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap

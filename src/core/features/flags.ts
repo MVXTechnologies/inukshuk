@@ -82,6 +82,17 @@ export const MARINE_ENABLED: boolean = false;
 export const VECTOR_BASEMAP_ENABLED: boolean = true;
 
 /**
+ * The once-a-year "Would you chip in?" card in the Library (#476, rules in
+ * `@core/support/nudge`: ≥ 10 outings recorded this year, at most once per
+ * 12 months). The Support screen and its Settings row do not depend on it.
+ *
+ * OFF — owner call pending (2026-09-30): the card is built and tested, but
+ * whether the app should ever ask unprompted is the owner's decision. Flip to
+ * `true` to show it; nothing else changes.
+ */
+export const SUPPORT_NUDGE_ENABLED: boolean = false;
+
+/**
  * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
  * constant so the menu copy and the e2e matchers can never drift apart.
  */

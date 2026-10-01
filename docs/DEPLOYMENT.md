@@ -406,6 +406,138 @@ curl -s "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/search?q=Kata
 Until it is deployed the app shows "Search is unavailable right now" and still
 answers coordinates and on-device matches.
 
+## Support Inukshuk: tips and the public accounts (#476)
+
+### In-app tips (store consoles, one-time)
+
+Four **consumable** in-app products, same ids on both stores, all unlocking
+nothing. There is no $2.99 tier: the coffee is the $6.99 `tip_medium`. The ids
+keep their original names because a store product id can never be reused. Do not
+create `tip_small`; if one already exists in a console, remove it from sale (the
+app ignores it).
+
+| Product id   | USD base price | Name in the app         |
+| ------------ | -------------- | ----------------------- |
+| `tip_medium` | $6.99          | Coffee at the trailhead |
+| `tip_large`  | $14.99         | Lunch at the lookout    |
+| `tip_xlarge` | $29.99         | A day on the trail      |
+| `tip_patron` | $99.99         | Patron of the trail     |
+
+The USD base prices are mirrored in `TIP_USD` (`src/core/support/tips.ts`) and
+used only to add up a person's own giving for the donors list. The app shows the
+store's localized price and offers only the tiers the store returns, so a tier
+can be added, repriced or withdrawn from the console with no release. The
+library is `expo-iap` (config plugin `expo-iap` in `app.config.ts`), wrapped by
+`src/lib/iap.ts`; it is native, so it ships in a store build, never by OTA.
+Older binaries simply show "Tips aren't available on this device right now".
+
+### `docs/support/costs.json` — the one source of truth (percentages only)
+
+Read by the website's `/support/` and `/fr/support/` pages (inline fetch; the
+page is complete without it) and by the app's Support screen (cached a day,
+`src/data/supportCosts.ts`; validated by `src/core/support/costs.ts`).
+
+**Owner rule: the file is public, so it never carries a budget or any dollar
+amount** — no goal, raised amount, costs or ledger. A unit test fails CI if one
+of those keys (or a `$`) appears in the checked-in file.
+
+```jsonc
+{
+  "year": 2026, // the calendar year the goals cover
+  "goals": [
+    // funded in order; labels come from the app and the site, not from here
+    { "id": "keepUp", "percent": 0 }, // "Keep the app up": servers, store accounts, licences
+    { "id": "features", "percent": 0 }, // "Implement new features": developer time
+  ],
+  "supporters": 0, // number of people who gave (integer)
+  "updated": "2026-09-30", // YYYY-MM-DD of this edit
+  "donors": [
+    // opt-in, published by hand (see below); hidden in the app and site while empty
+    { "name": "Anne T.", "place": "Rimouski", "since": 2026 },
+  ],
+}
+```
+
+Every field is optional: a missing goal counts as 0 %, unknown goal ids are
+ignored, percentages are clamped to 0–100. The app and the site show the first
+goal under 100 % as a bar, and each goal before it as "✓ funded for <year>";
+when both reach 100 % they thank everyone instead.
+
+**Computing the percentages (private, owner only).** Each goal has a yearly
+amount set by the owner and kept out of the repository (never commit it, not
+even in a comment). At the start of each month, from the App Store Connect and
+Play Console payout reports (net of store fees) plus any web gifts:
+
+1. `raised` = net donations received this calendar year.
+2. Fill the goals in order: `keepUp.percent = min(100, raised ÷ keepUpGoal × 100)`;
+   whatever exceeds `keepUpGoal` counts toward `features`:
+   `features.percent = min(100, max(0, raised − keepUpGoal) ÷ featuresGoal × 100)`.
+3. Round down to whole percents, update `supporters` and `updated`, commit.
+
+### Prominent donors: `POST /donors` on the tile Worker
+
+People whose tips add up to $100 (USD base prices, counted on the device in
+`support.json`) may send a display name from the thank-you screen or Settings ›
+System info. The app posts
+`{ name (≤ 40), place (≤ 60, optional), platform, transactionIds (1–20) }` to
+`POST /donors` on the tile Worker (`infra/tiles/worker/src/donors.ts`). The
+Worker validates it, rate-limits per client IP (the `DONOR_LIMITER` binding in
+`wrangler.toml`: 3 a minute, plus a per-isolate 3 an hour; the IP is never
+stored) and writes it to R2 as `donors/pending/<ts>-<rand>.json`. Nothing is
+published automatically:
+
+1. List pending files: `wrangler r2 object get inukshuk-tiles/donors/pending/…`
+   (or the dashboard).
+2. Check each transaction id against App Store Connect / Play Console reports.
+3. Add `{ "name", "place", "since" }` to `donors` in `docs/support/costs.json`,
+   then delete the pending file. Removal requests (by email) are the same edit
+   in reverse.
+
+### "I already donated": `POST /donor-verify/start|check` (email code)
+
+An honour system: the Support screen's "I already donated" link asks for an
+email, the Worker emails a 6-digit code, and a matching code rests the Map's
+tip button for 12 months on that device. No donation is looked up.
+
+- `start {email}` → always `202 {ok:true}` for a valid address (no
+  enumeration); at most 3 codes per address per hour.
+- `check {email, code}` → `200 {ok:true}` or `400 {ok:false}` (wrong, expired
+  and never-requested all look the same); 5 wrong tries burn the code.
+- Both are rate-limited per client IP (the `DONOR_LIMITER` binding plus a
+  per-isolate hourly cap). Codes are compared in constant time.
+- R2 keeps only `donor-verify/<HMAC(salt, email)>.json` =
+  `{ proof: HMAC(salt, email|code), expiresAt, attempts, starts }` — never the
+  address or the code. The object is deleted on success and swept once
+  stale; add the lifecycle rule below as a backstop.
+- Without both secrets the routes answer 404, so deploying the Worker early is
+  harmless.
+
+**One-time setup (owner):**
+
+1. **Resend account** — sign up at resend.com, then _Domains → Add domain_:
+   `mvxtechnologies.com` (or a subdomain such as `mail.mvxtechnologies.com`).
+2. **DNS at Namecheap** — _Domain List → mvxtechnologies.com → Manage →
+   Advanced DNS → Host Records_: add exactly the records Resend's domain page
+   lists (copy host and value from there; do not type them from memory). They
+   are typically a DKIM `TXT` record (host `resend._domainkey`), an SPF `TXT`
+   record and an `MX` record on the sending subdomain (host `send`), plus an
+   optional DMARC `TXT` (host `_dmarc`, e.g. `v=DMARC1; p=none;`). Wait for
+   Resend to show the domain as _Verified_.
+3. **API key** — Resend → _API Keys → Create_ (permission: sending access,
+   domain: mvxtechnologies.com), then from `infra/tiles/worker/`:
+   `npx wrangler secret put RESEND_API_KEY`.
+4. **Salt** — any long random string, kept secret:
+   `openssl rand -hex 32 | npx wrangler secret put DONOR_VERIFY_SALT`. Changing
+   it later only invalidates codes in flight.
+5. **Sender** — `VERIFY_FROM` in `wrangler.toml` `[vars]`
+   (default `Inukshuk <no-reply@mvxtechnologies.com>`; must be on the verified
+   domain).
+6. **R2 lifecycle backstop** — Cloudflare dashboard → R2 → `inukshuk-tiles` →
+   _Settings → Object lifecycle rules_: delete objects with prefix
+   `donor-verify/` 1 day after upload.
+7. `npx wrangler deploy`, then test:
+   `curl -X POST https://<worker>/donor-verify/start -H 'Content-Type: application/json' -d '{"email":"you@example.org"}'`.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for                                        |

@@ -36,7 +36,9 @@ const PARTS: readonly string[] = [
   ...(VECTOR_BASEMAP_ENABLED
     ? ['Vector map: Protomaps', 'Map font: Atkinson Hyperlegible Next']
     : []),
-  'Esri/ArcGIS basemaps',
+  // The map's own credit line names the imagery providers per basemap
+  // (`basemapAttribution`); the full roll must name every one of them too.
+  'Satellite imagery: Esri, Maxar',
   'AWS Terrain Tiles',
   'MapLibre',
   ...(WEATHER_ENABLED

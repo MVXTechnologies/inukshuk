@@ -227,6 +227,29 @@ export interface Settings {
    * (see `useLocationTracking`) — never per-fix.
    */
   lastKnownPosition: LatLng | null;
+  /**
+   * When the Library's once-a-year support card was last answered (Support or
+   * Not now), epoch ms; 0 = never. Read only while `SUPPORT_NUDGE_ENABLED` is
+   * on (see `@core/support/nudge`).
+   */
+  supportNudgeAnsweredAt: number;
+  /**
+   * The Map's tip button (#476): Settings › App settings switch. Off = hidden
+   * until switched back on. (Long-press › "Hide for an hour" does NOT touch
+   * it; see `tipJarHiddenUntil`.)
+   */
+  showTipJar: boolean;
+  /**
+   * Epoch ms until which the tip button is hidden after long-press › "Hide for
+   * an hour"; 0 = not hidden. Wall-clock: it comes back once that time has
+   * passed, whether or not the app was open meanwhile.
+   */
+  tipJarHiddenUntil: number;
+  /**
+   * Epoch ms until which the tip button rests (12 months after a tip in the
+   * app or a verified "I already donated"); 0 = not resting. It comes back after.
+   */
+  tipJarRestingUntil: number;
 }
 
 const DEFAULTS: Settings = {
@@ -268,6 +291,10 @@ const DEFAULTS: Settings = {
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   librarySortKey: DEFAULT_SORT,
   lastKnownPosition: null,
+  supportNudgeAnsweredAt: 0,
+  showTipJar: true,
+  tipJarHiddenUntil: 0,
+  tipJarRestingUntil: 0,
 };
 
 interface SettingsState extends Settings {
@@ -341,6 +368,10 @@ function snapshot(s: SettingsState): Settings {
     lastActivityCategory,
     librarySortKey,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
+    showTipJar,
+    tipJarHiddenUntil,
+    tipJarRestingUntil,
   } = s;
   return {
     tileUrl,
@@ -381,6 +412,10 @@ function snapshot(s: SettingsState): Settings {
     lastActivityCategory,
     librarySortKey,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
+    showTipJar,
+    tipJarHiddenUntil,
+    tipJarRestingUntil,
   };
 }
 
