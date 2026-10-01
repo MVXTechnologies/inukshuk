@@ -5,6 +5,24 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useMemo } from 'react';
 
 /**
+ * Stage joins stay small at a continental zoom (the Appalachian Trail's eleven
+ * would bead the whole line) and grow as you zoom in; start / finish stay 7.
+ * The zoom curve MUST be the top-level expression: MapLibre iOS throws an
+ * uncaught NSInvalidArgumentException ("zoom" expression may only be used as
+ * input to a top-level "step" or "interpolate") for a curve nested in a
+ * `match`, which crashed the app on "Show on map". Android merely ignored it.
+ */
+export const SHOWN_MARK_RADIUS = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  4,
+  ['match', ['get', 'kind'], 'join', 2.5, 7],
+  10,
+  ['match', ['get', 'kind'], 'join', 4.5, 7],
+] as const;
+
+/**
  * A long-distance trail shown on the main map (#467, board `OnMap.dc.html`):
  * the whole trail as an orange line over a halo, the selected stage drawn
  * heavier on top, and the start / finish / stage-join dots. Mounted as MapView
@@ -83,15 +101,7 @@ export function ShownTrailLayers({ shown }: { shown: ShownTrail }) {
           id="long-trail-shown-marks-dot"
           type="circle"
           paint={{
-            // Stage joins stay small at a continental zoom (the Appalachian
-            // Trail's eleven would bead the whole line) and grow as you zoom in.
-            'circle-radius': [
-              'match',
-              ['get', 'kind'],
-              'join',
-              ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 4.5],
-              7,
-            ],
+            'circle-radius': SHOWN_MARK_RADIUS as never,
             'circle-color': [
               'match',
               ['get', 'kind'],
