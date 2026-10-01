@@ -102,7 +102,7 @@ import { TrailInspectPanel } from './components/TrailInspectPanel';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
-import { BOTTOM_LAYER, waypointCardDockStyle } from './bottomLayers';
+import { BOTTOM_LAYER, snackbarWrapperStyle, waypointCardDockStyle } from './bottomLayers';
 import { formatLatLng } from '@core/geo/formatCoords';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
@@ -2852,6 +2852,7 @@ export function MapScreen() {
         visible={snack !== null}
         onDismiss={dismissSnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {snack ?? ''}
       </Snackbar>
@@ -2859,11 +2860,17 @@ export function MapScreen() {
         visible={overlaySnack !== null}
         onDismiss={dismissOverlaySnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {overlaySnack ?? ''}
       </Snackbar>
       {downloadProgress !== null && (
-        <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
+        <Snackbar
+          visible
+          onDismiss={() => undefined}
+          duration={Number.POSITIVE_INFINITY}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+        >
           {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
         </Snackbar>
       )}

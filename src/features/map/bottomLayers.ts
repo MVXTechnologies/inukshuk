@@ -14,6 +14,8 @@ export const BOTTOM_LAYER = {
   recordingPanel: { zIndex: 6 },
   /** A tapped waypoint's card: always above the recording panel. */
   waypointCard: { zIndex: 7 },
+  /** Snackbars: confirmations ("Waypoint deleted") must never hide under a dock. */
+  snackbar: { zIndex: 8 },
 } as const;
 
 /** Gap between a floating waypoint card and the recording panel under it. */
@@ -39,5 +41,17 @@ export function waypointCardDockStyle(recordingPanelUp: boolean, panelHeight: nu
     left: FLOATING_CARD_GAP,
     right: FLOATING_CARD_GAP,
     bottom: panelHeight + FLOATING_CARD_GAP,
+  };
+}
+
+/**
+ * The map screen's snackbars: above every bottom dock, and lifted over the
+ * recording panel while it is up — they used to render under it, so the
+ * "Waypoint dropped" / "Waypoint deleted" feedback never showed mid-recording.
+ */
+export function snackbarWrapperStyle(recordingPanelUp: boolean, panelHeight: number): ViewStyle {
+  return {
+    ...BOTTOM_LAYER.snackbar,
+    ...(recordingPanelUp ? { bottom: panelHeight } : {}),
   };
 }

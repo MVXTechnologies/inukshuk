@@ -3,7 +3,12 @@ import { render, screen } from '@testing-library/react-native';
 import { Animated, StyleSheet, View } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { BOTTOM_LAYER, FLOATING_CARD_GAP, waypointCardDockStyle } from './bottomLayers';
+import {
+  BOTTOM_LAYER,
+  FLOATING_CARD_GAP,
+  snackbarWrapperStyle,
+  waypointCardDockStyle,
+} from './bottomLayers';
 import { RecordingPanel } from './components/RecordingPanel';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
 
@@ -40,6 +45,12 @@ describe('waypoint card vs recording panel stacking (#505)', () => {
 
   it('the card layer sits above the recording panel layer', () => {
     expect(BOTTOM_LAYER.waypointCard.zIndex).toBeGreaterThan(BOTTOM_LAYER.recordingPanel.zIndex);
+  });
+
+  it('snackbars sit above every dock and clear the recording panel', () => {
+    expect(BOTTOM_LAYER.snackbar.zIndex).toBeGreaterThan(BOTTOM_LAYER.waypointCard.zIndex);
+    expect(snackbarWrapperStyle(true, 240)).toMatchObject({ bottom: 240 });
+    expect(snackbarWrapperStyle(false, 240).bottom).toBeUndefined();
   });
 
   it('docks flush with the bottom edge when not recording', () => {
