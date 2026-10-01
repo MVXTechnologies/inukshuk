@@ -178,8 +178,10 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 20 },
   summary: { marginTop: 4 },
+  // Wraps (primary button onto its own line) rather than squeezing a label.
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 8,

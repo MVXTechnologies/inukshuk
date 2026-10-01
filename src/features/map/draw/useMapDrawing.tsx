@@ -67,6 +67,7 @@ import {
   DrawNotice,
   DrawPanel,
   DrawStatus,
+  finishLabel,
   ReturnChip,
   ReturnMenu,
   RouteModeChips,
@@ -773,14 +774,18 @@ export function useMapDrawing({
               />
             ) : undefined
           }
-          toggle={
-            <ReturnChip
-              finish={state.finish}
-              disabled={state.vertices.length < 2}
-              open={returnMenuOpen}
-              onPress={() => setReturnMenuOpen((o) => !o)}
-            />
-          }
+          toggle={{
+            label: finishLabel(state.finish),
+            render: (showLabel) => (
+              <ReturnChip
+                finish={state.finish}
+                disabled={state.vertices.length < 2}
+                open={returnMenuOpen}
+                showLabel={showLabel}
+                onPress={() => setReturnMenuOpen((o) => !o)}
+              />
+            ),
+          }}
           overlay={
             returnMenuOpen
               ? (bottom) => (

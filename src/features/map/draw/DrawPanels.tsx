@@ -1,4 +1,5 @@
 import type { LegMode } from '@core/draw/legs';
+import { bottomRowLayout } from '@core/draw/panelLayout';
 import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -66,6 +67,8 @@ export function RouteModeChips({
           >
             <Text
               numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               style={[styles.modeLabel, { color: on ? t.map.chrome : t.map.chromeInk }]}
             >
               {m.label}
@@ -124,8 +127,11 @@ interface PanelProps {
   chart?: ReactNode;
   /** Below the stats: a warning or the selected point's delete row. */
   notice?: ReactNode;
-  /** Beside Undo/Clear: a route's Return chip. */
-  toggle?: ReactNode;
+  /**
+   * Beside Undo/Clear: a route's Return chip — its label (measured) and the
+   * chip, with or without that label (it collapses first when space runs out).
+   */
+  toggle?: { label: string; render: (showLabel: boolean) => ReactNode };
   /**
    * Drawn over the panel last (a menu anchored above the buttons row): gets
    * the distance from the panel's bottom edge to the top of that row.
@@ -143,6 +149,16 @@ interface PanelProps {
   onExit: () => void;
   onLayout?: (e: LayoutChangeEvent) => void;
 }
+
+/** Bottom-row geometry (dp): Undo + Clear, the gap, Save's side padding, the chip's chrome. */
+const ROW_GAP = 8;
+const ICONS_W = 52 + ROW_GAP + 52;
+/** Save's minimum side padding: the pill still reads as a button at its narrowest. */
+const SAVE_PAD = 10;
+/** Chip: padding 2×8, border 2×1.5, icon 20, gaps 2×3, caret 14 — plus its label. */
+const CHIP_CHROME = 16 + 3 + 20 + 6 + 14;
+/** Collapsed chip: icon + caret only. */
+const CHIP_COMPACT = 16 + 3 + 20 + 3 + 14;
 
 /** The bottom panel shared by the route and area tools. */
 export function DrawPanel({
@@ -167,6 +183,43 @@ export function DrawPanel({
   const theme = useTheme();
   const [panelH, setPanelH] = useState(0);
   const [buttonsY, setButtonsY] = useState(0);
+  const [rowW, setRowW] = useState(0);
+  const [labelW, setLabelW] = useState({ save: 0, chip: 0 });
+  const widths = {
+    save: labelW.save > 0 ? Math.ceil(labelW.save) + 2 * SAVE_PAD : 0,
+    chipFull: toggle ? Math.ceil(labelW.chip) + CHIP_CHROME : 0,
+    chipCompact: toggle ? CHIP_COMPACT : 0,
+  };
+  const layout = bottomRowLayout({
+    row: labelW.save > 0 ? rowW : 0,
+    icons: ICONS_W,
+    gap: ROW_GAP,
+    ...widths,
+  });
+  const saveButton = (
+    <Pressable
+      onPress={onSave}
+      disabled={!canSave}
+      accessibilityRole="button"
+      accessibilityLabel={saveLabel}
+      accessibilityState={{ disabled: !canSave }}
+      style={[
+        styles.save,
+        // Never narrower than its one-line label.
+        { backgroundColor: theme.colors.primary, minWidth: widths.save || undefined },
+        !canSave && styles.disabled,
+      ]}
+      testID="draw-save"
+    >
+      <Text
+        numberOfLines={1}
+        style={[styles.saveLabel, { color: theme.colors.onPrimary }]}
+        testID="draw-save-label"
+      >
+        {saveLabel}
+      </Text>
+    </Pressable>
+  );
   return (
     <View
       style={[styles.panel, { backgroundColor: t.surface, shadowColor: palette.shadow }]}
@@ -207,42 +260,73 @@ export function DrawPanel({
       </View>
       {chart}
       {notice}
-      <View style={styles.actions} onLayout={(e) => setButtonsY(e.nativeEvent.layout.y)}>
-        <Pressable
-          onPress={onUndo}
-          disabled={!canUndo}
-          accessibilityRole="button"
-          accessibilityLabel="Undo"
-          accessibilityState={{ disabled: !canUndo }}
-          style={[styles.round, { borderColor: t.outlineVariant }, !canUndo && styles.disabled]}
+      {/* Natural widths of Save's and the Return chip's labels, measured off-screen. */}
+      <View
+        style={styles.measure}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Text
+          style={styles.saveLabel}
+          onLayout={(e) => {
+            const width = e.nativeEvent.layout.width;
+            setLabelW((w) => ({ ...w, save: width }));
+          }}
+          testID="measure-save"
         >
-          <Icon source="undo" size={22} color={t.ink} />
-        </Pressable>
-        <Pressable
-          onPress={onClear}
-          disabled={!canClear}
-          accessibilityRole="button"
-          accessibilityLabel="Clear"
-          accessibilityState={{ disabled: !canClear }}
-          style={[styles.round, { borderColor: t.outlineVariant }, !canClear && styles.disabled]}
-        >
-          <Icon source="eraser" size={22} color={t.ink} />
-        </Pressable>
-        {toggle}
-        <Pressable
-          onPress={onSave}
-          disabled={!canSave}
-          accessibilityRole="button"
-          accessibilityLabel={saveLabel}
-          accessibilityState={{ disabled: !canSave }}
-          style={[
-            styles.save,
-            { backgroundColor: theme.colors.primary },
-            !canSave && styles.disabled,
-          ]}
-        >
-          <Text style={[styles.saveLabel, { color: theme.colors.onPrimary }]}>{saveLabel}</Text>
-        </Pressable>
+          {saveLabel}
+        </Text>
+        {toggle && (
+          <Text
+            style={styles.toggleLabel}
+            onLayout={(e) => {
+              const width = e.nativeEvent.layout.width;
+              setLabelW((w) => ({ ...w, chip: width }));
+            }}
+            testID="measure-chip"
+          >
+            {toggle.label}
+          </Text>
+        )}
+      </View>
+      <View
+        style={layout.mode === 'stacked' ? styles.stack : undefined}
+        onLayout={(e) => {
+          setButtonsY(e.nativeEvent.layout.y);
+          setRowW(e.nativeEvent.layout.width);
+        }}
+        testID="draw-actions"
+      >
+        <View style={styles.actions}>
+          <Pressable
+            onPress={onUndo}
+            disabled={!canUndo}
+            accessibilityRole="button"
+            accessibilityLabel="Undo"
+            accessibilityState={{ disabled: !canUndo }}
+            style={[styles.round, { borderColor: t.outlineVariant }, !canUndo && styles.disabled]}
+          >
+            <Icon source="undo" size={22} color={t.ink} />
+          </Pressable>
+          <Pressable
+            onPress={onClear}
+            disabled={!canClear}
+            accessibilityRole="button"
+            accessibilityLabel="Clear"
+            accessibilityState={{ disabled: !canClear }}
+            style={[styles.round, { borderColor: t.outlineVariant }, !canClear && styles.disabled]}
+          >
+            <Icon source="eraser" size={22} color={t.ink} />
+          </Pressable>
+          {toggle?.render(layout.chipLabel)}
+          {layout.mode !== 'stacked' && saveButton}
+        </View>
+        {layout.mode === 'stacked' && (
+          <View style={styles.actions} testID="draw-save-row">
+            {saveButton}
+          </View>
+        )}
       </View>
       {footer}
       {overlay?.(Math.max(0, panelH - buttonsY) + 6)}
@@ -260,6 +344,9 @@ const FINISHES: readonly { id: RouteFinish; icon: string; label: string; spoken:
 
 const finishOf = (id: RouteFinish) => FINISHES.find((f) => f.id === id) ?? FINISHES[0]!;
 
+/** The Return chip's visible label for an option ("Back & forth"). */
+export const finishLabel = (id: RouteFinish): string => finishOf(id).label;
+
 /**
  * "Return" (#515): how the route ends — one way, back & forth along the same
  * line, or a loop closed back to the start. One compact chip beside
@@ -271,11 +358,14 @@ export function ReturnChip({
   disabled,
   open,
   onPress,
+  showLabel = true,
 }: {
   finish: RouteFinish;
   disabled: boolean;
   open: boolean;
   onPress: () => void;
+  /** False when the row is narrow: icon + caret only (the spoken label stays). */
+  showLabel?: boolean;
 }) {
   const t = useSchemeTokens();
   const theme = useTheme();
@@ -289,7 +379,7 @@ export function ReturnChip({
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={`Return, ${f.spoken}`}
+      accessibilityLabel={`Return: ${f.spoken}`}
       accessibilityHint="Choose one way, back and forth, or a loop"
       accessibilityState={{ expanded: open, disabled }}
       style={[
@@ -301,10 +391,12 @@ export function ReturnChip({
       testID="return-chip"
     >
       <Icon source={f.icon} size={20} color={ink} />
-      <Text numberOfLines={1} style={[styles.toggleLabel, { color: ink }]}>
-        {f.label}
-      </Text>
-      <Icon source={open ? 'chevron-down' : 'chevron-up'} size={16} color={ink} />
+      {showLabel && (
+        <Text numberOfLines={1} style={[styles.toggleLabel, { color: ink }]}>
+          {f.label}
+        </Text>
+      )}
+      <Icon source={open ? 'chevron-down' : 'chevron-up'} size={14} color={ink} />
     </Pressable>
   );
 }
@@ -511,12 +603,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  // Sized by their labels ("Freehand" is the longest), sharing what is left;
+  // on a narrow phone the labels shrink a little rather than truncate.
   mode: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     borderRadius: (target.min - 8) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
   },
   modeLabel: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
   hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
@@ -560,18 +655,21 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 24,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stack: { gap: 8 },
+  measure: { position: 'absolute', opacity: 0, left: 0, top: 0, flexDirection: 'row' },
   saveLabel: { fontSize: 16, lineHeight: 20, fontWeight: '800' },
   toggle: {
     minHeight: 48,
     borderRadius: 24,
     borderWidth: 1.5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   toggleLabel: { fontSize: 13, lineHeight: 16, fontWeight: '800' },
   menu: {
