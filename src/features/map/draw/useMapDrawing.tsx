@@ -20,6 +20,7 @@ import {
   type LegMode,
   type LegView,
 } from '@core/draw/legs';
+import { buildDrawProfile } from '@core/draw/profile';
 import { failureNotice } from '@core/draw/routing';
 import { estimateDurationS, formatEstimate } from '@core/draw/timeEstimate';
 import { formatElevation, type Units } from '@core/format';
@@ -72,6 +73,7 @@ import { overwriteDrawnRoute, writeAreaGeoJson, writeNewDrawnRoute } from './sav
 import { SaveRouteSheet } from './SaveRouteSheet';
 import { useDrawSession, type DrawTarget } from './useDrawSession';
 import { useLegRouting } from './useLegRouting';
+import { RouteProfileStrip } from './RouteProfileStrip';
 import { computeRouteElevation, shownElevation, useRouteElevation } from './useRouteElevation';
 
 /**
@@ -195,6 +197,20 @@ export function useMapDrawing({
 
   const elevationState = useRouteElevation(routeLine, kind === 'route');
   const elevation = shownElevation(elevationState);
+  // The profile strip: the same samples as the climb stat and the saved GPX.
+  const profile = useMemo(
+    () =>
+      elevation !== null
+        ? buildDrawProfile(elevation.plan.samples, elevation.elevation.elevations)
+        : null,
+    [elevation],
+  );
+  /** The point scrubbed on the profile (its marker on the map), or null. */
+  const [scrubAt, setScrubAt] = useState<LngLat | null>(null);
+  const onProfileScrub = useCallback(
+    (p: { at: LngLat } | null) => setScrubAt(p === null ? null : p.at),
+    [],
+  );
 
   const editedTrackId = draw.target?.kind === 'route' ? (draw.target.trackId ?? null) : null;
   const editedTrack = editedTrackId ? (tracks.find((t) => t.id === editedTrackId) ?? null) : null;
@@ -618,6 +634,7 @@ export function useMapDrawing({
           legs={state.kind === 'route' ? shownLegs : undefined}
           mids={state.kind === 'route' ? legMids : undefined}
           warnColor={tokens.status.pausedInk}
+          scrubAt={state.kind === 'route' && profile !== null ? scrubAt : null}
           color={
             state.kind === 'route' ? lineColor : (areaEditor?.initial.color ?? DEFAULT_AREA_COLOR)
           }
@@ -681,6 +698,22 @@ export function useMapDrawing({
             ) : elevationState.status === 'unavailable' && vertices.length >= 2 ? (
               <DrawNotice text="Climb unavailable here (offline, or the route is too long)" />
             ) : null)
+          }
+          chart={
+            profile !== null && vertices.length >= 2 ? (
+              <RouteProfileStrip
+                profile={profile}
+                units={units}
+                // Newer numbers on the way (a leg added, snapped, dragged or
+                // undone): the last profile stays, dimmed, never blank.
+                dimmed={
+                  elevationState.status === 'computing' ||
+                  legsLoading ||
+                  elevation?.vertices !== routeLine
+                }
+                onScrub={onProfileScrub}
+              />
+            ) : undefined
           }
           footer={engines !== null ? <RoutingCredit engines={engines} /> : undefined}
           canUndo={canUndo(state)}

@@ -41,6 +41,8 @@ interface Props {
   mids?: readonly MidpointHandle[];
   /** Failed legs' line and warning dot. */
   warnColor?: string;
+  /** The point scrubbed on the elevation profile: a marker on the line. */
+  scrubAt?: LngLat | null;
 }
 
 /** The GeoJSON for the drawn shape and its handles. */
@@ -50,6 +52,7 @@ export function drawShapeGeoJson(
   selected: number | null = null,
   legs?: readonly LegView[],
   mids?: readonly MidpointHandle[],
+  scrubAt: LngLat | null = null,
 ) {
   const coords = shown.map((p) => [p[0], p[1]]);
   const first = coords[0];
@@ -104,6 +107,13 @@ export function drawShapeGeoJson(
       geometry: { type: 'Point', coordinates: [p[0], p[1]] },
     });
   });
+  if (scrubAt !== null) {
+    features.push({
+      type: 'Feature',
+      properties: { role: 'scrub' },
+      geometry: { type: 'Point', coordinates: [scrubAt[0], scrubAt[1]] },
+    });
+  }
   return { type: 'FeatureCollection', features };
 }
 
@@ -123,10 +133,11 @@ export function DrawLayers({
   legs,
   mids,
   warnColor = color,
+  scrubAt = null,
 }: Props) {
   const data = useMemo(
-    () => JSON.stringify(drawShapeGeoJson(kind, shown, selected, legs, mids)),
-    [kind, shown, selected, legs, mids],
+    () => JSON.stringify(drawShapeGeoJson(kind, shown, selected, legs, mids, scrubAt)),
+    [kind, shown, selected, legs, mids, scrubAt],
   );
   const shape =
     kind === 'route'
@@ -248,9 +259,24 @@ export function DrawLayers({
       }}
     />,
   ];
+  const scrub = (
+    <Layer
+      key="scrub"
+      id="draw-scrub"
+      beforeId={TRAILS_ANCHOR}
+      type="circle"
+      filter={role('scrub')}
+      paint={{
+        'circle-radius': 9,
+        'circle-color': ink,
+        'circle-stroke-width': 3,
+        'circle-stroke-color': halo,
+      }}
+    />
+  );
   return (
     <GeoJSONSource id="draw-shape" data={data}>
-      {[...shape, ...handles]}
+      {[...shape, ...handles, scrub]}
     </GeoJSONSource>
   );
 }

@@ -102,6 +102,8 @@ export interface DrawStat {
 interface PanelProps {
   title: string;
   stats: readonly DrawStat[];
+  /** Under the stats: the route's elevation profile. */
+  chart?: ReactNode;
   /** Below the stats: a warning or the selected point's delete row. */
   notice?: ReactNode;
   /** Under the buttons: the routing credit while snapped legs are shown. */
@@ -121,6 +123,7 @@ interface PanelProps {
 export function DrawPanel({
   title,
   stats,
+  chart,
   notice,
   footer,
   canUndo,
@@ -170,6 +173,7 @@ export function DrawPanel({
           </View>
         ))}
       </View>
+      {chart}
       {notice}
       <View style={styles.actions}>
         <Pressable

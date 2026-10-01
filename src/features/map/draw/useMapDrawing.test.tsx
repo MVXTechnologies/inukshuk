@@ -44,17 +44,25 @@ jest.mock('@data/routing', () => ({
   routeLeg: (mode: string, from: LngLat, to: LngLat) =>
     new Promise((resolve) => mockRouteCalls.push({ mode, from, to, answer: resolve })),
 }));
-// Offline: no DEM tile can be read, so the climb is unavailable (never guessed).
+// Offline by default: no DEM tile can be read, so the climb is unavailable
+// (never guessed). The profile tests (last, as decoded tiles are cached for
+// the session) hand out a sloping tile instead.
+const mockFetchDem = jest.fn();
 jest.mock('@features/map/dem', () => ({
-  fetchDemTile: jest.fn(() => Promise.reject(new Error('offline'))),
+  fetchDemTile: (...a: unknown[]) => mockFetchDem(...a),
 }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('expo-image-picker', () => ({}));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
-jest.mock('@maplibre/maplibre-react-native', () => {
-  const passthrough = ({ children }: { children?: unknown }) => children ?? null;
-  return { GeoJSONSource: passthrough, Layer: () => null };
-});
+/** Each map source's last GeoJSON, by id (the drawn shape is "draw-shape"). */
+const mockSources = new Map<string, string>();
+jest.mock('@maplibre/maplibre-react-native', () => ({
+  GeoJSONSource: ({ id, data, children }: { id: string; data?: string; children?: unknown }) => {
+    if (typeof data === 'string') mockSources.set(id, data);
+    return children ?? null;
+  },
+  Layer: () => null,
+}));
 /** The selected point's grip, as last rendered (its callbacks drive a drag). */
 const mockGrip: { current: Record<string, (...a: number[]) => void> | null } = { current: null };
 jest.mock('./DragHandle', () => ({
@@ -150,6 +158,9 @@ jest.useFakeTimers();
 
 beforeEach(() => {
   mockId = 0;
+  mockSources.clear();
+  mockFetchDem.mockReset();
+  mockFetchDem.mockImplementation(() => Promise.reject(new Error('offline')));
   mockRouteCalls.length = 0;
   mockLoadGeometry.mockReset();
   resetRouteModeMemory();
@@ -677,5 +688,134 @@ describe('route snapping (#515)', () => {
     expect(screen.getByLabelText('Roads')).toBeSelected();
     expect(mockRouteCalls).toHaveLength(0);
     expect(screen.getByText(/© OpenStreetMap/)).toBeOnTheScreen();
+  });
+});
+
+/** A DEM tile rising 1 m per pixel row towards the north (so the profile has relief). */
+const slopingTile = () => {
+  const data = new Float32Array(256 * 256);
+  for (let i = 0; i < data.length; i++) data[i] = 400 - Math.floor(i / 256);
+  return Promise.resolve(data);
+};
+
+/** A responder event at `x` px on the profile (PanResponder reads the touch history). */
+const profileTouch = (x: number) => ({
+  nativeEvent: { locationX: x, locationY: 10, pageX: x, pageY: 10, touches: [], timestamp: 1 },
+  touchHistory: {
+    numberActiveTouches: 1,
+    indexOfSingleActiveTouch: 0,
+    mostRecentTimeStamp: 1,
+    touchBank: [
+      {
+        touchActive: true,
+        startPageX: x,
+        startPageY: 10,
+        startTimeStamp: 1,
+        currentPageX: x,
+        currentPageY: 10,
+        currentTimeStamp: 1,
+        previousPageX: x,
+        previousPageY: 10,
+        previousTimeStamp: 1,
+      },
+    ],
+  },
+});
+
+/** Let the debounced, tile-by-tile elevation run finish under fake timers. */
+async function settleElevation() {
+  for (let i = 0; i < 12; i++) await flush(i === 0 ? 400 : 10);
+}
+
+const profileLabel = () =>
+  String(screen.getByTestId('route-profile').props.accessibilityLabel ?? '');
+
+describe('elevation profile while drawing (#515)', () => {
+  it('unavailable elevation: no chart, the amber note instead', async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    await settleElevation();
+    expect(screen.queryByTestId('route-profile')).toBeNull();
+    expect(screen.getByText(/Climb unavailable here/)).toBeOnTheScreen();
+  });
+
+  it('shows the profile, dims it while a new leg is measured, then redraws it', async () => {
+    mockFetchDem.mockImplementation(slopingTile);
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    expect(screen.queryByTestId('route-profile')).toBeNull(); // one point: no line yet
+    await tap(P2);
+    await settleElevation();
+    const first = profileLabel();
+    expect(first).toMatch(/^Elevation profile, \d+ m, \d+ m to \d+ m$/);
+    // The chart matches the climb stat (same samples).
+    expect(screen.getByLabelText(/^climb \d+ m$/)).toBeOnTheScreen();
+
+    await tap(P3);
+    // The previous profile stays, dimmed, while the new leg is measured.
+    expect(profileLabel()).toBe(`${first}, updating`);
+    expect(screen.getByTestId('route-profile')).toHaveStyle({ opacity: 0.45 });
+    await settleElevation();
+    expect(profileLabel()).not.toMatch(/updating/);
+    expect(profileLabel()).not.toBe(first); // longer route, new profile
+
+    // Undo goes back to the first profile.
+    await press('Undo');
+    await settleElevation();
+    expect(profileLabel()).toBe(first);
+  });
+
+  it('scrubbing the profile puts a marker on the drawn line and a readout; release clears', async () => {
+    mockFetchDem.mockImplementation(slopingTile);
+    await mount();
+    await act(async () => drawing().startRoute());
+    await tap(P1);
+    await tap(P2);
+    await settleElevation();
+    const strip = screen.getByTestId('route-profile');
+    await act(async () => {
+      fireEvent(strip, 'layout', { nativeEvent: { layout: { width: 300, height: 68 } } });
+    });
+    const scrubMarker = () => {
+      const shape = JSON.parse(mockSources.get('draw-shape') ?? '{"features":[]}') as {
+        features: { properties: { role: string }; geometry: { coordinates: number[] } }[];
+      };
+      return shape.features.find((f) => f.properties.role === 'scrub')?.geometry.coordinates;
+    };
+    expect(scrubMarker()).toBeUndefined();
+    await act(async () => {
+      fireEvent(strip, 'responderGrant', profileTouch(0));
+    });
+    // At the left edge: the start of the line.
+    expect(scrubMarker()?.[0]).toBeCloseTo(P1[0], 6);
+    expect(scrubMarker()?.[1]).toBeCloseTo(P1[1], 6);
+    expect(screen.getByTestId('route-profile-readout')).toHaveTextContent(
+      /^0 m · \d+ m · [+−]?\d+ %$/,
+    );
+    await act(async () => {
+      fireEvent(strip, 'responderMove', profileTouch(300));
+    });
+    expect(scrubMarker()?.[0]).toBeCloseTo(P2[0], 6);
+    expect(scrubMarker()?.[1]).toBeCloseTo(P2[1], 6);
+    await act(async () => {
+      fireEvent(strip, 'responderRelease', profileTouch(300));
+    });
+    expect(scrubMarker()).toBeUndefined();
+    expect(screen.queryByTestId('route-profile-readout')).toBeNull();
+  });
+
+  it('an area has no profile', async () => {
+    mockFetchDem.mockImplementation(slopingTile);
+    await mount();
+    await act(async () => drawing().startArea());
+    await tap(P1);
+    await tap(P2);
+    await tap(P3);
+    await settleElevation();
+    expect(screen.getByText('Draw an area')).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-profile')).toBeNull();
   });
 });
