@@ -111,6 +111,7 @@ import { TipBubble } from '@features/support/TipBubble';
 import { WaypointEditorDialog } from './components/WaypointEditorDialog';
 import { WaypointMarkerPin } from './components/WaypointMarkerPin';
 import { WaypointViewerCard } from './components/WaypointViewerCard';
+import { BOTTOM_LAYER, snackbarWrapperStyle, waypointCardDockStyle } from './bottomLayers';
 import { formatLatLng } from '@core/geo/formatCoords';
 import { destinationReadout } from '@core/geo/destination';
 import { nextWaypointLabel } from '@core/library/waypoints';
@@ -1434,6 +1435,22 @@ export function MapScreen() {
       else removeSavedWaypoint(editWp.id);
     }
     setEditWp(null);
+  };
+  /**
+   * Hold-to-delete straight from the waypoint card (#505) — no detour through
+   * the editor. A failed store commit keeps the card up and says so.
+   */
+  const deleteViewedWaypoint = () => {
+    if (!viewWp) return;
+    try {
+      if (viewWp.source === 'live') removeWaypoint(viewWp.id);
+      else removeSavedWaypoint(viewWp.id);
+    } catch {
+      showSnack('Could not delete the waypoint. Please try again.');
+      return;
+    }
+    setViewWp(null);
+    showSnack('Waypoint deleted');
   };
   /**
    * Pick the pin icon (#350). Applied immediately for a saved waypoint — the
@@ -2897,43 +2914,53 @@ export function MapScreen() {
 
       <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
 
-      {/* Read-only waypoint viewer (pin tap): coordinates/note/photo with copy
-          actions. Hidden while the trail inspector or the editor is up so the
-          bottom edge never stacks two cards. */}
-      {inspectTrack === null && editWaypoint === null && (
-        <WaypointViewerCard
-          waypoint={viewWaypoint}
-          onCopyCoords={() => {
-            if (!viewWaypoint) return;
-            void Clipboard.setStringAsync(
-              formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-            );
-            showSnack('Coordinates copied');
-          }}
-          onCopyNote={() => {
-            if (!viewWaypoint?.note) return;
-            void Clipboard.setStringAsync(viewWaypoint.note);
-            showSnack('Note copied');
-          }}
-          onSharePhoto={() => {
-            const uri = viewWaypoint?.photoUri;
-            if (!uri) return;
-            void (async () => {
-              if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-              else showSnack('Sharing is not available on this device');
-            })();
-          }}
-          onEdit={() => {
-            if (!viewWp) return;
-            discardDraftPhoto(newWp);
-            setNewWp(null);
-            setEditWp(viewWp);
-            setWpName(viewWaypoint?.label ?? '');
-            setWpDraft(viewWaypoint?.note ?? '');
-            setViewWp(null);
-          }}
-          onClose={() => setViewWp(null)}
-        />
+      {/* Waypoint card (pin tap, #505): note/photo at a glance, Edit and
+          hold-to-delete. Hidden while the trail inspector or the editor is up
+          so the bottom edge never stacks two cards. Its dock floats above the
+          recording panel (position AND z/elevation) — it used to be drawn
+          under the panel while recording. */}
+      {inspectTrack === null && editWaypoint === null && viewWaypoint !== null && (
+        <View
+          style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+          pointerEvents="box-none"
+          testID="waypoint-card-dock"
+        >
+          <WaypointViewerCard
+            waypoint={viewWaypoint}
+            floating={recordingPanelUp}
+            onCopyCoords={() => {
+              if (!viewWaypoint) return;
+              void Clipboard.setStringAsync(
+                formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+              );
+              showSnack('Coordinates copied');
+            }}
+            onCopyNote={() => {
+              if (!viewWaypoint?.note) return;
+              void Clipboard.setStringAsync(viewWaypoint.note);
+              showSnack('Note copied');
+            }}
+            onSharePhoto={() => {
+              const uri = viewWaypoint?.photoUri;
+              if (!uri) return;
+              void (async () => {
+                if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                else showSnack('Sharing is not available on this device');
+              })();
+            }}
+            onEdit={() => {
+              if (!viewWp) return;
+              discardDraftPhoto(newWp);
+              setNewWp(null);
+              setEditWp(viewWp);
+              setWpName(viewWaypoint?.label ?? '');
+              setWpDraft(viewWaypoint?.note ?? '');
+              setViewWp(null);
+            }}
+            onDelete={deleteViewedWaypoint}
+            onClose={() => setViewWp(null)}
+          />
+        </View>
       )}
 
       {/* ECCC forecast card (weather long-press): nearest citypage forecast +
@@ -3006,6 +3033,7 @@ export function MapScreen() {
         visible={snack !== null}
         onDismiss={dismissSnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {snack ?? ''}
       </Snackbar>
@@ -3013,11 +3041,17 @@ export function MapScreen() {
         visible={overlaySnack !== null}
         onDismiss={dismissOverlaySnack}
         duration={Number.POSITIVE_INFINITY}
+        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
       >
         {overlaySnack ?? ''}
       </Snackbar>
       {downloadProgress !== null && (
-        <Snackbar visible onDismiss={() => undefined} duration={Number.POSITIVE_INFINITY}>
+        <Snackbar
+          visible
+          onDismiss={() => undefined}
+          duration={Number.POSITIVE_INFINITY}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+        >
           {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
         </Snackbar>
       )}
@@ -3044,7 +3078,7 @@ const styles = StyleSheet.create({
   bottomSide: { flex: 1, alignItems: 'flex-start' },
   bottomSideStart: { gap: 4 },
   bottomSideEnd: { alignItems: 'flex-end' },
-  panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6 },
+  panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
   // is for separating whole blocks like the recording bar).
   weatherDock: { gap: 6 },
