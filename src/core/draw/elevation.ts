@@ -72,6 +72,19 @@ export interface RouteElevation {
   descentM: number;
 }
 
+/**
+ * Climb and descent of a drawn route from its elevations — THE one rule for
+ * a planned route (#502): the drawing bar, the saved Library stats and the
+ * trail view all call this on the same DEM samples, so they always agree.
+ * The recorder's hysteresis at the DEM threshold (`CLIMB_THRESHOLD_M`).
+ */
+export function routeClimb(elevations: readonly (number | undefined)[]): {
+  ascentM: number;
+  descentM: number;
+} {
+  return elevationGainLoss(elevations, { threshold: CLIMB_THRESHOLD_M });
+}
+
 /** Elevations and climb/descent along the plan's samples; null when no tile had data. */
 export function routeElevationFromTiles(
   plan: RouteElevationPlan,
@@ -79,6 +92,6 @@ export function routeElevationFromTiles(
 ): RouteElevation | null {
   const elevations = plan.samples.map((p) => elevationAt(p, plan.z, tiles));
   if (!elevations.some((e) => e !== undefined)) return null;
-  const { ascentM, descentM } = elevationGainLoss(elevations, { threshold: CLIMB_THRESHOLD_M });
+  const { ascentM, descentM } = routeClimb(elevations);
   return { elevations, ascentM, descentM };
 }

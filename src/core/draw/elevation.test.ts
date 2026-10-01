@@ -5,6 +5,7 @@ import {
   planRouteElevation,
   ROUTE_MAX_SAMPLES,
   ROUTE_SAMPLE_STEP_M,
+  routeClimb,
   routeElevationFromTiles,
 } from './elevation';
 
@@ -97,5 +98,21 @@ describe('routeElevationFromTiles', () => {
   it('is null with no tile data at all', () => {
     const plan = planRouteElevation(ROUTE)!;
     expect(routeElevationFromTiles(plan, new Map())).toBeNull();
+  });
+});
+
+describe('routeClimb', () => {
+  it('sums climb and descent with the DEM hysteresis (ignores sub-threshold wobble)', () => {
+    expect(routeClimb([100, 102, 100, 110, 130, 125, 90])).toEqual({ ascentM: 30, descentM: 40 });
+    expect(routeClimb([100, 101, 100, 101])).toEqual({ ascentM: 0, descentM: 0 });
+    expect(routeClimb([undefined, 50, undefined, 60])).toEqual({ ascentM: 10, descentM: 0 });
+  });
+
+  it('is what the tile computation reports, so bar and trail view agree', () => {
+    const plan = planRouteElevation(ROUTE)!;
+    const tiles = new Map<string, DemTile>();
+    for (const t of plan.tiles) tiles.set(tileKeyId(t), slopeTile(40 + (t.x % 7), 3));
+    const r = routeElevationFromTiles(plan, tiles)!;
+    expect(routeClimb(r.elevations)).toEqual({ ascentM: r.ascentM, descentM: r.descentM });
   });
 });
