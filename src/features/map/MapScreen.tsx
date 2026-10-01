@@ -2458,11 +2458,9 @@ export function MapScreen() {
                           inspect(null);
                           beginRegionSelect();
                         },
-                  // Coordinate readout/entry (#97) — always available; it
-                  // needs neither a GPS fix nor the flat 2D camera.
-                  onGoToCoordinates: () => void openGoToCoordinates(),
-                  // Settings left the tab bar (revamp decision 6).
-                  onOpenSettings: () => router.push('/settings'),
+                  // No "Navigate to coordinates" or "Settings" rows (owner,
+                  // 2026-10-01): tapping the map offers Navigate, Search places
+                  // takes coordinates, and the other tabs carry the gear.
                   // The editor frames the sheet over the live map, so it needs
                   // the flat 2D camera — but no region box and no extra step.
                   onMakeMap: terrain3d
