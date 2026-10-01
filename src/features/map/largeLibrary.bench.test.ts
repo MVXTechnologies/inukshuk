@@ -42,6 +42,11 @@ jest.mock('@data/storage', () => ({
   }),
 }));
 
+jest.mock('@data/heatStoreFiles', () => {
+  const { MemoryHeatIO } = jest.requireActual('@data/heatStoreMemoryIO');
+  return { createHeatFileIO: () => new MemoryHeatIO() };
+});
+
 const mockBuild = jest.fn();
 // Counts whole-library index rebuilds (before #465 this wrapped
 // `buildHeatIndex`, which the old hook called twice per rebuild).
@@ -147,10 +152,10 @@ d(`large library benchmark (N=${N})`, () => {
 
   const scenarios: [string, boolean, boolean, boolean][] = [
     // label, show every trail, heatmap on, warm geometry cache (second launch)
-    ['heatmap on, no trail shown, cold', false, true, false],
-    ['heatmap on, no trail shown, warm cache', false, true, true],
+    // Heatmap-on loads are measured by `persistedHeat.bench` since #500 (the
+    // heat no longer loads trail geometry, so "every trail loaded" never ends).
     ['heatmap off, every trail shown, warm cache', true, false, true],
-    ['heatmap on, every trail shown, cold', true, true, false],
+    ['heatmap off, every trail shown, cold', true, false, false],
   ];
   it.each(scenarios)('useTrackHeat load: %s', async (label, showAll, heatOn, warm) => {
     mockBuild.mockClear();

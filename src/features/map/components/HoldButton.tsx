@@ -35,6 +35,7 @@ export function HoldButton({
   background,
   children,
   style,
+  accessibilityConfirmAction,
 }: {
   size: number;
   onConfirm: () => void;
@@ -45,6 +46,11 @@ export function HoldButton({
   background: string;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /**
+   * An extra named screen-reader action that also confirms (e.g. `delete`),
+   * listed in the rotor / actions menu next to the default double-tap.
+   */
+  accessibilityConfirmAction?: { name: string; label: string };
 }) {
   const progress = useAnimatedValue(0);
   const animation = useRef<Animated.CompositeAnimation | null>(null);
@@ -110,9 +116,13 @@ export function HoldButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      accessibilityActions={[{ name: 'activate' }]}
+      accessibilityActions={[
+        { name: 'activate' },
+        ...(accessibilityConfirmAction ? [accessibilityConfirmAction] : []),
+      ]}
       onAccessibilityAction={(e) => {
-        if (e.nativeEvent.actionName === 'activate') onConfirm();
+        const name = e.nativeEvent.actionName;
+        if (name === 'activate' || name === accessibilityConfirmAction?.name) onConfirm();
       }}
       style={[
         styles.button,
