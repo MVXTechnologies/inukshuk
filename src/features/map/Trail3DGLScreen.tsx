@@ -1,4 +1,5 @@
 import { parseGpx } from '@core/geo/gpx';
+import { routeClimb } from '@core/draw/elevation';
 import {
   computeSegmentedTrackStats,
   haversineMeters,
@@ -489,8 +490,12 @@ export function Trail3DGLScreen({ trackId }: Props) {
   // Sample the terrain (DEM) under each point so the profile reads the same
   // surface the 3D view drapes the trail on. Reuses the heightmap the GL context
   // loads when available; in 2D mode it fetches it here.
+  // A route drawn on the map (#502) already carries DEM elevations sampled
+  // at the route's own zoom: re-sampling the coarser view heightmap would
+  // give a second, different climb. Its GPX elevations are the truth.
+  const planned = track?.plan !== undefined;
   useEffect(() => {
-    if (!points || points.length === 0 || !bbox) return;
+    if (!points || points.length === 0 || !bbox || planned) return;
     let cancelled = false;
     (async () => {
       try {
@@ -504,15 +509,22 @@ export function Trail3DGLScreen({ trackId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [points, bbox]);
+  }, [points, bbox, planned]);
 
   // Drive the profile + summary from the DEM-sampled points when available, so
   // the elevation chart and ↑/↓ totals match the 3D drape and the displayed view.
   const profilePoints = demPoints ?? points ?? [];
-  const profileStats = useMemo(
-    () => (demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts) : null),
-    [demPoints, segmentStarts],
-  );
+  const profileStats = useMemo(() => {
+    // A drawn route: the drawing bar's own climb rule over its DEM samples,
+    // so the trail view and the bar (and the Library) say the same number.
+    if (planned && points) {
+      return {
+        ...computeSegmentedTrackStats(points, segmentStarts),
+        ...routeClimb(points.map((p) => p.altitude)),
+      };
+    }
+    return demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts) : null;
+  }, [planned, points, demPoints, segmentStarts]);
 
   // Cumulative distance at each point for the trim tool's "keeping X of Y"
   // readout — O(n) once per point-set, then a subtraction per slider move.
