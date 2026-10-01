@@ -96,17 +96,19 @@ function sameName(a: Place, b: Place): boolean {
  * same-named segments kilometres apart. Within this distance, two of the same
  * linear type and name are one feature.
  */
-const LINEAR_DEDUPE_RADIUS_M: Partial<Record<Place['type'], number>> = {
+const TYPE_DEDUPE_RADIUS_M: Partial<Record<Place['type'], number>> = {
   river: 5_000,
   road: 2_000,
+  // A campground is often mapped twice: its office (a node) and its grounds.
+  campground: 1_000,
 };
 
 /**
  * Drop later entries that duplicate an earlier one: same name (in either
  * language) and either within {@link DEDUPE_RADIUS_M}, or the same type with
  * one inside the other's bounding box (a big lake's centre point and its
- * outline are kilometres apart), or the same linear type within
- * {@link LINEAR_DEDUPE_RADIUS_M}. Keeps the first — the better-ranked — copy.
+ * outline are kilometres apart), or the same type within
+ * {@link TYPE_DEDUPE_RADIUS_M}. Keeps the first — the better-ranked — copy.
  */
 export function dedupePlaces<T extends { place: Place }>(ranked: readonly T[]): T[] {
   const kept: T[] = [];
@@ -116,7 +118,7 @@ export function dedupePlaces<T extends { place: Place }>(ranked: readonly T[]): 
       const d = haversineMeters(pointOf(k), pointOf(r.place));
       if (d <= DEDUPE_RADIUS_M) return true;
       if (k.type !== r.place.type) return false;
-      if (d <= (LINEAR_DEDUPE_RADIUS_M[k.type] ?? 0)) return true;
+      if (d <= (TYPE_DEDUPE_RADIUS_M[k.type] ?? 0)) return true;
       return inside(r.place, k.bbox) || inside(k, r.place.bbox);
     });
     if (!dup) kept.push(r);

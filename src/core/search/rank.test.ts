@@ -57,6 +57,25 @@ describe('rankPlaces', () => {
     expect(ranked[0]?.distanceM).toBeGreaterThan(20_000);
   });
 
+  it('puts a far-away town above an equally far hamlet with the exact name', () => {
+    // Live "Chamonix" from Québec: everything is thousands of km away.
+    const ranked = rankPlaces(
+      [
+        place({ id: 'za', name: 'Chamonix', type: 'hamlet', latitude: -33.9, longitude: 18.9 }),
+        place({
+          id: 'fr',
+          name: 'Chamonix-Mont-Blanc',
+          type: 'town',
+          latitude: 45.92,
+          longitude: 6.87,
+        }),
+      ],
+      'Chamonix',
+      QUEBEC,
+    );
+    expect(ranked[0]?.place.id).toBe('fr');
+  });
+
   it('prefers the nearer of two equal matches', () => {
     const ranked = rankPlaces(
       [
@@ -132,6 +151,15 @@ describe('dedupePlaces — linear features', () => {
     });
     const kept = dedupePlaces([stream('a', 45.85), stream('b', 45.87), stream('c', 46.2)]);
     expect(kept.map((k) => k.place.id)).toEqual(['a', 'c']);
+  });
+
+  it('merges a campground mapped twice a few hundred metres apart', () => {
+    const camp = (id: string, latitude: number) => ({
+      place: place({ id, name: 'Camping Mont-Sainte-Anne', type: 'campground', latitude }),
+    });
+    expect(dedupePlaces([camp('a', 47.12), camp('b', 47.1236)]).map((k) => k.place.id)).toEqual([
+      'a',
+    ]);
   });
 
   it('keeps a peak and a lake of the same name a few km apart', () => {

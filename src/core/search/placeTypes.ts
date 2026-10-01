@@ -61,7 +61,7 @@ export const PLACE_TYPES: Readonly<Record<PlaceType, PlaceTypeInfo>> = {
   city: { icon: 'city-variant-outline', label: 'City', zoom: 12, boost: 0.9, fitBounds: false },
   town: { icon: 'home-city-outline', label: 'Town', zoom: 13, boost: 0.9, fitBounds: false },
   village: { icon: 'home-group', label: 'Village', zoom: 14, boost: 0.95, fitBounds: false },
-  hamlet: { icon: 'home-outline', label: 'Hamlet', zoom: 15, boost: 0.85, fitBounds: false },
+  hamlet: { icon: 'home-outline', label: 'Hamlet', zoom: 15, boost: 0.75, fitBounds: false },
   locality: {
     icon: 'map-marker-outline',
     label: 'Locality',
