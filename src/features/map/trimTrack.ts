@@ -54,6 +54,7 @@ export async function saveTrimmedCopy(
       name,
       fallbackName: name,
       fallbackTime: Date.now(),
+      category: summary.category,
     }),
     // The copy is the same activity as its source — keep its category.
     ...(summary.category ? { category: summary.category } : {}),
@@ -78,7 +79,7 @@ export async function overwriteWithTrim(
   endIdx: number,
   commit: (patch: TrimOverwriteResult['patch']) => void | Promise<void>,
 ): Promise<TrimOverwriteResult> {
-  const { points: kept, stats } = sliceTrack(points, startIdx, endIdx);
+  const { points: kept } = sliceTrack(points, startIdx, endIdx);
   if (kept.length < 2) throw new Error('Trim leaves fewer than 2 points');
   // An unreadable source must not silently discard its standalone waypoints.
   const waypoints = parseGpx(await storage.readFileText(summary.fileUri)).waypoints;
@@ -96,12 +97,14 @@ export async function overwriteWithTrim(
     name: summary.name,
     fallbackName: summary.name,
     fallbackTime: summary.startedAt,
+    category: summary.category,
   });
   const patch: TrimOverwriteResult['patch'] = {
     fileUri,
     startedAt: rebuilt.startedAt,
     endedAt: rebuilt.endedAt,
-    stats,
+    // Same math as the slice's stats, plus the category's moving profile.
+    stats: rebuilt.stats,
     notes,
   };
   await commit(patch);

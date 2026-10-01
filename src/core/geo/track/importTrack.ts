@@ -19,8 +19,14 @@ export function buildImportedTrack(args: {
   fallbackTime: number;
   /** `<trkseg>` boundaries (see `@core/geo/track/segments`); stats never bridge them. */
   segmentStarts?: readonly number[];
+  /**
+   * The activity category the caller will file it under, when already known:
+   * picks the moving-time stop threshold (#504). Not copied onto the track —
+   * callers still set `track.category` themselves.
+   */
+  category?: string | null;
 }): Track {
-  const { id, points, name, fallbackName, fallbackTime, segmentStarts = [] } = args;
+  const { id, points, name, fallbackName, fallbackTime, segmentStarts = [], category } = args;
 
   let minT = Infinity;
   let maxT = -Infinity;
@@ -38,6 +44,6 @@ export function buildImportedTrack(args: {
     endedAt: maxT === -Infinity ? undefined : maxT,
     status: 'finished',
     points: [...points],
-    stats: computeSegmentedTrackStats(points, segmentStarts),
+    stats: computeSegmentedTrackStats(points, segmentStarts, { category }),
   };
 }
