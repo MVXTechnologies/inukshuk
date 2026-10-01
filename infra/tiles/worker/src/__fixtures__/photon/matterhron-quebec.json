@@ -1,0 +1,459 @@
+{
+  "request": "q=matterhron&lang=en&alt=fr&limit=15&lat=46.81&lon=-71.21",
+  "upstream": {
+    "https://photon.komoot.io/api/?q=matterhron&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=%21shop&osm_tag=%21office&osm_tag=%21craft": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [7.6586024, 45.9764263] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 26863664,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Valtournenche",
+            "state": "Aosta Valley",
+            "country": "Italy"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [162.4496082, -77.6698015] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 7952854996,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-20.9471032, 75.4188451] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8988077705,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "country": "Greenland"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.1228096, 49.9511102] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 12311869666,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Beroun",
+            "county": "okres Beroun",
+            "state": "Central Bohemian Region",
+            "country": "Czechia"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.4233738, -29.0562661] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 4601956741,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Okhahlamba Local Municipality",
+            "county": "Uthukela District Municipality",
+            "state": "KwaZulu-Natal",
+            "country": "South Africa"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-117.2990098, 45.2276848] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 357312239,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Wallowa",
+            "state": "Oregon",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.598055, 50.725166] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 3076894812,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Svojkov",
+            "county": "okres Česká Lípa",
+            "state": "Liberec Region",
+            "country": "Czechia"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [167.16589, -45.55] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1061032937,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Fiordland Community",
+            "county": "Southland District",
+            "state": "Southland",
+            "country": "New Zealand"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-115.3753447, 41.8107405] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 357558408,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Elko",
+            "state": "Nevada",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-112.28767, 35.0552946] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 359269043,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Coconino",
+            "state": "Arizona",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-90.2062303, 43.6040407] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 292784610,
+            "osm_key": "place",
+            "osm_value": "neighbourhood",
+            "type": "locality",
+            "name": "Matterhorn",
+            "city": "Town of Woodland",
+            "county": "Sauk",
+            "state": "Wisconsin",
+            "country": "United States",
+            "extent": [-90.209992, 43.6077394, -90.1992036, 43.600354]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-120.6359685, 37.8560623] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2515976020,
+            "osm_key": "waterway",
+            "osm_value": "rapids",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Tuolumne",
+            "state": "California",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-100.45425, 20.7248983] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 297443170,
+            "osm_key": "highway",
+            "osm_value": "residential",
+            "type": "street",
+            "name": "Matterhorn",
+            "county": "Municipio de Querétaro",
+            "state": "Querétaro",
+            "country": "Mexico",
+            "extent": [-100.4544113, 20.7254661, -100.4540987, 20.7243333]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-105.679863, 32.9684347] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 14552465,
+            "osm_key": "highway",
+            "osm_value": "residential",
+            "type": "street",
+            "name": "Matterhorn",
+            "county": "Otero",
+            "state": "New Mexico",
+            "country": "United States",
+            "extent": [-105.681407, 32.969388, -105.67784, 32.967087]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-72.5686783, 45.0428112] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 11061478258,
+            "osm_key": "amenity",
+            "osm_value": "shelter",
+            "type": "house",
+            "name": "Matterhorn",
+            "city": "Sutton",
+            "county": "Brome-Missisquoi",
+            "state": "Quebec",
+            "country": "Canada"
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=mount+matterhron&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-117.917849, 33.81305] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 14081280525,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn Mountain",
+            "city": "Anaheim",
+            "county": "Orange",
+            "state": "California",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [15.195712, -21.826323] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 280278046,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Pontok Mountains",
+            "state": "Erongo Region",
+            "country": "Namibia"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [167.1717914, -45.5362959] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1287064281,
+            "osm_key": "natural",
+            "osm_value": "ridge",
+            "type": "other",
+            "name": "Matterhorn Mountains",
+            "city": "Fiordland Community",
+            "county": "Southland District",
+            "state": "Southland",
+            "country": "New Zealand",
+            "extent": [167.1466901, -45.499083, 167.1827524, -45.5682867]
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=matterhron&limit=15&lang=fr&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill&osm_tag=natural%3Awater&osm_tag=water&osm_tag=natural%3Abay&osm_tag=landuse%3Areservoir&osm_tag=waterway%3Ariver&osm_tag=place%3Acity&osm_tag=place%3Atown&osm_tag=place%3Avillage": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [7.6586024, 45.9764263] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 26863664,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Cervin",
+            "city": "Valtournenche",
+            "state": "Vallée d'Aoste",
+            "country": "Italie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [162.4496082, -77.6698015] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 7952854996,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-20.9471032, 75.4188451] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 8988077705,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "country": "Groenland"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.1228096, 49.9511102] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 12311869666,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Beroun",
+            "county": "okres Beroun",
+            "state": "Région de Bohême centrale",
+            "country": "Tchéquie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.4233738, -29.0562661] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 4601956741,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Okhahlamba Local Municipality",
+            "county": "Uthukela District Municipality",
+            "state": "KwaZulu-Natal",
+            "country": "Afrique du Sud"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-117.2990098, 45.2276848] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 357312239,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Wallowa",
+            "state": "Oregon",
+            "country": "États-Unis d'Amérique"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.598055, 50.725166] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 3076894812,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Svojkov",
+            "county": "okres Česká Lípa",
+            "state": "Liberecký kraj",
+            "country": "Tchéquie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [167.16589, -45.55] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1061032937,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "city": "Fiordland Community",
+            "county": "Southland District",
+            "state": "Southland",
+            "country": "Nouvelle-Zélande"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-115.3753447, 41.8107405] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 357558408,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Elko",
+            "state": "Nevada",
+            "country": "États-Unis d'Amérique"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-112.28767, 35.0552946] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 359269043,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Matterhorn",
+            "county": "Coconino",
+            "state": "Arizona",
+            "country": "États-Unis d'Amérique"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [13.8416284, 46.4305186] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 10034681708,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Mali Matterhorn",
+            "city": "Kranjska Gora",
+            "country": "Slovénie"
+          }
+        }
+      ]
+    }
+  }
+}

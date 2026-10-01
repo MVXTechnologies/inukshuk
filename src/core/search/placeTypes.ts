@@ -17,6 +17,8 @@ export type PlaceType =
   | 'region'
   | 'campground'
   | 'peak'
+  | 'mountain'
+  | 'range'
   | 'volcano'
   | 'pass'
   | 'lake'
@@ -28,6 +30,7 @@ export type PlaceType =
   | 'beach'
   | 'park'
   | 'forest'
+  | 'trail'
   | 'trailhead'
   | 'hut'
   | 'shelter'
@@ -49,8 +52,8 @@ export interface PlaceTypeInfo {
   /** Camera zoom when flying to a point of this type. */
   zoom: number;
   /**
-   * Ranking weight, 0…1: outdoor places (peaks, lakes, campgrounds, parks,
-   * trailheads, villages) first; streets and shops last.
+   * Ranking weight within a band, 0…1 (the bands themselves — peaks, water,
+   * trails, parks, settlements, roads — are in `rank.ts`).
    */
   boost: number;
   /** Frame the place's bounding box (when known) instead of a fixed zoom. */
@@ -72,6 +75,14 @@ export const PLACE_TYPES: Readonly<Record<PlaceType, PlaceTypeInfo>> = {
   region: { icon: 'map-outline', label: 'Region', zoom: 8, boost: 0.6, fitBounds: true },
   campground: { icon: 'tent', label: 'Campground', zoom: 15, boost: 1, fitBounds: false },
   peak: { icon: 'image-filter-hdr', label: 'Peak', zoom: 14, boost: 1, fitBounds: false },
+  mountain: { icon: 'image-filter-hdr', label: 'Mountain', zoom: 13, boost: 1, fitBounds: false },
+  range: {
+    icon: 'image-filter-hdr',
+    label: 'Mountain range',
+    zoom: 10,
+    boost: 0.9,
+    fitBounds: true,
+  },
   volcano: { icon: 'volcano', label: 'Volcano', zoom: 13, boost: 1, fitBounds: false },
   pass: { icon: 'terrain', label: 'Mountain pass', zoom: 15, boost: 0.9, fitBounds: false },
   lake: { icon: 'waves', label: 'Lake', zoom: 13, boost: 1, fitBounds: true },
@@ -83,6 +94,7 @@ export const PLACE_TYPES: Readonly<Record<PlaceType, PlaceTypeInfo>> = {
   beach: { icon: 'beach', label: 'Beach', zoom: 15, boost: 0.75, fitBounds: false },
   park: { icon: 'pine-tree', label: 'Park', zoom: 12, boost: 0.95, fitBounds: true },
   forest: { icon: 'forest', label: 'Forest', zoom: 13, boost: 0.75, fitBounds: true },
+  trail: { icon: 'walk', label: 'Trail', zoom: 15, boost: 0.95, fitBounds: true },
   trailhead: { icon: 'hiking', label: 'Trailhead', zoom: 16, boost: 0.95, fitBounds: false },
   hut: { icon: 'home-roof', label: 'Hut', zoom: 15, boost: 0.9, fitBounds: false },
   shelter: {
@@ -137,6 +149,8 @@ const BY_TAG: Readonly<Record<string, PlaceType>> = {
   'natural:peak': 'peak',
   'natural:hill': 'peak',
   'natural:ridge': 'peak',
+  'natural:massif': 'mountain',
+  'natural:mountain_range': 'range',
   'natural:volcano': 'volcano',
   'natural:saddle': 'pass',
   'mountain_pass:yes': 'pass',
@@ -167,6 +181,19 @@ const BY_TAG: Readonly<Record<string, PlaceType>> = {
   'amenity:shelter': 'shelter',
   'tourism:viewpoint': 'viewpoint',
   'highway:trailhead': 'trailhead',
+  'route:hiking': 'trail',
+  'route:foot': 'trail',
+  'route:walking': 'trail',
+  'route:bicycle': 'trail',
+  'route:mtb': 'trail',
+  'route:ski': 'trail',
+  'route:piste': 'trail',
+  'highway:path': 'trail',
+  'highway:footway': 'trail',
+  'highway:bridleway': 'trail',
+  'highway:cycleway': 'trail',
+  'highway:track': 'trail',
+  'highway:via_ferrata': 'trail',
 };
 
 /** Photon's own coarse `type` (its layer), for tags {@link BY_TAG} does not know. */

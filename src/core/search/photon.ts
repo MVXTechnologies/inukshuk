@@ -74,7 +74,7 @@ function placeOf(feature: unknown): Place | null {
   const extra =
     p.extra !== null && typeof p.extra === 'object' ? (p.extra as Record<string, unknown>) : {};
   const elevationM =
-    type === 'peak' || type === 'volcano' || type === 'pass'
+    type === 'peak' || type === 'mountain' || type === 'volcano' || type === 'pass'
       ? parseElevation(extra.ele)
       : undefined;
 

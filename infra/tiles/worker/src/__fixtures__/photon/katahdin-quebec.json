@@ -1,0 +1,556 @@
+{
+  "request": "q=katahdin&lang=en&alt=fr&limit=15&lat=46.81&lon=-71.21",
+  "upstream": {
+    "https://photon.komoot.io/api/?q=katahdin&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=%21shop&osm_tag=%21office&osm_tag=%21craft": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7334604, 45.9765867] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 6535934,
+            "osm_key": "leisure",
+            "osm_value": "nature_reserve",
+            "type": "other",
+            "name": "Katahdin Woods and Waters National Monument",
+            "county": "Penobscot",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.8246191, 46.1254839, -68.558363, 45.8275749]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-84.2468893, 34.9808525] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 749372571,
+            "osm_key": "highway",
+            "osm_value": "service",
+            "type": "street",
+            "name": "Katahdin",
+            "county": "Fannin",
+            "state": "Georgia",
+            "country": "United States",
+            "extent": [-84.2477959, 34.9819811, -84.2466667, 34.980379]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.1592922, 45.4394868] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 12262363,
+            "osm_key": "boundary",
+            "osm_value": "administrative",
+            "type": "city",
+            "name": "Katahdin Iron Works Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.2358205, 45.492264, -69.0823689, 45.3877261]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9738825, 45.8488643] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 151675658,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Katahdin Sream",
+            "city": "T2 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.983276, 45.8606889, -68.9690236, 45.8365961]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7171876, 45.9214777] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 439502260,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Katahdin Brook",
+            "city": "T3 R8 WELS",
+            "county": "Penobscot",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.7371156, 45.9328829, -68.7087073, 45.9179049]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9821859, 45.8958904] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 10284814069,
+            "osm_key": "waterway",
+            "osm_value": "waterfall",
+            "type": "other",
+            "name": "Katahdin Falls",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.0000916, 45.8855108] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1106074754,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Stream",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.0001446, 45.8855652, -69.0000385, 45.8854563]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7936621, 45.92545] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 2851483,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Katahdin Lake",
+            "city": "T3 R8 WELS",
+            "county": "Penobscot",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.804581, 45.93658, -68.7793, 45.9145218]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9735605, 45.8978094] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 443241904,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Stream",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.0000385, 45.9101189, -68.9442682, 45.8855652]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.0021108, 45.8843806] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1106074753,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Stream",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.0040609, 45.8854563, -69.0001446, 45.8822214]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9960311, 45.875939] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 151559172,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Sream",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.0040609, 45.8822214, -68.9902434, 45.8716617]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9889109, 45.8656566] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 151559171,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Sream",
+            "city": "T3 R10 WELS",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.9913948, 45.8716617, -68.9828142, 45.8606889]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7665872, 45.9192665] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 1117398911,
+            "osm_key": "waterway",
+            "osm_value": "stream",
+            "type": "other",
+            "name": "Katahdin Brook",
+            "city": "T3 R8 WELS",
+            "county": "Penobscot",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-68.7954436, 45.9239223, -68.7371156, 45.9183696]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.5995559, 45.4598517] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 11478824,
+            "osm_key": "highway",
+            "osm_value": "residential",
+            "type": "street",
+            "name": "Katahdin Circle",
+            "city": "Greenville",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.599559, 45.460157, -69.599, 45.459188]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.4737161, 45.4517849] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 459273838,
+            "osm_key": "highway",
+            "osm_value": "unclassified",
+            "type": "street",
+            "name": "Katahdin Iron Works Road",
+            "city": "Bowdoin College Grant West Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States",
+            "extent": [-69.48218, 45.453475, -69.465249, 45.450203]
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=mount+katahdin&limit=15&lang=en&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9145397, 45.9038468] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358226210,
+            "osm_key": "natural",
+            "osm_value": "massif",
+            "type": "other",
+            "name": "Mount Katahdin",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9147604, 45.8870718] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358223609,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Rum Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9198959, 45.8652223] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358210891,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Abol Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.8506969, 45.9412293] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358224297,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "South Turner Mountain",
+            "city": "Mount Katahdin Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.2192142, 45.4450484] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358223589,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Roundtop Mountain",
+            "city": "Katahdin Iron Works Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.2039359, 45.4336598] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358222628,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Ore Mountain",
+            "city": "Katahdin Iron Works Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-69.2197696, 45.4283821] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358220835,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Houston Mountain",
+            "city": "Katahdin Iron Works Township",
+            "county": "Piscataquis",
+            "state": "Maine",
+            "country": "United States"
+          }
+        }
+      ]
+    },
+    "https://photon.komoot.io/api/?q=katahdin&limit=15&lang=fr&lat=46.81&lon=-71.21&osm_tag=natural%3Apeak&osm_tag=natural%3Amassif&osm_tag=natural%3Amountain_range&osm_tag=natural%3Avolcano&osm_tag=natural%3Aridge&osm_tag=natural%3Ahill&osm_tag=natural%3Awater&osm_tag=water&osm_tag=natural%3Abay&osm_tag=landuse%3Areservoir&osm_tag=waterway%3Ariver&osm_tag=place%3Acity&osm_tag=place%3Atown&osm_tag=place%3Avillage": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9738825, 45.8488643] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 151675658,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Katahdin Sream",
+            "city": "T2 R10 WELS",
+            "county": "Comté de Piscataquis",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique",
+            "extent": [-68.983276, 45.8606889, -68.9690236, 45.8365961]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7171876, 45.9214777] },
+          "properties": {
+            "osm_type": "W",
+            "osm_id": 439502260,
+            "osm_key": "waterway",
+            "osm_value": "river",
+            "type": "other",
+            "name": "Katahdin Brook",
+            "city": "T3 R8 WELS",
+            "county": "Comté de Penobscot",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique",
+            "extent": [-68.7371156, 45.9328829, -68.7087073, 45.9179049]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.7936621, 45.92545] },
+          "properties": {
+            "osm_type": "R",
+            "osm_id": 2851483,
+            "osm_key": "water",
+            "osm_value": "lake",
+            "type": "other",
+            "name": "Katahdin Lake",
+            "city": "T3 R8 WELS",
+            "county": "Comté de Penobscot",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique",
+            "extent": [-68.804581, 45.93658, -68.7793, 45.9145218]
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-71.2661681, 42.4545393] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358272442,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Katahdin Hill",
+            "city": "Lexington",
+            "county": "Middlesex",
+            "state": "Massachusetts",
+            "country": "États-Unis d'Amérique"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [-68.9145397, 45.9038468] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 358226210,
+            "osm_key": "natural",
+            "osm_value": "massif",
+            "type": "other",
+            "name": "Mount Katahdin",
+            "city": "Mount Katahdin Township",
+            "county": "Comté de Piscataquis",
+            "state": "Maine",
+            "country": "États-Unis d'Amérique"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [29.879759, 40.43792] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2282325506,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "Karatekin",
+            "city": "İznik",
+            "state": "Bursa",
+            "country": "Turquie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [36.7166667, 36.2666667] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 567062319,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kafaldin",
+            "county": "District d'Harime",
+            "state": "Gouvernorat d'Idleb",
+            "country": "Syrie"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [74.5105698, 30.9261618] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 6851401997,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Kamal Din",
+            "county": "Firozpur Tahsil",
+            "state": "Pendjab",
+            "country": "Inde"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [62.7888552, 27.4873822] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 2269787695,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "district",
+            "name": "کله دین",
+            "city": "دهستان کله گان",
+            "county": "شهرستان گلشن",
+            "state": "Sistan-Baloutchistan",
+            "country": "Iran"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [33.9729323, 0.7960647] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 9763686247,
+            "osm_key": "place",
+            "osm_value": "village",
+            "type": "city",
+            "name": "Katandi",
+            "state": "Tororo",
+            "country": "Ouganda"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": { "type": "Point", "coordinates": [14.4068782, 45.5033282] },
+          "properties": {
+            "osm_type": "N",
+            "osm_id": 1575646801,
+            "osm_key": "natural",
+            "osm_value": "peak",
+            "type": "other",
+            "name": "Gumanačka",
+            "city": "Klana",
+            "county": "Comitat de Primorje-Gorski Kotar",
+            "country": "Croatie"
+          }
+        }
+      ]
+    }
+  }
+}

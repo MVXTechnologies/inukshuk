@@ -22,6 +22,8 @@ SEARCH_CACHE_CONTROL = "public, max-age=86400"
 SEARCH_RATE_PER_MIN = "60"
 # Photon osm_tag filters on every query: shops, offices and workshops never take a slot.
 PHOTON_OSM_TAGS = "!shop,!office,!craft"
+# "0" = one upstream query per search (no summit/water variants, see src/searchPlan.ts).
+PHOTON_VARIANTS = "1"
 
 # Optional global rate limit for /search (otherwise a per-isolate counter):
 # [[ratelimits]]
