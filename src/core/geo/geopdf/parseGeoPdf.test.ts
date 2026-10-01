@@ -1,5 +1,17 @@
+import { bboxUnitToPage } from './adobeGeo';
 import { parseGeoPdf } from './parseGeoPdf';
 import { buildClassicPdf, latin1Bytes } from './testUtils';
+
+describe('bboxUnitToPage', () => {
+  it('anchors the unit square on the BBox corners as written', () => {
+    expect(bboxUnitToPage([0, 0, 200, 100], 0, 1)).toEqual([0, 100]);
+    // Top-first: v = 1 is the SECOND y, the bottom.
+    expect(bboxUnitToPage([0, 100, 200, 0], 0, 1)).toEqual([0, 0]);
+    // Right-first: u = 0 is the right edge.
+    expect(bboxUnitToPage([200, 0, 0, 100], 0, 0)).toEqual([200, 0]);
+    expect(bboxUnitToPage([0, 0, 200, 100], 0.5, 0.25)).toEqual([100, 25]);
+  });
+});
 
 /**
  * Builds a 3-object PDF: catalog -> pages -> single page. The page object body
@@ -159,6 +171,31 @@ describe('parseGeoPdf — Adobe VP/Measure GEO', () => {
     expect(g.viewport.corners.topRight[1]).toBeCloseTo(46, 6);
     expect(g.viewport.corners.bottomRight[1]).toBeCloseTo(45, 6);
     expect(g.viewport.corners.bottomLeft[0]).toBeCloseTo(-75, 6);
+  });
+
+  it('anchors /LPTS on a top-first /BBox as written (Beau Lake, #487)', () => {
+    // The 2024 US Topo "Beau Lake, Maine" map viewport, verbatim: the BBox is
+    // written top-first (y 2088 → 59) and the first LPTS point (0, 1.00062)
+    // is therefore the frame's LOWER-left, paired with the south-west GPTS.
+    // Reading v = 1 as "top" drew the sheet flipped north–south.
+    const page =
+      '<< /Type /Page /MediaBox [0 0 1728 2088] /CropBox [0 0 1728 2088] /Rotate 0 /VP [ ' +
+      '<< /Type /Viewport /BBox [84.41805 2088 1634.72214 59.03374] ' +
+      '/Measure << /Type /Measure /Subtype /GEO ' +
+      '/LPTS [0 1.00062 -0.00105 0 1 -0.00062 1.00105 1] ' +
+      '/GPTS [47.23339 -69.14928 47.38806 -69.14972 47.38815 -68.97561 47.23348 -68.97568] ' +
+      '/GCS << /Type /PROJCS /EPSG 32619 >> ' +
+      '>> >> ] >>';
+    const res = parseGeoPdf(pdfWithPage(page));
+    expect(res.warnings).toEqual([]);
+    const g = res.georeferences[0]!;
+    expect(g.viewport.rect).toEqual({ x0: 84.41805, y0: 59.03374, x1: 1634.72214, y1: 2088 });
+    const c = g.viewport.corners;
+    expect(c.topLeft[0]).toBeCloseTo(-69.1494, 4);
+    expect(c.topLeft[1]).toBeCloseTo(47.3881, 4); // north
+    expect(c.topRight[0]).toBeCloseTo(-68.9757, 4);
+    expect(c.bottomRight[1]).toBeCloseTo(47.2335, 4); // south
+    expect(c.bottomLeft[0]).toBeCloseTo(-69.1494, 4);
   });
 
   it('ignores /BOUNDS for pairing: it is a clip polygon, not the LPTS', () => {

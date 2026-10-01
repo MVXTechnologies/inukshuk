@@ -1,0 +1,1144 @@
+[
+  {
+    "id": "ustopo-2024-beau-lake",
+    "standard": "USGS US Topo (2024 production, /VP, top-first /BBox)",
+    "source": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/USTopo/Current/PDF/ME/ME_Beau_Lake.pdf",
+    "note": "The #487 sheet: its map viewport writes /BBox top-first and /LPTS against that order.",
+    "fileBytes": 52762239,
+    "page": {
+      "MediaBox": [0, 0, 1728, 2088],
+      "CropBox": [0, 0, 1728, 2088],
+      "Rotate": 0,
+      "VP": [
+        {
+          "BBox": [84.41805, 2088, 1634.72214, 59.03374],
+          "Measure": {
+            "Bounds": [0, 1.00062, -0.00105, 0, 1, -0.00062, 1.00105, 1],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"GCS North American 1983 UTM Zone 19N (Calculated)\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mer\rcator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-69.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              47.23339, -69.14928, 47.38806, -69.14972, 47.38815, -68.97561, 47.23348, -68.97568
+            ],
+            "LPTS": [0, 1.00062, -0.00105, 0, 1, -0.00062, 1.00105, 1],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "Map Layers",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1114.1742, 191.51415, 1197.69226, 131.57396],
+          "Measure": {
+            "Bounds": [0, 1, 0, 0, 1, 0, 1, 1],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"World_Mercator\",GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Mercator\"],PARAMETER[\"False_Easting\",0.0],PARAMETER[\"False_Northing\",0.0]\r,PARAMETER[\"Central_Meridian\",0.0],PARAMETER[\"Standard_Parallel_1\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              42.93951, -73.58897, 47.57075, -73.58897, 47.57075, -64.44486, 42.93951, -64.44486
+            ],
+            "LPTS": [0, 1, 0, 0, 1, 0, 1, 1],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "Quadrangle Location",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1109.31431, 100.79387, 1153.23329, 35.99367],
+          "Measure": {
+            "Bounds": [0, 1, 0, 0, 1, 0, 1, 1],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"World_Mercator\",GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Mercator\"],PARAMETER[\"False_Easting\",0.0],PARAMETER[\"False_Northing\",0.0]\r,PARAMETER[\"Central_Meridian\",0.0],PARAMETER[\"Standard_Parallel_1\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              47.1241, -69.24997, 47.50033, -69.24997, 47.50033, -68.87503, 47.1241, -68.87503
+            ],
+            "LPTS": [0, 1, 0, 0, 1, 0, 1, 1],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "Adjoining Sheet Diagram",
+          "Type": "/Viewport"
+        }
+      ]
+    },
+    "expectedFrame": [-69.125, 47.25, -69, 47.375]
+  },
+  {
+    "id": "ustopo-2014-beau-lake",
+    "standard": "USGS US Topo (2014, TerraGo LGIDict)",
+    "source": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/USTopo/PDF/ME/ME_Beau_Lake_20140926_TM_geo.pdf",
+    "note": "Same quadrangle as the 2024 sheet, earlier production; must land on the same ground.",
+    "fileBytes": 16858278,
+    "page": {
+      "MediaBox": [0, 0, 1638, 2088],
+      "CropBox": [0, 0, 1638, 2088],
+      "Rotate": 0,
+      "LGIDict": [
+        {
+          "CTM": [
+            "8.466695584525782",
+            "-0.0067820112188434",
+            "0.0067820112188434",
+            "8.466695584525782",
+            "488329.0585522675",
+            "5230692.726801556"
+          ],
+          "Description": "UTM Grid and Projection",
+          "Display": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.991",
+                "dy": "-1.9072",
+                "dz": "-0.5129"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "6ue8db",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "77k78a"
+            },
+            "UUID": "5425A0FA00021000A56400215E5737DC"
+          },
+          "Neatline": [
+            "1466.92484999379",
+            "1998.005169324455",
+            "1466.924849993832",
+            "177.2723306757954",
+            "171.063900006545",
+            "177.2723306757115",
+            "171.0639000065031",
+            "1998.005169324372",
+            "1466.92484999379",
+            "1998.005169324455"
+          ],
+          "Projection": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.991",
+                "dy": "-1.9072",
+                "dz": "-0.5129"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "Registration": [
+            ["178.2638875049469", "184.4723181744384", "489839.6157148175", "5232253.388775625"],
+            ["1459.724862495263", "1990.805181825645", "500701.6062632563", "5247538.368373776"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        },
+        {
+          "CTM": [
+            "12624.09581667194",
+            "-3.147541733525954e-011",
+            "3.147541733525954e-011",
+            "12624.09581667194",
+            "-21464652.4541849",
+            "2919481.302103441"
+          ],
+          "Description": "Quadrangle Location",
+          "Display": {
+            "CentralMeridian": "0",
+            "Datum": "WGE",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "0",
+            "ProjectionType": "MC",
+            "ScaleFactor": "0",
+            "Type": "/Projection",
+            "Units": "m"
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "oz2z2a",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "77e78a"
+            },
+            "UUID": "5425A0FA00011000A56400215E5737DC"
+          },
+          "Neatline": [
+            "1133.3925",
+            "185.6837645348259",
+            "1049.805",
+            "185.6837645348259",
+            "1049.805",
+            "245.6637354651736",
+            "1133.3925",
+            "245.6637354651736",
+            "1133.3925",
+            "185.6837645348259"
+          ],
+          "Projection": {
+            "CentralMeridian": "0",
+            "Datum": "WGE",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "0",
+            "ProjectionType": "MC",
+            "ScaleFactor": "0",
+            "Type": "/Projection",
+            "Units": "m"
+          },
+          "Registration": [
+            ["1057.0046124031", "192.8833769379262", "-8120924.948543971", "5354459.534011037"],
+            ["1126.192887596899", "238.4641230620729", "-7247485.53310719", "5929875.240477661"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        },
+        {
+          "CTM": [
+            "8.466697738419462",
+            "-0.006782012943994543",
+            "0.006782012943994543",
+            "8.466697738419462",
+            "488329.0567863643",
+            "5230692.724460311"
+          ],
+          "Description": "Map Layers",
+          "Display": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.991",
+                "dy": "-1.9072",
+                "dz": "-0.5129"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "vzcaza",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "7ce78a"
+            },
+            "UUID": "5425A0FB00001000A56400215E5737DC"
+          },
+          "Neatline": [
+            "1384.121250000126",
+            "1915.205102561004",
+            "1384.12125",
+            "260.0723974390791",
+            "253.8675",
+            "260.0723974389115",
+            "253.8675000000105",
+            "1915.205102560837",
+            "1384.121250000126",
+            "1915.205102561004"
+          ],
+          "Projection": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.991",
+                "dy": "-1.9072",
+                "dz": "-0.5129"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "Registration": [
+            ["261.0674856667465", "267.2723831060248", "490541.2489215956", "5232953.86837883"],
+            ["1376.92126433317", "1908.005116893975", "499999.9730564756", "5246837.888770573"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        }
+      ]
+    },
+    "expectedFrame": [-69.125, 47.25, -69, 47.375]
+  },
+  {
+    "id": "ustopo-2013-belfry-ky",
+    "standard": "USGS US Topo (/VP, bottom-first BBox, no LPTS)",
+    "source": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/USTopo/ (KY_Belfry.pdf)",
+    "note": "The viewport values already pinned by cantopo.test.ts: ISO-default point order.",
+    "fileBytes": null,
+    "page": {
+      "MediaBox": [0, 0, 1728, 2088],
+      "VP": [
+        {
+          "Type": "/Viewport",
+          "BBox": [0, 41.75369, 1727.95998, 2088],
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "BOUNDS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GPTS": [
+              37.4802, -82.3949, 37.63815, -82.39767, 37.64002, -82.22933, 37.48207, -82.22657
+            ],
+            "GCS": {
+              "Type": "/PROJCS",
+              "EPSG": 32617
+            }
+          }
+        }
+      ]
+    },
+    "expectedFrame": [-82.375, 37.5, -82.25, 37.625]
+  },
+  {
+    "id": "ustopo-2014-machias-seal-island-south",
+    "standard": "USGS US Topo (current edition, LGIDict)",
+    "source": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/USTopo/Current/PDF/ME/ME_Machias_Seal_Island_South.pdf",
+    "note": "A current Maine sheet still in the LGIDict production; renders correctly before and after #487.",
+    "fileBytes": 1944461,
+    "page": {
+      "MediaBox": [0, 0, 1638, 2088],
+      "CropBox": [0, 0, 1638, 2088],
+      "Rotate": 0,
+      "LGIDict": [
+        {
+          "CTM": [
+            "8.464311952109121",
+            "0.2002501746169642",
+            "-0.2002501746169642",
+            "8.464311952109121",
+            "647482.7943697455",
+            "4912922.948354237"
+          ],
+          "Description": "Map Layers",
+          "Display": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.9738",
+                "dy": "-1.9453",
+                "dz": "-0.5486"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "woi67b",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "zp37e8"
+            },
+            "UUID": "54369F3300031000A36400215E57344C"
+          },
+          "Neatline": [
+            "1413.855000000074",
+            "260.3955620425006",
+            "224.1337500001152",
+            "260.3955620422491",
+            "224.1337500000524",
+            "1915.208187958421",
+            "1413.855000000126",
+            "1915.208187958589",
+            "1413.855000000074",
+            "260.3955620425006"
+          ],
+          "Projection": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.9738",
+                "dy": "-1.9453",
+                "dz": "-0.5486"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "Registration": [
+            ["231.3337527231651", "1908.008185234973", "649058.7964455826", "4929119.24946562"],
+            ["1406.654997276762", "267.595564765781", "659335.5750171182", "4915469.643600245"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        },
+        {
+          "CTM": [
+            "8.464312343289219",
+            "0.2002501838715231",
+            "-0.2002501838715231",
+            "8.464312343289219",
+            "647482.7940594385",
+            "4912922.947921132"
+          ],
+          "Description": "UTM Grid and Projection",
+          "Display": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.9738",
+                "dy": "-1.9453",
+                "dz": "-0.5486"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "hpgfh8",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "z877e8"
+            },
+            "UUID": "54369F3300021000A36400215E57344C"
+          },
+          "Neatline": [
+            "1496.655000000157",
+            "177.5955727893578",
+            "141.33375000022",
+            "177.5955727896092",
+            "141.3337500000838",
+            "1998.008177211061",
+            "1496.65500000001",
+            "1998.008177211061",
+            "1496.655000000157",
+            "177.5955727893578"
+          ],
+          "Projection": {
+            "Datum": {
+              "Description": "North_American_Datum_1983",
+              "Ellipsoid": {
+                "Description": "GRS 1980",
+                "InvFlattening": "298.257222101",
+                "SemiMajorAxis": "6378137"
+              },
+              "ToWGS84": {
+                "Description": "Custom To WGS84 Parameters",
+                "dx": "0.9738",
+                "dy": "-1.9453",
+                "dz": "-0.5486"
+              }
+            },
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "m",
+            "Zone": 19
+          },
+          "Registration": [
+            ["148.5337523904245", "1990.808174820458", "648341.3704301311", "4929803.514039612"],
+            ["1489.454997609659", "184.7955751799604", "660053.0010325713", "4914785.379026252"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        },
+        {
+          "CTM": [
+            "12623.03742776134",
+            "2.495907642064607e-011",
+            "-2.495907642064607e-011",
+            "12623.03742776134",
+            "-21651304.24690298",
+            "2915591.302847873"
+          ],
+          "Description": "Quadrangle Location",
+          "Display": {
+            "CentralMeridian": "0",
+            "Datum": "WGE",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "0",
+            "ProjectionType": "MC",
+            "ScaleFactor": "0",
+            "Type": "/Projection",
+            "Units": "m"
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "z77cpa",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "z8q7e8"
+            },
+            "UUID": "54369F3300011000A36400215E57344C"
+          },
+          "Neatline": [
+            "1148.274129231195",
+            "186.0074999999349",
+            "1064.679620768805",
+            "186.0074999999349",
+            "1064.679620768805",
+            "245.9925000000653",
+            "1148.274129231195",
+            "245.9925000000653",
+            "1148.274129231195",
+            "186.0074999999349"
+          ],
+          "Projection": {
+            "CentralMeridian": "0",
+            "Datum": "WGE",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "0",
+            "ProjectionType": "MC",
+            "ScaleFactor": "0",
+            "Type": "/Projection",
+            "Units": "m"
+          },
+          "Registration": [
+            ["1071.879836829303", "193.2077160604334", "-8120924.948543971", "5354459.534011037"],
+            ["1141.073913170696", "238.7922839395663", "-7247485.53310719", "5929875.240477661"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        }
+      ]
+    },
+    "expectedFrame": [-67.125, 44.375, -67, 44.5]
+  },
+  {
+    "id": "htmc-1955-beau-lake-62500",
+    "standard": "USGS Historical Topographic Map Collection (scanned, LGIDict)",
+    "source": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Maps/HistoricalTopo/PDF/ME/62500/ME_Beau%20Lake_460167_1955_62500_geo.pdf",
+    "note": "Polyconic NAD27: not placeable, but its native-CRS corners must still be north-up.",
+    "fileBytes": 4496982,
+    "page": {
+      "MediaBox": [0, 0, 1223.81, 1582.21],
+      "CropBox": [0, 0, 1223.81, 1582.21],
+      "Rotate": 0,
+      "LGIDict": [
+        {
+          "CTM": [
+            "22.04861111111374",
+            "0",
+            "3.720267802787225e-016",
+            "22.04861111111374",
+            "-14242.68104735041",
+            "-4663.035317367725"
+          ],
+          "Description": "Beau Lake",
+          "Display": {
+            "CentralMeridian": "-69.125",
+            "Datum": "NAS-E",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "47.25",
+            "ProjectionType": "PH",
+            "Type": "/Projection",
+            "Units": "m"
+          },
+          "LGIT:Info": {
+            "GeoEnable": {
+              "CertVer": "2",
+              "Code": "hmouo7",
+              "Features": ["/GeoPDF", "/GeoMark", "/GeoJavaScript", "/ShapeExport"],
+              "GeoEnable": "wv34oa"
+            },
+            "TypeData": {},
+            "UUID": "5038B5E20000100080A0001AA0B7F535"
+          },
+          "Neatline": [
+            "1075.148618778883",
+            "211.8326294960945",
+            "932.0767911459375",
+            "211.6416263988334",
+            "789.0048819096046",
+            "211.5270318532996",
+            "645.9329318765557",
+            "211.4888458922395",
+            "502.8609818532996",
+            "211.5270685265091",
+            "216.7859140199487",
+            "211.8326294960945",
+            "217.1226368147621",
+            "421.9452600131426",
+            "217.4595882192298",
+            "632.0594420022801",
+            "217.7967680582035",
+            "842.1751753000818",
+            "218.1341761564052",
+            "1052.292459739744",
+            "218.8095142123046",
+            "1472.430831272224",
+            "361.2067542600403",
+            "1472.23996380871",
+            "503.6040761813011",
+            "1472.125450638111",
+            "646.0014390343526",
+            "1472.087291793301",
+            "788.398801877579",
+            "1472.125487285247",
+            "1073.125018586527",
+            "1472.430831272224",
+            "1073.462882567489",
+            "1262.310445806293",
+            "1073.800518640082",
+            "1052.191611139052",
+            "1074.13792662877",
+            "842.0743274437859",
+            "1074.475106358146",
+            "631.958594890541"
+          ],
+          "Projection": {
+            "CentralMeridian": "-69.125",
+            "Datum": "NAS-E",
+            "FalseEasting": "0",
+            "FalseNorthing": "0",
+            "OriginLatitude": "47.25",
+            "ProjectionType": "PH",
+            "Type": "/Projection",
+            "Units": "M"
+          },
+          "Registration": [
+            ["0", "0", "-14242.68104735041", "-4663.035317367725"],
+            ["0", "1582.205767320415", "-14242.68104735041", "30222.40434404142"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.3"
+        }
+      ]
+    },
+    "expectedFrame": null
+  },
+  {
+    "id": "cantopo-015d04",
+    "standard": "NRCan CanTopo 1:50 000 (LGIDict, three dicts)",
+    "source": "https://ftp.maps.canada.ca/pub/nrcan_rncan/raster/cantopo/50k_geopdf/015/d/cantopo_015d04_geopdf.zip",
+    "note": "Carries a Canada-wide Lambert locator inset whose corners wrap past the pole.",
+    "fileBytes": 1465666,
+    "page": {
+      "MediaBox": [0, 0, 2880, 2016],
+      "VP": [],
+      "LGIDict": [
+        {
+          "CTM": [
+            "34219.2782419254",
+            "298.6271171124",
+            "-298.6271171124",
+            "34219.2782419254",
+            "-3773064.1685393695",
+            "-15148218.2802434840"
+          ],
+          "Description": "CANADA",
+          "Display": {
+            "CentralMeridian": "-96.00000",
+            "Datum": "NAR",
+            "FalseEasting": "0.00000",
+            "FalseNorthing": "0.00000",
+            "OriginLatitude": "40.00000",
+            "ProjectionType": "LE",
+            "StandardParallelOne": "45.00000",
+            "StandardParallelTwo": "82.00000",
+            "Type": "/Projection",
+            "Units": "M"
+          },
+          "LGI": "wva4ge4pxbpxywku",
+          "Neatline": [
+            "17.6519823406",
+            "439.9312500000",
+            "17.6519823406",
+            "598.4775000000",
+            "208.6980176594",
+            "598.4775000000",
+            "208.6980176594",
+            "439.9312500000"
+          ],
+          "Projection": {
+            "CentralMeridian": "-96.00000",
+            "Datum": "NAR",
+            "FalseEasting": "0.00000",
+            "FalseNorthing": "0.00000",
+            "OriginLatitude": "40.00000",
+            "ProjectionType": "LE",
+            "StandardParallelOne": "45.00000",
+            "StandardParallelTwo": "82.00000",
+            "Type": "/Projection"
+          },
+          "Registration": [
+            ["16.9638398251", "440.7678534822", "-3324199.0469146883", "-60394.5992574091"],
+            ["209.3861601749", "597.6408965178", "3213507.3284989242", "5365150.2318288274"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.1"
+        },
+        {
+          "CTM": [
+            "0.0069444444",
+            "0.0000000000",
+            "0.0000000000",
+            "0.0069444444",
+            "-79.1026562500",
+            "59.2500000000"
+          ],
+          "Description": "MGRS_FRAME",
+          "Display": {
+            "Datum": "WE",
+            "ProjectionType": "GEODETIC",
+            "Type": "/Projection"
+          },
+          "LGI": "q3nmub8edq5ph3ac",
+          "Neatline": [
+            "2174.7825000000",
+            "108.0000000000",
+            "2174.7825000000",
+            "144.0000000000",
+            "2246.7825000000",
+            "144.0000000000",
+            "2246.7825000000",
+            "108.0000000000"
+          ],
+          "Projection": {
+            "Datum": "WE",
+            "ProjectionType": "GEOGRAPHIC",
+            "Type": "/Projection"
+          },
+          "Registration": [
+            ["2174.7825000000", "108.0000000000", "-64.0000000000", "60.0000000000"],
+            ["2246.7825000000", "144.0000000000", "-63.5000000000", "60.2500000000"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.1"
+        },
+        {
+          "CTM": [
+            "17.6377879017",
+            "-0.2002091257",
+            "0.2002091257",
+            "17.6377879017",
+            "430191.6217594894",
+            "6647335.0169470487"
+          ],
+          "Description": "MAP_FRAME",
+          "Display": {
+            "Datum": "NAR",
+            "Hemisphere": "N",
+            "ProjectionType": "UT",
+            "Type": "/Projection",
+            "Units": "M",
+            "Zone": "20"
+          },
+          "LGI": "8b3eyssu3zyw4ent",
+          "Neatline": [
+            "338.1525000000",
+            "214.4025000000",
+            "338.1525000000",
+            "1892.0024999999",
+            "2822.1525000000",
+            "1892.0024999999",
+            "2822.1525000000",
+            "214.4025000000"
+          ],
+          "Projection": {
+            "CentralMeridian": "-63.00000",
+            "Datum": "NAR",
+            "FalseEasting": "500000.00000",
+            "FalseNorthing": "0.00000",
+            "OriginLatitude": "0.00000",
+            "ProjectionType": "TC",
+            "ScaleFactor": "0.99960",
+            "Type": "/Projection"
+          },
+          "Registration": [
+            ["347.7532360891", "200.3593172801", "436365.3333435091", "6650799.2887179991"],
+            ["2812.5517639109", "1906.0456827199", "480180.4209736844", "6680390.3479001159"]
+          ],
+          "Type": "/LGIDict",
+          "Version": "2.1"
+        }
+      ]
+    },
+    "expectedFrame": [-64, 60, -63.5, 60.25]
+  },
+  {
+    "id": "austopo-sc55-05-maer",
+    "standard": "Geoscience Australia AUSTopo 1:250 000 (/VP, continent inset first)",
+    "source": "https://d28rz98at9flks.cloudfront.net/148292/148292_00_Feb26.pdf",
+    "note": "Southern hemisphere, east longitudes; viewport 0 is a whole-continent inset.",
+    "fileBytes": 1539537,
+    "page": {
+      "MediaBox": [0, 0, 2383.93224, 1683.77616],
+      "UserUnit": 1,
+      "VP": [
+        {
+          "Type": "/Viewport",
+          "BBox": [170.0784, 1105.5096, 311.8104, 1247.2416],
+          "Name": "Map of Australia",
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              -49.49198, 111.06404, -4.57622, 111.06404, -4.57622, 155.9798, -49.49198, 155.9798
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/GEOGCS",
+              "WKT": "GEOGCS[\"GCS_GDA_1994\",DATUM[\"D_GDA_1994\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
+            }
+          }
+        },
+        {
+          "Type": "/Viewport",
+          "BBox": [340.1568, 85.0392, 2239.3656, 1388.9736],
+          "Name": "Main Map - Zone 55 - Standard Sheets",
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              -10.01464, 143.98192, -8.97593, 143.99101, -8.98521, 145.51362, -10.02501, 145.50913
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"GDA2020_MGA_Zone_55\",GEOGCS[\"GDA2020\",DATUM[\"GDA2020\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",10000000.0],PARAMETER[\"Central_Meridian\",147.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        },
+        {
+          "Type": "/Viewport",
+          "BBox": [51.02352, 992.124, 175.74768, 1085.66712],
+          "Name": "Locality Diagram - ZONE 55",
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              -10.9706, 142.72793, -7.99408, 142.76468, -8.01576, 146.75364, -11.00052, 146.75149
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"GDA2020_MGA_Zone_55\",GEOGCS[\"GDA2020\",DATUM[\"GDA2020\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",10000000.0],PARAMETER[\"Central_Meridian\",147.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        }
+      ]
+    },
+    "expectedFrame": [144, -10, 145.5, -9]
+  },
+  {
+    "id": "fstopo-302209507-bear-creek-tx",
+    "standard": "USFS FSTopo (/VP, upper-left-first LPTS)",
+    "source": "https://data.fs.usda.gov/geodata/rastergateway/ (FSTopo 302209507)",
+    "note": "LPTS 0 1 0 0 1 0 1 1 against a bottom-first BBox.",
+    "fileBytes": 2872522,
+    "page": {
+      "MediaBox": [0, 0, 1566, 1944],
+      "UserUnit": 1,
+      "VP": [
+        {
+          "BBox": [0, 84.8916, 1566, 1944],
+          "Measure": {
+            "Bounds": [0, 1, 0, 0, 1, 0, 1, 1],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"GCS North American 1983 UTM Zone 15N (Calculated)\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mer\rcator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-93.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              30.50727, -95.25659, 30.36531, -95.25649, 30.3653, -95.11859, 30.50727, -95.11849
+            ],
+            "LPTS": [0, 1, 0, 0, 1, 0, 1, 1],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "BaseMap",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1035.4428, 21.1752, 1125.634786755, 111.018189352],
+          "Measure": {
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"WGS_1984_World_Equidistant_Cylindrical\",GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Equidistant_Cylindrical_Ellipsoidal\"],PARAMETER[\"\rFalse_Easting\",0.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",0.0],PARAMETER[\"Standard_Parallel_1\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              30.23738, -95.38758, 30.63763, -95.38758, 30.63763, -94.98743, 30.23738, -94.98743
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "AdjoiningSheetDiagram",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1028.1204, 114.8616, 1132.9596, 184.5144],
+          "Measure": {
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GCS": {
+              "Type": "/GEOGCS",
+              "WKT": "GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
+            },
+            "GPTS": [
+              25.30392, -108.90468, 37.03395, -108.90468, 37.03395, -91.24901, 25.30392, -91.24901
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "QuadrangleLocation",
+          "Type": "/Viewport"
+        }
+      ]
+    },
+    "expectedFrame": [-95.25, 30.375, -95.125, 30.5]
+  },
+  {
+    "id": "fstopo-374510822-south-mountain-co",
+    "standard": "USFS FSTopo (/VP, upper-left-first LPTS)",
+    "source": "https://data.fs.usda.gov/geodata/rastergateway/ (FSTopo 374510822)",
+    "note": "Second FSTopo sheet, different state and BBox inset.",
+    "fileBytes": 3877807,
+    "page": {
+      "MediaBox": [0, 0, 1566, 1944],
+      "UserUnit": 1,
+      "VP": [
+        {
+          "BBox": [0, 79.8876, 1566, 1944],
+          "Measure": {
+            "Bounds": [0, 1, 0, 0, 1, 0, 1, 1],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"GCS North American 1983 UTM Zone 12N (Calculated)\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mer\rcator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-111.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              37.88218, -108.51279, 37.74001, -108.51264, 37.74001, -108.36225, 37.88217, -108.36211
+            ],
+            "LPTS": [0, 1, 0, 0, 1, 0, 1, 1],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "BaseMap",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1035.4428, 21.1248, 1125.634791985, 111.068832893],
+          "Measure": {
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"WGS_1984_World_Equidistant_Cylindrical\",GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Equidistant_Cylindrical_Ellipsoidal\"],PARAMETER[\"\rFalse_Easting\",0.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",0.0],PARAMETER[\"Standard_Parallel_1\",0.0],UNIT[\"Meter\",1.0]]"
+            },
+            "GPTS": [
+              37.61239, -108.63759, 38.01262, -108.63759, 38.01262, -108.23743, 37.61239, -108.23743
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "AdjoiningSheetDiagram",
+          "Type": "/Viewport"
+        },
+        {
+          "BBox": [1028.1204, 114.8616, 1132.9596, 184.5144],
+          "Measure": {
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GCS": {
+              "Type": "/GEOGCS",
+              "WKT": "GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
+            },
+            "GPTS": [
+              36.43322, -109.41118, 41.56264, -109.41118, 41.56264, -101.69054, 36.43322, -101.69054
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Name": "QuadrangleLocation",
+          "Type": "/Viewport"
+        }
+      ]
+    },
+    "expectedFrame": [-108.5, 37.75, -108.375, 37.875]
+  },
+  {
+    "id": "sepaq-anticosti-la-loutre",
+    "standard": "Sépaq park map (Avenza-style /VP, four identical viewports)",
+    "source": "ANT_Cerf_Secteur_la-loutre-1.pdf (Sépaq Anticosti)",
+    "note": "ISO-default LPTS, 1368×936 landscape page with the map frame inset from the edges.",
+    "fileBytes": 3588139,
+    "page": {
+      "MediaBox": [0, 0, 1368, 936],
+      "UserUnit": 1,
+      "VP": [
+        {
+          "Type": "/Viewport",
+          "BBox": [36, 36, 1062, 900],
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              49.49834, -63.80366, 49.64912, -63.80614, 49.65071, -63.53038, 49.49993, -63.52875
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"NAD_1983_UTM_Zone_20N\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-63.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        },
+        {
+          "Type": "/Viewport",
+          "BBox": [36, 36, 1062, 900],
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              49.49834, -63.80366, 49.64912, -63.80614, 49.65071, -63.53038, 49.49993, -63.52875
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"NAD_1983_UTM_Zone_20N\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-63.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        },
+        {
+          "Type": "/Viewport",
+          "BBox": [36, 36, 1062, 900],
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              49.49834, -63.80366, 49.64912, -63.80614, 49.65071, -63.53038, 49.49993, -63.52875
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"NAD_1983_UTM_Zone_20N\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-63.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        },
+        {
+          "Type": "/Viewport",
+          "BBox": [36, 36, 1062, 900],
+          "Measure": {
+            "Type": "/Measure",
+            "Subtype": "/GEO",
+            "Bounds": [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+            "GPTS": [
+              49.49834, -63.80366, 49.64912, -63.80614, 49.65071, -63.53038, 49.49993, -63.52875
+            ],
+            "LPTS": [0, 0, 0, 1, 1, 1, 1, 0],
+            "GCS": {
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"NAD_1983_UTM_Zone_20N\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",500000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-63.0],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]"
+            }
+          }
+        }
+      ]
+    },
+    "expectedFrame": [-63.806, 49.498, -63.529, 49.651]
+  },
+  {
+    "id": "utm-export-mini-bouloutiere-nord",
+    "standard": "UTM GIS export (/VP, 10 % inset clockwise LPTS)",
+    "source": "Mini-bouloutiere-GPS_NORD_UTM 1-20 000-Model-001.pdf",
+    "note": "LPTS lower-left, lower-right, upper-right, upper-left at 0.1..0.9.",
+    "fileBytes": 1283060,
+    "page": {
+      "MediaBox": [0, 0, 841.89, 1190.55],
+      "CropBox": [0, 0, 841.89, 1190.55],
+      "Rotate": 0,
+      "VP": [
+        {
+          "BBox": [0, 75.26856433073, 841.8897637795, 1115.282616772],
+          "Measure": {
+            "Bounds": [0, 0, 1, 0, 1, 1, 0, 1, 0, 0],
+            "GCS": {
+              "EPSG": 2038,
+              "Type": "/PROJCS",
+              "WKT": "PROJCS[\"NAD_1983_CSRS98_UTM_Zone_20N\",GEOGCS[\"GCS_North_American_1983_CSRS98\",DATUM[\"D_North_American_1983_CSRS98\",SPHEROID[\"GRS_1980\",6378137.000,298.25722210]],PRIMEM[\"Greenwich\",0],UNIT[\"Degree\",0.017453292519943295]],PROJECTION[\"Transverse_Mercator\"],\rPARAMETER[\"False_Easting\",500000.000],PARAMETER[\"False_Northing\",0.000],PARAMETER[\"Central_Meridian\",-63.00000000000000],PARAMETER[\"Scale_Factor\",0.9996],PARAMETER[\"Latitude_Of_Origin\",0.000],UNIT[\"Meter\",1.00000000000000]]"
+            },
+            "GPTS": [
+              50.48473649624, -63.28217574049, 50.48482918115, -63.24092532955, 50.51734343839,
+              -63.24109079797, 50.51725064695, -63.28236953899
+            ],
+            "LPTS": [0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9],
+            "PDU": ["M", "SQM", "DEG"],
+            "Subtype": "/GEO",
+            "Type": "/Measure"
+          },
+          "Type": "/Viewport"
+        }
+      ]
+    },
+    "expectedFrame": [-63.2875, 50.4807, -63.2357, 50.5214]
+  }
+]

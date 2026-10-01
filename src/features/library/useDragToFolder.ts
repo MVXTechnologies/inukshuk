@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  PanResponder,
-  Platform,
-  StatusBar,
-  type ScrollView,
-  type View,
-} from 'react-native';
+import { Animated, PanResponder, Platform, StatusBar, type View } from 'react-native';
 
 export interface DragItem {
   kind: 'map' | 'track' | 'waypoint';
@@ -33,7 +26,8 @@ const fromKey = (key: string): DropTargetKey => (key === ' ungrouped' ? null : k
  * Animated.ValueXY (no re-render per move), and the release drops onto
  * whichever registered header rect contains the finger. Header rects are
  * re-measured (throttled) during the drag because auto-scroll shifts them.
- * The ScrollView must set `scrollEnabled={dragging === null}`.
+ * The list must set `scrollEnabled={dragging === null}`, report its offset
+ * through `onScroll`, and scroll to an offset on `scrollTo` (edge auto-scroll).
  *
  * Built with lazy useState initializers (not `useRef(...).current`) so no ref
  * is touched during render — all mutable state lives in refs read/written
@@ -41,8 +35,11 @@ const fromKey = (key: string): DropTargetKey => (key === ' ungrouped' ? null : k
  */
 export function useDragToFolder({
   onDrop,
+  scrollTo,
 }: {
   onDrop: (item: DragItem, target: DropTargetKey) => void;
+  /** Scroll the list to a content offset (edge auto-scroll while dragging). */
+  scrollTo?: (y: number) => void;
 }) {
   const [dragging, setDragging] = useState<DragItem | null>(null);
   const [hovered, setHovered] = useState<DropTargetKey | 'none'>('none');
@@ -52,6 +49,10 @@ export function useDragToFolder({
   useEffect(() => {
     onDropRef.current = onDrop;
   }, [onDrop]);
+  const scrollToRef = useRef(scrollTo);
+  useEffect(() => {
+    scrollToRef.current = scrollTo;
+  }, [scrollTo]);
 
   const pendingItemRef = useRef<DragItem | null>(null);
   const draggingRef = useRef<DragItem | null>(null);
@@ -59,7 +60,6 @@ export function useDragToFolder({
   const targetsRef = useRef(new Map<string, View>());
   const rectsRef = useRef(new Map<string, { x: number; y: number; w: number; h: number }>());
   const lastMeasureRef = useRef(0);
-  const scrollRef = useRef<ScrollView | null>(null);
   const scrollYRef = useRef(0);
   const windowHRef = useRef(0);
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -176,7 +176,7 @@ export function useDragToFolder({
             else if (autoScrollRef.current === null) {
               autoScrollRef.current = setInterval(() => {
                 scrollYRef.current = Math.max(0, scrollYRef.current + dir * AUTO_SCROLL_STEP);
-                scrollRef.current?.scrollTo({ y: scrollYRef.current, animated: false });
+                scrollToRef.current?.(scrollYRef.current);
               }, 32);
             }
           },
@@ -212,7 +212,6 @@ export function useDragToFolder({
     ghost,
     registerTarget,
     handleProps,
-    scrollRef,
     onScroll,
     onWindowHeight,
   };

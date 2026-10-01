@@ -46,9 +46,9 @@ jest.mock('@core/heat/heatGrid', () => {
       mockIndexBuilds();
       return actual.buildGridIndex(...args);
     },
-    buildHeatGrid: (...args: unknown[]) => {
+    heatGridLines: (...args: unknown[]) => {
       mockGridBuilds();
-      return actual.buildHeatGrid(...args);
+      return actual.heatGridLines(...args);
     },
   };
 });
