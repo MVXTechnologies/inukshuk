@@ -245,10 +245,11 @@ export function DrawNotice({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
+  // Below the compass, clear of the controls rail on the right (16 + 48 + 12).
   modes: {
     position: 'absolute',
     left: 16,
-    right: 16,
+    right: 76,
     padding: 6,
     borderRadius: 26,
     flexDirection: 'row',
@@ -269,7 +270,7 @@ const styles = StyleSheet.create({
   },
   modeLabel: { fontSize: 14.5, lineHeight: 18, fontWeight: '800' },
   soon: { fontSize: 10.5, lineHeight: 13, fontWeight: '700' },
-  hintWrap: { position: 'absolute', left: 16, right: 16, alignItems: 'flex-start' },
+  hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
   hint: {
     fontSize: 13,
     lineHeight: 17,

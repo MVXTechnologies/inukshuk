@@ -114,9 +114,9 @@ export function drawHint(state: DrawState): string {
   if (state.kind === 'route') {
     if (n === 0) return 'Tap the map to start your route';
     if (n === 1) return 'Tap to add the next point; straight lines between them';
-    return 'Drag a point to move it, a midpoint to add one; tap a point to delete it';
+    return 'Tap a point to drag or delete it; tap a midpoint to add one';
   }
   if (n === 0) return 'Tap the map to place the first corner';
   if (n < 3) return `Tap ${3 - n} more corner${3 - n === 1 ? '' : 's'} to close the area`;
-  return 'Drag a corner to move it, a midpoint to add one; tap a corner to delete it';
+  return 'Tap a corner to drag or delete it; tap a midpoint to add one';
 }

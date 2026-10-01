@@ -2,10 +2,12 @@ import { canSave, canUndo, drawHint } from '@core/draw/editor';
 import {
   boundsOfVertices,
   isSelfIntersecting,
+  midpointHandles,
   polygonAreaM2,
   polygonPerimeterM,
   polylineLengthM,
 } from '@core/draw/geometry';
+import { hitHandle, type ScreenPoint } from '@core/draw/hitTest';
 import { estimateDurationS, formatEstimate } from '@core/draw/timeEstimate';
 import { formatElevation, type Units } from '@core/format';
 import {
@@ -32,12 +34,13 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 import { AreaCard } from './AreaCard';
 import { AreaEditorSheet, type AreaDraft } from './AreaEditorSheet';
 import { AreaLayers } from './AreaLayers';
+import { DragHandle } from './DragHandle';
 import { DrawLayers } from './DrawLayers';
 import {
   DrawHint,
@@ -63,7 +66,7 @@ import { computeRouteElevation, shownElevation, useRouteElevation } from './useR
 
 const NO_VERTICES: readonly LngLat[] = [];
 /** A long-press within this many px of a vertex deletes it. */
-const VERTEX_HIT_PX = 32;
+const LONG_PRESS_HIT_PX = 32;
 /** A second ✕ within this window discards an unsaved drawing. */
 const DISCARD_CONFIRM_MS = 3500;
 
@@ -89,7 +92,9 @@ export interface MapDrawing {
   startRoute: () => void;
   startArea: () => void;
   /** A map tap while a tool is open; true = consumed. */
-  onMapTap: (lngLat: LngLat | null) => boolean;
+  onMapTap: (lngLat: LngLat | null, point?: [number, number] | null) => boolean;
+  /** The camera settled: the selected point's grip must follow it. */
+  onCameraSettled: () => void;
   /** A long-press while a tool is open (deletes the vertex under it); true = consumed. */
   onMapLongPress: (point: [number, number] | null) => Promise<boolean>;
   /** A bare tap (nothing else claimed it) inside an area opens its card; true = consumed. */
@@ -222,16 +227,107 @@ export function useMapDrawing({
     exit();
   };
 
+  // Android Back: deselect, then the ✕ (with its discard warning); with no
+  // tool open, Back closes a tapped area's card. The sheets register their
+  // own handler (mounted later, so asked first).
+  const backRef = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    backRef.current = () => {
+      if (state !== null) {
+        if (state.selected !== null) draw.dispatch({ type: 'select', index: null });
+        else requestExit();
+        return true;
+      }
+      if (viewAreaId !== null) {
+        setViewAreaId(null);
+        return true;
+      }
+      return false;
+    };
+  });
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => backRef.current());
+    return () => sub.remove();
+  }, []);
+
+  /** Screen positions of the handles, for the tap hit-test (null = not projectable). */
+  const projectAll = useCallback(
+    async (points: readonly LngLat[]): Promise<(ScreenPoint | null)[]> => {
+      const map = mapRef.current;
+      if (!map) return points.map(() => null);
+      const res = await Promise.allSettled(points.map((p) => map.project(p)));
+      return res.map((r) =>
+        r.status === 'fulfilled' && r.value != null ? [r.value[0], r.value[1]] : null,
+      );
+    },
+    [mapRef],
+  );
+
   const onMapTap = useCallback(
-    (lngLat: LngLat | null): boolean => {
+    (lngLat: LngLat | null, point: [number, number] | null = null): boolean => {
       if (state === null) return false;
-      if (routeSaveOpen || areaEditor !== null) return true;
-      if (state.selected !== null) draw.dispatch({ type: 'select', index: null });
-      else if (lngLat) draw.dispatch({ type: 'add', at: lngLat });
+      if (routeSaveOpen || areaEditor !== null || lngLat === null) return true;
+      if (point === null) {
+        draw.tap(lngLat, null);
+        return true;
+      }
+      const mids = midpointHandles(state.vertices, state.kind === 'area').map((m) => m.at);
+      void Promise.all([projectAll(state.vertices), projectAll(mids)]).then(([v, m]) =>
+        draw.tap(lngLat, hitHandle(v, m, point)),
+      );
       return true;
     },
-    [state, draw, routeSaveOpen, areaEditor],
+    [state, draw, routeSaveOpen, areaEditor, projectAll],
   );
+
+  // The selected vertex's grip sits over it on screen: re-projected whenever
+  // the selection, the shape or the camera (`cameraVersion`) changes.
+  const [cameraVersion, setCameraVersion] = useState(0);
+  const [gripAt, setGripAt] = useState<ScreenPoint | null>(null);
+  const selectedVertex =
+    state !== null && state.selected !== null ? (state.vertices[state.selected] ?? null) : null;
+  useEffect(() => {
+    let alive = true;
+    if (selectedVertex === null) {
+      const t = setTimeout(() => setGripAt(null), 0);
+      return () => clearTimeout(t);
+    }
+    void projectAll([selectedVertex]).then(([p]) => {
+      if (alive) setGripAt(p ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [selectedVertex, cameraVersion, projectAll]);
+
+  const unproject = useCallback(
+    async (x: number, y: number): Promise<LngLat | null> => {
+      try {
+        const ll = await mapRef.current?.unproject([x, y]);
+        return ll ? [ll[0], ll[1]] : null;
+      } catch {
+        return null;
+      }
+    },
+    [mapRef],
+  );
+  const lastMoveAt = useRef(0);
+  const onGripMove = (x: number, y: number) => {
+    const index = state?.selected;
+    if (index === null || index === undefined) return;
+    // Throttled: each preview is a bridge round-trip and a source update.
+    const now = Date.now();
+    if (now - lastMoveAt.current < 50) return;
+    lastMoveAt.current = now;
+    void unproject(x, y).then((at) => {
+      if (at) draw.dragTo(index, at);
+    });
+  };
+  const onGripEnd = (x: number, y: number) => {
+    const index = state?.selected;
+    if (index === null || index === undefined) return;
+    void unproject(x, y).then((at) => draw.dragEnd(index, at));
+  };
 
   const onMapLongPress = useCallback(
     async (point: [number, number] | null): Promise<boolean> => {
@@ -239,7 +335,7 @@ export function useMapDrawing({
       const map = mapRef.current;
       if (!map || point === null || state.vertices.length === 0) return true;
       let best = -1;
-      let bestD = VERTEX_HIT_PX;
+      let bestD = LONG_PRESS_HIT_PX;
       const projected = await Promise.allSettled(state.vertices.map((v) => map.project(v)));
       projected.forEach((r, i) => {
         if (r.status !== 'fulfilled' || r.value == null) return;
@@ -428,16 +524,13 @@ export function useMapDrawing({
         <DrawLayers
           kind={state.kind}
           shown={draw.shown}
-          vertices={state.vertices}
           selected={state.selected}
-          revision={draw.revision}
           color={
             state.kind === 'route' ? lineColor : (areaEditor?.initial.color ?? DEFAULT_AREA_COLOR)
           }
           halo={tokens.explore.trailHalo}
           ink={tokens.inkVariant}
           selectedColor={theme.colors.error}
-          {...draw.handles}
         />
       )}
     </>
@@ -525,7 +618,8 @@ export function useMapDrawing({
     }
   }
 
-  const laneTop = topInset + 8;
+  // Under the compass (8 + 48 + 8): the rail keeps the right edge.
+  const laneTop = topInset + 64;
   const chrome = (
     <>
       {state !== null && state.kind === 'route' && <RouteModeChips mode="freehand" top={laneTop} />}
@@ -533,6 +627,16 @@ export function useMapDrawing({
         <DrawHint
           text={drawHint(state)}
           top={state.kind === 'route' ? laneTop + 56 + 8 : laneTop}
+        />
+      )}
+      {state !== null && gripAt !== null && !routeSaveOpen && areaEditor === null && (
+        <DragHandle
+          at={gripAt}
+          color={theme.colors.error}
+          fill={tokens.surface}
+          onMove={onGripMove}
+          onEnd={onGripEnd}
+          onCancel={() => draw.dragEnd(state.selected ?? 0, null)}
         />
       )}
       {panel !== null && (
@@ -608,6 +712,7 @@ export function useMapDrawing({
     startRoute,
     startArea,
     onMapTap,
+    onCameraSettled: () => setCameraVersion((v) => v + 1),
     onMapLongPress,
     onAreaTap,
     mapLayers,

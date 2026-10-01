@@ -1540,7 +1540,10 @@ export function MapScreen() {
       // A drawing tool owns every tap while it is open (#502/#503): pins,
       // trails and the point chip all wait until it closes.
       if (drawingRef.current.active) {
-        drawingRef.current.onMapTap(lngLatArr ? [lngLatArr[0], lngLatArr[1]] : null);
+        drawingRef.current.onMapTap(lngLatArr ? [lngLatArr[0], lngLatArr[1]] : null, [
+          point[0],
+          point[1],
+        ]);
         return;
       }
       const [px, py] = point;
@@ -1994,6 +1997,8 @@ export function MapScreen() {
             // contour overlays. React bails out when it is already true.
             setMapLoaded(true);
             setRegionVersion((v) => v + 1);
+            // The selected drawing point's grip follows the camera (#502/#503).
+            drawingRef.current.onCameraSettled();
             // The map-maker frame's scale and bbox come straight off the
             // settled camera (#349) — it is the only source of truth for both.
             if (makeMapOpen) readEditorCamera();

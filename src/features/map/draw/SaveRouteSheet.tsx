@@ -1,7 +1,7 @@
 import { allCategories, findCategory } from '@core/library/categories';
 import { useLibraryStore } from '@state/libraryStore';
-import { useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { BackHandler, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, Icon, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -49,6 +49,18 @@ export function SaveRouteSheet({
   );
   // Every activity except "Navigation trail", which is what "none" means here.
   const categories = allCategories(customCategories).filter((c) => c.id !== 'navigation');
+  // Android Back cancels the sheet (it never backs out of the app).
+  const cancelRef = useRef(onCancel);
+  useEffect(() => {
+    cancelRef.current = onCancel;
+  });
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      cancelRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   return (
     <View style={styles.scrim}>

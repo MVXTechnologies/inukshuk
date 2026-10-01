@@ -5,10 +5,10 @@ import {
   type DrawKind,
   type DrawState,
 } from '@core/draw/editor';
+import { midpointHandles } from '@core/draw/geometry';
+import type { HandleHit } from '@core/draw/hitTest';
 import type { LngLat } from '@core/models';
 import { useCallback, useMemo, useState } from 'react';
-
-import type { DrawHandleCallbacks } from './DrawLayers';
 
 /**
  * What a drawing session is for: a new shape, or a saved route/area being
@@ -16,12 +16,10 @@ import type { DrawHandleCallbacks } from './DrawLayers';
  */
 export type DrawTarget = { kind: 'route'; trackId?: string } | { kind: 'area'; areaId?: string };
 
-/** A handle mid-drag: the shape follows it before the drag commits. */
+/** A vertex mid-drag: the shape follows it before the drag commits. */
 interface DragPreview {
   index: number;
   at: LngLat;
-  /** A midpoint handle: the vertex is inserted at `index`, not moved. */
-  insert: boolean;
 }
 
 export interface DrawSession {
@@ -30,35 +28,39 @@ export interface DrawSession {
   target: DrawTarget | null;
   /** The vertices to draw, with an in-flight drag applied. */
   shown: readonly LngLat[];
-  /** Bumped by every commit (re-keys the native handles, see DrawLayers). */
-  revision: number;
   start: (target: DrawTarget, vertices?: readonly LngLat[]) => void;
   exit: () => void;
   dispatch: (action: DrawAction) => void;
-  handles: DrawHandleCallbacks;
+  /**
+   * A map tap: on a vertex it toggles that vertex's selection; on a
+   * midpoint it inserts a vertex there (selected, ready to drag); elsewhere
+   * it deselects, or — with nothing selected — adds a vertex.
+   */
+  tap: (at: LngLat, hit: HandleHit | null) => void;
+  /** The selected vertex follows the finger (not yet an edit). */
+  dragTo: (index: number, at: LngLat) => void;
+  /** The drag ended: one undoable move (null = cancelled). */
+  dragEnd: (index: number, at: LngLat | null) => void;
 }
 
 /**
  * The map screen's drawing-tool session (#502/#503): the pure editor
  * (`@core/draw/editor`) plus what only exists on screen — which saved item is
- * being edited, the live drag preview, and the handles' revision counter.
+ * being edited, and the live drag preview.
  */
 export function useDrawSession(): DrawSession {
   const [state, setState] = useState<DrawState | null>(null);
   const [target, setTarget] = useState<DrawTarget | null>(null);
   const [preview, setPreview] = useState<DragPreview | null>(null);
-  const [revision, setRevision] = useState(0);
 
   const dispatch = useCallback((action: DrawAction) => {
     setState((s) => (s === null ? s : drawReducer(s, action)));
-    setRevision((r) => r + 1);
   }, []);
 
   const start = useCallback((next: DrawTarget, vertices: readonly LngLat[] = []) => {
     setTarget(next);
     setPreview(null);
     setState(initialDrawState(next.kind as DrawKind, vertices));
-    setRevision((r) => r + 1);
   }, []);
 
   const exit = useCallback(() => {
@@ -67,40 +69,46 @@ export function useDrawSession(): DrawSession {
     setPreview(null);
   }, []);
 
-  const handles = useMemo<DrawHandleCallbacks>(
-    () => ({
-      onVertexPress: (index) => {
-        setState((s) =>
-          s === null
-            ? s
-            : drawReducer(s, { type: 'select', index: s.selected === index ? null : index }),
-        );
-        // Android draws each handle as a bitmap: re-key so the ring redraws.
-        setRevision((r) => r + 1);
-      },
-      onVertexDrag: (index, at) => setPreview({ index, at, insert: false }),
-      onVertexDragEnd: (index, at) => {
-        setPreview(null);
-        dispatch({ type: 'move', index, at });
-      },
-      onMidpointPress: (insertAt, at) => dispatch({ type: 'insert', index: insertAt, at }),
-      onMidpointDrag: (insertAt, at) => setPreview({ index: insertAt, at, insert: true }),
-      onMidpointDragEnd: (insertAt, at) => {
-        setPreview(null);
-        dispatch({ type: 'insert', index: insertAt, at });
-      },
-    }),
-    [dispatch],
-  );
+  const tap = useCallback((at: LngLat, hit: HandleHit | null) => {
+    setState((s) => {
+      if (s === null) return s;
+      if (hit?.kind === 'vertex') {
+        return drawReducer(s, {
+          type: 'select',
+          index: s.selected === hit.index ? null : hit.index,
+        });
+      }
+      if (hit?.kind === 'midpoint') {
+        const m = midpointHandles(s.vertices, s.kind === 'area')[hit.index];
+        if (m === undefined) return s;
+        const inserted = drawReducer(s, { type: 'insert', index: m.insertAt, at: m.at });
+        return drawReducer(inserted, { type: 'select', index: m.insertAt });
+      }
+      if (s.selected !== null) return drawReducer(s, { type: 'select', index: null });
+      return drawReducer(s, { type: 'add', at });
+    });
+  }, []);
+
+  const dragTo = useCallback((index: number, at: LngLat) => setPreview({ index, at }), []);
+
+  const dragEnd = useCallback((index: number, at: LngLat | null) => {
+    setPreview(null);
+    if (at === null) return;
+    setState((s) => {
+      if (s === null) return s;
+      const moved = drawReducer(s, { type: 'move', index, at });
+      // Keep the point selected: a second nudge is the common next step.
+      return moved === s ? s : { ...moved, selected: index };
+    });
+  }, []);
 
   const shown = useMemo(() => {
     const vertices = state?.vertices ?? [];
-    if (preview === null) return vertices;
+    if (preview === null || preview.index >= vertices.length) return vertices;
     const next = [...vertices];
-    if (preview.insert) next.splice(preview.index, 0, preview.at);
-    else if (preview.index < next.length) next[preview.index] = preview.at;
+    next[preview.index] = preview.at;
     return next;
   }, [state?.vertices, preview]);
 
-  return { state, target, shown, revision, start, exit, dispatch, handles };
+  return { state, target, shown, start, exit, dispatch, tap, dragTo, dragEnd };
 }

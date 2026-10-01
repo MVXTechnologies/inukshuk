@@ -118,7 +118,7 @@ describe('drawHint', () => {
   it('walks the user through each stage', () => {
     expect(drawHint(initialDrawState('route'))).toMatch(/start your route/);
     expect(drawHint(run(initialDrawState('route'), add(A)))).toMatch(/straight lines/);
-    expect(drawHint(run(initialDrawState('route'), add(A), add(B)))).toMatch(/Drag a point/);
+    expect(drawHint(run(initialDrawState('route'), add(A), add(B)))).toMatch(/Tap a point to drag/);
     expect(drawHint(initialDrawState('area'))).toMatch(/first corner/);
     expect(drawHint(run(initialDrawState('area'), add(A)))).toBe(
       'Tap 2 more corners to close the area',
@@ -127,7 +127,7 @@ describe('drawHint', () => {
       'Tap 1 more corner to close the area',
     );
     expect(drawHint(run(initialDrawState('area'), add(A), add(B), add(C)))).toMatch(
-      /Drag a corner/,
+      /Tap a corner to drag/,
     );
   });
 });

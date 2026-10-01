@@ -38,28 +38,18 @@ jest.mock('@features/map/dem', () => ({
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('expo-image-picker', () => ({}));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
-/** The draggable handles DrawLayers mounted, by annotation id (props kept for the test). */
-const mockHandles = new Map<string, Record<string, unknown>>();
 jest.mock('@maplibre/maplibre-react-native', () => {
   const passthrough = ({ children }: { children?: unknown }) => children ?? null;
-  return {
-    GeoJSONSource: passthrough,
-    Layer: () => null,
-    ViewAnnotation: (props: Record<string, unknown> & { id: string; children?: unknown }) => {
-      mockHandles.set(props.id, props);
-      return props.children ?? null;
-    },
-  };
+  return { GeoJSONSource: passthrough, Layer: () => null };
 });
-
-/** The current handle whose id starts with `prefix` (revision suffix varies). */
-function handle(prefix: string): Record<string, (e: unknown) => void> {
-  const keys = [...mockHandles.keys()].filter((k) => k.startsWith(prefix));
-  const latest = keys[keys.length - 1];
-  if (latest === undefined) throw new Error(`no handle ${prefix}`);
-  return mockHandles.get(latest) as Record<string, (e: unknown) => void>;
-}
-const dragEvent = (at: LngLat) => ({ nativeEvent: { lngLat: at, point: [0, 0], id: 'x' } });
+/** The selected point's grip, as last rendered (its callbacks drive a drag). */
+const mockGrip: { current: Record<string, (...a: number[]) => void> | null } = { current: null };
+jest.mock('./DragHandle', () => ({
+  DragHandle: (props: Record<string, (...a: number[]) => void>) => {
+    mockGrip.current = props;
+    return null;
+  },
+}));
 
 const METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -78,6 +68,7 @@ const beforeStart = jest.fn();
 const mapRef = {
   current: {
     project: jest.fn(async (p: LngLat) => [p[0] * 1e5, p[1] * 1e5] as [number, number]),
+    unproject: jest.fn(async (p: [number, number]) => [p[0] / 1e5, p[1] / 1e5] as LngLat),
   },
 };
 
@@ -119,9 +110,13 @@ const drawing = (): MapDrawing => {
   return api;
 };
 
+/** A map tap at `at`, with its screen point (so handles are hit-tested). */
 async function tap(at: LngLat | null) {
   await act(async () => {
-    drawing().onMapTap(at);
+    drawing().onMapTap(at, at ? [at[0] * 1e5, at[1] * 1e5] : null);
+  });
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 
@@ -143,7 +138,7 @@ jest.useFakeTimers();
 beforeEach(() => {
   mockId = 0;
   api = null;
-  mockHandles.clear();
+  mockGrip.current = null;
   snack.mockReset();
   beforeStart.mockReset();
   mockWriteTrackGpx.mockClear();
@@ -186,7 +181,7 @@ describe('route drawing (#502)', () => {
     await tap(P1);
     await tap(P2);
     await tap(P3);
-    expect(screen.getByText(/Drag a point/)).toBeOnTheScreen();
+    expect(screen.getByText(/Tap a point to drag/)).toBeOnTheScreen();
     // ~0.8 km, and the climb is unavailable offline (never a guess).
     expect(screen.getByLabelText(/^distance \d+ m$/)).toBeOnTheScreen();
     await flush(400);
@@ -220,27 +215,41 @@ describe('route drawing (#502)', () => {
     expect(snack).toHaveBeenCalledWith('Route "Route 1" saved to Library');
   });
 
-  it('drags a point, inserts by dragging a midpoint, and deletes a tapped point', async () => {
+  it('drags a selected point, inserts at a tapped midpoint, deletes a selected point', async () => {
     await mount();
     await act(async () => drawing().startRoute());
     await tap(P1);
     await tap(P3);
-    // Drag the second point onto P4 (DrawLayers' native handle callbacks).
-    await act(async () => handle('draw-v-1-').onDragEnd?.(dragEvent(P4)));
-    // Drag the segment's midpoint handle onto P2: a vertex is inserted there.
-    await act(async () => handle('draw-mid-1-').onDragEnd?.(dragEvent(P2)));
-    // Tap the last point: it is selected and its delete row shows.
-    await act(async () => handle('draw-v-2-').onPress?.(dragEvent(P4)));
-    expect(screen.getByText('Point 3 selected')).toBeOnTheScreen();
-    // A map tap while a point is selected only deselects it.
+    // Tap the second point: it is selected, its grip and delete row show.
     await tap(P3);
-    expect(screen.queryByText('Point 3 selected')).toBeNull();
-    await act(async () => handle('draw-v-2-').onPress?.(dragEvent(P4)));
+    expect(screen.getByText('Point 2 selected')).toBeOnTheScreen();
+    await flush(0);
+    expect(mockGrip.current).not.toBeNull();
+    // Drag the grip to P4 (screen px = lng/lat × 10⁵ in this stand-in).
+    await act(async () => {
+      mockGrip.current?.onMove?.(P4[0] * 1e5, P4[1] * 1e5);
+      mockGrip.current?.onEnd?.(P4[0] * 1e5, P4[1] * 1e5);
+    });
+    await flush(0);
+    // Tap the P1–P4 segment's midpoint: a vertex is inserted and selected.
+    const mid: LngLat = [(P1[0] + P4[0]) / 2, (P1[1] + P4[1]) / 2];
+    await tap(mid);
+    expect(screen.getByText('Point 2 selected')).toBeOnTheScreen();
+    // A map tap away only deselects.
+    await tap(P2);
+    expect(screen.queryByText(/selected$/)).toBeNull();
+    // Select the inserted point again and delete it.
+    await tap(mid);
     await press('Delete point');
     await press('Save route');
     await press('Save route to Library');
     await flush(0);
-    expect(useLibraryStore.getState().tracks[0]?.plan?.vertices).toEqual([P1, P2]);
+    const saved = useLibraryStore.getState().tracks[0]?.plan?.vertices ?? [];
+    // P1 and the dragged point; the inserted one was deleted again.
+    expect(saved).toHaveLength(2);
+    expect(saved[0]).toEqual(P1);
+    expect(saved[1]?.[0]).toBeCloseTo(P4[0], 9);
+    expect(saved[1]?.[1]).toBeCloseTo(P4[1], 9);
   });
 
   it('a long-press near a vertex deletes it; elsewhere it does nothing', async () => {

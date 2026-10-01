@@ -3,8 +3,16 @@ import { useIosKeyboardHeight } from '@features/common/useIosKeyboardHeight';
 import { palette } from '@ui/tokens';
 import { EndCaretTextInput } from '@ui/components/EndCaretTextInput';
 import { KEYBOARD_DONE_BAR_ID, KeyboardDoneBar } from '@ui/components/KeyboardDoneBar';
-import { useRef, useState } from 'react';
-import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  Image,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -98,6 +106,19 @@ export function AreaEditorSheet({
     added.current.clear();
     onCancel();
   };
+
+  // Android Back cancels the sheet (discarding its photo copies).
+  const cancelRef = useRef(cancel);
+  useEffect(() => {
+    cancelRef.current = cancel;
+  });
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      cancelRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   const save = () => {
     Keyboard.dismiss();
