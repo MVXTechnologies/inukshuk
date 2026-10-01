@@ -65,6 +65,7 @@ export function sanitizeRoutePlan(raw: unknown): RoutePlan | null {
     vertices: rawVertices,
     mode: rawMode,
     legModes: rawLegs,
+    backAndForth,
   } = raw as Record<string, unknown>;
   const vertices = sanitizeVertices(rawVertices);
   if (vertices.length < 2) return null;
@@ -73,9 +74,12 @@ export function sanitizeRoutePlan(raw: unknown): RoutePlan | null {
     Array.isArray(rawLegs) && rawLegs.length === vertices.length - 1 && rawLegs.every(isLegMode)
       ? (rawLegs as LegMode[])
       : null;
-  return legModes !== null && legModes.some((m) => m !== 'freehand')
-    ? { mode, vertices, legModes: [...legModes] }
-    : { mode, vertices };
+  const plan: RoutePlan =
+    legModes !== null && legModes.some((m) => m !== 'freehand')
+      ? { mode, vertices, legModes: [...legModes] }
+      : { mode, vertices };
+  // Only an explicit true turns it on: older plans are one-way.
+  return backAndForth === true ? { ...plan, backAndForth: true } : plan;
 }
 
 /** The plan saved with a drawn route: leg modes only when some leg is not Freehand. */
@@ -83,12 +87,14 @@ export function buildRoutePlan(
   vertices: readonly LngLat[],
   legModes: readonly LegMode[],
   mode: LegMode,
+  backAndForth = false,
 ): RoutePlan {
   const copy = vertices.map((v) => [v[0], v[1]] as LngLat);
   const legs = fitModes(legModes, vertices.length);
-  return legs.some((m) => m !== 'freehand')
+  const plan: RoutePlan = legs.some((m) => m !== 'freehand')
     ? { mode, vertices: copy, legModes: legs }
     : { mode, vertices: copy };
+  return backAndForth ? { ...plan, backAndForth: true } : plan;
 }
 
 /** Signed planar area (shoelace, degrees²): > 0 when counter-clockwise. */

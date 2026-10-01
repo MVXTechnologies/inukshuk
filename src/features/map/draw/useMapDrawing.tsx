@@ -14,6 +14,8 @@ import {
   legMidpointHandles,
   legViews,
   mergeLegs,
+  outAndBack,
+  outboundOf,
   routeLengthM,
   routingEngines,
   seedResultsFromLine,
@@ -59,6 +61,7 @@ import { DragHandle } from './DragHandle';
 import { DrawChooser } from './DrawChooser';
 import { DrawLayers } from './DrawLayers';
 import {
+  BackAndForthChip,
   DrawHint,
   DrawNotice,
   DrawPanel,
@@ -195,7 +198,14 @@ export function useMapDrawing({
   const failed = failedLegs(committedLegs);
   const engines = routingEngines(committedLegs);
 
-  const elevationState = useRouteElevation(routeLine, kind === 'route');
+  // Back & forth: the return is the outbound line reversed — derived live, so
+  // every outbound edit carries over, and never routed again.
+  const backAndForth = kind === 'route' && (state?.backAndForth ?? false);
+  const fullLine = useMemo(
+    () => (backAndForth ? outAndBack(routeLine) : routeLine),
+    [backAndForth, routeLine],
+  );
+  const elevationState = useRouteElevation(fullLine, kind === 'route');
   const elevation = shownElevation(elevationState);
   // The profile strip: the same samples as the climb stat and the saved GPX.
   const profile = useMemo(
@@ -228,6 +238,7 @@ export function useMapDrawing({
       initial: readonly LngLat[] = [],
       modes?: readonly LegMode[],
       mode?: LegMode,
+      backAndForth = false,
     ) => {
       onBeforeStart();
       setViewAreaId(null);
@@ -235,7 +246,7 @@ export function useMapDrawing({
       setRouteSaveOpen(false);
       setAreaEditor(null);
       discardArmedAt.current = 0;
-      draw.start(target, initial, modes, mode);
+      draw.start(target, initial, modes, mode, backAndForth);
     },
     [draw, onBeforeStart],
   );
@@ -265,11 +276,23 @@ export function useMapDrawing({
         if (modes.some(isRoutedMode)) {
           void loadTrackGeometry(t)
             .then((g) => {
-              if (g) seedLegs(seedResultsFromLine(g.parts.flat(), plan.vertices, modes));
+              if (!g) return;
+              const saved = g.parts.flat();
+              const last = plan.vertices[plan.vertices.length - 1];
+              // An out-and-back's saved line comes back: cut at the turnaround.
+              const outbound =
+                plan.backAndForth && last !== undefined ? outboundOf(saved, last) : saved;
+              seedLegs(seedResultsFromLine(outbound, plan.vertices, modes));
             })
             .catch(() => undefined);
         }
-        begin({ kind: 'route', trackId: t.id }, plan.vertices, modes, plan.mode);
+        begin(
+          { kind: 'route', trackId: t.id },
+          plan.vertices,
+          modes,
+          plan.mode,
+          plan.backAndForth === true,
+        );
         const box = boundsOfVertices(plan.vertices);
         if (box) setFocusBounds(box, { top: 140, right: 60, bottom: 300, left: 60 });
         return;
@@ -473,7 +496,7 @@ export function useMapDrawing({
   );
 
   // --- Route stats ------------------------------------------------------------
-  const distanceM = kind === 'route' ? routeLengthM(shownLegs) : 0;
+  const distanceM = kind === 'route' ? routeLengthM(shownLegs) * (backAndForth ? 2 : 1) : 0;
   const climb =
     elevation !== null
       ? `↑ ${formatElevation(elevation.elevation.ascentM, units)}`
@@ -489,7 +512,7 @@ export function useMapDrawing({
     setSavingRoute(true);
     try {
       const current = state.vertices;
-      const line = routeLine;
+      const line = fullLine;
       // The debounced numbers may trail the last edit: compute for exactly
       // what is being saved (cached tiles make this quick).
       const fresh =
@@ -501,6 +524,7 @@ export function useMapDrawing({
         line,
         legModes: state.modes,
         mode: state.mode,
+        backAndForth: state.backAndForth,
         name: name || editedTrack?.name || `Route ${tracks.filter((t) => t.plan).length + 1}`,
         category,
         elevation: fresh,
@@ -709,11 +733,19 @@ export function useMapDrawing({
                 dimmed={
                   elevationState.status === 'computing' ||
                   legsLoading ||
-                  elevation?.vertices !== routeLine
+                  elevation?.vertices !== fullLine
                 }
                 onScrub={onProfileScrub}
+                turnaroundRatio={backAndForth ? 0.5 : undefined}
               />
             ) : undefined
+          }
+          toggle={
+            <BackAndForthChip
+              on={state.backAndForth}
+              disabled={state.vertices.length < 2}
+              onToggle={() => draw.dispatch({ type: 'backAndForth', on: !state.backAndForth })}
+            />
           }
           footer={engines !== null ? <RoutingCredit engines={engines} /> : undefined}
           canUndo={canUndo(state)}

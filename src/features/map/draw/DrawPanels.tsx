@@ -106,6 +106,8 @@ interface PanelProps {
   chart?: ReactNode;
   /** Below the stats: a warning or the selected point's delete row. */
   notice?: ReactNode;
+  /** Beside Undo/Clear: a route's Back & forth toggle. */
+  toggle?: ReactNode;
   /** Under the buttons: the routing credit while snapped legs are shown. */
   footer?: ReactNode;
   canUndo: boolean;
@@ -125,6 +127,7 @@ export function DrawPanel({
   stats,
   chart,
   notice,
+  toggle,
   footer,
   canUndo,
   canClear,
@@ -196,6 +199,7 @@ export function DrawPanel({
         >
           <Icon source="eraser" size={22} color={t.ink} />
         </Pressable>
+        {toggle}
         <Pressable
           onPress={onSave}
           disabled={!canSave}
@@ -213,6 +217,46 @@ export function DrawPanel({
       </View>
       {footer}
     </View>
+  );
+}
+
+/**
+ * Back & forth (#515): the route returns to its start the same way. A toggle
+ * chip beside Undo/Clear; disabled until there is a line to come back along.
+ */
+export function BackAndForthChip({
+  on,
+  disabled,
+  onToggle,
+}: {
+  on: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const t = useSchemeTokens();
+  return (
+    <Pressable
+      onPress={onToggle}
+      disabled={disabled}
+      accessibilityRole="togglebutton"
+      accessibilityLabel="Back and forth"
+      accessibilityHint="The route returns to its start along the same way"
+      accessibilityState={{ selected: on, checked: on, disabled }}
+      style={[
+        styles.toggle,
+        { borderColor: on ? t.library.chipOn : t.outlineVariant },
+        on && { backgroundColor: t.library.chipOn },
+        disabled && styles.disabled,
+      ]}
+    >
+      <Icon source="arrow-u-left-top" size={20} color={on ? t.library.chipOnInk : t.ink} />
+      <Text
+        numberOfLines={1}
+        style={[styles.toggleLabel, { color: on ? t.library.chipOnInk : t.ink }]}
+      >
+        Back & forth
+      </Text>
+    </Pressable>
   );
 }
 
@@ -397,6 +441,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveLabel: { fontSize: 16, lineHeight: 20, fontWeight: '800' },
+  toggle: {
+    minHeight: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  toggleLabel: { fontSize: 13, lineHeight: 16, fontWeight: '800' },
   disabled: { opacity: 0.4 },
   selectedRow: {
     flexDirection: 'row',

@@ -33,6 +33,8 @@ export interface DrawnRouteInput {
   legModes?: readonly LegMode[];
   /** The chip the tool was on (it reopens on it). */
   mode?: LegMode;
+  /** Back & forth: `line` already returns to the start; the plan says so. */
+  backAndForth?: boolean;
   name: string;
   /** Activity id, or null for a plain Navigation trail. */
   category: string | null;
@@ -62,7 +64,12 @@ export function buildDrawnTrack(id: string, input: DrawnRouteInput): Track {
     };
   }
   track.category = input.category ?? 'navigation';
-  track.plan = buildRoutePlan(input.vertices, input.legModes ?? [], input.mode ?? 'freehand');
+  track.plan = buildRoutePlan(
+    input.vertices,
+    input.legModes ?? [],
+    input.mode ?? 'freehand',
+    input.backAndForth ?? false,
+  );
   return track;
 }
 

@@ -318,3 +318,23 @@ export function routingEngines(views: readonly LegView[]): string[] | null {
   }
   return [...engines];
 }
+
+/**
+ * Back & forth: the outbound line, then the same line reversed back to the
+ * start — the turnaround point once. The return is derived, so it reuses the
+ * outbound's snapped geometry and never needs a routing request.
+ */
+export function outAndBack(line: readonly LngLat[]): LngLat[] {
+  if (line.length < 2) return [...line];
+  return [...line, ...[...line].reverse().slice(1)];
+}
+
+/**
+ * The outbound half of a saved out-and-back line: up to the first point
+ * nearest the last control point (the turnaround). Used to cut a saved route
+ * back into legs ("Edit route").
+ */
+export function outboundOf(line: readonly LngLat[], turnaround: LngLat): LngLat[] {
+  if (line.length < 2) return [...line];
+  return line.slice(0, nearestIndex(line, turnaround, 0) + 1);
+}

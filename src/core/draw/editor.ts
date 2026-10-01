@@ -31,6 +31,12 @@ export interface DrawState {
   modes: readonly LegMode[];
   /** The mode the next leg gets (the selected chip). */
   mode: LegMode;
+  /**
+   * Back & forth: the route returns to its start along the same line,
+   * reversed. Derived, never edited — only the outbound vertices are. A
+   * setting like the chip, not an undo step.
+   */
+  backAndForth: boolean;
   /** Earlier shapes, newest last (capped at {@link MAX_UNDO}). */
   past: readonly DrawSnapshot[];
   /** The tapped vertex (its delete button shows), or null. */
@@ -46,6 +52,7 @@ export type DrawAction =
   | { type: 'undo' }
   | { type: 'clear' }
   | { type: 'mode'; mode: LegMode }
+  | { type: 'backAndForth'; on: boolean }
   | { type: 'load'; vertices: readonly LngLat[]; modes?: readonly LegMode[] };
 
 /** Undo depth: plenty for a hand-drawn line, bounded so memory is too. */
@@ -59,12 +66,14 @@ export function initialDrawState(
   vertices: readonly LngLat[] = [],
   modes?: readonly LegMode[],
   mode: LegMode = 'freehand',
+  backAndForth = false,
 ): DrawState {
   return {
     kind,
     vertices: [...vertices],
     modes: kind === 'route' ? fitModes(modes, vertices.length) : fitModes([], vertices.length),
     mode,
+    backAndForth: kind === 'route' && backAndForth,
     past: [],
     selected: null,
   };
@@ -167,6 +176,9 @@ export function drawReducer(state: DrawState, action: DrawAction): DrawState {
       return commit(state, [], [], null);
     case 'mode':
       return state.mode === action.mode ? state : { ...state, mode: action.mode };
+    case 'backAndForth':
+      if (state.kind !== 'route' || state.backAndForth === action.on) return state;
+      return { ...state, backAndForth: action.on };
     case 'load': {
       // Drop junk vertices together with the legs they start.
       const kept = action.vertices.map((v, i) => ({ v, m: action.modes?.[i] }));
@@ -176,6 +188,7 @@ export function drawReducer(state: DrawState, action: DrawAction): DrawState {
         ok.map((k) => k.v),
         ok.slice(0, -1).map((k) => k.m ?? 'freehand'),
         state.mode,
+        state.backAndForth,
       );
     }
   }

@@ -79,6 +79,11 @@ export interface RoutePlan {
    * all-Freehand routes, which keep their original shape on disk).
    */
   legModes?: RouteLegMode[];
+  /**
+   * Back & forth: the saved line returns to the start along the same way.
+   * `vertices` are the outbound points only. Absent = a one-way route.
+   */
+  backAndForth?: true;
 }
 
 /** A recorded route, persisted as GPX. */

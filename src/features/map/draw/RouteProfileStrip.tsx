@@ -49,11 +49,19 @@ interface Props {
   units: Units;
   /** Newer elevation is being computed: show this one dimmed. */
   dimmed?: boolean;
+  /** Back & forth: where the route turns round (0..1), marked with a thin tick. */
+  turnaroundRatio?: number;
   /** The scrubbed point (null when released), for the map marker. */
   onScrub?: (point: ProfileScrubPoint | null) => void;
 }
 
-export function RouteProfileStrip({ profile, units, dimmed = false, onScrub }: Props) {
+export function RouteProfileStrip({
+  profile,
+  units,
+  dimmed = false,
+  turnaroundRatio,
+  onScrub,
+}: Props) {
   const t = useSchemeTokens();
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<ProfileScrubPoint | null>(null);
@@ -97,7 +105,7 @@ export function RouteProfileStrip({ profile, units, dimmed = false, onScrub }: P
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
       accessible
       accessibilityRole="adjustable"
-      accessibilityLabel={`Elevation profile, ${compactDistance(profile.totalM, units)}, ${bottom} to ${top}${dimmed ? ', updating' : ''}`}
+      accessibilityLabel={`Elevation profile, ${compactDistance(profile.totalM, units)}, ${bottom} to ${top}${turnaroundRatio !== undefined ? ', out and back' : ''}${dimmed ? ', updating' : ''}`}
       testID="route-profile"
       {...responder.panHandlers}
     >
@@ -111,6 +119,18 @@ export function RouteProfileStrip({ profile, units, dimmed = false, onScrub }: P
             fill="none"
             strokeLinejoin="round"
           />
+          {turnaroundRatio !== undefined && (
+            <Line
+              testID="route-profile-turnaround"
+              x1={turnaroundRatio * width}
+              x2={turnaroundRatio * width}
+              y1={PROFILE_HEIGHT * 0.15}
+              y2={PROFILE_HEIGHT}
+              stroke={t.inkMuted}
+              strokeWidth={1}
+              strokeDasharray="3,3"
+            />
+          )}
           {cursorX !== null && (
             <Line
               x1={cursorX}

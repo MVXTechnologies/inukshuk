@@ -35,6 +35,7 @@ export interface DrawSession {
     vertices?: readonly LngLat[],
     modes?: readonly LegMode[],
     mode?: LegMode,
+    backAndForth?: boolean,
   ) => void;
   exit: () => void;
   dispatch: (action: DrawAction) => void;
@@ -81,12 +82,19 @@ export function useDrawSession(): DrawSession {
       vertices: readonly LngLat[] = [],
       modes?: readonly LegMode[],
       mode?: LegMode,
+      backAndForth = false,
     ) => {
       setTarget(next);
       setPreview(null);
       setState((s) =>
         // A new route keeps the chip the last one used.
-        initialDrawState(next.kind as DrawKind, vertices, modes, mode ?? s?.mode ?? lastMode),
+        initialDrawState(
+          next.kind as DrawKind,
+          vertices,
+          modes,
+          mode ?? s?.mode ?? lastMode,
+          backAndForth,
+        ),
       );
     },
     [],

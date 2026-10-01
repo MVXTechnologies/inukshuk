@@ -5,6 +5,7 @@
  * card's hold-to-delete removes it. The native map is stood in for by a
  * `project` stub; the drag handles' callbacks are exercised directly.
  */
+import { polylineLengthM } from '@core/draw/geometry';
 import type { LegResult } from '@core/draw/legs';
 import type { LngLat } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
@@ -817,5 +818,135 @@ describe('elevation profile while drawing (#515)', () => {
     await settleElevation();
     expect(screen.getByText('Draw an area')).toBeOnTheScreen();
     expect(screen.queryByTestId('route-profile')).toBeNull();
+  });
+});
+
+/** The distance stat in metres (it reads "850 m" or "1.2 km"). */
+const distanceM = () => {
+  const m = /^distance ([\d.]+) (k?m)$/.exec(
+    String(screen.getByLabelText(/^distance /).props.accessibilityLabel),
+  );
+  return m ? Number(m[1]) * (m[2] === 'km' ? 1000 : 1) : Number.NaN;
+};
+const estimateMin = () => {
+  const label = String(screen.getByLabelText(/^estimated /).props.accessibilityLabel);
+  const h = /(\d+) h/.exec(label);
+  const min = /(\d+) min/.exec(label);
+  return (h ? Number(h[1]) * 60 : 0) + (min ? Number(min[1]) : 0);
+};
+
+describe('Back & forth (#515)', () => {
+  it('doubles the route from the outbound line: stats, profile, no new routing; edits carry over', async () => {
+    mockFetchDem.mockImplementation(slopingTile);
+    await mount();
+    await act(async () => drawing().startRoute());
+    await press('Trails');
+    await tap(P1);
+    // One point: nothing to come back along yet.
+    expect(screen.getByLabelText('Back and forth')).toBeDisabled();
+    await tap(P2);
+    await flush(400);
+    await answer(bent);
+    await settleElevation();
+    const oneWay = distanceM();
+    const oneWayMin = estimateMin();
+    expect(screen.queryByTestId('route-profile-turnaround')).toBeNull();
+
+    await press('Back and forth');
+    expect(screen.getByLabelText('Back and forth')).toBeSelected();
+    await settleElevation();
+    // The return is the snapped outbound reversed: no routing request for it.
+    expect(mockRouteCalls).toHaveLength(0);
+    expect(distanceM()).toBeCloseTo(2 * oneWay, -2); // the stat rounds (1.2 km)
+    expect(estimateMin()).toBeGreaterThan(oneWayMin);
+    expect(profileLabel()).toMatch(/^Elevation profile, 1\.\d km/);
+    await act(async () => {
+      fireEvent(screen.getByTestId('route-profile'), 'layout', {
+        nativeEvent: { layout: { width: 300, height: 68 } },
+      });
+    });
+    expect(screen.getByTestId('route-profile-turnaround')).toBeTruthy();
+    expect(profileLabel()).toMatch(/, out and back$/);
+
+    // Extending the outbound routes only the new leg; the return follows.
+    await tap(P3);
+    await flush(400);
+    expect(mockRouteCalls.map((c) => [c.from, c.to])).toEqual([[P2, P3]]);
+    await answer(bent);
+    await settleElevation();
+    const longer = distanceM();
+    expect(longer).toBeGreaterThan(2 * oneWay);
+    await press('Undo');
+    await settleElevation();
+    expect(distanceM()).toBeCloseTo(2 * oneWay, -2); // the stat rounds (1.2 km)
+    expect(mockRouteCalls).toHaveLength(0);
+
+    await press('Save route');
+    await press('Save route to Library');
+    await flush(0);
+    const [saved] = useLibraryStore.getState().tracks;
+    expect(saved?.plan).toEqual({
+      mode: 'trails',
+      vertices: [P1, P2],
+      legModes: ['trails'],
+      backAndForth: true,
+    });
+    // The GPX holds the whole there-and-back: it ends where it started.
+    const xml = mockWriteTrackGpx.mock.calls[0]?.[1] ?? '';
+    const pts = [...xml.matchAll(/<trkpt lat="([-\d.]+)" lon="([-\d.]+)"/g)];
+    expect(pts[0]?.slice(1)).toEqual(pts[pts.length - 1]?.slice(1));
+    expect(pts.length % 2).toBe(1);
+  });
+
+  it('"Edit route" restores it on, with the outbound points editable, and asks for nothing', async () => {
+    const corner: LngLat = [P1[0], P2[1]];
+    mockLoadGeometry.mockResolvedValue({ parts: [[P1, corner, P2, corner, P1]] });
+    await mount();
+    await act(async () => {
+      useLibraryStore.setState({
+        tracks: [
+          {
+            id: 'r3',
+            name: 'There and back',
+            startedAt: 1,
+            fileUri: 'file:///doc/tracks/r3.gpx',
+            stats: {
+              distanceM: 1,
+              ascentM: 0,
+              descentM: 0,
+              durationS: 0,
+              movingTimeS: 0,
+              avgSpeedMps: 0,
+              maxSpeedMps: 0,
+              pointCount: 5,
+            },
+            plan: { mode: 'trails', vertices: [P1, P2], legModes: ['trails'], backAndForth: true },
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      useMapStore.getState().setDrawRequest({ kind: 'edit-route', trackId: 'r3' });
+    });
+    await flush(0);
+    await flush(400);
+    expect(screen.getByText('Edit route · There and back')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Back and forth')).toBeSelected();
+    expect(mockRouteCalls).toHaveLength(0);
+    // The leg came back snapped (via the corner), counted out and back.
+    const legM = polylineLengthM([P1, corner, P2]);
+    expect(distanceM()).toBeCloseTo(2 * legM, -2); // the stat rounds (1.2 km)
+    // Turning it off: one way again.
+    await press('Back and forth');
+    expect(distanceM()).toBeCloseTo(legM, -2); // the stat rounds (1.2 km)
+  });
+
+  it('is not offered for an area', async () => {
+    await mount();
+    await act(async () => drawing().startArea());
+    await tap(P1);
+    await tap(P2);
+    await tap(P3);
+    expect(screen.queryByLabelText('Back and forth')).toBeNull();
   });
 });
