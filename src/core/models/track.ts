@@ -33,10 +33,20 @@ export interface TrackStats {
   descentM: number;
   /** Wall-clock duration between first and last timed fixes, in seconds. */
   durationS: number;
-  /** Duration excluding stationary periods, in seconds. */
+  /**
+   * Duration excluding stationary periods, in seconds — sustained stops, GPS
+   * drift while stopped and long fix gaps don't count (#504,
+   * `@core/geo/track/movingTime`).
+   */
   movingTimeS: number;
-  /** Average speed over timed moving segments, in m/s. */
+  /** Average moving speed (moving distance ÷ moving time), in m/s. */
   avgSpeedMps: number;
+  /**
+   * Which moving-time algorithm and activity profile produced `movingTimeS` /
+   * `avgSpeedMps` (`movingModelKey`). Absent on trails saved before #504; a
+   * stale or missing stamp is recomputed lazily when the trail's points load.
+   */
+  movingModel?: string;
   /** Peak smoothed speed in m/s. */
   maxSpeedMps: number;
   minAltitudeM?: number;

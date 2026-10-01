@@ -126,6 +126,7 @@ class ImportSession {
       fileName: activity.sourceName,
     });
     const id = storage.newId();
+    const category = categoryForSport(activity.sport);
     const track = buildImportedTrack({
       id,
       points: activity.points,
@@ -133,6 +134,7 @@ class ImportSession {
       name,
       fallbackName: name,
       fallbackTime: Date.now(),
+      category,
     });
     const timed = isTimed(activity);
     if (timed) {
@@ -143,7 +145,6 @@ class ImportSession {
       }
       this.index.add(fingerprint);
     }
-    const category = categoryForSport(activity.sport);
     if (category) track.category = category;
     // Same rule as a GPX import: an untimed file is a route to follow.
     else if (!timed) track.category = 'navigation';

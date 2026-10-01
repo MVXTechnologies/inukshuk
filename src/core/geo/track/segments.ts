@@ -122,6 +122,8 @@ interface SegmentedStatsOpts {
   elevationThresholdM?: number;
   movingSpeedThresholdMps?: number;
   maxAccuracyM?: number;
+  /** The trail's activity category: picks the moving-time stop threshold (#504). */
+  category?: string | null;
 }
 
 /**
@@ -148,6 +150,7 @@ export function computeSegmentedTrackStats(
   let movingDistanceM = 0;
   let maxSpeedMps = 0;
   let pointCount = 0;
+  let movingModel: string | undefined;
   let minAltitudeM: number | undefined;
   let maxAltitudeM: number | undefined;
   let bbox: TrackStats['bbox'];
@@ -163,6 +166,7 @@ export function computeSegmentedTrackStats(
     movingDistanceM += s.avgSpeedMps * s.movingTimeS;
     if (s.maxSpeedMps > maxSpeedMps) maxSpeedMps = s.maxSpeedMps;
     pointCount += s.pointCount;
+    movingModel = s.movingModel;
     if (
       s.minAltitudeM !== undefined &&
       (minAltitudeM === undefined || s.minAltitudeM < minAltitudeM)
@@ -197,6 +201,7 @@ export function computeSegmentedTrackStats(
     maxAltitudeM,
     bbox,
     pointCount,
+    ...(movingModel !== undefined ? { movingModel } : {}),
   };
 }
 

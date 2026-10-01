@@ -214,6 +214,7 @@ export async function runSourceImport(
       name,
       fallbackName: name,
       fallbackTime: activity.startedAt,
+      category: activity.category,
     });
     const fingerprint = { startedAt: track.startedAt, distanceM: track.stats.distanceM };
     if (index.has(fingerprint)) {
