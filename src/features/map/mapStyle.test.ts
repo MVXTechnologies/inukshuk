@@ -813,7 +813,7 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
 
   it('flag on: contour tiles load z8–13 only — overzoomed past 13, nothing drawn below 8 (#509)', () => {
     expect(CONTOUR_SOURCE_MAXZOOM).toBe(13);
-    const style = withFlag(true)(TILE, false, 'map', false, {
+    const style = withFlag(true)(TILE, 'map', false, {
       vectorBasemap: {
         ...vectorBasemap,
         contours: 'https://tiles.example/contours/{z}/{x}/{y}.mvt',
