@@ -2,6 +2,7 @@ import { mapDocumentBounds } from '@core/library/mapBounds';
 import { primaryGeoreferences } from '@core/geo/geopdf/primary';
 import type { MapDocument, TrackSummary, Waypoint, WaypointIcon } from '@core/models';
 import { describeUploadOutcome } from '@core/strava/upload';
+import { resolveDocumentPath } from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { uploadTrackToStrava } from '@lib/strava';
 import { useImportStore } from '@state/importStore';
@@ -538,7 +539,11 @@ export function LibraryScreen() {
 
   const shareTrack = async (fileUri: string) => {
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, { mimeType: 'application/gpx+xml', UTI: 'public.xml' });
+      // Stored paths are document-relative (#255); the share sheet needs the absolute uri.
+      await Sharing.shareAsync(resolveDocumentPath(fileUri), {
+        mimeType: 'application/gpx+xml',
+        UTI: 'public.xml',
+      });
     } else {
       showSnack('Sharing is not available on this device');
     }
