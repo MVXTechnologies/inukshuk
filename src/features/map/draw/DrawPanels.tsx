@@ -67,6 +67,8 @@ export function RouteModeChips({
           >
             <Text
               numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               style={[styles.modeLabel, { color: on ? t.map.chrome : t.map.chromeInk }]}
             >
               {m.label}
@@ -151,11 +153,12 @@ interface PanelProps {
 /** Bottom-row geometry (dp): Undo + Clear, the gap, Save's side padding, the chip's chrome. */
 const ROW_GAP = 8;
 const ICONS_W = 52 + ROW_GAP + 52;
-const SAVE_PAD = 18;
-/** Chip: padding 2×10, border 2×1.5, icon 20, gaps 2×4, caret 16 — plus its label. */
-const CHIP_CHROME = 20 + 3 + 20 + 8 + 16;
+/** Save's minimum side padding: the pill still reads as a button at its narrowest. */
+const SAVE_PAD = 10;
+/** Chip: padding 2×8, border 2×1.5, icon 20, gaps 2×3, caret 14 — plus its label. */
+const CHIP_CHROME = 16 + 3 + 20 + 6 + 14;
 /** Collapsed chip: icon + caret only. */
-const CHIP_COMPACT = 20 + 3 + 20 + 4 + 16;
+const CHIP_COMPACT = 16 + 3 + 20 + 3 + 14;
 
 /** The bottom panel shared by the route and area tools. */
 export function DrawPanel({
@@ -266,7 +269,10 @@ export function DrawPanel({
       >
         <Text
           style={styles.saveLabel}
-          onLayout={(e) => setLabelW((w) => ({ ...w, save: e.nativeEvent.layout.width }))}
+          onLayout={(e) => {
+            const width = e.nativeEvent.layout.width;
+            setLabelW((w) => ({ ...w, save: width }));
+          }}
           testID="measure-save"
         >
           {saveLabel}
@@ -274,7 +280,10 @@ export function DrawPanel({
         {toggle && (
           <Text
             style={styles.toggleLabel}
-            onLayout={(e) => setLabelW((w) => ({ ...w, chip: e.nativeEvent.layout.width }))}
+            onLayout={(e) => {
+              const width = e.nativeEvent.layout.width;
+              setLabelW((w) => ({ ...w, chip: width }));
+            }}
             testID="measure-chip"
           >
             {toggle.label}
@@ -387,7 +396,7 @@ export function ReturnChip({
           {f.label}
         </Text>
       )}
-      <Icon source={open ? 'chevron-down' : 'chevron-up'} size={16} color={ink} />
+      <Icon source={open ? 'chevron-down' : 'chevron-up'} size={14} color={ink} />
     </Pressable>
   );
 }
@@ -594,12 +603,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  // Sized by their labels ("Freehand" is the longest), sharing what is left;
+  // on a narrow phone the labels shrink a little rather than truncate.
   mode: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     borderRadius: (target.min - 8) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
   },
   modeLabel: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
   hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
@@ -643,7 +655,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 24,
-    paddingHorizontal: 18,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -654,10 +666,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 24,
     borderWidth: 1.5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   toggleLabel: { fontSize: 13, lineHeight: 16, fontWeight: '800' },
   menu: {

@@ -89,6 +89,20 @@ describe('the Draw a route bottom row', () => {
     expect(screen.getByText('Back & forth')).toBeOnTheScreen();
   });
 
+  it('reads layout sizes at once: the event is released before the state update runs', async () => {
+    // Regression (emulator crash "Cannot read property 'layout' of null"):
+    // a state updater that reads the event later finds it emptied.
+    await mountAt(430);
+    await act(async () => {
+      const evt: { nativeEvent: unknown } = {
+        nativeEvent: { layout: { x: 0, y: 0, width: 90, height: 20 } },
+      };
+      fireEvent(screen.getByTestId('measure-save', { includeHiddenElements: true }), 'layout', evt);
+      evt.nativeEvent = null;
+    });
+    expect(saveMinWidth()).toBe(90 + 20);
+  });
+
   it('the Area panel (no chip) keeps one row even at 320 pt', async () => {
     await mountAt(320, { chip: false });
     expect(screen.queryByTestId('draw-save-row')).toBeNull();
