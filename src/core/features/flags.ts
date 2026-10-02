@@ -93,6 +93,19 @@ export const VECTOR_BASEMAP_ENABLED: boolean = true;
 export const SUPPORT_NUDGE_ENABLED: boolean = false;
 
 /**
+ * Reloading contour tiles the map failed to load (`@core/map/contourRecovery`,
+ * `useContourRecovery`): when a visible contour tile draws nothing although
+ * the server has lines for it, the contour layers blink off and on once so
+ * MapLibre asks for it again. Bounded (3 fetches, 2 reloads a tile) and only
+ * at zoom ≥ 10 on an untilted map.
+ *
+ * ON, but not yet seen on a device (2026-10-02): the reload hides the lines
+ * for ~150 ms. If that blink reads badly on a phone, flip this to `false` —
+ * holes then stay until the user pans away and back, as before.
+ */
+export const CONTOUR_RECOVERY_ENABLED: boolean = true;
+
+/**
  * Subtitle + a11y suffix shown on a parked row in the Overlays menu. One
  * constant so the menu copy and the e2e matchers can never drift apart.
  */

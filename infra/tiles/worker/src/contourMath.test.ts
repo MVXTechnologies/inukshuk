@@ -401,6 +401,39 @@ describe('encodeContourMvt', () => {
     expect(layer.values).toEqual([-5, 0.5]);
   });
 
+  it('writes the same bytes as before its buffers were reused (stored v3 tiles stay valid)', () => {
+    // From the encoder as it was when the v3 tiles in R2 were written.
+    const golden =
+      '1a940178020a08636f6e746f75727312171208000001010202030318022209090000121400c4042712231208' +
+      '000401030202030518022215098040804012bf0108c501ca0109eb3cc3410a04041210120400060103180222' +
+      '060902020a02021a03656c651a056c6576656c1a016b1a01732202286422022801220228022202280022022878' +
+      '220228032209190000000000a05e40288020';
+    const bytes = encodeContourMvt([
+      {
+        ele: 100,
+        level: 1,
+        k: 2,
+        s: 0,
+        lines: [
+          [0, 0, 10.4, 0.2, 10.4, 0.4, 300, -20],
+          [5, 5, 5.2, 5.1],
+        ],
+      },
+      {
+        ele: 120,
+        level: 0,
+        k: 2,
+        s: 3,
+        lines: [
+          [4096, 4096, 4000, 4100, 3900.5, 4200.5],
+          [7, 7, 9, 9],
+        ],
+      },
+      { ele: 122.5, level: 0, lines: [[1, 1, 2, 2]] },
+    ]);
+    expect(Buffer.from(bytes).toString('hex')).toBe(golden);
+  });
+
   it('is a valid empty tile with no features', () => {
     const layer = decodeMvt(encodeContourMvt([]));
     expect(layer.features).toHaveLength(0);
@@ -522,6 +555,25 @@ describe('decodeTerrariumPng', () => {
     expect(dem.width).toBe(5);
     expect(dem.height).toBe(4);
     expect(Array.from(dem.data)).toEqual(HEIGHTS.flat());
+  });
+
+  it('decodes a rough RGB tile of Paeth rows (the unrolled path) exactly', async () => {
+    // Northern Québec's tiles: nearly every row Paeth, noisy to the 1/256 m.
+    let seed = 7;
+    const noise = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const heights = Array.from({ length: 24 }, (_, y) =>
+      Array.from(
+        { length: 37 },
+        (_, x) => Math.round((400 + 80 * Math.sin(x / 5 + y / 7) + noise() * 30) * 256) / 256,
+      ),
+    );
+    for (const filters of [[4], [4, 4, 4, 2, 4, 1]]) {
+      const dem = await decodeTerrariumPng(terrariumPng(heights, { filters }), inflate);
+      expect(Array.from(dem.data)).toEqual(heights.flat());
+    }
   });
 
   it('handles RGBA and split IDAT chunks', async () => {

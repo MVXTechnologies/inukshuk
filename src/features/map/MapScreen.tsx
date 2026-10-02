@@ -17,7 +17,12 @@ import {
   type MapPressEvent,
   type PointChipHit,
 } from '@core/map/mapTap';
-import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import {
+  CONTOUR_RECOVERY_ENABLED,
+  MARINE_ENABLED,
+  VECTOR_BASEMAP_ENABLED,
+  WEATHER_ENABLED,
+} from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { pdfOverlayMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
@@ -91,7 +96,7 @@ import { SearchHitMarker } from './search/SearchHitMarker';
 import { cameraTargetFor } from '@core/search/camera';
 import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
-import { imageryContoursOption, vectorBasemapOption } from '@data/basemapTiles';
+import { imageryContoursOption, vectorBasemapOption, vectorContoursUrl } from '@data/basemapTiles';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
@@ -121,6 +126,7 @@ import * as Sharing from 'expo-sharing';
 import { toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
+import { useContourRecovery } from './hooks/useContourRecovery';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
@@ -138,7 +144,13 @@ import {
   TRACKS_LINES_LAYERS,
   lineOutlineFor,
 } from './mapLayers';
-import { buildOsmStyle } from './mapStyle';
+import {
+  buildOsmStyle,
+  CONTOUR_LINE_LAYER_IDS,
+  CONTOUR_SOURCE_MAXZOOM,
+  CONTOUR_SOURCE_MINZOOM,
+  VECTOR_CONTOURS_SOURCE,
+} from './mapStyle';
 import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -1050,6 +1062,25 @@ export function MapScreen() {
   // low-rate bits: "a gesture is in progress" and the settled bounds.
   const windViewRef = useRef<WindViewState | null>(null);
   const windSizeRef = useRef({ width: 0, height: 0 });
+  // Contour tiles the map failed to load (a 503 from the tile Worker) stay
+  // holes until the user pans away and back: MapLibre does not ask again.
+  // Once the camera settles this looks for them and gets them reloaded —
+  // bounded, online only, and only while the served contours are on screen.
+  const onContourSettled = useContourRecovery({
+    mapRef,
+    enabled:
+      CONTOUR_RECOVERY_ENABLED &&
+      mapLoaded &&
+      screenFocused &&
+      !offlineOnly &&
+      ((vectorBasemap && terrainContours) || imageryContours),
+    tilesUrl: vectorContoursUrl(),
+    sourceId: VECTOR_CONTOURS_SOURCE,
+    minzoom: CONTOUR_SOURCE_MINZOOM,
+    maxzoom: CONTOUR_SOURCE_MAXZOOM,
+    layerIds: CONTOUR_LINE_LAYER_IDS,
+    viewSize: () => windSizeRef.current,
+  });
   const [windInteracting, setWindInteracting] = useState(false);
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2041,6 +2072,7 @@ export function MapScreen() {
                   updateScaleAt(vs.zoom, vs.center[1]);
                   onSettleBearing(vs.bearing);
                   tilt.onSettledPitch(vs.pitch);
+                  onContourSettled(vs);
                 })
                 .catch(() => undefined); // mid-teardown — the next settle seeds it
             }}
@@ -2085,6 +2117,8 @@ export function MapScreen() {
               onSettleBearing(e.nativeEvent.bearing);
               // Settled pitch → the tilted-map relief pass (#480).
               tilt.onSettledPitch(e.nativeEvent.pitch);
+              // Settled view → look for contour tiles that failed to load.
+              onContourSettled(e.nativeEvent);
               // Settled centre → mapStore (wave B): resolves the effective
               // forecast model and the radar rows' "Canada only" hint. Same
               // render batch as the version bump above — no extra re-render.

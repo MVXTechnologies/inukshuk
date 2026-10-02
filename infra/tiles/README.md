@@ -226,19 +226,22 @@ ODbL)"; the index carries the attribution string too.
 ## Contour lines (#509)
 
 `/contours/{z}/{x}/{y}.mvt` is generated on demand (`worker/src/contours.ts`, pure parts in
-`contourMath.ts`, tested by the app's jest) from the Terrarium DEM tiles on AWS Open Data:
+`contourMath.ts` and `contourGrid.ts`, tested by the app's jest) from the Terrarium DEM tiles on
+AWS Open Data:
 
 1. **Edge cache** (per Cloudflare location, 30 days), then **R2**: every generated tile is
    written to `contours/{CONTOUR_VERSION}/{z}/{x}/{y}.mvt` (gzipped) after the response, so a
-   tile costs its CPU once ever. `X-Contour-Source: r2 | generated` says which. Bump
+   tile costs its CPU once ever. `X-Contour-Source: r2 | generated | partial` says which. Bump
    `CONTOUR_VERSION` when the geometry changes; old prefixes can be deleted at leisure.
-2. **Generation** aims at the free plan's 10 ms of CPU, which Alpine tiles used to blow (error
-   1102): DEM PNGs inflated by the native `DecompressionStream`; decoded DEM tiles kept per
-   isolate (LRU); steep regions get a coarser interval, set by the steepest tile of each
-   4 × 4-tile region (`MAX_CROSSINGS_PER_CELL`, `DENSITY_REGION_ZOOMS` in `contourMath.ts` —
-   the interval can only change on that grid, which shows as a density step where it does);
-   lines simplified (Douglas–Peucker, ½ px, ¼ px on the deepest tiles); closed rings under 1.5
-   DEM pixels, and anything at or below sea level, dropped.
+2. **Generation** aims at the free plan's 10 ms of CPU (next section): DEM PNGs inflated by the
+   native `DecompressionStream`; decoded DEM tiles kept per isolate; the grid and the isolines
+   traced in typed arrays (`contourGrid.ts` — maplibre-contour's algorithm and, byte for byte,
+   its output, without its closure per pixel and its quadratic line joins); steep regions get a
+   coarser interval, set by the steepest tile of each 4 × 4-tile region
+   (`MAX_CROSSINGS_PER_CELL`, `DENSITY_REGION_ZOOMS` in `contourMath.ts` — the interval can only
+   change on that grid, which shows as a density step where it does); lines simplified
+   (Douglas–Peucker, ½ px, ¼ px on the deepest tiles); closed rings under 1.5 DEM pixels, and
+   anything at or below sea level, dropped.
    Coarsening thins the dark band the old dense lines drew on steep walls, so every feature
    carries `k` (how many lines of the zoom's own interval a line stands for; 1 = kept) and `s`
    (steepness class 0–3 of that stretch, from the DEM gradient along it; lines are cut where it
@@ -252,6 +255,93 @@ an Alpine tile (Zermatt, Chamonix, Bernese Oberland, Brienz) went from 15–25 m
 warm to ≈ 9–11 ms cold / 3–5 ms warm, and from 26–55 k to 3.8–7.3 k vertices (36–76 KB →
 11–19 KB gzipped, with the steepness tags). Québec City and Mont-Sainte-Anne keep their intervals and look the same (fewer
 vertices only).
+
+### The free plan's CPU limit (error 1102)
+
+The Worker runs on the **free plan: 10 ms of CPU per request**. A request that goes over is
+killed and Cloudflare answers **HTTP 503, body `error code: 1102`** — nothing the Worker can
+catch, cache or log. On the map that tile is a **hole in the contour lines**: MapLibre Native
+does not retry it (since maplibre-native #2051 its tile loader frees the request, and the
+retry timer with it, on the first answer), so the hole stays until the user pans away and back.
+
+Seen on the owner's phone on 2.1.0 (2026-10-02) in northern Québec: probes of uncached z12–13
+tiles around 51° N, 67° W at concurrency 10–12 failed 30/60, 13/30 and 7/36; a retry of the
+same tile succeeded 30–50 % of the time; the Himalaya, Andes and Pyrenees probes did not fail.
+The rate is not stable: re-run the same day for this change, the same probe passed 84/84
+(z13, concurrency 8–12, all `generated`). Read any measured rate as that moment's.
+
+**Where the time went** (uncached z13 tile, Node on an M-series Mac, JIT warm; a fresh isolate
+is 2–3× slower until V8 has optimised the loops):
+
+| ms per tile                              | before     | after                              |
+| ---------------------------------------- | ---------- | ---------------------------------- |
+| decode 5 DEM PNGs (inflate + unfilter)   | 4.5–8.5    | 2 a request: 1.5–2.8 (all 5: 4–7)  |
+| height grid (neighbours, corner average) | 0.45–1.4   | 0.13                               |
+| isolines                                 | 0.8–3.9    | 0.4–1.7                            |
+| clean-up, MVT, gzip                      | 0.2–4.1    | 0.2–2.5                            |
+| **uncached tile, first request**         | **5–12.5** | **2–5.5** (partial; full: 4.5–7.5) |
+| tile whose DEM is already in the isolate | 1.4–4.9    | 0.7–2.8                            |
+
+- **Decoding DEM tiles is 65–80 % of an uncached tile**, and a tile needs five: its own, three
+  neighbours for a two-pixel border, its region's for the interval. Northern Québec is not
+  harder to contour (4.6–11 k raw vertices a tile, against 10–20 k in the Alps): its **DEM PNGs
+  are heavy** — 115–125 KB each against 17 KB around Québec City and 64 KB under Everest (the
+  Alps and the Pyrenees are as heavy: 133–136 KB) — and decoding one takes 1.5–2× as long.
+- **Decode budget** (`CONTOUR_DECODE_BUDGET` in `wrangler.toml`, default 2): a request decodes
+  at most that many DEM tiles itself — its own first, then the region's, then the neighbours —
+  and takes the others from the isolate's cache, or from the request that is decoding them.
+  When some are still missing it answers a **partial tile**: the same lines, drawn without the
+  missing neighbours' border (up to half a DEM pixel off along those edges —
+  `docs/assets/contour-cpu-before-after.jpg`). A partial tile is `X-Contour-Source: partial`,
+  cached 15 s, **never written to R2**; a later request for it finds the DEM decoded and makes
+  the full tile. A cold 3 × 4-tile
+  viewport: 9 full + 3 partial on the first round, all full on the second, 16 DEM decodes in
+  all and never more than 2 in a request.
+- The full tiles are **byte-identical** to before (640 tiles compared, z8–14, ten regions and
+  the world's edges), so `CONTOUR_VERSION` stays `v3`: nothing is regenerated, no R2 cost.
+- The app (`src/core/map/contourRecovery.ts`, from the version after 2.1.0) looks for the holes
+  itself when the camera settles and gets MapLibre to load them again: at most 3 fetches a
+  tile (2 s and 6 s apart) and 2 reloads.
+
+**The fix that needs no code: Workers Paid** ($5/month: 30 s of CPU per request, 10 M requests
+a month). Then set `CONTOUR_DECODE_BUDGET = "9"` and deploy: every tile is full on its first
+request and partial tiles are never made.
+
+Why not a marker ("this tile was tried and did not finish → make a lighter one next time")? A
+marker has to be written (R2 or the cache: I/O on every uncached tile) before the work, and
+only helps the second request; the budget is the same idea decided up front, from what the
+isolate already holds, at no cost. What it cannot bound is the generation itself on a fresh
+isolate (cold JIT), which is what the Paid plan is for.
+
+Not done, in order of what they would buy: WebAssembly for the PNG unfilter (no JIT warm-up:
+the biggest cut on a fresh isolate, at the price of a binary in the repo); `node:zlib`'s
+synchronous inflate under `nodejs_compat` (≈ 0.3 ms a DEM tile in Node, untested in workerd);
+keeping decoded DEM tiles in the Cache API across isolates; the DEM one zoom lower (2.25
+decodes a tile instead of 5, but half the detail — CDEM has real 20 m data at z12).
+
+**Deploy** (owner; from a checkout with `infra/tiles/worker/node_modules`):
+
+```sh
+cd infra/tiles/worker
+npm install            # drops maplibre-contour, no longer used
+npx tsc --noEmit
+npx wrangler deploy
+```
+
+**Verify** — uncached tiles, so move the square each run (`offset`), and stay gentle (the
+free plan's 100 000 requests a day are shared with users):
+
+```sh
+node infra/tiles/probe-contours.mjs 51.05 -67.1 13 36 12 120   # 36 tiles, concurrency 12
+node infra/tiles/probe-contours.mjs 51.05 -67.1 13 36 12 120   # the same square again
+```
+
+Expect, on the free plan with the budget at 2: first run mostly `200 generated` with some
+`200 partial` (about a quarter) and **few or no** `503 error code: 1102`; the second run, 15 s
+or more later, `200 r2`/`cached` for what was full and `200 generated` for what was partial,
+no `partial` left. If 1102s are still common, lower `CONTOUR_DECODE_BUDGET` to `"1"` (more
+partial tiles, one more round) — or buy the Paid plan. On the Paid plan with the budget at 9:
+all `200 generated`, then all `200 r2`/`cached`, never `partial`, never 1102.
 
 **Pre-generating dense mountain regions** (optional, NAS): run the same `contourTile` under
 Node over a bbox (Alps, Rockies…) for z8–13, write the gzipped tiles into a PMTiles archive
