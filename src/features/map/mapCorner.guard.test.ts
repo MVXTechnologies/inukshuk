@@ -28,7 +28,7 @@ describe('map corner', () => {
       /styles\.bottomSideStart\][^]*?<MapCreditsButton onPress=\{\(\) => setCreditsOpen\(true\)\} \/>\s*\{showScaleBar && scaleAt !== null && \(\s*<ScaleBar/,
     );
     // One row: the ⓘ and the scale bar side by side, bottoms aligned.
-    expect(map).toMatch(/bottomSideStart: \{ flexDirection: 'row', alignItems: 'flex-end'/);
+    expect(map).toMatch(/bottomSideStart: \{ flexDirection: 'row', alignItems: 'center'/);
     expect(existsSync(join(ROOT, 'src/features/map/components/MapCreditText.tsx'))).toBe(false);
     expect(map).not.toMatch(/MapCreditText/);
   });

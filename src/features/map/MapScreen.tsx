@@ -3147,8 +3147,8 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
-  // ⓘ then the scale bar, one row, bottoms aligned.
-  bottomSideStart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  // ⓘ then the scale bar, one row, the ⓘ centred on the scale bar's height (owner).
+  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bottomSideEnd: { alignItems: 'flex-end' },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap
