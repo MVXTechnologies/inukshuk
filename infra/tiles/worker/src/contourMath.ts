@@ -7,8 +7,11 @@
  * - a small Mapbox Vector Tile encoder for the result,
  * - a Terrarium PNG decoder that leaves the inflate to the platform's native
  *   DecompressionStream (fast-png's pure-JS inflate was most of a tile's CPU),
- * - an LRU map for the decoded DEM tiles an isolate keeps between requests,
+ * - an LRU map for what an isolate keeps between requests,
  * - the R2 key the generated tiles are stored under.
+ *
+ * The height grid, the isoline tracer and the per-request decode budget are
+ * in `contourGrid.ts`.
  */
 
 /** Deepest zoom we generate (older apps still ask for z14). */
@@ -416,9 +419,15 @@ export function cleanIsolines(
 
 // --- Mapbox Vector Tile encoding -------------------------------------------
 
+const UTF8 = new TextEncoder();
+
 class Writer {
-  private buf = new Uint8Array(4096);
+  private buf: Uint8Array;
   pos = 0;
+
+  constructor(size = 4096) {
+    this.buf = new Uint8Array(size);
+  }
 
   private grow(n: number): void {
     if (this.pos + n <= this.buf.length) return;
@@ -452,7 +461,17 @@ class Writer {
   }
 
   string(field: number, s: string): void {
-    this.bytes(field, new TextEncoder().encode(s));
+    this.bytes(field, UTF8.encode(s));
+  }
+
+  /** Start over, keeping the buffer. */
+  reset(): void {
+    this.pos = 0;
+  }
+
+  /** What was written, without a copy — valid until the next write or reset. */
+  view(): Uint8Array {
+    return this.buf.subarray(0, this.pos);
   }
 
   finish(): Uint8Array {
@@ -463,7 +482,7 @@ class Writer {
 const zigzag = (n: number): number => (n < 0 ? -2 * n - 1 : 2 * n);
 
 function encodeValue(v: number): Uint8Array {
-  const w = new Writer();
+  const w = new Writer(16);
   if (Number.isInteger(v)) {
     if (v >= 0) {
       w.tag(5, 0); // uint_value
@@ -507,38 +526,48 @@ export function encodeContourMvt(
     return i;
   };
 
-  const layerW = new Writer();
+  const layerW = new Writer(16_384);
   layerW.tag(15, 0); // version 2
   layerW.varint(2);
   layerW.string(1, layer);
+  // Reused across features: a feature is written into them, then copied once.
+  const geom = new Writer(8192);
+  const tags = new Writer(16);
+  const fw = new Writer(8192);
   for (const f of features) {
-    const geom: number[] = [];
+    geom.reset();
     let cx = 0;
     let cy = 0;
     for (const line of f.lines) {
-      const pts: number[] = [];
+      // Points left once rounded and consecutive duplicates dropped.
+      let count = 0;
+      let lx = 0;
+      let ly = 0;
       for (let i = 0; i < line.length; i += 2) {
         const x = Math.round(line[i]!);
         const y = Math.round(line[i + 1]!);
-        const n = pts.length;
-        if (n >= 2 && pts[n - 2] === x && pts[n - 1] === y) continue;
-        pts.push(x, y);
+        if (count > 0 && x === lx && y === ly) continue;
+        lx = x;
+        ly = y;
+        count++;
       }
-      if (pts.length < 4) continue;
-      geom.push((1 << 3) | 1); // MoveTo ×1
-      geom.push(zigzag(pts[0]! - cx), zigzag(pts[1]! - cy));
-      cx = pts[0]!;
-      cy = pts[1]!;
-      geom.push(((pts.length / 2 - 1) << 3) | 2); // LineTo ×(n − 1)
-      for (let i = 2; i < pts.length; i += 2) {
-        geom.push(zigzag(pts[i]! - cx), zigzag(pts[i + 1]! - cy));
-        cx = pts[i]!;
-        cy = pts[i + 1]!;
+      if (count < 2) continue;
+      geom.varint((1 << 3) | 1); // MoveTo ×1
+      let written = 0;
+      for (let i = 0; i < line.length; i += 2) {
+        const x = Math.round(line[i]!);
+        const y = Math.round(line[i + 1]!);
+        if (written > 0 && x === cx && y === cy) continue;
+        geom.varint(zigzag(x - cx));
+        geom.varint(zigzag(y - cy));
+        cx = x;
+        cy = y;
+        if (written === 0) geom.varint(((count - 1) << 3) | 2); // LineTo ×(n − 1)
+        written++;
       }
     }
-    if (geom.length === 0) continue;
-    const fw = new Writer();
-    const tags = new Writer();
+    if (geom.pos === 0) continue;
+    tags.reset();
     tags.varint(0);
     tags.varint(indexOf(f.ele));
     tags.varint(1);
@@ -551,13 +580,12 @@ export function encodeContourMvt(
       tags.varint(3);
       tags.varint(indexOf(f.s));
     }
-    fw.bytes(2, tags.finish()); // packed tags
+    fw.reset();
+    fw.bytes(2, tags.view()); // packed tags
     fw.tag(3, 0); // type LINESTRING
     fw.varint(2);
-    const g = new Writer();
-    for (const v of geom) g.varint(v);
-    fw.bytes(4, g.finish()); // packed geometry
-    layerW.bytes(2, fw.finish());
+    fw.bytes(4, geom.view()); // packed geometry
+    layerW.bytes(2, fw.view());
   }
   // Keys by index: 0 ele, 1 level, 2 k, 3 s (unused keys cost a few bytes).
   layerW.string(3, eleKey);
@@ -568,8 +596,8 @@ export function encodeContourMvt(
   layerW.tag(5, 0);
   layerW.varint(extent);
 
-  const tile = new Writer();
-  tile.bytes(3, layerW.finish());
+  const tile = new Writer(layerW.pos + 16);
+  tile.bytes(3, layerW.view());
   return tile.finish();
 }
 
@@ -672,6 +700,49 @@ export async function decodeTerrariumPng(
       if (y === 0) {
         // Paeth with no row above is Sub.
         for (let i = s + bpp; i < s + stride; i++) px[i] = (px[i]! + px[i - bpp]!) & 255;
+      } else if (bpp === 3) {
+        // What Terrarium is: RGB rows, nearly all Paeth — over half of a DEM
+        // tile's decode. One pixel a step, the left (a) and upper-left (c)
+        // pixels carried in locals instead of read back from the buffer.
+        let a0 = (px[s]! + px[u]!) & 255;
+        let a1 = (px[s + 1]! + px[u + 1]!) & 255;
+        let a2 = (px[s + 2]! + px[u + 2]!) & 255;
+        px[s] = a0;
+        px[s + 1] = a1;
+        px[s + 2] = a2;
+        let c0 = px[u]!;
+        let c1 = px[u + 1]!;
+        let c2 = px[u + 2]!;
+        for (let i = s + 3, j = u + 3, end = s + stride; i < end; i += 3, j += 3) {
+          const b0 = px[j]!;
+          const b1 = px[j + 1]!;
+          const b2 = px[j + 2]!;
+          // pa = |b − c|, pb = |a − c|, pc = |a + b − 2c|.
+          let p = b0 - c0;
+          let q = a0 - c0;
+          let pa = p < 0 ? -p : p;
+          let pb = q < 0 ? -q : q;
+          let pc = p + q < 0 ? -(p + q) : p + q;
+          a0 = (px[i]! + (pa <= pb && pa <= pc ? a0 : pb <= pc ? b0 : c0)) & 255;
+          p = b1 - c1;
+          q = a1 - c1;
+          pa = p < 0 ? -p : p;
+          pb = q < 0 ? -q : q;
+          pc = p + q < 0 ? -(p + q) : p + q;
+          a1 = (px[i + 1]! + (pa <= pb && pa <= pc ? a1 : pb <= pc ? b1 : c1)) & 255;
+          p = b2 - c2;
+          q = a2 - c2;
+          pa = p < 0 ? -p : p;
+          pb = q < 0 ? -q : q;
+          pc = p + q < 0 ? -(p + q) : p + q;
+          a2 = (px[i + 2]! + (pa <= pb && pa <= pc ? a2 : pb <= pc ? b2 : c2)) & 255;
+          px[i] = a0;
+          px[i + 1] = a1;
+          px[i + 2] = a2;
+          c0 = b0;
+          c1 = b1;
+          c2 = b2;
+        }
       } else {
         for (let i = 0; i < bpp; i++) px[s + i] = (px[s + i]! + px[u + i]!) & 255;
         for (let i = bpp; i < stride; i++) {

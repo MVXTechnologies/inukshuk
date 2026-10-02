@@ -32,6 +32,7 @@ import {
   type StoneContourSource,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
+  STONE_LAYER_PREFIX,
 } from '@core/map/stoneStyle';
 import {
   DEFAULT_HILLSHADE_STRENGTH,
@@ -92,6 +93,15 @@ export const VECTOR_CONTOURS_SOURCE = 'basemap-contours';
  */
 export const CONTOUR_SOURCE_MINZOOM = 8;
 export const CONTOUR_SOURCE_MAXZOOM = 13;
+/**
+ * The line layers drawn from the served contour tiles, on the map and over
+ * imagery alike (`stoneStyle`'s ids): where `useContourRecovery` looks for a
+ * tile's lines.
+ */
+export const CONTOUR_LINE_LAYER_IDS: readonly string[] = [
+  `${STONE_LAYER_PREFIX}contour-minor`,
+  `${STONE_LAYER_PREFIX}contour-major`,
+];
 /** Source id of our worldwide named-summits tiles on the vector base map. */
 export const VECTOR_PEAKS_SOURCE = 'basemap-peaks';
 /** Source id of the vector base map (see `OsmStyleOptions.vectorBasemap`). */

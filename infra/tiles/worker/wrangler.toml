@@ -13,6 +13,11 @@ bucket_name = "inukshuk-tiles"
 [vars]
 ALLOWED_ORIGINS = "*"
 CACHE_CONTROL = "public, max-age=86400"
+# DEM tiles one contour request may decode itself (src/contourGrid.ts). 2 keeps
+# an uncached tile near the free plan's 10 ms of CPU; a tile that needed more
+# is answered partial (X-Contour-Source: partial, cached 15 s, not stored).
+# On the Workers Paid plan set "9": every tile is full on its first request.
+CONTOUR_DECODE_BUDGET = "2"
 # Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
 STRAVA_CLIENT_ID = "283079"
 # Place search (GET /search, src/search.ts): the Photon /api endpoint it proxies.
