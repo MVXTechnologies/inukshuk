@@ -18,6 +18,7 @@ import {
 } from '@core/map/terrainOptions';
 import { DEFAULT_WHITE_KEY, parseWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
+import { parseMaxHr } from '@core/stats/hrZones';
 import { DEFAULT_IMAGERY_LOOK, isImageryLook, type ImageryLook } from '@core/map/satelliteImagery';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
@@ -253,6 +254,11 @@ export interface Settings {
    * app or a verified "I already donated"); 0 = not resting. It comes back after.
    */
   tipJarRestingUntil: number;
+  /**
+   * Max heart rate for the Logbook's heart-rate zones, bpm; 0 = estimate it
+   * from the activities (99th percentile of the last 12 months' samples).
+   */
+  maxHeartRateBpm: number;
 }
 
 const DEFAULTS: Settings = {
@@ -299,6 +305,7 @@ const DEFAULTS: Settings = {
   showTipJar: true,
   tipJarHiddenUntil: 0,
   tipJarRestingUntil: 0,
+  maxHeartRateBpm: 0,
 };
 
 interface SettingsState extends Settings {
@@ -377,6 +384,7 @@ function snapshot(s: SettingsState): Settings {
     showTipJar,
     tipJarHiddenUntil,
     tipJarRestingUntil,
+    maxHeartRateBpm,
   } = s;
   return {
     tileUrl,
@@ -422,6 +430,7 @@ function snapshot(s: SettingsState): Settings {
     showTipJar,
     tipJarHiddenUntil,
     tipJarRestingUntil,
+    maxHeartRateBpm,
   };
 }
 
@@ -477,6 +486,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             : undefined,
         ) ?? DEFAULT_WHITE_KEY;
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
+      // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
+      if (
+        next.maxHeartRateBpm !== 0 &&
+        parseMaxHr(String(next.maxHeartRateBpm)) !== next.maxHeartRateBpm
+      ) {
+        next.maxHeartRateBpm = 0;
+      }
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

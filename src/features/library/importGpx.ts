@@ -2,6 +2,7 @@ import type { Track } from '@core/models';
 import { parseGpx } from '@core/geo/gpx';
 import { buildImportedTrack, snapWaypointsToNotes, type ImportedNote } from '@core/geo/track';
 import * as storage from '@data/storage';
+import { primeTrailStats } from '@data/trailStatsStore';
 
 export interface ImportedTrack {
   track: Track;
@@ -38,6 +39,8 @@ function buildFromGpxText(
     track.category = 'navigation';
   }
   const notes = hasTrackOrRoutePoints ? snapWaypointsToNotes(points, waypoints) : [];
+  // Statistics from the points in hand: the Logbook never reads this GPX back.
+  primeTrailStats(track, points, segmentStarts);
   return { track, fileUri, notes };
 }
 

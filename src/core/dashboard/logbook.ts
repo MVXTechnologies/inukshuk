@@ -9,7 +9,7 @@ import {
 
 /**
  * The Logbook (revamp `After-Logbook.html`, spec §7): the "Distance per week /
- * month / year" bar chart, the lifetime hero numbers, the "Activities by type"
+ * month / year" bar chart, the hero numbers, the "Activities by type"
  * counts and the Recent list. Pure — local-time bucketing reuses
  * `aggregate.ts` (Monday weeks, DST-safe day arithmetic).
  */
@@ -184,15 +184,6 @@ export function heroClimb(meters: number, units: Units): HeroValue {
   }
   if (m < 10_000) return { value: grouped(Math.round(m)), unit: 'm' };
   return { value: (Math.round(m / 100) / 10).toFixed(1), unit: 'km' };
-}
-
-/** "SINCE MAR 2025" for the hero card's caps label; null for an empty logbook. */
-export function sinceLabel(tracks: readonly Pick<TrackSummary, 'startedAt'>[]): string | null {
-  if (tracks.length === 0) return null;
-  const oldest = Math.min(...tracks.map((t) => t.startedAt));
-  if (!Number.isFinite(oldest)) return null;
-  const d = new Date(oldest);
-  return `SINCE ${monthName(d).toUpperCase()} ${d.getFullYear()}`;
 }
 
 /** Activity counts per category id, for the "Activities by type" chips. */
