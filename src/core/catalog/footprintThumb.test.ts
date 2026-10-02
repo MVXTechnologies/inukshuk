@@ -186,6 +186,6 @@ describe('pointBbox', () => {
     expect((b[1] + b[3]) / 2).toBeCloseTo(47.32, 9);
     const cos = Math.cos((47.32 * Math.PI) / 180);
     expect((b[2] - b[0]) * cos).toBeCloseTo(b[3] - b[1], 9);
-    expect(b[3] - b[1]).toBeCloseTo(0.24, 9);
+    expect(b[3] - b[1]).toBeCloseTo(0.6, 9);
   });
 });

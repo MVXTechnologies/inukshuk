@@ -210,7 +210,7 @@ export function buildFootprintScene(
  * not a footprint): ±`halfLatDeg` north–south and the same ground distance
  * east–west, so the thumbnail frames it like a sheet of that size.
  */
-export function pointBbox(point: LatLng, halfLatDeg = 0.12): CatalogBbox {
+export function pointBbox(point: LatLng, halfLatDeg = 0.3): CatalogBbox {
   const cosLat = Math.max(0.2, Math.cos(point.latitude * DEG2RAD));
   const halfLon = halfLatDeg / cosLat;
   return [

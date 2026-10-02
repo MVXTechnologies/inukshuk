@@ -257,7 +257,7 @@ export function ExploreLanding({
                     key={`place-${card.place.id}`}
                     id={card.place.id}
                     title={card.place.name}
-                    meta={[card.place.type, card.collection.blurb]
+                    meta={[card.place.type, card.collection.publisher]
                       .filter((p) => p !== '')
                       .join(' · ')}
                     distance={formatDistanceShort(card.distanceMeters, units)}
