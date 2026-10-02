@@ -6,11 +6,17 @@ import { overlayAnchor } from '@core/map/layerSlots';
 import { HILLSHADE_2D_MIN_ZOOM, HILLSHADE_DEM_SOURCE_ID, TILT_RELIEF_LAYER_ID } from './mapStyle';
 import {
   HEAT_CROSSFADE,
+  HEAT_GLOW_BASE_WEIGHT,
   HEAT_GLOW_INTENSITY,
   HEAT_GLOW_RADIUS_STOPS,
   HEAT_LINE_RAMP_DARK,
   HEAT_LINE_RAMP_LIGHT,
   HEAT_LINE_WIDTH_STOPS,
+  HEAT_PASS_STRENGTH,
+  HEAT_RAMP_DARK,
+  HEAT_RAMP_LIGHT,
+  HEAT_WIDTH_MAX_GAIN,
+  HEAT_WIDTH_PER_DOUBLING,
   heatGlowColorStops,
   heatGlowOpacity,
   heatLineOpacity,
@@ -88,9 +94,9 @@ export function lineOutlineFor(basemap: 'map' | 'satellite', dark: boolean): Lin
 
 /**
  * The personal heatmap (#466), one set per ground. Street zooms draw the
- * pass-count lines (`useTrackHeat.heatLines`): crisp, 1–5 px, a single pass
- * a clearly visible warm line and many passes hot, over the ground's
- * outline (#492); low zooms draw a soft glow from the coarse grid
+ * pass-count lines (`useTrackHeat.heatLines`): crisp, 1–7 px, a single pass
+ * a faint thin line and only much-run streets hot, over the ground's
+ * outline (#492), itself as faint as its line; low zooms draw a soft glow from the coarse grid
  * (`useTrackHeat.heatGlow`). The two crossfade over `HEAT_CROSSFADE`. All
  * numbers live in `@core/heat/heatStyle` (shared with the offline PNG
  * preview).
@@ -98,8 +104,25 @@ export function lineOutlineFor(basemap: 'map' | 'satellite', dark: boolean): Lin
  * `lines` is an ARRAY, casing first: both name the same anchor, and of two
  * children inserted below one anchor the later one lands on top.
  */
-function heatLayers(ramp: Ramp, tone: LineOutline) {
-  const widthFactor = ['+', 1, ['min', 0.6, ['*', 0.12, ['log2', ['max', 1, ['get', 'count']]]]]];
+function heatLayers(ramp: Ramp, glowRamp: Ramp, tone: LineOutline) {
+  const widthFactor = [
+    '+',
+    1,
+    [
+      'min',
+      HEAT_WIDTH_MAX_GAIN,
+      ['*', HEAT_WIDTH_PER_DOUBLING, ['log2', ['max', 1, ['get', 'count']]]],
+    ],
+  ];
+  // The pass strength (`heatPassStrength`) as a step on the count: scales the
+  // casing, so a lone pass doesn't sit in a full-strength halo.
+  const [firstStrength, ...moreStrength] = HEAT_PASS_STRENGTH;
+  const strength = [
+    'step',
+    ['get', 'count'],
+    firstStrength?.[1] ?? 1,
+    ...moreStrength.flatMap(([count, s]) => [count, s]),
+  ];
   const outline = LINE_OUTLINE[tone];
   const [first, ...rest] = ramp;
   const lineWidth = (add: number) =>
@@ -119,6 +142,18 @@ function heatLayers(ramp: Ramp, tone: LineOutline) {
       HEAT_CROSSFADE[1],
       k,
     ] as never;
+  // The casing's: as above, times the pass strength — zoom stays the
+  // top-level input (MapLibre iOS crashes on a nested ['zoom']).
+  const casingOpacity = (k: number) =>
+    [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      HEAT_CROSSFADE[0],
+      ['*', heatLineOpacity(HEAT_CROSSFADE[0]) * k, strength],
+      HEAT_CROSSFADE[1],
+      ['*', k, strength],
+    ] as never;
   return {
     glow: (
       <Layer
@@ -128,13 +163,17 @@ function heatLayers(ramp: Ramp, tone: LineOutline) {
         type="heatmap"
         maxzoom={HEAT_CROSSFADE[1]}
         paint={{
-          'heatmap-weight': ['+', 0.5, ['/', ['log2', ['max', 1, ['get', 'count']]], 4]] as never,
+          'heatmap-weight': [
+            '+',
+            HEAT_GLOW_BASE_WEIGHT,
+            ['/', ['log2', ['max', 1, ['get', 'count']]], 4],
+          ] as never,
           'heatmap-intensity': HEAT_GLOW_INTENSITY,
           'heatmap-color': [
             'interpolate',
             ['linear'],
             ['heatmap-density'],
-            ...heatGlowColorStops(ramp).flatMap(([d, c, a]) => [d, rgba(c, a)]),
+            ...heatGlowColorStops(glowRamp).flatMap(([d, c, a]) => [d, rgba(c, a)]),
           ] as never,
           'heatmap-radius': [
             'interpolate',
@@ -165,7 +204,7 @@ function heatLayers(ramp: Ramp, tone: LineOutline) {
         paint={{
           'line-color': outline.color,
           'line-width': lineWidth(outline.widthAdd),
-          'line-opacity': lineOpacity(outline.opacity),
+          'line-opacity': casingOpacity(outline.opacity),
           'line-blur': 0.5,
         }}
       />,
@@ -196,9 +235,9 @@ function heatLayers(ramp: Ramp, tone: LineOutline) {
  * map and on satellite imagery (dark in both themes), each with its outline.
  */
 export const HEAT_LAYERS = {
-  paper: heatLayers(HEAT_LINE_RAMP_LIGHT, 'paper'),
-  night: heatLayers(HEAT_LINE_RAMP_DARK, 'night'),
-  imagery: heatLayers(HEAT_LINE_RAMP_DARK, 'imagery'),
+  paper: heatLayers(HEAT_LINE_RAMP_LIGHT, HEAT_RAMP_LIGHT, 'paper'),
+  night: heatLayers(HEAT_LINE_RAMP_DARK, HEAT_RAMP_DARK, 'night'),
+  imagery: heatLayers(HEAT_LINE_RAMP_DARK, HEAT_RAMP_DARK, 'imagery'),
 } as const;
 
 /** A trail line over its outline, both under one filter (arrays: see the note above). */

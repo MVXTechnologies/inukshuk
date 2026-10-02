@@ -217,6 +217,32 @@ function contourPaint(
 }
 
 /**
+ * How the heights ride the major contours (owner, 2026-10: "I see 3 darker
+ * lines and only the 50, not the 50, 100 and 150"). MapLibre lays line
+ * labels out per tile: candidate spots every `symbol-spacing` px along each
+ * line (a line that crosses the tile edge gets its first one half a spacing
+ * in, and no fallback in the middle), and each spot is kept only if the line
+ * bends less than `text-max-angle` under the label. It never looks for
+ * another spot. With 320 px and 25° (until 2.1.0), a phone screen — 400 px
+ * wide, and up to twice a tile's scale before the next zoom's tiles take
+ * over, so up to 640 px between spots — often held no surviving spot for
+ * most of the lines crossing it. Measured on the served contour tiles
+ * (Mont-Sainte-Anne, Stoneham, Charlevoix, Jacques-Cartier, Baie-Saint-Paul,
+ * random 400×720 px views at z13–14): 73 % of the index lines in view
+ * carried a height; with these values, 89 % (z12–13: 75 → 94 %) — the rest
+ * are lines that only clip a corner. The tighter `text-padding` lets heights
+ * on neighbouring index lines of a steep slope stack, as on a paper topo map.
+ */
+export const CONTOUR_LABEL_LAYOUT = {
+  /** px between candidate spots along one line (on-screen: up to 2×). */
+  spacingPx: 220,
+  /** Bend allowed under a label (MapLibre's default; contours wiggle). */
+  maxAngleDeg: 45,
+  /** Collision padding around each height (px). */
+  paddingPx: 2,
+} as const;
+
+/**
  * Our worldwide named-summits tileset (`infra/tiles/nas/peaks.sh`): one point
  * per OSM natural=peak|volcano with a name, carrying `name` (+ `name:en` /
  * `name:fr`), `ele` (integer metres, when known), `kind` and `rank` — the
@@ -743,12 +769,12 @@ export function buildStoneLayers(
       filter: ['all', aboveSea, isMajor],
       layout: {
         'symbol-placement': 'line',
-        'symbol-spacing': 320,
+        'symbol-spacing': CONTOUR_LABEL_LAYOUT.spacingPx,
         'text-field': ['to-string', ['round', ['to-number', ['get', c.field], 0]]],
         'text-font': fonts.regular,
         'text-size': ramp([12, 10], [16, 12]),
-        'text-max-angle': 25,
-        'text-padding': 4,
+        'text-max-angle': CONTOUR_LABEL_LAYOUT.maxAngleDeg,
+        'text-padding': CONTOUR_LABEL_LAYOUT.paddingPx,
       },
       paint: { 'text-color': scheme.contour, ...halo },
     };

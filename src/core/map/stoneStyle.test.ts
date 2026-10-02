@@ -14,6 +14,7 @@ import {
   buildStoneImageryLayers,
   buildStoneImagerySlots,
   buildStoneLayers,
+  CONTOUR_LABEL_LAYOUT,
   CONTOUR_MAX_STEEP,
   contourEmphasis,
   contourStroke,
@@ -342,6 +343,116 @@ describe('buildStoneLayers', () => {
       'to-string',
       ['round', ['to-number', ['get', 'ele'], 0]],
     ]);
+  });
+
+  // Owner, 2026-10: three index lines in view, only one height. MapLibre
+  // tries one spot per `symbol-spacing` along a line, a line crossing the
+  // tile edge first half a spacing in, and drops a spot where the line bends
+  // more than `text-max-angle` under it — it never looks for another.
+  describe('heights on every index line in view', () => {
+    const contourLabel = () => {
+      const { labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        contours: {
+          source: 'contours',
+          sourceLayer: 'contours',
+          field: 'ele',
+          levelField: 'level',
+        },
+      });
+      const l = labels.find((x) => x.id === `${STONE_LAYER_PREFIX}contour-label`);
+      return (l as { layout: Record<string, unknown> }).layout;
+    };
+
+    it('lays the heights out with the shared spacing, bend and padding', () => {
+      expect(contourLabel()).toMatchObject({
+        'symbol-spacing': CONTOUR_LABEL_LAYOUT.spacingPx,
+        'text-max-angle': CONTOUR_LABEL_LAYOUT.maxAngleDeg,
+        'text-padding': CONTOUR_LABEL_LAYOUT.paddingPx,
+      });
+    });
+
+    it('tries a spot often enough that a line across a phone screen gets one', () => {
+      // A tile is shown at up to 2× its scale before the next zoom's tiles
+      // take over, so spots on one line land up to 2 × spacing apart on
+      // screen; a 400 px wide phone must still see one on a line crossing it
+      // (320 px, the 2.1.0 value, left 640 px gaps).
+      const PHONE_WIDTH_PX = 400;
+      expect(2 * CONTOUR_LABEL_LAYOUT.spacingPx).toBeLessThanOrEqual(1.1 * PHONE_WIDTH_PX);
+      // …but not so often that one line is a string of heights.
+      expect(CONTOUR_LABEL_LAYOUT.spacingPx).toBeGreaterThanOrEqual(160);
+    });
+
+    it('lets a height sit on a wiggly contour and stack with its neighbours', () => {
+      // 25° (2.1.0) rejected most spots on a DEM contour's bends.
+      expect(CONTOUR_LABEL_LAYOUT.maxAngleDeg).toBeGreaterThanOrEqual(45);
+      expect(CONTOUR_LABEL_LAYOUT.maxAngleDeg).toBeLessThanOrEqual(60);
+      expect(CONTOUR_LABEL_LAYOUT.paddingPx).toBeLessThanOrEqual(2);
+    });
+
+    it('labels every major level and no minor one', () => {
+      const { labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        contours: {
+          source: 'contours',
+          sourceLayer: 'contours',
+          field: 'ele',
+          levelField: 'level',
+        },
+      });
+      const l = labels.find((x) => x.id === `${STONE_LAYER_PREFIX}contour-label`) as {
+        filter: FilterSpecification;
+      };
+      const f = featureFilter(l.filter, 'filter');
+      const at = (ele: number, level: number, extra: Record<string, unknown> = {}) =>
+        f.filter({ zoom: 13 }, {
+          type: 2,
+          properties: { ele, level, ...extra },
+        } as never);
+      // The owner's three: 50, 100 and 150 m, all index lines at z13.
+      for (const ele of [50, 100, 150, 1250]) expect(at(ele, 1)).toBe(true);
+      // A coarsened steep tile's lines (k > 1) keep their heights too.
+      expect(at(250, 1, { k: 5, s: 3 })).toBe(true);
+      for (const ele of [10, 60, 140]) expect(at(ele, 0)).toBe(false);
+      expect(at(0, 1)).toBe(false);
+    });
+
+    it('passes the style-spec validator, zoom only at the top of each curve', () => {
+      const { base, labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        contours: {
+          source: 'contours',
+          sourceLayer: 'contours',
+          field: 'ele',
+          levelField: 'level',
+          coarseField: 'k',
+          steepField: 's',
+        },
+      });
+      const errors = validateStyleMin({
+        version: 8,
+        glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+        sources: {
+          [SOURCE]: { type: 'vector', tiles: ['https://t.example/{z}/{x}/{y}.pbf'] },
+          contours: { type: 'vector', tiles: ['https://c.example/{z}/{x}/{y}.mvt'] },
+        },
+        layers: [...base, ...labels],
+      } as Parameters<typeof validateStyleMin>[0]);
+      expect(errors).toEqual([]);
+      // MapLibre iOS crashes on a ['zoom'] that isn't the input of the
+      // top-level interpolate/step.
+      const label = contourLabel();
+      const nestedZoom = (v: unknown, top: boolean): boolean => {
+        if (!Array.isArray(v)) return false;
+        if (v.length === 1 && v[0] === 'zoom') return !top;
+        const isCurve = v[0] === 'interpolate' || v[0] === 'step';
+        return v.some((x, i) => {
+          const zoomInput = isCurve && top && i === (v[0] === 'interpolate' ? 2 : 1);
+          return nestedZoom(x, zoomInput);
+        });
+      };
+      for (const value of Object.values(label)) expect(nestedZoom(value, true)).toBe(false);
+    });
   });
 
   it('adds no contour label without contours', () => {
