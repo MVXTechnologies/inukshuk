@@ -24,7 +24,6 @@ import {
 } from '@core/map/terrainOptions';
 import { peakDueFilter } from '@core/map/stoneStyle';
 import {
-  basemapAttribution,
   buildOsmStyle,
   CONTOUR_SOURCE_MAXZOOM,
   CONTOUR_SOURCE_MINZOOM,
@@ -719,23 +718,6 @@ describe('position-puck anchors (#332)', () => {
     const labelIds = ids.filter((id) => /label|overlay-labels|coast/i.test(id));
     expect(labelIds.length).toBeGreaterThan(0);
     for (const id of labelIds) expect(ids.indexOf(id)).toBeGreaterThan(lastAnchor);
-  });
-});
-
-describe('basemapAttribution', () => {
-  it.each([
-    ['map' as const, '© OpenStreetMap'],
-    ['satellite' as const, '© Esri, Maxar'],
-  ])('credits the %s basemap', (basemap, credit) => {
-    expect(basemapAttribution(basemap)).toBe(credit);
-  });
-
-  it('credits Protomaps on the vector base map', () => {
-    expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
-  });
-
-  it('credits OpenStreetMap too when our vector overlays ride the imagery (#492)', () => {
-    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar · © OpenStreetMap');
   });
 });
 

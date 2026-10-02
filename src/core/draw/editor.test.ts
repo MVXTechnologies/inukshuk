@@ -3,6 +3,7 @@ import type { LngLat } from '@core/models';
 import {
   canSave,
   canUndo,
+  drawHelp,
   drawHint,
   drawReducer,
   initialDrawState,
@@ -147,6 +148,19 @@ describe('drawReducer', () => {
     expect(
       drawHint(run(initialDrawState('route'), { type: 'mode', mode: 'roads' }, add(A))),
     ).toMatch(/follows roads/);
+  });
+
+  it('keeps the edit instructions in the (?) help for both tools (2.1.1)', () => {
+    expect(drawHelp('route')).toContain(
+      'Tap a point to drag or delete it; tap a midpoint to add one.',
+    );
+    expect(drawHelp('area')).toContain(
+      'Tap a corner to drag or delete it; tap a midpoint to add one.',
+    );
+    for (const kind of ['route', 'area'] as const) {
+      expect(drawHelp(kind).length).toBeGreaterThan(0);
+      expect(drawHelp(kind).join(' ')).toMatch(/Long-press/);
+    }
   });
 
   it('caps the undo history', () => {

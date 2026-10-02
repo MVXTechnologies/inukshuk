@@ -52,6 +52,22 @@ export function pointChipAfterBareTap<T>(open: T | null, tapped: T): T | null {
   return open === null ? tapped : null;
 }
 
+/**
+ * What a bare tap (no pin, chip, trail, heat spot or dot under it) does.
+ *
+ * - `leave-focus`: a trail or route was focused (its sheet or the heat
+ *   carousel up). The tap only closes it: no point bubble drops where the
+ *   finger landed, no drawn-area card opens, and the camera STAYS where it is
+ *   (owner, 2.1.1). It used to glide back to the pre-focus zoom and drop the
+ *   bubble, so "leave the trail" meant losing your place and gaining a popup.
+ * - `map`: nothing was focused — the area card / point bubble route decides.
+ */
+export type BareTapRoute = 'leave-focus' | 'map';
+
+export function bareTapAfterFocus(focused: boolean): BareTapRoute {
+  return focused ? 'leave-focus' : 'map';
+}
+
 /** A map press, copied out of MapLibre's `onPress` event: screen px and [lng, lat]. */
 export interface MapPress {
   point: readonly [number, number];

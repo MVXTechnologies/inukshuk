@@ -4,7 +4,7 @@ import { palette, target } from '@ui/tokens';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
 
 /**
@@ -81,37 +81,110 @@ export function RouteModeChips({
 }
 
 /**
- * The one-line instruction under the chips (or alone, for an area), and an
- * optional tip under it ("Tap the start to close the loop").
+ * A small transient tip under the chips (2.1.1): the first tap's
+ * instruction, or "Tap the start to close the loop" near the start. The
+ * standing instruction banner is gone; the full help is behind the panel
+ * title's (?).
  */
-export function DrawHint({ text, top, tip }: { text: string; top: number; tip?: string }) {
-  const t = useSchemeTokens();
+export function DrawTip({
+  text,
+  top,
+  icon,
+  testID,
+}: {
+  text: string;
+  top: number;
+  icon: string;
+  testID?: string;
+}) {
   const theme = useTheme();
   return (
     <View style={[styles.hintWrap, { top }]} pointerEvents="none">
-      <Text
-        style={[styles.hint, { backgroundColor: t.surface, color: t.inkVariant }]}
-        accessibilityLiveRegion="polite"
+      <View
+        style={[styles.tip, { backgroundColor: theme.colors.secondaryContainer }]}
+        testID={testID}
       >
-        {text}
-      </Text>
-      {tip !== undefined && (
-        <View
-          style={[styles.tip, { backgroundColor: theme.colors.secondaryContainer }]}
-          testID="loop-tip"
+        <Icon source={icon} size={15} color={theme.colors.onSecondaryContainer} />
+        <Text
+          style={[styles.tipText, { color: theme.colors.onSecondaryContainer }]}
+          accessibilityLiveRegion="polite"
         >
-          <Icon source="autorenew" size={15} color={theme.colors.onSecondaryContainer} />
-          <Text
-            style={[styles.tipText, { color: theme.colors.onSecondaryContainer }]}
-            accessibilityLiveRegion="polite"
-          >
-            {tip}
-          </Text>
-        </View>
-      )}
+          {text}
+        </Text>
+      </View>
     </View>
   );
 }
+
+/**
+ * The drawing help (2.1.1): a small popover anchored above the panel title's
+ * (?), with the instructions the banner used to show. A full-screen
+ * transparent backdrop closes it on a tap anywhere (and keeps that tap from
+ * adding a point). Plain Views — no Portal, no Dialog.
+ */
+export function DrawHelpPopover({
+  lines,
+  bottom,
+  anchorX,
+  onClose,
+}: {
+  lines: readonly string[];
+  /** Distance from the screen's bottom edge to the popover's (the panel's height). */
+  bottom: number;
+  /** The (?)'s centre, from the screen's left edge: where the caret points. */
+  anchorX: number;
+  onClose: () => void;
+}) {
+  // A Material tooltip: inverse colours, so it reads apart from the panel
+  // (same surface) and the map, in light and dark alike.
+  const { colors } = useTheme();
+  const popBottom = bottom + HELP_GAP + HELP_CARET / 2;
+  return (
+    <View style={styles.helpLayer} pointerEvents="box-none" testID="draw-help">
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={onClose}
+        accessibilityLabel="Close drawing help"
+        testID="draw-help-backdrop"
+      />
+      {/* The caret: a square turned 45°, half under the bubble, pointing at the (?). */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.helpCaret,
+          {
+            bottom: popBottom - HELP_CARET / 2,
+            left: Math.max(HELP_SIDE + 12, anchorX - HELP_CARET / 2),
+            backgroundColor: colors.inverseSurface,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.help,
+          {
+            bottom: popBottom,
+            backgroundColor: colors.inverseSurface,
+            shadowColor: palette.shadow,
+          },
+        ]}
+        pointerEvents="none"
+        accessibilityLiveRegion="polite"
+      >
+        {lines.map((line) => (
+          <Text key={line} style={[styles.helpText, { color: colors.inverseOnSurface }]}>
+            {line}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** The help popover's caret (side of the turned square), gap to the panel, side margins. */
+const HELP_CARET = 14;
+const HELP_GAP = 4;
+const HELP_SIDE = 12;
 
 export interface DrawStat {
   value: string;
@@ -137,8 +210,11 @@ interface PanelProps {
    * the distance from the panel's bottom edge to the top of that row.
    */
   overlay?: (buttonsBottom: number) => ReactNode;
-  /** Under the buttons: the routing credit while snapped legs are shown. */
-  footer?: ReactNode;
+  /**
+   * The (?) after the title (2.1.1): toggles the help popover. `onAnchor` gets
+   * the (?)'s centre from the panel's left edge, for the popover's caret.
+   */
+  help?: { open: boolean; onToggle: () => void; onAnchor: (x: number) => void };
   canUndo: boolean;
   canClear: boolean;
   canSave: boolean;
@@ -149,6 +225,9 @@ interface PanelProps {
   onExit: () => void;
   onLayout?: (e: LayoutChangeEvent) => void;
 }
+
+/** The panel's side padding (dp): the (?)'s anchor is measured from it. */
+const PANEL_PAD_X = 18;
 
 /** Bottom-row geometry (dp): Undo + Clear, the gap, Save's side padding, the chip's chrome. */
 const ROW_GAP = 8;
@@ -168,7 +247,7 @@ export function DrawPanel({
   notice,
   toggle,
   overlay,
-  footer,
+  help,
   canUndo,
   canClear,
   canSave,
@@ -230,9 +309,31 @@ export function DrawPanel({
       testID="draw-panel"
     >
       <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: t.ink }]} accessibilityRole="header">
+        <Text style={[styles.title, { color: t.ink }]} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
+        {help !== undefined && (
+          <Pressable
+            onPress={help.onToggle}
+            onLayout={(e) => {
+              const { x, width } = e.nativeEvent.layout;
+              help.onAnchor(PANEL_PAD_X + x + width / 2);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Drawing help"
+            accessibilityState={{ expanded: help.open }}
+            hitSlop={8}
+            style={styles.helpButton}
+            testID="draw-help-button"
+          >
+            <Icon
+              source={help.open ? 'help-circle' : 'help-circle-outline'}
+              size={20}
+              color={t.inkMuted}
+            />
+          </Pressable>
+        )}
+        <View style={styles.titleSpacer} />
         <Pressable
           onPress={onExit}
           accessibilityRole="button"
@@ -328,7 +429,6 @@ export function DrawPanel({
           </View>
         )}
       </View>
-      {footer}
       {overlay?.(Math.max(0, panelH - buttonsY) + 6)}
     </View>
   );
@@ -558,32 +658,6 @@ export function DrawStatus({ text }: { text: string }) {
   );
 }
 
-/**
- * The routing credit the engines' terms ask for (OSM data + the engine), with
- * the "report a map error" link FOSSGIS asks apps to carry.
- */
-export function RoutingCredit({ engines }: { engines: readonly string[] }) {
-  const t = useSchemeTokens();
-  return (
-    <View style={styles.credit}>
-      <Text style={[styles.creditText, styles.creditBody, { color: t.inkMuted }]} numberOfLines={2}>
-        {engines.length > 0 ? `Routing ${engines.join(' + ')} · ` : 'Routing · '}© OpenStreetMap
-        contributors
-      </Text>
-      <Pressable
-        onPress={() => void Linking.openURL('https://www.openstreetmap.org/fixthemap')}
-        accessibilityRole="link"
-        accessibilityLabel="Report a map error"
-        hitSlop={8}
-      >
-        <Text style={[styles.creditText, styles.creditLink, { color: t.inkVariant }]}>
-          Report a map error
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // Below the compass, clear of the controls rail on the right (16 + 48 + 12).
   // The search pill's slot: between the compass (16 + 48) and the rail, 12 dp
@@ -615,18 +689,10 @@ const styles = StyleSheet.create({
   },
   modeLabel: { fontSize: 14, lineHeight: 18, fontWeight: '800' },
   hintWrap: { position: 'absolute', left: 16, right: 76, alignItems: 'flex-start' },
-  hint: {
-    fontSize: 13,
-    lineHeight: 17,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
   panel: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    paddingHorizontal: 18,
+    paddingHorizontal: PANEL_PAD_X,
     paddingTop: 8,
     paddingBottom: 14,
     gap: 10,
@@ -636,7 +702,33 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', minHeight: 36 },
-  title: { flex: 1, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  title: { flexShrink: 1, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  titleSpacer: { flex: 1 },
+  helpButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  // Over the whole screen (above the panel's dock), for the backdrop.
+  helpLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
+  help: {
+    position: 'absolute',
+    left: HELP_SIDE,
+    right: HELP_SIDE,
+    maxWidth: 360,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 6,
+    elevation: 10,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  helpText: { fontSize: 14, lineHeight: 19 },
+  helpCaret: {
+    position: 'absolute',
+    width: HELP_CARET,
+    height: HELP_CARET,
+    transform: [{ rotate: '45deg' }],
+    elevation: 10,
+  },
   exit: { width: 40, height: 36, alignItems: 'flex-end', justifyContent: 'center' },
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, alignItems: 'center' },
@@ -702,7 +794,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
@@ -728,9 +819,5 @@ const styles = StyleSheet.create({
   chipButtonLabel: { fontSize: 14, lineHeight: 18, fontWeight: '700' },
   notice: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   outlined: { borderWidth: 1.5, minHeight: 32 },
-  credit: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -2 },
-  creditText: { fontSize: 11, lineHeight: 14 },
-  creditBody: { flex: 1 },
-  creditLink: { textDecorationLine: 'underline', fontWeight: '700' },
   noticeText: { flex: 1, fontSize: 13, lineHeight: 17 },
 });
