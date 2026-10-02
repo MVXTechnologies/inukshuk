@@ -59,20 +59,56 @@ export function vectorPeaksUrl(): string {
 }
 
 /**
+ * National parks and protected areas (OSM boundary=national_park |
+ * protected_area), one worldwide archive built on the NAS
+ * (`infra/tiles/nas/parks.sh`) and served by the same Worker. Protomaps
+ * misfiles too many of them to rank (`infra/tiles/README.md` § Parks).
+ */
+export const DEFAULT_VECTOR_PARKS_URL = `${TILE_HOST}/parks/{z}/{x}/{y}.mvt`;
+
+/**
+ * Whether `parks.pmtiles` is on the tile host. NOT YET: `parks.sh` has not
+ * had its first NAS run, and a style that names a source with no tiles
+ * behind it draws nothing from it. Until then the map draws the parks
+ * Protomaps has. Flip this after the first upload (it is OTA-updatable).
+ */
+export const PARKS_TILES_PUBLISHED = false;
+
+/**
+ * The parks tile template this build reads: a build-time override, ours once
+ * published, else null — the style then falls back to Protomaps' parks.
+ */
+export function vectorParksUrl(): string | null {
+  const value: unknown = Constants.expoConfig?.extra?.vectorParksUrl;
+  if (typeof value === 'string' && value !== '') return value;
+  return PARKS_TILES_PUBLISHED ? DEFAULT_VECTOR_PARKS_URL : null;
+}
+
+/**
  * The `vectorBasemap` style option for our host (tiles, Atkinson glyphs, the
- * named summits and, when `withContours`, the served contour tiles) — one
- * place for the main map, the trail viewer and offline packs (a pack stores
- * every source of the style it downloads through, so the summits come along).
+ * named summits, the parks once published and, when `withContours`, the
+ * served contour tiles) — one place for the main map, the trail viewer and
+ * offline packs (a pack stores every source of the style it downloads
+ * through, so the summits and parks come along).
  */
 export function vectorBasemapOption(
   dark: boolean,
   withContours: boolean,
-): { tiles: string[]; dark: boolean; glyphs?: string; contours?: string; peaks: string } {
+): {
+  tiles: string[];
+  dark: boolean;
+  glyphs?: string;
+  contours?: string;
+  peaks: string;
+  parks?: string;
+} {
   const glyphs = vectorGlyphsUrl();
+  const parks = vectorParksUrl();
   return {
     tiles: [vectorTilesUrl()],
     dark,
     peaks: vectorPeaksUrl(),
+    ...(parks !== null ? { parks } : {}),
     ...(glyphs !== null ? { glyphs } : {}),
     ...(withContours ? { contours: vectorContoursUrl() } : {}),
   };

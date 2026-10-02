@@ -187,6 +187,13 @@ export interface Settings {
   /** How early named summits appear on the vector map (#461). */
   peakDensity: PeakDensity;
   /**
+   * "Parks & protected areas" (overlays menu → On the map): the boundaries
+   * and names of national parks, reserves and protected areas on the vector
+   * map and, with Labels on satellite, over the imagery. On by default; a
+   * settings file from before the toggle has no such key and gets the default.
+   */
+  showParks: boolean;
+  /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
    * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
    * None there is nothing to deepen.
@@ -283,6 +290,7 @@ const DEFAULTS: Settings = {
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
+  showParks: true,
   tiltRelief: DEFAULT_TILT_RELIEF,
   errorReporting: true,
   terrainSlope: false,
@@ -361,6 +369,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     errorReporting,
     terrainSlope,
@@ -406,6 +415,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     errorReporting,
     terrainSlope,

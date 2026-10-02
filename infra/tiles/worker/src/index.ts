@@ -3,7 +3,8 @@
  *
  *   GET /{archive}/{z}/{x}/{y}.mvt        vector tile from {archive}.pmtiles
  *                                         (/basemap/… via basemap.index.json pieces,
- *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
+ *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh,
+ *                                         /parks/… from parks.pmtiles — ../nas/parks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
  *   GET /contours/{z}/{x}/{y}.mvt         contour lines from DEM tiles, generated once
  *                                         and kept in R2 (./contours.ts)

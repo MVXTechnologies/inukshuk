@@ -178,6 +178,37 @@ describe('Labels on satellite (#484)', () => {
   });
 });
 
+describe('Parks & protected areas', () => {
+  it('is on by default and toggles the setting on the Map base', async () => {
+    useMapStore.setState({ basemap: 'map' });
+    await renderMenu();
+    expect(checked('Parks & protected areas')).toBe(true);
+    expect(screen.getByText('Boundaries and names')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Parks & protected areas'));
+    expect(useSettingsStore.getState().showParks).toBe(false);
+  });
+
+  it('works over Satellite while its labels are on', async () => {
+    useMapStore.setState({ basemap: 'satellite' });
+    useSettingsStore.setState({ satelliteLabels: true, showParks: false });
+    await renderMenu();
+    expect(checked('Parks & protected areas')).toBe(false);
+    fireEvent.press(screen.getByLabelText('Parks & protected areas'));
+    expect(useSettingsStore.getState().showParks).toBe(true);
+  });
+
+  it('rests, with a hint, over Satellite without labels (they carry the parks)', async () => {
+    useMapStore.setState({ basemap: 'satellite' });
+    useSettingsStore.setState({ satelliteLabels: false });
+    await renderMenu();
+    const row = screen.getByLabelText('Parks & protected areas');
+    expect(row.props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByText('Needs labels on satellite')).toBeTruthy();
+    fireEvent.press(row);
+    expect(useSettingsStore.getState().showParks).toBe(true);
+  });
+});
+
 describe('Imagery brightness (#495)', () => {
   it('defaults to Brighter and sets the look while the base map is Satellite', async () => {
     useMapStore.setState({ basemap: 'satellite' });

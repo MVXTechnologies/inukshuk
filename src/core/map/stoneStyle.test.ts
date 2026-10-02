@@ -21,6 +21,8 @@ import {
   elevationLabel,
   IMAGERY_CONTOUR_PAINT,
   IMAGERY_ROAD_OPACITY,
+  PARK_BAND_WIDTH,
+  PARK_PAINT,
   peakDueFilter,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
@@ -46,6 +48,7 @@ const LIGHT: StoneBasemapScheme = {
   contour: '#C98A2B',
   ink: '#1E252C',
   inkMuted: '#4A5561',
+  parkInk: '#566B34',
   halo: '#F2ECE1',
 };
 
@@ -65,6 +68,7 @@ const DARK: StoneBasemapScheme = {
   contour: '#C98A2B',
   ink: '#E9E4D8',
   inkMuted: '#A7B0B9',
+  parkInk: '#93A25F',
   halo: '#1A1F25',
 };
 
@@ -477,9 +481,12 @@ describe('buildStoneLayers', () => {
       ['to-number', ['coalesce', ['get', 'ele'], 0], 0],
     ]);
     // Exactly one peak layer: Protomaps' own peaks would duplicate ours at z13+.
+    // (What still reads `pois`: the trail POIs and, without parks tiles, the park names.)
     expect(
-      labels.filter((l) => (l as { 'source-layer'?: string })['source-layer'] === 'pois'),
-    ).toHaveLength(1);
+      labels
+        .filter((l) => (l as { 'source-layer'?: string })['source-layer'] === 'pois')
+        .map((l) => l.id),
+    ).toEqual([`${STONE_LAYER_PREFIX}poi`, `${STONE_LAYER_PREFIX}park-label`]);
     expect(labels.filter((l) => l.id.includes('peak'))).toHaveLength(1);
   });
 
@@ -897,5 +904,298 @@ describe('buildStoneImagerySlots (contours on satellite, #492)', () => {
       layers: [...contours, ...linework, ...labels],
     };
     expect(validateStyleMin(style as never)).toEqual([]);
+  });
+});
+
+describe('parks and protected areas', () => {
+  const PARKS = { source: 'parks', areaLayer: 'parks', labelLayer: 'park_labels' };
+  const strip = (l: LayerSpecification) => l.id.slice(STONE_LAYER_PREFIX.length);
+  const PARK_IDS = ['park-band', 'park-outline', 'park-line', 'park-label'];
+  type Loose = {
+    id: string;
+    type: string;
+    source?: string;
+    'source-layer'?: string;
+    minzoom?: number;
+    filter?: unknown;
+    layout?: Record<string, unknown>;
+    paint?: Record<string, unknown>;
+  };
+  const parkLayers = (scheme: StoneBasemapScheme, ours: boolean): Record<string, Loose> => {
+    const { base, labels } = buildStoneLayers(scheme, {
+      source: SOURCE,
+      ...(ours ? { parks: PARKS } : {}),
+    });
+    return Object.fromEntries(
+      [...base, ...labels].filter((l) => PARK_IDS.includes(strip(l))).map((l) => [strip(l), l]),
+    ) as Record<string, Loose>;
+  };
+  /** A layer's filter as a predicate over (tile zoom, feature properties, geometry type). */
+  const passes = (layer: Loose) => {
+    const f = featureFilter(layer.filter as FilterSpecification, 'filter');
+    return (zoom: number, properties: Record<string, unknown>, type: 1 | 2 | 3 = 1) =>
+      f.filter({ zoom }, { type, properties, geometry: [] } as unknown as Parameters<
+        typeof f.filter
+      >[1]);
+  };
+  const validate = (layers: LayerSpecification[]) =>
+    validateStyleMin({
+      version: 8,
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      sources: {
+        [SOURCE]: { type: 'vector', tiles: ['https://t.example/{z}/{x}/{y}.mvt'] },
+        parks: { type: 'vector', tiles: ['https://parks.example/{z}/{x}/{y}.mvt'] },
+        peaks: { type: 'vector', tiles: ['https://peaks.example/{z}/{x}/{y}.mvt'] },
+      },
+      layers,
+    } as Parameters<typeof validateStyleMin>[0]).map((e) => e.message);
+
+  it('is on by default: band, quiet dashes and edge in the body, the name among the labels', () => {
+    const { base, labels } = buildStoneLayers(LIGHT, { source: SOURCE });
+    const ids = base.map(strip);
+    // Over the land-use wash, under the water (a lake covers the line crossing it).
+    expect(ids.slice(ids.indexOf('park') + 1, ids.indexOf('water'))).toEqual([
+      'park-band',
+      'park-outline',
+      'park-line',
+    ]);
+    expect(labels.map(strip)).toContain('park-label');
+  });
+
+  it('switches off as one: no boundary, no name — the land-use wash stays', () => {
+    const { base, labels } = buildStoneLayers(LIGHT, {
+      source: SOURCE,
+      parks: PARKS,
+      protectedAreas: false,
+    });
+    const ids = [...base, ...labels].map(strip);
+    for (const k of PARK_IDS) expect(ids).not.toContain(k);
+    expect(ids).toContain('park');
+    expect([...base, ...labels].some((l) => (l as Loose).source === PARKS.source)).toBe(false);
+  });
+
+  describe("without our tiles (Protomaps' parks)", () => {
+    const l = parkLayers(LIGHT, false);
+
+    it('draws national parks, reserves and protected areas strong from z5', () => {
+      for (const k of ['park-band', 'park-line']) {
+        expect(l[k]).toMatchObject({ source: SOURCE, 'source-layer': 'landuse', minzoom: 5 });
+        const due = passes(l[k]!);
+        for (const kind of ['national_park', 'nature_reserve', 'protected_area']) {
+          expect([kind, due(5, { kind }, 3)]).toEqual([kind, true]);
+        }
+        // The city park, the wood and the farm get no band.
+        for (const kind of ['park', 'forest', 'wood', 'farmland']) {
+          expect([kind, due(12, { kind }, 3)]).toEqual([kind, false]);
+        }
+      }
+    });
+
+    it('dashes the `park` polygons quietly, stepping back as the streets arrive', () => {
+      const quiet = l['park-outline']!;
+      expect(quiet).toMatchObject({ source: SOURCE, 'source-layer': 'landuse', minzoom: 6 });
+      expect(passes(quiet)(8, { kind: 'park' }, 3)).toBe(true);
+      expect(passes(quiet)(8, { kind: 'national_park' }, 3)).toBe(false);
+      expect(quiet.paint?.['line-dasharray']).toEqual([3, 2]);
+      expect(quiet.paint?.['line-opacity']).toEqual([
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        12,
+        PARK_PAINT.quiet,
+        14,
+        0.3,
+      ]);
+    });
+
+    it('names a park from the zoom before its min_zoom (the first tile that carries it)', () => {
+      const label = l['park-label']!;
+      expect(label).toMatchObject({ source: SOURCE, 'source-layer': 'pois', minzoom: 5 });
+      const due = passes(label);
+      // As measured on the served tiles (2026-10).
+      const banff = { kind: 'national_park', name: 'Banff National Park', min_zoom: 6 };
+      const yellowstone = {
+        kind: 'nature_reserve',
+        name: 'Yellowstone National Park',
+        min_zoom: 8,
+      };
+      const jacques = { kind: 'park', name: 'Parc national de la Jacques-Cartier', min_zoom: 13 };
+      expect(due(5, banff)).toBe(true);
+      expect(due(6, yellowstone)).toBe(false);
+      expect(due(7, yellowstone)).toBe(true);
+      expect(due(11, jacques)).toBe(false);
+      expect(due(12, jacques)).toBe(true);
+      // Not a park, or no name: never.
+      expect(due(15, { kind: 'peak', name: 'Mont Sainte-Anne', min_zoom: 13 })).toBe(false);
+      expect(due(15, { kind: 'national_park', min_zoom: 6 })).toBe(false);
+      expect(label.layout?.['symbol-sort-key']).toEqual([
+        'to-number',
+        ['coalesce', ['get', 'min_zoom'], 99],
+        99,
+      ]);
+    });
+  });
+
+  describe('with our parks tiles', () => {
+    const l = parkLayers(LIGHT, true);
+
+    it('draws the national parks strong from their own polygons, as early as z4', () => {
+      for (const k of ['park-band', 'park-line']) {
+        expect(l[k]).toMatchObject({ source: 'parks', 'source-layer': 'parks', minzoom: 4 });
+        expect(passes(l[k]!)(4, { class: 'national', rank: 5 }, 3)).toBe(true);
+      }
+    });
+
+    it("keeps Protomaps' reserves as quiet dashes from z8, and drops its city parks", () => {
+      const quiet = l['park-outline']!;
+      expect(quiet).toMatchObject({ source: SOURCE, 'source-layer': 'landuse', minzoom: 8 });
+      expect(passes(quiet)(8, { kind: 'nature_reserve' }, 3)).toBe(true);
+      expect(passes(quiet)(14, { kind: 'park' }, 3)).toBe(false);
+      expect(quiet.paint?.['line-opacity']).toBe(PARK_PAINT.quiet);
+    });
+
+    it('takes every name from our label points, the larger area winning', () => {
+      const label = l['park-label']!;
+      expect(label).toMatchObject({ source: 'parks', 'source-layer': 'park_labels', minzoom: 4 });
+      expect(passes(label)(7, { name: 'Parc national de la Jacques-Cartier', rank: 7 })).toBe(true);
+      expect(passes(label)(7, { rank: 7 })).toBe(false);
+      expect(label.layout?.['symbol-sort-key']).toEqual([
+        'to-number',
+        ['coalesce', ['get', 'rank'], 99],
+        99,
+      ]);
+      // Protomaps' park names would double ours.
+      const { labels } = buildStoneLayers(LIGHT, { source: SOURCE, parks: PARKS, peaks: PEAKS });
+      expect(labels.filter((x) => (x as Loose)['source-layer'] === 'pois').map(strip)).toEqual([
+        'poi',
+      ]);
+    });
+  });
+
+  it.each([
+    ['light', false, LIGHT],
+    ['light', true, LIGHT],
+    ['dark', false, DARK],
+    ['dark', true, DARK],
+  ] as const)(
+    'inks every park layer in the park green only (%s, our tiles: %s)',
+    (_, ours, scheme) => {
+      const l = parkLayers(scheme, ours);
+      expect(Object.keys(l).sort()).toEqual([...PARK_IDS].sort());
+      for (const k of ['park-band', 'park-outline', 'park-line']) {
+        expect(l[k]?.type).toBe('line');
+        expect(l[k]?.paint?.['line-color']).toBe(scheme.parkInk);
+      }
+      expect(l['park-label']?.paint).toMatchObject({
+        'text-color': scheme.parkInk,
+        'text-halo-color': scheme.halo,
+      });
+      expect(l['park-label']?.layout?.['text-font']).toEqual(STONE_FONTS_ATKINSON.italic);
+      // The band is a wash, the edge is ink.
+      const band = l['park-band']?.paint?.['line-opacity'] as number;
+      expect(band).toBe(scheme.dark ? PARK_PAINT.band.dark : PARK_PAINT.band.light);
+      expect(band).toBeLessThan(0.3);
+      expect(l['park-line']?.paint?.['line-opacity']).toBe(PARK_PAINT.edge);
+    },
+  );
+
+  it('insets the band by half its width, and keeps it inside the tile buffer', () => {
+    const band = parkLayers(LIGHT, false)['park-band']!;
+    const width = band.paint?.['line-width'] as unknown[];
+    const offset = band.paint?.['line-offset'] as unknown[];
+    expect(width.slice(0, 3)).toEqual(['interpolate', ['exponential', 1.4], ['zoom']]);
+    expect(offset.slice(0, 3)).toEqual(['interpolate', ['exponential', 1.4], ['zoom']]);
+    expect(width.slice(3)).toEqual(PARK_BAND_WIDTH.flat());
+    expect(offset.slice(3)).toEqual(PARK_BAND_WIDTH.flatMap(([z, w]) => [z, w / 2]));
+    // Polygons are clipped 8 px past the tile edge; the band reaches `width` px in.
+    for (const [, w] of PARK_BAND_WIDTH) expect(w).toBeLessThan(8);
+  });
+
+  it('reads the zoom only as the input of a top-level curve (MapLibre iOS crashes otherwise)', () => {
+    /** Every path at which `["zoom"]` occurs in an expression. */
+    const zoomPaths = (value: unknown, path: number[] = []): number[][] =>
+      !Array.isArray(value)
+        ? []
+        : value.length === 1 && value[0] === 'zoom'
+          ? [path]
+          : value.flatMap((v, i) => zoomPaths(v, [...path, i]));
+    let curves = 0;
+    for (const ours of [false, true]) {
+      for (const layer of Object.values(parkLayers(DARK, ours))) {
+        for (const props of [layer.paint ?? {}, layer.layout ?? {}]) {
+          for (const [key, value] of Object.entries(props)) {
+            for (const path of zoomPaths(value)) {
+              const head = (value as unknown[])[0];
+              expect(['interpolate', 'step']).toContain(head);
+              // interpolate: [op, interpolation, input, …]; step: [op, input, …].
+              expect([layer.id, key, path]).toEqual([layer.id, key, [head === 'step' ? 1 : 2]]);
+              curves++;
+            }
+          }
+        }
+      }
+    }
+    expect(curves).toBeGreaterThan(8);
+  });
+
+  it('keeps peaks and places legible: the park name is placed after them', () => {
+    for (const ours of [false, true]) {
+      const { labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        peaks: PEAKS,
+        ...(ours ? { parks: PARKS } : {}),
+      });
+      const ids = labels.map(strip);
+      // MapLibre places the LAST symbol layer first, so later layers win collisions.
+      const park = ids.indexOf('park-label');
+      expect(park).toBeGreaterThan(-1);
+      for (const k of ['peak', 'place-village', 'place-town', 'place-city']) {
+        expect([k, ids.indexOf(k) > park]).toEqual([k, true]);
+      }
+    }
+  });
+
+  it.each([
+    ['light', LIGHT],
+    ['dark', DARK],
+  ])('passes the style-spec validator (%s), with and without our tiles', (_, scheme) => {
+    for (const ours of [false, true]) {
+      const { base, labels } = buildStoneLayers(scheme, {
+        source: SOURCE,
+        language: 'fr',
+        peaks: PEAKS,
+        ...(ours ? { parks: PARKS } : {}),
+      });
+      expect(validate([...base, ...labels])).toEqual([]);
+    }
+  });
+
+  describe('over satellite imagery', () => {
+    it.each([false, true])(
+      'draws the boundary and the name, never a fill (our tiles: %s)',
+      (ours) => {
+        const layers = buildStoneImageryLayers(DARK, {
+          source: SOURCE,
+          peaks: PEAKS,
+          ...(ours ? { parks: PARKS } : {}),
+        });
+        const ids = layers.map(strip);
+        for (const k of PARK_IDS) expect(ids).toContain(k);
+        expect(layers.some((x) => x.type === 'fill')).toBe(false);
+        expect(ids).not.toContain('park');
+        // Boundaries under the roads and trails; the name under the summits.
+        expect(ids.indexOf('park-line')).toBeLessThan(ids.indexOf('road-minor'));
+        expect(ids.indexOf('park-label')).toBeLessThan(ids.indexOf('peak'));
+        expect(validate(layers)).toEqual([]);
+      },
+    );
+
+    it('follows the toggle', () => {
+      const ids = buildStoneImageryLayers(DARK, { source: SOURCE, protectedAreas: false }).map(
+        strip,
+      );
+      for (const k of PARK_IDS) expect(ids).not.toContain(k);
+      expect(ids).toContain('place-town');
+    });
   });
 });

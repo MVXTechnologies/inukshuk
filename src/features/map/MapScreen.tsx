@@ -459,6 +459,8 @@ export function MapScreen() {
   /** Its strength and the summits' density — the Topology menu's #461 rows. */
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
+  /** "Parks & protected areas": boundaries and names on the vector layers. */
+  const showParks = useSettingsStore((s) => s.showParks);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   /**
@@ -694,6 +696,7 @@ export function MapScreen() {
             vectorBasemap: {
               ...vectorBasemapOption(theme.dark, terrainContours),
               peakDensity,
+              protectedAreas: showParks,
             },
           }
         : {}),
@@ -702,6 +705,7 @@ export function MapScreen() {
             imageryLabels: {
               ...vectorBasemapOption(theme.dark, false),
               peakDensity,
+              protectedAreas: showParks,
             },
           }
         : {}),
@@ -794,6 +798,7 @@ export function MapScreen() {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     offlineOnly,
     offlineRegions,

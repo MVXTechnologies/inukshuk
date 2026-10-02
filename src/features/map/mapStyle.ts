@@ -30,6 +30,7 @@ import {
   buildStoneImagerySlots,
   buildStoneLayers,
   type StoneContourSource,
+  type StoneStyleOptions,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
 } from '@core/map/stoneStyle';
@@ -394,6 +395,13 @@ export interface OsmStyleOptions {
     peaks?: string;
     /** How early the summits appear (#461); default `normal`. */
     peakDensity?: PeakDensity;
+    /**
+     * Our parks tiles (`infra/tiles/nas/parks.sh`); unset = the parks
+     * Protomaps has, which it ranks and names unevenly.
+     */
+    parks?: string;
+    /** "Parks & protected areas": boundaries and names. Default true. */
+    protectedAreas?: boolean;
   };
   /**
    * "Labels on satellite" (#484): our vector base map's roads, trails and
@@ -408,6 +416,9 @@ export interface OsmStyleOptions {
     glyphs?: string;
     peaks?: string;
     peakDensity?: PeakDensity;
+    /** As on {@link vectorBasemap}: boundary and name only, no fill. */
+    parks?: string;
+    protectedAreas?: boolean;
   };
   /**
    * Contours on satellite (#492): the Map base's served contour tiles, with
@@ -535,6 +546,35 @@ function peaksSource(tiles: string): StyleSpecification['sources'][string] {
   };
 }
 
+/** Source id of our parks tiles on the vector base map. */
+export const VECTOR_PARKS_SOURCE = 'basemap-parks';
+
+/** Our parks source. OSM data, already credited by the base map. */
+function parksSource(tiles: string): StyleSpecification['sources'][string] {
+  return {
+    type: 'vector',
+    tiles: [tiles],
+    // Built z4–z12 (`parks.sh`): the largest parks from z4, every protected
+    // area by z12; MapLibre overzooms z12 past that.
+    minzoom: 4,
+    maxzoom: 12,
+  };
+}
+
+/** How the stone layers read our parks tiles, and the toggle, as style options. */
+function parksOptions(from: {
+  parks?: string;
+  protectedAreas?: boolean;
+}): Pick<StoneStyleOptions, 'parks' | 'protectedAreas'> {
+  const on = from.protectedAreas ?? true;
+  return {
+    protectedAreas: on,
+    ...(on && from.parks
+      ? { parks: { source: VECTOR_PARKS_SOURCE, areaLayer: 'parks', labelLayer: 'park_labels' } }
+      : {}),
+  };
+}
+
 /**
  * A minimal MapLibre style that renders a raster base layer (OSM streets,
  * or satellite imagery — see {@link baseSource}).
@@ -615,6 +655,7 @@ export function buildOsmStyle(
           ...(options.vectorBasemap.peakDensity
             ? { peakDensity: options.vectorBasemap.peakDensity }
             : {}),
+          ...parksOptions(options.vectorBasemap),
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -625,6 +666,11 @@ export function buildOsmStyle(
     }
     if (options.vectorBasemap.peaks) {
       style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(options.vectorBasemap.peaks);
+    }
+    // Only with the toggle on: a source no layer reads is still downloaded
+    // into offline packs.
+    if (options.vectorBasemap.parks && parksOptions(options.vectorBasemap).parks) {
+      style.sources[VECTOR_PARKS_SOURCE] = parksSource(options.vectorBasemap.parks);
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     put('base', ...stone.base);
@@ -678,6 +724,8 @@ export function buildOsmStyle(
       style.sources[VECTOR_BASEMAP_SOURCE] = vectorBaseSource(imageryLabels.tiles);
       if (imageryLabels.peaks)
         style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imageryLabels.peaks);
+      if (imageryLabels.parks && parksOptions(imageryLabels).parks)
+        style.sources[VECTOR_PARKS_SOURCE] = parksSource(imageryLabels.parks);
     }
     if (imageryContours) {
       style.sources[VECTOR_CONTOURS_SOURCE] = contoursSource(imageryContours.tiles);
@@ -692,6 +740,7 @@ export function buildOsmStyle(
         ? { peaks: { source: VECTOR_PEAKS_SOURCE, sourceLayer: 'peaks' } }
         : {}),
       ...(imageryLabels?.peakDensity ? { peakDensity: imageryLabels.peakDensity } : {}),
+      ...parksOptions(imageryLabels ?? {}),
     });
     put('contours', ...imagery.contours);
     put('linework', ...imagery.linework);
