@@ -245,7 +245,23 @@ def point_at_fraction(parts, fraction):
 
 
 def chain_ways(ways):
-    """Ordered way geometries → continuous parts (MultiLineString)."""
+    """Way geometries (in member order) → continuous parts, in trail order.
+
+    OSM member order is a hint, not a guarantee: plenty of relations list
+    their ways unsorted, and child routes are drawn in whichever direction
+    their mapper walked. So:
+
+    1. consecutive members that share an end are chained (either way round);
+    2. chains whose ends coincide are joined whatever their member order —
+       only where exactly two chain ends meet (a T junction is ambiguous);
+    3. the pieces left are ordered and oriented end-to-end (order_pieces):
+       member order when it is about as good as a geographic chaining,
+       else the chaining — never a jump back and forth across the map;
+    4. consecutive pieces whose ends are within JOIN_GAP_M are joined.
+
+    Disjoint pieces stay separate parts (the app draws a MultiLineString; a
+    straight connector across an unmapped gap would be a made-up trail).
+    """
     parts = []
     first_len = 0
     for g in ways:
@@ -271,7 +287,275 @@ def chain_ways(ways):
             first_len = 1
             continue
         first_len += 1
-    return join_gaps(parts)
+    return order_parts(merge_shared_ends(parts))
+
+
+def order_parts(parts):
+    """Parts → the same parts ordered and oriented end-to-end, then joined
+    where their ends meet within JOIN_GAP_M."""
+    parts = [p for p in parts if len(p) >= 2]
+    order = order_pieces([(p[0], p[-1]) for p in parts])
+    return join_gaps([list(reversed(parts[i])) if flip else parts[i] for i, flip in order])
+
+
+def merge_shared_ends(parts):
+    """Join chains that share an end node, whatever their order in the list.
+
+    Only where exactly two chain ends meet: at a junction of three (a spur,
+    a loop closing on the line) which way the trail goes is ambiguous, and
+    order_pieces decides by distance instead. A joined run keeps the
+    direction of its earliest chain (member order is the relation's own
+    direction). Linear in the number of points: the E-paths have thousands
+    of chains."""
+    parts = [list(p) for p in parts if len(p) >= 2]
+    nodes = {}
+    for i, p in enumerate(parts):
+        if p[0] == p[-1]:
+            continue  # a closed loop has no free end
+        nodes.setdefault(p[0], []).append((i, 0))
+        nodes.setdefault(p[-1], []).append((i, 1))
+    link = {}
+    for hits in nodes.values():
+        if len(hits) == 2 and hits[0][0] != hits[1][0]:
+            link[hits[0]] = hits[1]
+            link[hits[1]] = hits[0]
+    out = []
+    for run in linked_runs(len(parts), link):
+        line = []
+        for i, f in run:
+            pts = parts[i][::-1] if f else parts[i]
+            line.extend(pts[1:] if line else pts)
+        out.append(line)
+    return out
+
+
+def linked_runs(n, link, earliest_first=False):
+    """Pieces 0…n-1 whose ends are linked ({(i, end): (j, end)}, end 0 = start,
+    1 = finish) → runs [(index, flipped)], each walked end to end, in the
+    order of their earliest piece and in that piece's own direction — or,
+    `earliest_first`, run so that the earliest piece comes first (a
+    superroute's first stage is where it starts, whichever way it was mapped)."""
+    seen = [False] * n
+
+    def walk(i, flipped):
+        run = []
+        while not seen[i]:
+            seen[i] = True
+            run.append((i, flipped))
+            nxt = link.get((i, 0 if flipped else 1))
+            if nxt is None:
+                break
+            i, flipped = nxt[0], nxt[1] == 1
+        return run
+
+    runs = []
+    # Runs with a free end first (walked from that end), then the closed rings.
+    for i in range(n):
+        if seen[i]:
+            continue
+        if (i, 0) not in link:
+            runs.append(walk(i, False))
+        elif (i, 1) not in link:
+            runs.append(walk(i, True))
+    for i in range(n):
+        if not seen[i]:
+            runs.append(walk(i, False))
+    out = []
+    for run in sorted(runs, key=lambda r: min(i for i, _ in r)):
+        first = min(run)
+        if earliest_first:
+            turn = run.index(first) > (len(run) - 1) / 2
+        else:
+            turn = first[1]  # the earliest piece would run backwards
+        if turn:
+            run = [(i, not f) for i, f in reversed(run)]
+        out.append(run)
+    return out
+
+
+def _near_m(a, b):
+    """Equirectangular distance, metres — exact enough to rank ends."""
+    k = math.cos(math.radians((a[1] + b[1]) / 2))
+    return math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * EARTH_R * math.pi / 180
+
+
+def _orient(order_ends):
+    """Best orientation of pieces in a FIXED order (Viterbi over flip / no
+    flip): [(start, end)] → (flips, total gap m). Ties keep a piece as is."""
+    n = len(order_ends)
+    if n == 0:
+        return [], 0.0
+    # cost[f] = best total ending with piece k flipped (f=1) or not (f=0)
+    cost = [0.0, 0.0]
+    back = []
+    for k in range(1, n):
+        prev, cur = order_ends[k - 1], order_ends[k]
+        tails = (prev[1], prev[0])  # prev's exit point when not flipped / flipped
+        heads = (cur[0], cur[1])
+        new, choice = [0.0, 0.0], [0, 0]
+        for f in (0, 1):
+            options = [cost[pf] + _near_m(tails[pf], heads[f]) for pf in (0, 1)]
+            pf = 0 if options[0] <= options[1] else 1
+            new[f], choice[f] = options[pf], pf
+        back.append(choice)
+        cost = new
+    f = 0 if cost[0] <= cost[1] else 1
+    total = cost[f]
+    flips = [f]
+    for choice in reversed(back):
+        f = choice[f]
+        flips.append(f)
+    flips.reverse()
+    return [bool(x) for x in flips], total
+
+
+# Stage ends this close are where one stage hands over to the next — mapped
+# sections rarely meet on the exact node.
+STAGE_JOIN_M = 1000.0
+
+
+def order_stages(ends):
+    """Stages [(start, end)] in member order → [(index, flipped)].
+
+    Stages are not ways: a superroute often lists side trails, loops or
+    variants after its main sections (the Bruce Trail, the Rideau Trail), so
+    the list is never re-chained by distance. Member order stays, with two
+    repairs:
+
+    - a stage listed out of place moves to where it hands over to its
+      neighbours (ends within STAGE_JOIN_M) — one stage at a time, and only
+      while that strictly adds handovers (ties: the order that strays
+      least from member order), only into a gap (never between two stages
+      that already meet), so side trails that meet the line at a section
+      boundary stay where they are listed, and the first member stays
+      first (a side loop from the trailhead — the Rideau Trail's K&P loop —
+      is not "stage 1");
+    - every stage is turned to meet its neighbours (a section mapped in
+      the other direction: the Appalachian Trail's Virginia, the Balcon du
+      Léman stages the GR 5 walks backwards).
+    """
+    n = len(ends)
+    touch = [
+        [
+            i != j and min(_near_m(p, q) for p in ends[i] for q in ends[j]) <= STAGE_JOIN_M
+            for j in range(n)
+        ]
+        for i in range(n)
+    ]
+
+    def handovers(seq):
+        return sum(touch[a][b] for a, b in zip(seq, seq[1:]))
+
+    seq = list(range(n))
+    score = handovers(seq)
+    for _ in range(n * n):
+        best = None
+        for pos, k in enumerate(seq):
+            rest = seq[:pos] + seq[pos + 1 :]
+            for at in range(len(rest) + 1):
+                if at == pos:
+                    continue
+                if 0 < at < len(rest) and touch[rest[at - 1]][rest[at]]:
+                    continue  # never split two stages that already hand over
+                cand = rest[:at] + [k] + rest[at:]
+                if cand[0] != 0:
+                    continue  # the first member is where the trail starts
+                gain = handovers(cand) - score
+                if gain <= 0:
+                    continue
+                # Ties: the order that strays least from member order.
+                stray = sum(abs(i - j) for i, j in enumerate(cand))
+                if best is None or (gain, -stray) > (best[0], -best[2]):
+                    best = (gain, cand, stray)
+        if best is None:
+            break
+        score += best[0]
+        seq = best[1]
+    flips, _ = _orient([ends[i] for i in seq])
+    return list(zip(seq, flips))
+
+
+# Member order is kept unless a geographic chaining is clearly shorter in
+# jumps: by this factor and by ORDER_SLACK_M (a few hundred metres of
+# unmapped gaps never reorder a relation that is listed in order).
+ORDER_FACTOR = 1.25
+ORDER_SLACK_M = 2000.0
+# Greedy chaining tries every piece as the start up to this many pieces,
+# else the pieces whose ends are loneliest (a trail's two ends) and the first.
+ORDER_ALL_STARTS = 40
+ORDER_LONELY_STARTS = 12
+# Past this many pieces the greedy chaining (quadratic) is skipped: member
+# order, each piece turned to meet its neighbours.
+ORDER_MAX_PIECES = 1500
+
+
+def order_pieces(ends):
+    """Order and orient pieces of a line, given each piece's (start, end).
+
+    Returns [(index, flipped)] covering every piece once. The given (member)
+    order is kept, each piece turned to meet its neighbours, unless chaining
+    the pieces geographically (greedy nearest end) leaves clearly less ground
+    to jump across — then that order, run in the direction that keeps the
+    first member nearer the start.
+    """
+    n = len(ends)
+    if n <= 1:
+        return [(i, False) for i in range(n)]
+    kept_flips, kept_cost = _orient(ends)
+    if n > ORDER_MAX_PIECES:
+        return [(i, kept_flips[i]) for i in range(n)]
+    best = None
+    for start in _greedy_starts(ends):
+        order = _greedy_chain(ends, start)
+        flips, cost = _orient([ends[i] for i in order])
+        if best is None or cost < best[1]:
+            best = (order, cost, flips)
+    if best is None or kept_cost <= best[1] * ORDER_FACTOR + ORDER_SLACK_M:
+        return [(i, kept_flips[i]) for i in range(n)]
+    order, _, flips = best
+    pairs = list(zip(order, flips))
+    if order.index(0) > (n - 1) / 2:
+        pairs = [(i, not f) for i, f in reversed(pairs)]
+    return pairs
+
+
+def _greedy_starts(ends):
+    n = len(ends)
+    if n <= ORDER_ALL_STARTS:
+        return [(i, f) for i in range(n) for f in (False, True)]
+    # Loneliest ends: the farthest from any other piece's end — where a line starts.
+    lonely = []
+    for i, (a, b) in enumerate(ends):
+        for f, p in ((False, a), (True, b)):
+            near = min(
+                min(_near_m(p, q[0]), _near_m(p, q[1])) for j, q in enumerate(ends) if j != i
+            )
+            lonely.append((near, i, f))
+    lonely.sort(reverse=True)
+    starts = [(i, f) for _, i, f in lonely[:ORDER_LONELY_STARTS]]
+    return starts + [(0, False), (0, True)]
+
+
+def _greedy_chain(ends, start):
+    """Pieces in greedy nearest-end order from `start` (index, flipped)."""
+    i, flipped = start
+    order = [i]
+    used = {i}
+    tip = ends[i][0] if flipped else ends[i][1]
+    while len(order) < len(ends):
+        best_d, best_j, best_tip = None, None, None
+        for j, (a, b) in enumerate(ends):
+            if j in used:
+                continue
+            da, db = _near_m(tip, a), _near_m(tip, b)
+            if best_d is None or da < best_d:
+                best_d, best_j, best_tip = da, j, b
+            if db < best_d:
+                best_d, best_j, best_tip = db, j, a
+        order.append(best_j)
+        used.add(best_j)
+        tip = best_tip
+    return order
 
 
 def bridge_parts(parts, max_gap_m):
@@ -825,26 +1109,43 @@ def load_relations(raw):
     return relations
 
 
-def main_parts(rel, relations, seen=None):
-    """A relation's main line: its own main-role ways, then its child routes'."""
+def main_ways(rel, relations, seen=None):
+    """A relation's main-role ways as (way id, relation id, geometry), its
+    child routes' in place, in member order."""
     seen = seen if seen is not None else set()
     if rel['id'] in seen:
         return []
     seen = seen | {rel['id']}
     ways = []
-    parts = []
     for m in rel.get('members', []):
         role = (m.get('role') or '').strip()
         if m.get('type') == 'way' and role in MAIN_ROLES and m.get('geometry'):
-            ways.append([(round(p['lon'], 6), round(p['lat'], 6)) for p in m['geometry'] if p])
+            geom = [(round(p['lon'], 6), round(p['lat'], 6)) for p in m['geometry'] if p]
+            ways.append((m.get('ref'), rel['id'], geom))
         elif m.get('type') == 'relation' and role in MAIN_ROLES and m['ref'] in relations:
-            if ways:
-                parts.extend(chain_ways(ways))
-                ways = []
-            parts.extend(main_parts(relations[m['ref']], relations, seen))
-    if ways:
-        parts.extend(chain_ways(ways))
-    return join_gaps([p for p in parts if len(p) >= 2])
+            ways.extend(main_ways(relations[m['ref']], relations, seen))
+    return ways
+
+
+def main_parts(rel, relations):
+    """A relation's main line (own main-role ways and its child routes'),
+    chained and ordered end-to-end (chain_ways).
+
+    A way that two child routes share (overlapping sections of the Trans
+    Canada Trail) is drawn once: twice, it would chain into a line that runs
+    out and back over itself and count its length twice. A way repeated in
+    ONE relation is kept — that is a deliberate out-and-back (a spur to a
+    summit and back), and member order chains it so."""
+    owner, ways = {}, []
+    for ref, rid, geom in main_ways(rel, relations):
+        if ref is not None and owner.setdefault(ref, rid) != rid:
+            continue
+        ways.append(geom)
+    return [p for p in chain_ways(ways) if len(p) >= 2]
+
+
+def reversed_parts(parts):
+    return [list(reversed(p)) for p in reversed(parts)]
 
 
 def stage_relations(rel, relations):
@@ -895,14 +1196,24 @@ def stage_name(tags, n, parent_name=None, region=None):
 
 def build_trail(rel, relations, sitelinks, regions):
     tags = rel.get('tags') or {}
-    stages = stage_relations(rel, relations)
+    stages = []
+    for child in stage_relations(rel, relations):
+        parts = main_parts(child, relations)
+        if parts:
+            stages.append((child, parts))
+    # Stages in trail order, each running the trail's way (order_stages): a
+    # section mapped in the other direction (the Appalachian Trail's
+    # Virginia, the Balcon du Léman stages the GR 5 walks backwards) is
+    # turned round — its from/to with it.
+    order = order_stages([(parts[0][0], parts[-1][-1]) for _, parts in stages])
     stage_docs = []
     all_parts = []
-    for n, child in enumerate(stages, start=1):
-        parts = main_parts(child, relations)
-        if not parts:
-            continue
-        ctags = child.get('tags') or {}
+    for n, (i, flipped) in enumerate(order, start=1):
+        child, parts = stages[i]
+        ctags = dict(child.get('tags') or {})
+        if flipped:
+            parts = reversed_parts(parts)
+            ctags['from'], ctags['to'] = ctags.get('to'), ctags.get('from')
         simplified, _ = simplify_parts(parts, SIMPLIFY_M, MAX_DETAIL_POINTS)
         doc = {
             'id': f"r{child['id']}",
@@ -923,7 +1234,7 @@ def build_trail(rel, relations, sitelinks, regions):
     single = None
     if len(stage_docs) == 1:
         # One stage is no stages: a wrapper around its one route.
-        single = stages[0] if stages else None
+        single = stages[0][0]
         stage_docs = []
     own = main_parts(rel, relations) if not stage_docs else all_parts
     if not own:

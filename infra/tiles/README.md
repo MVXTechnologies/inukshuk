@@ -130,14 +130,22 @@ Explore's "Long-distance trails near you" reads OpenStreetMap route relations bu
 2. **Overpass, geometry** — `relation(id:…);out geom;` in batches (≤ 150 relations, ≤ 8 000 km of
    bbox diagonals), then the same for their child relations (stages), up to three levels.
 3. **Wikidata** — sitelink counts for relations with a `wikidata` tag (50 ids per request).
-4. **Build** — ways chained into lines (member order, either direction, gaps ≤ 60 m joined;
+4. **Build** — ways chained into lines (member order first, then any ways sharing an end node
+   whatever their order, either direction; the pieces left ordered and turned end-to-end —
+   member order unless a geographic chaining jumps clearly less — and gaps ≤ 60 m joined; real
+   gaps stay separate parts, never a drawn connector;
    `alternative`/`excursion`/`approach`/`backward` members left out), measured, and kept when
    ≥ 30 km (international / national) or ≥ 40 km (everything else). A relation that is a member
    of another route is that route's **stage**, and not a trail of its own — unless it stands
    alone: its own Wikidata item with ≥ 5 sitelinks (the Appalachian Trail, a stage of the Eastern
    Continental Trail), or its own `website` (the Sentier des Caps, a stage of the Sentier
    National); a section named like its trail ("Sentier National, Charlevoix") never does. A
-   wrapper around one route (plus variants) is one trail. A stage named only like its trail (the
+   wrapper around one route (plus variants) is one trail. Stages keep member order (side trails
+   listed after the main sections stay there), except that a stage listed out of place moves
+   into the gap where it hands over to both neighbours (ends ≤ 1 km), and a stage mapped in the
+   other direction is turned round, its `from`/`to` swapped (the AT's Virginia; the Balcon du
+   Léman stages the GR 5 walks backwards). A way shared by two child routes is drawn once.
+   A stage named only like its trail (the
    AT's state sections) takes its region's name. Same-name twins with overlapping boxes (a summer
    hike and a winter ski route) merge into one trail with both activities. Countries and regions
    come from Natural Earth (21 samples along the line; admin-1 at the midpoint). Thumbnails bridge
