@@ -60,6 +60,7 @@ import {
   restartLocalServer,
   writeServedText,
   type LocalServerLease,
+  copyToServed,
 } from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
@@ -141,9 +142,9 @@ export interface RasterizeArgs {
   /**
    * "See-through white" (`@core/geo/pdfWhiteKey`): after pdf.js paints, the
    * page's near-white paper is keyed to transparency at this level, in the
-   * same WebView pass. `off` (default) leaves the render untouched. A keyed
-   * render never goes to a native renderer — they cannot key — so it always
-   * takes pdf.js.
+   * same WebView pass. `off` (default) leaves the render untouched. A tile
+   * a native renderer drew is keyed by the page afterwards (`__pdfKeyImage`)
+   * and comes back as `pngDataUri`, so keying does not cost the native path.
    */
   whiteKey?: WhiteKeyLevel;
   /**
@@ -153,6 +154,13 @@ export interface RasterizeArgs {
    * interactive is waiting. A render already in progress is never preempted.
    */
   priority?: RasterizePriority;
+  /**
+   * Served path only: requests that share this key (a page's file and
+   * revision) may reuse the document the previous one opened, so a burst of
+   * detail tiles opens and parses the page once instead of once per tile.
+   * Empty (default) opens and releases the document per request.
+   */
+  holdKey?: string;
 }
 
 export type RasterizePriority = 'interactive' | 'background';
@@ -208,8 +216,18 @@ interface WebViewNativeMessage {
   pageWidthPt: number;
   pageHeightPt: number;
 }
+/** The page keyed a native tile's white (`__pdfKeyImage`). */
+type WebViewKeyedMessage = { id: string; kind: 'keyed' } & (
+  | { ok: true; pngDataUri: string; widthPx: number; heightPx: number; keyMs: number }
+  | { ok: false; error: string }
+);
 type WebViewResultMessage = WebViewSuccessMessage | WebViewErrorMessage | WebViewNativeMessage;
-type WebViewMessage = WebViewResultMessage | WebViewReadyMessage;
+type WebViewMessage = WebViewResultMessage | WebViewReadyMessage | WebViewKeyedMessage;
+
+/** Where a native tile waits, on the served allowlist, for the page to key it. */
+const KEY_STAGING_DIR = '.rasterizer';
+/** Loading, keying and re-encoding one tile; far below the render timeout. */
+const KEY_TIMEOUT_MS = 15_000;
 
 /** True for render-result messages (everything that is not the readiness ping). */
 function isResultMessage(message: WebViewMessage): message is WebViewResultMessage {
@@ -342,7 +360,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // never decoded. Resolves { config, changed }: config is null when the
   // document has no layers or they could not be read (pdf.js defaults apply).
   function prepareLayers(doc, loadingTask) {
-    var none = { config: null, changed: 0 };
+    var none = { config: null, changed: 0, drawnChanged: 0 };
     function filterWorker(visibility) {
       if (!WORKER_FILTERS_LAYERS) return;
       // Same port as pdf.js' own messages, so it lands before the operator
@@ -372,7 +390,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         // worker unfiltered, which is only slower, never wrong.
         plan.changed.forEach(function (id) { config.setVisibility(id, plan.visibility[id]); });
         filterWorker(plan.visibility);
-        return { config: config, changed: plan.changed.length };
+        return { config: config, changed: plan.changed.length, drawnChanged: (plan.drawnChanged || plan.changed).length };
       } catch (e) {
         filterWorker(null);
         return none;
@@ -543,7 +561,34 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     return s > 0 && typeof window.__inkKeyWhite === 'function' ? Math.min(1, s) : 0;
   }
 
+  // The document a burst of detail tiles shares. Opening it, building the
+  // page's operator list and decoding its images is most of a render — and
+  // nearly independent of the crop: a US Topo sheet costs the same ~0.7 s for
+  // a 1024 px tile as for the 2048 px overview. A tile request that names the
+  // same hold key as the last one (same served URL and file revision) reuses
+  // the open document and page, whose operator list pdf.js keeps, and only
+  // paints. Released after HOLD_IDLE_MS without a matching request, on any
+  // other request, and on every failure.
+  var HOLD_IDLE_MS = 8000;
+  var held = null;
+  function dropHeld() {
+    if (!held) return;
+    var h = held;
+    held = null;
+    clearTimeout(h.timer);
+    Promise.resolve().then(function () { return h.task.destroy(); }).catch(function () {});
+  }
+
   function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage, look) {
+    var holdKey = input.url && look && typeof look.hold === 'string' && look.hold ? look.hold : null;
+    var reuse = null;
+    if (attempt === 0 && holdKey && held && held.key === holdKey) {
+      reuse = held;
+      clearTimeout(reuse.timer);
+      held = null;
+    } else {
+      dropHeld();
+    }
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -571,11 +616,22 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     }
 
     var t0 = Date.now();
-    var loadingTask = window.pdfjsLib.getDocument(params);
+    var loadingTask = reuse ? reuse.task : window.pdfjsLib.getDocument(params);
+    var pages = reuse ? reuse.pages : {};
+    var layersPromise = reuse ? reuse.layers : null;
     var destruction = null;
     function releaseDocument() {
       if (!destruction) destruction = Promise.resolve().then(function () { return loadingTask.destroy(); });
       return destruction;
+    }
+    // After a successful paint: keep the document for the next tile of the
+    // same burst instead of destroying it (see HOLD_IDLE_MS).
+    function finishDocument(doc) {
+      if (!holdKey || destruction) return releaseDocument();
+      dropHeld();
+      held = { key: holdKey, task: loadingTask, doc: doc, pages: pages, layers: layersPromise, timer: null };
+      held.timer = setTimeout(dropHeld, HOLD_IDLE_MS);
+      return Promise.resolve();
     }
     function releaseFailure(err) {
       post({ id: id, ok: false, resetEngine: true, error: 'PDF resource cleanup failed: ' + String(err) });
@@ -606,12 +662,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       if (watchdog !== null) clearTimeout(watchdog);
       watchdog = setTimeout(onStall, LOAD_WATCHDOG_MS);
     }
-    armWatchdog();
-    loadingTask.onProgress = function () {
-      if (!stalled && !loaded) armWatchdog();
-    };
+    if (!reuse) {
+      armWatchdog();
+      loadingTask.onProgress = function () {
+        if (!stalled && !loaded) armWatchdog();
+      };
+    }
 
-    loadingTask.promise
+    (reuse ? Promise.resolve(reuse.doc) : loadingTask.promise)
       .then(function (doc) {
         if (stalled) return undefined;
         loaded = true;
@@ -622,7 +680,9 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (pageNumber < 1 || pageNumber > pageCount) {
           throw new Error('pageIndex ' + pageIndex + ' out of range (pageCount ' + pageCount + ')');
         }
-        return Promise.all([doc.getPage(pageNumber), prepareLayers(doc, loadingTask)]).then(function (loadedPage) {
+        if (!pages[pageNumber]) pages[pageNumber] = doc.getPage(pageNumber);
+        if (!layersPromise) layersPromise = prepareLayers(doc, loadingTask);
+        return Promise.all([pages[pageNumber], layersPromise]).then(function (loadedPage) {
           var page = loadedPage[0];
           var layers = loadedPage[1];
           // Always rasterize in the page's UNROTATED (MediaBox) coordinate space
@@ -635,11 +695,12 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
           // Native renderers draw the document's default layers; a page whose
-          // layer plan differs from them stays on pdf.js so every raster of it
-          // (overview and detail tiles) shows the same layers. Nor can they
-          // key white: a keyed render always stays here.
+          // layer plan draws differently from them stays on pdf.js so every raster of it
+          // (overview and detail tiles) shows the same layers. They cannot
+          // key white either: RN sends a keyed native tile back through
+          // __pdfKeyImage, so keying does not keep a page off them.
           var strength = keyStrength(look);
-          if (nativePage && strength === 0 && layers.changed === 0 && page.rotate === 0 && page.userUnit === 1 &&
+          if (nativePage && layers.drawnChanged === 0 && page.rotate === 0 && page.userUnit === 1 &&
               Array.isArray(page.view) && page.view.length === 4 &&
               page.view[0] === 0 && page.view[1] === 0 &&
               page.view[2] === nativePage.expectedPageWidthPt &&
@@ -684,7 +745,8 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
             var renderMs = Date.now() - t1;
             // Release the document (and, on the served path, its chunk buffer)
             // before the next request; the WebView is a long-lived process.
-            return releaseDocument().then(function () {
+            // A tile burst holds it instead, briefly (finishDocument).
+            return finishDocument(doc).then(function () {
               post({
                 id: id,
                 ok: true,
@@ -697,6 +759,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
                 loadMs: loadMs,
                 renderMs: renderMs,
                 keyMs: keyMs,
+                reused: reuse ? true : undefined,
               });
             });
           });
@@ -715,6 +778,41 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   }
 
   // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
+  // "See-through white" for a tile a native renderer drew: load its PNG
+  // (staged same-origin by RN), run the same one-pass key as a pdf.js render,
+  // and post the keyed PNG. Loading and re-encoding cost far less than
+  // painting the page with pdf.js, which is what a keyed tile used to need.
+  window.__pdfKeyImage = function (id, url, strength) {
+    function fail(reason) { post({ id: id, kind: 'keyed', ok: false, error: reason }); }
+    if (typeof window.__inkKeyWhite !== 'function') { fail('white-key runtime missing'); return; }
+    var img = new Image();
+    img.onerror = function () { fail('native tile failed to load'); };
+    img.onload = function () {
+      try {
+        var canvas = document.getElementById('canvas');
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        var t = Date.now();
+        var image = ctx.getImageData(0, 0, w, h);
+        window.__inkKeyWhite(image.data, Math.min(1, strength));
+        ctx.putImageData(image, 0, 0);
+        image = null;
+        var keyMs = Date.now() - t;
+        var pngDataUri = canvas.toDataURL('image/png');
+        canvas.width = 1;
+        canvas.height = 1;
+        post({ id: id, kind: 'keyed', ok: true, pngDataUri: pngDataUri, widthPx: w, heightPx: h, keyMs: keyMs });
+      } catch (e) {
+        fail('white-key failed: ' + ((e && e.message) ? e.message : String(e)));
+      }
+    };
+    img.src = url;
+  };
+
   window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop, nativePage, look) {
     resetFetchTrace();
     var input;
@@ -874,111 +972,184 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [applyEngine]);
 
-  const startNative = useCallback((id: string, pending: PendingRequest) => {
-    if (nativeActiveRef.current !== null) return;
-    const { nativePage, crop, pageIndex, targetWidthPx } = pending.args;
-    if (!nativePage) return;
-    const cacheKey = nativeGeometryKey(pending.args);
-    const requestKey = nativeRequestKey(pending.args);
-    nativeActiveRef.current = id;
-    clearTimeout(pending.timeout);
-    pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
-    let retryWithPdfJs = false;
-    void (async () => {
-      try {
-        pending.backendDispatched = true;
-        const result = await renderNativePdfCrop({
-          fileUri: nativePage.fileUri,
-          pageIndex,
-          pageWidthPt: nativePage.expectedPageWidthPt,
-          pageHeightPt: nativePage.expectedPageHeightPt,
-          // Keep the public crop null for PDF.js's larger overview budget;
-          // only the native API needs an explicit full-page rectangle.
-          crop: crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 },
-          targetWidthPx,
+  // Native tiles waiting for the page to key their white, by request id.
+  const keyWaitersRef = useRef(new Map<string, (message: WebViewKeyedMessage | null) => void>());
+  /**
+   * Key a native tile's white in the page: stage the PNG where the page can
+   * load it, have it keyed, and return the keyed PNG. The native file and its
+   * staged copy are deleted either way. Throws when the page cannot do it.
+   */
+  const keyNativeTile = useCallback(async (id: string, nativeUri: string, strength: number) => {
+    const origin = originRef.current;
+    const stagedPath = `${KEY_STAGING_DIR}/key-${id}.png`;
+    let stagedUri: string | null = null;
+    try {
+      const url = origin === null ? null : servedFileUrl(origin, stagedPath);
+      const wv = webviewRef.current;
+      if (url === null || !wv || !readyRef.current) throw new Error('white-key page unavailable');
+      stagedUri = await copyToServed(nativeUri, stagedPath);
+      const message = await new Promise<WebViewKeyedMessage | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), KEY_TIMEOUT_MS);
+        keyWaitersRef.current.set(id, (m) => {
+          clearTimeout(timer);
+          resolve(m);
         });
-        if (
-          !mountedRef.current ||
-          pendingRef.current.get(id) !== pending ||
-          activeRequestRef.current !== id
-        ) {
-          deleteNativePdfOutput(result.fileUri);
-          return;
-        }
-        clearTimeout(pending.timeout);
-        pendingRef.current.delete(id);
-        if (cacheKey !== null) {
-          const cache = verifiedGeometryRef.current;
-          cache.delete(cacheKey);
-          cache.add(cacheKey);
-          while (cache.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
-            const oldest = cache.values().next().value;
-            if (oldest === undefined) break;
-            cache.delete(oldest);
+        wv.injectJavaScript(
+          `window.__pdfKeyImage && window.__pdfKeyImage(${JSON.stringify(id)}, ${JSON.stringify(url)}, ${strength}); true;`,
+        );
+      });
+      if (message === null) throw new Error('white-key timed out');
+      if (!message.ok) throw new Error(message.error);
+      return message;
+    } finally {
+      keyWaitersRef.current.delete(id);
+      deleteNativePdfOutput(nativeUri);
+      if (stagedUri !== null) deleteNativePdfOutput(stagedUri);
+    }
+  }, []);
+
+  const startNative = useCallback(
+    (id: string, pending: PendingRequest) => {
+      if (nativeActiveRef.current !== null) return;
+      const { nativePage, crop, pageIndex, targetWidthPx } = pending.args;
+      if (!nativePage) return;
+      const cacheKey = nativeGeometryKey(pending.args);
+      const requestKey = nativeRequestKey(pending.args);
+      nativeActiveRef.current = id;
+      clearTimeout(pending.timeout);
+      pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
+      let retryWithPdfJs = false;
+      void (async () => {
+        try {
+          pending.backendDispatched = true;
+          const result = await renderNativePdfCrop({
+            fileUri: nativePage.fileUri,
+            pageIndex,
+            pageWidthPt: nativePage.expectedPageWidthPt,
+            pageHeightPt: nativePage.expectedPageHeightPt,
+            // Keep the public crop null for PDF.js's larger overview budget;
+            // only the native API needs an explicit full-page rectangle.
+            crop: crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 },
+            targetWidthPx,
+          });
+          if (
+            !mountedRef.current ||
+            pendingRef.current.get(id) !== pending ||
+            activeRequestRef.current !== id
+          ) {
+            deleteNativePdfOutput(result.fileUri);
+            return;
           }
-        }
-        pending.resolve(result);
-      } catch (error) {
-        if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
-        if (
-          mountedRef.current &&
-          pendingRef.current.get(id) === pending &&
-          activeRequestRef.current === id &&
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === 'E_PDF_UNSUPPORTED'
-        ) {
-          // Unsupported can describe either the page encoding or this crop's
-          // decoder budget. Cache only the exact crop and output width, never
-          // disable valid small crops after a full-page request is refused.
-          if (requestKey !== null) {
-            const unsupported = unsupportedRequestsRef.current;
-            unsupported.delete(requestKey);
-            unsupported.add(requestKey);
-            while (unsupported.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
-              const oldest = unsupported.values().next().value;
-              if (oldest === undefined) break;
-              unsupported.delete(oldest);
+          // "See-through white": the native renderers cannot key, so the page
+          // keys the tile they drew. A page that cannot (reloading, timed out)
+          // sends this one crop back through pdf.js, which keys as it paints.
+          const strength = whiteKeyStrength(pending.args.whiteKey);
+          let keyed: (WebViewKeyedMessage & { ok: true }) | null = null;
+          if (strength > 0) {
+            try {
+              keyed = await keyNativeTile(id, result.fileUri, strength);
+            } catch {
+              throw Object.assign(new Error('native tile could not be keyed'), {
+                code: 'E_PDF_UNSUPPORTED',
+              });
             }
+            if (
+              !mountedRef.current ||
+              pendingRef.current.get(id) !== pending ||
+              activeRequestRef.current !== id
+            )
+              return;
           }
-          // This page is outside the native renderer's deliberately narrow
-          // capabilities. Retry the same request once without native handoff;
-          // queue release in finally dispatches it ahead of waiting work.
-          pending.args = { ...pending.args, nativePage: null };
-          queueRef.current.unshift({ id, args: pending.args });
-          retryWithPdfJs = true;
-          return;
-        }
-        if (pendingRef.current.get(id) === pending) {
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);
-          const admissionFailed =
+          if (cacheKey !== null) {
+            const cache = verifiedGeometryRef.current;
+            cache.delete(cacheKey);
+            cache.add(cacheKey);
+            while (cache.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+              const oldest = cache.values().next().value;
+              if (oldest === undefined) break;
+              cache.delete(oldest);
+            }
+          }
+          if (keyed) {
+            pending.resolve({
+              pngDataUri: keyed.pngDataUri,
+              widthPx: keyed.widthPx,
+              heightPx: keyed.heightPx,
+              pageWidthPt: result.pageWidthPt,
+              pageHeightPt: result.pageHeightPt,
+              pageCount: result.pageCount,
+              loadMs: result.loadMs,
+              renderMs: result.renderMs,
+              keyMs: keyed.keyMs,
+            });
+          } else {
+            pending.resolve(result);
+          }
+        } catch (error) {
+          if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
+          if (
+            mountedRef.current &&
+            pendingRef.current.get(id) === pending &&
+            activeRequestRef.current === id &&
             typeof error === 'object' &&
             error !== null &&
             'code' in error &&
-            (error.code === 'E_PDF_BUSY' || error.code === 'E_PDF_CONTEXT');
-          pending.reject(
-            admissionFailed
-              ? new PdfRenderNotStartedError(error)
-              : error instanceof Error
-                ? error
-                : new Error(String(error)),
-          );
-        }
-      } finally {
-        if (!retryWithPdfJs) finishRecovery(pending);
-        if (nativeActiveRef.current === id) {
-          nativeActiveRef.current = null;
-          if (mountedRef.current) {
-            busyRef.current = false;
-            activeRequestRef.current = null;
-            pumpQueueRef.current();
+            error.code === 'E_PDF_UNSUPPORTED'
+          ) {
+            // Unsupported can describe either the page encoding or this crop's
+            // decoder budget. Cache only the exact crop and output width, never
+            // disable valid small crops after a full-page request is refused.
+            if (requestKey !== null) {
+              const unsupported = unsupportedRequestsRef.current;
+              unsupported.delete(requestKey);
+              unsupported.add(requestKey);
+              while (unsupported.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+                const oldest = unsupported.values().next().value;
+                if (oldest === undefined) break;
+                unsupported.delete(oldest);
+              }
+            }
+            // This page is outside the native renderer's deliberately narrow
+            // capabilities. Retry the same request once without native handoff;
+            // queue release in finally dispatches it ahead of waiting work.
+            pending.args = { ...pending.args, nativePage: null };
+            queueRef.current.unshift({ id, args: pending.args });
+            retryWithPdfJs = true;
+            return;
+          }
+          if (pendingRef.current.get(id) === pending) {
+            clearTimeout(pending.timeout);
+            pendingRef.current.delete(id);
+            const admissionFailed =
+              typeof error === 'object' &&
+              error !== null &&
+              'code' in error &&
+              (error.code === 'E_PDF_BUSY' || error.code === 'E_PDF_CONTEXT');
+            pending.reject(
+              admissionFailed
+                ? new PdfRenderNotStartedError(error)
+                : error instanceof Error
+                  ? error
+                  : new Error(String(error)),
+            );
+          }
+        } finally {
+          if (!retryWithPdfJs) finishRecovery(pending);
+          if (nativeActiveRef.current === id) {
+            nativeActiveRef.current = null;
+            if (mountedRef.current) {
+              busyRef.current = false;
+              activeRequestRef.current = null;
+              pumpQueueRef.current();
+            }
           }
         }
-      }
-    })();
-  }, []);
+      })();
+    },
+    [keyNativeTile],
+  );
 
   const pumpQueue = useCallback(() => {
     if (busyRef.current || nativeActiveRef.current !== null || !readyRef.current) {
@@ -1055,7 +1226,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
     }
     const idLiteral = JSON.stringify(id);
-    const lookLiteral = JSON.stringify({ whiteKey: whiteKeyStrength(args.whiteKey) });
+    const lookLiteral = JSON.stringify({
+      whiteKey: whiteKeyStrength(args.whiteKey),
+      ...(args.holdKey ? { hold: args.holdKey } : {}),
+    });
     const live = originRef.current;
     if (args.source.url !== undefined && live !== null) {
       let url = args.source.url;
@@ -1106,6 +1280,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
+      if ('kind' in message && message.kind === 'keyed') {
+        keyWaitersRef.current.get(message.id)?.(message);
+        return;
+      }
       if (!isResultMessage(message)) {
         if (message.ok) {
           servedLoadRetryRef.current = false;
@@ -1458,10 +1636,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           pageIndex: args.pageIndex,
           targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
           crop: args.crop ?? null,
-          // Native renderers cannot key white; a keyed render is pdf.js's.
-          nativePage: nativePdfAvailable() && whiteKey === 0 ? (args.nativePage ?? null) : null,
+          // Native renderers cannot key white; the served page keys their
+          // tile afterwards. Inline mode has no way to hand it over: pdf.js.
+          nativePage:
+            nativePdfAvailable() && (whiteKey === 0 || originRef.current !== null)
+              ? (args.nativePage ?? null)
+              : null,
           whiteKey,
           priority: args.priority ?? 'interactive',
+          holdKey: args.holdKey ?? '',
         };
         const expire = () => {
           const stillPending = pendingRef.current.get(id);

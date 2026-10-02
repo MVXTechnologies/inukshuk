@@ -210,6 +210,24 @@ export function localServerLeases(): number {
  * (creating parent folders), overwriting any previous version, and return
  * its `file://` uri. The rasterizer page is written this way on every mount.
  */
+/**
+ * Copy a file (any `file://` uri) to a document-relative path under the
+ * served root, creating folders as needed, and return the copy's `file://`
+ * uri. The rasterizer page reads a native tile this way to key its white.
+ */
+export async function copyToServed(sourceUri: string, documentPath: string): Promise<string> {
+  const slash = documentPath.lastIndexOf('/');
+  const dir =
+    slash === -1
+      ? new Directory(Paths.document)
+      : new Directory(Paths.document, documentPath.slice(0, slash));
+  if (!dir.exists) dir.create({ intermediates: true });
+  const file = new File(dir, documentPath.slice(slash + 1));
+  if (file.exists) file.delete();
+  await new File(sourceUri).copy(file);
+  return file.uri;
+}
+
 export function writeServedText(documentPath: string, text: string): string {
   const slash = documentPath.lastIndexOf('/');
   const dir =

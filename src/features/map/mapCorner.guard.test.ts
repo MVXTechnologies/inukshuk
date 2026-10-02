@@ -3,9 +3,10 @@
  * (MapScreen is too heavy to mount in Jest; `asyncEventRead.guard` does the
  * same):
  *
- * - the ⓘ credit button is gone and the corner holds the tip button;
- * - the basemap credit stays ON the map as text (OpenStreetMap's attribution
- *   guideline and Esri's terms expect it on the map view itself);
+ * - the old bottom-right ⓘ chip is gone and the corner holds the tip button;
+ * - the credit stays ON the map view (OpenStreetMap's attribution guideline
+ *   and Esri's terms): since 2.1.1 a small ⓘ LEFT of the scale bar, which
+ *   opens the credits sheet (it replaced the #476 text caption);
  * - the tip button lives on the Map only — not on Library, Explore or Logbook.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -17,15 +18,25 @@ const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
 describe('map corner', () => {
   const map = read('src/features/map/MapScreen.tsx');
 
-  it('has no ⓘ credit button any more', () => {
+  it('has no bottom-right attribution chip any more', () => {
     expect(map).not.toMatch(/AttributionChip/);
     expect(existsSync(join(ROOT, 'src/features/map/components/AttributionChip.tsx'))).toBe(false);
   });
 
-  it('keeps the credit visible on the map as text', () => {
+  it('keeps the credit on the map: an ⓘ to the LEFT of the scale bar (2.1.1)', () => {
     expect(map).toMatch(
-      /<MapCreditText basemap=\{basemap\} vector=\{stoneBase\} osmLabels=\{imageryLabels\} \/>/,
+      /styles\.bottomSideStart\][^]*?<MapCreditsButton onPress=\{\(\) => setCreditsOpen\(true\)\} \/>\s*\{showScaleBar && scaleAt !== null && \(\s*<ScaleBar/,
     );
+    // One row: the ⓘ and the scale bar side by side, bottoms aligned.
+    expect(map).toMatch(/bottomSideStart: \{ flexDirection: 'row', alignItems: 'center'/);
+    expect(existsSync(join(ROOT, 'src/features/map/components/MapCreditText.tsx'))).toBe(false);
+    expect(map).not.toMatch(/MapCreditText/);
+  });
+
+  it('opens the credits sheet from what the map is drawing, routing included', () => {
+    expect(map).toMatch(/\{creditsOpen && \(\s*<MapCreditsSheet\s+lines=\{mapCredits\(\{/);
+    expect(map).toMatch(/routingEngines: drawing\.routingEngines,/);
+    expect(map).toMatch(/pdfMaps: shownMaps\.map\(\(m\) => m\.name\),/);
   });
 
   it('puts the tip button in the bottom-right corner', () => {
@@ -102,12 +113,13 @@ describe('coffee mascot bubble', () => {
       /style=\{styles\.bottomRow\}[^>]*onLayout=\{\(e\) => setBottomRowY\(e\.nativeEvent\.layout\.y\)\}/,
     );
     expect(map).toMatch(/bottom=\{bottomColumnH - bottomRowY \+ TIP_BUBBLE_GAP\}/);
-    // The row holds the scale bar, the credit caption and the tip button.
-    expect(map).toMatch(/styles\.bottomRow\}[^]*?<MapCreditText[^]*?<TipButton/);
+    // The row holds the credits ⓘ, the scale bar and the tip button.
+    expect(map).toMatch(/styles\.bottomRow\}[^]*?<MapCreditsButton[^]*?<ScaleBar[^]*?<TipButton/);
   });
 
   it.each([
     'railMenuOpen',
+    'creditsOpen',
     'trailSheetUp',
     'pickingCategory',
     'recordRequested',
@@ -122,4 +134,38 @@ describe('coffee mascot bubble', () => {
   it('only runs while the Map tab is in front', () => {
     expect(map).toMatch(/focused=\{isFocused\}/);
   });
+});
+
+describe('leaving a focused trail by tapping the map (2.1.1)', () => {
+  const map = read('src/features/map/MapScreen.tsx');
+  const press =
+    /const handleMapPress = useCallback\([^]*?\n  const onMapPress/.exec(map)?.[0] ?? '';
+
+  it('is decided before the dot, the area card and the point bubble', () => {
+    expect(press).not.toBe('');
+    const leave = press.indexOf('bareTapAfterFocus(inspectId !== null || heatSelection !== null)');
+    expect(leave).toBeGreaterThan(0);
+    expect(leave).toBeLessThan(press.indexOf('await tapHitsUserDot()'));
+    expect(leave).toBeLessThan(press.indexOf('drawingRef.current.onAreaTap('));
+    expect(leave).toBeLessThan(press.indexOf('setPointAt(\n            pointChipAfterBareTap('));
+  });
+
+  it('closes the focus, forgets the camera snapshot and returns: no bubble, no glide back', () => {
+    const block = /=== 'leave-focus'\) \{([^}]*)\}/.exec(press)?.[1] ?? '';
+    expect(block).toContain('inspect(null);');
+    expect(block).toContain('setHeatSelection(null);');
+    expect(block).toContain('selectionCamera.forget();');
+    expect(block).toContain('return;');
+    expect(block).not.toMatch(/restore|setPointAt|setStop/);
+    // The tap handler never glides the camera back; only the ✕ handlers do.
+    expect(press).not.toMatch(/releaseCameraOnDeselect\(\)/);
+    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(2);
+  });
+});
+
+// Owner (2.1.1): the trail panel's and carousel's ✕ leave the camera where it is.
+it('the ✕ on a trail selection releases the camera snapshot instead of gliding back', () => {
+  const map = readFileSync(join(__dirname, 'MapScreen.tsx'), 'utf8');
+  expect(map).toMatch(/const releaseCameraOnDeselect = selectionCamera\.forget;/);
+  expect(map).not.toMatch(/selectionCamera\.restore\b/);
 });

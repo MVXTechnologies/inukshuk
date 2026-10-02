@@ -1,4 +1,4 @@
-import { parseLinkOutCollections, placeActivities } from './collections';
+import { parseLinkOutCollections, placeActivities, placeKind } from './collections';
 
 const place = (overrides: Record<string, unknown> = {}) => ({
   id: 'sepaq-pq-jac',
@@ -81,11 +81,22 @@ describe('parseLinkOutCollections', () => {
   });
 });
 
+describe('placeKind', () => {
+  it('browses a place under the Type its place type implies', () => {
+    expect(placeKind({ type: 'ZEC' })).toBe('hunting-fishing');
+    expect(placeKind({ type: 'Wildlife reserve' })).toBe('hunting-fishing');
+    expect(placeKind({ type: 'National park' })).toBe('park');
+    expect(placeKind({ type: 'Marine park' })).toBe('park');
+    expect(placeKind({ type: 'Museum' })).toBeNull();
+  });
+});
+
 describe('placeActivities', () => {
   it('uses the place’s own activities, else its type’s defaults', () => {
     expect(placeActivities({ type: 'Wildlife reserve' })).toEqual(['hunting', 'fishing']);
     expect(placeActivities({ type: 'National park' })).toEqual(['hiking', 'camping']);
     expect(placeActivities({ type: 'Marine park' })).toEqual(['paddling']);
+    expect(placeActivities({ type: 'ZEC' })).toEqual(['hunting', 'fishing']);
     expect(placeActivities({ type: 'Museum' })).toEqual([]);
     expect(placeActivities({ type: 'National park', activities: ['ski'] })).toEqual(['ski']);
   });

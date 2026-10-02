@@ -1,9 +1,10 @@
+import { haversineMeters } from '@core/geo/geomath';
 import type { LatLng } from '@core/models';
 import type { FacetsOf } from './exploreFacets';
 import type { NearbyCatalogItem } from './nearby';
-import { nearbySections } from './nearbySections';
+import { catalogItemCountry, nearbySections } from './nearbySections';
 import type { CatalogItem } from './schema';
-import type { CatalogKind } from './taxonomy';
+import type { CatalogKind, LinkOutCollection, LinkOutPlace } from './taxonomy';
 
 /**
  * "Popular near you" — the explorer landing's carousel (#447).
@@ -69,4 +70,108 @@ export function popularNearYou(
     }
   }
   return out;
+}
+
+/**
+ * One "Popular near you" card: a catalog map, or a place from a link-out
+ * collection (a Parcs Québec park) whose maps live on the publisher's site.
+ */
+export type PopularCard =
+  | { type: 'item'; item: CatalogItem; distanceMeters: number }
+  | {
+      type: 'place';
+      place: LinkOutPlace;
+      collection: LinkOutCollection;
+      distanceMeters: number;
+    };
+
+/** A link-out place counts as "near" within this radius — a park 600 km off is not. */
+export const POPULAR_PLACE_RADIUS_METERS = 250_000;
+
+export interface PopularCardsOptions extends PopularNearOptions {
+  /** At most this many place cards, so the row stays mostly downloadable maps. */
+  maxPlaces?: number;
+  placeRadiusMeters?: number;
+}
+
+/**
+ * The carousel with link-out places folded in (2.1.x fix for "Popular near
+ * you never shows anything"). From Québec City the catalog's nearest Canadian
+ * sheets are New Brunswick CanTopo 321 km+ away (CanTopo does not cover the
+ * area), so every card was a far-off sheet over a generic placeholder. The
+ * parks with real maps 40–150 km away were only reachable three screens
+ * down, under Collections.
+ *
+ * Places are weighted like parks ({@link POPULAR_KIND_WEIGHT}) and merged into
+ * the leading national group's ranking — the link-out collections are Québec
+ * publishers, and in any case a place within {@link POPULAR_PLACE_RADIUS_METERS}
+ * is closer than the radius any catalog group uses. At most `maxPlaces`
+ * (default half the row) are places.
+ */
+export function popularNearYouCards(
+  items: readonly CatalogItem[],
+  collections: readonly LinkOutCollection[],
+  origin: LatLng | null,
+  facetsOf: FacetsOf,
+  options?: PopularCardsOptions,
+): PopularCard[] {
+  const limit = Math.max(0, options?.limit ?? DEFAULT_POPULAR_LIMIT);
+  if (origin === null || limit === 0) return [];
+  const maxPlaces = Math.max(0, options?.maxPlaces ?? Math.ceil(limit / 2));
+  const placeRadius = options?.placeRadiusMeters ?? POPULAR_PLACE_RADIUS_METERS;
+
+  const places: Extract<PopularCard, { type: 'place' }>[] = [];
+  const seen = new Set<string>();
+  for (const collection of collections) {
+    for (const place of collection.places) {
+      if (seen.has(place.id)) continue;
+      seen.add(place.id);
+      const distanceMeters = haversineMeters(origin, {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      });
+      if (!Number.isFinite(distanceMeters) || distanceMeters > placeRadius) continue;
+      places.push({ type: 'place', place, collection, distanceMeters });
+    }
+  }
+  places.sort((a, b) =>
+    a.distanceMeters !== b.distanceMeters
+      ? a.distanceMeters - b.distanceMeters
+      : a.place.id.localeCompare(b.place.id),
+  );
+  const keptPlaces = places.slice(0, maxPlaces);
+
+  const mapCards: PopularCard[] = popularNearYou(items, origin, facetsOf, {
+    ...options,
+    limit,
+  }).map((entry) => ({ type: 'item', ...entry }));
+  if (keptPlaces.length === 0) return mapCards;
+
+  // Merge places into the leading group: the leading group is every card up
+  // to the first change of country in the CA → US → other order.
+  const countryOf = (card: PopularCard | undefined) =>
+    card?.type === 'item' ? catalogItemCountry(card.item) : null;
+  const firstCountry = countryOf(mapCards[0]);
+  let leadEnd = 0;
+  while (leadEnd < mapCards.length && countryOf(mapCards[leadEnd]) === firstCountry) leadEnd += 1;
+  const weight = (card: PopularCard): number => {
+    if (card.type === 'place') return card.distanceMeters * POPULAR_KIND_WEIGHT.park;
+    const kind = facetsOf(card.item).kind;
+    return card.distanceMeters * (kind === null ? 1 : POPULAR_KIND_WEIGHT[kind]);
+  };
+  const lead = [...mapCards.slice(0, leadEnd), ...keptPlaces].sort((a, b) => weight(a) - weight(b));
+  return [...lead, ...mapCards.slice(leadEnd)].slice(0, limit);
+}
+
+/** What the "Popular near you" section shows — it never silently disappears. */
+export type PopularNearStatus = 'no-position' | 'loading' | 'none-in-range' | 'cards';
+
+export function popularNearStatus(input: {
+  position: LatLng | null;
+  cardCount: number;
+  loading: boolean;
+}): PopularNearStatus {
+  if (input.cardCount > 0) return 'cards';
+  if (input.position === null) return 'no-position';
+  return input.loading ? 'loading' : 'none-in-range';
 }

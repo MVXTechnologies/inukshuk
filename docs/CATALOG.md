@@ -38,7 +38,7 @@ Pages root, so `docs/catalog/v2/index.json` serves at
   // Side documents, fetched lazily (same path rules as shards):
   "search": { "path": "search.json", "byteSize": 741381, "tokenCount": 34764 },
   "facets": { "path": "facets.json", "byteSize": 47842 },
-  "collections": { "path": "collections.json", "byteSize": 11813 },
+  "collections": { "path": "collections.json", "byteSize": 30603 },
   "shards": [
     {
       "id": "topo-n40w080-3",
@@ -206,6 +206,10 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
 
 - Fragments are plain `{ sources, items }` JSON: one per source, either crawled
   by a `fetch-*.ts` or hand-curated.
+- `fetch-quebec-rivers.ts` builds its fragment from a reviewed list,
+  `scripts/catalog/sources/quebec-rivers.json`, and emits only the maps whose
+  publisher has granted permission. Until one does, it writes no fragment
+  (CATALOG-SOURCES §1.5).
 - `build-manifest.ts` merges them, drops duplicate ids, refuses items whose
   `sourceId` was never declared, plans the shards with the **same**
   `planCatalogShards` the client's ranking assumes, and validates every shard
@@ -410,8 +414,30 @@ place carries its provenance in an `evidence` field; the generator strips it.
     - 5 from OSM only: msb, por, tem, aig, ssl.
   - **sepaq.com was never fetched.** It answers scripts with 403 and a CAPTCHA.
   - Coordinates are the OSM boundary centre (`out center`).
+- **Zecs du Québec** (Réseau Zec): all 63 zecs, typed "ZEC", each linking to
+  the zec's own site (`https://<name>.reseauzec.com/`, Martin-Valin on its own
+  domain). Coordinates are the centre of the territory bbox from Réseau Zec's
+  public `Public_zec` boundary layer. No zec states a licence, so no map file
+  is linked and nothing enters the download catalog: see
+  `docs/research/zec-maps.md` (per-zec map URLs, five GeoPDFs ready to add
+  once Réseau Zec agrees).
 - Activities per place type: national park → hiking, camping; marine park →
-  paddling; wildlife reserve → hunting, fishing (`PLACE_TYPE_ACTIVITIES`).
+  paddling; wildlife reserve and ZEC → hunting, fishing (`PLACE_TYPE_ACTIVITIES`).
+  A place may carry its own `activities` instead, when there is evidence for
+  them (recorded in its `evidence.activities`): Zec Martin-Valin publishes a
+  canoe-camping map, so it is tagged paddling, hunting, fishing, camping. No
+  activity is added to a place on the strength of its type alone beyond the
+  table above.
+- **Places are points on the Explore map** (`src/core/catalog/explorePoints.ts`),
+  beside the catalog sheets. A checked Activity keeps the places tagged with
+  it; a checked Type keeps the places whose type maps to it
+  (`PLACE_TYPE_KINDS`: parks → `park`, reserves and zecs → `hunting-fishing`);
+  Terrain and Source describe sheets only, so they leave places out. A sheet's
+  card downloads; a place's card opens the publisher's page. An activity with
+  no point at all gets an empty state rather than a blank map.
+- The explorer landing's "Popular near you" folds the nearest places (within
+  250 km, at most half the row) in with the catalog maps
+  (`popularNearYouCards`).
 - Excluded, because Sépaq does not run them:
   - the Nunavik parks (Nunavik Parks);
   - Nibiischii and the Cree-run reserves;

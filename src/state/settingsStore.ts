@@ -18,6 +18,7 @@ import {
 } from '@core/map/terrainOptions';
 import { DEFAULT_WHITE_KEY, parseWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
+import { parseMaxHr } from '@core/stats/hrZones';
 import { DEFAULT_IMAGERY_LOOK, isImageryLook, type ImageryLook } from '@core/map/satelliteImagery';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
@@ -187,6 +188,13 @@ export interface Settings {
   /** How early named summits appear on the vector map (#461). */
   peakDensity: PeakDensity;
   /**
+   * "Parks & protected areas" (overlays menu → On the map): the boundaries
+   * and names of national parks, reserves and protected areas on the vector
+   * map and, with Labels on satellite, over the imagery. On by default; a
+   * settings file from before the toggle has no such key and gets the default.
+   */
+  showParks: boolean;
+  /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
    * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
    * None there is nothing to deepen.
@@ -253,6 +261,11 @@ export interface Settings {
    * app or a verified "I already donated"); 0 = not resting. It comes back after.
    */
   tipJarRestingUntil: number;
+  /**
+   * Max heart rate for the Logbook's heart-rate zones, bpm; 0 = estimate it
+   * from the activities (99th percentile of the last 12 months' samples).
+   */
+  maxHeartRateBpm: number;
 }
 
 const DEFAULTS: Settings = {
@@ -283,6 +296,7 @@ const DEFAULTS: Settings = {
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
+  showParks: true,
   tiltRelief: DEFAULT_TILT_RELIEF,
   errorReporting: true,
   terrainSlope: false,
@@ -299,6 +313,7 @@ const DEFAULTS: Settings = {
   showTipJar: true,
   tipJarHiddenUntil: 0,
   tipJarRestingUntil: 0,
+  maxHeartRateBpm: 0,
 };
 
 interface SettingsState extends Settings {
@@ -361,6 +376,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     errorReporting,
     terrainSlope,
@@ -377,6 +393,7 @@ function snapshot(s: SettingsState): Settings {
     showTipJar,
     tipJarHiddenUntil,
     tipJarRestingUntil,
+    maxHeartRateBpm,
   } = s;
   return {
     tileUrl,
@@ -406,6 +423,7 @@ function snapshot(s: SettingsState): Settings {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     errorReporting,
     terrainSlope,
@@ -422,6 +440,7 @@ function snapshot(s: SettingsState): Settings {
     showTipJar,
     tipJarHiddenUntil,
     tipJarRestingUntil,
+    maxHeartRateBpm,
   };
 }
 
@@ -477,6 +496,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             : undefined,
         ) ?? DEFAULT_WHITE_KEY;
       if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
+      // 0 (estimate) or a plausible typed max; anything else falls back to the estimate.
+      if (
+        next.maxHeartRateBpm !== 0 &&
+        parseMaxHr(String(next.maxHeartRateBpm)) !== next.maxHeartRateBpm
+      ) {
+        next.maxHeartRateBpm = 0;
+      }
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

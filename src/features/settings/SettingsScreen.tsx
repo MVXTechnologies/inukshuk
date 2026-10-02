@@ -15,7 +15,7 @@ import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import Constants from 'expo-constants';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 
 import { describeRunningUpdate } from '@core/app/updateInfo';
@@ -47,6 +47,7 @@ import { MAP_DATA_CREDITS } from './mapDataCredits';
 import { MarinePacksSection } from './MarinePacksSection';
 import { OfflineMapsSection } from './OfflineMapsSection';
 import { ConnectionsSection } from './ConnectionsSection';
+import { TrainingSection } from './TrainingSection';
 
 const DISPLACEMENT_OPTIONS = [
   { value: '2', label: '2 m' },
@@ -112,6 +113,11 @@ const DISPLAY_LABEL = { normal: 'Normal', sunlight: 'Sunlight', night: 'Night re
 
 export function SettingsScreen() {
   const router = useRouter();
+  // `?open=<category>` opens that category (Statistics' "change" max-HR link).
+  const { open } = useLocalSearchParams<{ open?: string }>();
+  const [expanded, setExpanded] = useState<string | number | undefined>(
+    typeof open === 'string' ? open : undefined,
+  );
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   // Owner feedback (2026-08-08): with a category open, the next collapsed
@@ -273,7 +279,10 @@ export function SettingsScreen() {
             View: Paper clones a paddingLeft onto direct accordion children
             that lack left/right props, which would stagger mixed rows — one
             wrapper neutralizes that and keeps rows full-width. */}
-        <List.AccordionGroup>
+        <List.AccordionGroup
+          expandedId={expanded}
+          onAccordionPress={(id) => setExpanded((cur) => (cur === id ? undefined : id))}
+        >
           <List.Accordion
             id="app"
             title="App settings"
@@ -425,6 +434,21 @@ export function SettingsScreen() {
                   </Text>
                 </View>
               </List.Section>
+            </View>
+          </List.Accordion>
+
+          <Divider />
+
+          <List.Accordion
+            id="training"
+            title="Training"
+            description="Heart-rate zones"
+            left={(p) => <List.Icon {...p} icon="heart-pulse" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
+          >
+            <View style={styles.accordionBody}>
+              <TrainingSection />
             </View>
           </List.Accordion>
 

@@ -3,7 +3,8 @@
  *
  *   GET /{archive}/{z}/{x}/{y}.mvt        vector tile from {archive}.pmtiles
  *                                         (/basemap/… via basemap.index.json pieces,
- *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh)
+ *                                         /peaks/… from peaks.pmtiles — ../nas/peaks.sh,
+ *                                         /parks/… from parks.pmtiles — ../nas/parks.sh)
  *   GET /{archive}.json                   TileJSON for the archive
  *   GET /contours/{z}/{x}/{y}.mvt         contour lines from DEM tiles, generated once
  *                                         and kept in R2 (./contours.ts)
@@ -32,6 +33,7 @@ import {
   type RangeResponse,
   type Source,
 } from 'pmtiles';
+import { decodeBudgetFrom } from './contourGrid';
 import { contourR2Key } from './contourMath';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
 import { handleSearch, type SearchEnv } from './search';
@@ -75,6 +77,12 @@ export interface Env extends SearchEnv, RouteEnv {
   RESEND_API_KEY?: string;
   /** Sender for the code email; defaults to Inukshuk <no-reply@mvxtechnologies.com>. */
   VERIFY_FROM?: string;
+  /**
+   * DEM tiles one contour request may decode itself (DEFAULT_DECODE_BUDGET in
+   * ./contourGrid.ts). "9" on the Workers Paid plan: every tile is full on
+   * its first request.
+   */
+  CONTOUR_DECODE_BUDGET?: string;
 }
 
 const donorFallbackLimit = memoryLimiter();
@@ -344,12 +352,20 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
 
 /** Terrain doesn't change: contour tiles are cached for 30 days. */
 const CONTOUR_CACHE_CONTROL = 'public, max-age=2592000';
+/**
+ * A partial tile (the decode budget ran out, ./contours.ts) is good enough to
+ * draw but must not stick: a few seconds at the edge and on the phone, so the
+ * next request for it reaches the Worker again — by then the DEM tiles it
+ * lacked are decoded.
+ */
+const CONTOUR_PARTIAL_CACHE_CONTROL = 'public, max-age=15';
 
 /**
  * A contour tile (#509): from R2 when it was generated before, else generated
  * now and written to R2 after the response — so each tile costs its CPU once
  * ever, not once per edge location per 30 days. The edge cache in `fetch`
- * still answers most requests before we get here.
+ * still answers most requests before we get here. `X-Contour-Source` says
+ * which: `r2`, `generated`, or `partial` (never stored).
  */
 async function serveContours(
   env: Env,
@@ -374,10 +390,22 @@ async function serveContours(
       encodeBody: 'manual',
     });
   }
-  const { mvt } = await contourTile(z, x, y);
+  const { mvt, partial } = await contourTile(z, x, y, {
+    decodeBudget: decodeBudgetFrom(env.CONTOUR_DECODE_BUDGET),
+  });
   const gzipped = await new Response(
     new Response(mvt).body!.pipeThrough(new CompressionStream('gzip')),
   ).arrayBuffer();
+  if (partial) {
+    return new Response(gzipped, {
+      headers: {
+        ...headers,
+        'Cache-Control': CONTOUR_PARTIAL_CACHE_CONTROL,
+        'X-Contour-Source': 'partial',
+      },
+      encodeBody: 'manual',
+    });
+  }
   ctx.waitUntil(
     env.BUCKET.put(key, gzipped, {
       httpMetadata: { contentType: 'application/x-protobuf', contentEncoding: 'gzip' },

@@ -11,6 +11,9 @@ import {
   type ChartGranularity,
 } from '@core/dashboard/logbook';
 import { findCategory } from '@core/library/categories';
+import { activityWeekStreaks } from '@core/stats/streaks';
+import { LogbookHeaderActions } from '@features/logbook/LogbookHeaderActions';
+import { useTrailStatsBackfill } from '@features/logbook/useTrailStats';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { space } from '@ui/tokens';
@@ -24,7 +27,6 @@ import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { ActivityTypeChips } from './ActivityTypeChips';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
 import { DistanceChart } from './DistanceChart';
-import { LifetimeCard } from './LifetimeCard';
 import { MonthCalendar } from './MonthCalendar';
 import { RecentActivityRow } from './RecentActivityRow';
 import { useDashboardClock } from './useDashboardClock';
@@ -34,7 +36,7 @@ const RECENT_ROWS = 5;
 
 /**
  * The Logbook tab (the old Dashboard; revamp `After-Logbook.html`, spec §7):
- * lifetime totals, "Distance per week" (Week/Month/Year), "Activities by type"
+ * "Distance per week" (Week/Month/Year), "Activities by type"
  * — which doubles as the type filter — the Recent list, and the month
  * calendar that taps through to each trail. Everything derives from the
  * library's TrackSummary index — pure aggregation in `@core/dashboard`,
@@ -52,6 +54,9 @@ export function DashboardScreen() {
   const [granularity, setGranularity] = useState<ChartGranularity>('week');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const now = useDashboardClock();
+  // Statistics' per-trail summaries are computed in the background from here,
+  // so a first-run backfill is usually done before Statistics is opened.
+  useTrailStatsBackfill();
   // Following the current month is the default; explicit browsing pins it.
   const [browsedMonth, setBrowsedMonth] = useState<{ year: number; month: number } | null>(null);
   const visibleMonth = useMemo(() => {
@@ -79,6 +84,9 @@ export function DashboardScreen() {
     [tracks, categoryId],
   );
   const typeCounts = useMemo(() => countsByType(tracks), [tracks]);
+  // The header flame: consecutive weeks with an outing, across ALL
+  // activities whatever chip is selected here (Statistics' "All" card shows the same).
+  const streak = useMemo(() => activityWeekStreaks(tracks, null, now).current, [tracks, now]);
   const recent = useMemo(
     () => recentActivities(tracks, categoryId, RECENT_ROWS),
     [tracks, categoryId],
@@ -131,7 +139,14 @@ export function DashboardScreen() {
   // and Settings gear sit exactly where the Library's and Explore's do.
   const header = (
     <View style={{ paddingTop: insets.top }}>
-      <ScreenHeader title="Logbook" />
+      <ScreenHeader title="Logbook">
+        {hasAnyActivity && (
+          <LogbookHeaderActions
+            streakWeeks={streak}
+            onOpenStats={() => router.push('/logbook/stats')}
+          />
+        )}
+      </ScreenHeader>
     </View>
   );
 
@@ -159,7 +174,6 @@ export function DashboardScreen() {
       {header}
       <ScrollView style={styles.fill} contentContainerStyle={styles.content}>
         <View style={styles.top}>
-          <LifetimeCard tracks={matching} units={units} typeName={selectedCategory?.name ?? null} />
           <DistanceChart
             buckets={buckets}
             granularity={granularity}

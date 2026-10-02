@@ -17,7 +17,12 @@ import {
   type MapPressEvent,
   type PointChipHit,
 } from '@core/map/mapTap';
-import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
+import {
+  CONTOUR_RECOVERY_ENABLED,
+  MARINE_ENABLED,
+  VECTOR_BASEMAP_ENABLED,
+  WEATHER_ENABLED,
+} from '@core/features/flags';
 import { carouselFitPadding } from '@core/geo/cameraFit';
 import { buildDownloadedMask } from '@core/geo/downloadedMask';
 import { pdfOverlayMaps, visibleTrackIds, visibleWaypoints } from '@core/library/visibility';
@@ -37,7 +42,7 @@ import {
   resolveModelWmsLayer,
   weatherModelById,
 } from '@core/weather/weatherModels';
-import type { BoundingBox, LatLng, LngLat, TrackPoint, WaypointIcon } from '@core/models';
+import type { BoundingBox, LatLng, TrackPoint, WaypointIcon } from '@core/models';
 import { resolveEffectiveModel } from '@core/weather/modelCoverage';
 import { WEATHER_DRAPE_OPACITY } from '@core/weather/weatherLook';
 import { WIND_DRAPE_OPACITY } from '@core/weather/windLook';
@@ -83,7 +88,9 @@ import { CompassBadge } from './components/CompassBadge';
 import { DestinationChip } from './components/DestinationChip';
 import { DestinationMarkerPin } from './components/DestinationMarkerPin';
 import { GoToCoordinatesDialog } from './components/GoToCoordinatesDialog';
-import { MapCreditText } from './components/MapCreditText';
+import { MapCreditsButton, MapCreditsSheet } from './components/MapCredits';
+import { mapCredits } from '@core/map/mapCredits';
+import { bareTapAfterFocus } from '@core/map/mapTap';
 import { HeadingCone } from './components/HeadingCone';
 import { MapSearchPill } from './components/MapSearchPill';
 import { PlaceSearchSheet } from './search/PlaceSearchSheet';
@@ -91,7 +98,7 @@ import { SearchHitMarker } from './search/SearchHitMarker';
 import { cameraTargetFor } from '@core/search/camera';
 import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
-import { imageryContoursOption, vectorBasemapOption } from '@data/basemapTiles';
+import { imageryContoursOption, vectorBasemapOption, vectorContoursUrl } from '@data/basemapTiles';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
@@ -121,11 +128,13 @@ import * as Sharing from 'expo-sharing';
 import { toLineFeature, toLngLatBounds, type TrailLineFeature } from './geojson';
 import { useAutoPauseOnLocationLoss } from './hooks/useAutoPauseOnLocationLoss';
 import { useCameraControls } from './hooks/useCameraControls';
+import { useContourRecovery } from './hooks/useContourRecovery';
 import { useHeadingCamera } from './hooks/useHeadingCamera';
 import { useMapBearing } from './hooks/useMapBearing';
 import { useOfflineDownload } from './hooks/useOfflineDownload';
 import { useRecordingSession } from './hooks/useRecordingSession';
 import { useTrailInspection } from './hooks/useTrailInspection';
+import { useSelectionCamera } from './hooks/useSelectionCamera';
 import {
   CONTOUR_LAYERS,
   FOCUSED_TRAIL_LAYERS,
@@ -138,7 +147,13 @@ import {
   TRACKS_LINES_LAYERS,
   lineOutlineFor,
 } from './mapLayers';
-import { buildOsmStyle } from './mapStyle';
+import {
+  buildOsmStyle,
+  CONTOUR_LINE_LAYER_IDS,
+  CONTOUR_SOURCE_MAXZOOM,
+  CONTOUR_SOURCE_MINZOOM,
+  VECTOR_CONTOURS_SOURCE,
+} from './mapStyle';
 import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -276,12 +291,11 @@ export function MapScreen() {
   // (the launch-race crash behind the 07-30 nightly and local blank screens).
   const [mapLoaded, setMapLoaded] = useState(false);
   // Pre-selection camera, captured just before the first selection-driven
-  // camera fit (see the inspect-fit effect below) so a later FULL deselect
-  // can glide smoothly back to it. Switching the selection from one trail to
-  // another must NOT overwrite this — it only ever holds the view from
-  // before selection started, until a deselect consumes and clears it.
-  // Written only inside event handlers/effects, never during render.
-  const restoreCameraRef = useRef<{ center: LngLat; zoom: number } | null>(null);
+  // camera fit (see the inspect-fit effect below) so the panel's or the
+  // carousel's ✕ can glide back to it. Switching the selection from one trail
+  // to another must NOT overwrite it. Tapping the map elsewhere to leave the
+  // focus FORGETS it instead: the camera stays put (2.1.1).
+  const selectionCamera = useSelectionCamera(cameraRef, mapRef);
 
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   // Cold-start camera seed: the persisted last known map position. Hydration is
@@ -459,6 +473,8 @@ export function MapScreen() {
   /** Its strength and the summits' density — the Topology menu's #461 rows. */
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
+  /** "Parks & protected areas": boundaries and names on the vector layers. */
+  const showParks = useSettingsStore((s) => s.showParks);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   /**
@@ -562,6 +578,8 @@ export function MapScreen() {
   // The bottom column's height and the row's top inside it, for the bubble.
   const [bottomColumnH, setBottomColumnH] = useState<number | null>(null);
   const [bottomRowY, setBottomRowY] = useState<number | null>(null);
+  // The ⓘ credits sheet (2.1.1): what the map is drawing, with its © lines.
+  const [creditsOpen, setCreditsOpen] = useState(false);
   // Coordinate readout/entry dialog (#97), opened from the map-actions sheet.
   // The centre is captured WHEN IT OPENS (an exact getViewState read) rather
   // than tracked per settle — nothing else needs a metre-accurate centre, and
@@ -694,6 +712,7 @@ export function MapScreen() {
             vectorBasemap: {
               ...vectorBasemapOption(theme.dark, terrainContours),
               peakDensity,
+              protectedAreas: showParks,
             },
           }
         : {}),
@@ -702,6 +721,7 @@ export function MapScreen() {
             imageryLabels: {
               ...vectorBasemapOption(theme.dark, false),
               peakDensity,
+              protectedAreas: showParks,
             },
           }
         : {}),
@@ -794,6 +814,7 @@ export function MapScreen() {
     showHillshade,
     hillshadeStrength,
     peakDensity,
+    showParks,
     tiltRelief,
     offlineOnly,
     offlineRegions,
@@ -1050,6 +1071,25 @@ export function MapScreen() {
   // low-rate bits: "a gesture is in progress" and the settled bounds.
   const windViewRef = useRef<WindViewState | null>(null);
   const windSizeRef = useRef({ width: 0, height: 0 });
+  // Contour tiles the map failed to load (a 503 from the tile Worker) stay
+  // holes until the user pans away and back: MapLibre does not ask again.
+  // Once the camera settles this looks for them and gets them reloaded —
+  // bounded, online only, and only while the served contours are on screen.
+  const onContourSettled = useContourRecovery({
+    mapRef,
+    enabled:
+      CONTOUR_RECOVERY_ENABLED &&
+      mapLoaded &&
+      screenFocused &&
+      !offlineOnly &&
+      ((vectorBasemap && terrainContours) || imageryContours),
+    tilesUrl: vectorContoursUrl(),
+    sourceId: VECTOR_CONTOURS_SOURCE,
+    minzoom: CONTOUR_SOURCE_MINZOOM,
+    maxzoom: CONTOUR_SOURCE_MAXZOOM,
+    layerIds: CONTOUR_LINE_LAYER_IDS,
+    viewSize: () => windSizeRef.current,
+  });
   const [windInteracting, setWindInteracting] = useState(false);
   const [windSettledBounds, setWindSettledBounds] = useState<WindBbox | null>(null);
   const windSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1175,51 +1215,31 @@ export function MapScreen() {
     // Capture the camera as it stood BEFORE this selection-driven fit — but
     // only once per selection "session" (the ref-is-null check): switching
     // from one selected trail to another must not clobber the true
-    // pre-selection view held for the eventual deselect glide-back (see
-    // restoreCameraOnDeselect). Gated on mapLoaded — see its declaration
+    // pre-selection view held for the ✕ glide-back (see
+    // useSelectionCamera). Gated on mapLoaded — see its declaration
     // comment (ungated getViewState NPEs on the native thread).
-    if (restoreCameraRef.current === null && mapLoaded) {
-      void mapRef.current
-        ?.getViewState()
-        .then((vs) => {
-          restoreCameraRef.current = { center: vs.center, zoom: vs.zoom };
-        })
-        .catch(() => {
-          // map mid-teardown — skip capturing; the deselect glide-back just
-          // won't fire this one time.
-        })
-        .finally(fit);
-    } else {
-      fit();
-    }
+    selectionCamera.fitAfterCapture(fit, mapLoaded);
     // `setFollowUser` is a stable setter wrapper; `insets.top` is effectively
     // constant per device/orientation. `inspectPanelHeight` IS a real dep:
     // when the very first-ever panel layout lands after this effect already
     // fit with the estimate, this reruns to re-fit with the real padding —
-    // safe because the restoreCameraRef guard below only captures once per
+    // safe because useSelectionCamera only captures once per
     // selection "session", so the re-fit never re-captures the (now
     // already-moved) view as the restore target.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectId, inspectPoints, inspectTrack, inspectPanelHeight]);
 
-  // Glide the camera back to its pre-selection view on a FULL deselect (the
-  // effect above is the only thing that ever populates restoreCameraRef) —
-  // called from the three close paths below (inspect-panel close, carousel
-  // close, cold-tap deselect), never when merely switching the selected
-  // trail. Clears the ref so a redundant deselect is a no-op.
-  const restoreCameraOnDeselect = useCallback(() => {
-    const prev = restoreCameraRef.current;
-    if (!prev) return;
-    restoreCameraRef.current = null;
-    void cameraRef.current?.setStop({ center: prev.center, zoom: prev.zoom, duration: 600 });
-  }, []);
+  // Closing the inspect panel or the carousel (✕) leaves the camera where it
+  // is, like a tap elsewhere on the map (owner, 2.1.1): it only forgets the
+  // pre-selection snapshot. useSelectionCamera.restore() stays for a future
+  // "back to where I was" control.
+  const releaseCameraOnDeselect = selectionCamera.forget;
 
   // Item 5: when the heat-spot carousel OPENS, zoom the camera OUT to fit the
   // union of every trail it's showing (not just the focused one) — capturing
-  // the pre-open camera first via the SAME restoreCameraRef mechanism the
+  // the pre-open camera first via the SAME useSelectionCamera snapshot the
   // inspect-panel fit above uses, so the carousel's own onClose (which
-  // already calls restoreCameraOnDeselect) glides back to it with no further
-  // wiring. Keyed on heatSelection?.trackIds's REFERENCE — that array is
+  // calls releaseCameraOnDeselect) releases it with no further wiring. Keyed on heatSelection?.trackIds's REFERENCE — that array is
   // reused as-is by onFocus (`{...cur, focusedIdx}`), so this only fires once
   // per carousel "open", not on every focused-card swipe.
   useEffect(() => {
@@ -1244,20 +1264,7 @@ export function MapScreen() {
     const bounds = toLngLatBounds(union);
     const padding = carouselFitPadding(insets.top);
     const fit = () => cameraRef.current?.fitBounds(bounds, { duration: 600, padding });
-    if (restoreCameraRef.current === null && mapLoaded) {
-      void mapRef.current
-        ?.getViewState()
-        .then((vs) => {
-          restoreCameraRef.current = { center: vs.center, zoom: vs.zoom };
-        })
-        .catch(() => {
-          // map mid-teardown — skip capturing; the close glide-back just
-          // won't fire this one time.
-        })
-        .finally(fit);
-    } else {
-      fit();
-    }
+    selectionCamera.fitAfterCapture(fit, mapLoaded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heatSelection?.trackIds]);
 
@@ -1756,6 +1763,19 @@ export function MapScreen() {
         setHeatSelection(null); // a single-trail tap hides the carousel
         inspect(at.trackIds[0] ?? null);
       } else {
+        // Leaving a focused trail or route (its panel or the heat carousel
+        // up) by tapping the map elsewhere (2.1.1, owner): the tap ONLY
+        // closes the focus. No point bubble, no area card, no follow, and
+        // the camera stays where it is — the pre-focus snapshot is
+        // forgotten, not glided back to (the panel's ✕ still glides back).
+        if (bareTapAfterFocus(inspectId !== null || heatSelection !== null) === 'leave-focus') {
+          setHeatSelection(null);
+          inspect(null);
+          selectionCamera.forget();
+          setViewWp(null);
+          setForecastAt(null);
+          return;
+        }
         // Nothing else claimed the tap — the dot route gets its turn now
         // (item 4: tap your own position dot to resume following after
         // panning away). Checked after heat/trail so it can never steal a
@@ -1764,13 +1784,6 @@ export function MapScreen() {
           setFollowUser(true);
           return;
         }
-        // Empty/cold tap: deselect both the carousel and any open inspect
-        // panel (item 7 — tapping empty map while a trail is selected
-        // deselects it, same as tapping empty space anywhere else), and
-        // glide the camera back to its pre-selection view.
-        setHeatSelection(null);
-        inspect(null);
-        restoreCameraOnDeselect();
         // A drawn area under the tap (#503) opens its card — ahead of the
         // point chip, behind every pin, trail and heat spot (a trail inside
         // an area stays tappable). A second tap on the same area closes the
@@ -1813,7 +1826,9 @@ export function MapScreen() {
       heatOn,
       inspect,
       showTrackOverlays,
-      restoreCameraOnDeselect,
+      inspectId,
+      heatSelection,
+      selectionCamera,
       location,
       setFollowUser,
       pointAt,
@@ -2041,6 +2056,7 @@ export function MapScreen() {
                   updateScaleAt(vs.zoom, vs.center[1]);
                   onSettleBearing(vs.bearing);
                   tilt.onSettledPitch(vs.pitch);
+                  onContourSettled(vs);
                 })
                 .catch(() => undefined); // mid-teardown — the next settle seeds it
             }}
@@ -2085,6 +2101,8 @@ export function MapScreen() {
               onSettleBearing(e.nativeEvent.bearing);
               // Settled pitch → the tilted-map relief pass (#480).
               tilt.onSettledPitch(e.nativeEvent.pitch);
+              // Settled view → look for contour tiles that failed to load.
+              onContourSettled(e.nativeEvent);
               // Settled centre → mapStore (wave B): resolves the effective
               // forecast model and the radar rows' "Canada only" hint. Same
               // render batch as the version bump above — no extra re-render.
@@ -2716,11 +2734,14 @@ export function MapScreen() {
               pointerEvents="box-none"
               onLayout={(e) => setBottomRowY(e.nativeEvent.layout.y)}
             >
+              {/* 2.1.1: the credit caption became a small ⓘ LEFT of the scale bar;
+                it opens the credits sheet (every source on screen, the routing
+                engine while a routed route is up, "Report a map error"). */}
               <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
+                <MapCreditsButton onPress={() => setCreditsOpen(true)} />
                 {showScaleBar && scaleAt !== null && (
                   <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
                 )}
-                <MapCreditText basemap={basemap} vector={stoneBase} osmLabels={imageryLabels} />
               </View>
               {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
@@ -2732,6 +2753,7 @@ export function MapScreen() {
                   focused={isFocused}
                   bubbleBlocked={
                     railMenuOpen ||
+                    creditsOpen ||
                     trailSheetUp ||
                     pickingCategory ||
                     recordRequested ||
@@ -2828,7 +2850,7 @@ export function MapScreen() {
             units={units}
             onClose={() => {
               inspect(null);
-              restoreCameraOnDeselect();
+              releaseCameraOnDeselect();
             }}
             onScrub={setMarkerAt}
             onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
@@ -2921,7 +2943,7 @@ export function MapScreen() {
             onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
             onClose={() => {
               setHeatSelection(null);
-              restoreCameraOnDeselect();
+              releaseCameraOnDeselect();
             }}
             topInset={insets.top}
           />
@@ -2937,6 +2959,39 @@ export function MapScreen() {
             right={TIP_BUBBLE_RIGHT}
             bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
             tailRight={TIP_BUBBLE_TAIL_RIGHT}
+          />
+        )}
+
+        {/* The ⓘ credits sheet (2.1.1), just above the bottom row that holds the
+          button. Its lines follow what the map is drawing right now. */}
+        {creditsOpen && (
+          <MapCreditsSheet
+            lines={mapCredits({
+              basemap: basemap === 'satellite' ? 'satellite' : 'map',
+              vector: stoneBase,
+              osmLabels: imageryLabels,
+              terrain:
+                (terrainContours && (vectorBasemap || imageryContours)) ||
+                terrainOverlays2d.contours != null ||
+                (showHillshade && basemap === 'map'),
+              pdfMaps: shownMaps.map((m) => m.name),
+              routingEngines: drawing.routingEngines,
+              weather: weatherLayer !== null && !offlineOnly,
+              marine: marineActive,
+            })}
+            bottom={
+              // The bottom column's own lift, same precedence as its style.
+              (drawing.panelHeight > 0
+                ? drawing.panelHeight
+                : trailSheetUp
+                  ? trailSheetHeight
+                  : recordingPanelUp
+                    ? panelHeight
+                    : 0) +
+              (bottomColumnH !== null && bottomRowY !== null ? bottomColumnH - bottomRowY : 48) +
+              TIP_BUBBLE_GAP
+            }
+            onClose={() => setCreditsOpen(false)}
           />
         )}
 
@@ -3130,7 +3185,8 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 16, right: 16, bottom: 0, gap: 12, paddingBottom: 10 },
   bottomRow: { flexDirection: 'row', alignItems: 'flex-end' },
   bottomSide: { flex: 1, alignItems: 'flex-start' },
-  bottomSideStart: { gap: 4 },
+  // ⓘ then the scale bar, one row, the ⓘ centred on the scale bar's height (owner).
+  bottomSideStart: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bottomSideEnd: { alignItems: 'flex-end' },
   panelDock: { position: 'absolute', left: 0, right: 0, bottom: 0, ...BOTTOM_LAYER.recordingPanel },
   // Legend pill + time scrubber, tight together (the bottom column's own gap

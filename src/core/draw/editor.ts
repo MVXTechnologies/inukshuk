@@ -201,7 +201,26 @@ export const canUndo = (state: DrawState): boolean => state.past.length > 0;
 export const canSave = (state: DrawState): boolean =>
   state.vertices.length >= MIN_VERTICES[state.kind];
 
-/** The one-line hint under the mode chips / in the panel for the current state. */
+/**
+ * The drawing help behind the panel title's (?) (2.1.1): how to draw and edit,
+ * shown on demand instead of as a banner over the map.
+ */
+export function drawHelp(kind: DrawKind): string[] {
+  if (kind === 'route') {
+    return [
+      'Tap the map to add a point. Trails and Roads legs follow the paths; Freehand draws straight lines.',
+      'Tap a point to drag or delete it; tap a midpoint to add one.',
+      'Long-press a point to delete it.',
+    ];
+  }
+  return [
+    'Tap the map to place the corners; three close the area.',
+    'Tap a corner to drag or delete it; tap a midpoint to add one.',
+    'Long-press a corner to delete it.',
+  ];
+}
+
+/** The one-line hint for the current state (the first tap's is shown as a small tip). */
 export function drawHint(state: DrawState): string {
   const n = state.vertices.length;
   if (state.kind === 'route') {

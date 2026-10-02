@@ -14,7 +14,6 @@ import {
   labelledBars,
   niceAxisMax,
   recentActivities,
-  sinceLabel,
   startOfLocalMonth,
   startOfLocalYear,
 } from './logbook';
@@ -152,13 +151,6 @@ describe('hero numbers', () => {
     expect(heroClimb(1_068, 'metric')).toEqual({ value: '1,068', unit: 'm' });
     expect(heroClimb(1_000, 'imperial')).toEqual({ value: '3,281', unit: 'ft' });
     expect(heroClimb(21_400, 'imperial')).toEqual({ value: '70.2', unit: 'k ft' });
-  });
-
-  it('dates the logbook from its oldest activity', () => {
-    expect(sinceLabel([{ startedAt: NOW }, { startedAt: new Date(2025, 2, 14).getTime() }])).toBe(
-      'SINCE MAR 2025',
-    );
-    expect(sinceLabel([])).toBeNull();
   });
 });
 

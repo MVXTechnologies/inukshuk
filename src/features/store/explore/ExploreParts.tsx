@@ -1,4 +1,6 @@
 import { badgeIndex, sourceAbbreviation } from '@core/catalog/exploreFormat';
+import type { CatalogBbox } from '@core/catalog/schema';
+import type { LatLng } from '@core/models';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { tabularNums } from '@ui/fonts';
 import { palette, radius, space, target } from '@ui/tokens';
@@ -7,6 +9,8 @@ import { memo, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import Svg, { Path } from 'react-native-svg';
+
+import { FootprintThumb } from './FootprintThumb';
 
 /**
  * Building blocks of the map explorer (#447, boards `Main.dc.html` et al.):
@@ -109,13 +113,22 @@ export function MapPreview({
 export const CARD_WIDTH = 160;
 const CARD_IMAGE_HEIGHT = 120;
 
-/** One "Popular near you" card: preview + distance badge, title, meta line. */
+/**
+ * One "Popular near you" card: picture + distance badge, title, meta line.
+ * The picture is the sheet's footprint on an offline outline map when the
+ * item has a bbox (`FootprintThumb`), else the publisher thumbnail, else the
+ * drawn placeholder.
+ */
 export const MapCard = memo(function MapCard({
   id,
   title,
   meta,
   distance,
   thumbnailUrl,
+  bbox,
+  position = null,
+  marker = false,
+  external = false,
   onPress,
 }: {
   id: string;
@@ -123,28 +136,49 @@ export const MapCard = memo(function MapCard({
   meta: string;
   distance: string | null;
   thumbnailUrl: string | undefined;
+  bbox?: CatalogBbox | undefined;
+  position?: LatLng | null;
+  /** Pin instead of footprint (a link-out place). */
+  marker?: boolean;
+  /** Opens the publisher's site: link role and an open-in-new mark. */
+  external?: boolean;
   onPress: () => void;
 }) {
   const t = useSchemeTokens();
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole={external ? 'link' : 'button'}
       accessibilityLabel={[title, meta, distance].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={[styles.cardImage, { borderColor: t.outlineVariant }]}>
-        <MapPreview
-          thumbnailUrl={thumbnailUrl}
-          seed={id}
-          width={CARD_WIDTH}
-          height={CARD_IMAGE_HEIGHT}
-        />
+        {bbox !== undefined ? (
+          <FootprintThumb
+            bbox={bbox}
+            width={CARD_WIDTH}
+            height={CARD_IMAGE_HEIGHT}
+            position={position}
+            marker={marker}
+          />
+        ) : (
+          <MapPreview
+            thumbnailUrl={thumbnailUrl}
+            seed={id}
+            width={CARD_WIDTH}
+            height={CARD_IMAGE_HEIGHT}
+          />
+        )}
         {distance !== null && (
           <View style={[styles.distanceBadge, { backgroundColor: t.surface }]}>
             <Text style={[styles.distanceText, tabularNums, { color: t.inkVariant }]}>
               {distance}
             </Text>
+          </View>
+        )}
+        {external && (
+          <View style={[styles.externalBadge, { backgroundColor: t.surface }]}>
+            <Icon source="open-in-new" size={14} color={t.inkVariant} />
           </View>
         )}
       </View>
@@ -431,6 +465,13 @@ const styles = StyleSheet.create({
     bottom: space.sm,
     paddingHorizontal: 7,
     paddingVertical: 3,
+    borderRadius: 6,
+  },
+  externalBadge: {
+    position: 'absolute',
+    right: space.sm,
+    top: space.sm,
+    padding: 4,
     borderRadius: 6,
   },
   distanceText: { fontSize: 12, lineHeight: 15, fontWeight: '700' },

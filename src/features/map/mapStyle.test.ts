@@ -23,8 +23,8 @@ import {
   PEAK_LEAD,
 } from '@core/map/terrainOptions';
 import { peakDueFilter } from '@core/map/stoneStyle';
+import { validateStyleMin as validateStyle } from '@maplibre/maplibre-gl-style-spec';
 import {
-  basemapAttribution,
   buildOsmStyle,
   CONTOUR_SOURCE_MAXZOOM,
   CONTOUR_SOURCE_MINZOOM,
@@ -722,23 +722,6 @@ describe('position-puck anchors (#332)', () => {
   });
 });
 
-describe('basemapAttribution', () => {
-  it.each([
-    ['map' as const, '© OpenStreetMap'],
-    ['satellite' as const, '© Esri, Maxar'],
-  ])('credits the %s basemap', (basemap, credit) => {
-    expect(basemapAttribution(basemap)).toBe(credit);
-  });
-
-  it('credits Protomaps on the vector base map', () => {
-    expect(basemapAttribution('map', true)).toBe('© OpenStreetMap · Protomaps');
-  });
-
-  it('credits OpenStreetMap too when our vector overlays ride the imagery (#492)', () => {
-    expect(basemapAttribution('satellite', true)).toBe('© Esri, Maxar · © OpenStreetMap');
-  });
-});
-
 describe('night red raster (decision 4)', () => {
   const osmPaint = (night: boolean) => {
     const style = buildOsmStyle('https://tiles/{z}/{x}/{y}.png', 'map', false, { night });
@@ -888,6 +871,79 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
         'source-layer': 'peaks',
       }),
     ]);
+  });
+
+  describe('parks and protected areas', () => {
+    const PARK_LAYERS = [
+      'stone-park-band',
+      'stone-park-outline',
+      'stone-park-line',
+      'stone-park-label',
+    ];
+    const parks = 'https://tiles.example/parks/{z}/{x}/{y}.mvt';
+    const parkLayers = (s: ReturnType<typeof buildOsmStyle>) =>
+      s.layers.filter((l) => PARK_LAYERS.includes(l.id));
+    /** The whole style through the reference validator (it catches a nested zoom). */
+    const validateStyleMin = (s: ReturnType<typeof buildOsmStyle>) =>
+      validateStyle(s as never).map((e) => e.message);
+
+    it("draws Protomaps' parks by default, with no extra source", () => {
+      const s = withFlag(true)(TILE, 'map', false, { vectorBasemap });
+      expect(parkLayers(s).map((l) => l.id)).toEqual(PARK_LAYERS);
+      expect(s.sources['basemap-parks']).toBeUndefined();
+      for (const l of parkLayers(s)) expect(l).toMatchObject({ source: 'basemap-vector' });
+      expect(validateStyleMin(s)).toEqual([]);
+    });
+
+    it('reads our parks tiles (z4–z12) when given', () => {
+      const s = withFlag(true)(TILE, 'map', false, { vectorBasemap: { ...vectorBasemap, parks } });
+      expect(s.sources['basemap-parks']).toEqual({
+        type: 'vector',
+        tiles: [parks],
+        minzoom: 4,
+        maxzoom: 12,
+      });
+      const byId = Object.fromEntries(parkLayers(s).map((l) => [l.id, l]));
+      for (const id of ['stone-park-band', 'stone-park-line']) {
+        expect(byId[id]).toMatchObject({ source: 'basemap-parks', 'source-layer': 'parks' });
+      }
+      expect(byId['stone-park-label']).toMatchObject({
+        source: 'basemap-parks',
+        'source-layer': 'park_labels',
+      });
+      expect(validateStyleMin(s)).toEqual([]);
+    });
+
+    it('the toggle removes the layers and the source, and nothing else', () => {
+      const build = withFlag(true);
+      const on = build(TILE, 'map', false, { vectorBasemap: { ...vectorBasemap, parks } });
+      const off = build(TILE, 'map', false, {
+        vectorBasemap: { ...vectorBasemap, parks, protectedAreas: false },
+      });
+      expect(parkLayers(off)).toEqual([]);
+      // No layer reads it, so an offline pack must not download it.
+      expect(off.sources['basemap-parks']).toBeUndefined();
+      expect(off.layers.map((l) => l.id)).toEqual(
+        on.layers.map((l) => l.id).filter((id) => !PARK_LAYERS.includes(id)),
+      );
+      expect(validateStyleMin(off)).toEqual([]);
+    });
+
+    it('over satellite: boundary and name with the labels, no fill, same toggle', () => {
+      const imageryLabels = { tiles: vectorBasemap.tiles, parks };
+      const s = buildOsmStyle(TILE, 'satellite', false, { imageryLabels });
+      expect(parkLayers(s).map((l) => l.id)).toEqual(PARK_LAYERS);
+      expect(s.sources['basemap-parks']).toMatchObject({ type: 'vector', maxzoom: 12 });
+      expect(s.layers.some((l) => l.id.startsWith('stone-') && l.type === 'fill')).toBe(false);
+      expect(validateStyleMin(s)).toEqual([]);
+
+      const off = buildOsmStyle(TILE, 'satellite', false, {
+        imageryLabels: { ...imageryLabels, protectedAreas: false },
+      });
+      expect(parkLayers(off)).toEqual([]);
+      expect(off.sources['basemap-parks']).toBeUndefined();
+      expect(off.layers.some((l) => l.id === 'stone-place-town')).toBe(true);
+    });
   });
 
   it('flag on: the dark scheme yields a different stone style', () => {

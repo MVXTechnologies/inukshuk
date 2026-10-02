@@ -1,5 +1,5 @@
-# Logbook (the old Dashboard) e2e: the lifetime totals and the "Distance per
-# week" chart show real data from the suite's fixture trail, the Week/Month/
+# Logbook (the old Dashboard) e2e: the "Distance per week" chart and the
+# Recent list show real data from the suite's fixture trail, the Week/Month/
 # Year segment and the "Activities by type" chips (which are the type filter)
 # drive the chart, and the month calendar taps through to the trail viewer.
 #
@@ -43,7 +43,7 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Distance per week'
     timeout: 15000
-# Lifetime totals carry today's fixture trail → a real distance.
+# The chart subtitle and the Recent row carry today's fixture trail → a real distance.
 - assertVisible: '.*(km|\d+ m).*'
 # The fixture is inside the 12-week window, so the chart is not empty.
 - assertNotVisible: 'No activities'

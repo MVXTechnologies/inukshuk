@@ -8,13 +8,15 @@ import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from '
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HeaderAction, ScreenHeader } from '@ui/components/ScreenHeader';
+import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { InukshukLoader } from '@ui/components/InukshukLoader';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { CatalogResultsList } from './explore/CatalogResultsList';
 import { ExploreLanding } from './explore/ExploreLanding';
+import { BrowseOnMapButton } from './explore/ExploreParts';
 import { exploreMapHref } from './explore/exploreRoutes';
+import { OrganisationMapsCta } from './explore/OrganisationMapsCta';
 import { useCatalogDownloadFlow } from './explore/useCatalogDownloadFlow';
 
 /**
@@ -153,6 +155,7 @@ export function StoreScreen() {
           <Text variant="bodyMedium" style={styles.emptyText}>
             No maps match your search.
           </Text>
+          <OrganisationMapsCta style={styles.ctaEmpty} />
         </View>
       );
     }
@@ -187,7 +190,7 @@ export function StoreScreen() {
         </View>
       );
     }
-    if (searchScope === 'complete') return null;
+    if (searchScope === 'complete') return <OrganisationMapsCta style={styles.cta} />;
     return (
       <View style={styles.footer}>
         <Text
@@ -210,49 +213,54 @@ export function StoreScreen() {
       <HeaderContours />
       {/* The shared tab header: same title and gear position as Library and Logbook. */}
       <View style={{ paddingTop: insets.top }}>
-        <ScreenHeader title="Explore">
-          <HeaderAction
-            icon="map-outline"
-            onPress={() => router.push(exploreMapHref())}
-            accessibilityLabel="Show on a map"
-          />
-        </ScreenHeader>
+        <ScreenHeader title="Explore" />
       </View>
 
-      <View
-        style={[
-          styles.search,
-          { backgroundColor: tokens.surface, borderColor: tokens.outlineVariant },
-        ]}
-      >
-        <Icon source="magnify" size={20} color={tokens.inkMuted} />
-        <TextInput
-          placeholder="Search a place, a park, a map…"
-          placeholderTextColor={tokens.inkMuted}
-          accessibilityLabel="Search maps"
-          value={query}
-          onChangeText={setQuery}
-          // #235 — results are live-filtered; Return just puts the keyboard away.
-          returnKeyType="search"
-          submitBehavior="blurAndSubmit"
-          onSubmitEditing={() => Keyboard.dismiss()}
-          autoCorrect={false}
+      {/* Search and "Browse on the map" share ONE row (2.1.1, owner): the
+        landing's separate pill row cost a whole band of height, and the
+        header's map glyph duplicated it. The pill keeps its label (#474: an
+        icon alone was missed). */}
+      <View style={styles.searchRow} testID="explore-search-row">
+        <View
           style={[
-            styles.searchInput,
-            { color: tokens.ink, fontFamily: theme.fonts.bodyLarge.fontFamily },
+            styles.search,
+            { backgroundColor: tokens.surface, borderColor: tokens.outlineVariant },
           ]}
+        >
+          <Icon source="magnify" size={20} color={tokens.inkMuted} />
+          <TextInput
+            placeholder="Search a place, a park, a map…"
+            placeholderTextColor={tokens.inkMuted}
+            accessibilityLabel="Search maps"
+            value={query}
+            onChangeText={setQuery}
+            // #235 — results are live-filtered; Return just puts the keyboard away.
+            returnKeyType="search"
+            submitBehavior="blurAndSubmit"
+            onSubmitEditing={() => Keyboard.dismiss()}
+            autoCorrect={false}
+            style={[
+              styles.searchInput,
+              { color: tokens.ink, fontFamily: theme.fonts.bodyLarge.fontFamily },
+            ]}
+          />
+          {query !== '' && (
+            <Pressable
+              onPress={() => setQuery('')}
+              hitSlop={target.compactHitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              style={styles.clear}
+            >
+              <Icon source="close" size={20} color={tokens.inkMuted} />
+            </Pressable>
+          )}
+        </View>
+        <BrowseOnMapButton
+          label="Map"
+          onPress={() => router.push(exploreMapHref())}
+          accessibilityLabel="Browse all maps on the map"
         />
-        {query !== '' && (
-          <Pressable
-            onPress={() => setQuery('')}
-            hitSlop={target.compactHitSlop}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            style={styles.clear}
-          >
-            <Icon source="close" size={20} color={tokens.inkMuted} />
-          </Pressable>
-        )}
       </View>
 
       {fromCache && status === 'ready' && (
@@ -284,11 +292,18 @@ export function StoreScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  search: {
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
     marginHorizontal: space.lg,
     marginTop: space.sm,
-    height: 52,
-    borderRadius: 26,
+  },
+  search: {
+    flex: 1,
+    minWidth: 0,
+    height: target.min,
+    borderRadius: target.min / 2,
     borderWidth: 1,
     paddingLeft: space.lg,
     paddingRight: space.sm,
@@ -302,4 +317,6 @@ const styles = StyleSheet.create({
   footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
+  cta: { marginHorizontal: space.lg, marginTop: space.lg },
+  ctaEmpty: { alignSelf: 'stretch', marginTop: space.md },
 });

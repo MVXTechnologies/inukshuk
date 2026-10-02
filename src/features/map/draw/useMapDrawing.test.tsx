@@ -237,6 +237,43 @@ describe('route drawing (#502)', () => {
     expect(screen.getByLabelText('Freehand')).toBeSelected();
   });
 
+  it("shows the help behind the title's (?), and a tap anywhere closes it (2.1.1)", async () => {
+    await mount();
+    await act(async () => drawing().startRoute());
+    // Only the first tap's small tip, never the standing banner.
+    expect(screen.getByText('Tap the map to start your route')).toBeOnTheScreen();
+    expect(screen.queryByTestId('draw-help')).toBeNull();
+    await press('Drawing help');
+    expect(screen.getByTestId('draw-help')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Tap a point to drag or delete it; tap a midpoint to add one.'),
+    ).toBeOnTheScreen();
+    expect(screen.getByLabelText('Drawing help')).toHaveProp('accessibilityState', {
+      expanded: true,
+    });
+    // The backdrop swallows the tap: no point is added.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('draw-help-backdrop'));
+    });
+    expect(screen.queryByTestId('draw-help')).toBeNull();
+    expect(screen.getByLabelText(/^distance 0 m$/)).toBeOnTheScreen();
+    // After the first point the start tip is gone too.
+    await tap(P1);
+    expect(screen.queryByTestId('draw-tip')).toBeNull();
+  });
+
+  it('the area tool has the same (?) with the corner instructions', async () => {
+    await mount();
+    await act(async () => drawing().startArea());
+    expect(screen.getByText('Draw an area')).toBeOnTheScreen();
+    await press('Drawing help');
+    expect(
+      screen.getByText('Tap a corner to drag or delete it; tap a midpoint to add one.'),
+    ).toBeOnTheScreen();
+    await press('Drawing help'); // the (?) toggles it closed too
+    expect(screen.queryByTestId('draw-help')).toBeNull();
+  });
+
   it('adds, undoes, clears and saves an untimed planned route', async () => {
     await mount();
     await act(async () => drawing().startRoute());
@@ -244,7 +281,8 @@ describe('route drawing (#502)', () => {
     await tap(P1);
     await tap(P2);
     await tap(P3);
-    expect(screen.getByText(/Tap a point to drag/)).toBeOnTheScreen();
+    // No instruction banner over the map (2.1.1): the help is behind the (?).
+    expect(screen.queryByText(/Tap a point to drag/)).toBeNull();
     // ~0.8 km, and the climb is unavailable offline (never a guess).
     expect(screen.getByLabelText(/^distance \d+ m$/)).toBeOnTheScreen();
     await flush(400);
@@ -574,7 +612,6 @@ describe('route snapping (#515)', () => {
     await press('Trails');
     expect(screen.getByLabelText('Trails')).toBeSelected();
     await tap(P1);
-    expect(screen.getByText(/follows trails/)).toBeOnTheScreen();
     await tap(P2);
     // Loading: the leg is a straight placeholder, and the route can't be saved yet.
     expect(screen.getByText('Finding the trail…')).toBeOnTheScreen();
@@ -585,8 +622,11 @@ describe('route snapping (#515)', () => {
     await answer(bent);
     expect(screen.queryByText('Finding the trail…')).toBeNull();
     expect(distanceLabel()).toBeGreaterThan(straight);
-    expect(screen.getByText(/Routing BRouter · © OpenStreetMap/)).toBeOnTheScreen();
-    expect(screen.getByLabelText('Report a map error')).toBeOnTheScreen();
+    // The routing credit moved to the map's ⓘ credits sheet (2.1.1): the
+    // panel has no footer any more; the engines are handed to MapScreen.
+    expect(drawing().routingEngines).toEqual(['BRouter']);
+    expect(screen.queryByText(/Routing BRouter/)).toBeNull();
+    expect(screen.queryByLabelText('Report a map error')).toBeNull();
 
     await press('Save route');
     await press('Save route to Library');
@@ -633,7 +673,7 @@ describe('route snapping (#515)', () => {
     await flush(400);
     // The new leg is straight (no request); the trail leg stays snapped.
     expect(mockRouteCalls).toHaveLength(0);
-    expect(screen.getByText(/Routing BRouter/)).toBeOnTheScreen();
+    expect(drawing().routingEngines).toEqual(['BRouter']);
     await press('Undo');
     await press('Undo');
     await press('Undo');
@@ -688,7 +728,8 @@ describe('route snapping (#515)', () => {
     // The chip it was saved on, the trail leg snapped from the saved line.
     expect(screen.getByLabelText('Roads')).toBeSelected();
     expect(mockRouteCalls).toHaveLength(0);
-    expect(screen.getByText(/© OpenStreetMap/)).toBeOnTheScreen();
+    // Routed legs on screen: the credits sheet gets a Routing line.
+    expect(drawing().routingEngines).not.toBeNull();
   });
 });
 

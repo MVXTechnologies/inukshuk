@@ -174,6 +174,29 @@ Licence"`.
   As `forest` (National Forest maps, a category old apps already label), the
   plan is 281 topo + 71 forest shards and an 87 KB index.
 
+### 1.5 Québec river-descent maps — WIRED, 0 shipped (permission-gated, 2026-10-02)
+
+- **What.** Canoe, kayak and rafting route maps showing rapids, falls and
+  portages. Research and licence evidence:
+  `docs/research/quebec-river-maps.md`.
+- **Why nothing ships.** No publisher licenses its files.
+  - Canot Kayak Québec (353 rivers) grants only a personal, non-commercial
+    licence.
+  - Cartes Plein-air (366 maps) and COBARIC (6 GeoPDF fiches) are "tous droits
+    réservés".
+  - Parks Canada's reproduction grant is non-commercial, which this policy
+    excludes (§2, Brazil).
+- **How it ships when a publisher agrees.**
+  - The source is hand-curated in `scripts/catalog/sources/quebec-rivers.json`.
+    Each publisher carries `permission: { status, evidence }`.
+  - `@core/catalog/riverMaps` emits only `granted` publishers' maps, as
+    category `river`, kind `trail`, activity `paddling`, with a bbox.
+  - `fetch-quebec-rivers.ts` HEADs them into `fragments/quebec-rivers.json`.
+    While nothing is granted it writes no fragment, so the catalog is
+    unchanged.
+  - The 6 COBARIC fiches are already curated, with bboxes read from their own
+    `/GPTS`.
+
 ## 2. Marine charts — nothing shippable, and the reason is format
 
 **This is the headline negative result.** Every openly-licensed chart source is
@@ -285,3 +308,11 @@ fetch their files. The first is **Parcs Québec (Sépaq)**: 37 places in
   after the Avenza–Blue Marble merger of 2026-04-07. A partnership proposal
   has been drafted for the owner (kept out of this public repo).
   Until Sépaq authorizes it in writing, we link out only.
+- **Zecs du Québec (Réseau Zec)**: 63 places in
+  `scripts/catalog/collections/zecs.json`, each linking to the zec's own
+  website. Every zec has a free, georeferenced 1:40 000 territory map
+  (Avenza, and Réseau Zec's cartothèque — whose SharePoint links are not
+  public), and 8 zecs post a GeoPDF on their own site, but reseauzec.com says
+  only "Tous droits réservés" and no zec states a licence. **Needs
+  permission** before any map file is linked; the research table and the
+  ready-to-add GeoPDFs are in `docs/research/zec-maps.md`.

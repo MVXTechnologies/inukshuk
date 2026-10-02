@@ -171,13 +171,18 @@ def split4(bbox):
     return [[w, s, mx, my], [mx, s, e, my], [w, my, mx, n], [mx, my, e, n]]
 
 
-def overpass(bbox, endpoint, log):
-    """Elements in bbox; retries with backoff, then splits the bbox in four."""
-    return _overpass(bbox, endpoint, log, 0)
+def overpass(bbox, endpoint, log, query=None):
+    """Elements in bbox; retries with backoff, then splits the bbox in four.
+
+    `query` builds the Overpass QL for a bbox (default: the named summits);
+    parks_geojson.py passes its own. An element that spans split boxes comes
+    back once per box — callers deduplicate by id.
+    """
+    return _overpass(bbox, endpoint, log, 0, query or query_for)
 
 
-def _overpass(bbox, endpoint, log, depth):
-    body = urllib.parse.urlencode({'data': query_for(bbox)}).encode()
+def _overpass(bbox, endpoint, log, depth, query=query_for):
+    body = urllib.parse.urlencode({'data': query(bbox)}).encode()
     last = None
     for attempt in range(RETRIES):
         req = urllib.request.Request(
@@ -215,7 +220,7 @@ def _overpass(bbox, endpoint, log, depth):
     log(f'  {bbox}: {last}; splitting in four')
     out = []
     for part in split4(bbox):
-        out.extend(_overpass(part, endpoint, log, depth + 1))
+        out.extend(_overpass(part, endpoint, log, depth + 1, query))
     return out
 
 

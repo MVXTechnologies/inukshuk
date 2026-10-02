@@ -49,6 +49,15 @@ export interface PdfLayerPlan {
   visibility: Record<string, boolean>;
   /** Ids whose final visibility differs from the document default. */
   changed: string[];
+  /**
+   * The changes that can alter what the page draws. Imagery switched off
+   * while the document's own "Images" parent group is already off changes
+   * nothing: US Topo nests its orthoimage under that parent, and both must be
+   * on for it to draw (#477). A native renderer, which draws the document's
+   * default layers, gives the same picture when this is empty — so a 2024
+   * US Topo sheet keeps its native detail tiles, as before #478.
+   */
+  drawnChanged: string[];
 }
 
 /** pdf.js' parsed `/OC` marked-content properties. */
@@ -120,6 +129,12 @@ export const PDF_LAYER_RUNTIME_SOURCE = String.raw`(function (root) {
     for (var i = 0; i < list.length; i++) if (list[i] && isImagery(list[i].name)) hasImagery = true;
     var visibility = {};
     var changed = [];
+    var drawnChanged = [];
+    var parentOff = false;
+    for (var k = 0; k < list.length; k++) {
+      var p = list[k];
+      if (p && typeof p.name === 'string' && IMAGE_PARENT.test(p.name) && !p.visible) parentOff = true;
+    }
     for (var j = 0; j < list.length; j++) {
       var g = list[j];
       if (!g || typeof g.id !== 'string') continue;
@@ -127,9 +142,12 @@ export const PDF_LAYER_RUNTIME_SOURCE = String.raw`(function (root) {
       if (isImagery(g.name)) v = show;
       else if (show && hasImagery && typeof g.name === 'string' && IMAGE_PARENT.test(g.name)) v = true;
       visibility[g.id] = v;
-      if (v !== !!g.visible) changed.push(g.id);
+      if (v !== !!g.visible) {
+        changed.push(g.id);
+        if (v || !parentOff || !isImagery(g.name)) drawnChanged.push(g.id);
+      }
     }
-    return { visibility: visibility, changed: changed };
+    return { visibility: visibility, changed: changed, drawnChanged: drawnChanged };
   }
 
   // Mirrors pdf.js 3.11 OptionalContentConfig: unknown groups and malformed

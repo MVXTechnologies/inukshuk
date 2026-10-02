@@ -6,7 +6,14 @@ import {
   type PdfDetailPlan,
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
-import { chooseFallbackDetails, unionOfBboxes } from '@core/geo/detailFallback';
+import { chooseFallbackDetails } from '@core/geo/detailFallback';
+import { bboxFromLngLats } from '@core/geo/geomath';
+import {
+  coverFromCache,
+  parseTileKey,
+  pdfTileBudgets,
+  type TileCell,
+} from '@core/geo/pdfTileCache';
 import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
 import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { chooseRasterSource, emptyInlineReadReason } from '@core/library/rasterSource';
@@ -25,17 +32,25 @@ import { useLibraryStore } from '@state/libraryStore';
 import { isPdfRenderCancellation, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { File } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { usePdfRasterizer, usePdfRasterizerServer, type RasterizeSource } from './PdfRasterizer';
 import type { PdfOverlay } from './usePdfOverlay';
 
 interface Detail extends PdfOverlay {
   overviewKey: string;
+  /** Page identity plus look: tiles of one page key are interchangeable by cell. */
+  pageKey: string;
+  cell: TileCell | null;
   cacheKey: string;
   pixels: number;
 }
 interface Target {
   key: string;
   overviewKey: string;
+  pageKey: string;
+  cell: TileCell | null;
+  /** A neighbour outside the view, rendered ahead of a pan; never shown as such. */
+  prefetch: boolean;
   id: string;
   parentId: string;
   fileUri: string;
@@ -51,17 +66,6 @@ interface Target {
   /** The overview's "See-through white" level; tiles are drawn to match it. */
   whiteKey: WhiteKeyLevel;
 }
-const VISIBLE_PIXELS = 6 * 1024 * 1024;
-/**
- * Extra texture the already-rendered tiles kept under the fresh ones may use
- * (#344). Deliberately smaller than the visible budget: continuity is worth
- * memory, but not as much as the tiles the camera actually asked for.
- */
-const FALLBACK_PIXELS = 4 * 1024 * 1024;
-const MAX_FALLBACK_TILES = 12;
-const HANDOFF_PIXELS = 18 * 1024 * 1024;
-const SETTLED_PIXELS = 12 * 1024 * 1024;
-const MAX_CACHE_FILES = 64;
 const overviewKey = (o: PdfOverlay) => JSON.stringify([o.id, o.imageUri, o.coordinates]);
 /** A page's file revision: a re-import or replacement starts its backoff over. */
 const pageRevision = (t: Target) => `${t.fileUri}@${t.revision}`;
@@ -78,6 +82,14 @@ export function usePdfDetails(
   const rasterize = usePdfRasterizer();
   const serverOrigin = usePdfRasterizerServer();
   const [displayed, setDisplayed] = useState<Detail[]>([]);
+  // After the OS warns about memory: no neighbour ring, a small cache.
+  const [lowMemory, setLowMemory] = useState(false);
+  const budgets = pdfTileBudgets(lowMemory);
+  const VISIBLE_PIXELS = budgets.visiblePixels;
+  const tileOptions = {
+    prefetchMargin: budgets.prefetchMargin,
+    maxPrefetch: budgets.maxPrefetchTiles,
+  };
   const worker = useRef({
     epoch: 0,
     busy: false,
@@ -88,7 +100,12 @@ export function usePdfDetails(
     paused: false,
     // Pages whose last attempt failed without being quarantined (#382).
     backoff: emptyBackoffLedger(),
+    // Desired tiles the cache already shows (the same cell wider, or its four
+    // children): nothing to render for them.
+    covered: new Set<string>(),
+    budgets,
   });
+  const liveOverviewKeys = overviews.map(overviewKey);
   const targets: Target[] = [];
   if (bounds) {
     // Count eligible pages before dividing the visible budget. Overviews stay
@@ -109,8 +126,9 @@ export function usePdfDetails(
         viewportWidthPx,
         VISIBLE_PIXELS,
         viewport,
+        tileOptions,
       );
-      if (!plans.length) continue;
+      if (!plans.some((plan) => !plan.prefetch)) continue;
       pages.push({ o, map, pageIndex, geo, plans });
       if (pages.length === 2) break;
     }
@@ -123,9 +141,10 @@ export function usePdfDetails(
           viewportWidthPx,
           VISIBLE_PIXELS / 2,
           viewport,
+          tileOptions,
         );
       }
-      const remaining = pages.filter((page) => page.plans.length);
+      const remaining = pages.filter((page) => page.plans.some((plan) => !plan.prefetch));
       if (remaining.length === 1) {
         const page = remaining[0]!;
         page.plans = planPdfDetailTiles(
@@ -135,18 +154,26 @@ export function usePdfDetails(
           viewportWidthPx,
           VISIBLE_PIXELS,
           viewport,
+          tileOptions,
         );
       }
     }
     for (const { o, map, pageIndex, geo, plans } of pages) {
       const baseKey = overviewKey(o);
       const whiteKey = o.whiteKey ?? 0;
+      // The white-key level is in the page key: a tile drawn at another level
+      // is never reused or kept as a fallback for this one. A cell's geometry
+      // follows from the overview's corners (in `baseKey`) and its grid cell.
+      const pageKey = JSON.stringify([baseKey, map.fileUri, map.importedAt, whiteKey]);
       for (const plan of plans) {
+        // Null for a plan off the dyadic grid: reused only by its own key.
+        const cell = parseTileKey(plan.tileKey);
         targets.push({
-          // The level is in the key: a tile drawn at another level is never
-          // reused or kept as a fallback for this one.
-          key: JSON.stringify([baseKey, map.fileUri, map.importedAt, plan, whiteKey]),
+          key: `${pageKey}|${plan.tileKey ?? JSON.stringify(plan.crop)}|${plan.targetWidthPx}`,
           overviewKey: baseKey,
+          pageKey,
+          cell,
+          prefetch: plan.prefetch === true,
           id: `${o.id}:tile:${plan.tileKey}`,
           parentId: o.id,
           fileUri: map.fileUri,
@@ -162,7 +189,18 @@ export function usePdfDetails(
       }
     }
   }
+  // Everything the camera can see before any neighbour, across pages.
+  targets.sort((a, b) => Number(a.prefetch) - Number(b.prefetch));
   const key = JSON.stringify(targets);
+  const boundsKey = bounds ? JSON.stringify(bounds) : '';
+  const liveKey = JSON.stringify(liveOverviewKeys);
+
+  useEffect(() => {
+    // Android onTrimMemory / iOS didReceiveMemoryWarning: stop prefetching
+    // and shrink the cache for the rest of the session.
+    const sub = AppState.addEventListener('memoryWarning', () => setLowMemory(true));
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     const w = worker.current;
@@ -180,8 +218,11 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const epoch = w.epoch;
+    w.budgets = pdfTileBudgets(lowMemory);
     const statusKeys = new Set(
-      (JSON.parse(key) as Target[]).map((target) => overlayDetailStatusKey(target.parentId)),
+      (JSON.parse(key) as Target[])
+        .filter((target) => !target.prefetch)
+        .map((target) => overlayDetailStatusKey(target.parentId)),
     );
     const clearLoading = () => {
       useOverlayStatusStore.setState((state) => {
@@ -203,42 +244,76 @@ export function usePdfDetails(
     // Invalidate the old snapshot immediately, debounce only starting work.
     const next: Target[] = JSON.parse(key);
     w.desired = next;
+    const cameraBox = boundsKey
+      ? (() => {
+          const b = JSON.parse(boundsKey) as PdfDetailBounds;
+          return { minLng: b.west, minLat: b.south, maxLng: b.east, maxLat: b.north };
+        })()
+      : null;
+    const live = new Set(JSON.parse(liveKey) as string[]);
     const publish = () => {
       if (w.paused) return;
-      const fresh: Detail[] = [];
-      let pixels = 0;
-      for (const target of w.desired) {
-        const detail = w.cache.get(target.key);
-        if (!detail) continue;
-        if (!new File(detail.imageUri).exists) {
-          w.cache.delete(target.key);
-          continue;
-        }
-        // Native result dimensions are authoritative, even if an unexpected
-        // backend result is larger than the planner's requested raster.
-        if (pixels + detail.pixels > VISIBLE_PIXELS) continue;
-        pixels += detail.pixels;
-        fresh.push(detail);
+      const { visiblePixels, fallbackPixels, maxFallbackTiles } = w.budgets;
+      // Forget tiles whose file the OS reclaimed.
+      for (const [cacheKey, detail] of w.cache) {
+        if (!new File(detail.imageUri).exists) w.cache.delete(cacheKey);
       }
+      const fresh = new Map<string, Detail>();
+      const covered = new Set<string>();
+      let pixels = 0;
+      // Exact tiles first, then stand-ins with what is left of the budget: a
+      // stand-in (four children) costs up to four times the texture of the
+      // tile it replaces and must never crowd out a tile already rendered.
+      for (const exactPass of [true, false]) {
+        for (const target of w.desired) {
+          const exact = w.cache.get(target.key);
+          if ((exact !== undefined) !== exactPass) continue;
+          // A wider raster of the same cell, or its four children from the
+          // previous zoom, show it at least as sharp: zooming out reuses them
+          // instead of rendering (and blurring) again.
+          const cover = exact
+            ? [exact]
+            : target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
+          if (!cover) continue;
+          if (target.prefetch) {
+            covered.add(target.key);
+            continue;
+          }
+          const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
+          const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
+          // Native result dimensions are authoritative, even if an unexpected
+          // backend result is larger than the planner's requested raster.
+          if (pixels + addedPixels > visiblePixels) continue;
+          pixels += addedPixels;
+          for (const detail of added) fresh.set(detail.cacheKey, detail);
+          covered.add(target.key);
+        }
+      }
+      w.covered = covered;
 
-      // Keep the detail already rendered until its replacement arrives (#344).
-      // A tile's key carries the camera-derived crop and width, so panning
-      // reuses tiles but ANY zoom change invalidates every key at once — and
-      // the screen had nothing to show until the new tiles finished, which
-      // reads as the map unloading and re-rendering on every pinch. Cached
+      // Keep the detail already rendered until its replacement arrives (#344):
+      // tiles of a page still on screen stay under the fresh ones. Cached
       // tiles are ordered least-recently-used first, so reverse for MRU.
+      const freshList = [...fresh.values()];
       const { keep } = chooseFallbackDetails<Detail>({
-        cached: [...w.cache.values()].reverse().filter((d) => new File(d.imageUri).exists),
-        freshKeys: new Set(fresh.map((d) => d.cacheKey)),
-        freshBboxes: fresh.map((d) => d.bbox),
-        liveOverviewKeys: new Set(w.desired.map((t) => t.overviewKey)),
-        bounds: unionOfBboxes(w.desired.map((t) => t.bbox)),
-        budgetPixels: FALLBACK_PIXELS,
-        maxCount: MAX_FALLBACK_TILES,
+        cached: [...w.cache.values()].reverse(),
+        freshKeys: new Set(fresh.keys()),
+        freshBboxes: freshList.map((d) => d.bbox),
+        liveOverviewKeys: live,
+        bounds: cameraBox,
+        budgetPixels: fallbackPixels,
+        maxCount: maxFallbackTiles,
       });
       // Fallbacks first: MapLibre stacks later inserts above earlier ones
       // under the same anchor, so the fresh tiles must come last to win.
-      const current: Detail[] = [...keep, ...fresh];
+      // Among fallbacks, coarser below finer (the sharper tile stays on top),
+      // in a stable order so republishing does not reshuffle mounted layers.
+      keep.sort(
+        (a, b) =>
+          (a.cell?.divisions ?? 0) - (b.cell?.divisions ?? 0) ||
+          (a.cacheKey < b.cacheKey ? -1 : a.cacheKey > b.cacheKey ? 1 : 0),
+      );
+      const current: Detail[] = [...keep, ...freshList];
       w.pinned = new Set(current.map((detail) => detail.imageUri));
       setDisplayed((previous) =>
         previous.length === current.length &&
@@ -247,20 +322,12 @@ export function usePdfDetails(
           : current,
       );
     };
-    const prune = (budget: number) => {
-      let pixels = [...w.cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
-      for (const [cacheKey, detail] of w.cache) {
-        if (w.cache.size <= MAX_CACHE_FILES && pixels <= budget) break;
-        if (w.pinned.has(detail.imageUri)) continue;
-        storage.deleteFileAt(detail.imageUri);
-        w.cache.delete(cacheKey);
-        pixels -= detail.pixels;
-      }
-    };
+    const prune = (budget: number) =>
+      trimTileCache(w.cache, w.pinned, w.desired, w.budgets.cacheFiles, budget);
     // Reuse every cached tile in the new desired snapshot immediately. Waiting
     // for a new center tile must not hide matching neighbors during a pan.
     publish();
-    prune(HANDOFF_PIXELS);
+    prune(w.budgets.handoffPixels);
     const timer = setTimeout(() => {
       if (w.busy || w.epoch !== epoch) return;
       w.busy = true;
@@ -268,15 +335,29 @@ export function usePdfDetails(
         while (w.epoch === epoch) {
           const snapshot = w.desired;
           const attempted = new Set<string>();
+          // Tiles skipped because stand-ins showed them when their turn came.
+          const stoodIn: Target[] = [];
           const failed = new Set<string>();
           for (const target of snapshot) {
             if (w.desired !== snapshot || w.epoch !== epoch) break;
+            // Visible work before any neighbour: a tile whose stand-in lost
+            // its place is rendered before the ring starts.
+            if (
+              target.prefetch &&
+              stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))
+            )
+              break;
             let dispatched = false;
             try {
               let detail = w.cache.get(target.key);
               if (detail && !new File(detail.imageUri).exists) {
                 w.cache.delete(target.key);
                 detail = undefined;
+              }
+              // Already on screen through a wider raster or its children.
+              if (!detail && w.covered.has(target.key)) {
+                stoodIn.push(target);
+                continue;
               }
               if (!detail) {
                 const statusKey = overlayDetailStatusKey(target.parentId);
@@ -291,6 +372,7 @@ export function usePdfDetails(
                   Date.now(),
                 );
                 if (held) {
+                  if (target.prefetch) break;
                   if (!failed.has(statusKey) && !w.paused) {
                     useOverlayStatusStore
                       .getState()
@@ -299,9 +381,11 @@ export function usePdfDetails(
                   failed.add(statusKey);
                   continue;
                 }
-                attempted.add(statusKey);
-                if (!failed.has(statusKey)) {
-                  useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendering' });
+                if (!target.prefetch) {
+                  attempted.add(statusKey);
+                  if (!failed.has(statusKey)) {
+                    useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendering' });
+                  }
                 }
                 const origin = await serverOrigin();
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
@@ -328,6 +412,11 @@ export function usePdfDetails(
                   targetWidthPx: target.plan.targetWidthPx,
                   crop: target.plan.crop,
                   whiteKey: target.whiteKey,
+                  // Neighbours wait behind anything the map is waiting for.
+                  priority: target.prefetch ? 'background' : 'interactive',
+                  // One open document for the whole burst of tiles, unless
+                  // the OS has warned about memory.
+                  holdKey: w.budgets.holdDocument ? pageRevision(target) : undefined,
                   nativePage: target.nativeGeometry && {
                     fileUri: storage.resolveDocumentPath(target.fileUri),
                     revision: target.revision,
@@ -355,6 +444,8 @@ export function usePdfDetails(
                 const actualPixels = result.widthPx * result.heightPx;
                 detail = {
                   cacheKey: target.key,
+                  pageKey: target.pageKey,
+                  cell: target.cell,
                   pixels:
                     Number.isFinite(actualPixels) && actualPixels > 0
                       ? actualPixels
@@ -364,7 +455,8 @@ export function usePdfDetails(
                   overviewKey: target.overviewKey,
                   imageUri,
                   coordinates: target.plan.coordinates,
-                  bbox: target.bbox,
+                  // The tile's own footprint: what it covers as a fallback.
+                  bbox: bboxFromLngLats(target.plan.coordinates),
                 };
                 w.cache.set(target.key, detail);
                 w.backoff = recordSuccess(w.backoff, target.parentId);
@@ -375,8 +467,14 @@ export function usePdfDetails(
               // A stale completion may be useful on a later pan. Only tiles
               // belonging to the latest desired snapshot can become visible.
               publish();
-              prune(HANDOFF_PIXELS);
+              prune(w.budgets.handoffPixels);
             } catch (error) {
+              if (target.prefetch) {
+                // A neighbour is a guess: its failure never fails, backs off,
+                // pauses or reports the page the visible tiles belong to. Stop
+                // prefetching for this snapshot; the next camera move retries.
+                break;
+              }
               const quarantine =
                 dispatched &&
                 !(error instanceof PdfRenderNotStartedError) &&
@@ -431,6 +529,9 @@ export function usePdfDetails(
           }
           if (w.epoch !== epoch) return;
           if (w.desired === snapshot) {
+            // A stand-in can lose its place to tiles rendered after it (the
+            // visible budget): go round again for the tile it stood in for.
+            if (stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))) continue;
             for (const statusKey of attempted) {
               if (!failed.has(statusKey)) {
                 useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendered' });
@@ -447,23 +548,47 @@ export function usePdfDetails(
       clearTimeout(timer);
       clearLoading();
     };
-  }, [key, rasterize, serverOrigin, enabled]);
+  }, [key, boundsKey, liveKey, lowMemory, rasterize, serverOrigin, enabled]);
 
   useEffect(() => {
     const w = worker.current;
-    const timer = setTimeout(() => {
-      let pixels = [...w.cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
-      for (const [cacheKey, detail] of w.cache) {
-        if (w.cache.size <= MAX_CACHE_FILES && pixels <= SETTLED_PIXELS) break;
-        if (w.pinned.has(detail.imageUri)) continue;
-        storage.deleteFileAt(detail.imageUri);
-        w.cache.delete(cacheKey);
-        pixels -= detail.pixels;
-      }
-    }, 2000);
+    const timer = setTimeout(
+      () =>
+        trimTileCache(w.cache, w.pinned, w.desired, w.budgets.cacheFiles, w.budgets.settledPixels),
+      2000,
+    );
     return () => clearTimeout(timer);
-  }, [displayed]);
+  }, [displayed, lowMemory]);
 
-  const live = new Set(targets.map((t) => t.key));
-  return displayed.filter((d) => live.has(d.cacheKey));
+  // Every tile published for a page still on screen: the fresh ones and the
+  // fallbacks kept under them. Filtering by the current targets instead (as
+  // before) dropped every fallback as soon as a zoom changed the keys: the
+  // map went back to the blurry overview and re-rendered what it had.
+  const live = new Set(liveOverviewKeys);
+  return displayed.filter((d) => live.has(d.overviewKey));
+}
+
+/**
+ * Delete cached tiles until the cache is within `maxFiles` and `maxPixels`:
+ * least-recently-used first, tiles the camera no longer wants (not even as a
+ * neighbour) before those it does. Tiles on screen are never deleted.
+ */
+function trimTileCache(
+  cache: Map<string, Detail>,
+  pinned: ReadonlySet<string>,
+  desired: readonly Target[],
+  maxFiles: number,
+  maxPixels: number,
+): void {
+  let pixels = [...cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
+  const wanted = new Set(desired.map((target) => target.key));
+  for (const keepWanted of [true, false]) {
+    for (const [cacheKey, detail] of cache) {
+      if (cache.size <= maxFiles && pixels <= maxPixels) return;
+      if (pinned.has(detail.imageUri) || (keepWanted && wanted.has(cacheKey))) continue;
+      storage.deleteFileAt(detail.imageUri);
+      cache.delete(cacheKey);
+      pixels -= detail.pixels;
+    }
+  }
 }

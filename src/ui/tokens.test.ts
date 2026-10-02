@@ -71,6 +71,10 @@ function pairs(t: SchemeTokens): [string, string, string, number][] {
     ['muted on surface', t.inkMuted, t.surface, TEXT],
     ['muted on tab bar (level 2)', t.inkMuted, t.elevation.level2, TEXT],
     ['muted on elevation 3', t.inkMuted, t.elevation.level3, TEXT],
+    // Logbook statistics.
+    ['streak flame on background', t.stats.flame, t.background, GRAPHIC],
+    ['current bar on surface', t.stats.barCurrent, t.surface, GRAPHIC],
+    ['NEW badge ink on its badge', t.stats.onNewBadge, t.stats.newBadge, TEXT],
     // Map chrome (translucent: judged over light and dark tiles).
     ['chrome ink on map chrome', t.map.chromeInk, t.map.chrome, TEXT],
     ['chrome ink on the mini recording pill', t.map.chromeInk, t.map.chromeMini, TEXT],
@@ -171,6 +175,18 @@ describe.each([
     for (const ground of asDrawn(fg, bg)) {
       expect(contrastRatio(fg, ground)).toBeGreaterThanOrEqual(min);
     }
+  });
+});
+
+describe('year-in-review empty days read on dark cards', () => {
+  it.each([
+    ['stone night', darkScheme],
+    ['sunlight', sunlightScheme],
+    ['night red', nightScheme],
+  ])('%s: the empty-day outline is 3:1 on the card', (_name, scheme) => {
+    expect(contrastRatio(scheme.stats.dayEmptyOutline, scheme.surface)).toBeGreaterThanOrEqual(
+      GRAPHIC,
+    );
   });
 });
 

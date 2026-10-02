@@ -2,6 +2,7 @@ import {
   CATALOG_ACTIVITIES,
   isCatalogActivity,
   type CatalogActivity,
+  type CatalogKind,
   type LinkOutCollection,
   type LinkOutPlace,
 } from './taxonomy';
@@ -139,6 +140,8 @@ export const PLACE_TYPE_ACTIVITIES: Readonly<Record<string, CatalogActivity[]>> 
   'National park': ['hiking', 'camping'],
   'Marine park': ['paddling'],
   'Wildlife reserve': ['hunting', 'fishing'],
+  // A zec (zone d'exploitation contrôlée) is a hunting and fishing territory.
+  ZEC: ['hunting', 'fishing'],
 };
 
 /** A place's own activities, else its type's defaults (vocabulary order). */
@@ -148,4 +151,21 @@ export function placeActivities(
   if (place.activities !== undefined && place.activities.length > 0) return [...place.activities];
   const defaults = new Set(PLACE_TYPE_ACTIVITIES[place.type] ?? []);
   return CATALOG_ACTIVITIES.filter((a) => defaults.has(a));
+}
+
+/**
+ * The explorer "Type" a place is browsed under, by place type — so the map's
+ * Type chip ("Hunting & fishing", "Parks") reaches places as well as map
+ * sheets. Same vocabulary as catalog items (`CatalogKind`); a type not listed
+ * has no kind and only shows while no Type is selected.
+ */
+export const PLACE_TYPE_KINDS: Readonly<Record<string, CatalogKind>> = {
+  'National park': 'park',
+  'Marine park': 'park',
+  'Wildlife reserve': 'hunting-fishing',
+  ZEC: 'hunting-fishing',
+};
+
+export function placeKind(place: Pick<LinkOutPlace, 'type'>): CatalogKind | null {
+  return PLACE_TYPE_KINDS[place.type] ?? null;
 }

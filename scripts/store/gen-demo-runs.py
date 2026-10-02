@@ -2,10 +2,12 @@
 
 Geometry: routed along real paths (routing.openstreetmap.de foot/bike).
 Elevation: sampled from the same terrarium DEM the app uses.
+Heart rate: synthesized per point (effort follows pace and grade, with a
+warm-up and cardiac lag), so the Logbook's heart-rate zones have data.
 Output: tracks/<id>.gpx + tracks.json (library entries with stats).
 
 Usage (needs network and Pillow):
-    python3 scripts/store/gen-demo-runs.py <out-dir>
+    python3 scripts/store/gen-demo-runs.py <out-dir> [YYYY-MM-DD of the newest run]
     scripts/store/seed-sim.sh <sim-udid> <out-dir> [light|dark]
 """
 import io, json, math, os, random, string, sys, urllib.request
@@ -118,6 +120,11 @@ def rid():
 geoms = {}
 tracks = []
 now = datetime(2026, 9, 26, 11, 0, tzinfo=timezone.utc)  # 07:00 in Québec
+if len(sys.argv) > 2:
+    now = datetime.strptime(sys.argv[2], '%Y-%m-%d').replace(hour=11, tzinfo=timezone.utc)
+
+# Heart rate per activity: (resting-ish floor of the effort, bpm at the nominal pace).
+HR_BASE = {'run': (105, 138), 'bike': (100, 128), 'walk': (82, 96), 'hike': (88, 110)}
 for i, t in enumerate(PLAN):
     _, cat, prof, speed, wps = ROUTES[t]
     name = NAMES[i]
@@ -152,6 +159,25 @@ for i, t in enumerate(PLAN):
     eles = [round(sorted(raw[max(0, k - W):k + W + 1])[len(raw[max(0, k - W):k + W + 1]) // 2]
                   + random.gauss(0, 0.3), 1) for k in range(len(raw))]
     eles = [round(sum(eles[max(0, k - 8):k + 9]) / len(eles[max(0, k - 8):k + 9]), 1) for k in range(len(eles))]
+    # Heart rate: effort from pace and grade, lagging (~40 s), after a warm-up.
+    floor, cruise = HR_BASE[cat]
+    hard = 16 if 'tempo' in name.lower() or 'repeats' in name.lower() else 0
+    easy = -8 if 'recovery' in name.lower() or 'easy' in name.lower() or 'shakeout' in name.lower() else 0
+    hrs = []
+    hr = floor
+    for k in range(len(noisy)):
+        if k:
+            dt = max(1.0, (ts[k] - ts[k - 1]).total_seconds())
+            d = hav(noisy[k - 1], noisy[k])
+            grade = (eles[k] - eles[k - 1]) / max(1.0, d)
+            pace = (d / dt) / speed
+            elapsed = (ts[k] - ts[0]).total_seconds()
+            drift = min(8.0, elapsed / 600)  # cardiac drift, ~1 bpm per 10 min
+            kick = 38 if cat in ('run', 'bike') and k > len(noisy) * 0.94 else 0  # a finishing push
+            target = cruise + hard + easy + kick + (pace - 1) * 60 + max(-0.06, min(0.12, grade)) * 220 + drift
+            target = max(floor - 10, min(192, target))
+            hr += (target - hr) * (1 - math.exp(-dt / 40)) + random.gauss(0, 0.4)
+        hrs.append(int(round(hr)))
     # Stats like the app: ascent with a 3 m hysteresis.
     asc = desc = 0.0
     ref = eles[0]
@@ -166,11 +192,15 @@ for i, t in enumerate(PLAN):
     tid = rid()
     with open(f'{OUT}/tracks/{tid}.gpx', 'w') as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Inukshuk" '
-                'xmlns="http://www.topografix.com/GPX/1/1">\n'
+                'xmlns="http://www.topografix.com/GPX/1/1" '
+                'xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">\n'
                 f'<metadata><name>{name}</name></metadata>\n<trk><name>{name}</name><trkseg>\n')
-        for p, e, tt in zip(noisy, eles, ts):
+        for p, e, tt, bpm in zip(noisy, eles, ts, hrs):
             f.write(f'<trkpt lat="{p[0]:.6f}" lon="{p[1]:.6f}"><ele>{e}</ele>'
-                    f'<time>{tt.strftime("%Y-%m-%dT%H:%M:%SZ")}</time></trkpt>\n')
+                    f'<time>{tt.strftime("%Y-%m-%dT%H:%M:%SZ")}</time>'
+                    '<extensions><gpxtpx:TrackPointExtension>'
+                    f'<gpxtpx:hr>{bpm}</gpxtpx:hr>'
+                    '</gpxtpx:TrackPointExtension></extensions></trkpt>\n')
         f.write('</trkseg></trk>\n</gpx>\n')
     tracks.append({
         'id': tid, 'name': name,

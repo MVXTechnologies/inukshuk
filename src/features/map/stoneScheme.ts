@@ -35,6 +35,9 @@ export function stoneSchemeFromTokens(tokens: SchemeTokens, dark: boolean): Ston
     contour: palette.ochre,
     ink: tokens.ink,
     inkMuted: tokens.inkMuted,
+    // Park boundaries and names: the deep sage on paper (4.9:1 for the
+    // italic names), the lighter sage on stone night.
+    parkInk: dark ? palette.sage : palette.sageDeep,
     halo: land,
   };
 }
@@ -67,6 +70,8 @@ export function imageryStoneScheme(): StoneBasemapScheme {
     waterInk: night.data.info,
     ink: palette.surface,
     inkMuted: night.ink,
+    // Parks: the pale sage, which holds over forest canopy and bare rock.
+    parkInk: palette.sagePill,
     halo: palette.shadow,
   };
 }

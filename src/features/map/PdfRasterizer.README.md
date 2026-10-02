@@ -60,6 +60,21 @@ it never draws the full PDF page with CoreGraphics. See the
 [native module notes](../../../modules/inukshuk-pdf/README.md) and
 [iOS validation and benchmark notes](../../../modules/inukshuk-pdf/ios/README.md).
 
+**See-through white on native tiles.** The native renderers cannot key white.
+For a keyed request the provider copies the native PNG to
+`Documents/.rasterizer/key-<id>.png` (on the served allowlist), the page loads
+it same-origin, runs the same one-pass key as a pdf.js render
+(`window.__pdfKeyImage`) and posts the keyed PNG; the result then has
+`pngDataUri`, and both files are deleted. If the page cannot key a tile
+(reloading, 15 s timeout) that crop is retried once through pdf.js, which keys
+as it paints. Inline mode keeps keyed renders on pdf.js. Emulator, Beau Lake,
+50 %: 252 ms per tile (key pass 3–7 ms), against 2–14 s per tile on pdf.js.
+
+Each native crop still opens the document and page itself (about 190 ms of a
+230 ms tile on the emulator; the render and PNG encode are about 25 ms).
+Keeping them open across a burst needs a change in the native module, so a
+store build.
+
 The native worker renders only a bounded crop bitmap and writes lossless opaque
 PNG directly to cache, capped at 3072 pixels per edge and 3 Mi pixels per crop.
 The result has `fileUri` instead of `pngDataUri`; callers
@@ -92,15 +107,47 @@ crops that cross its diagonal.
 Tiles use IDs `${overview.id}:tile:${plan.tileKey}` and carry
 `parentId: overview.id`, so the map groups each detail with its own overview
 without duplicate source/layer IDs. The hook displays completed tiles
-incrementally, reuses matching cached tiles immediately during pans, and
-coalesces waiting work to the latest camera snapshot. Only tiles in that current
-snapshot are displayed; obsolete completions may enter the bounded reuse cache.
+incrementally and coalesces waiting work to the latest camera snapshot.
 
-Cache accounting uses returned raster width and height, with a geometry estimate
-when dimensions are unavailable. Current visible files are pinned. The cache is
-limited to 64 files and 18 Mi pixels during handoff, with cleanup to 12 Mi pixels
-after two seconds. Unmount deletes cached files, and native files returned after
+**Reuse (`@core/geo/pdfTileCache`).** A tile is cached under its page identity
+(file, revision, georeference, white-key level) plus its grid cell and width.
+Widths come from a fixed ladder (`PDF_TILE_WIDTH_LADDER`, steps of at most
+1.33x), so a small pinch keeps the same keys. A cell the camera asks for is
+shown without rendering when the cache holds the same cell at least as wide
+(a small zoom-out) or all four children of the next level down, each at least
+half as wide (a whole-level zoom-out). Everything already rendered for a page
+still on screen stays displayed under the fresh tiles until its replacement
+covers it (#344), within a fallback budget of 6 Mi pixels / 24 tiles. A zoom
+therefore never drops back to the blurry overview. Before this, the hook's
+return filtered by the current targets and dropped every fallback, and tiles
+carried the page bbox instead of their own.
+
+**Neighbour prefetch.** `planPdfDetailTiles(..., {prefetchMargin, maxPrefetch})`
+also plans the ring around the view (one view per side, up to 24 cells, nearest
+first) at the same level and width, so each ring cell has the key it will have
+once visible. Ring tiles render after every visible tile at
+`priority: 'background'`, never show as such, never set the Library's
+"rendering" status, and a ring failure never fails, backs off, pauses or
+reports the page. A camera move replaces the waiting work with the new
+snapshot's.
+
+**Budgets (`pdfTileBudgets`).** On-screen textures: 6 Mi pixels visible plus
+6 Mi pixels of fallback. Exact tiles take the visible budget before stand-ins
+(four children cost up to four times the tile they replace); a tile whose
+stand-in loses its place is rendered before the ring. Disk cache: 96 files,
+36 Mi pixels during handoff, 28 Mi pixels after two seconds settled;
+least-recently-used first, tiles the camera no longer wants before the ring.
+After an OS memory warning (`AppState` `memoryWarning`) the ring stops and the
+caches shrink (2 Mi fallback, 40 files, 8 Mi settled). Displayed files are
+never deleted. Unmount deletes cached files, and native files returned after
 unmount are deleted without adoption.
+
+**Held document.** Detail requests pass `holdKey` (the page's file and
+revision). The page keeps that document, its page and layer plan open for
+8 s after a successful paint, and a request with the same key reuses them:
+pdf.js keeps the page's operator list, so the next tile only paints. Any other
+request, any failure and the idle timer release it. Beau Lake US Topo, 1024 px
+tiles, headless Chrome: 742 ms -> 143 ms per tile.
 
 ## How it works
 
@@ -269,9 +316,12 @@ render.
   would not have painted. If the patch doesn't apply (another pdf.js build),
   the page logs it and renders unfiltered. `pdfWorkerPatch.test.ts` fails if
   the shipped asset stops matching.
-- **Native handoff.** A page whose layer plan differs from the document
-  defaults is not handed to the native renderers (they draw the defaults), so
-  the overview and its detail tiles always show the same layers.
+- **Native handoff.** A page whose layer plan draws differently from the
+  document defaults is not handed to the native renderers (they draw the
+  defaults), so the overview and its detail tiles always show the same layers.
+  Imagery switched off under an "Images" parent that is already off by default
+  draws nothing different (`drawnChanged` is empty): a 2024 US Topo keeps its
+  native detail tiles, as before #478.
 
 Measured on `ME_Portland_West_20240805_TM_geo.pdf` (58.6 MB), 2048 px overview,
 through this page's own script in headless Chrome with the served range path:

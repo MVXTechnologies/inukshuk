@@ -10,6 +10,7 @@ import {
 } from '@core/import/sources';
 import * as storage from '@data/storage';
 import { primeTrackGeometry } from '@data/trackGeometry';
+import { primeTrailStats } from '@data/trailStatsStore';
 import { reportError } from '@lib/errorReporting';
 import { healthSource } from '@lib/health';
 import { createStravaSource } from '@lib/stravaSource';
@@ -91,7 +92,10 @@ async function run(job: ImportJob, listed?: readonly RemoteActivity[]): Promise<
         libraryTracks: () => useLibraryStore.getState().tracks,
         addTracks: (items) => useLibraryStore.getState().addTracks(items),
         writeGpx: storage.writeTrackGpx,
-        onTrackSaved: primeTrackGeometry,
+        onTrackSaved: (track, points, segmentStarts) => {
+          primeTrackGeometry(track, points, segmentStarts);
+          primeTrailStats(track, points, segmentStarts);
+        },
         newId: storage.newId,
         now: () => Date.now(),
         yieldToUi,
