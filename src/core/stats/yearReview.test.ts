@@ -1,5 +1,12 @@
 import { summary } from './testTracks';
-import { dayOfYear, daysInYear, reviewYears, shadeLevels, yearReview } from './yearReview';
+import {
+  dayOfYear,
+  daysInYear,
+  heatmapStrip,
+  reviewYears,
+  shadeLevels,
+  yearReview,
+} from './yearReview';
 
 const at = (y: number, m: number, d: number, h = 9) => new Date(y, m, d, h).getTime();
 
@@ -81,5 +88,36 @@ describe('reviewYears', () => {
         now,
       ),
     ).toEqual([2026, 2025, 2023]);
+  });
+});
+
+describe('heatmapStrip', () => {
+  // 2026 starts on a Thursday (weekday 3, Monday-based): 53 week columns.
+  const base = { year: 2026, firstWeekday: 3, dayCount: 365, width: 335, gap: 3 };
+
+  it('fits 26 weeks across the card and scrolls the rest', () => {
+    const s = heatmapStrip({ ...base, now: at(2026, 9, 2) });
+    expect(s.columns).toBe(53);
+    expect(s.cell).toBeCloseTo((335 - 25 * 3) / 26);
+    expect(s.contentWidth).toBeCloseTo(53 * 10 + 52 * 3);
+  });
+
+  it('opens with this week at the right edge in the current year', () => {
+    const s = heatmapStrip({ ...base, now: at(2026, 9, 2) });
+    // Oct 2 is day 274: column floor((3 + 274) / 7) = 39.
+    expect(s.offsetX).toBeCloseTo(40 * 10 + 39 * 3 - 335);
+  });
+
+  it('opens on December for a past year, and at the start early in the year', () => {
+    const past = heatmapStrip({ ...base, now: at(2027, 4, 1) });
+    expect(past.offsetX).toBeCloseTo(past.contentWidth - 335);
+    expect(heatmapStrip({ ...base, now: at(2026, 1, 10) }).offsetX).toBe(0);
+  });
+
+  it('stays finite before the card is measured', () => {
+    expect(heatmapStrip({ ...base, width: 0, now: at(2026, 9, 2) })).toMatchObject({
+      cell: 0,
+      offsetX: 0,
+    });
   });
 });

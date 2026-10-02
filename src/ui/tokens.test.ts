@@ -178,6 +178,18 @@ describe.each([
   });
 });
 
+describe('year-in-review empty days read on dark cards', () => {
+  it.each([
+    ['stone night', darkScheme],
+    ['sunlight', sunlightScheme],
+    ['night red', nightScheme],
+  ])('%s: the empty-day outline is 3:1 on the card', (_name, scheme) => {
+    expect(contrastRatio(scheme.stats.dayEmptyOutline, scheme.surface)).toBeGreaterThanOrEqual(
+      GRAPHIC,
+    );
+  });
+});
+
 describe('type scale', () => {
   it.each(Object.entries(type))('%s is at least the 12 dp floor', (_name, style) => {
     expect(style.fontSize).toBeGreaterThanOrEqual(MIN_FONT_SIZE);

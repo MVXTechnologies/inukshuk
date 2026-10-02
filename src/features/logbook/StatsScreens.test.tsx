@@ -7,6 +7,8 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { DashboardScreen } from '@features/dashboard/DashboardScreen';
+
 import { LogbookHeaderActions } from './LogbookHeaderActions';
 import { RecordsScreen } from './RecordsScreen';
 import { StatsScreen } from './StatsScreen';
@@ -16,6 +18,9 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
 jest.mock('@data/storage', () => ({}));
+jest.mock('@features/library/useRouteThumbnail', () => ({
+  useRouteThumbnail: () => null,
+}));
 
 const NOW = new Date(2026, 8, 23, 15).getTime();
 
@@ -88,7 +93,7 @@ describe('Statistics', () => {
     ]);
 
     expect(screen.getByLabelText(/^THIS MONTH: 20 km, .* 2 outings/)).toBeTruthy();
-    expect(screen.getByLabelText('Current streak 2 weeks, best 2 weeks')).toBeTruthy();
+    expect(screen.getByLabelText('Week streak: 2 weeks, best 2')).toBeTruthy();
     expect(screen.getByText('Last 12 weeks')).toBeTruthy();
     // Only the activities the user has get a chip.
     expect(screen.getByLabelText('Run')).toBeTruthy();
@@ -115,11 +120,53 @@ describe('Statistics', () => {
     expect(screen.getByLabelText(/^THIS YEAR · RUN: 10 km, .* 1 outing/)).toBeTruthy();
     expect(screen.getByText('This year, month by month')).toBeTruthy();
     expect(screen.getByText('Average pace')).toBeTruthy();
+    // The streak card names its activity: only the run's week counts.
+    expect(screen.getByLabelText('Run week streak: 1 week, best 1')).toBeTruthy();
+    expect(screen.getByText('Run week streak')).toBeTruthy();
     // 150 bpm of a 200 max is Z3 (70–80 %), all of it.
     expect(screen.getByText(/Max HR 200 bpm · set by you/)).toBeTruthy();
     expect(
       screen.getByLabelText(/Heart-rate zones over 1 activity: .*zone 3 100 percent/),
     ).toBeTruthy();
+  });
+});
+
+describe('Week streak, header and Statistics', () => {
+  // Runs in 2 consecutive weeks, rides and a hike filling 3 more before them.
+  const library = [
+    track('r1', 'Run', 1, 'run'),
+    track('r2', 'Run', 8, 'run'),
+    track('b1', 'Ride', 15, 'bike'),
+    track('h1', 'Hike', 22, 'hike'),
+    track('b2', 'Ride', 29, 'bike'),
+  ];
+
+  it('the header flame equals the Statistics "All" card, whatever chip is on', async () => {
+    // Both screens over the same library, side by side.
+    await show(
+      <>
+        <DashboardScreen />
+        <StatsScreen />
+      </>,
+      library,
+    );
+    const flame = () => {
+      const label: string = screen.getByLabelText(/^\d+-week streak$/).props.accessibilityLabel;
+      return Number.parseInt(label, 10);
+    };
+    expect(flame()).toBe(5);
+    expect(screen.getByLabelText(`Week streak: ${flame()} weeks, best 5`)).toBeTruthy();
+
+    // The Logbook's own type filter does not change the flame.
+    await fireEvent.press(screen.getByLabelText('Run, 2 activities'));
+    expect(flame()).toBe(5);
+
+    // A Statistics chip narrows its card, and says so; All matches the flame again.
+    await fireEvent.press(screen.getByLabelText('Run'));
+    expect(screen.getByLabelText('Run week streak: 2 weeks, best 2')).toBeTruthy();
+    expect(flame()).toBe(5);
+    await fireEvent.press(screen.getByLabelText('All'));
+    expect(screen.getByLabelText(`Week streak: ${flame()} weeks, best 5`)).toBeTruthy();
   });
 });
 

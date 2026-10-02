@@ -1,7 +1,13 @@
 import { heroDistance } from '@core/dashboard/logbook';
 import { createFormatters, formatSpan } from '@core/format';
 import { activityChips, statsTracks } from '@core/stats/periods';
-import { reviewYears, yearReview, type ReviewMetric } from '@core/stats/yearReview';
+import {
+  dayOfYear,
+  heatmapStrip,
+  reviewYears,
+  yearReview,
+  type ReviewMetric,
+} from '@core/stats/yearReview';
 import { useDashboardClock } from '@features/dashboard/useDashboardClock';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -11,7 +17,7 @@ import { tabularNums } from '@ui/fonts';
 import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +34,7 @@ const METRICS: { value: ReviewMetric; label: string }[] = [
 /**
  * Logbook › Year in review (owner-approved mockup, board 4): a year
  * selector, a calendar heatmap — one cell per day, Monday rows, four shades
- * by the day's distance or moving time — and month-by-month distance bars
+ * by the day's distance or moving time, in a strip that scrolls sideways — and month-by-month distance bars
  * with the best month darker.
  */
 export function YearReviewScreen() {
@@ -120,12 +126,13 @@ export function YearReviewScreen() {
             year={year}
             levels={review.levels}
             firstWeekday={review.firstWeekday}
+            now={now}
             accessibilityLabel={`${year} calendar: ${review.activeDays} active days`}
           />
           <Legend />
           <Text style={[styles.hint, { color: tokens.inkMuted }]}>
             Shaded by each day’s {metric === 'distance' ? 'distance' : 'moving time'}, in four
-            steps.
+            steps. Swipe for earlier months.
           </Text>
         </StatsCard>
 
@@ -171,72 +178,99 @@ function Summary({ value, label }: { value: string; label: string }) {
   );
 }
 
-const GAP = 2;
+const GAP = 3;
+const LABEL_H = 18;
 
-/** 53 Monday-start columns × 7 rows, one cell per day; month initials on top. */
+/**
+ * One cell per day in Monday-start week columns, as a horizontally scrollable
+ * strip: about 26 weeks fill the card (so a day is a finger-readable square
+ * rather than a speck), opening on the most recent weeks, with month names
+ * above. Empty days carry a hairline so the grid reads on a dark card.
+ */
 function CalendarHeatmap({
   year,
   levels,
   firstWeekday,
+  now,
   accessibilityLabel,
 }: {
   year: number;
   levels: readonly number[];
   firstWeekday: number;
+  now: number;
   accessibilityLabel: string;
 }) {
   const theme = useTheme();
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
-  const columns = Math.ceil((firstWeekday + levels.length) / 7);
-  const cell = width > 0 ? (width - (columns - 1) * GAP) / columns : 0;
-  const labelH = 14;
-  const height = labelH + 7 * cell + 6 * GAP;
-  const shades = [tokens.stats.dayEmpty, ...tokens.stats.dayShades];
-  const monthStarts = MONTHS.map((_, m) => {
-    const doy = Math.round(
-      (new Date(year, m, 1).getTime() - new Date(year, 0, 1).getTime()) / 86_400_000,
-    );
-    return Math.floor((firstWeekday + doy) / 7);
+  const scroller = useRef<ScrollView>(null);
+  const { cell, contentWidth, offsetX } = heatmapStrip({
+    year,
+    firstWeekday,
+    dayCount: levels.length,
+    now,
+    width,
+    gap: GAP,
   });
+  const height = LABEL_H + 7 * cell + 6 * GAP;
+  const shades = [tokens.stats.dayEmpty, ...tokens.stats.dayShades];
+  const monthStarts = MONTHS.map((_, m) =>
+    Math.floor((firstWeekday + dayOfYear(new Date(year, m, 1).getTime(), year)) / 7),
+  );
+  // Open on the most recent weeks; again when the year (or the card) changes.
+  useEffect(() => {
+    if (width > 0) scroller.current?.scrollTo({ x: offsetX, animated: false });
+  }, [width, offsetX, year]);
   return (
     <View
       accessible
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Scrolls sideways through the year"
       onLayout={(e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width))}
       style={{ height: width > 0 ? height : 120 }}
     >
       {width > 0 && (
-        <Svg width={width} height={height}>
-          {monthStarts.map((col, m) => (
-            <SvgText
-              key={m}
-              x={col * (cell + GAP)}
-              y={10}
-              fontSize={10}
-              fontFamily={theme.fonts.bodySmall.fontFamily}
-              fill={tokens.inkMuted}
-            >
-              {MONTHS[m]!.charAt(0)}
-            </SvgText>
-          ))}
-          {levels.map((level, day) => {
-            const slot = firstWeekday + day;
-            const col = Math.floor(slot / 7);
-            const row = slot % 7;
-            return (
-              <Rect
-                key={day}
+        <ScrollView
+          ref={scroller}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentOffset={{ x: offsetX, y: 0 }}
+          testID="year-heatmap-strip"
+        >
+          <Svg width={contentWidth} height={height}>
+            {monthStarts.map((col, m) => (
+              <SvgText
+                key={m}
                 x={col * (cell + GAP)}
-                y={labelH + row * (cell + GAP)}
-                width={cell}
-                height={cell}
-                rx={Math.min(2, cell / 4)}
-                fill={shades[level] ?? shades[0]}
-              />
-            );
-          })}
-        </Svg>
+                y={12}
+                fontSize={12}
+                fontFamily={theme.fonts.bodySmall.fontFamily}
+                fill={tokens.inkMuted}
+              >
+                {MONTHS[m]}
+              </SvgText>
+            ))}
+            {levels.map((level, day) => {
+              const slot = firstWeekday + day;
+              const col = Math.floor(slot / 7);
+              const row = slot % 7;
+              const empty = level === 0;
+              return (
+                <Rect
+                  key={day}
+                  x={col * (cell + GAP) + (empty ? 0.5 : 0)}
+                  y={LABEL_H + row * (cell + GAP) + (empty ? 0.5 : 0)}
+                  width={cell - (empty ? 1 : 0)}
+                  height={cell - (empty ? 1 : 0)}
+                  rx={Math.min(3, cell / 4)}
+                  fill={shades[level] ?? shades[0]}
+                  stroke={empty ? tokens.stats.dayEmptyOutline : undefined}
+                  strokeWidth={empty ? 1 : 0}
+                />
+              );
+            })}
+          </Svg>
+        </ScrollView>
       )}
     </View>
   );
@@ -252,8 +286,15 @@ function Legend() {
       importantForAccessibility="no-hide-descendants"
     >
       <Text style={[styles.legendText, { color: tokens.inkMuted }]}>Less</Text>
-      {shades.map((c) => (
-        <View key={c} style={[styles.legendCell, { backgroundColor: c }]} />
+      {shades.map((c, i) => (
+        <View
+          key={c}
+          style={[
+            styles.legendCell,
+            { backgroundColor: c },
+            i === 0 && { borderWidth: 1, borderColor: tokens.stats.dayEmptyOutline },
+          ]}
+        />
       ))}
       <Text style={[styles.legendText, { color: tokens.inkMuted }]}>More</Text>
     </View>
@@ -324,7 +365,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
   hint: { fontSize: 12, lineHeight: 16 },
   legend: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' },
-  legendCell: { width: 11, height: 11, borderRadius: 2 },
+  legendCell: { width: 12, height: 12, borderRadius: 3 },
   legendText: { fontSize: 11, lineHeight: 14 },
   months: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: BAR_H + 20 },
   monthCol: { flex: 1, alignItems: 'stretch', gap: 4 },

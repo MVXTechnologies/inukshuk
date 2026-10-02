@@ -11,7 +11,7 @@ import {
   type ChartGranularity,
 } from '@core/dashboard/logbook';
 import { findCategory } from '@core/library/categories';
-import { weekStreaks } from '@core/stats/streaks';
+import { activityWeekStreaks } from '@core/stats/streaks';
 import { LogbookHeaderActions } from '@features/logbook/LogbookHeaderActions';
 import { useTrailStatsBackfill } from '@features/logbook/useTrailStats';
 import { useLibraryStore } from '@state/libraryStore';
@@ -27,7 +27,6 @@ import { ScreenHeader } from '@ui/components/ScreenHeader';
 import { ActivityTypeChips } from './ActivityTypeChips';
 import { DayActivitiesDialog } from './DayActivitiesDialog';
 import { DistanceChart } from './DistanceChart';
-import { LifetimeCard } from './LifetimeCard';
 import { MonthCalendar } from './MonthCalendar';
 import { RecentActivityRow } from './RecentActivityRow';
 import { useDashboardClock } from './useDashboardClock';
@@ -37,7 +36,7 @@ const RECENT_ROWS = 5;
 
 /**
  * The Logbook tab (the old Dashboard; revamp `After-Logbook.html`, spec §7):
- * lifetime totals, "Distance per week" (Week/Month/Year), "Activities by type"
+ * "Distance per week" (Week/Month/Year), "Activities by type"
  * — which doubles as the type filter — the Recent list, and the month
  * calendar that taps through to each trail. Everything derives from the
  * library's TrackSummary index — pure aggregation in `@core/dashboard`,
@@ -85,15 +84,9 @@ export function DashboardScreen() {
     [tracks, categoryId],
   );
   const typeCounts = useMemo(() => countsByType(tracks), [tracks]);
-  // The header flame: consecutive weeks with an outing, every activity.
-  const streak = useMemo(
-    () =>
-      weekStreaks(
-        tracks.filter((t) => matchesCategoryFilter(t, null)).map((t) => t.startedAt),
-        now,
-      ).current,
-    [tracks, now],
-  );
+  // The header flame: consecutive weeks with an outing, across ALL
+  // activities whatever chip is selected here (Statistics' "All" card shows the same).
+  const streak = useMemo(() => activityWeekStreaks(tracks, null, now).current, [tracks, now]);
   const recent = useMemo(
     () => recentActivities(tracks, categoryId, RECENT_ROWS),
     [tracks, categoryId],
@@ -181,7 +174,6 @@ export function DashboardScreen() {
       {header}
       <ScrollView style={styles.fill} contentContainerStyle={styles.content}>
         <View style={styles.top}>
-          <LifetimeCard tracks={matching} units={units} typeName={selectedCategory?.name ?? null} />
           <DistanceChart
             buckets={buckets}
             granularity={granularity}

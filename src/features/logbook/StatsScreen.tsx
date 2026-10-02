@@ -12,7 +12,7 @@ import {
   totalsIn,
   type StatsPeriod,
 } from '@core/stats/periods';
-import { weekStreaks } from '@core/stats/streaks';
+import { activityWeekStreaks, streakTitle } from '@core/stats/streaks';
 import { findCategory } from '@core/library/categories';
 import { useDashboardClock } from '@features/dashboard/useDashboardClock';
 import { useLibraryStore } from '@state/libraryStore';
@@ -85,12 +85,8 @@ export function StatsScreen() {
   const comparison = useMemo(() => comparisonLine(shown, period, now), [shown, period, now]);
   const bars = useMemo(() => periodBars(shown, period, now), [shown, period, now]);
   const streaks = useMemo(
-    () =>
-      weekStreaks(
-        shown.map((t) => t.startedAt),
-        now,
-      ),
-    [shown, now],
+    () => activityWeekStreaks(performed, effectiveActivity, now),
+    [performed, effectiveActivity, now],
   );
   const avgKind = averageKind(effectiveActivity);
   const avg = averageValue(totals, avgKind);
@@ -111,6 +107,7 @@ export function StatsScreen() {
 
   const f = createFormatters(units);
   const category = findCategory(effectiveActivity, customCategories);
+  const streakLabel = streakTitle(category?.name ?? null);
   const caps = [PERIOD_CAPS[period], category?.name.toUpperCase()].filter(Boolean).join(' · ');
   const avgText =
     avg === null
@@ -176,11 +173,17 @@ export function StatsScreen() {
         <View style={styles.pair}>
           <StatsCard
             style={styles.half}
-            accessibilityLabel={`Current streak ${streaks.current} weeks, best ${streaks.best} weeks`}
+            accessibilityLabel={`${streakLabel}: ${streaks.current} ${streaks.current === 1 ? 'week' : 'weeks'}, best ${streaks.best}`}
           >
             <View style={styles.smallHead}>
               <Icon source="fire" size={18} color={tokens.stats.flame} />
-              <Text style={[styles.smallLabel, { color: tokens.inkMuted }]}>Week streak</Text>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={[styles.smallLabel, styles.shrink, { color: tokens.inkMuted }]}
+              >
+                {streakLabel}
+              </Text>
             </View>
             <Text style={[styles.smallValue, tabularNums, { color: tokens.ink }]}>
               {streaks.current}
@@ -339,6 +342,7 @@ const styles = StyleSheet.create({
   half: { flex: 1, minWidth: 0, gap: 2 },
   smallHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   smallLabel: { fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  shrink: { flexShrink: 1 },
   smallValue: { fontSize: 24, lineHeight: 30, fontWeight: '800' },
   smallUnit: { fontSize: 14, fontWeight: '700' },
   smallSub: { fontSize: 12, lineHeight: 16 },

@@ -1,4 +1,5 @@
-import { addLocalDays, startOfLocalWeek } from '@core/dashboard/aggregate';
+import { addLocalDays, matchesCategoryFilter, startOfLocalWeek } from '@core/dashboard/aggregate';
+import type { TrackSummary } from '@core/models';
 
 /**
  * Week streaks: consecutive local weeks (Monday-start) with at least one
@@ -35,4 +36,25 @@ export function weekStreaks(startTimes: Iterable<number>, now: number): WeekStre
     previous = w;
   }
   return { current, best: Math.max(best, current) };
+}
+
+/**
+ * The week streaks of one activity, or of every performed activity (`null`).
+ * The Logbook header flame and the Statistics card both read this, so the
+ * flame always equals the Statistics "All" card.
+ */
+export function activityWeekStreaks(
+  tracks: readonly Pick<TrackSummary, 'category' | 'plan' | 'startedAt'>[],
+  activity: string | null,
+  now: number,
+): WeekStreaks {
+  return weekStreaks(
+    tracks.filter((t) => matchesCategoryFilter(t, activity)).map((t) => t.startedAt),
+    now,
+  );
+}
+
+/** The streak card's title: "Week streak" for All, "Run week streak" for an activity. */
+export function streakTitle(activityName: string | null): string {
+  return activityName === null ? 'Week streak' : `${activityName} week streak`;
 }

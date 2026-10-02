@@ -1,5 +1,6 @@
-import { distanceUnitMeters, niceAxisMax } from '@core/dashboard/logbook';
+import { distanceUnitMeters } from '@core/dashboard/logbook';
 import type { Units } from '@core/format';
+import { tightAxis } from '@core/stats/axis';
 import type { StatsBar, StatsPeriod } from '@core/stats/periods';
 import { formatDistance } from '@state/formatters';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -14,10 +15,12 @@ import { StatsCard } from './StatsControls';
  * The Statistics bar chart, following the period: day by day (Week), week by
  * week over 12 weeks (Month), month by month (Year), year by year (All
  * time). Sage bars; the bar holding today is the darker sage. Distance, with
- * a 0 / half / nice-max axis on the right.
+ * an axis on the right that hugs the tallest bar (`tightAxis`: 3 to 5 ticks).
  */
 
 const CHART_H = 128;
+/** The top tick's gridline; the plot runs from here down to BASE_Y. */
+const TOP_Y = 6;
 const BASE_Y = 104;
 const AXIS_W = 28;
 const LABEL_Y = 122;
@@ -54,7 +57,10 @@ export function StatsBarChart({
   const tokens = useSchemeTokens();
   const [width, setWidth] = useState(0);
   const perUnit = distanceUnitMeters(units);
-  const top = niceAxisMax(Math.max(0, ...bars.map((b) => b.distanceM / perUnit)));
+  const axis = tightAxis(Math.max(0, ...bars.map((b) => b.distanceM / perUnit)));
+  const top = axis.max;
+  const plotH = BASE_Y - TOP_Y;
+  const tickY = (v: number) => BASE_Y - (v / top) * plotH;
   const plotW = Math.max(0, width - AXIS_W);
   const slot = bars.length > 0 ? plotW / bars.length : 0;
   const barW = Math.min(26, slot * 0.66);
@@ -80,19 +86,19 @@ export function StatsBarChart({
       >
         {width > 0 && (
           <Svg width={width} height={CHART_H}>
-            {[0.5, BASE_Y / 2 + 0.5, BASE_Y + 0.5].map((y) => (
+            {axis.ticks.map((v) => (
               <Line
-                key={y}
+                key={v}
                 x1={0}
                 x2={plotW}
-                y1={y}
-                y2={y}
+                y1={Math.round(tickY(v)) + 0.5}
+                y2={Math.round(tickY(v)) + 0.5}
                 stroke={tokens.divider}
                 strokeWidth={1}
               />
             ))}
             {bars.map((b, i) => {
-              const h = Math.min(BASE_Y, (b.distanceM / perUnit / top) * BASE_Y);
+              const h = Math.min(plotH, (b.distanceM / perUnit / top) * plotH);
               const zero = h < 2;
               return (
                 <Rect
@@ -107,11 +113,11 @@ export function StatsBarChart({
                 />
               );
             })}
-            {[top, top / 2, 0].map((v, k) => (
+            {axis.ticks.map((v) => (
               <SvgText
-                key={k}
+                key={`t${v}`}
                 x={plotW + 5}
-                y={[4 + FONT * 0.8, BASE_Y / 2 + FONT * 0.35, BASE_Y + FONT * 0.35][k]}
+                y={tickY(v) + FONT * 0.35}
                 fontSize={FONT}
                 fontFamily={fontFamily}
                 fill={tokens.inkMuted}

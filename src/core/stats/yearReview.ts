@@ -116,3 +116,44 @@ export function reviewYears(
   }
   return [...years].sort((a, b) => b - a);
 }
+
+/**
+ * The year heatmap as a horizontally scrollable strip: `visibleWeeks` week
+ * columns fill the card, the rest scroll. It opens on the most recent weeks —
+ * today's week for the current year, December otherwise.
+ */
+export interface HeatmapStrip {
+  /** Week columns the year spans (53 or 54). */
+  columns: number;
+  /** Side of one day cell. */
+  cell: number;
+  /** Width of the whole strip. */
+  contentWidth: number;
+  /** Scroll offset that puts the focus week at the right edge. */
+  offsetX: number;
+}
+
+export function heatmapStrip(opts: {
+  year: number;
+  firstWeekday: number;
+  dayCount: number;
+  now: number;
+  width: number;
+  gap: number;
+  visibleWeeks?: number;
+}): HeatmapStrip {
+  const { year, firstWeekday, dayCount, now, width, gap } = opts;
+  const columns = Math.ceil((firstWeekday + dayCount) / 7);
+  if (!(opts.width > 0)) return { columns, cell: 0, contentWidth: 0, offsetX: 0 };
+  const visible = Math.min(columns, opts.visibleWeeks ?? 26);
+  const cell = Math.max(0, (width - (visible - 1) * gap) / visible);
+  const contentWidth = columns * cell + (columns - 1) * gap;
+  const today = new Date(now);
+  let focus = columns - 1;
+  if (today.getFullYear() === year) {
+    focus = Math.floor((firstWeekday + dayOfYear(now, year)) / 7);
+  }
+  const right = (focus + 1) * cell + focus * gap;
+  const offsetX = Math.max(0, Math.min(contentWidth - width, right - width));
+  return { columns, cell, contentWidth, offsetX };
+}

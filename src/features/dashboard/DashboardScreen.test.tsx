@@ -3,8 +3,7 @@ import type { TrackSummary } from '@core/models';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { MD3LightTheme, PaperProvider } from 'react-native-paper';
-import { StyleSheet } from 'react-native';
+import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DashboardScreen } from './DashboardScreen';
 
@@ -65,13 +64,14 @@ it('keeps the empty state when nothing was recorded', async () => {
   expect(screen.getByLabelText('Settings')).toBeTruthy();
 });
 
-it('shows lifetime totals, the weekly chart, type counts and the Recent rows', async () => {
+it('shows the weekly chart, type counts and the Recent rows, and no lifetime card', async () => {
   await show([
     track('a', 'Les Loups — Jacques-Cartier', 25, 'hike'),
     track('b', 'Mont-Sainte-Anne — La Crête', 2, 'run'),
   ]);
 
-  expect(screen.getByLabelText(/^Lifetime totals: 22 km, 7 h, 2,136 m climbed$/)).toBeTruthy();
+  expect(screen.queryByLabelText(/^Lifetime totals/)).toBeNull();
+  expect(screen.queryByText(/^LIFETIME/)).toBeNull();
   expect(screen.getByText('Distance per week')).toBeTruthy();
   expect(screen.getByLabelText('Hike, 1 activity')).toBeTruthy();
   expect(screen.getByLabelText('Run, 1 activity')).toBeTruthy();
@@ -106,16 +106,6 @@ it('switches the chart to months', async () => {
   await fireEvent.press(screen.getByText('Month'));
   expect(screen.getByText('Distance per month')).toBeTruthy();
   expect(screen.getByText(/^Last 12 months · /)).toBeTruthy();
-});
-
-it('draws the lifetime units in the card ink, not the page ink', async () => {
-  await show([track('a', 'Mont Albert', 1, 'hike')]);
-  // The innermost match is the unit span nested in the value ("11 km").
-  const unit = screen
-    .getAllByText(/km$/)
-    .find((t) => JSON.stringify(t.props.children) === JSON.stringify([' ', 'km']));
-  expect(unit).toBeDefined();
-  expect(StyleSheet.flatten(unit?.props.style).color).toBe(MD3LightTheme.colors.inverseOnSurface);
 });
 
 it('shows each recent activity with its route thumbnail', async () => {
