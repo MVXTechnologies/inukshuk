@@ -77,3 +77,13 @@ export function vectorBasemapOption(
     ...(withContours ? { contours: vectorContoursUrl() } : {}),
   };
 }
+
+/**
+ * The `imageryContours` style option (#492): the same served contour tiles
+ * as the Map base, plus our glyph host for their height labels, for drawing
+ * over satellite imagery.
+ */
+export function imageryContoursOption(): { tiles: string; glyphs?: string } {
+  const glyphs = vectorGlyphsUrl();
+  return { tiles: vectorContoursUrl(), ...(glyphs !== null ? { glyphs } : {}) };
+}

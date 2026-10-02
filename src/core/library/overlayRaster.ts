@@ -1,4 +1,5 @@
 import { fnv1a32 } from '@core/encoding/fnv1a';
+import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import type { MapDocument } from '@core/models';
 
 /**
@@ -26,12 +27,33 @@ export function documentRevision(map: Pick<MapDocument, 'importedAt' | 'fileUri'
   return `${map.importedAt}_${fnv1a32(map.fileUri.slice(map.fileUri.lastIndexOf('/') + 1))}`;
 }
 
+/**
+ * The part of a raster's identity that says how it was drawn beyond the page
+ * itself: empty for the plain render (so every raster cached before
+ * "See-through white" existed keeps its name), `_wk-<percent>` (`_wk-25` … `_wk-100`) when its white
+ * paper was keyed. Switching the level therefore renders each page once per
+ * level and then finds it on disk; nothing is ever re-downloaded.
+ */
+export function rasterLookSuffix(whiteKey: WhiteKeyLevel = 0): string {
+  return whiteKey === 0 ? '' : `_wk-${whiteKey * 25}`;
+}
+
 /** In-memory cache key of a page's overview raster. */
-export function rasterCacheKey(docId: string, pageIndex: number, revision: string): string {
-  return `${docId}:${revision}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}`;
+export function rasterCacheKey(
+  docId: string,
+  pageIndex: number,
+  revision: string,
+  whiteKey: WhiteKeyLevel = 0,
+): string {
+  return `${docId}:${revision}:${pageIndex}:${OVERLAY_TARGET_WIDTH_PX}${rasterLookSuffix(whiteKey)}`;
 }
 
 /** The on-disk name of a page's overview raster (without extension). */
-export function rasterFileName(docId: string, pageIndex: number, revision: string): string {
-  return `${docId}_${revision}_${pageIndex}_${OVERLAY_TARGET_WIDTH_PX}`;
+export function rasterFileName(
+  docId: string,
+  pageIndex: number,
+  revision: string,
+  whiteKey: WhiteKeyLevel = 0,
+): string {
+  return `${docId}_${revision}_${pageIndex}_${OVERLAY_TARGET_WIDTH_PX}${rasterLookSuffix(whiteKey)}`;
 }

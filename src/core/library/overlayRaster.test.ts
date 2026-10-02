@@ -1,3 +1,4 @@
+import { WHITE_KEY_LEVELS } from '@core/geo/pdfWhiteKey';
 import {
   OVERLAY_TARGET_WIDTH_PX,
   documentRevision,
@@ -26,5 +27,18 @@ describe('raster identity', () => {
   it('names the width the PNG was rendered at', () => {
     expect(rasterFileName('m1', 2, 'r')).toBe(`m1_r_2_${OVERLAY_TARGET_WIDTH_PX}`);
     expect(rasterCacheKey('m1', 2, 'r')).toBe(`m1:r:2:${OVERLAY_TARGET_WIDTH_PX}`);
+  });
+
+  it('keeps the plain name for Off and a distinct one per see-through level', () => {
+    expect(rasterFileName('m1', 2, 'r', 0)).toBe(rasterFileName('m1', 2, 'r'));
+    expect(rasterCacheKey('m1', 2, 'r', 0)).toBe(rasterCacheKey('m1', 2, 'r'));
+    const names = new Set(WHITE_KEY_LEVELS.map((level) => rasterFileName('m1', 2, 'r', level)));
+    const keys = new Set(WHITE_KEY_LEVELS.map((level) => rasterCacheKey('m1', 2, 'r', level)));
+    expect(names.size).toBe(5);
+    expect(keys.size).toBe(5);
+    expect(rasterFileName('m1', 2, 'r', 4)).toBe(`m1_r_2_${OVERLAY_TARGET_WIDTH_PX}_wk-100`);
+    expect(rasterFileName('m1', 2, 'r', 1)).toBe(`m1_r_2_${OVERLAY_TARGET_WIDTH_PX}_wk-25`);
+    expect(rasterCacheKey('m1', 2, 'r', 2)).toBe(`m1:r:2:${OVERLAY_TARGET_WIDTH_PX}_wk-50`);
+    expect(rasterCacheKey('m1', 2, 'r', 3)).toBe(`m1:r:2:${OVERLAY_TARGET_WIDTH_PX}_wk-75`);
   });
 });

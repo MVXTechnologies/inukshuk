@@ -2,6 +2,11 @@ import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRend
 import { type PdfCrop } from '@core/geo/pdfDetail';
 import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
 import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
+import {
+  PDF_WHITE_KEY_RUNTIME_SOURCE,
+  whiteKeyStrength,
+  type WhiteKeyLevel,
+} from '@core/geo/pdfWhiteKey';
 import { patchPdfWorkerSource } from '@core/geo/pdfWorkerPatch';
 /**
  * PdfRasterizer — fully-offline PDF page → PNG rasterizer for MapLibre overlays.
@@ -134,6 +139,14 @@ export interface RasterizeArgs {
     expectedPageHeightPt: number;
   } | null;
   /**
+   * "See-through white" (`@core/geo/pdfWhiteKey`): after pdf.js paints, the
+   * page's near-white paper is keyed to transparency at this level, in the
+   * same WebView pass. `off` (default) leaves the render untouched. A keyed
+   * render never goes to a native renderer — they cannot key — so it always
+   * takes pdf.js.
+   */
+  whiteKey?: WhiteKeyLevel;
+  /**
    * Queue placement. `interactive` (default) is something the map is waiting
    * for and goes ahead of every queued `background` request; `background` is
    * the import-time pre-render (#272 step 2) and only runs once nothing
@@ -158,6 +171,8 @@ export type RasterResult = (
   /** Wall-clock ms inside the WebView: document open, and page render. */
   loadMs: number;
   renderMs: number;
+  /** Ms of the see-through-white pass (part of `renderMs`); absent when unkeyed. */
+  keyMs?: number;
 };
 
 /** Shape of the success/error messages the WebView posts back to RN. */
@@ -173,6 +188,7 @@ interface WebViewSuccessMessage {
   pageCount: number;
   loadMs: number;
   renderMs: number;
+  keyMs?: number;
 }
 interface WebViewErrorMessage {
   kind?: undefined;
@@ -309,6 +325,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
 <body>
 <div id="stage"><canvas id="canvas"></canvas></div>
 <script>${PDF_LAYER_RUNTIME_SOURCE}</script>
+<script>${PDF_WHITE_KEY_RUNTIME_SOURCE}</script>
 <script>${pdfMainSource}</script>
 <script>
 (function () {
@@ -519,7 +536,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   var LOAD_WATCHDOG_MS = 12000;
   var RANGE_CHUNK_BYTES = 1048576;
 
-  function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage) {
+  // How the raster is finished after pdf.js paints: { whiteKey: strength }
+  // keys near-white paper to transparency (0 or absent = untouched).
+  function keyStrength(look) {
+    var s = look && typeof look.whiteKey === 'number' ? look.whiteKey : 0;
+    return s > 0 && typeof window.__inkKeyWhite === 'function' ? Math.min(1, s) : 0;
+  }
+
+  function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage, look) {
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -572,7 +596,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (attempt === 0) {
           // Drop to the main-thread fake worker and retry once.
           try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
-          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage);
+          renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage, look);
         } else {
           post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' + fetchSummary() });
         }
@@ -612,8 +636,10 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var pageHeightPt = baseViewport.height;
           // Native renderers draw the document's default layers; a page whose
           // layer plan differs from them stays on pdf.js so every raster of it
-          // (overview and detail tiles) shows the same layers.
-          if (nativePage && layers.changed === 0 && page.rotate === 0 && page.userUnit === 1 &&
+          // (overview and detail tiles) shows the same layers. Nor can they
+          // key white: a keyed render always stays here.
+          var strength = keyStrength(look);
+          if (nativePage && strength === 0 && layers.changed === 0 && page.rotate === 0 && page.userUnit === 1 &&
               Array.isArray(page.view) && page.view.length === 4 &&
               page.view[0] === 0 && page.view[1] === 0 &&
               page.view[2] === nativePage.expectedPageWidthPt &&
@@ -640,6 +666,17 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var renderParams = { canvasContext: ctx, viewport: viewport, transform: [1, 0, 0, 1, geometry.offsetX, geometry.offsetY] };
           if (layers.config) renderParams.optionalContentConfigPromise = Promise.resolve(layers.config);
           return page.render(renderParams).promise.then(function () {
+            var keyMs;
+            if (strength > 0) {
+              // One pass over the painted pixels: near-white paper becomes
+              // transparent, colour and ink stay (@core/geo/pdfWhiteKey).
+              var tk = Date.now();
+              var image = ctx.getImageData(0, 0, widthPx, heightPx);
+              window.__inkKeyWhite(image.data, strength);
+              ctx.putImageData(image, 0, 0);
+              image = null;
+              keyMs = Date.now() - tk;
+            }
             var pngDataUri = canvas.toDataURL('image/png');
             // Free the canvas memory before reporting back.
             canvas.width = 1;
@@ -659,6 +696,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
                 pageCount: pageCount,
                 loadMs: loadMs,
                 renderMs: renderMs,
+                keyMs: keyMs,
               });
             });
           });
@@ -677,7 +715,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   }
 
   // \`url\` is null in inline mode: the PDF was streamed in via __pdfAppend.
-  window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop, nativePage) {
+  window.__pdfRender = function (id, pageIndex, targetWidthPx, url, crop, nativePage, look) {
     resetFetchTrace();
     var input;
     if (url) {
@@ -686,7 +724,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       input = { base64: chunks.join('') };
     }
     chunks = [];
-    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage);
+    renderOnce(id, pageIndex, targetWidthPx, input, 0, crop, nativePage, look);
   };
 
   post({ id: '__ready__', ok: true });
@@ -1017,6 +1055,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
     }
     const idLiteral = JSON.stringify(id);
+    const lookLiteral = JSON.stringify({ whiteKey: whiteKeyStrength(args.whiteKey) });
     const live = originRef.current;
     if (args.source.url !== undefined && live !== null) {
       let url = args.source.url;
@@ -1028,7 +1067,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       // Served: the request is four small values; pdf.js fetches the bytes.
       const urlLiteral = JSON.stringify(source.url);
       wv.injectJavaScript(
-        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}); true;`,
+        `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, ${urlLiteral}, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}, ${lookLiteral}); true;`,
       );
       return;
     }
@@ -1040,7 +1079,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       wv.injectJavaScript(`window.__pdfAppend && window.__pdfAppend(${chunkLiteral}); true;`);
     }
     wv.injectJavaScript(
-      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}); true;`,
+      `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}, ${lookLiteral}); true;`,
     );
   }, [startNative]);
 
@@ -1132,6 +1171,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           pageCount: message.pageCount,
           loadMs: message.loadMs,
           renderMs: message.renderMs,
+          ...(typeof message.keyMs === 'number' ? { keyMs: message.keyMs } : {}),
         });
       } else {
         pending.reject(new Error(message.error));
@@ -1412,12 +1452,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         idCounterRef.current += 1;
         const id = `req-${idCounterRef.current}`;
+        const whiteKey = args.whiteKey ?? 0;
         const normalized: Required<RasterizeArgs> = {
           source,
           pageIndex: args.pageIndex,
           targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
           crop: args.crop ?? null,
-          nativePage: nativePdfAvailable() ? (args.nativePage ?? null) : null,
+          // Native renderers cannot key white; a keyed render is pdf.js's.
+          nativePage: nativePdfAvailable() && whiteKey === 0 ? (args.nativePage ?? null) : null,
+          whiteKey,
           priority: args.priority ?? 'interactive',
         };
         const expire = () => {

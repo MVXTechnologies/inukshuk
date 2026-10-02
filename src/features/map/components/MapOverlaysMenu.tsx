@@ -1,6 +1,9 @@
+import { sheetBodyMaxHeight } from '@core/map/sheetFit';
+import { useMapAreaBottom, useWindowEdge } from '../mapAreaBottom';
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
+import { WHITE_KEY_LEVELS, nearestWhiteKeyLevel, whiteKeyLabel } from '@core/geo/pdfWhiteKey';
 import { radarAvailableAt } from '@core/weather/modelCoverage';
 import {
   PEAK_DENSITIES,
@@ -10,6 +13,7 @@ import {
   type ShadingLevel,
 } from '@core/map/terrainOptions';
 import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
+import { IMAGERY_LOOK_LABEL, IMAGERY_LOOKS } from '@core/map/satelliteImagery';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -26,6 +30,7 @@ import {
 import { FolderPickerDialog } from './FolderPickerDialog';
 import { MapButton } from './MapButton';
 import {
+  ControlRow,
   LevelsRow,
   MapSheet,
   NavRow,
@@ -37,6 +42,7 @@ import {
   useSheetWidth,
 } from './mapSheet';
 import { RangeSlider } from './RangeSlider';
+import { StepSlider } from './StepSlider';
 
 /**
  * THE overlays menu (#484 redesign): everything drawn on top of the base map,
@@ -45,8 +51,9 @@ import { RangeSlider } from './RangeSlider';
  * checkboxes, segmented pickers where a row has levels. It replaces the
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * - On the map — Content (folder picker), PDF maps, Personal heatmap,
- *   Labels on satellite.
+ * - On the map — Content (folder picker), PDF maps, See-through white
+ *   (a 5-stop slider: Off, 25 / 50 / 75 / 100 %), Personal heatmap, Labels
+ *   on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
  *   Peaks.
  * - Live layers — Weather (drills into its list) and Marine, both parked
@@ -65,9 +72,10 @@ import { RangeSlider } from './RangeSlider';
  * 'Weather: <layer>'/'Weather (coming soon)', 'Marine'/'Marine (coming
  * soon)'; the weather list's back row stays 'Back to overlays'.
  *
- * The rows scroll inside a capped height. The slope RangeSlider claims its
- * touches at touch-down and refuses termination, so a drag on a thumb beats
- * the ScrollView; the level pickers are taps.
+ * The rows scroll inside a capped height. The slope RangeSlider and the
+ * see-through StepSlider ('See-through white', one adjustable element) claim
+ * their touches at touch-down and refuse termination, so a drag beats the
+ * ScrollView; the level pickers are taps.
  */
 
 /** Per-layer icon (MaterialCommunityIcons). UI-only mapping — the catalog in
@@ -89,6 +97,9 @@ const BELOW_INSET = 52 + 16;
 
 const SHADING = SHADING_LEVELS.map((l) => ({ value: l, label: SHADING_LABEL[l] }));
 const TILT = TILT_RELIEFS.map((r) => ({ value: r, label: TILT_RELIEF_LABEL[r] }));
+/** See-through white's slider stops: Off, 25 %, 50 %, 75 %, 100 %. */
+const WHITE_KEY_STOPS = WHITE_KEY_LEVELS.map(whiteKeyLabel);
+const IMAGERY = IMAGERY_LOOKS.map((l) => ({ value: l, label: IMAGERY_LOOK_LABEL[l] }));
 const PEAKS = PEAK_DENSITIES.map((d) => ({ value: d, label: PEAK_DENSITY_LABEL[d] }));
 const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
   value: m,
@@ -124,7 +135,9 @@ function OverlayRows({
   const slopeMaxDeg = useSettingsStore((s) => s.terrainSlopeMaxDeg);
   const showHeatmap = useSettingsStore((s) => s.showHeatmap);
   const showPdfMaps = useSettingsStore((s) => s.showPdfOverlay);
+  const pdfWhiteKey = useSettingsStore((s) => s.pdfWhiteKey);
   const satelliteLabels = useSettingsStore((s) => s.satelliteLabels);
+  const satelliteImagery = useSettingsStore((s) => s.satelliteImagery);
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
@@ -176,6 +189,27 @@ function OverlayRows({
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
       />
+      {/* How see-through the maps' white paper is, so the base map shows
+          through open land and margins. The default for every PDF map; a
+          map can override it from its Library ⋮ menu. */}
+      <ControlRow
+        icon="circle-opacity"
+        label="See-through white"
+        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
+        disabled={!showPdfMaps}
+      >
+        <StepSlider
+          labels={WHITE_KEY_STOPS}
+          value={pdfWhiteKey}
+          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
+          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+          disabled={!showPdfMaps}
+          accessibilityLabel="See-through white"
+          accentColor={accent}
+          trackColor={tokens.surfaceVariant}
+          tickColor={tokens.inkMuted}
+        />
+      </ControlRow>
       <SwitchRow
         icon="fire"
         label="Personal heatmap"
@@ -190,6 +224,17 @@ function OverlayRows({
         value={satelliteLabels}
         disabled={!onSatellite}
         onToggle={() => set('satelliteLabels', !satelliteLabels)}
+      />
+      {/* #495: Esri's imagery reads dark under forest and in shadow; a
+          client-side lift (Brighter by default) or the tiles as served. */}
+      <LevelsRow
+        icon="brightness-6"
+        label="Imagery"
+        hint={onSatellite ? 'Satellite brightness' : 'For the Satellite map type'}
+        levels={IMAGERY}
+        selected={satelliteImagery}
+        onSelect={(l) => set('satelliteImagery', l)}
+        disabled={!onSatellite}
       />
 
       <SectionTitle>Terrain</SectionTitle>
@@ -405,11 +450,24 @@ export function OverlaysPanel({
 }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
   const { height: windowH } = useWindowDimensions();
+  // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
+  // behind it on a phone and "Live layers" could never be scrolled to.
+  const areaBottom = useMapAreaBottom();
+  const { ref: bodyRef, onLayout: onBodyLayout, value: bodyTop } = useWindowEdge('top');
   return (
     <>
       <SheetHeader title="Overlays" closeLabel="Close overlays" onClose={onClose} />
       <ScrollView
-        style={{ maxHeight: windowH * BODY_MAX_SHARE }}
+        ref={bodyRef as never}
+        onLayout={onBodyLayout}
+        style={{
+          maxHeight: sheetBodyMaxHeight({
+            windowHeight: windowH,
+            maxShare: BODY_MAX_SHARE,
+            areaBottom,
+            bodyTop,
+          }),
+        }}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"

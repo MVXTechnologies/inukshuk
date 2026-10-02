@@ -4,6 +4,7 @@ import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
+import { effectiveTrailViewTab, type TrailViewTab } from '@core/library/trailViewTabs';
 import type { LatLng } from '@core/models';
 import * as storage from '@data/storage';
 import { sanitizeMarineLayers, type MarineLayerId } from '@core/geo/marineLayers';
@@ -15,7 +16,9 @@ import {
   type HillshadeStrength,
   type PeakDensity,
 } from '@core/map/terrainOptions';
+import { DEFAULT_WHITE_KEY, parseWhiteKeyLevel, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { DEFAULT_TILT_RELIEF, isTiltRelief, type TiltRelief } from '@core/map/tiltRelief';
+import { DEFAULT_IMAGERY_LOOK, isImageryLook, type ImageryLook } from '@core/map/satelliteImagery';
 import { sanitizeMarinePackSnoozes } from '@core/geo/marinePacks';
 import { sanitizeWeatherLayer, type WeatherLayerId } from '@core/geo/weatherLayers';
 import {
@@ -144,6 +147,15 @@ export interface Settings {
    */
   showPdfOverlay: boolean;
   /**
+   * "See-through white" (overlays menu → On the map, under PDF maps): how
+   * transparent the near-white paper of every PDF map is drawn, so the base
+   * map shows through open land and the collar (`@core/geo/pdfWhiteKey`).
+   * The global default; a map can override it from its Library ⋮ menu
+   * (`MapDocument.whiteKey`). A slider stop: 0 = Off … 4 = 100 %. Off by
+   * default — no change until chosen.
+   */
+  pdfWhiteKey: WhiteKeyLevel;
+  /**
    * Latitude-aware scale bar under the compass badge. On by default — a map
    * you navigate by needs a distance reference — but switchable, because map
    * chrome has been pruned here before for clutter.
@@ -155,6 +167,11 @@ export interface Settings {
    * imagery. No effect on the Map base, which carries its own.
    */
   satelliteLabels: boolean;
+  /**
+   * "Imagery" (overlays menu → On the map, #495): how the Satellite base map
+   * is toned — the tiles as served, or a brightening paint over them.
+   */
+  satelliteImagery: ImageryLook;
   /**
    * Shaded-relief hillshade blended under the `map` basemap (the
    * `hillshade-2d` layer in `mapStyle.ts`). Platform-defaulted — see
@@ -202,6 +219,8 @@ export interface Settings {
    * persisted. Junk hydrates back to the default via `isSortKey`.
    */
   librarySortKey: SortKey;
+  /** The trail view's last-picked tab (#511): Overview · Timeline · Splits · Notes. */
+  trailViewTab: TrailViewTab;
   /**
    * Last known map position, used to seed the camera on a cold launch so the
    * map opens where the user last was instead of MapLibre's [0,0] default
@@ -211,6 +230,29 @@ export interface Settings {
    * (see `useLocationTracking`) — never per-fix.
    */
   lastKnownPosition: LatLng | null;
+  /**
+   * When the Library's once-a-year support card was last answered (Support or
+   * Not now), epoch ms; 0 = never. Read only while `SUPPORT_NUDGE_ENABLED` is
+   * on (see `@core/support/nudge`).
+   */
+  supportNudgeAnsweredAt: number;
+  /**
+   * The Map's tip button (#476): Settings › App settings switch. Off = hidden
+   * until switched back on. (Long-press › "Hide for an hour" does NOT touch
+   * it; see `tipJarHiddenUntil`.)
+   */
+  showTipJar: boolean;
+  /**
+   * Epoch ms until which the tip button is hidden after long-press › "Hide for
+   * an hour"; 0 = not hidden. Wall-clock: it comes back once that time has
+   * passed, whether or not the app was open meanwhile.
+   */
+  tipJarHiddenUntil: number;
+  /**
+   * Epoch ms until which the tip button rests (12 months after a tip in the
+   * app or a verified "I already donated"); 0 = not resting. It comes back after.
+   */
+  tipJarRestingUntil: number;
 }
 
 const DEFAULTS: Settings = {
@@ -234,8 +276,10 @@ const DEFAULTS: Settings = {
   marinePackSnoozes: [],
   showHeatmap: true,
   showPdfOverlay: true,
+  pdfWhiteKey: DEFAULT_WHITE_KEY,
   showScaleBar: true,
   satelliteLabels: true,
+  satelliteImagery: DEFAULT_IMAGERY_LOOK,
   showHillshade: DEFAULT_SHOW_HILLSHADE,
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
@@ -249,7 +293,12 @@ const DEFAULTS: Settings = {
   slopeDisclaimerShown: false,
   lastActivityCategory: DEFAULT_CATEGORY_ID,
   librarySortKey: DEFAULT_SORT,
+  trailViewTab: 'overview',
   lastKnownPosition: null,
+  supportNudgeAnsweredAt: 0,
+  showTipJar: true,
+  tipJarHiddenUntil: 0,
+  tipJarRestingUntil: 0,
 };
 
 interface SettingsState extends Settings {
@@ -305,8 +354,10 @@ function snapshot(s: SettingsState): Settings {
     marinePackSnoozes,
     showHeatmap,
     showPdfOverlay,
+    pdfWhiteKey,
     showScaleBar,
     satelliteLabels,
+    satelliteImagery,
     showHillshade,
     hillshadeStrength,
     peakDensity,
@@ -320,7 +371,12 @@ function snapshot(s: SettingsState): Settings {
     slopeDisclaimerShown,
     lastActivityCategory,
     librarySortKey,
+    trailViewTab,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
+    showTipJar,
+    tipJarHiddenUntil,
+    tipJarRestingUntil,
   } = s;
   return {
     tileUrl,
@@ -343,8 +399,10 @@ function snapshot(s: SettingsState): Settings {
     marinePackSnoozes,
     showHeatmap,
     showPdfOverlay,
+    pdfWhiteKey,
     showScaleBar,
     satelliteLabels,
+    satelliteImagery,
     showHillshade,
     hillshadeStrength,
     peakDensity,
@@ -358,7 +416,12 @@ function snapshot(s: SettingsState): Settings {
     slopeDisclaimerShown,
     lastActivityCategory,
     librarySortKey,
+    trailViewTab,
     lastKnownPosition,
+    supportNudgeAnsweredAt,
+    showTipJar,
+    tipJarHiddenUntil,
+    tipJarRestingUntil,
   };
 }
 
@@ -396,12 +459,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Same story for the Library sort: the ladder keeps any string, so a key
       // retired by a later build would survive as an unmatched switch case.
       if (!isSortKey(next.librarySortKey)) next.librarySortKey = DEFAULT_SORT;
+      next.trailViewTab = effectiveTrailViewTab(next.trailViewTab);
       if (!isDisplayCondition(next.displayCondition)) next.displayCondition = 'normal';
       if (!isHillshadeStrength(next.hillshadeStrength)) {
         next.hillshadeStrength = DEFAULT_HILLSHADE_STRENGTH;
       }
       if (!isPeakDensity(next.peakDensity)) next.peakDensity = DEFAULT_PEAK_DENSITY;
       if (!isTiltRelief(next.tiltRelief)) next.tiltRelief = DEFAULT_TILT_RELIEF;
+      // See-through white is a slider stop (0–4) now; the feature's first cut
+      // stored names, which the ladder's typeof check would DROP against the
+      // numeric default. Recover the raw value: a stop is kept, the names
+      // migrate (off → 0, some → 2, full → 4), anything else is Off.
+      next.pdfWhiteKey =
+        parseWhiteKeyLevel(
+          typeof saved === 'object' && saved !== null
+            ? (saved as { pdfWhiteKey?: unknown }).pdfWhiteKey
+            : undefined,
+        ) ?? DEFAULT_WHITE_KEY;
+      if (!isImageryLook(next.satelliteImagery)) next.satelliteImagery = DEFAULT_IMAGERY_LOOK;
       // Writes that landed before the file was read win for their own keys.
       const current = get();
       const early: Partial<Settings> = {};

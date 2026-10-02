@@ -12,11 +12,13 @@ import type { FilterSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { PEAK_DENSITIES, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 import {
   buildStoneImageryLayers,
+  buildStoneImagerySlots,
   buildStoneLayers,
   CONTOUR_MAX_STEEP,
   contourEmphasis,
   contourStroke,
   elevationLabel,
+  IMAGERY_CONTOUR_PAINT,
   IMAGERY_ROAD_OPACITY,
   peakDueFilter,
   STONE_FONTS_ATKINSON,
@@ -701,5 +703,88 @@ describe('contour steepness emphasis (#509)', () => {
       layers: layersOf(DARK, TAGGED),
     });
     expect(errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+describe('buildStoneImagerySlots (contours on satellite, #492)', () => {
+  const slots = (scheme: StoneBasemapScheme, labels = true) =>
+    buildStoneImagerySlots(scheme, {
+      source: SOURCE,
+      peaks: PEAKS,
+      contours: { ...CONTOURS, levelField: 'level' },
+      labels,
+    });
+  const strip = (l: LayerSpecification) => l.id.slice(STONE_LAYER_PREFIX.length);
+
+  it('splits contours, line work and labels into their own slots', () => {
+    const { contours, linework, labels } = slots(DARK);
+    expect(contours.map(strip)).toEqual([
+      'contour-minor-casing',
+      'contour-minor',
+      'contour-major-casing',
+      'contour-major',
+    ]);
+    for (const l of linework) expect(l.type).toBe('line');
+    expect(linework.map(strip)).toContain('path');
+    // Heights first among the labels, so names win any collision.
+    expect(labels[0] && strip(labels[0])).toBe('contour-label');
+    for (const l of labels) expect(l.type).toBe('symbol');
+  });
+
+  it('matches the flat list for line work and labels', () => {
+    const { linework, labels } = slots(DARK);
+    const flat = buildStoneImageryLayers(DARK, { source: SOURCE, peaks: PEAKS });
+    expect([...linework, ...labels.filter((l) => !l.id.includes('contour'))]).toEqual(flat);
+  });
+
+  it('draws each contour line over a dark casing in the halo colour, majors stronger', () => {
+    const { contours } = slots(DARK);
+    const paint = (id: string) =>
+      contours.find((l) => strip(l) === id)?.paint as Record<string, unknown>;
+    for (const kind of ['minor', 'major'] as const) {
+      expect(paint(`contour-${kind}`)['line-color']).toBe(DARK.contour);
+      expect(paint(`contour-${kind}-casing`)['line-color']).toBe(DARK.halo);
+      expect(paint(`contour-${kind}-casing`)['line-width']).toBeGreaterThan(
+        paint(`contour-${kind}`)['line-width'] as number,
+      );
+      expect(paint(`contour-${kind}`)['line-opacity']).toBe(
+        IMAGERY_CONTOUR_PAINT[kind].lineOpacity,
+      );
+    }
+    expect(IMAGERY_CONTOUR_PAINT.major.lineOpacity).toBeGreaterThan(
+      IMAGERY_CONTOUR_PAINT.minor.lineOpacity,
+    );
+    // Casings keep the line's source, filter and zoom range.
+    const minor = contours.find((l) => strip(l) === 'contour-minor');
+    const casing = contours.find((l) => strip(l) === 'contour-minor-casing');
+    expect({ ...casing, id: '', paint: {} }).toEqual({ ...minor, id: '', paint: {} });
+  });
+
+  it('draws only the contours (and their heights) with labels off', () => {
+    const { contours, linework, labels } = slots(DARK, false);
+    expect(contours.length).toBe(4);
+    expect(linework).toEqual([]);
+    expect(labels.map(strip)).toEqual(['contour-label']);
+  });
+
+  it('draws no contours without a contour source', () => {
+    const { contours, labels } = buildStoneImagerySlots(DARK, { source: SOURCE });
+    expect(contours).toEqual([]);
+    expect(labels.some((l) => l.id.includes('contour'))).toBe(false);
+  });
+
+  it('passes the style-spec validator', () => {
+    const { contours, linework, labels } = slots(DARK);
+    const style = {
+      version: 8 as const,
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      sources: {
+        [SOURCE]: { type: 'vector' as const, tiles: ['https://t.example/{z}/{x}/{y}.mvt'] },
+        peaks: { type: 'vector' as const, tiles: ['https://p.example/{z}/{x}/{y}.mvt'] },
+        contours: { type: 'vector' as const, tiles: ['https://c.example/{z}/{x}/{y}.mvt'] },
+      },
+      layers: [...contours, ...linework, ...labels],
+    };
+    expect(validateStyleMin(style as never)).toEqual([]);
   });
 });

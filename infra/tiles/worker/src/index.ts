@@ -11,6 +11,12 @@
  *   GET /trails/v1/index.json             long-distance trail index (trails-v1.index.json)
  *   GET /trails/v1/d/{version}/{id}.json  one trail's detail, range-read from
  *                                         trails-{version}.details.bin (../nas/trails.sh)
+ *   GET /search?q=&lang=&alt=&lat=&lon=&limit=
+ *                                         place search, proxied to Photon (./search.ts)
+ *   POST /donors                         opt-in donor name, filed as pending in R2 (./donors.ts)
+ *   POST /donor-verify/start|check      "I already donated" email code (./donorVerify.ts)
+ *   POST /route {mode, profile, points}   route snapping for the drawing tool, proxied to
+ *                                         BRouter (trails) / Valhalla (roads) (./route.ts)
  *
  * Each archive is ONE PMTiles file in R2 (see ../nas/). The pmtiles library
  * reads only the byte ranges a tile needs, and every response is cached at
@@ -28,8 +34,20 @@ import {
 } from 'pmtiles';
 import { contourR2Key } from './contourMath';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
+import { handleSearch, type SearchEnv } from './search';
+import { handleDonor, memoryLimiter } from './donors';
+import {
+  CODE_TTL_MS,
+  codeEmail,
+  handleVerify,
+  PREFIX as VERIFY_PREFIX,
+  randomCode,
+  type PendingCode,
+} from './donorVerify';
 
-export interface Env {
+import { handleRoute, type RouteEnv } from './route';
+
+export interface Env extends SearchEnv, RouteEnv {
   BUCKET: R2Bucket;
   /** Comma-separated origins for CORS, or "*" (the app is native; browsers are for debugging). */
   ALLOWED_ORIGINS?: string;
@@ -44,6 +62,133 @@ export interface Env {
   STRAVA_CLIENT_ID?: string;
   /** Strava API app secret (`wrangler secret put STRAVA_CLIENT_SECRET`). */
   STRAVA_CLIENT_SECRET?: string;
+  /**
+   * Workers rate-limiting binding for `POST /donors` (`[[ratelimits]]` in
+   * wrangler.toml). Unset = a best-effort per-isolate limit.
+   */
+  DONOR_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /**
+   * "I already donated" (`/donor-verify/*`, ./donorVerify.ts). Both secrets
+   * must be set (`wrangler secret put …`) or the routes answer 404.
+   */
+  DONOR_VERIFY_SALT?: string;
+  RESEND_API_KEY?: string;
+  /** Sender for the code email; defaults to Inukshuk <no-reply@mvxtechnologies.com>. */
+  VERIFY_FROM?: string;
+}
+
+const donorFallbackLimit = memoryLimiter();
+/** Per-isolate hourly cap on verify requests per client, on top of the binding. */
+const verifyFallbackLimit = memoryLimiter(10, 60 * 60_000);
+
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function donorVerify(
+  request: Request,
+  env: Env,
+  route: 'start' | 'check',
+): Promise<Response> {
+  const salt = env.DONOR_VERIFY_SALT;
+  const resendKey = env.RESEND_API_KEY;
+  if (!salt || !resendKey) return new Response('not found', { status: 404 });
+  const length = Number(request.headers.get('Content-Length') ?? '0');
+  if (length > 1024) return Response.json({ ok: false, error: 'body too large' }, { status: 400 });
+  const client = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const result = await handleVerify(
+    {
+      route,
+      method: request.method,
+      client,
+      body: request.method === 'POST' ? await request.text() : '',
+    },
+    {
+      get: async (key) => {
+        const object = await env.BUCKET.get(key);
+        return object === null ? null : ((await object.json()) as PendingCode);
+      },
+      put: async (key, value) => {
+        await env.BUCKET.put(key, JSON.stringify(value), {
+          httpMetadata: { contentType: 'application/json' },
+          customMetadata: {
+            expiresAt: String(Math.max(value.expiresAt, Date.now() + CODE_TTL_MS)),
+          },
+        });
+      },
+      delete: async (key) => {
+        await env.BUCKET.delete(key);
+      },
+      sweep: async (now) => {
+        const listed = await env.BUCKET.list({
+          prefix: VERIFY_PREFIX,
+          limit: 100,
+          include: ['customMetadata'],
+        });
+        const stale = listed.objects
+          .filter((o) => Number(o.customMetadata?.expiresAt ?? 0) + 60 * 60_000 < now)
+          .map((o) => o.key);
+        if (stale.length > 0) await env.BUCKET.delete(stale);
+      },
+      allow: async (key) => {
+        if (!(await verifyFallbackLimit(key))) return false;
+        return env.DONOR_LIMITER ? (await env.DONOR_LIMITER.limit({ key })).success : true;
+      },
+      hmac: (message) => hmacHex(salt, message),
+      code: () => randomCode((a) => crypto.getRandomValues(a)),
+      sendCode: async (email, code) => {
+        const { subject, text } = codeEmail(code);
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: env.VERIFY_FROM ?? 'Inukshuk <no-reply@mvxtechnologies.com>',
+            to: [email],
+            subject,
+            text,
+          }),
+        });
+        return res.ok;
+      },
+      now: () => Date.now(),
+    },
+  );
+  return Response.json(result.body, {
+    status: result.status,
+    headers: { 'Cache-Control': 'no-store' },
+  });
+}
+
+async function donors(request: Request, env: Env): Promise<Response> {
+  const client = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const length = Number(request.headers.get('Content-Length') ?? '0');
+  if (length > 4096) return Response.json({ error: 'body too large' }, { status: 413 });
+  const result = await handleDonor(
+    { method: request.method, client, body: request.method === 'POST' ? await request.text() : '' },
+    {
+      put: async (key, json) => {
+        await env.BUCKET.put(key, json, { httpMetadata: { contentType: 'application/json' } });
+      },
+      allow: async (key) =>
+        env.DONOR_LIMITER
+          ? (await env.DONOR_LIMITER.limit({ key })).success
+          : donorFallbackLimit(key),
+      now: () => new Date(),
+      random: () => crypto.randomUUID().slice(0, 8),
+    },
+  );
+  return Response.json(result.body, {
+    status: result.status,
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
@@ -453,6 +598,21 @@ export default {
         return new Response(`upload error: ${(e as Error).message}`, { status: 500 });
       }
     }
+    const [, verifyRoute] = /^\/donor-verify\/(start|check)$/.exec(url.pathname) ?? [];
+    if (verifyRoute === 'start' || verifyRoute === 'check') {
+      try {
+        return await donorVerify(request, env, verifyRoute);
+      } catch {
+        return Response.json({ ok: false, error: 'unavailable' }, { status: 503 });
+      }
+    }
+    if (url.pathname === '/donors') {
+      try {
+        return await donors(request, env);
+      } catch {
+        return Response.json({ error: 'could not save' }, { status: 500 });
+      }
+    }
     const [, stravaKind] = STRAVA_PATH.exec(url.pathname) ?? [];
     if (stravaKind !== undefined) {
       try {
@@ -463,10 +623,44 @@ export default {
     }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: { ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET' },
+        headers: {
+          ...corsHeaders(request, env),
+          'Access-Control-Allow-Methods': 'GET, POST',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
       });
     }
+    // Route snapping: POST, its own cache key, rate limit and error answers.
+    if (url.pathname === '/route') {
+      return handleRoute(
+        request,
+        env,
+        {
+          fetch: (input, init) => fetch(input, init),
+          cache: caches.default,
+          waitUntil: (p) => ctx.waitUntil(p),
+          now: () => Date.now(),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        },
+        corsHeaders(request, env),
+      );
+    }
     if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
+
+    // Place search (#496): its own cache key, rate limit and error answers.
+    if (url.pathname === '/search') {
+      return handleSearch(
+        request,
+        env,
+        {
+          fetch: (input, init) => fetch(input, init),
+          cache: caches.default,
+          waitUntil: (p) => ctx.waitUntil(p),
+          now: () => Date.now(),
+        },
+        corsHeaders(request, env),
+      );
+    }
 
     const cache = caches.default;
     const keyUrl = new URL(url);

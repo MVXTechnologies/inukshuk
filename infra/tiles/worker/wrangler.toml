@@ -15,3 +15,50 @@ ALLOWED_ORIGINS = "*"
 CACHE_CONTROL = "public, max-age=86400"
 # Strava API app (public id; the secret is `wrangler secret put STRAVA_CLIENT_SECRET`).
 STRAVA_CLIENT_ID = "283079"
+# Place search (GET /search, src/search.ts): the Photon /api endpoint it proxies.
+# Point at a self-hosted Photon (e.g. on the NAS) to leave the public instance.
+PHOTON_URL = "https://photon.komoot.io/api/"
+SEARCH_CACHE_CONTROL = "public, max-age=86400"
+SEARCH_RATE_PER_MIN = "60"
+# Photon osm_tag filters on every query: shops, offices and workshops never take a slot.
+PHOTON_OSM_TAGS = "!shop,!office,!craft"
+# "0" = one upstream query per search (no summit/water variants, see src/searchPlan.ts).
+PHOTON_VARIANTS = "1"
+# "I already donated" code email (#476). Secrets: `wrangler secret put
+# RESEND_API_KEY` and `wrangler secret put DONOR_VERIFY_SALT` (any long random
+# string); without both, /donor-verify/* answers 404.
+VERIFY_FROM = "Inukshuk <no-reply@mvxtechnologies.com>"
+# Route snapping (POST /route, src/route.ts). Each mode picks an engine
+# ("brouter" or "valhalla"); point the URLs at the NAS router to leave the
+# public instances — no app update needed.
+TRAIL_ENGINE = "brouter"
+ROAD_ENGINE = "valhalla"
+BROUTER_URL = "https://brouter.de/brouter"
+VALHALLA_URL = "https://valhalla1.openstreetmap.de"
+ROUTE_CACHE_CONTROL = "public, max-age=604800"
+ROUTE_RATE_PER_MIN = "30"
+# FOSSGIS allows at most one request per second: pace each engine per isolate.
+ROUTE_UPSTREAM_INTERVAL_MS = "1000"
+
+# Optional global rate limit for /search (otherwise a per-isolate counter):
+# [[ratelimits]]
+# name = "SEARCH_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 60, period = 60 }
+
+# Optional global rate limit for /route (otherwise a per-isolate counter):
+# [[ratelimits]]
+# name = "ROUTE_LIMITER"
+# namespace_id = "1002"
+# simple = { limit = 30, period = 60 }
+
+# POST /donors (#476): at most 3 donor-name submissions per client IP per
+# minute, on top of the per-isolate hourly cap in src/donors.ts. The IP is the
+# limiter key only; it is never stored.
+[[ratelimits]]
+name = "DONOR_LIMITER"
+namespace_id = "1476"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60

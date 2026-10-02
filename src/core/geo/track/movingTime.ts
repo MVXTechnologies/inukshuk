@@ -141,21 +141,33 @@ function medianStepS(points: readonly TrackPoint[]): number {
   return dts[Math.floor(dts.length / 2)] ?? 0;
 }
 
+/** {@link classifyMovingSteps}: the step from fix k-1 to fix k is not measurable (untimed, backwards). */
+export const STEP_INVALID = 0;
+/** The step counts as moving time. */
+export const STEP_MOVING = 1;
+/** The step is part of a sustained stop (slow for at least `minStopS`). */
+export const STEP_STOPPED = 2;
+/** No fix for longer than the gap limit: never moving time. */
+export const STEP_GAP = 3;
+/** A `<trkseg>` / recording-pause boundary (only from {@link classifySegmentedSteps}). */
+export const STEP_BREAK = 4;
+
 /**
- * Moving time and moving distance of ONE continuous segment (callers split
- * `<trkseg>`s / recording pauses first — see `computeSegmentedTrackStats`).
+ * Per-step verdict for ONE continuous segment: `out[k]` describes the step
+ * from fix `k-1` to fix `k` (`out[0]` is unused, {@link STEP_INVALID}). This
+ * is the classifier {@link computeMovingTime} sums, exposed so splits and
+ * stop detection (the trail view's Timeline, #511) agree with the moving
+ * time to the second.
  */
-export function computeMovingTime(
+export function classifyMovingSteps(
   points: readonly TrackPoint[],
   opts?: MovingTimeOpts,
-): MovingTimeResult {
+): Uint8Array {
+  const out = new Uint8Array(points.length);
   const stopSpeedMps = opts?.stopSpeedMps ?? PROFILES.foot.stopSpeedMps;
   const halfWindowMs = ((opts?.windowS ?? DEFAULT_WINDOW_S) * 1000) / 2;
   const minStopS = opts?.minStopS ?? DEFAULT_MIN_STOP_S;
   const maxGapS = Math.max(opts?.maxGapS ?? DEFAULT_MAX_GAP_S, GAP_INTERVALS * medianStepS(points));
-
-  let movingTimeS = 0;
-  let movingDistanceM = 0;
 
   // Walk "runs": maximal stretches of timed fixes whose steps are all
   // forward in time and no longer than the gap limit. Duplicate timestamps
@@ -172,28 +184,78 @@ export function computeMovingTime(
       const b = points[j + 1]!;
       if (!isTimed(b)) break;
       const dt = (b.time - a.time) / 1000;
-      if (dt < 0 || dt > maxGapS) break;
+      if (dt < 0) break;
+      if (dt > maxGapS) {
+        out[j + 1] = STEP_GAP;
+        break;
+      }
       j += 1;
     }
-    if (j > i) {
-      const r = measureRun(points, i, j, stopSpeedMps, halfWindowMs, minStopS);
-      movingTimeS += r.movingTimeS;
-      movingDistanceM += r.movingDistanceM;
-    }
+    if (j > i) classifyRun(points, i, j, stopSpeedMps, halfWindowMs, minStopS, out);
     i = j + 1;
+  }
+  return out;
+}
+
+/**
+ * {@link classifyMovingSteps} over a whole multi-segment trail: each segment
+ * is classified on its own and the step INTO each segment start is
+ * {@link STEP_BREAK}, so nothing bridges a pause.
+ */
+export function classifySegmentedSteps(
+  points: readonly TrackPoint[],
+  segmentStarts: readonly number[],
+  opts?: MovingTimeOpts,
+): Uint8Array {
+  const out = new Uint8Array(points.length);
+  const bounds = [
+    0,
+    ...Array.from(
+      new Set(segmentStarts.filter((s) => Number.isInteger(s) && s > 0 && s < points.length)),
+    ).sort((a, b) => a - b),
+    points.length,
+  ];
+  for (let b = 0; b + 1 < bounds.length; b++) {
+    const from = bounds[b]!;
+    const to = bounds[b + 1]!;
+    const steps = classifyMovingSteps(points.slice(from, to), opts);
+    out.set(steps, from);
+    if (from > 0) out[from] = STEP_BREAK;
+  }
+  return out;
+}
+
+/**
+ * Moving time and moving distance of ONE continuous segment (callers split
+ * `<trkseg>`s / recording pauses first — see `computeSegmentedTrackStats`).
+ */
+export function computeMovingTime(
+  points: readonly TrackPoint[],
+  opts?: MovingTimeOpts,
+): MovingTimeResult {
+  const steps = classifyMovingSteps(points, opts);
+  let movingTimeS = 0;
+  let movingDistanceM = 0;
+  for (let k = 1; k < points.length; k++) {
+    if (steps[k] !== STEP_MOVING) continue;
+    const a = points[k - 1]!;
+    const b = points[k]!;
+    movingTimeS += (b.time - a.time) / 1000;
+    movingDistanceM += haversineMeters(a, b);
   }
   return { movingTimeS, movingDistanceM };
 }
 
-/** Moving time over `points[from..to]`, a gap-free run of timed fixes. */
-function measureRun(
+/** Classify the steps of `points[from..to]`, a gap-free run of timed fixes, into `out`. */
+function classifyRun(
   points: readonly TrackPoint[],
   from: number,
   to: number,
   stopSpeedMps: number,
   halfWindowMs: number,
   minStopS: number,
-): MovingTimeResult {
+  out: Uint8Array,
+): void {
   const n = to - from + 1;
   // Prefix sums (relative to the run's first fix, longitude unwrapped across
   // the antimeridian) so each window centroid is O(1).
@@ -240,28 +302,19 @@ function measureRun(
     slow[k] = speed < stopSpeedMps ? 1 : 0;
   }
 
-  // Sum steps, dropping slow stretches that last at least minStopS.
-  let movingTimeS = 0;
-  let movingDistanceM = 0;
+  // Slow stretches lasting at least minStopS are stops; everything else moves.
   let k = 1;
   while (k < n) {
     let end = k;
     while (end + 1 < n && slow[end + 1] === slow[k]) end += 1;
     let spanS = 0;
-    let spanM = 0;
     for (let m = k; m <= end; m++) {
-      const a = points[from + m - 1]!;
-      const b = points[from + m]!;
-      spanS += (b.time - a.time) / 1000;
-      spanM += haversineMeters(a, b);
+      spanS += (points[from + m]!.time - points[from + m - 1]!.time) / 1000;
     }
-    if (!(slow[k] === 1 && spanS >= minStopS)) {
-      movingTimeS += spanS;
-      movingDistanceM += spanM;
-    }
+    const verdict = slow[k] === 1 && spanS >= minStopS ? STEP_STOPPED : STEP_MOVING;
+    for (let m = k; m <= end; m++) out[from + m] = verdict;
     k = end + 1;
   }
-  return { movingTimeS, movingDistanceM };
 }
 
 /** What the trail summary shows for time and average pace/speed. */

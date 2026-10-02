@@ -67,6 +67,7 @@ describe('Overlays sheet layout (#484)', () => {
       'PDF maps',
       'Personal heatmap',
       'Labels on satellite',
+      'Imagery',
       'Shading',
       '3D relief',
       'Contours',
@@ -170,9 +171,33 @@ describe('Labels on satellite (#484)', () => {
     await renderMenu();
     const row = screen.getByLabelText('Labels on satellite');
     expect(row.props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByText('For the Satellite map type')).toBeTruthy();
+    // Both satellite-only rows (labels, imagery) say where they apply.
+    expect(screen.getAllByText('For the Satellite map type')).toHaveLength(2);
     fireEvent.press(row);
     expect(useSettingsStore.getState().satelliteLabels).toBe(true);
+  });
+});
+
+describe('Imagery brightness (#495)', () => {
+  it('defaults to Brighter and sets the look while the base map is Satellite', async () => {
+    useMapStore.setState({ basemap: 'satellite' });
+    await renderMenu();
+    expect(screen.getByText('Satellite brightness')).toBeTruthy();
+    expect(selected('Brighter')).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Bright'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('bright');
+    await fireEvent.press(screen.getByLabelText('Original'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('original');
+  });
+
+  it('is greyed and inert on the Map base', async () => {
+    useMapStore.setState({ basemap: 'map' });
+    await renderMenu();
+    expect(screen.getByLabelText('Original').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    await fireEvent.press(screen.getByLabelText('Original'));
+    expect(useSettingsStore.getState().satelliteImagery).toBe('brighter');
   });
 });
 
@@ -236,6 +261,57 @@ describe('Terrain levels', () => {
     expect(screen.getByLabelText('Dramatic').props.accessibilityState).toMatchObject({
       disabled: true,
     });
+  });
+});
+
+describe('See-through white (PDF maps)', () => {
+  const slider = () => screen.getByLabelText('See-through white');
+  const adjust = (actionName: 'increment' | 'decrement') =>
+    act(async () => {
+      fireEvent(slider(), 'accessibilityAction', { nativeEvent: { actionName } });
+    });
+
+  it('sits under PDF maps as a 5-stop slider, Off by default', async () => {
+    await renderMenu();
+    expect(screen.getByText('See-through white')).toBeTruthy();
+    expect(slider().props.accessibilityRole).toBe('adjustable');
+    expect(slider().props.accessibilityValue).toEqual({ min: 0, max: 4, now: 0, text: 'Off' });
+  });
+
+  it('steps through 25 / 50 / 75 / 100 %, each setting the global level', async () => {
+    await renderMenu();
+    const seen: string[] = [];
+    for (const expected of [1, 2, 3, 4]) {
+      await adjust('increment');
+      expect(useSettingsStore.getState().pdfWhiteKey).toBe(expected);
+      seen.push(String(slider().props.accessibilityValue.text));
+    }
+    expect(seen).toEqual(['25 %', '50 %', '75 %', '100 %']);
+    expect(screen.getByText('100 %')).toBeTruthy();
+    // Clamped at Full.
+    await adjust('increment');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(4);
+  });
+
+  it('steps back down to Off and leaves the 3D relief Off alone', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 1, tiltRelief: 'natural' });
+    await renderMenu();
+    expect(slider().props.accessibilityValue).toMatchObject({ now: 1, text: '25 %' });
+    await adjust('decrement');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(0);
+    expect(slider().props.accessibilityValue).toMatchObject({ now: 0, text: 'Off' });
+    expect(useSettingsStore.getState().tiltRelief).toBe('natural');
+    // The 3D relief segment owns the plain 'Off' name.
+    expect(screen.getByLabelText('Off')).toBeTruthy();
+  });
+
+  it('rests while PDF maps are hidden', async () => {
+    useSettingsStore.setState({ showPdfOverlay: false, pdfWhiteKey: 2 });
+    await renderMenu();
+    expect(screen.getByText('Needs PDF maps')).toBeTruthy();
+    expect(slider().props.accessibilityState).toMatchObject({ disabled: true });
+    await adjust('increment');
+    expect(useSettingsStore.getState().pdfWhiteKey).toBe(2);
   });
 });
 

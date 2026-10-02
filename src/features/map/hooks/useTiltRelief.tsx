@@ -32,14 +32,15 @@ export interface TiltReliefBinding {
  * layer, and not mounting before the first load keeps it from creating a
  * colourless duplicate.
  */
-export function useTiltRelief(style: StyleSpecification): TiltReliefBinding {
+export function useTiltRelief(style: StyleSpecification, imagery = false): TiltReliefBinding {
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const [settledPitch, setSettledPitch] = useState(0);
   const [styleGeneration, setStyleGeneration] = useState(0);
   const onStyleLoaded = useCallback(() => setStyleGeneration((g) => g + 1), []);
   const onSettledPitch = useCallback((p: number) => setSettledPitch(pitchBucket(p)), []);
   const hasPass = useMemo(() => styleHasTiltRelief(style), [style]);
-  const exaggeration = tiltReliefExaggeration(tiltRelief, settledPitch);
+  // Over satellite imagery the pass is lighter (#492).
+  const exaggeration = tiltReliefExaggeration(tiltRelief, settledPitch, imagery);
   const layer =
     hasPass && styleGeneration > 0 ? (
       <Fragment key={`tilt-relief-${styleGeneration}`}>{tiltReliefLayer(exaggeration)}</Fragment>

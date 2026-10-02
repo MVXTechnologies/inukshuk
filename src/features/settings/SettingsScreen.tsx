@@ -40,6 +40,8 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DisplaySheet } from '@features/display/DisplaySheet';
+import { DonorsList } from '@features/support/DonorsList';
+import { SupportSettingsRow } from '@features/support/SupportSettingsRow';
 import { exportAllData } from './exportAllData';
 import { MAP_DATA_CREDITS } from './mapDataCredits';
 import { MarinePacksSection } from './MarinePacksSection';
@@ -127,6 +129,7 @@ export function SettingsScreen() {
   const units = useSettingsStore((s) => s.units);
   const themeMode = useSettingsStore((s) => s.themeMode);
   const compactMapChrome = useSettingsStore((s) => s.compactMapChrome);
+  const showTipJar = useSettingsStore((s) => s.showTipJar);
   const displayCondition = useSettingsStore((s) => s.displayCondition);
   const [displaySheetOpen, setDisplaySheetOpen] = useState(false);
   const errorReporting = useSettingsStore((s) => s.errorReporting);
@@ -142,6 +145,7 @@ export function SettingsScreen() {
   const tracks = useLibraryStore((s) => s.tracks);
   const folders = useLibraryStore((s) => s.folders);
   const waypoints = useLibraryStore((s) => s.waypoints);
+  const areas = useLibraryStore((s) => s.areas);
   const customCategories = useLibraryStore((s) => s.customCategories);
   const mapVisibilityMode = useLibraryStore((s) => s.mapVisibilityMode);
   const visibleFolderIds = useLibraryStore((s) => s.visibleFolderIds);
@@ -180,8 +184,8 @@ export function SettingsScreen() {
   };
 
   const exportPlan = useMemo(
-    () => planDataArchive({ folders, maps, tracks, waypoints }),
-    [folders, maps, tracks, waypoints],
+    () => planDataArchive({ folders, maps, tracks, waypoints, areas }),
+    [folders, maps, tracks, waypoints, areas],
   );
   // Uncompressed total of every planned file — a good upper-bound estimate for
   // the zip (maps/photos are stored, only the small GPX/JSON parts deflate).
@@ -212,6 +216,7 @@ export function SettingsScreen() {
         activeTrackIds,
         customCategories,
         waypoints,
+        areas,
       },
       {
         onProgress: (done, total) => setExportProgress({ done, total }),
@@ -260,6 +265,9 @@ export function SettingsScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
+        {/* Support Inukshuk (#476): first, above every category. */}
+        <SupportSettingsRow />
+
         {/* Five collapsible categories (owner's grouping, backlog item 4);
             AccordionGroup keeps one open at a time. Each body is a single
             View: Paper clones a paddingLeft onto direct accordion children
@@ -339,6 +347,17 @@ export function SettingsScreen() {
                       value={compactMapChrome}
                       onValueChange={(v) => set('compactMapChrome', v)}
                       accessibilityLabel="Compact map chrome"
+                    />
+                  )}
+                />
+                <List.Item
+                  title="Show the tip button"
+                  description="A small button on the map that opens Support Inukshuk"
+                  right={() => (
+                    <Switch
+                      value={showTipJar}
+                      onValueChange={(v) => set('showTipJar', v)}
+                      accessibilityLabel="Show the tip button"
                     />
                   )}
                 />
@@ -601,6 +620,8 @@ export function SettingsScreen() {
                   Offline trail navigation
                 </Text>
               </View>
+              {/* Prominent donors (#476): hidden while the published list is empty. */}
+              <DonorsList />
               {/* The version alone cannot answer "did the fix I published
                   arrive?": an over-the-air update never changes it, so a
                   stale bundle and a current one both read the same (#341).

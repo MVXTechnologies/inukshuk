@@ -333,6 +333,211 @@ update_). Regenerating the secret on Strava only needs a new
 - Nothing is uploaded without an explicit user action, and _Disconnect_ in
   Settings also revokes the grant via `/oauth/deauthorize`.
 
+## Place search (Photon through the tile Worker)
+
+The map's _Search places_ box (#496) asks the tile Worker's
+`GET /search?q=&lang=&alt=&lat=&lon=&limit=` (`infra/tiles/worker/src/search.ts`),
+which forwards to a [Photon](https://github.com/komoot/photon) geocoder —
+OpenStreetMap data, by komoot. The app never calls Photon directly, so the
+upstream can change without an app release.
+
+### Photon's API, as we use it
+
+- Endpoint `/api` (the `PHOTON_URL` var; default `https://photon.komoot.io/api/`),
+  answering GeoJSON. Parameters we send: `q` (made for search-as-you-type),
+  `limit`, `lang` (the public instance indexes `default`, `en`, `fr`, `de`,
+  `it`; omitted = local `name`) and `lat`/`lon` (location bias; we round to
+  0.01°, about 1 km), plus `osm_tag` exclusions from `PHOTON_OSM_TAGS`
+  (default `!shop,!office,!craft`: a furniture store named "Katahdin" must not
+  take the peak's slot). Photon also offers `osm_tag` inclusions (`key:value`,
+  `:value`), `layer`, `bbox`, `zoom` and `location_bias_scale`; the rest of
+  the filtering and the ranking happen in the app (`src/core/search`), so one
+  cached answer serves every view.
+- Each feature's `properties` carry `osm_key`/`osm_value` (mapped to our place
+  types in `src/core/search/placeTypes.ts`), `type` (Photon's layer), `name`,
+  `city`/`county`/`state`/`country`, and for areas an `extent` of
+  `[minLon, maxLat, maxLon, minLat]`. `extra` (extra OSM tags) is empty on the
+  public instance, so summits show no elevation there; a self-hosted Photon
+  imported with extra tags `ele` lights the elevation up with no app change.
+- **One search, up to three upstream queries** (`infra/tiles/worker/src/searchPlan.ts`),
+  run in parallel and merged (same OSM object once): the query as typed (a
+  trailing generic word moved to the front, "katahdin mount" → "mount
+  katahdin"); the same restricted to summits (`osm_tag=natural:peak`,
+  `natural:massif`, …) or to water for a water word, with "mount"/"mont"
+  added when the user typed no generic word; and the distinctive words alone,
+  restricted to summits, water and towns. Why: Photon has no "Katahdin" peak
+  (OSM's is "Mount Katahdin", `natural=massif`), and its typo tolerance needs
+  a second word to anchor on ("mount katadhin" finds it, "katadhin" finds
+  villages in Japan). The query as typed decides failure; a failed variant
+  is served but not cached. `PHOTON_VARIANTS = "0"` goes back to one query.
+- `alt=en|fr` runs the third query in the second language; its names are
+  merged as `alt_name` (shown in grey) on the results it shares with the
+  others. Results only it found keep their address line in that language.
+  `PHOTON_ALT_NAMES = "0"` turns it off.
+
+### Fair-use policy of photon.komoot.io
+
+komoot's public instance is free "as long as the number of requests stay in a
+reasonable limit. Extensive usage will be throttled or completely banned", with
+no availability guarantee and changes without notice; for larger volumes they
+ask you to run your own instance. Hence the Worker:
+
+- sends an identifying `User-Agent` (`SEARCH_USER_AGENT` in `search.ts`);
+- caches every answer at the edge for a day (`SEARCH_CACHE_CONTROL`), keyed on
+  the case- and space-folded query, so every phone typing "Mont-Sainte-Anne"
+  costs Photon three requests a day (at most `MAX_UPSTREAM_CALLS` per search);
+- limits searches that miss the cache per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
+  per isolate; for a global limit, enable the commented `[[ratelimits]]`
+  binding `SEARCH_LIMITER` in `wrangler.toml`);
+- the app debounces 250 ms, needs 2 characters, and aborts stale requests.
+
+If traffic grows past "reasonable", self-host Photon on the NAS (Docker image
+`rtuszik/photon-docker` or the release JAR with a Nominatim/OSM dump; North
+America is tens of GB) and set `PHOTON_URL` to it.
+
+### Deploying the route
+
+```sh
+cd infra/tiles/worker
+npx wrangler deploy          # ships GET /search with the [vars] above
+curl -s "https://inukshuk-tiles.marcandre-vigneault-96.workers.dev/search?q=Katahdin&lang=en&alt=fr&limit=3" | head -c 400
+```
+
+Until it is deployed the app shows "Search is unavailable right now" and still
+answers coordinates and on-device matches.
+
+## Support Inukshuk: tips and the public accounts (#476)
+
+### In-app tips (store consoles, one-time)
+
+Four **consumable** in-app products, same ids on both stores, all unlocking
+nothing. There is no $2.99 tier: the coffee is the $6.99 `tip_medium`. The ids
+keep their original names because a store product id can never be reused. Do not
+create `tip_small`; if one already exists in a console, remove it from sale (the
+app ignores it).
+
+| Product id   | USD base price | Name in the app         |
+| ------------ | -------------- | ----------------------- |
+| `tip_medium` | $6.99          | Coffee at the trailhead |
+| `tip_large`  | $14.99         | Lunch at the lookout    |
+| `tip_xlarge` | $29.99         | A day on the trail      |
+| `tip_patron` | $99.99         | Patron of the trail     |
+
+The USD base prices are mirrored in `TIP_USD` (`src/core/support/tips.ts`) and
+used only to add up a person's own giving for the donors list. The app shows the
+store's localized price and offers only the tiers the store returns, so a tier
+can be added, repriced or withdrawn from the console with no release. The
+library is `expo-iap` (config plugin `expo-iap` in `app.config.ts`), wrapped by
+`src/lib/iap.ts`; it is native, so it ships in a store build, never by OTA.
+Older binaries simply show "Tips aren't available on this device right now".
+
+### `docs/support/costs.json` — the one source of truth (percentages only)
+
+Read by the website's `/support/` and `/fr/support/` pages (inline fetch; the
+page is complete without it) and by the app's Support screen (cached a day,
+`src/data/supportCosts.ts`; validated by `src/core/support/costs.ts`).
+
+**Owner rule: the file is public, so it never carries a budget or any dollar
+amount** — no goal, raised amount, costs or ledger. A unit test fails CI if one
+of those keys (or a `$`) appears in the checked-in file.
+
+```jsonc
+{
+  "year": 2026, // the calendar year the goals cover
+  "goals": [
+    // funded in order; labels come from the app and the site, not from here
+    { "id": "keepUp", "percent": 0 }, // "Keep the app up": servers, store accounts, licences
+    { "id": "features", "percent": 0 }, // "Implement new features": developer time
+  ],
+  "supporters": 0, // number of people who gave (integer)
+  "updated": "2026-09-30", // YYYY-MM-DD of this edit
+  "donors": [
+    // opt-in, published by hand (see below); hidden in the app and site while empty
+    { "name": "Anne T.", "place": "Rimouski", "since": 2026 },
+  ],
+}
+```
+
+Every field is optional: a missing goal counts as 0 %, unknown goal ids are
+ignored, percentages are clamped to 0–100. The app and the site show the first
+goal under 100 % as a bar, and each goal before it as "✓ funded for <year>";
+when both reach 100 % they thank everyone instead.
+
+**Computing the percentages (private, owner only).** Each goal has a yearly
+amount set by the owner and kept out of the repository (never commit it, not
+even in a comment). At the start of each month, from the App Store Connect and
+Play Console payout reports (net of store fees) plus any web gifts:
+
+1. `raised` = net donations received this calendar year.
+2. Fill the goals in order: `keepUp.percent = min(100, raised ÷ keepUpGoal × 100)`;
+   whatever exceeds `keepUpGoal` counts toward `features`:
+   `features.percent = min(100, max(0, raised − keepUpGoal) ÷ featuresGoal × 100)`.
+3. Round down to whole percents, update `supporters` and `updated`, commit.
+
+### Prominent donors: `POST /donors` on the tile Worker
+
+People whose tips add up to $100 (USD base prices, counted on the device in
+`support.json`) may send a display name from the thank-you screen or Settings ›
+System info. The app posts
+`{ name (≤ 40), place (≤ 60, optional), platform, transactionIds (1–20) }` to
+`POST /donors` on the tile Worker (`infra/tiles/worker/src/donors.ts`). The
+Worker validates it, rate-limits per client IP (the `DONOR_LIMITER` binding in
+`wrangler.toml`: 3 a minute, plus a per-isolate 3 an hour; the IP is never
+stored) and writes it to R2 as `donors/pending/<ts>-<rand>.json`. Nothing is
+published automatically:
+
+1. List pending files: `wrangler r2 object get inukshuk-tiles/donors/pending/…`
+   (or the dashboard).
+2. Check each transaction id against App Store Connect / Play Console reports.
+3. Add `{ "name", "place", "since" }` to `donors` in `docs/support/costs.json`,
+   then delete the pending file. Removal requests (by email) are the same edit
+   in reverse.
+
+### "I already donated": `POST /donor-verify/start|check` (email code)
+
+An honour system: the Support screen's "I already donated" link asks for an
+email, the Worker emails a 6-digit code, and a matching code rests the Map's
+tip button for 12 months on that device. No donation is looked up.
+
+- `start {email}` → always `202 {ok:true}` for a valid address (no
+  enumeration); at most 3 codes per address per hour.
+- `check {email, code}` → `200 {ok:true}` or `400 {ok:false}` (wrong, expired
+  and never-requested all look the same); 5 wrong tries burn the code.
+- Both are rate-limited per client IP (the `DONOR_LIMITER` binding plus a
+  per-isolate hourly cap). Codes are compared in constant time.
+- R2 keeps only `donor-verify/<HMAC(salt, email)>.json` =
+  `{ proof: HMAC(salt, email|code), expiresAt, attempts, starts }` — never the
+  address or the code. The object is deleted on success and swept once
+  stale; add the lifecycle rule below as a backstop.
+- Without both secrets the routes answer 404, so deploying the Worker early is
+  harmless.
+
+**One-time setup (owner):**
+
+1. **Resend account** — sign up at resend.com, then _Domains → Add domain_:
+   `mvxtechnologies.com` (or a subdomain such as `mail.mvxtechnologies.com`).
+2. **DNS at Namecheap** — _Domain List → mvxtechnologies.com → Manage →
+   Advanced DNS → Host Records_: add exactly the records Resend's domain page
+   lists (copy host and value from there; do not type them from memory). They
+   are typically a DKIM `TXT` record (host `resend._domainkey`), an SPF `TXT`
+   record and an `MX` record on the sending subdomain (host `send`), plus an
+   optional DMARC `TXT` (host `_dmarc`, e.g. `v=DMARC1; p=none;`). Wait for
+   Resend to show the domain as _Verified_.
+3. **API key** — Resend → _API Keys → Create_ (permission: sending access,
+   domain: mvxtechnologies.com), then from `infra/tiles/worker/`:
+   `npx wrangler secret put RESEND_API_KEY`.
+4. **Salt** — any long random string, kept secret:
+   `openssl rand -hex 32 | npx wrangler secret put DONOR_VERIFY_SALT`. Changing
+   it later only invalidates codes in flight.
+5. **Sender** — `VERIFY_FROM` in `wrangler.toml` `[vars]`
+   (default `Inukshuk <no-reply@mvxtechnologies.com>`; must be on the verified
+   domain).
+6. **R2 lifecycle backstop** — Cloudflare dashboard → R2 → `inukshuk-tiles` →
+   _Settings → Object lifecycle rules_: delete objects with prefix
+   `donor-verify/` 1 day after upload.
+7. `npx wrangler deploy`, then test:
+   `curl -X POST https://<worker>/donor-verify/start -H 'Content-Type: application/json' -d '{"email":"you@example.org"}'`.
+
 ## Secrets summary (GitHub → Settings → Secrets → Actions)
 
 | Secret                        | Needed for                                        |

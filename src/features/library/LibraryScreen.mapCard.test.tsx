@@ -18,6 +18,7 @@ import { NO_GEOREFERENCE_NOTICE } from '@core/library/overlayPages';
 import { LibraryScreen } from '@features/library/LibraryScreen';
 import { useLibraryStore } from '@state/libraryStore';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -308,3 +309,61 @@ it.each(['m1:0', 'm1:0:detail'])(
     await act(async () => useOverlayStatusStore.setState({ statuses: {} }));
   },
 );
+
+describe('per-map See-through white (⋮ Map options)', () => {
+  const whiteKeyOf = (id: string) =>
+    useLibraryStore.getState().maps.find((m) => m.id === id)?.whiteKey;
+
+  afterEach(() => useSettingsStore.getState().reset());
+
+  it('follows the global level by default and names it', async () => {
+    useSettingsStore.setState({ pdfWhiteKey: 2 });
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    const def = await view.findByLabelText('See-through white: Default');
+    expect(def.props.accessibilityState).toMatchObject({ selected: true });
+    expect(view.getByText('Default (global: 50 %)')).toBeTruthy();
+  });
+
+  it('offers Default plus the five slider stops', async () => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    await view.findByLabelText('See-through white: Default');
+    for (const stop of ['Off', '25 %', '50 %', '75 %', '100 %']) {
+      expect(view.getByLabelText(`See-through white: ${stop}`)).toBeTruthy();
+    }
+  });
+
+  it.each([
+    ['Off', 0],
+    ['25 %', 1],
+    ['50 %', 2],
+    ['75 %', 3],
+    ['100 %', 4],
+  ] as const)('%s overrides the global level for this map', async (stop, level) => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    await press(view, `See-through white: ${stop}`);
+    expect(whiteKeyOf('m1')).toBe(level);
+  });
+
+  it('shows the override as chosen, and Default clears it', async () => {
+    const view = await show(mapDoc({ georeferences: [geo(0)], activePages: [0] }));
+    await press(view, 'Map options');
+    await press(view, 'See-through white: 100 %');
+    expect(whiteKeyOf('m1')).toBe(4);
+
+    await press(view, 'Map options');
+    const full = await view.findByLabelText('See-through white: 100 %');
+    expect(full.props.accessibilityState).toMatchObject({ selected: true });
+    await press(view, 'See-through white: Default');
+    expect(whiteKeyOf('m1')).toBeUndefined();
+  });
+
+  it('is not offered for a map that can never be drawn', async () => {
+    const view = await show(mapDoc({ georeferences: [] }));
+    await press(view, 'Map options');
+    await view.findByText('Rename');
+    expect(view.queryByLabelText('See-through white: Default')).toBeNull();
+  });
+});

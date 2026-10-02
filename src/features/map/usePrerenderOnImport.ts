@@ -1,4 +1,5 @@
 import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
+import { effectiveWhiteKey, type WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import {
   OVERLAY_TARGET_WIDTH_PX,
   rasterCacheKey,
@@ -19,6 +20,7 @@ import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useLibraryStore } from '@state/libraryStore';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
+import { useSettingsStore } from '@state/settingsStore';
 import { useEffect } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import {
@@ -67,12 +69,22 @@ export function usePrerenderOnImport(): void {
     let running = false;
     let appActive = isForeground(AppState.currentState);
 
+    // Pre-render at the level the map will ask for (the document's override,
+    // else the global "See-through white"), so the map finds the very file.
+    const levelFor = (job: PrerenderJob): WhiteKeyLevel =>
+      effectiveWhiteKey(
+        useLibraryStore.getState().maps.find((m) => m.id === job.docId)?.whiteKey,
+        useSettingsStore.getState().pdfWhiteKey,
+      );
     const isCached = (job: PrerenderJob): boolean =>
-      storage.existingOverlayPng(rasterFileName(job.docId, job.pageIndex, job.revision)) !== null;
+      storage.existingOverlayPng(
+        rasterFileName(job.docId, job.pageIndex, job.revision, levelFor(job)),
+      ) !== null;
 
     const run = async (job: PrerenderJob): Promise<void> => {
       const statusKey = overlayStatusKey(job.docId, job.pageIndex);
-      const cacheKey = rasterCacheKey(job.docId, job.pageIndex, job.revision);
+      const whiteKey = levelFor(job);
+      const cacheKey = rasterCacheKey(job.docId, job.pageIndex, job.revision, whiteKey);
       const pending = pendingRastersFor(rasterize);
       // The map is rendering this very page right now; it will write the file.
       if (pending.has(cacheKey)) return;
@@ -103,6 +115,7 @@ export function usePrerenderOnImport(): void {
           pageIndex: job.pageIndex,
           targetWidthPx: OVERLAY_TARGET_WIDTH_PX,
           priority: 'background',
+          whiteKey,
           nativePage: nativeGeometry && {
             fileUri: storage.resolveDocumentPath(job.fileUri),
             revision: job.revision,
@@ -115,7 +128,7 @@ export function usePrerenderOnImport(): void {
             throw error;
           throw new PdfRenderFailure(error);
         });
-        const name = rasterFileName(job.docId, job.pageIndex, job.revision);
+        const name = rasterFileName(job.docId, job.pageIndex, job.revision, whiteKey);
         const uri =
           raster.fileUri !== undefined
             ? storage.adoptOverlayPng(name, raster.fileUri)

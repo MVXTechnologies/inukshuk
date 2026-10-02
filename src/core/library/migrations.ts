@@ -1,4 +1,5 @@
 import type {
+  Area,
   Folder,
   GeoReference,
   MapDocument,
@@ -6,10 +7,13 @@ import type {
   TrackNote,
   Waypoint,
 } from '@core/models';
+import { parseWhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { sanitizeTrackOrigin } from '@core/import/origin';
 import { toDocumentRelativePath } from '@core/storage/documentPaths';
 import type { CustomCategory } from './categories';
 import { isWaypointIcon } from './waypointIcons';
+import { normalizeArea } from './areas';
+import { sanitizeRoutePlan } from '@core/draw/serialize';
 
 /**
  * Versioned migrations for Inukshuk's persisted JSON documents (`library.json`
@@ -24,7 +28,7 @@ import { isWaypointIcon } from './waypointIcons';
  */
 
 /** Current `library.json` schema. v1 = the unversioned legacy index. */
-export const LIBRARY_SCHEMA_VERSION = 10;
+export const LIBRARY_SCHEMA_VERSION = 11;
 
 /** How the map picks visible overlays: by item type toggles, or by folder. */
 export type MapVisibilityMode = 'type' | 'folders';
@@ -48,6 +52,8 @@ export interface LibraryIndex {
   waypoints: Waypoint[];
   /** User-defined activity categories (see `@core/library/categories`). */
   customCategories: CustomCategory[];
+  /** Areas drawn on the map (#503). */
+  areas: Area[];
 }
 
 type RawDoc = Record<string, unknown>;
@@ -196,6 +202,18 @@ function normalizeNotes(raw: unknown): TrackNote[] {
 }
 
 /**
+ * A map's persisted "See-through white" override: a slider stop (0–4) kept,
+ * a name from the feature's first, 3-level cut migrated (off → 0, some → 2,
+ * full → 4), junk dropped (= follow the global level). Done here in the
+ * sanitize pass rather than as a version step, so it holds whatever version
+ * stamp a file carries.
+ */
+function whiteKeyOverride(v: unknown): Pick<MapDocument, 'whiteKey'> {
+  const level = parseWhiteKeyLevel(v);
+  return level === undefined ? {} : { whiteKey: level };
+}
+
+/**
  * Normalize one persisted map document to the current shape. Older builds
  * stored a single `georeference` (or none); the current model stores
  * `georeferences[]` + `activePages[]` (defaulting to every georeferenced page
@@ -258,6 +276,7 @@ function normalizeMapDoc(raw: RawDoc): MapDocument {
     ...(typeof legacy.sourceUpdatedAt === 'string'
       ? { sourceUpdatedAt: legacy.sourceUpdatedAt }
       : {}),
+    ...whiteKeyOverride(raw.whiteKey),
   };
 }
 
@@ -317,6 +336,12 @@ const LIBRARY_UPGRADERS: Record<number, (doc: RawDoc) => RawDoc> = {
   // (nothing imported from a source before), so a pure version stamp; the
   // sanitize pass below validates the field wherever it IS present.
   9: (doc) => ({ ...doc, schemaVersion: 10 }),
+  // v10 → v11: maps gained the optional per-map "See-through white" override
+  // (`whiteKey`, #491); drawn areas (#503) joined the index — older indexes
+  // never stored any, so the list starts empty — and trails gained the
+  // optional drawn-route `plan` (#502). Absent on every pre-v11 document by
+  // definition; the sanitize pass validates all three wherever they ARE present.
+  10: (doc) => ({ ...doc, schemaVersion: 11, areas: asArray(doc.areas) }),
 };
 
 /** Keep only array entries that look like persisted records with a string id. */
@@ -327,7 +352,7 @@ function recordsWithId<T extends { id: string }>(value: unknown): T[] {
 /**
  * Apply `map` to every stored file path in an index — the maps' `fileUri`, the
  * trails' `fileUri`, their notes' `photoUri`, and standalone waypoints'
- * `photoUri`. **This is the complete list of persisted paths in
+ * `photoUri`, and drawn areas' `photoUris`. **This is the complete list of persisted paths in
  * `library.json`**; anything new that stores a path must be added here, or it
  * will go stale on the next iOS container rotation (#247).
  *
@@ -355,6 +380,9 @@ export function mapLibraryIndexPaths(
     waypoints: index.waypoints.map((w) =>
       w.photoUri === undefined ? w : { ...w, photoUri: map(w.photoUri) },
     ),
+    areas: index.areas.map((a) =>
+      a.photoUris === undefined ? a : { ...a, photoUris: a.photoUris.map(map) },
+    ),
   };
 }
 
@@ -375,13 +403,16 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
   const tracks = recordsWithId<TrackSummary>(doc.tracks)
     .filter((track) => typeof track.fileUri === 'string' && track.fileUri.trim() !== '')
     .map((track) => {
-      const { origin: rawOrigin, ...rest } = track;
+      const { origin: rawOrigin, plan: rawPlan, ...rest } = track;
       const origin = rawOrigin === undefined ? undefined : sanitizeTrackOrigin(rawOrigin);
+      const plan = rawPlan === undefined ? null : sanitizeRoutePlan(rawPlan);
       return {
         ...rest,
         ...(track.notes !== undefined ? { notes: normalizeNotes(track.notes) } : {}),
         // A junk origin is dropped, never the trail: it just loses its source mark.
         ...(origin ? { origin } : {}),
+        // Same for a junk drawn-route plan: the trail stays, "Edit route" goes.
+        ...(plan ? { plan } : {}),
       };
     });
   const activeMapId = typeof doc.activeMapId === 'string' ? doc.activeMapId : null;
@@ -408,6 +439,11 @@ export function migrateLibraryIndex(raw: unknown, documentDir?: string): Library
     customCategories: recordsWithId<CustomCategory>(doc.customCategories).filter(
       (c) => typeof c.name === 'string' && c.name.trim() !== '' && typeof c.color === 'string',
     ),
+    // An area that cannot be drawn (no id, < 3 valid vertices) is dropped;
+    // junk optional fields are cleaned, never cost the area.
+    areas: asArray(doc.areas)
+      .map(normalizeArea)
+      .filter((a): a is Area => a !== null),
   };
   // #247 — runs on EVERY load, not just the v5→v6 step: the population that
   // needs healing is already at v5/v6 with absolute paths burned in, and the

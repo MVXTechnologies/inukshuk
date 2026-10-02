@@ -1114,25 +1114,100 @@ export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
   'place-province',
 ];
 
+/** The imagery layers, split by the slot each draws in (`@core/map/layerSlots`). */
+export interface StoneImageryLayers {
+  /** Contour lines, each over a dark casing — the `contours` slot. */
+  contours: LayerSpecification[];
+  /** Road ribbons and the trail network — the `linework` slot. */
+  linework: LayerSpecification[];
+  /** Contour heights first, then every name — the `labels` slot. */
+  labels: LayerSpecification[];
+}
+
+/** What to draw over the imagery: names and trails, contours, or both. */
+export interface StoneImageryOptions extends StoneStyleOptions {
+  /** Roads, trails and names ("Labels on satellite"). Default true. */
+  labels?: boolean;
+}
+
 /**
- * {@link buildStoneLayers} cut down to {@link STONE_IMAGERY_LAYER_KEYS}, in
- * draw order (line work first, labels last). The caller passes a scheme
- * tuned for imagery — light ink on a dark halo reads over any photo.
+ * Contour lines over imagery (#492): the same served lines and interval
+ * ladder as the Map base, in the imagery palette — a light line over a soft
+ * dark casing. The pair carries its own contrast, so it reads over dark
+ * forest (where a lone ochre stroke vanished) and snow or bare rock (where
+ * a lone white one did). Major lines stronger, as on the map.
+ */
+export const IMAGERY_CONTOUR_PAINT = {
+  minor: { lineOpacity: 0.55, lineWidth: 0.8, casingOpacity: 0.35, casingWidth: 2.2 },
+  major: { lineOpacity: 0.85, lineWidth: 1.3, casingOpacity: 0.45, casingWidth: 3 },
+} as const;
+
+/**
+ * {@link buildStoneLayers} cut down to what still makes sense over satellite
+ * imagery, split into the stack's slots: contours (when a contour source is
+ * given) and {@link STONE_IMAGERY_LAYER_KEYS} line work and labels (unless
+ * `labels` is false). The caller passes a scheme tuned for imagery — light
+ * ink on a dark halo reads over any photo.
+ */
+export function buildStoneImagerySlots(
+  scheme: StoneBasemapScheme,
+  options: StoneImageryOptions,
+): StoneImageryLayers {
+  const keep = new Set(STONE_IMAGERY_LAYER_KEYS.map((k) => `${STONE_LAYER_PREFIX}${k}`));
+  const roads = new Set(ROADS.map((r) => `${STONE_LAYER_PREFIX}road-${r.id}`));
+  const { base, labels } = buildStoneLayers(scheme, options);
+  const named = (options.labels ?? true) ? [...base, ...labels].filter((l) => keep.has(l.id)) : [];
+
+  const contours: LayerSpecification[] = [];
+  for (const kind of ['minor', 'major'] as const) {
+    const line = base.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-${kind}`);
+    if (line?.type !== 'line') continue;
+    const look = IMAGERY_CONTOUR_PAINT[kind];
+    contours.push(
+      {
+        ...line,
+        id: `${line.id}-casing`,
+        paint: {
+          'line-color': scheme.halo,
+          'line-opacity': look.casingOpacity,
+          'line-width': look.casingWidth,
+          'line-blur': 0.6,
+        },
+      },
+      {
+        ...line,
+        paint: {
+          'line-color': scheme.contour,
+          'line-opacity': look.lineOpacity,
+          'line-width': look.lineWidth,
+        },
+      },
+    );
+  }
+  const contourLabel = labels.find((l) => l.id === `${STONE_LAYER_PREFIX}contour-label`);
+
+  return {
+    contours,
+    linework: named
+      .filter((l) => l.type === 'line')
+      .map((l) =>
+        roads.has(l.id) ? { ...l, paint: { ...l.paint, 'line-opacity': IMAGERY_ROAD_OPACITY } } : l,
+      ),
+    // Heights first, so roads, water and place names win any collision.
+    labels: [...(contourLabel ? [contourLabel] : []), ...named.filter((l) => l.type !== 'line')],
+  };
+}
+
+/**
+ * The roads, trails and names over imagery as one list, line work under the
+ * labels: {@link buildStoneImagerySlots} without contours.
  */
 export function buildStoneImageryLayers(
   scheme: StoneBasemapScheme,
   options: Omit<StoneStyleOptions, 'contours'>,
 ): LayerSpecification[] {
-  const keep = new Set(STONE_IMAGERY_LAYER_KEYS.map((k) => `${STONE_LAYER_PREFIX}${k}`));
-  const roads = new Set(ROADS.map((r) => `${STONE_LAYER_PREFIX}road-${r.id}`));
-  const { base, labels } = buildStoneLayers(scheme, options);
-  return [...base, ...labels]
-    .filter((l) => keep.has(l.id))
-    .map((l) =>
-      l.type === 'line' && roads.has(l.id)
-        ? { ...l, paint: { ...l.paint, 'line-opacity': IMAGERY_ROAD_OPACITY } }
-        : l,
-    );
+  const { linework, labels } = buildStoneImagerySlots(scheme, options);
+  return [...linework, ...labels];
 }
 
 /** Road ribbons over imagery: present enough to follow, thin enough to see through. */

@@ -207,6 +207,28 @@ export interface SchemeTokens {
     trailThumb: string;
     trailThumbContour: string;
   };
+  /** Support Inukshuk (#476, boards `Main/Thanks/Entry.dc.html`). */
+  support: {
+    /** The Settings entry card and the Tip button, and the ink on them. */
+    accent: string;
+    onAccent: string;
+    /** Tier icons and the "full accounts" link. */
+    link: string;
+    /** The chosen tip tier: its ground and its border. */
+    selected: string;
+    selectedBorder: string;
+    /** The year's progress bar: fill and track. */
+    progress: string;
+    progressTrack: string;
+    /** The thank-you inukshuk: light and dark stones. */
+    stone: string;
+    stoneDeep: string;
+    /** Tip button pieces (TipButton.dc.html): the cairn's pale stones, the coin, the heart. */
+    cairnLight: string;
+    cairnMid: string;
+    coin: string;
+    heart: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -328,6 +350,21 @@ export const lightScheme: SchemeTokens = {
     trailBadgeInk: palette.surface,
     trailThumb: '#E8E4D6',
     trailThumbContour: '#C9C0A8',
+  },
+  support: {
+    accent: palette.sageDeep,
+    onAccent: palette.surface,
+    link: '#3F5025',
+    selected: '#EEF1E4',
+    selectedBorder: palette.sageDeep,
+    progress: palette.sageDeep,
+    progressTrack: '#E2DBCB',
+    stone: '#3B444D',
+    stoneDeep: '#2D353D',
+    cairnLight: '#C9CFC2',
+    cairnMid: '#AEB6AA',
+    coin: '#E0B94E',
+    heart: '#C2410C',
   },
 };
 
@@ -455,6 +492,24 @@ export const darkScheme: SchemeTokens = {
     trailThumb: '#1B2127',
     trailThumbContour: '#39424B',
   },
+  support: {
+    // The board's #6F8A45 fill is only ~3.5:1 under paper ink; one step
+    // deeper (the explorer's cluster green) carries the button label at AA.
+    accent: '#4A5E2B',
+    onAccent: '#F2ECE0',
+    link: '#A9C07A',
+    selected: '#26301F',
+    selectedBorder: '#A9C07A',
+    progress: '#A9C07A',
+    progressTrack: '#2F3842',
+    // The light board's charcoal stones vanish on stone night: lift them.
+    stone: '#A7B0B8',
+    stoneDeep: '#77828E',
+    cairnLight: '#C9CFC2',
+    cairnMid: '#AEB6AA',
+    coin: '#E0B94E',
+    heart: '#F07A45',
+  },
 };
 
 /**
@@ -576,6 +631,21 @@ export const sunlightScheme: SchemeTokens = {
     trailBadgeInk: palette.white,
     trailThumb: '#F2F2F2',
     trailThumbContour: '#D0D0D0',
+  },
+  support: {
+    accent: palette.black,
+    onAccent: palette.white,
+    link: palette.black,
+    selected: '#F2F2F2',
+    selectedBorder: palette.black,
+    progress: palette.black,
+    progressTrack: '#DDDDDD',
+    stone: '#333333',
+    stoneDeep: palette.black,
+    cairnLight: '#EEEEEE',
+    cairnMid: '#CCCCCC',
+    coin: '#E0B94E',
+    heart: '#B02222',
   },
 };
 
@@ -703,6 +773,21 @@ export const nightScheme: SchemeTokens = {
     trailBadgeInk: NIGHT_INK,
     trailThumb: '#1A0000',
     trailThumbContour: '#7A1C17',
+  },
+  support: {
+    accent: '#3A0B08',
+    onAccent: NIGHT_INK,
+    link: NIGHT_INK,
+    selected: '#2A0503',
+    selectedBorder: NIGHT_INK,
+    progress: NIGHT_INK,
+    progressTrack: '#3A0B08',
+    stone: NIGHT_INK,
+    stoneDeep: '#CC2E24',
+    cairnLight: NIGHT_INK,
+    cairnMid: '#CC2E24',
+    coin: NIGHT_INK,
+    heart: NIGHT_INK,
   },
 };
 

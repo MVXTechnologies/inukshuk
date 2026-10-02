@@ -5,7 +5,7 @@ import { numberNotesOnTrack } from '@core/library/notes';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import { useSettingsStore } from '@state/settingsStore';
 import { useMapStore, type MapBasemap } from '@state/mapStore';
-import { mapColors } from '@ui/theme';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import {
   Camera,
   type CameraRef,
@@ -32,6 +32,7 @@ export function Trail2DView({
   scrubAt,
   basemap,
   onNotePress,
+  focus,
 }: {
   points: readonly TrackPoint[];
   /** Recording segment boundaries (pauses) — the trace is not drawn across them. */
@@ -43,6 +44,11 @@ export function Trail2DView({
   basemap?: MapBasemap;
   /** Called with the note id when a numbered pin is tapped. */
   onNotePress?: (noteId: string) => void;
+  /**
+   * Centre the camera here (keeping the zoom) — a Timeline item or jump chip
+   * was tapped (#511). A new object re-centres even on the same spot.
+   */
+  focus?: { latitude: number; longitude: number } | null;
 }) {
   const tileUrl = useSettingsStore((s) => s.tileUrl);
   // Same platform-defaulted switch the main map obeys (#230) — a setting the
@@ -51,6 +57,7 @@ export function Trail2DView({
   const mainBasemap = useMapStore((s) => s.basemap);
   const bm = basemap ?? mainBasemap;
   const theme = useTheme();
+  const tokens = useSchemeTokens();
   const contours = useSettingsStore((s) => s.terrainContours);
   // The main map's shading strength and "3D relief" (#461/#480): the focused
   // view tilts with two fingers like the main map (owner call, #480), so it
@@ -122,13 +129,20 @@ export function Trail2DView({
     if (!bbox) return;
     cameraRef.current?.fitBounds(toLngLatBounds(bbox), {
       duration: 0,
-      padding: { top: 60, right: 40, bottom: 60, left: 40 },
+      // Top clears the floating title card (#511), right the layer rail,
+      // bottom the cursor readout badge.
+      padding: { top: 110, right: 64, bottom: 52, left: 36 },
     });
   }, [bbox]);
 
   useEffect(() => {
     fitToTrail();
   }, [fitToTrail]);
+
+  useEffect(() => {
+    if (!focus) return;
+    cameraRef.current?.easeTo({ center: [focus.longitude, focus.latitude], duration: 450 });
+  }, [focus]);
 
   // Pin taps are hit-tested at the MAP level, same as MapScreen's waypoint
   // pins: <Marker onPress> doesn't fire on Android, and a Pressable child
@@ -181,17 +195,19 @@ export function Trail2DView({
       <Camera ref={cameraRef} />
       {tilt.layer}
       <GeoJSONSource id="trail-2d" data={lineFeature}>
+        {/* Orange route on a paper halo (#511, the explorer's trail ink):
+            reads on the map, the hillshade and satellite alike. */}
         <Layer
           id="trail-2d-casing"
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': '#FFFFFF', 'line-width': 5, 'line-opacity': 0.7 }}
+          paint={{ 'line-color': tokens.explore.trailHalo, 'line-width': 8, 'line-opacity': 0.9 }}
         />
         <Layer
           id="trail-2d-line"
           type="line"
           layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          paint={{ 'line-color': '#E0312B', 'line-width': 2.6, 'line-opacity': 0.96 }}
+          paint={{ 'line-color': tokens.explore.trail, 'line-width': 4.5 }}
         />
       </GeoJSONSource>
 
@@ -202,10 +218,10 @@ export function Trail2DView({
             id="trail-2d-scrub-dot"
             type="circle"
             paint={{
-              'circle-radius': 7,
-              'circle-color': mapColors.userLocation,
-              'circle-stroke-width': 2,
-              'circle-stroke-color': '#ffffff',
+              'circle-radius': 8,
+              'circle-color': tokens.inkVariant,
+              'circle-stroke-width': 3,
+              'circle-stroke-color': tokens.explore.trailHalo,
             }}
           />
         </GeoJSONSource>

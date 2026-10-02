@@ -1,4 +1,5 @@
 import type {
+  Area,
   Folder,
   MapDocument,
   Track,
@@ -37,6 +38,37 @@ import { create } from 'zustand';
 export interface SeedNote extends ImportedNote {
   /** Absolute file:// uri of an attached photo (already copied into storage). */
   photoUri?: string;
+}
+
+/** What the area editor hands the store (#503). */
+export interface AreaInput {
+  name: string;
+  ring: Area['ring'];
+  color: string;
+  note?: string;
+  photoUris?: string[];
+  tags?: string[];
+}
+
+/** Apply an area patch, dropping emptied optional fields. */
+function patchedArea(area: Area, patch: Partial<AreaInput>, now: number): Area {
+  const next: Area = { ...area, updatedAt: now };
+  if (patch.name !== undefined) next.name = patch.name.trim() || area.name;
+  if (patch.ring !== undefined && patch.ring.length >= 3) next.ring = [...patch.ring];
+  if (patch.color !== undefined) next.color = patch.color;
+  if (patch.note !== undefined) {
+    if (patch.note.trim() === '') delete next.note;
+    else next.note = patch.note;
+  }
+  if (patch.photoUris !== undefined) {
+    if (patch.photoUris.length === 0) delete next.photoUris;
+    else next.photoUris = [...patch.photoUris];
+  }
+  if (patch.tags !== undefined) {
+    if (patch.tags.length === 0) delete next.tags;
+    else next.tags = [...patch.tags];
+  }
+  return next;
 }
 
 /** A trail as it comes out of an import: the parsed track, its GPX file and any notes. */
@@ -191,6 +223,18 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   renameWaypoint: (id: string, label: string) => void;
   /** Remove a waypoint and any photo it owns. */
   removeWaypoint: (id: string) => void;
+  // Drawn areas (#503) — polygons with a note, photos, a colour and tags,
+  // persisted in the index like standalone waypoints.
+  /** Add a drawn area (≥ 3 vertices); returns its id. */
+  addArea: (input: AreaInput) => string;
+  /**
+   * Patch an area. Photos dropped from `photoUris` are deleted once the
+   * change is committed (the area owned them); a blank `name` keeps the
+   * current one; an empty `note`/`tags` removes the field.
+   */
+  updateArea: (id: string, patch: Partial<AreaInput>) => void;
+  /** Remove an area and every photo it owns. */
+  removeArea: (id: string) => void;
   activeMap: () => MapDocument | null;
 }
 
@@ -231,6 +275,7 @@ function persist(state: Omit<LibraryIndex, 'schemaVersion'> & { hydrated: boolea
     activeTrackIds: state.activeTrackIds,
     customCategories: state.customCategories,
     waypoints: state.waypoints,
+    areas: state.areas,
   };
   // #247 — the store holds ABSOLUTE uris (every consumer, from <Image> to
   // Sharing to the GPX reader, wants one), but the index on disk must hold
@@ -305,6 +350,7 @@ function toSummary({ track, fileUri, notes }: ImportedTrack): TrackSummary {
     ...(seeded ? { notes: seeded } : {}),
     ...(track.category ? { category: track.category } : {}),
     ...(track.origin ? { origin: track.origin } : {}),
+    ...(track.plan ? { plan: track.plan } : {}),
   };
 }
 
@@ -340,6 +386,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activeTrackIds: [],
   customCategories: [],
   waypoints: [],
+  areas: [],
   hydrated: false,
   pdfRecoveryNotice: null,
   dismissPdfRecoveryNotice: () => set({ pdfRecoveryNotice: null }),
@@ -838,6 +885,52 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const w = s.waypoints.find((x) => x.id === id);
       const next = { ...s, waypoints: s.waypoints.filter((x) => x.id !== id) };
       persistAndDelete(next, [w?.photoUri]);
+      return next;
+    }),
+
+  addArea: (input) => {
+    const id = storage.newId();
+    set((s) => {
+      const now = Date.now();
+      const area = patchedArea(
+        {
+          id,
+          name: input.name.trim() || 'Area',
+          ring: [...input.ring],
+          color: input.color,
+          createdAt: now,
+        },
+        { note: input.note, photoUris: input.photoUris, tags: input.tags },
+        now,
+      );
+      delete area.updatedAt;
+      const next = { ...s, areas: [...s.areas, area] };
+      persist(next);
+      return next;
+    });
+    return id;
+  },
+
+  updateArea: (id, patch) =>
+    set((s) => {
+      const old = s.areas.find((a) => a.id === id);
+      if (!old) return s;
+      const updated = patchedArea(old, patch, Date.now());
+      const kept = new Set(updated.photoUris ?? []);
+      const next = { ...s, areas: s.areas.map((a) => (a.id === id ? updated : a)) };
+      persistAndDelete(
+        next,
+        (old.photoUris ?? []).filter((uri) => !kept.has(uri)),
+      );
+      return next;
+    }),
+
+  removeArea: (id) =>
+    set((s) => {
+      const area = s.areas.find((a) => a.id === id);
+      if (!area) return s;
+      const next = { ...s, areas: s.areas.filter((a) => a.id !== id) };
+      persistAndDelete(next, area.photoUris ?? []);
       return next;
     }),
 

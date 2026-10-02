@@ -1,5 +1,5 @@
 import { useSettingsStore } from '@state/settingsStore';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MapTypePanel } from './LayersMenu';
 import { MapActionsMenu, type MapActions } from './MapActionsMenu';
@@ -33,6 +33,8 @@ interface Props {
    */
   compactOpen: boolean;
   onCompactOpenChange: (open: boolean) => void;
+  /** Any of the rail's sheets (map type, overlays, "+" actions) opened or closed. */
+  onMenuOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -50,6 +52,10 @@ export function MapControlsRail(props: Props) {
   // plain-View sheets in the rail's own column; ONE open at a time, owned
   // here so an outside tap on the backdrop below closes whichever is up.
   const [openMenu, setOpenMenu] = useState<null | 'basemap' | 'overlays' | 'actions'>(null);
+  const { onMenuOpenChange } = props;
+  useEffect(() => {
+    onMenuOpenChange?.(openMenu !== null);
+  }, [openMenu, onMenuOpenChange]);
 
   const { top, following, onLocate, onStopFollowing, showFitControl, onFit, actions } = props;
 

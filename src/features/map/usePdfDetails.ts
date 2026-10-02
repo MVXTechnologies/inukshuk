@@ -8,6 +8,7 @@ import {
 } from '@core/geo/pdfDetail';
 import { chooseFallbackDetails, unionOfBboxes } from '@core/geo/detailFallback';
 import { nativePageGeometry } from '@core/geo/geopdf/pageBox';
+import type { WhiteKeyLevel } from '@core/geo/pdfWhiteKey';
 import { chooseRasterSource, emptyInlineReadReason } from '@core/library/rasterSource';
 import {
   activeBackoff,
@@ -47,6 +48,8 @@ interface Target {
   revision: string;
   plan: PdfDetailPlan;
   bbox: PdfOverlay['bbox'];
+  /** The overview's "See-through white" level; tiles are drawn to match it. */
+  whiteKey: WhiteKeyLevel;
 }
 const VISIBLE_PIXELS = 6 * 1024 * 1024;
 /**
@@ -137,9 +140,12 @@ export function usePdfDetails(
     }
     for (const { o, map, pageIndex, geo, plans } of pages) {
       const baseKey = overviewKey(o);
+      const whiteKey = o.whiteKey ?? 0;
       for (const plan of plans) {
         targets.push({
-          key: JSON.stringify([baseKey, map.fileUri, map.importedAt, plan]),
+          // The level is in the key: a tile drawn at another level is never
+          // reused or kept as a fallback for this one.
+          key: JSON.stringify([baseKey, map.fileUri, map.importedAt, plan, whiteKey]),
           overviewKey: baseKey,
           id: `${o.id}:tile:${plan.tileKey}`,
           parentId: o.id,
@@ -151,6 +157,7 @@ export function usePdfDetails(
           revision: String(map.importedAt),
           plan,
           bbox: o.bbox,
+          whiteKey,
         });
       }
     }
@@ -320,6 +327,7 @@ export function usePdfDetails(
                   pageIndex: target.pageIndex,
                   targetWidthPx: target.plan.targetWidthPx,
                   crop: target.plan.crop,
+                  whiteKey: target.whiteKey,
                   nativePage: target.nativeGeometry && {
                     fileUri: storage.resolveDocumentPath(target.fileUri),
                     revision: target.revision,
