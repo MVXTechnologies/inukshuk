@@ -1,0 +1,112 @@
+{
+  "_comment": "Hand-curated (2026-10-02). Québec river-descent maps, permission-gated: a map reaches the catalog only when its publisher's permission.status is \"granted\" with quoted evidence (see src/core/catalog/riverMaps.ts). Nothing here is granted yet, so fetch-quebec-rivers.ts writes no fragment and the published catalog is unchanged. Research, licences and outreach drafts: docs/research/quebec-river-maps.md. Bboxes come from each file's own GeoPDF /GPTS, read on 2026-10-02.",
+  "publishers": [
+    {
+      "id": "cobaric",
+      "name": "COBARIC — parcours canotables",
+      "licence": "© COBARIC, all rights reserved (no licence)",
+      "attribution": "COBARIC (Comité de bassin de la rivière Chaudière)",
+      "homepage": "https://cobaric.qc.ca/projets/en-cours/parcours-canotables/",
+      "permission": {
+        "status": "pending",
+        "evidence": "Footer: \"© Copyright - COBARIC, 2024\"; no reuse clause on https://cobaric.qc.ca/projets/en-cours/parcours-canotables/ (read 2026-10-02). Outreach draft in docs/research/quebec-river-maps.md; not sent."
+      }
+    },
+    {
+      "id": "ckq",
+      "name": "Canot Kayak Québec — relevés de rivières",
+      "licence": "© Canot Kayak Québec, all rights reserved; personal non-commercial use only",
+      "attribution": "Canot Kayak Québec",
+      "homepage": "https://canot-kayak.qc.ca/repertoire-et-archives-des-releves-de-rivieres/",
+      "permission": {
+        "status": "pending",
+        "evidence": "Conditions d'utilisation (2025-08-11), Propriété intellectuelle: \"Toute représentation, diffusion, reproduction, adaptation ou exploitation partielle ou totale des contenus ... sans l'autorisation préalable, expresse et écrite du partenariat, est strictement interdite\". https://canot-kayak.qc.ca/wp-content/uploads/2025/08/Conditions_d_utilisation_carte_interactive_ckq_20250811-1.pdf. No maps listed until CKQ answers; outreach draft in docs/research/quebec-river-maps.md, not sent."
+      }
+    },
+    {
+      "id": "cartes-plein-air",
+      "name": "Cartes Plein-air",
+      "licence": "© Cartes Plein-air and each map's author, all rights reserved",
+      "attribution": "Cartes Plein-air (cartespleinair.org) and the map's author",
+      "homepage": "https://cartespleinair.org/cartes",
+      "permission": {
+        "status": "pending",
+        "evidence": "Footer: \"© 2026 Cartes Plein-air. All rights reserved.\" (https://cartespleinair.org/en/maps, read 2026-10-02). No maps listed until the site and authors answer; outreach draft in docs/research/quebec-river-maps.md, not sent."
+      }
+    }
+  ],
+  "maps": [
+    {
+      "slug": "cobaric-chaudiere-breakeyville",
+      "publisherId": "cobaric",
+      "title": "Rivière Chaudière (Breakeyville) — parcours canotable",
+      "river": "Rivière Chaudière",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2021/07/Fiche-technique-riviere-Chaudiere-Breakeyville-2021.pdf",
+      "format": "geopdf",
+      "bbox": [-71.3115, 46.6379, -71.2029, 46.7127],
+      "bboxEvidence": "GeoPDF /GPTS of the route index sheet (10-page fiche, 14 viewports; the Chaudière watershed locator excluded)",
+      "lang": "fr",
+      "edition": "2021"
+    },
+    {
+      "slug": "cobaric-prevost-gilbert",
+      "publisherId": "cobaric",
+      "title": "Rivière Prévost-Gilbert — parcours canotable",
+      "river": "Rivière Prévost-Gilbert",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2021/11/Fiche-technique-riviere-Prevost-Gilbert-2021.pdf",
+      "format": "geopdf",
+      "bbox": [-71.1089, 46.0813, -70.9214, 46.2111],
+      "bboxEvidence": "GeoPDF /GPTS of the route index sheet (15-page fiche, 23 viewports; the MRC locator excluded)",
+      "lang": "fr",
+      "edition": "2021"
+    },
+    {
+      "slug": "cobaric-arnold",
+      "publisherId": "cobaric",
+      "title": "Rivière Arnold (haute et basse) — parcours canotables",
+      "river": "Rivière Arnold",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2020/12/Fiche-technique-riviere-Arnold-2020.pdf",
+      "format": "geopdf",
+      "bbox": [-70.9426, 45.3218, -70.8068, 45.4698],
+      "bboxEvidence": "Union of the two GeoPDF /GPTS route index sheets (14-page fiche, 12 viewports; the MRC du Granit locator excluded)",
+      "lang": "fr",
+      "edition": "2020"
+    },
+    {
+      "slug": "cobaric-aux-araignees",
+      "publisherId": "cobaric",
+      "title": "Rivière aux Araignées — parcours canotable",
+      "river": "Rivière aux Araignées",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2020/12/Fiche-technique-riviere-aux-Araignees-2020.pdf",
+      "format": "geopdf",
+      "bbox": [-70.7935, 45.428, -70.7175, 45.4815],
+      "bboxEvidence": "GeoPDF /GPTS of the route index sheet (7-page fiche, 7 viewports; the MRC du Granit locator excluded)",
+      "lang": "fr",
+      "edition": "2020"
+    },
+    {
+      "slug": "cobaric-clinton",
+      "publisherId": "cobaric",
+      "title": "Rivière Clinton — parcours canotable",
+      "river": "Rivière Clinton",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2020/12/Fiche-technique-riviere-Clinton-2020.pdf",
+      "format": "geopdf",
+      "bbox": [-70.9667, 45.3636, -70.8581, 45.4401],
+      "bboxEvidence": "GeoPDF /GPTS of the route index sheet (9-page fiche, 7 viewports; the MRC du Granit locator excluded)",
+      "lang": "fr",
+      "edition": "2020"
+    },
+    {
+      "slug": "cobaric-victoria",
+      "publisherId": "cobaric",
+      "title": "Rivière Victoria — parcours canotable",
+      "river": "Rivière Victoria",
+      "url": "https://cobaric.qc.ca/wp-content/uploads/2020/12/Fiche-technique-riviere-Victoria-2020.pdf",
+      "format": "geopdf",
+      "bbox": [-71.0447, 45.4759, -70.9221, 45.5621],
+      "bboxEvidence": "GeoPDF /GPTS of the route index sheet (10-page fiche, 8 viewports; the MRC du Granit locator excluded)",
+      "lang": "fr",
+      "edition": "2020"
+    }
+  ]
+}

@@ -206,6 +206,10 @@ npx tsx scripts/catalog/make-fixture.ts     # → .maestro/fixtures/catalog/ (e2
 
 - Fragments are plain `{ sources, items }` JSON: one per source, either crawled
   by a `fetch-*.ts` or hand-curated.
+- `fetch-quebec-rivers.ts` builds its fragment from a reviewed list,
+  `scripts/catalog/sources/quebec-rivers.json`, and emits only the maps whose
+  publisher has granted permission. Until one does, it writes no fragment
+  (CATALOG-SOURCES §1.5).
 - `build-manifest.ts` merges them, drops duplicate ids, refuses items whose
   `sourceId` was never declared, plans the shards with the **same**
   `planCatalogShards` the client's ranking assumes, and validates every shard
