@@ -1,4 +1,4 @@
-import { canSave, canUndo, drawHint } from '@core/draw/editor';
+import { canSave, canUndo, drawHelp, drawHint } from '@core/draw/editor';
 import {
   boundsOfVertices,
   isSelfIntersecting,
@@ -63,15 +63,15 @@ import { DragHandle } from './DragHandle';
 import { DrawChooser } from './DrawChooser';
 import { DrawLayers } from './DrawLayers';
 import {
-  DrawHint,
+  DrawHelpPopover,
   DrawNotice,
   DrawPanel,
   DrawStatus,
   finishLabel,
   ReturnChip,
   ReturnMenu,
+  DrawTip,
   RouteModeChips,
-  RoutingCredit,
   SelectedPointRow,
   type DrawStat,
 } from './DrawPanels';
@@ -130,6 +130,12 @@ export interface MapDrawing {
   onMapLongPress: (point: [number, number] | null) => Promise<boolean>;
   /** A bare tap (nothing else claimed it) inside an area opens its card; true = consumed. */
   onAreaTap: (lngLat: LngLat) => boolean;
+  /**
+   * The routing engines behind the routed legs on screen (null without any):
+   * the map's credits sheet credits them (2.1.1 — the draw panel's footer
+   * credit moved there).
+   */
+  routingEngines: readonly string[] | null;
   mapLayers: ReactNode;
   chrome: ReactNode;
 }
@@ -167,6 +173,9 @@ export function useMapDrawing({
   const [viewAreaId, setViewAreaId] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [returnMenuOpen, setReturnMenuOpen] = useState(false);
+  /** The (?) help popover (2.1.1), and where its caret points. */
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpAnchorX, setHelpAnchorX] = useState(0);
   const discardArmedAt = useRef(0);
 
   const state = draw.state;
@@ -256,6 +265,7 @@ export function useMapDrawing({
       setRouteSaveOpen(false);
       setAreaEditor(null);
       discardArmedAt.current = 0;
+      setHelpOpen(false);
       draw.start(target, initial, modes, mode, finish);
     },
     [draw, onBeforeStart],
@@ -704,6 +714,11 @@ export function useMapDrawing({
     </>
   );
 
+  const help = {
+    open: helpOpen,
+    onToggle: () => setHelpOpen((o) => !o),
+    onAnchor: setHelpAnchorX,
+  };
   let panel: ReactNode = null;
   if (state !== null && !routeSaveOpen && areaEditor === null) {
     const selectedRow =
@@ -810,7 +825,7 @@ export function useMapDrawing({
                 )
               : undefined
           }
-          footer={engines !== null ? <RoutingCredit engines={engines} /> : undefined}
+          help={help}
           canUndo={canUndo(state)}
           canClear={state.vertices.length > 0}
           canSave={canSave(state) && !legsLoading}
@@ -846,6 +861,7 @@ export function useMapDrawing({
           onUndo={() => draw.dispatch({ type: 'undo' })}
           onClear={() => draw.dispatch({ type: 'clear' })}
           onSave={finishArea}
+          help={help}
           onExit={requestExit}
           onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)}
         />
@@ -855,6 +871,17 @@ export function useMapDrawing({
 
   // Under the compass (8 + 48 + 8): the rail keeps the right edge.
   const laneTop = topInset + 64;
+  const tip: { text: string; icon: string; testID: string } | null =
+    state === null || routeSaveOpen || areaEditor !== null
+      ? null
+      : state.kind === 'route' &&
+          state.finish !== 'loop' &&
+          nearStart(state.vertices) &&
+          !isLoopTipRetired()
+        ? { text: 'Tap the start to close the loop', icon: 'autorenew', testID: 'loop-tip' }
+        : state.vertices.length === 0
+          ? { text: drawHint(state), icon: 'gesture-tap', testID: 'draw-tip' }
+          : null;
   const chrome = (
     <>
       {/* The mode picker takes the search pill's slot, right of the compass. */}
@@ -865,20 +892,10 @@ export function useMapDrawing({
           onChange={(mode) => draw.dispatch({ type: 'mode', mode })}
         />
       )}
-      {state !== null && !routeSaveOpen && areaEditor === null && (
-        <DrawHint
-          text={drawHint(state)}
-          top={laneTop}
-          tip={
-            state.kind === 'route' &&
-            state.finish !== 'loop' &&
-            nearStart(state.vertices) &&
-            !isLoopTipRetired()
-              ? 'Tap the start to close the loop'
-              : undefined
-          }
-        />
-      )}
+      {/* No instruction banner (2.1.1): the help is behind the title's (?).
+        Two small transient tips stay — the first tap's, and "close the loop"
+        near the start. */}
+      {tip !== null && <DrawTip {...tip} top={laneTop} />}
       {chooserOpen && state === null && (
         <View style={styles.dock} pointerEvents="box-none">
           <DrawChooser
@@ -901,6 +918,14 @@ export function useMapDrawing({
         <View style={styles.dock} pointerEvents="box-none">
           {panel}
         </View>
+      )}
+      {panel !== null && helpOpen && state !== null && (
+        <DrawHelpPopover
+          lines={drawHelp(state.kind)}
+          bottom={panelHeight}
+          anchorX={helpAnchorX}
+          onClose={() => setHelpOpen(false)}
+        />
       )}
       {state !== null && state.kind === 'route' && routeSaveOpen && (
         <SaveRouteSheet
@@ -974,6 +999,7 @@ export function useMapDrawing({
     onCameraSettled: () => setCameraVersion((v) => v + 1),
     onMapLongPress,
     onAreaTap,
+    routingEngines: kind === 'route' ? engines : null,
     mapLayers,
     chrome,
   };

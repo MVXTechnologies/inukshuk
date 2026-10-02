@@ -120,22 +120,6 @@ function baseSource(
 }
 
 /**
- * The short credit the attribution chip shows for a basemap (bottom-right of
- * the map, revamp `Main.html`). MapLibre's own attribution button stays off
- * (it crowded the map); Settings › System info carries the full credits roll.
- */
-export function basemapAttribution(basemap: MapBasemap, vector = false): string {
-  switch (basemap) {
-    case 'satellite':
-      // `vector`: our OSM names, roads and trails ride the imagery (#492).
-      return vector ? '© Esri, Maxar · © OpenStreetMap' : '© Esri, Maxar';
-    default:
-      // The vector base is OSM data cut by Protomaps' pipeline.
-      return vector ? '© OpenStreetMap · Protomaps' : '© OpenStreetMap';
-  }
-}
-
-/**
  * The raster tile-URL template ({z}/{x}/{y} or {z}/{y}/{x}) for a basemap — used
  * to fetch a single preview tile without spinning up a whole MapLibre instance.
  */

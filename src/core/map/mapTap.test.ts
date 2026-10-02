@@ -5,6 +5,7 @@
  * every tap on it.
  */
 import {
+  bareTapAfterFocus,
   chipSurvivesHit,
   pointChipAfterBareTap,
   readMapPress,
@@ -14,6 +15,18 @@ import {
 } from './mapTap';
 
 const PIN = { id: 'wp-1' };
+
+describe('bareTapAfterFocus (2.1.1)', () => {
+  it('a tap elsewhere while a trail is focused only leaves the focus', () => {
+    // MapScreen returns on this route BEFORE the area card and the point
+    // bubble, and forgets (does not glide back to) the pre-focus camera.
+    expect(bareTapAfterFocus(true)).toBe('leave-focus');
+  });
+
+  it('a tap with nothing focused goes on to the area card / point bubble', () => {
+    expect(bareTapAfterFocus(false)).toBe('map');
+  });
+});
 
 describe('routeMapTap', () => {
   it.each(['navigate', 'waypoint', 'copy'] as const)(

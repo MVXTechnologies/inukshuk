@@ -109,17 +109,33 @@ it('routes each tile to its stack screen', async () => {
   expect(mockPush).toHaveBeenLastCalledWith('/explore/item/cantopo-021l14');
   await fireEvent.press(view.getByLabelText('See maps near you on a map'));
   expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
-  await fireEvent.press(view.getByLabelText('Show on a map'));
+  await fireEvent.press(view.getByLabelText('Browse all maps on the map'));
   expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
 });
 
-it('has an explicit, labelled "Browse on the map" button — even with no position (#474)', async () => {
+it('has an explicit, labelled map pill — even with no position (#474)', async () => {
   useSettingsStore.setState({ lastKnownPosition: null });
   seedCatalog(fixtureIndex());
   const view = await landing();
-  expect(view.getByText('Browse on the map')).toBeTruthy();
+  expect(view.getByText('Map')).toBeTruthy();
   await fireEvent.press(view.getByLabelText('Browse all maps on the map'));
   expect(mockPush).toHaveBeenLastCalledWith('/explore/map');
+});
+
+it('puts search and the map pill side by side in one row (2.1.1)', async () => {
+  seedCatalog(fixtureIndex());
+  const view = await landing();
+  const search = view.getByLabelText('Search maps');
+  const pill = view.getByLabelText('Browse all maps on the map');
+  // Same parent row, laid out horizontally; the search field takes the room.
+  const row = view.getByTestId('explore-search-row');
+  expect(row).toHaveStyle({ flexDirection: 'row' });
+  expect(row).toContainElement(search);
+  expect(row).toContainElement(pill);
+  // The header's duplicate map glyph and the landing's own pill row are gone.
+  expect(view.queryByLabelText('Show on a map')).toBeNull();
+  expect(view.queryByText('Browse on the map')).toBeNull();
+  expect(view.getAllByLabelText('Browse all maps on the map')).toHaveLength(1);
 });
 
 it('lists US Topo sheets (terrain only, no stored activities) under Hiking when loaded', async () => {
