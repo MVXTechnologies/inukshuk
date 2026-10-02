@@ -1,3 +1,4 @@
+import { useTipsAvailable } from './useTipsAvailable';
 import { nextFactIndex } from '@core/support/funFacts';
 import {
   BUBBLE_CHECK_MS,
@@ -104,6 +105,8 @@ export function TipButton({
   const router = useRouter();
   const t = useSchemeTokens();
   const enabled = useSettingsStore((s) => s.showTipJar);
+  // No mug until the store can actually sell a tip (useTipsAvailable).
+  const tipsAvailable = useTipsAvailable();
   const restingUntil = useSettingsStore((s) => s.tipJarRestingUntil);
   const hiddenUntil = useSettingsStore((s) => s.tipJarHiddenUntil);
   const setSetting = useSettingsStore((s) => s.set);
@@ -146,7 +149,7 @@ export function TipButton({
   }, [hiddenForAnHour, hideRecheckMs, clock]);
 
   const visible = tipJarVisible({
-    enabled,
+    enabled: enabled && tipsAvailable,
     recording,
     navigating,
     blocked,

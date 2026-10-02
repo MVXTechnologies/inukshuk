@@ -19,6 +19,7 @@ import { TipBubble } from './TipBubble';
 import { TipButton } from './TipButton';
 
 const mockPush = jest.fn();
+jest.mock('./useTipsAvailable', () => ({ useTipsAvailable: () => true }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: jest.fn(async () => null) }));
 

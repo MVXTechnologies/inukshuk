@@ -21,6 +21,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { TipButton } from './TipButton';
 
 const mockPush = jest.fn();
+jest.mock('./useTipsAvailable', () => ({ useTipsAvailable: () => true }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@data/storage', () => ({ writeJson: jest.fn(), readJson: jest.fn(async () => null) }));
 // The stock Reanimated mock hands out a NEW shared value on every render; the
