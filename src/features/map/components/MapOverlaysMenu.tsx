@@ -141,6 +141,7 @@ function OverlayRows({
   const showHillshade = useSettingsStore((s) => s.showHillshade);
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
+  const showParks = useSettingsStore((s) => s.showParks);
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const set = useSettingsStore((s) => s.set);
 
@@ -164,6 +165,7 @@ function OverlayRows({
   // Only meaningful over imagery: on the Map base the row stays visible but
   // greyed, saying where it applies.
   const onSatellite = basemap === 'satellite';
+  const parksAvailable = !onSatellite || satelliteLabels;
 
   // Marine chart mode is all-or-nothing (D-6 amendment): on = every catalog
   // layer, off = none. While parked the persisted array is left ALONE but
@@ -216,6 +218,17 @@ function OverlayRows({
         hint="Where you have been, by visits"
         value={showHeatmap}
         onToggle={() => set('showHeatmap', !showHeatmap)}
+      />
+      {/* National parks, reserves and protected areas: boundary and name on
+          the vector map. Over imagery they ride "Labels on satellite" (the
+          same vector pass), so the row rests while that is off. */}
+      <SwitchRow
+        icon="pine-tree"
+        label="Parks & protected areas"
+        hint={parksAvailable ? 'Boundaries and names' : 'Needs labels on satellite'}
+        value={showParks}
+        disabled={!parksAvailable}
+        onToggle={() => set('showParks', !showParks)}
       />
       <SwitchRow
         icon="label-outline"

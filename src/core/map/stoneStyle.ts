@@ -71,6 +71,8 @@ export interface StoneBasemapScheme {
   ink: string;
   /** Road names, POIs, provinces. */
   inkMuted: string;
+  /** Park and protected-area boundaries and their names — the green ink. */
+  parkInk: string;
   /** Text halo — should match `land`. */
   halo: string;
 }
@@ -259,6 +261,29 @@ export interface StonePeaksSource {
   sourceLayer: string;
 }
 
+/**
+ * Our worldwide parks tileset (`infra/tiles/nas/parks.sh`), which exists
+ * because Protomaps cannot be trusted to know a national park: it files
+ * Yellowstone and Kruger under `nature_reserve`, and Jacques-Cartier, the
+ * Swiss National Park and Algonquin under `park` — the kind of a city square
+ * — naming those only from z12–13 (measured on the served tiles, 2026-10).
+ *
+ * - `areaLayer`: one polygon per OSM boundary=national_park (or IUCN II
+ *   protected area), in the tiles from two zooms before its `rank`;
+ * - `labelLayer`: one point per named protected area, carrying `name`
+ *   (+ `name:en` / `name:fr`), `class` (`national` | `reserve`) and `rank` —
+ *   the zoom its area earns (≥ 5000 km² at z5 … the smallest at z12), which is
+ *   also the first zoom whose tiles carry it.
+ *
+ * Without this source the map draws what Protomaps has (see
+ * {@link StoneStyleOptions.protectedAreas}).
+ */
+export interface StoneParksSource {
+  source: string;
+  areaLayer: string;
+  labelLayer: string;
+}
+
 export interface StoneStyleOptions {
   /** Id of the Protomaps vector source in the style. */
   source: string;
@@ -266,6 +291,13 @@ export interface StoneStyleOptions {
   language?: StoneLabelLanguage;
   contours?: StoneContourSource;
   peaks?: StonePeaksSource;
+  parks?: StoneParksSource;
+  /**
+   * "Parks & protected areas" (overlays menu): the boundary of every national
+   * park, reserve and protected area, and its name in green italic. Default
+   * true. Off leaves only the faint land-use wash parks always had.
+   */
+  protectedAreas?: boolean;
   /**
    * How early our summits appear (#461): each is drawn `PEAK_LEAD` zooms
    * before its elevation-ladder `rank`. Default {@link DEFAULT_PEAK_DENSITY}.
@@ -427,7 +459,29 @@ const GREEN = [
   'garden',
   'cemetery',
 ];
-const PARK = ['park', 'nature_reserve', 'national_park', 'protected_area'];
+/** Protected land in Protomaps' eyes. Not `park`: that is every city park too. */
+const PROTECTED = ['nature_reserve', 'national_park', 'protected_area'];
+const PARK = ['park', ...PROTECTED];
+
+/**
+ * The band of green inside a park boundary, as on a paper topo map: its width
+ * by zoom (px). Drawn as an inset line (`line-offset` = half the width), so it
+ * hugs the inside of the edge. Kept under 8 px: vector tiles clip polygons 8 px
+ * past the tile edge, and a wider band would bring those cut edges into view.
+ */
+export const PARK_BAND_WIDTH: readonly (readonly [number, number])[] = [
+  [4, 1.5],
+  [8, 4],
+  [12, 7],
+];
+
+/** How strongly the boundary is inked: the band, the edge and the quiet dashes. */
+export const PARK_PAINT = {
+  // Lighter on stone night and imagery: a pale sage band glows on a dark ground.
+  band: { light: 0.2, dark: 0.16 },
+  edge: 0.8,
+  quiet: 0.6,
+} as const;
 
 /**
  * Road ribbons, widest first, each with its width ramp. Protomaps groups
@@ -579,6 +633,114 @@ export function buildStoneLayers(
     };
   };
 
+  /**
+   * Parks and protected areas: boundary and name (the fill is the land-use
+   * wash below). Two weights of boundary — STRONG, a solid green edge over a
+   * translucent band along its inside, and QUIET, thin dashes:
+   *
+   * - with our parks tiles: national parks strong, from their own polygons
+   *   (as early as z4 for the largest); Protomaps' reserves and protected
+   *   areas quiet, from z8. Every name comes from our label points.
+   * - without them: Protomaps' national parks, reserves and protected areas
+   *   strong from z5 (it tells them apart too unreliably to rank them), its
+   *   `park` polygons quiet — the big parks it misfiles, and city parks,
+   *   whose dashes step back as the streets arrive. Names from its `pois`
+   *   points, from the zoom before their `min_zoom` (the first zoom whose
+   *   tiles carry them).
+   *
+   * Every zoom curve is the top-level interpolate of its property (a nested
+   * one crashes MapLibre iOS).
+   */
+  const parkLayers = (): {
+    lines: LayerSpecification[];
+    label: SymbolLayerSpecification | null;
+  } => {
+    if (options.protectedAreas === false) return { lines: [], label: null };
+    const ours = options.parks;
+    type From = Pick<LineLayerSpecification, 'source' | 'source-layer' | 'minzoom' | 'filter'>;
+    const strong: From = ours
+      ? { source: ours.source, 'source-layer': ours.areaLayer, minzoom: 4, filter: isPolygon }
+      : { source, 'source-layer': 'landuse', minzoom: 5, filter: isIn('kind', PROTECTED) };
+    const quiet: From = ours
+      ? { source, 'source-layer': 'landuse', minzoom: 8, filter: isIn('kind', PROTECTED) }
+      : { source, 'source-layer': 'landuse', minzoom: 6, filter: ['==', ['get', 'kind'], 'park'] };
+    const band = PARK_BAND_WIDTH.map(([z, w]): [number, number] => [z, w]);
+    return {
+      lines: [
+        {
+          id: id('park-band'),
+          type: 'line',
+          ...strong,
+          layout: { 'line-join': 'round' },
+          paint: {
+            'line-color': scheme.parkInk,
+            'line-opacity': dark ? PARK_PAINT.band.dark : PARK_PAINT.band.light,
+            'line-width': ramp(...band),
+            // Positive = inset on a polygon: the band sits inside the edge.
+            'line-offset': ramp(...band.map(([z, w]): [number, number] => [z, w / 2])),
+          },
+        },
+        {
+          id: id('park-outline'),
+          type: 'line',
+          ...quiet,
+          paint: {
+            'line-color': scheme.parkInk,
+            'line-opacity': ours
+              ? PARK_PAINT.quiet
+              : ['interpolate', ['linear'], ['zoom'], 12, PARK_PAINT.quiet, 14, 0.3],
+            'line-width': ramp([6, 0.5], [14, 1.2]),
+            'line-dasharray': [3, 2],
+          },
+        },
+        {
+          id: id('park-line'),
+          type: 'line',
+          ...strong,
+          layout: { 'line-join': 'round' },
+          paint: {
+            'line-color': scheme.parkInk,
+            'line-opacity': PARK_PAINT.edge,
+            'line-width': ramp([4, 0.6], [9, 1], [14, 1.6]),
+          },
+        },
+      ],
+      label: {
+        id: id('park-label'),
+        type: 'symbol',
+        ...(ours
+          ? {
+              source: ours.source,
+              'source-layer': ours.labelLayer,
+              minzoom: 4,
+              filter: ['has', 'name'],
+            }
+          : {
+              source,
+              'source-layer': 'pois',
+              minzoom: 5,
+              filter: ['all', isIn('kind', PARK), ['has', 'name'], dueWithin(1)],
+            }),
+        layout: {
+          'text-field': name,
+          'text-font': fonts.italic,
+          'text-size': ramp([5, 10.5], [9, 12], [14, 14]),
+          'text-letter-spacing': 0.04,
+          'text-max-width': 7,
+          'text-padding': 4,
+          // The larger park wins a collision: our area rank, or Protomaps' zoom.
+          'symbol-sort-key': [
+            'to-number',
+            ['coalesce', ['get', ours ? 'rank' : 'min_zoom'], 99],
+            99,
+          ],
+        },
+        paint: { 'text-color': scheme.parkInk, ...halo },
+      },
+    };
+  };
+  const parks = parkLayers();
+
   const base: LayerSpecification[] = [
     { id: id('background'), type: 'background', paint: { 'background-color': scheme.land } },
     // Low zooms (z0–7): Protomaps' generalised land cover.
@@ -664,20 +826,7 @@ export function buildStoneLayers(
       filter: isIn('kind', PARK),
       paint: { 'fill-color': scheme.vegetation, 'fill-opacity': vegOpacity * 0.35 },
     },
-    {
-      id: id('park-outline'),
-      type: 'line',
-      source,
-      'source-layer': 'landuse',
-      minzoom: 8,
-      filter: isIn('kind', ['nature_reserve', 'national_park', 'protected_area']),
-      paint: {
-        'line-color': scheme.vegetation,
-        'line-opacity': 0.7,
-        'line-width': ramp([8, 0.6], [14, 1.6]),
-        'line-dasharray': [3, 2],
-      },
-    },
+    ...parks.lines,
     {
       id: id('water'),
       type: 'fill',
@@ -1018,6 +1167,9 @@ export function buildStoneLayers(
       },
       paint: { 'text-color': scheme.inkMuted, ...halo },
     },
+    // Under the summits and the places: a peak or a town keeps its name where
+    // a park's would crowd it.
+    ...(parks.label ? [parks.label] : []),
     peakLayer(),
     {
       id: id('place-village'),
@@ -1125,6 +1277,10 @@ export function buildStoneLayers(
  * imagery shows through untouched.
  */
 export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
+  // Park boundaries and names, no fill: the imagery stays untouched.
+  'park-band',
+  'park-outline',
+  'park-line',
   ...ROADS.map((r) => `road-${r.id}`),
   'track',
   'cycleway',
@@ -1133,6 +1289,7 @@ export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
   'water-label',
   'road-label',
   'poi',
+  'park-label',
   'peak',
   'place-village',
   'place-town',

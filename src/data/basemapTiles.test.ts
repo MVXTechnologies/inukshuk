@@ -2,11 +2,14 @@ import Constants from 'expo-constants';
 import {
   DEFAULT_VECTOR_CONTOURS_URL,
   DEFAULT_VECTOR_GLYPHS_URL,
+  DEFAULT_VECTOR_PARKS_URL,
   DEFAULT_VECTOR_PEAKS_URL,
   DEFAULT_VECTOR_TILES_URL,
+  PARKS_TILES_PUBLISHED,
   vectorBasemapOption,
   vectorContoursUrl,
   vectorGlyphsUrl,
+  vectorParksUrl,
   vectorPeaksUrl,
   vectorTilesUrl,
 } from './basemapTiles';
@@ -54,6 +57,22 @@ it('reads summit tiles from our Worker unless overridden', () => {
   expect(vectorPeaksUrl()).toBe('http://127.0.0.1:8787/peaks/{z}/{x}/{y}.mvt');
   extra().vectorPeaksUrl = '';
   expect(vectorPeaksUrl()).toBe(DEFAULT_VECTOR_PEAKS_URL);
+});
+
+it('names no parks tiles until they are published, unless a build points at some', () => {
+  delete extra().vectorParksUrl;
+  expect(DEFAULT_VECTOR_PARKS_URL).toMatch(/\/parks\/\{z\}\/\{x\}\/\{y\}\.mvt$/);
+  // The gate and the default move together: published = our Worker's archive.
+  expect(vectorParksUrl()).toBe(PARKS_TILES_PUBLISHED ? DEFAULT_VECTOR_PARKS_URL : null);
+  expect('parks' in vectorBasemapOption(false, false)).toBe(PARKS_TILES_PUBLISHED);
+  extra().vectorParksUrl = 'http://127.0.0.1:8787/parks/{z}/{x}/{y}.mvt';
+  expect(vectorParksUrl()).toBe('http://127.0.0.1:8787/parks/{z}/{x}/{y}.mvt');
+  expect(vectorBasemapOption(false, false).parks).toBe(
+    'http://127.0.0.1:8787/parks/{z}/{x}/{y}.mvt',
+  );
+  extra().vectorParksUrl = '';
+  expect(vectorParksUrl()).toBe(PARKS_TILES_PUBLISHED ? DEFAULT_VECTOR_PARKS_URL : null);
+  delete extra().vectorParksUrl;
 });
 
 it('builds the style option from our hosts, summits always, contours only when asked', () => {

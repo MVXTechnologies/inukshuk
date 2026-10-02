@@ -10,15 +10,16 @@ Protomaps daily planet ──(nas/refresh.sh: extract our regions)──▶ base
 phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ R2 bucket inukshuk-tiles
 ```
 
-| Path                               | What                                               |
-| ---------------------------------- | -------------------------------------------------- |
-| `/basemap/{z}/{x}/{y}.mvt`         | vector tile (gzip), z0–15; 204 where there is none |
-| `/basemap.json`                    | TileJSON                                           |
-| `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`  |
-| `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles  |
-| `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)       |
-| `/trails/v1/index.json`            | long-distance trail index (Explore, #467)          |
-| `/trails/v1/d/{version}/{id}.json` | one trail's route and stages (range-read)          |
+| Path                               | What                                                 |
+| ---------------------------------- | ---------------------------------------------------- |
+| `/basemap/{z}/{x}/{y}.mvt`         | vector tile (gzip), z0–15; 204 where there is none   |
+| `/basemap.json`                    | TileJSON                                             |
+| `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`    |
+| `/parks/{z}/{x}/{y}.mvt`           | national parks (gzip), z4–12 — **not published yet** |
+| `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles    |
+| `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)         |
+| `/trails/v1/index.json`            | long-distance trail index (Explore, #467)            |
+| `/trails/v1/d/{version}/{id}.json` | one trail's route and stages (range-read)            |
 
 Coverage (`nas/pieces.json`): **the whole world** (land between 60° S and 84° N) as 20 regional
 archives plus `basemap.index.json` — Canada/US/Greenland and Europe first (2026-09-28 morning),
@@ -113,6 +114,81 @@ up to four times. Once a month is well within the public instance's fair use.
 
 **Attribution**: summits are OSM data (ODbL), covered by the base map's existing
 "© OpenStreetMap contributors" credit; the archive carries the same attribution.
+
+## Parks (national parks and protected areas)
+
+**Status: written, not run.** `parks.pmtiles` is not on R2 yet, so the app draws the parks
+Protomaps has. After the first run, set `PARKS_TILES_PUBLISHED = true` in
+`src/data/basemapTiles.ts` (an OTA) and the map switches to these tiles.
+
+**Why.** Protomaps files protected land under four `landuse`/`pois` kinds and gets the important
+ones wrong. Measured on our served tiles (2026-10-02, 26 well-known parks on five continents):
+
+| Protomaps kind   | parks                                                                          | boundary                             | name from  |
+| ---------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------- |
+| `national_park`  | 9 — Banff, Mont-Tremblant, Vanoise, Sarek, Torres del Paine …                  | z4                                   | z5–7       |
+| `nature_reserve` | 8 — Yellowstone, Yosemite, Grand Canyon, Kruger, Serengeti, Kakadu …           | z4                                   | z7         |
+| `park`           | 6 — Jacques-Cartier, Grands-Jardins, Algonquin, Swiss NP, Triglav, Daisetsuzan | z4, but the same kind as a city park | **z11–12** |
+| no polygon       | 2 — Lake District, Adirondack                                                  | **none**                             | z7         |
+
+The polygons carry no name and no size, only the kind; names are `pois` points with a `min_zoom`,
+in the tiles from the zoom before it. So a third of the sample cannot be drawn as a national park
+from Protomaps alone: Jacques-Cartier (670 km²) is indistinguishable from a neighbourhood park and
+nameless until z12. OSM itself is clear about it: Jacques-Cartier and Grands-Jardins are
+`boundary=national_park` — with no `protect_class`, which seems to be what Protomaps' rule wants.
+
+**What `nas/parks.sh` builds** (+ `nas/parks_geojson.py`, stdlib Python; tests:
+`python3 -m unittest infra/tiles/nas/test_parks_geojson.py`):
+
+1. **Overpass**, two queries per `pieces.json` bbox:
+   - _national_ — `boundary=national_park`, or `boundary=protected_area` + `protect_class=2`,
+     named, `out geom` (~4 600 + the IUCN II areas worldwide);
+   - _reserve_ — every other named `boundary=protected_area` of a nature class (`protect_class`
+     1a–7 or none; heritage, military and Natura 2000 overlays are left out) and
+     `leisure=nature_reserve`, `out tags bb` — no geometry (~110 000 worldwide; their
+     boundaries stay Protomaps' polygons).
+2. **Convert** to two GeoJSONSeq files:
+   - `parks` layer — a MultiPolygon per national park (member ways stitched into rings, holes
+     kept), with `name`, `class: national`, `rank`;
+   - `park_labels` layer — a point per protected area with `name` (+ `name:en`/`name:fr`), `class`
+     (`national` | `reserve`) and `rank`. A national park's point is inside its largest part, as
+     far from the edge as a coarse grid search finds (a centroid can land outside a crescent);
+     a reserve's is the centre of its bounds.
+
+   `rank` is the zoom the area earns; a reserve comes two zooms after a park of its size (its
+   area is estimated as 60 % of its bounding box):
+
+   | area (km²) | ≥ 20 000 | ≥ 5 000 | ≥ 1 500 | ≥ 400 | ≥ 100 | ≥ 25 | ≥ 6 | smaller |
+   | ---------- | -------- | ------- | ------- | ----- | ----- | ---- | --- | ------- |
+   | rank       | 4        | 5       | 6       | 7     | 8     | 9    | 10  | 11      |
+
+   A label is in the tiles from its rank, a polygon two zooms earlier (never before z4), so a
+   park's outline arrives before its name.
+
+3. **tippecanoe** (the image `peaks.sh` builds): `-Z4 -z12 -r1 --no-feature-limit
+--no-tile-size-limit --no-tiny-polygon-reduction`, layers `parks` and `park_labels`.
+4. **Upload** as `parks.pmtiles` — only with ≥ `PARKS_MIN_FEATURES` (3 500) national parks and not
+   more than 30 % below the last run. The Worker needs no change: it serves any `{archive}.pmtiles`
+   as `/{archive}/{z}/{x}/{y}.mvt` and `/_upload` already takes `*.pmtiles`.
+
+```sh
+~/inukshuk-tiles/infra/nas/parks.sh                 # several hours (estimate), nearly all Overpass
+PARKS_RESUME=1 ~/inukshuk-tiles/infra/nas/parks.sh  # keep the pieces an interrupted run fetched
+```
+
+**Dry run** (2026-10-02, on a Mac, steps 1–3 without Docker or upload, three small boxes: Québec,
+the Engadin, Yellowstone): 19 national polygons — every relation closed into rings — and 176
+labels; 3.1 MB of raw Overpass JSON gave a 0.4 MB archive, and the app drew it from a loopback
+`pmtiles serve` on the emulator. The full 24-piece run and its duration are untested.
+**Monthly**: not in `scheduler.sh` yet; add it after peaks the way the trails block below shows.
+Same Overpass etiquette and attribution as the peaks.
+
+**In the app** (`buildStoneLayers`, `src/core/map/stoneStyle.ts`): `stone-park-band` +
+`stone-park-line` (the boundary: a solid green edge over a translucent band along its inside),
+`stone-park-outline` (quiet dashes) and `stone-park-label` (green italic), all behind the
+"Parks & protected areas" switch of the overlays menu. With these tiles the strong boundary is
+ours and every name comes from `park_labels`; without them it is Protomaps' three protected kinds,
+its `park` polygons are dashed, and names appear when Protomaps' `min_zoom` says.
 
 ## Long-distance trails (Explore, #467)
 
