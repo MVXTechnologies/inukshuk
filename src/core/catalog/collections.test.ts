@@ -86,6 +86,7 @@ describe('placeActivities', () => {
     expect(placeActivities({ type: 'Wildlife reserve' })).toEqual(['hunting', 'fishing']);
     expect(placeActivities({ type: 'National park' })).toEqual(['hiking', 'camping']);
     expect(placeActivities({ type: 'Marine park' })).toEqual(['paddling']);
+    expect(placeActivities({ type: 'ZEC' })).toEqual(['hunting', 'fishing']);
     expect(placeActivities({ type: 'Museum' })).toEqual([]);
     expect(placeActivities({ type: 'National park', activities: ['ski'] })).toEqual(['ski']);
   });

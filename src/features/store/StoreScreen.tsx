@@ -15,6 +15,7 @@ import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { CatalogResultsList } from './explore/CatalogResultsList';
 import { ExploreLanding } from './explore/ExploreLanding';
 import { exploreMapHref } from './explore/exploreRoutes';
+import { OrganisationMapsCta } from './explore/OrganisationMapsCta';
 import { useCatalogDownloadFlow } from './explore/useCatalogDownloadFlow';
 
 /**
@@ -153,6 +154,7 @@ export function StoreScreen() {
           <Text variant="bodyMedium" style={styles.emptyText}>
             No maps match your search.
           </Text>
+          <OrganisationMapsCta style={styles.ctaEmpty} />
         </View>
       );
     }
@@ -187,7 +189,7 @@ export function StoreScreen() {
         </View>
       );
     }
-    if (searchScope === 'complete') return null;
+    if (searchScope === 'complete') return <OrganisationMapsCta style={styles.cta} />;
     return (
       <View style={styles.footer}>
         <Text
@@ -302,4 +304,6 @@ const styles = StyleSheet.create({
   footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 64, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
+  cta: { marginHorizontal: space.lg, marginTop: space.lg },
+  ctaEmpty: { alignSelf: 'stretch', marginTop: space.md },
 });

@@ -285,3 +285,11 @@ fetch their files. The first is **Parcs Québec (Sépaq)**: 37 places in
   after the Avenza–Blue Marble merger of 2026-04-07. A partnership proposal
   has been drafted for the owner (kept out of this public repo).
   Until Sépaq authorizes it in writing, we link out only.
+- **Zecs du Québec (Réseau Zec)**: 63 places in
+  `scripts/catalog/collections/zecs.json`, each linking to the zec's own
+  website. Every zec has a free, georeferenced 1:40 000 territory map
+  (Avenza, and Réseau Zec's cartothèque — whose SharePoint links are not
+  public), and 8 zecs post a GeoPDF on their own site, but reseauzec.com says
+  only "Tous droits réservés" and no zec states a licence. **Needs
+  permission** before any map file is linked; the research table and the
+  ready-to-add GeoPDFs are in `docs/research/zec-maps.md`.

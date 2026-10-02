@@ -9,6 +9,7 @@ import { StoreScreen } from '@features/store/StoreScreen';
 import { useCatalogStore } from '@state/catalogStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { fireEvent } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 
 import {
   fixtureIndex,
@@ -170,6 +171,48 @@ it('asks for a first fix instead of an empty carousel without a position', async
   const view = await landing();
   expect(view.queryByText('Popular near you')).toBeNull();
   expect(view.getByText('Open the Map tab once to see the maps near you first.')).toBeTruthy();
+});
+
+describe('Popular near you never vanishes silently', () => {
+  it('folds nearby parks in, each card drawing a footprint thumbnail', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    seedCatalog(fixtureIndex());
+    const view = await landing();
+    // Jacques-Cartier and the Laurentides reserve are within reach; Gaspésie is not.
+    expect(view.getByText('Parc national de la Jacques-Cartier')).toBeTruthy();
+    expect(view.getByText('Réserve faunique des Laurentides')).toBeTruthy();
+    expect(view.queryAllByText('Parc national de la Gaspésie')).toHaveLength(0);
+    // Every card has an offline footprint picture.
+    expect(
+      view.getAllByTestId('footprint-thumb', { includeHiddenElements: true }).length,
+    ).toBeGreaterThanOrEqual(4);
+    await fireEvent.press(view.getByText('Parc national de la Jacques-Cartier'));
+    expect(open).toHaveBeenCalledWith('https://www.sepaq.com/pq/jac/');
+    open.mockRestore();
+  });
+
+  it('says it is still looking while the nearest shards load', async () => {
+    collectionsMock.mockResolvedValue(null);
+    seedCatalog(fixtureIndex({ items: [] }), { loadingShards: true });
+    const view = await landing();
+    expect(view.getByText('Popular near you')).toBeTruthy();
+    expect(view.getByText('Finding maps near you…')).toBeTruthy();
+  });
+
+  it('says so when nothing is in range', async () => {
+    collectionsMock.mockResolvedValue(null);
+    seedCatalog(fixtureIndex({ items: [usTopo('cupertino', 37.31, -122.06, ['mountains'])] }));
+    const view = await landing();
+    expect(view.getByText('No maps in the catalog near you yet.')).toBeTruthy();
+  });
+});
+
+it('ends with the organisation call to action', async () => {
+  seedCatalog(fixtureIndex());
+  const view = await landing();
+  expect(view.getByTestId('org-maps-cta')).toBeTruthy();
+  expect(view.getByText('Your organisation’s maps aren’t here?')).toBeTruthy();
+  expect(view.getByText('marc-andre.vigneault@mvxtechnologies.com')).toBeTruthy();
 });
 
 it('offers Retry when the catalog cannot load at all', async () => {

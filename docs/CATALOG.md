@@ -38,7 +38,7 @@ Pages root, so `docs/catalog/v2/index.json` serves at
   // Side documents, fetched lazily (same path rules as shards):
   "search": { "path": "search.json", "byteSize": 741381, "tokenCount": 34764 },
   "facets": { "path": "facets.json", "byteSize": 47842 },
-  "collections": { "path": "collections.json", "byteSize": 11813 },
+  "collections": { "path": "collections.json", "byteSize": 30603 },
   "shards": [
     {
       "id": "topo-n40w080-3",
@@ -410,8 +410,18 @@ place carries its provenance in an `evidence` field; the generator strips it.
     - 5 from OSM only: msb, por, tem, aig, ssl.
   - **sepaq.com was never fetched.** It answers scripts with 403 and a CAPTCHA.
   - Coordinates are the OSM boundary centre (`out center`).
+- **Zecs du Québec** (Réseau Zec): all 63 zecs, typed "ZEC", each linking to
+  the zec's own site (`https://<name>.reseauzec.com/`, Martin-Valin on its own
+  domain). Coordinates are the centre of the territory bbox from Réseau Zec's
+  public `Public_zec` boundary layer. No zec states a licence, so no map file
+  is linked and nothing enters the download catalog: see
+  `docs/research/zec-maps.md` (per-zec map URLs, five GeoPDFs ready to add
+  once Réseau Zec agrees).
 - Activities per place type: national park → hiking, camping; marine park →
-  paddling; wildlife reserve → hunting, fishing (`PLACE_TYPE_ACTIVITIES`).
+  paddling; wildlife reserve and ZEC → hunting, fishing (`PLACE_TYPE_ACTIVITIES`).
+- The explorer landing's "Popular near you" folds the nearest places (within
+  250 km, at most half the row) in with the catalog maps
+  (`popularNearYouCards`).
 - Excluded, because Sépaq does not run them:
   - the Nunavik parks (Nunavik Parks);
   - Nibiischii and the Cree-run reserves;

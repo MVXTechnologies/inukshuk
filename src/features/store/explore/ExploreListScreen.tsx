@@ -29,6 +29,7 @@ import { ExploreFilterBar } from './ExploreFilterBar';
 import { BrowseOnMapButton } from './ExploreParts';
 import { exploreMapHref } from './exploreRoutes';
 import { itemFacets } from './facetsAdapter';
+import { OrganisationMapsCta } from './OrganisationMapsCta';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 
 /**
@@ -179,16 +180,19 @@ export function ExploreListScreen({ initialFilter }: { initialFilter: ExploreFil
             Look further away
           </Button>
         )}
+        <OrganisationMapsCta style={styles.ctaEmpty} />
       </View>
     );
   };
 
   const footer =
-    sorted.length > 0 && loadingShards ? (
+    sorted.length === 0 ? null : loadingShards ? (
       <View style={styles.footer}>
         <ActivityIndicator size="small" />
       </View>
-    ) : null;
+    ) : (
+      <OrganisationMapsCta style={styles.cta} />
+    );
 
   return (
     <View style={[styles.fill, { backgroundColor: t.background }]}>
@@ -242,4 +246,6 @@ const styles = StyleSheet.create({
   footer: { paddingVertical: 16, alignItems: 'center' },
   emptyWrap: { alignItems: 'center', gap: 12, paddingTop: 48, paddingHorizontal: 24 },
   emptyText: { textAlign: 'center' },
+  cta: { marginHorizontal: space.lg, marginTop: space.lg },
+  ctaEmpty: { alignSelf: 'stretch', marginTop: space.md },
 });

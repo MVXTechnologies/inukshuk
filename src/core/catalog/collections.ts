@@ -139,6 +139,8 @@ export const PLACE_TYPE_ACTIVITIES: Readonly<Record<string, CatalogActivity[]>> 
   'National park': ['hiking', 'camping'],
   'Marine park': ['paddling'],
   'Wildlife reserve': ['hunting', 'fishing'],
+  // A zec (zone d'exploitation contrôlée) is a hunting and fishing territory.
+  ZEC: ['hunting', 'fishing'],
 };
 
 /** A place's own activities, else its type's defaults (vocabulary order). */
