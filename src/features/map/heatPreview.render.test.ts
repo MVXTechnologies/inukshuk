@@ -21,10 +21,15 @@ import {
   walkTrackCells,
 } from '@core/heat/heatGrid';
 import {
+  HEAT_GLOW_INTENSITY,
+  HEAT_GLOW_RADIUS_STOPS,
   HEAT_LINE_RAMP_DARK,
   HEAT_LINE_RAMP_LIGHT,
   HEAT_LINE_WIDTH_STOPS,
+  HEAT_RAMP_DARK,
+  HEAT_RAMP_LIGHT,
   heatGlowOpacity,
+  heatGlowWeight,
   heatLineOpacity,
   heatLineWidthFactor,
   interpolateStops,
@@ -244,6 +249,7 @@ d('heatmap preview renders', () => {
     // AFTER
     const after = new Canvas(bg);
     const ramp = theme === 'light' ? HEAT_LINE_RAMP_LIGHT : HEAT_LINE_RAMP_DARK;
+    const glowRamp = theme === 'light' ? HEAT_RAMP_LIGHT : HEAT_RAMP_DARK;
     const glowOpacity = heatGlowOpacity(zoom);
     if (glowOpacity > 0) {
       heatmapKernel(
@@ -253,18 +259,11 @@ d('heatmap preview renders', () => {
             f.geometry.coordinates[0] as number,
             f.geometry.coordinates[1] as number,
           );
-          return { x, y, w: 0.5 + Math.log2(f.properties.count) / 4 };
+          return { x, y, w: heatGlowWeight(f.properties.count) };
         }),
-        interpolateStops(
-          [
-            [6, 2],
-            [10, 5],
-            [12, 9],
-          ],
-          zoom,
-        ),
-        1.2,
-        (dv) => [hex(rampColor(ramp, 1 + dv * 30)), Math.min(1, 0.35 + dv)],
+        interpolateStops(HEAT_GLOW_RADIUS_STOPS, zoom),
+        HEAT_GLOW_INTENSITY,
+        (dv) => [hex(rampColor(glowRamp, 1 + dv * 30)), Math.min(1, 0.15 + dv)],
         glowOpacity,
       );
     }

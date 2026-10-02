@@ -22,6 +22,17 @@ import {
   TERRAIN_OVERLAY_ANCHOR,
   TRAILS_ANCHOR,
 } from '@core/geo/mapLayerStack';
+import {
+  HEAT_GROUND_DARK,
+  HEAT_GROUND_LIGHT,
+  HEAT_PASS_STRENGTH,
+  HEAT_RAMP_LIGHT,
+  heatGlowColorStops,
+  heatPassStrength,
+  rgba,
+} from '@core/heat/heatStyle';
+import { expression, validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
+import { stoneScheme } from './stoneScheme';
 
 // Hoisted above the imports by babel-plugin-jest-hoist. The MapLibre native
 // modules are looked up with TurboModuleRegistry.getEnforcing at import time,
@@ -281,12 +292,72 @@ describe('line outlines (#492)', () => {
       expect(casing?.props.paint['line-color']).toBe(LINE_OUTLINE[tone].color);
       const width = JSON.stringify(casing?.props.paint['line-width']);
       expect(width).toContain(`${LINE_OUTLINE[tone].widthAdd}]`);
-      // The casing crossfades in with the lines, at the outline's opacity.
+      // The casing crossfades in with the lines, at the outline's opacity
+      // times the pass strength (a lone pass doesn't sit in a full halo).
       const op = casing?.props.paint['line-opacity'] as unknown[];
-      expect(op[op.length - 1]).toBe(LINE_OUTLINE[tone].opacity);
+      expect(op[op.length - 1]).toEqual([
+        '*',
+        LINE_OUTLINE[tone].opacity,
+        expect.arrayContaining(['step', ['get', 'count']]),
+      ]);
       expect((line?.props.paint['line-opacity'] as unknown[]).slice(-1)).toEqual([1]);
     },
   );
+
+  // Owner, 2026-10: softer heat — evaluate the real paint at a street zoom.
+  describe.each(['paper', 'night', 'imagery'] as const)('%s heat paint', (tone) => {
+    const paint = (i: 0 | 1, prop: string) =>
+      layers(HEAT_LAYERS[tone].lines)[i]?.props.paint[prop] as never;
+    const at = (value: never, type: 'number' | 'color', count: number, zoom = 14) => {
+      const parsed = expression.createExpression(value, {
+        type,
+        'property-type': 'data-driven',
+        expression: { interpolated: true, parameters: ['zoom', 'feature'] },
+      } as never);
+      if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+      return parsed.value.evaluate({ zoom }, { type: 2, properties: { count } } as never);
+    };
+
+    it('fades the casing with the line: a lone pass gets a fraction of the halo', () => {
+      const casing = paint(0, 'line-opacity');
+      expect(at(casing, 'number', 1)).toBeCloseTo(LINE_OUTLINE[tone].opacity * heatPassStrength(1));
+      expect(at(casing, 'number', 64)).toBeCloseTo(LINE_OUTLINE[tone].opacity);
+      expect(at(casing, 'number', 1)).toBeLessThan(at(casing, 'number', 8));
+    });
+
+    it('draws a lone pass thin and many passes wider', () => {
+      const w = paint(1, 'line-width');
+      expect(at(w, 'number', 1)).toBeCloseTo(1.8);
+      expect(at(w, 'number', 8)).toBeGreaterThan(at(w, 'number', 1) * 1.5);
+    });
+
+    it('validates, with zoom only as the top-level curve input (MapLibre iOS)', () => {
+      const style = {
+        version: 8,
+        sources: { heat: { type: 'geojson', data: EMPTY } },
+        layers: [
+          ...layers(HEAT_LAYERS[tone].lines).map((l) => ({ ...l.props, source: 'heat' })),
+          {
+            ...(HEAT_LAYERS[tone].glow as unknown as Painted).props,
+            source: 'heat',
+          },
+        ].map(({ beforeId: _b, ...l }: Record<string, unknown>) => l),
+      };
+      expect(validateStyleMin(style as never)).toEqual([]);
+    });
+  });
+
+  it('fades the lines toward the very grounds the map paints', () => {
+    expect(HEAT_GROUND_LIGHT).toBe(stoneScheme(false).land);
+    expect(HEAT_GROUND_DARK).toBe(stoneScheme(true).land);
+    expect(HEAT_PASS_STRENGTH.length).toBeGreaterThan(1);
+  });
+
+  it('glows from the full-strength ramp (the glow fades by alpha)', () => {
+    const glow = (HEAT_LAYERS.paper.glow as unknown as Painted).props.paint['heatmap-color'];
+    const stops = heatGlowColorStops(HEAT_RAMP_LIGHT);
+    expect(JSON.stringify(glow)).toContain(rgba(stops[1]![1], stops[1]![2]));
+  });
 
   it('heats the imagery and night grounds with the dark ramp, paper with the light', () => {
     const colour = (tone: 'paper' | 'night' | 'imagery') =>

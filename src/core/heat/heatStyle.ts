@@ -3,16 +3,67 @@
  * offline PNG preview so both draw the same thing.
  *
  * Street zooms: crisp pass-count lines (see `heatGridLines`) — a single pass
- * is a clearly visible warm line, many passes run hot. Low zooms: a soft glow
- * from the coarse grid, fading out as the lines take over.
+ * is a faint, thin warm line; only streets run again and again run hot
+ * (owner, 2026-10: "a little bit too intense, we see clearly all the
+ * tracks"). Low zooms: a soft glow from the coarse grid, fading out as the
+ * lines take over.
  */
 
 /** Pass count → line colour. Opaque on purpose: chained lines meet with round
  * caps, and translucent caps would bead at every joint. */
 export type Ramp = readonly (readonly [count: number, color: string])[];
 
-/** Light basemaps: warm orange for one pass, deepening to crimson. */
-export const HEAT_LINE_RAMP_LIGHT: Ramp = [
+/**
+ * The grounds the ramps are laid over: the paper and night map land
+ * (`stoneScheme`'s `land`, i.e. the `background` / night `surface` tokens —
+ * kept in step by a test in `src/features/map`).
+ */
+export const HEAT_GROUND_LIGHT = '#F2ECE0';
+export const HEAT_GROUND_DARK = '#1A1F24';
+
+/**
+ * How strongly a pass count shows (MapLibre `step` semantics): the share of
+ * its full ramp colour laid over the ground. A single pass reads like a
+ * translucent stroke at {@link HEAT_PASS_STRENGTH}[0] — without being
+ * translucent (see {@link Ramp}) — and the strength builds to full by 5–8
+ * passes. The casing under the lines follows the same strength.
+ */
+export const HEAT_PASS_STRENGTH: readonly (readonly [count: number, strength: number])[] = [
+  [1, 0.45],
+  [2, 0.65],
+  [4, 0.85],
+  [8, 1],
+];
+
+/** The strength of a pass count (stepping through {@link HEAT_PASS_STRENGTH}). */
+export function heatPassStrength(count: number): number {
+  let s = HEAT_PASS_STRENGTH[0]?.[1] ?? 1;
+  for (const [c, v] of HEAT_PASS_STRENGTH) if (count >= c) s = v;
+  return s;
+}
+
+/** `#rrggbb` laid over `ground` at `alpha` (0–1), as an opaque `#RRGGBB`. */
+export function mixHex(color: string, ground: string, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  let out = '#';
+  for (const i of [1, 3, 5]) {
+    const f = parseInt(color.slice(i, i + 2), 16);
+    const g = parseInt(ground.slice(i, i + 2), 16);
+    out += Math.round(g + (f - g) * a)
+      .toString(16)
+      .toUpperCase()
+      .padStart(2, '0');
+  }
+  return out;
+}
+
+/** A full-strength ramp faded toward its ground by {@link heatPassStrength}. */
+function fadedRamp(full: Ramp, ground: string): Ramp {
+  return full.map(([count, color]) => [count, mixHex(color, ground, heatPassStrength(count))]);
+}
+
+/** Light basemaps, full strength: warm orange for one pass, deepening to crimson. */
+export const HEAT_RAMP_LIGHT: Ramp = [
   [1, '#F28E2B'],
   [2, '#EF6A1F'],
   [4, '#E4461A'],
@@ -21,8 +72,8 @@ export const HEAT_LINE_RAMP_LIGHT: Ramp = [
   [64, '#7A0636'],
 ];
 
-/** Dark basemaps: ember for one pass, brightening to near-white hot. */
-export const HEAT_LINE_RAMP_DARK: Ramp = [
+/** Dark basemaps, full strength: ember for one pass, brightening to near-white hot. */
+export const HEAT_RAMP_DARK: Ramp = [
   [1, '#D9541E'],
   [2, '#F0762A'],
   [4, '#FF9A2E'],
@@ -31,18 +82,28 @@ export const HEAT_LINE_RAMP_DARK: Ramp = [
   [64, '#FFF8D6'],
 ];
 
-/** Line width (px) by zoom for one pass; more passes add up to +60 %. */
+/** The paper map's line colours: a pale apricot for one pass, crimson when hot. */
+export const HEAT_LINE_RAMP_LIGHT: Ramp = fadedRamp(HEAT_RAMP_LIGHT, HEAT_GROUND_LIGHT);
+
+/** The night map's (and imagery's) line colours: a dim ember for one pass, near-white when hot. */
+export const HEAT_LINE_RAMP_DARK: Ramp = fadedRamp(HEAT_RAMP_DARK, HEAT_GROUND_DARK);
+
+/** Line width (px) by zoom for one pass; more passes add up to +80 %. */
 export const HEAT_LINE_WIDTH_STOPS: readonly (readonly [zoom: number, px: number])[] = [
-  [9, 0.8],
-  [12, 1.6],
-  [14, 2.4],
-  [16, 3.2],
-  [18, 4.5],
+  [9, 0.6],
+  [12, 1.2],
+  [14, 1.8],
+  [16, 2.6],
+  [18, 3.8],
 ];
+
+/** Width growth per doubling of the pass count, and its cap. */
+export const HEAT_WIDTH_PER_DOUBLING = 0.2;
+export const HEAT_WIDTH_MAX_GAIN = 0.8;
 
 /** Width multiplier for a pass count (log-scaled, capped). */
 export function heatLineWidthFactor(count: number): number {
-  return 1 + Math.min(0.6, 0.12 * Math.log2(Math.max(1, count)));
+  return 1 + Math.min(HEAT_WIDTH_MAX_GAIN, HEAT_WIDTH_PER_DOUBLING * Math.log2(Math.max(1, count)));
 }
 
 /** Lines fade in over these zooms (the glow fades out over the same range). */
@@ -103,26 +164,31 @@ export const HEAT_GLOW_RADIUS_STOPS: readonly (readonly [zoom: number, px: numbe
 ];
 
 /** Glow `heatmap-intensity`. */
-export const HEAT_GLOW_INTENSITY = 1.2;
+export const HEAT_GLOW_INTENSITY = 1;
+
+/** Glow `heatmap-weight` of a lone pass; each doubling adds a quarter. */
+export const HEAT_GLOW_BASE_WEIGHT = 0.35;
 
 /** Glow `heatmap-weight` for a coarse cell's pass count (log-scaled). */
 export function heatGlowWeight(count: number): number {
-  return 0.5 + Math.log2(Math.max(1, count)) / 4;
+  return HEAT_GLOW_BASE_WEIGHT + Math.log2(Math.max(1, count)) / 4;
 }
 
-/** Glow colour by kernel density: [density, colour, alpha]. A lone pass
- * already reads (alpha 0.45); dense corridors run to the ramp's hot end. */
+/** Glow colour by kernel density: [density, colour, alpha], from a
+ * full-strength ramp ({@link HEAT_RAMP_LIGHT} / {@link HEAT_RAMP_DARK}: the
+ * glow is translucent, so its alpha does the fading). A lone pass shows as a
+ * faint haze (alpha 0.25); dense corridors run to the ramp's hot end. */
 export function heatGlowColorStops(
   ramp: Ramp,
 ): readonly (readonly [density: number, color: string, alpha: number])[] {
   const c = (n: number) => rampColor(ramp, n);
   return [
     [0, c(1), 0],
-    [0.02, c(1), 0.45],
-    [0.25, c(2), 0.65],
-    [0.5, c(4), 0.8],
-    [0.75, c(8), 0.9],
-    [1, c(16), 1],
+    [0.02, c(1), 0.25],
+    [0.25, c(2), 0.45],
+    [0.5, c(4), 0.65],
+    [0.75, c(8), 0.82],
+    [1, c(16), 0.95],
   ];
 }
 
