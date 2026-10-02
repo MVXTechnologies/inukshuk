@@ -2,7 +2,10 @@ import {
   planPdfDetail,
   rasterCropGeometry,
   planPdfDetailTiles,
+  ladderTileWidth,
+  PDF_TILE_WIDTH_LADDER,
   type PdfDetailPlan,
+  type PdfDetailTileOptions,
 } from './pdfDetail';
 import type { LngLat } from '@core/models';
 
@@ -479,4 +482,117 @@ it.each([
   { heightPx: 2400, bearing: Infinity },
 ])('rejects invalid physical map-frame inputs %j', (viewport) => {
   expect(planPdfDetailTiles(corners, page, view, 1200, undefined, viewport)).toEqual([]);
+});
+
+describe('tile width ladder', () => {
+  it('snaps up to the next step and caps at the top one', () => {
+    expect(ladderTileWidth(1)).toBe(256);
+    expect(ladderTileWidth(256)).toBe(256);
+    expect(ladderTileWidth(257)).toBe(384);
+    expect(ladderTileWidth(700)).toBe(768);
+    expect(ladderTileWidth(99999)).toBe(3072);
+    for (let i = 1; i < PDF_TILE_WIDTH_LADDER.length; i++) {
+      const step = PDF_TILE_WIDTH_LADDER[i]!;
+      expect(step % 32).toBe(0);
+      expect(step / PDF_TILE_WIDTH_LADDER[i - 1]!).toBeLessThanOrEqual(1.5);
+    }
+  });
+
+  it('keeps tile keys through a small zoom, so their rasters are reused', () => {
+    // Zooming in or out by 3 % around the same centre: same grid level, and
+    // the ideal width moves inside one ladder step.
+    const zoom = (factor: number) => {
+      const cx = (view.west + view.east) / 2,
+        cy = (view.south + view.north) / 2;
+      const hw = ((view.east - view.west) / 2) * factor,
+        hh = ((view.north - view.south) / 2) * factor;
+      return { west: cx - hw, east: cx + hw, south: cy - hh, north: cy + hh };
+    };
+    const at = planPdfDetailTiles(corners, page, zoom(1), 1200);
+    const widths = new Set(at.map((t) => t.targetWidthPx));
+    expect(widths.size).toBe(1);
+    const keys = (tiles: PdfDetailPlan[]) => new Set(tiles.map((t) => t.tileKey));
+    for (const factor of [0.97, 1.03]) {
+      const next = keys(planPdfDetailTiles(corners, page, zoom(factor), 1200));
+      expect([...keys(at)].filter((k) => next.has(k)).length).toBeGreaterThan(0);
+    }
+    // Below the pixel budget the width is the ideal one snapped up the ladder,
+    // so it holds across the same small zooms instead of moving 32 px a time.
+    const roomy = (factor: number) =>
+      planPdfDetailTiles(corners, page, zoom(factor), 1200, 64 * 1024 * 1024);
+    const ideal = roomy(1)[0]!.targetWidthPx;
+    expect(PDF_TILE_WIDTH_LADDER).toContain(ideal);
+    for (const factor of [0.97, 1.03]) {
+      const next = roomy(factor);
+      expect(next[0]!.targetWidthPx).toBe(ideal);
+      expect([...keys(roomy(1))].filter((k) => keys(next).has(k)).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('neighbour prefetch ring', () => {
+  const options = { prefetchMargin: 0.5, maxPrefetch: 12 };
+  const plan = (bounds: typeof view, opts: PdfDetailTileOptions = options) =>
+    planPdfDetailTiles(corners, page, bounds, 1200, undefined, undefined, opts);
+
+  it('plans no ring unless asked', () => {
+    const plain = planPdfDetailTiles(corners, page, view, 1200);
+    expect(plain.some((t) => t.prefetch)).toBe(false);
+    for (const none of [
+      {},
+      { prefetchMargin: 0 },
+      { prefetchMargin: 0.5, maxPrefetch: 0 },
+      { prefetchMargin: NaN },
+    ])
+      expect(plan(view, none)).toEqual(plain);
+  });
+
+  it('adds the nearest surrounding cells after the visible ones, at the same level and width', () => {
+    const plain = planPdfDetailTiles(corners, page, view, 1200);
+    const tiles = plan(view);
+    const visible = tiles.filter((t) => !t.prefetch);
+    const ring = tiles.filter((t) => t.prefetch);
+    expect(visible).toEqual(plain);
+    expect(tiles.slice(0, visible.length)).toEqual(visible);
+    expect(ring.length).toBeGreaterThan(0);
+    expect(ring.length).toBeLessThanOrEqual(12);
+    const level = plain[0]!.tileKey!.split(':')[0];
+    for (const t of ring) {
+      expect(t.targetWidthPx).toBe(plain[0]!.targetWidthPx);
+      expect(t.tileKey!.split(':')[0]).toBe(level);
+      expect(plain.some((p) => p.tileKey === t.tileKey)).toBe(false);
+    }
+    expect(new Set(tiles.map((t) => t.tileKey)).size).toBe(tiles.length);
+    expect(plan(view, { prefetchMargin: 0.5, maxPrefetch: 3 }).filter((t) => t.prefetch)).toEqual(
+      ring.slice(0, 3),
+    );
+  });
+
+  it('gives a ring cell the very key it has once a pan makes it visible', () => {
+    const tiles = plan(view);
+    const shift = (view.east - view.west) * 0.4;
+    const panned = planPdfDetailTiles(
+      corners,
+      page,
+      { ...view, west: view.west + shift, east: view.east + shift },
+      1200,
+    );
+    const ring = new Set(tiles.filter((t) => t.prefetch).map((t) => t.tileKey));
+    const was = new Set(tiles.filter((t) => !t.prefetch).map((t) => t.tileKey));
+    const newlyVisible = panned.filter((t) => !was.has(t.tileKey));
+    expect(newlyVisible.length).toBeGreaterThan(0);
+    for (const t of newlyVisible) expect(ring.has(t.tileKey)).toBe(true);
+  });
+
+  it('stays on the page', () => {
+    // A view over the page's top-left corner: no ring cell outside [0, 1].
+    const tiles = plan({ west: -71.06, east: -70.96, south: 46.94, north: 47.04 });
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const t of tiles) {
+      expect(t.crop.x0).toBeGreaterThanOrEqual(0);
+      expect(t.crop.y0).toBeGreaterThanOrEqual(0);
+      expect(t.crop.x1).toBeLessThanOrEqual(1);
+      expect(t.crop.y1).toBeLessThanOrEqual(1);
+    }
+  });
 });

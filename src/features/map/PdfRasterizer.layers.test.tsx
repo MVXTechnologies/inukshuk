@@ -208,6 +208,20 @@ it('keeps a page whose layers were changed away from the native renderer', async
   expect(result?.pngDataUri).toBe('data:image/png;base64,PNG');
 });
 
+it('hands a 2024 US Topo (imagery under a hidden "Images" parent) to the native renderer', async () => {
+  // Switching Orthoimage off changes nothing drawn: its parent is already off
+  // by default, so the native renderer's default-layer picture is identical.
+  const config = fakeConfig({
+    '1R': { name: 'Images', visible: false },
+    '2R': { name: 'Orthoimage', visible: true },
+    '3R': { name: 'Contours', visible: true },
+  });
+  const { render } = await loadPage({ config });
+  const result = await render(NATIVE_PAGE);
+  expect(result).toMatchObject({ ok: true, kind: 'native-geometry' });
+  expect(config.setVisibility).toHaveBeenCalledWith('2R', false);
+});
+
 it('still hands a page at its default layers to the native renderer', async () => {
   const config = fakeConfig({ '2R': { name: 'Contours', visible: true } });
   const { render, port } = await loadPage({ config });

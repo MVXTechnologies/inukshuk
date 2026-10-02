@@ -153,6 +153,13 @@ export interface RasterizeArgs {
    * interactive is waiting. A render already in progress is never preempted.
    */
   priority?: RasterizePriority;
+  /**
+   * Served path only: requests that share this key (a page's file and
+   * revision) may reuse the document the previous one opened, so a burst of
+   * detail tiles opens and parses the page once instead of once per tile.
+   * Empty (default) opens and releases the document per request.
+   */
+  holdKey?: string;
 }
 
 export type RasterizePriority = 'interactive' | 'background';
@@ -342,7 +349,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // never decoded. Resolves { config, changed }: config is null when the
   // document has no layers or they could not be read (pdf.js defaults apply).
   function prepareLayers(doc, loadingTask) {
-    var none = { config: null, changed: 0 };
+    var none = { config: null, changed: 0, drawnChanged: 0 };
     function filterWorker(visibility) {
       if (!WORKER_FILTERS_LAYERS) return;
       // Same port as pdf.js' own messages, so it lands before the operator
@@ -372,7 +379,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         // worker unfiltered, which is only slower, never wrong.
         plan.changed.forEach(function (id) { config.setVisibility(id, plan.visibility[id]); });
         filterWorker(plan.visibility);
-        return { config: config, changed: plan.changed.length };
+        return { config: config, changed: plan.changed.length, drawnChanged: (plan.drawnChanged || plan.changed).length };
       } catch (e) {
         filterWorker(null);
         return none;
@@ -543,7 +550,34 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     return s > 0 && typeof window.__inkKeyWhite === 'function' ? Math.min(1, s) : 0;
   }
 
+  // The document a burst of detail tiles shares. Opening it, building the
+  // page's operator list and decoding its images is most of a render — and
+  // nearly independent of the crop: a US Topo sheet costs the same ~0.7 s for
+  // a 1024 px tile as for the 2048 px overview. A tile request that names the
+  // same hold key as the last one (same served URL and file revision) reuses
+  // the open document and page, whose operator list pdf.js keeps, and only
+  // paints. Released after HOLD_IDLE_MS without a matching request, on any
+  // other request, and on every failure.
+  var HOLD_IDLE_MS = 8000;
+  var held = null;
+  function dropHeld() {
+    if (!held) return;
+    var h = held;
+    held = null;
+    clearTimeout(h.timer);
+    Promise.resolve().then(function () { return h.task.destroy(); }).catch(function () {});
+  }
+
   function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage, look) {
+    var holdKey = input.url && look && typeof look.hold === 'string' && look.hold ? look.hold : null;
+    var reuse = null;
+    if (attempt === 0 && holdKey && held && held.key === holdKey) {
+      reuse = held;
+      clearTimeout(reuse.timer);
+      held = null;
+    } else {
+      dropHeld();
+    }
     var params;
     if (input.url) {
       // Served: let pdf.js range-fetch. disableStream cancels the full-body
@@ -571,11 +605,22 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     }
 
     var t0 = Date.now();
-    var loadingTask = window.pdfjsLib.getDocument(params);
+    var loadingTask = reuse ? reuse.task : window.pdfjsLib.getDocument(params);
+    var pages = reuse ? reuse.pages : {};
+    var layersPromise = reuse ? reuse.layers : null;
     var destruction = null;
     function releaseDocument() {
       if (!destruction) destruction = Promise.resolve().then(function () { return loadingTask.destroy(); });
       return destruction;
+    }
+    // After a successful paint: keep the document for the next tile of the
+    // same burst instead of destroying it (see HOLD_IDLE_MS).
+    function finishDocument(doc) {
+      if (!holdKey || destruction) return releaseDocument();
+      dropHeld();
+      held = { key: holdKey, task: loadingTask, doc: doc, pages: pages, layers: layersPromise, timer: null };
+      held.timer = setTimeout(dropHeld, HOLD_IDLE_MS);
+      return Promise.resolve();
     }
     function releaseFailure(err) {
       post({ id: id, ok: false, resetEngine: true, error: 'PDF resource cleanup failed: ' + String(err) });
@@ -606,12 +651,14 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       if (watchdog !== null) clearTimeout(watchdog);
       watchdog = setTimeout(onStall, LOAD_WATCHDOG_MS);
     }
-    armWatchdog();
-    loadingTask.onProgress = function () {
-      if (!stalled && !loaded) armWatchdog();
-    };
+    if (!reuse) {
+      armWatchdog();
+      loadingTask.onProgress = function () {
+        if (!stalled && !loaded) armWatchdog();
+      };
+    }
 
-    loadingTask.promise
+    (reuse ? Promise.resolve(reuse.doc) : loadingTask.promise)
       .then(function (doc) {
         if (stalled) return undefined;
         loaded = true;
@@ -622,7 +669,9 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
         if (pageNumber < 1 || pageNumber > pageCount) {
           throw new Error('pageIndex ' + pageIndex + ' out of range (pageCount ' + pageCount + ')');
         }
-        return Promise.all([doc.getPage(pageNumber), prepareLayers(doc, loadingTask)]).then(function (loadedPage) {
+        if (!pages[pageNumber]) pages[pageNumber] = doc.getPage(pageNumber);
+        if (!layersPromise) layersPromise = prepareLayers(doc, loadingTask);
+        return Promise.all([pages[pageNumber], layersPromise]).then(function (loadedPage) {
           var page = loadedPage[0];
           var layers = loadedPage[1];
           // Always rasterize in the page's UNROTATED (MediaBox) coordinate space
@@ -635,11 +684,11 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
           var pageWidthPt = baseViewport.width;
           var pageHeightPt = baseViewport.height;
           // Native renderers draw the document's default layers; a page whose
-          // layer plan differs from them stays on pdf.js so every raster of it
+          // layer plan draws differently from them stays on pdf.js so every raster of it
           // (overview and detail tiles) shows the same layers. Nor can they
           // key white: a keyed render always stays here.
           var strength = keyStrength(look);
-          if (nativePage && strength === 0 && layers.changed === 0 && page.rotate === 0 && page.userUnit === 1 &&
+          if (nativePage && strength === 0 && layers.drawnChanged === 0 && page.rotate === 0 && page.userUnit === 1 &&
               Array.isArray(page.view) && page.view.length === 4 &&
               page.view[0] === 0 && page.view[1] === 0 &&
               page.view[2] === nativePage.expectedPageWidthPt &&
@@ -684,7 +733,8 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
             var renderMs = Date.now() - t1;
             // Release the document (and, on the served path, its chunk buffer)
             // before the next request; the WebView is a long-lived process.
-            return releaseDocument().then(function () {
+            // A tile burst holds it instead, briefly (finishDocument).
+            return finishDocument(doc).then(function () {
               post({
                 id: id,
                 ok: true,
@@ -697,6 +747,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
                 loadMs: loadMs,
                 renderMs: renderMs,
                 keyMs: keyMs,
+                reused: reuse ? true : undefined,
               });
             });
           });
@@ -1055,7 +1106,10 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.timeout = setTimeout(pending.expire, RENDER_TIMEOUT_MS);
     }
     const idLiteral = JSON.stringify(id);
-    const lookLiteral = JSON.stringify({ whiteKey: whiteKeyStrength(args.whiteKey) });
+    const lookLiteral = JSON.stringify({
+      whiteKey: whiteKeyStrength(args.whiteKey),
+      ...(args.holdKey ? { hold: args.holdKey } : {}),
+    });
     const live = originRef.current;
     if (args.source.url !== undefined && live !== null) {
       let url = args.source.url;
@@ -1462,6 +1516,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           nativePage: nativePdfAvailable() && whiteKey === 0 ? (args.nativePage ?? null) : null,
           whiteKey,
           priority: args.priority ?? 'interactive',
+          holdKey: args.holdKey ?? '',
         };
         const expire = () => {
           const stillPending = pendingRef.current.get(id);
