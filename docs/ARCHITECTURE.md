@@ -63,8 +63,9 @@ four stages:
    pixels are keyed to transparency (colour-to-alpha, so text edges get no
    halo) at a 5-stop strength (Off, 25–100 %) chosen globally on the Overlays
    menu slider or per map; the
-   level is part of the raster's cache name, and a keyed render never goes
-   to a native renderer. If the server cannot
+   level is part of the raster's cache name. A detail tile a native renderer
+   drew is keyed by the same page afterwards (`__pdfKeyImage`), so a keyed
+   map keeps its native tiles. If the server cannot
    start, PDFs under 16 MB fall back to the old base64-over-the-bridge path;
    bigger ones fail with a message instead of hanging. Requests are queued,
    with a watchdog that falls back to pdf.js's main-thread fake worker if the

@@ -60,6 +60,21 @@ it never draws the full PDF page with CoreGraphics. See the
 [native module notes](../../../modules/inukshuk-pdf/README.md) and
 [iOS validation and benchmark notes](../../../modules/inukshuk-pdf/ios/README.md).
 
+**See-through white on native tiles.** The native renderers cannot key white.
+For a keyed request the provider copies the native PNG to
+`Documents/.rasterizer/key-<id>.png` (on the served allowlist), the page loads
+it same-origin, runs the same one-pass key as a pdf.js render
+(`window.__pdfKeyImage`) and posts the keyed PNG; the result then has
+`pngDataUri`, and both files are deleted. If the page cannot key a tile
+(reloading, 15 s timeout) that crop is retried once through pdf.js, which keys
+as it paints. Inline mode keeps keyed renders on pdf.js. Emulator, Beau Lake,
+50 %: 252 ms per tile (key pass 3–7 ms), against 2–14 s per tile on pdf.js.
+
+Each native crop still opens the document and page itself (about 190 ms of a
+230 ms tile on the emulator; the render and PNG encode are about 25 ms).
+Keeping them open across a burst needs a change in the native module, so a
+store build.
+
 The native worker renders only a bounded crop bitmap and writes lossless opaque
 PNG directly to cache, capped at 3072 pixels per edge and 3 Mi pixels per crop.
 The result has `fileUri` instead of `pngDataUri`; callers
