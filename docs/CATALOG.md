@@ -419,6 +419,18 @@ place carries its provenance in an `evidence` field; the generator strips it.
   once Réseau Zec agrees).
 - Activities per place type: national park → hiking, camping; marine park →
   paddling; wildlife reserve and ZEC → hunting, fishing (`PLACE_TYPE_ACTIVITIES`).
+  A place may carry its own `activities` instead, when there is evidence for
+  them (recorded in its `evidence.activities`): Zec Martin-Valin publishes a
+  canoe-camping map, so it is tagged paddling, hunting, fishing, camping. No
+  activity is added to a place on the strength of its type alone beyond the
+  table above.
+- **Places are points on the Explore map** (`src/core/catalog/explorePoints.ts`),
+  beside the catalog sheets. A checked Activity keeps the places tagged with
+  it; a checked Type keeps the places whose type maps to it
+  (`PLACE_TYPE_KINDS`: parks → `park`, reserves and zecs → `hunting-fishing`);
+  Terrain and Source describe sheets only, so they leave places out. A sheet's
+  card downloads; a place's card opens the publisher's page. An activity with
+  no point at all gets an empty state rather than a blank map.
 - The explorer landing's "Popular near you" folds the nearest places (within
   250 km, at most half the row) in with the catalog maps
   (`popularNearYouCards`).

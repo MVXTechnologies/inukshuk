@@ -1,4 +1,4 @@
-import { parseLinkOutCollections, placeActivities } from './collections';
+import { parseLinkOutCollections, placeActivities, placeKind } from './collections';
 
 const place = (overrides: Record<string, unknown> = {}) => ({
   id: 'sepaq-pq-jac',
@@ -78,6 +78,16 @@ describe('parseLinkOutCollections', () => {
     ]);
     expect(collections.map((c) => c.id)).toEqual(['sepaq']);
     expect(warnings).toHaveLength(5);
+  });
+});
+
+describe('placeKind', () => {
+  it('browses a place under the Type its place type implies', () => {
+    expect(placeKind({ type: 'ZEC' })).toBe('hunting-fishing');
+    expect(placeKind({ type: 'Wildlife reserve' })).toBe('hunting-fishing');
+    expect(placeKind({ type: 'National park' })).toBe('park');
+    expect(placeKind({ type: 'Marine park' })).toBe('park');
+    expect(placeKind({ type: 'Museum' })).toBeNull();
   });
 });
 

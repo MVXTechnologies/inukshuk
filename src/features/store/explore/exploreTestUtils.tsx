@@ -133,6 +133,37 @@ export const sepaqRaw = {
   ],
 };
 
+/** Two zecs: one by type default (hunting, fishing), one with its own tags. */
+export const zecsRaw = {
+  id: 'zecs',
+  name: 'Zecs du Québec',
+  publisher: 'Réseau Zec',
+  blurb: 'Maps from Réseau Zec',
+  homepage: 'https://reseauzec.com/cartotheque/',
+  places: [
+    {
+      id: 'zec-batiscan-neilson',
+      name: 'Zec Batiscan-Neilson',
+      type: 'ZEC',
+      latitude: 47.1285,
+      longitude: -71.8545,
+      url: 'https://zecbatiscanneilson.reseauzec.com/',
+    },
+    {
+      id: 'zec-martin-valin',
+      name: 'Zec Martin-Valin',
+      type: 'ZEC',
+      latitude: 48.634,
+      longitude: -70.564,
+      url: 'https://zecmartinvalin.com/',
+      activities: ['paddling', 'hunting', 'fishing', 'camping'],
+    },
+  ],
+};
+
+/** Both link-out collections, as `collections.json` serves them. */
+export const collectionsRaw = [...sepaqRaw.collections, zecsRaw];
+
 export async function mountWithProviders(ui: ReactElement) {
   return render(
     <SafeAreaProvider

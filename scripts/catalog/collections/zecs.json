@@ -517,7 +517,9 @@
       "latitude": 48.634,
       "longitude": -70.564,
       "url": "https://zecmartinvalin.com/",
+      "activities": ["paddling", "hunting", "fishing", "camping"],
       "evidence": {
+        "activities": "the zec publishes its own canoe-camping map (Carte-Martin-Valin-Canot-Camping.pdf, docs/research/zec-maps.md) beside its hunting and fishing territory map",
         "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean; answers 406 to scripted requests, fine in a browser",
         "coordinates": "centre of the territory bbox [-70.845,48.428,-70.283,48.84] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
       }
