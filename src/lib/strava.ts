@@ -32,6 +32,7 @@ import { resolveDocumentPath } from '@data/storage';
 import { reportError } from '@lib/errorReporting';
 import { useStravaStore } from '@state/stravaStore';
 import Constants from 'expo-constants';
+import { File } from 'expo-file-system';
 import * as Linking from 'expo-linking';
 import { nanoid } from 'nanoid/non-secure';
 import { AppState } from 'react-native';
@@ -271,16 +272,17 @@ export async function uploadTrackToStrava(track: UploadableTrack): Promise<Uploa
     for (const [key, value] of Object.entries(buildUploadFields(track.name, track.id))) {
       form.append(key, value);
     }
-    // React Native's FormData takes a { uri, name, type } file descriptor and
-    // streams the file from disk (its types call it a Blob). Saved trails
-    // store a document-relative path (`tracks/<id>.gpx`, since #255), which
-    // the native networking layer can't open — resolve it first, or every
-    // upload dies as a network error.
-    form.append('file', {
-      uri: resolveDocumentPath(track.fileUri),
-      name: `${track.id}.gpx`,
-      type: 'application/gpx+xml',
-    } as unknown as Blob);
+    // The file part is an expo-file-system File (Blob-like: name, type and
+    // bytes()). Expo SDK 56's fetch builds the multipart body itself and
+    // rejects React Native's old { uri, name, type } descriptor with
+    // "Unsupported FormDataPart implementation" (auto-report #525), so every
+    // push failed before it left the phone. Saved trails store a
+    // document-relative path (`tracks/<id>.gpx`, #255): resolve it first.
+    form.append(
+      'file',
+      new File(resolveDocumentPath(track.fileUri)) as unknown as Blob,
+      `${track.id}.gpx`,
+    );
 
     const response = await fetch(STRAVA_UPLOADS_URL, {
       method: 'POST',
