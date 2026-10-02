@@ -319,11 +319,27 @@ def merge_shared_ends(parts):
         if len(hits) == 2 and hits[0][0] != hits[1][0]:
             link[hits[0]] = hits[1]
             link[hits[1]] = hits[0]
-    seen = [False] * len(parts)
+    out = []
+    for run in linked_runs(len(parts), link):
+        line = []
+        for i, f in run:
+            pts = parts[i][::-1] if f else parts[i]
+            line.extend(pts[1:] if line else pts)
+        out.append(line)
+    return out
+
+
+def linked_runs(n, link, earliest_first=False):
+    """Pieces 0…n-1 whose ends are linked ({(i, end): (j, end)}, end 0 = start,
+    1 = finish) → runs [(index, flipped)], each walked end to end, in the
+    order of their earliest piece and in that piece's own direction — or,
+    `earliest_first`, run so that the earliest piece comes first (a
+    superroute's first stage is where it starts, whichever way it was mapped)."""
+    seen = [False] * n
 
     def walk(i, flipped):
         run = []
-        while i is not None and not seen[i]:
+        while not seen[i]:
             seen[i] = True
             run.append((i, flipped))
             nxt = link.get((i, 0 if flipped else 1))
@@ -334,26 +350,26 @@ def merge_shared_ends(parts):
 
     runs = []
     # Runs with a free end first (walked from that end), then the closed rings.
-    for i in range(len(parts)):
+    for i in range(n):
         if seen[i]:
             continue
         if (i, 0) not in link:
             runs.append(walk(i, False))
         elif (i, 1) not in link:
             runs.append(walk(i, True))
-    for i in range(len(parts)):
+    for i in range(n):
         if not seen[i]:
             runs.append(walk(i, False))
     out = []
     for run in sorted(runs, key=lambda r: min(i for i, _ in r)):
         first = min(run)
-        if first[1]:  # the earliest chain would run backwards: turn the run
+        if earliest_first:
+            turn = run.index(first) > (len(run) - 1) / 2
+        else:
+            turn = first[1]  # the earliest piece would run backwards
+        if turn:
             run = [(i, not f) for i, f in reversed(run)]
-        line = []
-        for i, f in run:
-            pts = parts[i][::-1] if f else parts[i]
-            line.extend(pts[1:] if line else pts)
-        out.append(line)
+        out.append(run)
     return out
 
 
@@ -391,6 +407,72 @@ def _orient(order_ends):
         flips.append(f)
     flips.reverse()
     return [bool(x) for x in flips], total
+
+
+# Stage ends this close are where one stage hands over to the next — mapped
+# sections rarely meet on the exact node.
+STAGE_JOIN_M = 1000.0
+
+
+def order_stages(ends):
+    """Stages [(start, end)] in member order → [(index, flipped)].
+
+    Stages are not ways: a superroute often lists side trails, loops or
+    variants after its main sections (the Bruce Trail, the Rideau Trail), so
+    the list is never re-chained by distance. Member order stays, with two
+    repairs:
+
+    - a stage listed out of place moves to where it hands over to its
+      neighbours (ends within STAGE_JOIN_M) — one stage at a time, and only
+      while that strictly adds handovers (ties: the order that strays
+      least from member order), only into a gap (never between two stages
+      that already meet), so side trails that meet the line at a section
+      boundary stay where they are listed, and the first member stays
+      first (a side loop from the trailhead — the Rideau Trail's K&P loop —
+      is not "stage 1");
+    - every stage is turned to meet its neighbours (a section mapped in
+      the other direction: the Appalachian Trail's Virginia, the Balcon du
+      Léman stages the GR 5 walks backwards).
+    """
+    n = len(ends)
+    touch = [
+        [
+            i != j and min(_near_m(p, q) for p in ends[i] for q in ends[j]) <= STAGE_JOIN_M
+            for j in range(n)
+        ]
+        for i in range(n)
+    ]
+
+    def handovers(seq):
+        return sum(touch[a][b] for a, b in zip(seq, seq[1:]))
+
+    seq = list(range(n))
+    score = handovers(seq)
+    for _ in range(n * n):
+        best = None
+        for pos, k in enumerate(seq):
+            rest = seq[:pos] + seq[pos + 1 :]
+            for at in range(len(rest) + 1):
+                if at == pos:
+                    continue
+                if 0 < at < len(rest) and touch[rest[at - 1]][rest[at]]:
+                    continue  # never split two stages that already hand over
+                cand = rest[:at] + [k] + rest[at:]
+                if cand[0] != 0:
+                    continue  # the first member is where the trail starts
+                gain = handovers(cand) - score
+                if gain <= 0:
+                    continue
+                # Ties: the order that strays least from member order.
+                stray = sum(abs(i - j) for i, j in enumerate(cand))
+                if best is None or (gain, -stray) > (best[0], -best[2]):
+                    best = (gain, cand, stray)
+        if best is None:
+            break
+        score += best[0]
+        seq = best[1]
+    flips, _ = _orient([ends[i] for i in seq])
+    return list(zip(seq, flips))
 
 
 # Member order is kept unless a geographic chaining is clearly shorter in
@@ -1028,7 +1110,8 @@ def load_relations(raw):
 
 
 def main_ways(rel, relations, seen=None):
-    """A relation's main-role way geometries, its child routes' in place, in member order."""
+    """A relation's main-role ways as (way id, relation id, geometry), its
+    child routes' in place, in member order."""
     seen = seen if seen is not None else set()
     if rel['id'] in seen:
         return []
@@ -1037,7 +1120,8 @@ def main_ways(rel, relations, seen=None):
     for m in rel.get('members', []):
         role = (m.get('role') or '').strip()
         if m.get('type') == 'way' and role in MAIN_ROLES and m.get('geometry'):
-            ways.append([(round(p['lon'], 6), round(p['lat'], 6)) for p in m['geometry'] if p])
+            geom = [(round(p['lon'], 6), round(p['lat'], 6)) for p in m['geometry'] if p]
+            ways.append((m.get('ref'), rel['id'], geom))
         elif m.get('type') == 'relation' and role in MAIN_ROLES and m['ref'] in relations:
             ways.extend(main_ways(relations[m['ref']], relations, seen))
     return ways
@@ -1045,8 +1129,19 @@ def main_ways(rel, relations, seen=None):
 
 def main_parts(rel, relations):
     """A relation's main line (own main-role ways and its child routes'),
-    chained and ordered end-to-end (chain_ways)."""
-    return [p for p in chain_ways(main_ways(rel, relations)) if len(p) >= 2]
+    chained and ordered end-to-end (chain_ways).
+
+    A way that two child routes share (overlapping sections of the Trans
+    Canada Trail) is drawn once: twice, it would chain into a line that runs
+    out and back over itself and count its length twice. A way repeated in
+    ONE relation is kept — that is a deliberate out-and-back (a spur to a
+    summit and back), and member order chains it so."""
+    owner, ways = {}, []
+    for ref, rid, geom in main_ways(rel, relations):
+        if ref is not None and owner.setdefault(ref, rid) != rid:
+            continue
+        ways.append(geom)
+    return [p for p in chain_ways(ways) if len(p) >= 2]
 
 
 def reversed_parts(parts):
@@ -1106,11 +1201,11 @@ def build_trail(rel, relations, sitelinks, regions):
         parts = main_parts(child, relations)
         if parts:
             stages.append((child, parts))
-    # Stages in trail order, each running the trail's way: member order unless
-    # it jumps about (order_pieces), and a section mapped in the other
-    # direction (the Appalachian Trail's Virginia, the Balcon du Léman stages
-    # the GR 5 walks backwards) turned round — its from/to with it.
-    order = order_pieces([(parts[0][0], parts[-1][-1]) for _, parts in stages])
+    # Stages in trail order, each running the trail's way (order_stages): a
+    # section mapped in the other direction (the Appalachian Trail's
+    # Virginia, the Balcon du Léman stages the GR 5 walks backwards) is
+    # turned round — its from/to with it.
+    order = order_stages([(parts[0][0], parts[-1][-1]) for _, parts in stages])
     stage_docs = []
     all_parts = []
     for n, (i, flipped) in enumerate(order, start=1):

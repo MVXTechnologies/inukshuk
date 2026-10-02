@@ -140,9 +140,11 @@ Explore's "Long-distance trails near you" reads OpenStreetMap route relations bu
    alone: its own Wikidata item with ≥ 5 sitelinks (the Appalachian Trail, a stage of the Eastern
    Continental Trail), or its own `website` (the Sentier des Caps, a stage of the Sentier
    National); a section named like its trail ("Sentier National, Charlevoix") never does. A
-   wrapper around one route (plus variants) is one trail. Stages are ordered the same way (member
-   order unless it jumps about), and a stage mapped in the other direction is turned round, its
-   `from`/`to` swapped (the AT's Virginia; the Balcon du Léman stages the GR 5 walks backwards).
+   wrapper around one route (plus variants) is one trail. Stages keep member order (side trails
+   listed after the main sections stay there), except that a stage listed out of place moves
+   into the gap where it hands over to both neighbours (ends ≤ 1 km), and a stage mapped in the
+   other direction is turned round, its `from`/`to` swapped (the AT's Virginia; the Balcon du
+   Léman stages the GR 5 walks backwards). A way shared by two child routes is drawn once.
    A stage named only like its trail (the
    AT's state sections) takes its region's name. Same-name twins with overlapping boxes (a summer
    hike and a winter ski route) merge into one trail with both activities. Countries and regions

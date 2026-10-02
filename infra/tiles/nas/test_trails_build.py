@@ -23,9 +23,11 @@ from trails_build import (  # noqa: E402
     join_gaps,
     level_of,
     line_length_m,
+    main_parts,
     merge_duplicates,
     merge_shared_ends,
     order_pieces,
+    order_stages,
     parse_distance_km,
     popularity,
     simplify,
@@ -296,6 +298,37 @@ class SegmentOrder(unittest.TestCase):
         _, detail, _ = build_trail(rels[9], rels, {}, Regions(None))
         self.assertEqual([s['name'] for s in detail['stages']], ['A', 'B', 'C'])
 
+    def test_side_trail_stages_stay_after_the_main_sections(self):
+        # The Bruce / Rideau Trail pattern: main sections in order, then side
+        # trails that branch off mid-section. Re-chaining by distance would
+        # interleave them; only stages that hand over to each other move.
+        w = self.W
+        side1 = [(-70.7, 47.05), (-70.6, 47.05)]  # off the middle of A
+        side2 = [(-70.7, 47.45), (-70.8, 47.45)]  # off the middle of C
+        rels = {
+            1: stage_rel(1, [w[0], w[1]], name='A'),
+            2: stage_rel(2, [w[2], w[3]], name='B'),
+            3: stage_rel(3, [w[4], w[5]], name='C'),
+            4: stage_rel(4, [side2], name='C side trails'),
+            5: stage_rel(5, [side1], name='A side trails'),
+            9: super_rel(9, [1, 2, 3, 4, 5]),
+        }
+        _, detail, _ = build_trail(rels[9], rels, {}, Regions(None))
+        self.assertEqual(
+            [s['name'] for s in detail['stages']], ['A', 'B', 'C', 'C side trails', 'A side trails']
+        )
+
+    def test_order_stages(self):
+        a, b, c = ((0, 0), (0, 1)), ((0, 1.001), (0, 2)), ((0, 2), (0, 3))
+        # Listed C, A, B: the run A-B-C, C (the earliest) kept nearest the start → C, B, A.
+        self.assertEqual(order_stages([c, a, b]), [(0, True), (2, True), (1, True)])
+        # Two stages whose ends are nowhere near: member order, as mapped.
+        self.assertEqual(order_stages([a, ((5, 5), (5, 6))]), [(0, False), (1, False)])
+        # A side loop starting next to the trail's start (the Rideau Trail's
+        # K&P Blue Loop) is not pulled in front of stage 1.
+        loop = ((0, -0.001), (0.001, -0.001))
+        self.assertEqual(order_stages([a, b, loop]), [(0, False), (1, False), (2, False)])
+
     def test_reversed_superroute_order_still_starts_at_the_first_member(self):
         # Stages listed south→north but each mapped north→south and shuffled:
         # the trail runs the way its first stage sits (first half of the line).
@@ -308,6 +341,36 @@ class SegmentOrder(unittest.TestCase):
         }
         _, detail, _ = build_trail(rels[9], rels, {}, Regions(None))
         self.assertEqual([s['name'] for s in detail['stages']], ['A', 'B', 'C'])
+
+    def test_way_shared_by_two_child_routes_is_drawn_once(self):
+        # Two sections of a wrapper overlap on one way (the Trans Canada
+        # Trail's): chained twice it ran out and back over itself and its
+        # length counted double. A way repeated in ONE relation (a spur out
+        # and back) is deliberate and kept.
+        w = self.W
+        shared = way(77, w[2])
+        rels = {
+            1: rel(1, {'type': 'route', 'route': 'hiking'}, [way(10, w[0]), way(11, w[1]), shared]),
+            2: rel(2, {'type': 'route', 'route': 'hiking'}, [shared, way(12, w[3])]),
+            9: rel(
+                9,
+                {'type': 'route', 'route': 'hiking', 'network': 'rwn', 'name': 'Wrapper'},
+                [{'type': 'relation', 'ref': 1, 'role': ''}, {'type': 'relation', 'ref': 2, 'role': ''}],
+            ),
+        }
+        parts = main_parts(rels[9], rels)
+        self.assertEqual(len(parts), 1)
+        self.assertAlmostEqual(line_length_m(parts[0]) / 1000, 44.5, delta=0.3)
+        spur = [(-70.7, 47.1), (-70.6, 47.1)]
+        out_and_back = rel(
+            3,
+            {'type': 'route', 'route': 'hiking'},
+            [way(10, w[0]), way(13, spur), way(13, spur), way(11, w[1])],
+        )
+        parts = main_parts(out_and_back, {3: out_and_back})
+        self.assertEqual(len(parts), 1)
+        total = line_length_m(w[0]) + line_length_m(w[1]) + 2 * line_length_m(spur)
+        self.assertAlmostEqual(line_length_m(parts[0]), total, delta=1)
 
     def test_thumbnail_follows_the_ordered_line(self):
         w = self.W
