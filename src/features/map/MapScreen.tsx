@@ -1193,18 +1193,17 @@ export function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectId, inspectPoints, inspectTrack, inspectPanelHeight]);
 
-  // Glide the camera back to its pre-selection view when the inspect panel's
-  // or the carousel's ✕ closes it — never when merely switching the selected
-  // trail, and never on a tap elsewhere on the map (that one forgets the
-  // snapshot and leaves the camera where it is, 2.1.1).
-  const restoreCameraOnDeselect = selectionCamera.restore;
+  // Closing the inspect panel or the carousel (✕) leaves the camera where it
+  // is, like a tap elsewhere on the map (owner, 2.1.1): it only forgets the
+  // pre-selection snapshot. useSelectionCamera.restore() stays for a future
+  // "back to where I was" control.
+  const releaseCameraOnDeselect = selectionCamera.forget;
 
   // Item 5: when the heat-spot carousel OPENS, zoom the camera OUT to fit the
   // union of every trail it's showing (not just the focused one) — capturing
   // the pre-open camera first via the SAME useSelectionCamera snapshot the
   // inspect-panel fit above uses, so the carousel's own onClose (which
-  // already calls restoreCameraOnDeselect) glides back to it with no further
-  // wiring. Keyed on heatSelection?.trackIds's REFERENCE — that array is
+  // calls releaseCameraOnDeselect) releases it with no further wiring. Keyed on heatSelection?.trackIds's REFERENCE — that array is
   // reused as-is by onFocus (`{...cur, focusedIdx}`), so this only fires once
   // per carousel "open", not on every focused-card swipe.
   useEffect(() => {
@@ -2812,7 +2811,7 @@ export function MapScreen() {
             units={units}
             onClose={() => {
               inspect(null);
-              restoreCameraOnDeselect();
+              releaseCameraOnDeselect();
             }}
             onScrub={setMarkerAt}
             onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
@@ -2905,7 +2904,7 @@ export function MapScreen() {
             onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
             onClose={() => {
               setHeatSelection(null);
-              restoreCameraOnDeselect();
+              releaseCameraOnDeselect();
             }}
             topInset={insets.top}
           />

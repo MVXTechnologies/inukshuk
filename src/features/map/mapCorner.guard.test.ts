@@ -158,7 +158,14 @@ describe('leaving a focused trail by tapping the map (2.1.1)', () => {
     expect(block).toContain('return;');
     expect(block).not.toMatch(/restore|setPointAt|setStop/);
     // The tap handler never glides the camera back; only the ✕ handlers do.
-    expect(press).not.toMatch(/restoreCameraOnDeselect\(\)/);
-    expect(map.match(/restoreCameraOnDeselect\(\);/g) ?? []).toHaveLength(2);
+    expect(press).not.toMatch(/releaseCameraOnDeselect\(\)/);
+    expect(map.match(/releaseCameraOnDeselect\(\);/g) ?? []).toHaveLength(2);
   });
+});
+
+// Owner (2.1.1): the trail panel's and carousel's ✕ leave the camera where it is.
+it('the ✕ on a trail selection releases the camera snapshot instead of gliding back', () => {
+  const map = readFileSync(join(__dirname, 'MapScreen.tsx'), 'utf8');
+  expect(map).toMatch(/const releaseCameraOnDeselect = selectionCamera\.forget;/);
+  expect(map).not.toMatch(/selectionCamera\.restore\b/);
 });
