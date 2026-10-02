@@ -108,22 +108,24 @@ return filtered by the current targets and dropped every fallback, and tiles
 carried the page bbox instead of their own.
 
 **Neighbour prefetch.** `planPdfDetailTiles(..., {prefetchMargin, maxPrefetch})`
-also plans the ring around the view (half a view per side, up to 12 cells,
-nearest first) at the same level and width, so each ring cell has the key it
-will have once visible. Ring tiles render after the visible ones at
+also plans the ring around the view (one view per side, up to 24 cells, nearest
+first) at the same level and width, so each ring cell has the key it will have
+once visible. Ring tiles render after every visible tile at
 `priority: 'background'`, never show as such, never set the Library's
-"rendering" status, and never pause or report their page on failure. A camera
-move replaces the waiting work with the new snapshot's.
+"rendering" status, and a ring failure never fails, backs off, pauses or
+reports the page. A camera move replaces the waiting work with the new
+snapshot's.
 
 **Budgets (`pdfTileBudgets`).** On-screen textures: 6 Mi pixels visible plus
-6 Mi pixels of fallback. Disk cache: 96 files, 32 Mi pixels during handoff,
-24 Mi pixels after two seconds settled; least-recently-used first, tiles the
-camera no longer wants before the ring. After an OS memory warning
-(`AppState` `memoryWarning`) the ring stops, the renderer no longer holds the
-document between tiles, and the caches shrink (2 Mi
-fallback, 40 files, 8 Mi settled). Displayed files are never deleted. Unmount
-deletes cached files, and native files returned after unmount are deleted
-without adoption.
+6 Mi pixels of fallback. Exact tiles take the visible budget before stand-ins
+(four children cost up to four times the tile they replace); a tile whose
+stand-in loses its place is rendered before the ring. Disk cache: 96 files,
+36 Mi pixels during handoff, 28 Mi pixels after two seconds settled;
+least-recently-used first, tiles the camera no longer wants before the ring.
+After an OS memory warning (`AppState` `memoryWarning`) the ring stops and the
+caches shrink (2 Mi fallback, 40 files, 8 Mi settled). Displayed files are
+never deleted. Unmount deletes cached files, and native files returned after
+unmount are deleted without adoption.
 
 **Held document.** Detail requests pass `holdKey` (the page's file and
 revision). The page keeps that document, its page and layer plan open for

@@ -139,11 +139,11 @@ export function pdfTileBudgets(lowMemory: boolean): PdfTileBudgets {
     visiblePixels: 6 * MI,
     fallbackPixels: 6 * MI,
     maxFallbackTiles: 24,
-    prefetchMargin: 0.5,
-    maxPrefetchTiles: 12,
+    prefetchMargin: 1,
+    maxPrefetchTiles: 24,
     holdDocument: true,
     cacheFiles: 96,
-    handoffPixels: 32 * MI,
-    settledPixels: 24 * MI,
+    handoffPixels: 36 * MI,
+    settledPixels: 28 * MI,
   };
 }

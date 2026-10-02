@@ -261,27 +261,33 @@ export function usePdfDetails(
       const fresh = new Map<string, Detail>();
       const covered = new Set<string>();
       let pixels = 0;
-      for (const target of w.desired) {
-        const exact = w.cache.get(target.key);
-        // A wider raster of the same cell, or its four children from the
-        // previous zoom, show it at least as sharp: zooming out reuses them
-        // instead of rendering (and blurring) again.
-        const cover = exact
-          ? [exact]
-          : target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
-        if (!cover) continue;
-        if (target.prefetch) {
+      // Exact tiles first, then stand-ins with what is left of the budget: a
+      // stand-in (four children) costs up to four times the texture of the
+      // tile it replaces and must never crowd out a tile already rendered.
+      for (const exactPass of [true, false]) {
+        for (const target of w.desired) {
+          const exact = w.cache.get(target.key);
+          if ((exact !== undefined) !== exactPass) continue;
+          // A wider raster of the same cell, or its four children from the
+          // previous zoom, show it at least as sharp: zooming out reuses them
+          // instead of rendering (and blurring) again.
+          const cover = exact
+            ? [exact]
+            : target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
+          if (!cover) continue;
+          if (target.prefetch) {
+            covered.add(target.key);
+            continue;
+          }
+          const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
+          const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
+          // Native result dimensions are authoritative, even if an unexpected
+          // backend result is larger than the planner's requested raster.
+          if (pixels + addedPixels > visiblePixels) continue;
+          pixels += addedPixels;
+          for (const detail of added) fresh.set(detail.cacheKey, detail);
           covered.add(target.key);
-          continue;
         }
-        const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
-        const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
-        // Native result dimensions are authoritative, even if an unexpected
-        // backend result is larger than the planner's requested raster.
-        if (pixels + addedPixels > visiblePixels) continue;
-        pixels += addedPixels;
-        for (const detail of added) fresh.set(detail.cacheKey, detail);
-        covered.add(target.key);
       }
       w.covered = covered;
 
@@ -329,9 +335,18 @@ export function usePdfDetails(
         while (w.epoch === epoch) {
           const snapshot = w.desired;
           const attempted = new Set<string>();
+          // Tiles skipped because stand-ins showed them when their turn came.
+          const stoodIn: Target[] = [];
           const failed = new Set<string>();
           for (const target of snapshot) {
             if (w.desired !== snapshot || w.epoch !== epoch) break;
+            // Visible work before any neighbour: a tile whose stand-in lost
+            // its place is rendered before the ring starts.
+            if (
+              target.prefetch &&
+              stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))
+            )
+              break;
             let dispatched = false;
             try {
               let detail = w.cache.get(target.key);
@@ -340,7 +355,10 @@ export function usePdfDetails(
                 detail = undefined;
               }
               // Already on screen through a wider raster or its children.
-              if (!detail && w.covered.has(target.key)) continue;
+              if (!detail && w.covered.has(target.key)) {
+                stoodIn.push(target);
+                continue;
+              }
               if (!detail) {
                 const statusKey = overlayDetailStatusKey(target.parentId);
                 // A page whose last failure was not its own fault sits out a
@@ -452,17 +470,9 @@ export function usePdfDetails(
               prune(w.budgets.handoffPixels);
             } catch (error) {
               if (target.prefetch) {
-                // A neighbour is a guess. Back the page off quietly and stop
-                // prefetching; its visible tiles report their own errors.
-                if (!isPdfRenderCancellation(error)) {
-                  w.backoff = recordFailure(
-                    w.backoff,
-                    target.parentId,
-                    pageRevision(target),
-                    error instanceof Error ? error.message : String(error),
-                    Date.now(),
-                  ).ledger;
-                }
+                // A neighbour is a guess: its failure never fails, backs off,
+                // pauses or reports the page the visible tiles belong to. Stop
+                // prefetching for this snapshot; the next camera move retries.
                 break;
               }
               const quarantine =
@@ -519,6 +529,9 @@ export function usePdfDetails(
           }
           if (w.epoch !== epoch) return;
           if (w.desired === snapshot) {
+            // A stand-in can lose its place to tiles rendered after it (the
+            // visible budget): go round again for the tile it stood in for.
+            if (stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))) continue;
             for (const statusKey of attempted) {
               if (!failed.has(statusKey)) {
                 useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendered' });

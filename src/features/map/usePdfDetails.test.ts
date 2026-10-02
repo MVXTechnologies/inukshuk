@@ -994,6 +994,40 @@ describe('reusing rendered detail across zooms and pans', () => {
     await v.unmount();
   });
 
+  it('never lets stand-in children crowd a rendered tile out of the visible budget', async () => {
+    // 1 Mi-pixel rasters: four children stand in for one parent at 4 Mi.
+    mockRasterize.mockResolvedValue({ ...raster, widthPx: 1024, heightPx: 1024 });
+    mockPlans.mockReturnValue(children(512));
+    const v = await renderHook(
+      ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+      { initialProps: { b: bounds } },
+    );
+    await flush();
+    expect(mockRasterize).toHaveBeenCalledTimes(4);
+    // Zoomed out: the covered parent first, then three cells that must render.
+    // Children (4 Mi) + three tiles (3 Mi) exceed the 6 Mi visible budget.
+    const parents = [cell(8, 3, 4, 1024), cell(8, 2, 4, 1024), cell(8, 4, 4, 1024)];
+    mockPlans.mockReturnValue([...parents, cell(8, 3, 3, 1024), cell(8, 5, 4, 1024, true)]);
+    await v.rerender({ b: zoomedOut });
+    await flush();
+    // The stood-in parent is rendered before the neighbour ring starts.
+    const order = mockRasterize.mock.calls.slice(4).map(([args]) => args.priority);
+    expect(order).toEqual([
+      'interactive',
+      'interactive',
+      'interactive',
+      'interactive',
+      'background',
+    ]);
+    // Every requested tile ends up on screen; the parent was rendered once the
+    // children no longer fitted beside the tiles the camera asked for.
+    const shown = new Set(ids(v.result.current));
+    for (const key of ['8:3:4:1024', '8:2:4:1024', '8:4:4:1024', '8:3:3:1024'])
+      expect(shown.has(`map:0:tile:${key}`)).toBe(true);
+    expect(mockRasterize).toHaveBeenCalledTimes(9);
+    await v.unmount();
+  });
+
   it('shows the wider raster of the same cell after a small zoom-out', async () => {
     mockPlans.mockReturnValue([cell(8, 3, 4, 1024)]);
     const v = await renderHook(
@@ -1058,11 +1092,23 @@ describe('reusing rendered detail across zooms and pans', () => {
     reportError.mockClear();
     mockRasterize.mockResolvedValueOnce(raster).mockRejectedValueOnce(new Error('ring failed'));
     mockPlans.mockReturnValue([cell(8, 3, 4, 768), cell(8, 4, 4, 768, true)]);
-    const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+    const v = await renderHook(
+      ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+      { initialProps: { b: bounds } },
+    );
     await flush();
     expect(ids(v.result.current)).toEqual(['map:0:tile:8:3:4:768']);
     expect(reportError).not.toHaveBeenCalled();
     expect(mockPauseFailedPage).not.toHaveBeenCalled();
+    expect(useOverlayStatusStore.getState().statuses['map:0:detail']?.phase).not.toBe('failed');
+    // No backoff either: panning onto that cell renders it at once.
+    mockPlans.mockReturnValue([cell(8, 3, 4, 768), cell(8, 4, 4, 768)]);
+    await v.rerender({ b: { ...bounds, east: bounds.east + 0.05 } });
+    await flush();
+    expect(new Set(ids(v.result.current))).toEqual(
+      new Set(['map:0:tile:8:3:4:768', 'map:0:tile:8:4:4:768']),
+    );
+    expect(useOverlayStatusStore.getState().statuses['map:0:detail']?.phase).not.toBe('failed');
     await v.unmount();
   });
 

@@ -8,6 +8,7 @@ import {
   type PdfDetailTileOptions,
 } from './pdfDetail';
 import type { LngLat } from '@core/models';
+import { pdfTileBudgets } from './pdfTileCache';
 
 const corners: [LngLat, LngLat, LngLat, LngLat] = [
   [-71, 47],
@@ -582,6 +583,36 @@ describe('neighbour prefetch ring', () => {
     const newlyVisible = panned.filter((t) => !was.has(t.tileKey));
     expect(newlyVisible.length).toBeGreaterThan(0);
     for (const t of newlyVisible) expect(ring.has(t.tileKey)).toBe(true);
+  });
+
+  it.each([
+    ['east', 1, 0],
+    ['west', -1, 0],
+    ['north', 0, 1],
+    ['south', 0, -1],
+  ])('covers a pan of one whole view %s with the shipped budgets', (_name, dx, dy) => {
+    const budgets = pdfTileBudgets(false);
+    const ringed = plan(view, {
+      prefetchMargin: budgets.prefetchMargin,
+      maxPrefetch: budgets.maxPrefetchTiles,
+    });
+    const have = new Set(ringed.map((t) => t.tileKey));
+    const w = view.east - view.west,
+      h = view.north - view.south;
+    const panned = planPdfDetailTiles(
+      corners,
+      page,
+      {
+        west: view.west + dx * w,
+        east: view.east + dx * w,
+        south: view.south + dy * h,
+        north: view.north + dy * h,
+      },
+      1200,
+    );
+    expect(panned.length).toBeGreaterThan(0);
+    // Every tile of the next view is already rendered or in the ring.
+    for (const t of panned) expect(have.has(t.tileKey)).toBe(true);
   });
 
   it('stays on the page', () => {
