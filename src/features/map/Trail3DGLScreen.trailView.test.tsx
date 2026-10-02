@@ -41,9 +41,6 @@ jest.mock('@data/storage', () => ({
   readFileText: jest.fn(async () => mockGpx.current),
   writeJson: jest.fn(),
 }));
-// The dormant three.js branch (#480): never mounted here, but imported.
-jest.mock('expo-gl', () => ({ GLView: jest.requireActual('react-native').View }));
-jest.mock('expo-three', () => ({ Renderer: jest.fn() }));
 jest.mock('./dem', () => ({
   fetchHeightmap: jest.fn(() => Promise.reject(new Error('offline'))),
 }));
