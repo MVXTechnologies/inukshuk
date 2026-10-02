@@ -1,3 +1,4 @@
+import { MapAreaBottomContext, useWindowEdge } from './mapAreaBottom';
 import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
 import {
@@ -1959,199 +1960,205 @@ export function MapScreen() {
     heatSelection === null &&
     !drawing.ownsBottom;
 
+  const {
+    ref: mapAreaRef,
+    onLayout: onMapAreaLayout,
+    value: mapAreaBottom,
+  } = useWindowEdge('bottom');
   return (
-    <View style={styles.fill}>
-      {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
-        <Map
-          ref={mapRef}
-          style={styles.fill}
-          mapStyle={style}
-          // Owner call (backlog item 1): the bottom-left ornaments — MapLibre's
-          // wordmark logo and the attribution "i" — take too much map. Both are
-          // off; the OSM/Esri data credit lives in Settings → About instead
-          // ("Maps & data"), which is where the store listings also point.
-          attribution={false}
-          logo={false}
-          // We draw our own compass badge (top-left), so hide MapLibre's native
-          // compass — when the map is rotated it otherwise appears in the top-right,
-          // peeking out behind our locate button as a stray dark circle.
-          compass={false}
-          touchPitch
-          onPress={onMapPress}
-          // Weather/marine gesture: long-press opens the forecast card (ECCC
-          // forecast + CHS tides) for that point. Gated on an active weather
-          // OR marine layer (and online) so the map behaves exactly like
-          // today when both are off.
-          onLongPress={(e: {
-            nativeEvent?: { lngLat?: [number, number]; point?: [number, number] };
-          }) => {
-            gesturePause.tap();
-            // Drawing (#502/#503): a long-press on a vertex deletes it, and
-            // never drops a destination pin under the tool.
-            if (drawingRef.current.active) {
-              void drawingRef.current.onMapLongPress(e.nativeEvent?.point ?? null);
-              return;
-            }
-            const lngLat = e.nativeEvent?.lngLat;
-            if (!lngLat) return;
-            const at = { longitude: lngLat[0], latitude: lngLat[1] };
-            // Weather/marine gesture (unchanged): long-press opens the
-            // forecast card (ECCC forecast + CHS tides) for that point.
-            if ((weatherLayer !== null || marineActive) && !offlineOnly) {
-              setForecastAt(at);
-              return;
-            }
-            // Bare map: long-press DROPS THE DESTINATION PIN (#97). This is
-            // the "drop a pin" gesture people already expect, and it costs no
-            // permanent chrome — the only thing it adds to the screen is the
-            // pin and its readout chip, both of which the ✕ clears. A second
-            // long-press moves the pin rather than stacking another.
-            setDestination(at);
-            showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
-          }}
-          // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
-          // every STYLE reload as well as a real (re)mount, and the false
-          // switched the marine chart off, which changed the style, which
-          // reloaded it again — a self-sustaining storm measured at ~15
-          // style reloads per second (perf fix 2026-08-10). The gate exists
-          // to keep getViewState() off an uninitialised native view, and
-          // only an unmounted <Map> can put us back in that state — which
-          // the effect above re-arms.
-          // The style is parsed and the native view exists: safe for
-          // getViewState(). Same reasoning as the region-change hook below.
-          onDidFinishLoadingStyle={() => {
-            setMapLoaded(true);
-            tilt.onStyleLoaded();
-          }}
-          onDidFinishLoadingMap={() => {
-            setMapLoaded(true);
-            // Seed the scale bar: onRegionDidChange is not guaranteed to fire
-            // before the user's first gesture, and a map with no scale on it
-            // until you pan looks broken.
-            void mapRef.current
-              ?.getViewState()
-              .then((vs) => {
-                updateScaleAt(vs.zoom, vs.center[1]);
-                onSettleBearing(vs.bearing);
-                tilt.onSettledPitch(vs.pitch);
-              })
-              .catch(() => undefined); // mid-teardown — the next settle seeds it
-          }}
-          // Feeds the crossfade's "is the staged frame actually drawn yet"
-          // gate (see useWeatherCrossfade). A ref, so this fires at render
-          // rate without costing a React update.
-          onDidFinishRenderingFrameFully={() => {
-            renderedFramesRef.current += 1;
-          }}
-          // Wind particles track the camera at gesture rate; the handler is
-          // only attached while the overlay is live (zero event traffic
-          // otherwise — the map stays byte-identical to a windless one).
-          // Once per camera move (not per frame): marks the PERSON's pans and
-          // zooms so the mascot bubble waits for a still map (#476); the mug
-          // keeps animating regardless. Programmatic moves (follow-my-location
-          // nudges every fix) never count; see gesturePause for the iOS tap
-          // trap this guards against.
-          onRegionWillChange={(e) => {
-            gesturePause.willChange(e.nativeEvent.userInteraction === true);
-          }}
-          onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
-          onRegionDidChange={(e) => {
-            gesturePause.didChange();
-            // A settled camera is proof the native map is up: in some sessions
-            // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
-            // never fires, which left every mapLoaded-gated feature dead — the
-            // offline/map-maker selectors stuck on "Calculating…", no slope or
-            // contour overlays. React bails out when it is already true.
-            setMapLoaded(true);
-            setRegionVersion((v) => v + 1);
-            // The selected drawing point's grip follows the camera (#502/#503).
-            drawingRef.current.onCameraSettled();
-            // The map-maker frame's scale and bbox come straight off the
-            // settled camera (#349) — it is the only source of truth for both.
-            if (makeMapOpen) readEditorCamera();
-            // Settled bounds for the marine chart's re-anchor check (the
-            // wind layer keeps its own copy behind the windEnabled gate).
-            setSettledBounds(windBoundsOf(e.nativeEvent));
-            updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
-            // Settled bearing → the badge's red north needle, and the
-            // snap-back detent for a rotation too small to have been meant.
-            onSettleBearing(e.nativeEvent.bearing);
-            // Settled pitch → the tilted-map relief pass (#480).
-            tilt.onSettledPitch(e.nativeEvent.pitch);
-            // Settled centre → mapStore (wave B): resolves the effective
-            // forecast model and the radar rows' "Canada only" hint. Same
-            // render batch as the version bump above — no extra re-render.
-            setMapCenter({
-              latitude: e.nativeEvent.center[1],
-              longitude: e.nativeEvent.center[0],
-            });
-            void refreshBounds();
-            if (windEnabled) onWindRegionDidChange(e);
-          }}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            windSizeRef.current = { width, height };
-            // A camera state seeded (or streamed) before this layout carries
-            // a stale size; re-stamp it so the particle projection can never
-            // be left scaled to a zero-width viewport.
-            if (windViewRef.current !== null) {
-              windViewRef.current = { ...windViewRef.current, width, height };
-            }
-            setWindLayout((prev) =>
-              prev.width === width && prev.height === height ? prev : { width, height },
-            );
-            onMapLayout(e);
-          }}
-        >
-          <Camera
-            ref={cameraRef}
-            // A cold launch mounts <Map>/<Camera> fresh;
-            // without a centre here MapLibre defaults to [0,0] (null island,
-            // "middle of the Atlantic"). Seed from the live location when we
-            // have one, else the persisted last known position. Once the first
-            // fix lands, follow mode (trackUserLocation below, on by default)
-            // flies the camera to it natively — no manual fly needed, and none
-            // wanted if the user already panned away (which clears followUser).
-            initialViewState={{
-              zoom: 14,
-              ...(initialCenter ? { center: initialCenter } : {}),
+    <MapAreaBottomContext.Provider value={mapAreaBottom}>
+      <View style={styles.fill} ref={mapAreaRef} onLayout={onMapAreaLayout}>
+        {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
+          <Map
+            ref={mapRef}
+            style={styles.fill}
+            mapStyle={style}
+            // Owner call (backlog item 1): the bottom-left ornaments — MapLibre's
+            // wordmark logo and the attribution "i" — take too much map. Both are
+            // off; the OSM/Esri data credit lives in Settings → About instead
+            // ("Maps & data"), which is where the store listings also point.
+            attribution={false}
+            logo={false}
+            // We draw our own compass badge (top-left), so hide MapLibre's native
+            // compass — when the map is rotated it otherwise appears in the top-right,
+            // peeking out behind our locate button as a stray dark circle.
+            compass={false}
+            touchPitch
+            onPress={onMapPress}
+            // Weather/marine gesture: long-press opens the forecast card (ECCC
+            // forecast + CHS tides) for that point. Gated on an active weather
+            // OR marine layer (and online) so the map behaves exactly like
+            // today when both are off.
+            onLongPress={(e: {
+              nativeEvent?: { lngLat?: [number, number]; point?: [number, number] };
+            }) => {
+              gesturePause.tap();
+              // Drawing (#502/#503): a long-press on a vertex deletes it, and
+              // never drops a destination pin under the tool.
+              if (drawingRef.current.active) {
+                void drawingRef.current.onMapLongPress(e.nativeEvent?.point ?? null);
+                return;
+              }
+              const lngLat = e.nativeEvent?.lngLat;
+              if (!lngLat) return;
+              const at = { longitude: lngLat[0], latitude: lngLat[1] };
+              // Weather/marine gesture (unchanged): long-press opens the
+              // forecast card (ECCC forecast + CHS tides) for that point.
+              if ((weatherLayer !== null || marineActive) && !offlineOnly) {
+                setForecastAt(at);
+                return;
+              }
+              // Bare map: long-press DROPS THE DESTINATION PIN (#97). This is
+              // the "drop a pin" gesture people already expect, and it costs no
+              // permanent chrome — the only thing it adds to the screen is the
+              // pin and its readout chip, both of which the ✕ clears. A second
+              // long-press moves the pin rather than stacking another.
+              setDestination(at);
+              showSnack(`Destination set — ${formatLatLng(at.latitude, at.longitude)}`);
             }}
-            // "Rotate map with heading" setting: the map bearing always comes
-            // from OUR filtered heading (see useHeadingCamera → useCompass),
-            // whether or not we are following the user, eased over a short
-            // linear transition so successive updates glide instead of ticking.
-            // MapLibre normalizes bearing transitions to the shortest arc, so
-            // 359°→1° turns 2°, not 358°. undefined when the setting is off.
-            //
-            // We deliberately do NOT use trackUserLocation="heading": that maps
-            // to MapLibre's native CameraMode.TRACKING_COMPASS, which drives the
-            // bearing from the platform's *raw* compass — the unfiltered signal
-            // this whole module exists to tame, so the map would shake even
-            // while the needle sat still. "default" (CameraMode.TRACKING) keeps
-            // the centre-on-user behaviour and leaves the bearing to us.
-            bearing={headingForCamera}
-            {...(headingForCamera !== undefined
-              ? { duration: 150, easing: 'linear' as const }
-              : {})}
-            trackUserLocation={followUser ? 'default' : undefined}
-            onTrackUserLocationChange={(e) => {
-              if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
+            // NOT onWillStartLoadingMap -> setMapLoaded(false): that fires on
+            // every STYLE reload as well as a real (re)mount, and the false
+            // switched the marine chart off, which changed the style, which
+            // reloaded it again — a self-sustaining storm measured at ~15
+            // style reloads per second (perf fix 2026-08-10). The gate exists
+            // to keep getViewState() off an uninitialised native view, and
+            // only an unmounted <Map> can put us back in that state — which
+            // the effect above re-arms.
+            // The style is parsed and the native view exists: safe for
+            // getViewState(). Same reasoning as the region-change hook below.
+            onDidFinishLoadingStyle={() => {
+              setMapLoaded(true);
+              tilt.onStyleLoaded();
             }}
-            // 0, the lowest MapLibre allows: at z1 the world is ~1,000 pt wide,
-            // so a phone could never show more than part of it ("half of the
-            // world isn't visible when fully zoomed out", owner 2026-09-28).
-            // At z0 it is ~512 pt: the whole globe top to bottom.
-            minZoom={0}
-            // Camera cap; the raster SOURCES cap their tile-fetch zoom lower
-            // (see NATIVE_MAX_ZOOM in mapStyle.ts) so zooming past each
-            // service's real data — or past an offline pack's deepest stored
-            // zoom — overscales the last real tiles (blurry) instead of
-            // rendering Esri's "Map data not yet available" placeholders or
-            // blank offline tiles.
-            maxZoom={18}
-          />
+            onDidFinishLoadingMap={() => {
+              setMapLoaded(true);
+              // Seed the scale bar: onRegionDidChange is not guaranteed to fire
+              // before the user's first gesture, and a map with no scale on it
+              // until you pan looks broken.
+              void mapRef.current
+                ?.getViewState()
+                .then((vs) => {
+                  updateScaleAt(vs.zoom, vs.center[1]);
+                  onSettleBearing(vs.bearing);
+                  tilt.onSettledPitch(vs.pitch);
+                })
+                .catch(() => undefined); // mid-teardown — the next settle seeds it
+            }}
+            // Feeds the crossfade's "is the staged frame actually drawn yet"
+            // gate (see useWeatherCrossfade). A ref, so this fires at render
+            // rate without costing a React update.
+            onDidFinishRenderingFrameFully={() => {
+              renderedFramesRef.current += 1;
+            }}
+            // Wind particles track the camera at gesture rate; the handler is
+            // only attached while the overlay is live (zero event traffic
+            // otherwise — the map stays byte-identical to a windless one).
+            // Once per camera move (not per frame): marks the PERSON's pans and
+            // zooms so the mascot bubble waits for a still map (#476); the mug
+            // keeps animating regardless. Programmatic moves (follow-my-location
+            // nudges every fix) never count; see gesturePause for the iOS tap
+            // trap this guards against.
+            onRegionWillChange={(e) => {
+              gesturePause.willChange(e.nativeEvent.userInteraction === true);
+            }}
+            onRegionIsChanging={windEnabled ? onWindRegionIsChanging : undefined}
+            onRegionDidChange={(e) => {
+              gesturePause.didChange();
+              // A settled camera is proof the native map is up: in some sessions
+              // (seen on iOS in the mountains, 2026-09-28) onDidFinishLoadingMap
+              // never fires, which left every mapLoaded-gated feature dead — the
+              // offline/map-maker selectors stuck on "Calculating…", no slope or
+              // contour overlays. React bails out when it is already true.
+              setMapLoaded(true);
+              setRegionVersion((v) => v + 1);
+              // The selected drawing point's grip follows the camera (#502/#503).
+              drawingRef.current.onCameraSettled();
+              // The map-maker frame's scale and bbox come straight off the
+              // settled camera (#349) — it is the only source of truth for both.
+              if (makeMapOpen) readEditorCamera();
+              // Settled bounds for the marine chart's re-anchor check (the
+              // wind layer keeps its own copy behind the windEnabled gate).
+              setSettledBounds(windBoundsOf(e.nativeEvent));
+              updateScaleAt(e.nativeEvent.zoom, e.nativeEvent.center[1]);
+              // Settled bearing → the badge's red north needle, and the
+              // snap-back detent for a rotation too small to have been meant.
+              onSettleBearing(e.nativeEvent.bearing);
+              // Settled pitch → the tilted-map relief pass (#480).
+              tilt.onSettledPitch(e.nativeEvent.pitch);
+              // Settled centre → mapStore (wave B): resolves the effective
+              // forecast model and the radar rows' "Canada only" hint. Same
+              // render batch as the version bump above — no extra re-render.
+              setMapCenter({
+                latitude: e.nativeEvent.center[1],
+                longitude: e.nativeEvent.center[0],
+              });
+              void refreshBounds();
+              if (windEnabled) onWindRegionDidChange(e);
+            }}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              windSizeRef.current = { width, height };
+              // A camera state seeded (or streamed) before this layout carries
+              // a stale size; re-stamp it so the particle projection can never
+              // be left scaled to a zero-width viewport.
+              if (windViewRef.current !== null) {
+                windViewRef.current = { ...windViewRef.current, width, height };
+              }
+              setWindLayout((prev) =>
+                prev.width === width && prev.height === height ? prev : { width, height },
+              );
+              onMapLayout(e);
+            }}
+          >
+            <Camera
+              ref={cameraRef}
+              // A cold launch mounts <Map>/<Camera> fresh;
+              // without a centre here MapLibre defaults to [0,0] (null island,
+              // "middle of the Atlantic"). Seed from the live location when we
+              // have one, else the persisted last known position. Once the first
+              // fix lands, follow mode (trackUserLocation below, on by default)
+              // flies the camera to it natively — no manual fly needed, and none
+              // wanted if the user already panned away (which clears followUser).
+              initialViewState={{
+                zoom: 14,
+                ...(initialCenter ? { center: initialCenter } : {}),
+              }}
+              // "Rotate map with heading" setting: the map bearing always comes
+              // from OUR filtered heading (see useHeadingCamera → useCompass),
+              // whether or not we are following the user, eased over a short
+              // linear transition so successive updates glide instead of ticking.
+              // MapLibre normalizes bearing transitions to the shortest arc, so
+              // 359°→1° turns 2°, not 358°. undefined when the setting is off.
+              //
+              // We deliberately do NOT use trackUserLocation="heading": that maps
+              // to MapLibre's native CameraMode.TRACKING_COMPASS, which drives the
+              // bearing from the platform's *raw* compass — the unfiltered signal
+              // this whole module exists to tame, so the map would shake even
+              // while the needle sat still. "default" (CameraMode.TRACKING) keeps
+              // the centre-on-user behaviour and leaves the bearing to us.
+              bearing={headingForCamera}
+              {...(headingForCamera !== undefined
+                ? { duration: 150, easing: 'linear' as const }
+                : {})}
+              trackUserLocation={followUser ? 'default' : undefined}
+              onTrackUserLocationChange={(e) => {
+                if (e.nativeEvent.trackUserLocation === null) setFollowUser(false);
+              }}
+              // 0, the lowest MapLibre allows: at z1 the world is ~1,000 pt wide,
+              // so a phone could never show more than part of it ("half of the
+              // world isn't visible when fully zoomed out", owner 2026-09-28).
+              // At z0 it is ~512 pt: the whole globe top to bottom.
+              minZoom={0}
+              // Camera cap; the raster SOURCES cap their tile-fetch zoom lower
+              // (see NATIVE_MAX_ZOOM in mapStyle.ts) so zooming past each
+              // service's real data — or past an offline pack's deepest stored
+              // zoom — overscales the last real tiles (blurry) instead of
+              // rendering Esri's "Map data not yet available" placeholders or
+              // blank offline tiles.
+              maxZoom={18}
+            />
 
-          {/* Live drapes, mounted as MapView children rather than style-JSON
+            {/* Live drapes, mounted as MapView children rather than style-JSON
               layers (perf fix 2026-08-10). A changed `mapStyle` object makes
               maplibre-react-native reload the ENTIRE native style — every
               source rebuilt, every tile refetched, the vector coastlines and
@@ -2165,87 +2172,87 @@ export function MapScreen() {
               height that drape must occupy (see `@core/geo/mapLayerStack`).
               The PDF overlays and trails below carry no anchor at all, which
               is what keeps them on top of everything. */}
-          {/* The tilted-map relief pass (#480): adopts the style's own hidden
+            {/* The tilted-map relief pass (#480): adopts the style's own hidden
               layer of that id (right above the base hillshade) and sets its
               visibility/exaggeration from the settled pitch. */}
-          {tilt.layer}
-          {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
-          {weatherLayer !== null && !offlineOnly && (
-            <WeatherDrapeLayers
-              fade={weatherFade}
-              frames={weatherDrape.frames}
-              // Wind runs LIGHTER than every other weather layer, and
-              // deliberately so: it is the only layer that also draws its own
-              // ink on top. The value and the ladder of everything tried before
-              // it live with the constant in @core/weather/windLook.
-              opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : WEATHER_DRAPE_OPACITY}
-            />
-          )}
-          {marineActive && (
-            <MarineSoundingsLayer
-              soundings={overlayTiles !== null ? (marineChart.chart?.soundings ?? null) : null}
-            />
-          )}
+            {tilt.layer}
+            {marineActive && <MarineDrapeLayer drape={marineChart.chart?.drape ?? null} />}
+            {weatherLayer !== null && !offlineOnly && (
+              <WeatherDrapeLayers
+                fade={weatherFade}
+                frames={weatherDrape.frames}
+                // Wind runs LIGHTER than every other weather layer, and
+                // deliberately so: it is the only layer that also draws its own
+                // ink on top. The value and the ladder of everything tried before
+                // it live with the constant in @core/weather/windLook.
+                opacity={weatherLayer === 'wind' ? WIND_DRAPE_OPACITY : WEATHER_DRAPE_OPACITY}
+              />
+            )}
+            {marineActive && (
+              <MarineSoundingsLayer
+                soundings={overlayTiles !== null ? (marineChart.chart?.soundings ?? null) : null}
+              />
+            )}
 
-          {showPdfOverlay &&
-            overlays.map((o) => (
-              <Fragment key={o.id}>
-                <ImageSource id={o.id} url={o.imageUri} coordinates={o.coordinates}>
-                  {pdfOverviewLayer(o.id)}
-                </ImageSource>
-                {pdfDetails
-                  .filter((d) => (d.parentId ?? d.id) === o.id)
-                  .map((d) => (
-                    <ImageSource
-                      key={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
-                      id={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
-                      url={d.imageUri}
-                      coordinates={d.coordinates}
-                    >
-                      {pdfDetailLayer(`${d.id}-detail-${fnv1a32(d.imageUri)}`)}
-                    </ImageSource>
-                  ))}
-              </Fragment>
-            ))}
+            {showPdfOverlay &&
+              overlays.map((o) => (
+                <Fragment key={o.id}>
+                  <ImageSource id={o.id} url={o.imageUri} coordinates={o.coordinates}>
+                    {pdfOverviewLayer(o.id)}
+                  </ImageSource>
+                  {pdfDetails
+                    .filter((d) => (d.parentId ?? d.id) === o.id)
+                    .map((d) => (
+                      <ImageSource
+                        key={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                        id={`${d.id}-detail-${fnv1a32(d.imageUri)}`}
+                        url={d.imageUri}
+                        coordinates={d.coordinates}
+                      >
+                        {pdfDetailLayer(`${d.id}-detail-${fnv1a32(d.imageUri)}`)}
+                      </ImageSource>
+                    ))}
+                </Fragment>
+              ))}
 
-          {/* Terrain overlays sit UNDER the PDF maps on both base maps
+            {/* Terrain overlays sit UNDER the PDF maps on both base maps
               (#492): the slope raster over the relief and under the names,
               on-device contours (the raster fallback) with the contours.
               Their heights come from `@core/map/layerSlots`, not from this
               mount order. */}
-          {terrainOverlays2d.slope && (
-            <ImageSource
-              id="slope2d"
-              url={terrainOverlays2d.slope.uri}
-              coordinates={terrainOverlays2d.slope.coordinates}
-            >
-              {SLOPE_LAYER}
-            </ImageSource>
-          )}
-          {/* On-device contours (raster fallback only — both vector bases
+            {terrainOverlays2d.slope && (
+              <ImageSource
+                id="slope2d"
+                url={terrainOverlays2d.slope.uri}
+                coordinates={terrainOverlays2d.slope.coordinates}
+              >
+                {SLOPE_LAYER}
+              </ImageSource>
+            )}
+            {/* On-device contours (raster fallback only — both vector bases
               draw the served ones in the style). They must contrast with the
               ground: white over satellite imagery (mostly dark), the warm
               brown over the light map/relief basemaps — each with a thin
               opposite-shade halo so lines stay readable across mixed terrain
               (line layers can't sample the raster beneath, so this is
               per-basemap, not per-pixel). */}
-          {terrainOverlays2d.contours && (
-            <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
-              {contourLayerSet.minor}
-            </GeoJSONSource>
-          )}
-          {terrainOverlays2d.contours && (
-            <GeoJSONSource id="contours2d-major" data={terrainOverlays2d.contours.major}>
-              {contourLayerSet.major}
-            </GeoJSONSource>
-          )}
+            {terrainOverlays2d.contours && (
+              <GeoJSONSource id="contours2d-minor" data={terrainOverlays2d.contours.minor}>
+                {contourLayerSet.minor}
+              </GeoJSONSource>
+            )}
+            {terrainOverlays2d.contours && (
+              <GeoJSONSource id="contours2d-major" data={terrainOverlays2d.contours.major}>
+                {contourLayerSet.major}
+              </GeoJSONSource>
+            )}
 
-          {/* Drawn areas (#503) and the shape being drawn (#502/#503): user
+            {/* Drawn areas (#503) and the shape being drawn (#502/#503): user
               content, above the PDF maps and terrain overlays, at the
               trails' anchor (see useMapDrawing / DrawLayers). */}
-          {drawing.mapLayers}
+            {drawing.mapLayers}
 
-          {/* The personal heatmap (#470), over EVERY qualifying trail in the
+            {/* The personal heatmap (#470), over EVERY qualifying trail in the
               library while the toggle is on (independent of visibility
               mode/folder filters/activeTrackIds — see qualifiesForHeat):
               a soft glow from the coarse pass grid when zoomed out, fading
@@ -2255,18 +2262,18 @@ export function MapScreen() {
               how many trails or fixes there are, and are serialized once per
               data change. Drawn BEFORE the trail lines below so they sit
               beneath them. */}
-          {heatOn && heatGlowJson && (
-            <GeoJSONSource id="tracks-heat-glow-points" data={heatGlowJson}>
-              {heatLayerSet.glow}
-            </GeoJSONSource>
-          )}
-          {heatOn && heatLinesJson && (
-            <GeoJSONSource id="tracks-heat-lines-source" data={heatLinesJson}>
-              {heatLayerSet.lines}
-            </GeoJSONSource>
-          )}
+            {heatOn && heatGlowJson && (
+              <GeoJSONSource id="tracks-heat-glow-points" data={heatGlowJson}>
+                {heatLayerSet.glow}
+              </GeoJSONSource>
+            )}
+            {heatOn && heatLinesJson && (
+              <GeoJSONSource id="tracks-heat-lines-source" data={heatLinesJson}>
+                {heatLayerSet.lines}
+              </GeoJSONSource>
+            )}
 
-          {/* Trail lines: every shown trail as a thin, clean, category-
+            {/* Trail lines: every shown trail as a thin, clean, category-
               coloured LineString — no glow layer, no width stepping (see
               useTrackHeat). When a trail is selected (a tap-selected heat
               spot OR the inspect panel), every trail from THIS shown-trails
@@ -2278,15 +2285,15 @@ export function MapScreen() {
               onMapPress below to open the HeatPointCarousel; the per-trail
               onPress this replaced is gone for good — the map-level hit-test
               (heatAt) is the only way in now. */}
-          {showTrackOverlays && linesJson && (
-            <GeoJSONSource id="tracks-lines" data={linesJson}>
-              {hasSelection
-                ? TRACKS_LINES_LAYERS[lineOutline].hidden
-                : TRACKS_LINES_LAYERS[lineOutline].shown}
-            </GeoJSONSource>
-          )}
+            {showTrackOverlays && linesJson && (
+              <GeoJSONSource id="tracks-lines" data={linesJson}>
+                {hasSelection
+                  ? TRACKS_LINES_LAYERS[lineOutline].hidden
+                  : TRACKS_LINES_LAYERS[lineOutline].shown}
+              </GeoJSONSource>
+            )}
 
-          {/* Focused-trail highlight: the selected trail's own geometry
+            {/* Focused-trail highlight: the selected trail's own geometry
               (useTrackHeat.lineFor), drawn independent of whether it's in
               the shown-trails source above — this is what makes a hot-spot
               carousel tap "clickable" even with traces hidden entirely
@@ -2294,108 +2301,108 @@ export function MapScreen() {
               showTrackOverlays: a selection can only exist from a tap that
               already required trail overlays / the heatmap, so this layer
               simply follows whether there's a trail to draw. */}
-          {focusLine && (
-            <GeoJSONSource id="focused-trail-line" data={focusLine}>
-              {FOCUSED_TRAIL_LAYERS[lineOutline]}
-            </GeoJSONSource>
-          )}
+            {focusLine && (
+              <GeoJSONSource id="focused-trail-line" data={focusLine}>
+                {FOCUSED_TRAIL_LAYERS[lineOutline]}
+              </GeoJSONSource>
+            )}
 
-          {/* A long-distance trail shown from Explore (#467). */}
-          {shownTrail !== null && <ShownTrailLayers shown={shownTrail} />}
+            {/* A long-distance trail shown from Explore (#467). */}
+            {shownTrail !== null && <ShownTrailLayers shown={shownTrail} />}
 
-          {/* Ring marker at the tapped heat spot, shown only while the
+            {/* Ring marker at the tapped heat spot, shown only while the
               carousel is open — same one-feature GeoJSONSource + circle
               pattern as the inspect-marker dot below. */}
-          {heatSelection && (
-            <GeoJSONSource
-              id="heat-tap-marker"
-              data={{
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: [heatSelection.lngLat.lng, heatSelection.lngLat.lat],
-                },
-                properties: {},
-              }}
-            >
-              <Layer
-                id="heat-tap-marker-ring"
-                beforeId={MARKERS_ANCHOR}
-                type="circle"
-                paint={{
-                  'circle-radius': 9,
-                  'circle-color': 'transparent',
-                  'circle-stroke-width': 2.5,
-                  'circle-stroke-color': theme.colors.primary,
+            {heatSelection && (
+              <GeoJSONSource
+                id="heat-tap-marker"
+                data={{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [heatSelection.lngLat.lng, heatSelection.lngLat.lat],
+                  },
+                  properties: {},
                 }}
-              />
-            </GeoJSONSource>
-          )}
+              >
+                <Layer
+                  id="heat-tap-marker-ring"
+                  beforeId={MARKERS_ANCHOR}
+                  type="circle"
+                  paint={{
+                    'circle-radius': 9,
+                    'circle-color': 'transparent',
+                    'circle-stroke-width': 2.5,
+                    'circle-stroke-color': theme.colors.primary,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
 
-          {markerAt && (
-            <GeoJSONSource
-              id="inspect-marker"
-              data={{
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [markerAt.longitude, markerAt.latitude] },
-                properties: {},
-              }}
-            >
-              {INSPECT_MARKER_LAYER}
-            </GeoJSONSource>
-          )}
+            {markerAt && (
+              <GeoJSONSource
+                id="inspect-marker"
+                data={{
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: [markerAt.longitude, markerAt.latitude] },
+                  properties: {},
+                }}
+              >
+                {INSPECT_MARKER_LAYER}
+              </GeoJSONSource>
+            )}
 
-          {trailFeature && (
-            <GeoJSONSource id="trail" data={trailFeature}>
-              {LIVE_TRAIL_LAYERS}
-            </GeoJSONSource>
-          )}
+            {trailFeature && (
+              <GeoJSONSource id="trail" data={trailFeature}>
+                {LIVE_TRAIL_LAYERS}
+              </GeoJSONSource>
+            )}
 
-          {/* Waypoint pins (saved standalone ones always; live ones while a
+            {/* Waypoint pins (saved standalone ones always; live ones while a
               recording session is up). Visual only — tap handling is done at
               the map level (onMapPress); MapLibre's <Marker onPress> doesn't
               fire on Android. */}
-          {visiblePins.map((w) => (
-            <Marker
-              key={`${w.source}-${w.id}`}
-              id={`${w.source}-${w.id}`}
-              lngLat={[w.longitude, w.latitude]}
-              anchor="bottom"
-            >
-              <WaypointMarkerPin
-                icon={w.source === 'saved' ? w.icon : undefined}
-                hasPhoto={!!w.photoUri}
-                label={w.label}
-                selected={viewWp?.id === w.id && viewWp.source === w.source}
-              />
-            </Marker>
-          ))}
+            {visiblePins.map((w) => (
+              <Marker
+                key={`${w.source}-${w.id}`}
+                id={`${w.source}-${w.id}`}
+                lngLat={[w.longitude, w.latitude]}
+                anchor="bottom"
+              >
+                <WaypointMarkerPin
+                  icon={w.source === 'saved' ? w.icon : undefined}
+                  hasPhoto={!!w.photoUri}
+                  label={w.label}
+                  selected={viewWp?.id === w.id && viewWp.source === w.source}
+                />
+              </Marker>
+            ))}
 
-          {/* Destination pin (#97). Visual only, like the waypoint pins —
+            {/* Destination pin (#97). Visual only, like the waypoint pins —
               it is cleared from the chip's ✕, never by tapping the map, so a
               destination survives every other tap interaction. */}
-          {destination !== null && (
-            <Marker
-              id="destination"
-              lngLat={[destination.longitude, destination.latitude]}
-              anchor="bottom"
-            >
-              <DestinationMarkerPin />
-            </Marker>
-          )}
+            {destination !== null && (
+              <Marker
+                id="destination"
+                lngLat={[destination.longitude, destination.latitude]}
+                anchor="bottom"
+              >
+                <DestinationMarkerPin />
+              </Marker>
+            )}
 
-          {/* Place-search highlight (#496): where the last pick landed. */}
-          {searchHit !== null && (
-            <Marker
-              id="search-hit"
-              lngLat={[searchHit.longitude, searchHit.latitude]}
-              anchor="bottom"
-            >
-              <SearchHitMarker place={searchHit} />
-            </Marker>
-          )}
+            {/* Place-search highlight (#496): where the last pick landed. */}
+            {searchHit !== null && (
+              <Marker
+                id="search-hit"
+                lngLat={[searchHit.longitude, searchHit.latitude]}
+                anchor="bottom"
+              >
+                <SearchHitMarker place={searchHit} />
+              </Marker>
+            )}
 
-          {/* Tap-anywhere readout chip (wave A item 7, unified by wave D
+            {/* Tap-anywhere readout chip (wave A item 7, unified by wave D
               §D1/D-5): ONE compact Windy-style chip at the tapped spot —
               the weather value pinned to the scrubbed TIME, the surveyed
               NONNA depth in marine mode, both stacked when both are on, and
@@ -2404,167 +2411,167 @@ export function MapScreen() {
               — dismissal (and the coordinates copy) is hit-tested in
               onMapPress (Marker onPress doesn't fire on Android, the
               waypoint-pin precedent). */}
-          {pointAt !== null && (
-            <Marker id="map-point" lngLat={[pointAt.longitude, pointAt.latitude]} anchor="bottom">
-              {/* #232 — the chip is the hub for the two things you can do
+            {pointAt !== null && (
+              <Marker id="map-point" lngLat={[pointAt.longitude, pointAt.latitude]} anchor="bottom">
+                {/* #232 — the chip is the hub for the two things you can do
                   with a point you can see. Compact, in the chip, gone with
                   it; the row's taps arrive through onMapPress above. */}
-              <MapPointChip
-                accessibilityLabel="Map point readout"
-                actions={{
-                  onNavigate: () => runPointChipHit('navigate', pointAt),
-                  onAddWaypoint: () => runPointChipHit('waypoint', pointAt),
-                  onClaimTouch: () => {
-                    chipTouchAtRef.current = Date.now();
-                  },
-                }}
-              >
-                {weatherLayer !== null && !offlineOnly && (
-                  <WeatherPointLine
-                    at={pointAt}
-                    layer={weatherLayer}
-                    model={weatherModel}
-                    timeIso={weatherTl.timeParam}
-                    selectedMs={weatherTl.selectedMs}
-                  />
-                )}
-                {marineActive && <DepthPointLine at={pointAt} />}
-                {/* Coordinates (#97): promoted from "only on the bare map" to
+                <MapPointChip
+                  accessibilityLabel="Map point readout"
+                  actions={{
+                    onNavigate: () => runPointChipHit('navigate', pointAt),
+                    onAddWaypoint: () => runPointChipHit('waypoint', pointAt),
+                    onClaimTouch: () => {
+                      chipTouchAtRef.current = Date.now();
+                    },
+                  }}
+                >
+                  {weatherLayer !== null && !offlineOnly && (
+                    <WeatherPointLine
+                      at={pointAt}
+                      layer={weatherLayer}
+                      model={weatherModel}
+                      timeIso={weatherTl.timeParam}
+                      selectedMs={weatherTl.selectedMs}
+                    />
+                  )}
+                  {marineActive && <DepthPointLine at={pointAt} />}
+                  {/* Coordinates (#97): promoted from "only on the bare map" to
                     ALWAYS — a nav app that hides where you just tapped behind
                     a weather value is answering the wrong question. This is
                     the app's one coordinate readout for a point you can see;
                     the map CENTRE's readout lives in the coordinates dialog
                     rather than in a second competing chip. */}
-                <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
-                {/* How far and which way from where you stand (#232) — the
+                  <MapPointLine text={formatLatLng(pointAt.latitude, pointAt.longitude)} />
+                  {/* How far and which way from where you stand (#232) — the
                     same two numbers the destination chip shows, straight off
                     the current fix. Silently absent without one. */}
-                {pointReadout !== null && (
-                  <MapPointLine
-                    text={`${pointReadout.distance}  ·  ${pointReadout.bearing}`}
-                    muted
-                  />
-                )}
-                <MapPointLine text="Tap to copy" muted />
-              </MapPointChip>
-            </Marker>
-          )}
+                  {pointReadout !== null && (
+                    <MapPointLine
+                      text={`${pointReadout.distance}  ·  ${pointReadout.bearing}`}
+                      muted
+                    />
+                  )}
+                  <MapPointLine text="Tap to copy" muted />
+                </MapPointChip>
+              </Marker>
+            )}
 
-          {/* Direction cone under the dot. The built-in `heading` arrow was
+            {/* Direction cone under the dot. The built-in `heading` arrow was
               dropped: it points along the GPS course (garbage while standing
               still); the cone tracks the smoothed compass instead. */}
-          <HeadingCone location={location} />
-          {/* Revamp puck, replacing MapLibre's default one (children do):
+            <HeadingCone location={location} />
+            {/* Revamp puck, replacing MapLibre's default one (children do):
               halo, ring and dot in the scheme's puck tokens, plus the amber
               uncertainty ring on a weak signal while recording. */}
-          <UserLocation animated>
-            <PuckLayers
-              weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
-            />
-          </UserLocation>
-        </Map>
-      )}
+            <UserLocation animated>
+              <PuckLayers
+                weakAccuracyM={status !== 'idle' && gpsQuality === 'weak' ? lastAccuracyM : null}
+              />
+            </UserLocation>
+          </Map>
+        )}
 
-      {/* Wind particle overlay (weather M3): a transparent GLView riding
+        {/* Wind particle overlay (weather M3): a transparent GLView riding
           absolute-fill over the 2D map, under every piece of chrome below.
           Touches pass straight through (pointerEvents none). One gate —
           windEnabled — kills the whole thing; degradation without network
           is the gradient drape alone. */}
-      {windEnabled && (
-        <WindParticleLayer
-          model={effectiveModel}
-          timeIso={weatherTl.timeParam}
-          viewRef={windViewRef}
-          interacting={windInteracting}
-          settledBounds={windSettledBounds}
-        />
-      )}
+        {windEnabled && (
+          <WindParticleLayer
+            model={effectiveModel}
+            timeIso={weatherTl.timeParam}
+            viewRef={windViewRef}
+            interacting={windInteracting}
+            settledBounds={windSettledBounds}
+          />
+        )}
 
-      {/* Region select overlay for offline download */}
-      {selecting && (
-        <RegionSelectOverlay
-          toGeo={toGeo}
-          boundsVersion={boundsVersion}
-          refreshBounds={refreshBounds}
-          activeBasemap={basemap}
-          tileUrl={tileUrl}
-          onCancel={cancelRegionSelect}
-          onConfirm={confirmDownload}
-        />
-      )}
+        {/* Region select overlay for offline download */}
+        {selecting && (
+          <RegionSelectOverlay
+            toGeo={toGeo}
+            boundsVersion={boundsVersion}
+            refreshBounds={refreshBounds}
+            activeBasemap={basemap}
+            tileUrl={tileUrl}
+            onCancel={cancelRegionSelect}
+            onConfirm={confirmDownload}
+          />
+        )}
 
-      {/* Map maker (#349): a full-screen editor over the LIVE map. There is no
+        {/* Map maker (#349): a full-screen editor over the LIVE map. There is no
           region-box step any more — the sheet on screen IS the selection, and
           the bbox is read off the camera when Create is tapped. */}
-      {makeMapState !== null && (
-        <MapMakerEditor
-          camera={editorCamera}
-          progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
-          onRequestZoom={requestEditorZoom}
-          onStyleChange={setEditorStyle}
-          onCreate={(bbox, options, scaleDenom) => startMakeMap(bbox, { ...options, scaleDenom })}
-          onCancel={cancelMakeMap}
-        />
-      )}
+        {makeMapState !== null && (
+          <MapMakerEditor
+            camera={editorCamera}
+            progress={makeMapState.phase === 'generating' ? makeMapState.progress : null}
+            onRequestZoom={requestEditorZoom}
+            onStyleChange={setEditorStyle}
+            onCreate={(bbox, options, scaleDenom) => startMakeMap(bbox, { ...options, scaleDenom })}
+            onCancel={cancelMakeMap}
+          />
+        )}
 
-      {/* Top-left compass (decision 1): snug to the safe area. */}
-      <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
-      </View>
+        {/* Top-left compass (decision 1): snug to the safe area. */}
+        <View style={[styles.topLeft, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <CompassBadge onPress={resetNorth} mapBearing={mapBearing} />
+        </View>
 
-      {/* "Search places" between the compass and the rail (revamp Main.html).
+        {/* "Search places" between the compass and the rail (revamp Main.html).
           Opens the place search (#496): towns, peaks, lakes, campgrounds by
           name, or a coordinate. Same gates as the rail, plus the offline-area
           selector, whose box starts right under it. Stands aside while a
           drawing tool owns the top (#502/#503). */}
-      {makeMapState === null && heatSelection === null && !selecting && !drawing.active && (
-        <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
-          {/* A shown long-distance trail takes the pill's place (#467). */}
-          {shownTrail !== null ? (
-            <ShownTrailPill shown={shownTrail} />
-          ) : (
-            !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
-          )}
-        </View>
-      )}
-      {searchOpen && !drawing.active && (
-        <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <PlaceSearchSheet
-            origin={location}
-            bias={searchBias}
-            onSelect={onPickPlace}
-            onClose={closePlaceSearch}
-          />
-        </View>
-      )}
+        {makeMapState === null && heatSelection === null && !selecting && !drawing.active && (
+          <View style={[styles.searchPill, { top: insets.top + 8 }]} pointerEvents="box-none">
+            {/* A shown long-distance trail takes the pill's place (#467). */}
+            {shownTrail !== null ? (
+              <ShownTrailPill shown={shownTrail} />
+            ) : (
+              !searchOpen && <MapSearchPill onPress={() => void openPlaceSearch()} />
+            )}
+          </View>
+        )}
+        {searchOpen && !drawing.active && (
+          <View style={[styles.searchSheet, { top: insets.top + 8 }]} pointerEvents="box-none">
+            <PlaceSearchSheet
+              origin={location}
+              bias={searchBias}
+              onSelect={onPickPlace}
+              onClose={closePlaceSearch}
+            />
+          </View>
+        )}
 
-      {/* Mandatory marine notice (marine M3): whenever a marine layer is
+        {/* Mandatory marine notice (marine M3): whenever a marine layer is
           draped, the "Not for navigation" chip pins top-centre — between the
           compass (left) and the controls rail (right). A plain overlay chip
           like the GPS warning, never a Portal/Dialog. */}
-      {marineActive && (
-        <View
-          style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
-          pointerEvents="none"
-        >
-          <MarineDisclaimerChip />
-        </View>
-      )}
+        {marineActive && (
+          <View
+            style={[styles.marineChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            pointerEvents="none"
+          >
+            <MarineDisclaimerChip />
+          </View>
+        )}
 
-      {/* Destination readout (#97): top-centre, between the compass+scale
+        {/* Destination readout (#97): top-centre, between the compass+scale
           stack (left) and the controls rail (right) — the same free lane the
           marine notice uses, so the two are mutually exclusive. Only while a
           destination exists; the ✕ on it is the way out. */}
-      {destination !== null && !marineActive && (
-        <View
-          style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
-          pointerEvents="box-none"
-        >
-          <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
-        </View>
-      )}
+        {destination !== null && !marineActive && (
+          <View
+            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            pointerEvents="box-none"
+          >
+            <DestinationChip readout={destReadout} onClear={() => setDestination(null)} />
+          </View>
+        )}
 
-      {/* Right-side map controls. Unmounted while the map-maker editor is up:
+        {/* Right-side map controls. Unmounted while the map-maker editor is up:
           its desk/drawer covers the rail visually, but a covered rail would
           still sit in the accessibility tree — screen readers (and E2E) could
           reach a hidden "Layers" behind the drawer's Layers tab. Also
@@ -2572,126 +2579,127 @@ export function MapScreen() {
           directly over the rail's footprint (top-right), so a covered rail
           would again leave hidden nodes in the a11y tree; it comes back the
           instant the carousel closes (heatSelection back to null). */}
-      {makeMapState === null && heatSelection === null && (
-        <MapControlsRail
-          top={insets.top + 8}
-          following={followUser}
-          onStopFollowing={() => setFollowUser(false)}
-          onLocate={() => {
-            setFollowUser(true);
-            // Also zoom in to a useful "where am I" level (~2.5 km across);
-            // never zooms out if the user is already closer.
-            if (location) void zoomToLocateLevel(location.latitude);
-          }}
-          showFitControl={overlays.length > 0}
-          // Each press focuses the NEXT active PDF overlay, wrapping around —
-          // with several maps loaded, repeated taps tour them all. A single
-          // overlay behaves like the old fit-to-map.
-          onFit={() => {
-            const overlay = overlays[fitCycleRef.current % overlays.length];
-            fitCycleRef.current += 1;
-            if (overlay) fitOverlayBounds(overlay.bbox);
-          }}
-          pdfOverlayCount={overlays.length}
-          trackOverlayCount={drawnTrackCount}
-          // "+" map actions (wave A item 6): moved out of the bottom-right
-          // FAB.Group into the rail, directly below Map overlays. Hidden
-          // (undefined) while a recording is under way (the active controls
-          // take over), while selecting a region, and while the category
-          // sheet is deciding — the same gates the old FAB carried. The
-          // bottom-corner-specific gates (#131 inspect overlap, the model
-          // sheet's perch, the weather-dock lift) are gone with the corner.
-          actions={
-            status === 'idle' && !selecting && !pickingCategory && !drawing.active
-              ? {
-                  onRecord: () => setPickingCategory(true),
-                  onAddWaypoint,
-                  // A second download would stop the first's loopback server.
-                  onDownload:
-                    downloadProgress !== null
-                      ? undefined
-                      : () => {
-                          // Close any open trail inspector first: the download
-                          // sheet renders below the inspector panel (#131).
-                          inspect(null);
-                          beginRegionSelect();
-                        },
-                  // No "Navigate to coordinates" or "Settings" rows (owner,
-                  // 2026-10-01): tapping the map offers Navigate, Search places
-                  // takes coordinates, and the other tabs carry the gear.
-                  // The editor frames the sheet over the live map, so it needs
-                  // the flat 2D camera — but no region box and no extra step.
-                  onMakeMap: () => {
-                    inspect(null);
-                    setMakeMapState({ phase: 'editing' });
-                  },
-                  // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
-                  // route or area first.
-                  onDraw: drawing.openChooser,
-                }
-              : undefined
-          }
-          compactOpen={compactControlsOpen}
-          onCompactOpenChange={setCompactControlsOpen}
-          onMenuOpenChange={setRailMenuOpen}
-        />
-      )}
+        {makeMapState === null && heatSelection === null && (
+          <MapControlsRail
+            top={insets.top + 8}
+            following={followUser}
+            onStopFollowing={() => setFollowUser(false)}
+            onLocate={() => {
+              setFollowUser(true);
+              // Also zoom in to a useful "where am I" level (~2.5 km across);
+              // never zooms out if the user is already closer.
+              if (location) void zoomToLocateLevel(location.latitude);
+            }}
+            showFitControl={overlays.length > 0}
+            // Each press focuses the NEXT active PDF overlay, wrapping around —
+            // with several maps loaded, repeated taps tour them all. A single
+            // overlay behaves like the old fit-to-map.
+            onFit={() => {
+              const overlay = overlays[fitCycleRef.current % overlays.length];
+              fitCycleRef.current += 1;
+              if (overlay) fitOverlayBounds(overlay.bbox);
+            }}
+            pdfOverlayCount={overlays.length}
+            trackOverlayCount={drawnTrackCount}
+            // "+" map actions (wave A item 6): moved out of the bottom-right
+            // FAB.Group into the rail, directly below Map overlays. Hidden
+            // (undefined) while a recording is under way (the active controls
+            // take over), while selecting a region, and while the category
+            // sheet is deciding — the same gates the old FAB carried. The
+            // bottom-corner-specific gates (#131 inspect overlap, the model
+            // sheet's perch, the weather-dock lift) are gone with the corner.
+            actions={
+              status === 'idle' && !selecting && !pickingCategory && !drawing.active
+                ? {
+                    onRecord: () => setPickingCategory(true),
+                    onAddWaypoint,
+                    // A second download would stop the first's loopback server.
+                    onDownload:
+                      downloadProgress !== null
+                        ? undefined
+                        : () => {
+                            // Close any open trail inspector first: the download
+                            // sheet renders below the inspector panel (#131).
+                            inspect(null);
+                            beginRegionSelect();
+                          },
+                    // No "Navigate to coordinates" or "Settings" rows (owner,
+                    // 2026-10-01): tapping the map offers Navigate, Search places
+                    // takes coordinates, and the other tabs carry the gear.
+                    // The editor frames the sheet over the live map, so it needs
+                    // the flat 2D camera — but no region box and no extra step.
+                    onMakeMap: () => {
+                      inspect(null);
+                      setMakeMapState({ phase: 'editing' });
+                    },
+                    // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
+                    // route or area first.
+                    onDraw: drawing.openChooser,
+                  }
+                : undefined
+            }
+            compactOpen={compactControlsOpen}
+            onCompactOpenChange={setCompactControlsOpen}
+            onMenuOpenChange={setRailMenuOpen}
+          />
+        )}
 
-      {permission === 'denied' && (
-        <Banner
-          visible
-          style={[styles.banner, { top: insets.top + 8 }]}
-          icon="map-marker-off"
-          actions={[]}
-        >
-          Location permission denied. Enable it in Settings to see your position and record trails.
-        </Banner>
-      )}
+        {permission === 'denied' && (
+          <Banner
+            visible
+            style={[styles.banner, { top: insets.top + 8 }]}
+            icon="map-marker-off"
+            actions={[]}
+          >
+            Location permission denied. Enable it in Settings to see your position and record
+            trails.
+          </Banner>
+        )}
 
-      {permission === 'granted' && unavailableReason !== null && (
-        <Banner
-          visible
-          style={[styles.banner, { top: insets.top + 8 }]}
-          icon="map-marker-off"
-          actions={[]}
-        >
-          {unavailableReason}
-        </Banner>
-      )}
+        {permission === 'granted' && unavailableReason !== null && (
+          <Banner
+            visible
+            style={[styles.banner, { top: insets.top + 8 }]}
+            icon="map-marker-off"
+            actions={[]}
+          >
+            {unavailableReason}
+          </Banner>
+        )}
 
-      {/* Bottom HUD + controls. Item 3: a single row so the stats HUD and the
+        {/* Bottom HUD + controls. Item 3: a single row so the stats HUD and the
           three record buttons share one layout — collapsed centers the
           (small) pill against the (bigger) icon buttons so they pop slightly
           out of the bar; expanded bottom-aligns the smaller card on the left
           against the buttons stacked vertically to its right. */}
-      {/* Item 2: with the map logo/attribution gone, the recording UI drops
+        {/* Item 2: with the map logo/attribution gone, the recording UI drops
           into the freed bottom-left space — a much smaller pad clears more
           map above it. */}
-      {/* Wave A item 1 (dock gap): NO insets.bottom here. This screen sits
+        {/* Wave A item 1 (dock gap): NO insets.bottom here. This screen sits
           ABOVE the tab bar, and the tab bar already absorbs the gesture-nav
           inset itself — padding it again double-paid the inset and floated
           the weather dock (and recording bar) ~1 cm off the bar. A few dp of
           fixed breathing room is all the column needs. */}
-      <View
-        style={[
-          styles.bottom,
-          recordingPanelUp && { bottom: panelHeight },
-          trailSheetUp && { bottom: trailSheetHeight },
-          drawing.panelHeight > 0 && { bottom: drawing.panelHeight },
-        ]}
-        pointerEvents="box-none"
-        onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
-      >
-        {/* Pages still in the rasterizer, one dismissible row each (#269).
+        <View
+          style={[
+            styles.bottom,
+            recordingPanelUp && { bottom: panelHeight },
+            trailSheetUp && { bottom: trailSheetHeight },
+            drawing.panelHeight > 0 && { bottom: drawing.panelHeight },
+          ]}
+          pointerEvents="box-none"
+          onLayout={(e) => setBottomColumnH(e.nativeEvent.layout.height)}
+        >
+          {/* Pages still in the rasterizer, one dismissible row each (#269).
             First in the column so they stack above the scale bar. */}
-        <RenderingToasts />
-        {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
+          <RenderingToasts />
+          {/* Scale bar, bottom-left (owner call, 2026-09-08 — #97 had docked it
             under the compass). It is the FIRST child of the bottom chrome
             COLUMN rather than absolutely positioned in the corner, so it
             stacks ABOVE the recording bar, the marine legend and the weather
             dock instead of colliding with them; with none of those up it sits
             just above the tab bar, in the cartographic corner. */}
-        {/* Scale bar + the basemap credit as quiet text (left) and the tip button
+          {/* Scale bar + the basemap credit as quiet text (left) and the tip button
             (right, Map only, #476) share one row. The ⓘ credit button is gone:
             its corner holds the tip button, and the full roll is in Settings ›
             System info. The short credit STAYS on the map as text because
@@ -2699,403 +2707,409 @@ export function MapScreen() {
             on the map view itself.
             Recording starts from "+" → Record track (owner call, 2026-09-27:
             no separate Record button over the map). */}
-        {/* Not while the region selector or the map maker owns the bottom
+          {/* Not while the region selector or the map maker owns the bottom
             edge: their sheets sit in this column's footprint, and the row
             would draw over their Cancel / Download / Next buttons. */}
-        {!selecting && makeMapState === null && (
-          <View
-            style={styles.bottomRow}
-            pointerEvents="box-none"
-            onLayout={(e) => setBottomRowY(e.nativeEvent.layout.y)}
-          >
-            <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
-              {showScaleBar && scaleAt !== null && (
-                <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
-              )}
-              <MapCreditText basemap={basemap} vector={stoneBase} osmLabels={imageryLabels} />
-            </View>
-            {/* The tip button hides itself while recording, while a destination is
+          {!selecting && makeMapState === null && (
+            <View
+              style={styles.bottomRow}
+              pointerEvents="box-none"
+              onLayout={(e) => setBottomRowY(e.nativeEvent.layout.y)}
+            >
+              <View style={[styles.bottomSide, styles.bottomSideStart]} pointerEvents="box-none">
+                {showScaleBar && scaleAt !== null && (
+                  <ScaleBar zoom={scaleAt.zoom} latitude={scaleAt.latitude} />
+                )}
+                <MapCreditText basemap={basemap} vector={stoneBase} osmLabels={imageryLabels} />
+              </View>
+              {/* The tip button hides itself while recording, while a destination is
                 followed, and while a trail sheet, heat carousel or the coordinate
                 dialog is up. */}
-            <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
-              <TipButton
-                navigating={destination !== null}
-                gestureActive={cameraMoving}
-                focused={isFocused}
-                bubbleBlocked={
-                  railMenuOpen ||
-                  trailSheetUp ||
-                  pickingCategory ||
-                  recordRequested ||
-                  modelSheetOpen ||
-                  selecting ||
-                  makeMapState !== null
-                }
-                blocked={inspectId !== null || heatSelection !== null || goToOpen}
-              />
+              <View style={[styles.bottomSide, styles.bottomSideEnd]} pointerEvents="box-none">
+                <TipButton
+                  navigating={destination !== null}
+                  gestureActive={cameraMoving}
+                  focused={isFocused}
+                  bubbleBlocked={
+                    railMenuOpen ||
+                    trailSheetUp ||
+                    pickingCategory ||
+                    recordRequested ||
+                    modelSheetOpen ||
+                    selecting ||
+                    makeMapState !== null
+                  }
+                  blocked={inspectId !== null || heatSelection !== null || goToOpen}
+                />
+              </View>
             </View>
-          </View>
-        )}
-        {/* Depth legend (marine wave D §D2): the chart's quantized band
+          )}
+          {/* Depth legend (marine wave D §D2): the chart's quantized band
             scale, in the same bottom column as the weather dock and above it
             (the weather scrubber must keep the bottom edge). Only while the
             chart drape can actually be on screen — and never while the
             region selector or the map maker owns the bottom edge, the same
             gates the weather dock carries. */}
-        {marineActive && !selecting && makeMapState === null && (
-          <MarineLegend
-            source={marineChartSource(marineChart.sourceId)}
-            offline={marineChart.chart?.offline ?? false}
-          />
-        )}
-        {/* Offline marine pack offer (wave D §D4): a quiet Surface row in
+          {marineActive && !selecting && makeMapState === null && (
+            <MarineLegend
+              source={marineChartSource(marineChart.sourceId)}
+              offline={marineChart.chart?.offline ?? false}
+            />
+          )}
+          {/* Offline marine pack offer (wave D §D4): a quiet Surface row in
             the bottom stack — never a Dialog, never a Portal (One UI
             touch-swallow), and snoozed for 30 days by "Not now". */}
-        {marinePackOfferState !== null && (
-          <MarinePackBanner
-            offer={marinePackOfferState}
-            progress={packProgress}
-            onDownload={onDownloadMarinePack}
-            onDismiss={onSnoozeMarinePack}
-          />
-        )}
-        {/* Weather dock (weather UX M1): the value-legend pill + time
+          {marinePackOfferState !== null && (
+            <MarinePackBanner
+              offer={marinePackOfferState}
+              progress={packProgress}
+              onDownload={onDownloadMarinePack}
+              onDismiss={onSnoozeMarinePack}
+            />
+          )}
+          {/* Weather dock (weather UX M1): the value-legend pill + time
             scrubber, riding the same bottom flex column as the recording bar
             — the column stacks them, so they never overlap it. Hidden with
             the recording UI while the region-select overlay owns the bottom
             edge, and offline-only parks weather entirely. */}
-        {weatherDockVisible && !drawing.active && weatherTl.timeline !== null && (
-          <View style={styles.weatherDock} pointerEvents="box-none">
-            {/* M2: the model sheet floats above the legend+scrubber in the
+          {weatherDockVisible && !drawing.active && weatherTl.timeline !== null && (
+            <View style={styles.weatherDock} pointerEvents="box-none">
+              {/* M2: the model sheet floats above the legend+scrubber in the
                 same dock column (right-aligned over the chevron that opened
                 it). Forecast layers only — radar is model-less. */}
-            {modelSheetOpen && weatherTl.timeline.kind === 'forecast' && (
-              <WeatherModelSheet
-                selected={weatherModel}
-                effective={effectiveModel}
-                onSelect={(id) => setSettings('weatherModel', id)}
-                onCompare={openModelCompare}
+              {modelSheetOpen && weatherTl.timeline.kind === 'forecast' && (
+                <WeatherModelSheet
+                  selected={weatherModel}
+                  effective={effectiveModel}
+                  onSelect={(id) => setSettings('weatherModel', id)}
+                  onCompare={openModelCompare}
+                />
+              )}
+              <WeatherLegend layer={weatherLayerById(weatherLayer)} />
+              <WeatherTimeScrubber
+                timeline={weatherTl.timeline}
+                selectedIdx={weatherTl.selectedIdx}
+                selectedMs={weatherTl.selectedMs}
+                onScrub={weatherTl.scrubTo}
+                playing={weatherAnimating}
+                onTogglePlay={toggleWeatherAnimation}
+                onOpenModelPicker={
+                  weatherTl.timeline.kind === 'forecast'
+                    ? () => setModelSheetOpen((o) => !o)
+                    : undefined
+                }
+                modelPickerOpen={modelSheetOpen}
+                modelCaption={
+                  weatherTl.timeline.kind === 'forecast'
+                    ? // The EFFECTIVE model, with an honest marker when it was
+                      // auto-resolved (outside the selected model's domain).
+                      `${weatherModelById(effectiveModel).label} ${weatherModelById(effectiveModel).horizonLabel.toUpperCase()}${modelFallback ? ' · AUTO' : ''}`
+                    : undefined
+                }
               />
-            )}
-            <WeatherLegend layer={weatherLayerById(weatherLayer)} />
-            <WeatherTimeScrubber
-              timeline={weatherTl.timeline}
-              selectedIdx={weatherTl.selectedIdx}
-              selectedMs={weatherTl.selectedMs}
-              onScrub={weatherTl.scrubTo}
-              playing={weatherAnimating}
-              onTogglePlay={toggleWeatherAnimation}
-              onOpenModelPicker={
-                weatherTl.timeline.kind === 'forecast'
-                  ? () => setModelSheetOpen((o) => !o)
-                  : undefined
-              }
-              modelPickerOpen={modelSheetOpen}
-              modelCaption={
-                weatherTl.timeline.kind === 'forecast'
-                  ? // The EFFECTIVE model, with an honest marker when it was
-                    // auto-resolved (outside the selected model's domain).
-                    `${weatherModelById(effectiveModel).label} ${weatherModelById(effectiveModel).horizonLabel.toUpperCase()}${modelFallback ? ' · AUTO' : ''}`
-                  : undefined
-              }
+            </View>
+          )}
+        </View>
+
+        {trailSheetUp && shownTrail !== null && (
+          <ShownTrailSheet
+            shown={shownTrail}
+            position={location ? [location.longitude, location.latitude] : null}
+            units={units}
+            onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
+            onMessage={showSnack}
+          />
+        )}
+
+        {inspectId && inspectPoints && inspectTrack && (
+          <TrailInspectPanel
+            track={inspectTrack}
+            points={inspectPoints}
+            units={units}
+            onClose={() => {
+              inspect(null);
+              restoreCameraOnDeselect();
+            }}
+            onScrub={setMarkerAt}
+            onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
+            // A drawn route reopens in the drawing tool, which closes this panel.
+            onEditRoute={() =>
+              useMapStore
+                .getState()
+                .setDrawRequest({ kind: 'edit-route', trackId: inspectTrack.id })
+            }
+            onLayout={setInspectPanelHeight}
+          />
+        )}
+
+        {/* Night red veil (decision 4): tints the whole map; never catches touches. */}
+        {displayCondition === 'night' && (
+          <View
+            style={[StyleSheet.absoluteFill, { backgroundColor: NIGHT_MAP.veil }]}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
+        {displayCondition === 'night' && makeMapState === null && (
+          <View
+            style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
+            pointerEvents="box-none"
+          >
+            <NightExitPill />
+          </View>
+        )}
+
+        {/* Glove lock (revamp §3): a shield over the map and all its chrome;
+          only the panel's hold-to-unlock stays live. */}
+        {recordingPanelUp && gloveLocked && (
+          <View
+            style={StyleSheet.absoluteFill}
+            onStartShouldSetResponder={() => true}
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+          />
+        )}
+
+        {/* Recording panel (revamp decision 3): mini overlay / strip /
+          expanded, full-width at the bottom — the tab bar hides while
+          recording. Hidden while the region-select overlay owns the bottom. */}
+        {recordingPanelUp && (
+          <View style={styles.panelDock} pointerEvents="box-none">
+            <RecordingPanel
+              status={status === 'paused' ? 'paused' : 'recording'}
+              stats={stats}
+              elapsedS={elapsedS}
+              liveSpeedMps={liveSpeedMps}
+              gpsQuality={gpsQuality}
+              onPause={pause}
+              onResume={resume}
+              onStop={() => {
+                setGloveLocked(false);
+                void handleStop();
+              }}
+              onMark={() => {
+                const n = addWaypoint();
+                if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
+                else showSnack('Waiting for a GPS fix before dropping a waypoint');
+              }}
+              gloveLocked={gloveLocked}
+              onGloveLockChange={setGloveLocked}
+              onHeightChange={setPanelHeight}
             />
           </View>
         )}
-      </View>
 
-      {trailSheetUp && shownTrail !== null && (
-        <ShownTrailSheet
-          shown={shownTrail}
-          position={location ? [location.longitude, location.latitude] : null}
-          units={units}
-          onLayout={(e) => setTrailSheetHeight(e.nativeEvent.layout.height)}
-          onMessage={showSnack}
-        />
-      )}
-
-      {inspectId && inspectPoints && inspectTrack && (
-        <TrailInspectPanel
-          track={inspectTrack}
-          points={inspectPoints}
-          units={units}
-          onClose={() => {
-            inspect(null);
-            restoreCameraOnDeselect();
-          }}
-          onScrub={setMarkerAt}
-          onView={() => router.push(`/trail3d/${inspectTrack.id}`)}
-          // A drawn route reopens in the drawing tool, which closes this panel.
-          onEditRoute={() =>
-            useMapStore.getState().setDrawRequest({ kind: 'edit-route', trackId: inspectTrack.id })
-          }
-          onLayout={setInspectPanelHeight}
-        />
-      )}
-
-      {/* Night red veil (decision 4): tints the whole map; never catches touches. */}
-      {displayCondition === 'night' && (
-        <View
-          style={[StyleSheet.absoluteFill, { backgroundColor: NIGHT_MAP.veil }]}
-          pointerEvents="none"
-        />
-      )}
-
-      {/* "Night on · tap to exit" (Night-Mode board), under the search pill. */}
-      {displayCondition === 'night' && makeMapState === null && (
-        <View
-          style={[styles.topCenterChip, { top: insets.top + TOP_CHIP_OFFSET }]}
-          pointerEvents="box-none"
-        >
-          <NightExitPill />
-        </View>
-      )}
-
-      {/* Glove lock (revamp §3): a shield over the map and all its chrome;
-          only the panel's hold-to-unlock stays live. */}
-      {recordingPanelUp && gloveLocked && (
-        <View
-          style={StyleSheet.absoluteFill}
-          onStartShouldSetResponder={() => true}
-          accessible={false}
-          importantForAccessibility="no-hide-descendants"
-        />
-      )}
-
-      {/* Recording panel (revamp decision 3): mini overlay / strip /
-          expanded, full-width at the bottom — the tab bar hides while
-          recording. Hidden while the region-select overlay owns the bottom. */}
-      {recordingPanelUp && (
-        <View style={styles.panelDock} pointerEvents="box-none">
-          <RecordingPanel
-            status={status === 'paused' ? 'paused' : 'recording'}
-            stats={stats}
-            elapsedS={elapsedS}
-            liveSpeedMps={liveSpeedMps}
-            gpsQuality={gpsQuality}
-            onPause={pause}
-            onResume={resume}
-            onStop={() => {
-              setGloveLocked(false);
-              void handleStop();
-            }}
-            onMark={() => {
-              const n = addWaypoint();
-              if (n > 0) showSnack(`Waypoint ${n} dropped — tap it to add a note or photo`);
-              else showSnack('Waiting for a GPS fix before dropping a waypoint');
-            }}
-            gloveLocked={gloveLocked}
-            onGloveLockChange={setGloveLocked}
-            onHeightChange={setPanelHeight}
-          />
-        </View>
-      )}
-
-      {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
+        {/* Right-edge activity carousel: opened by tapping a "hot" heat spot
           (onMapPress above). Mutually exclusive with TrailInspectPanel — the
           two setters clear each other, never both open at once. */}
-      {heatSelection && (
-        <HeatPointCarousel
-          trackIds={heatSelection.trackIds}
-          tracks={tracks}
-          focusedIdx={heatSelection.focusedIdx}
-          onFocus={(idx) => {
-            setHeatSelection((cur) => {
-              if (!cur) return cur;
-              // Bound-check against the current trail count — the dim
-              // expression above indexes trackIds[focusedIdx] and must never
-              // see an out-of-range index.
-              const clamped = Math.max(0, Math.min(idx, cur.trackIds.length - 1));
-              return { ...cur, focusedIdx: clamped };
-            });
-          }}
-          onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
-          onClose={() => {
-            setHeatSelection(null);
-            restoreCameraOnDeselect();
-          }}
-          topInset={insets.top}
-        />
-      )}
+        {heatSelection && (
+          <HeatPointCarousel
+            trackIds={heatSelection.trackIds}
+            tracks={tracks}
+            focusedIdx={heatSelection.focusedIdx}
+            onFocus={(idx) => {
+              setHeatSelection((cur) => {
+                if (!cur) return cur;
+                // Bound-check against the current trail count — the dim
+                // expression above indexes trackIds[focusedIdx] and must never
+                // see an out-of-range index.
+                const clamped = Math.max(0, Math.min(idx, cur.trackIds.length - 1));
+                return { ...cur, focusedIdx: clamped };
+              });
+            }}
+            onOpenTrail={(id) => router.push(`/trail3d/${id}`)}
+            onClose={() => {
+              setHeatSelection(null);
+              restoreCameraOnDeselect();
+            }}
+            topInset={insets.top}
+          />
+        )}
 
-      {/* The coffee mascot's speech bubble (#476), over the tip button in the
+        {/* The coffee mascot's speech bubble (#476), over the tip button in the
           bottom-right corner: at the root so it can be tapped on Android, and
           above the whole bottom row so it never covers the scale bar or the
           credit caption. The bubble only shows with no panel or sheet up, so
           the column sits at the bottom edge. */}
-      {bottomColumnH !== null && bottomRowY !== null && (
-        <TipBubble
-          right={TIP_BUBBLE_RIGHT}
-          bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
-          tailRight={TIP_BUBBLE_TAIL_RIGHT}
-        />
-      )}
+        {bottomColumnH !== null && bottomRowY !== null && (
+          <TipBubble
+            right={TIP_BUBBLE_RIGHT}
+            bottom={bottomColumnH - bottomRowY + TIP_BUBBLE_GAP}
+            tailRight={TIP_BUBBLE_TAIL_RIGHT}
+          />
+        )}
 
-      {/* Category-first record start: sheet opens on "Record track"; Start
+        {/* Category-first record start: sheet opens on "Record track"; Start
           actually begins the recording with the chosen category. */}
-      <CategoryStartSheet
-        visible={(pickingCategory || recordRequested) && status === 'idle' && !drawing.active}
-        onStart={(categoryId) => {
-          setPickingCategory(false);
-          setRecordRequested(false);
-          startRecording(categoryId);
-        }}
-        onDismiss={() => {
-          setPickingCategory(false);
-          setRecordRequested(false);
-        }}
-      />
+        <CategoryStartSheet
+          visible={(pickingCategory || recordRequested) && status === 'idle' && !drawing.active}
+          onStart={(categoryId) => {
+            setPickingCategory(false);
+            setRecordRequested(false);
+            startRecording(categoryId);
+          }}
+          onDismiss={() => {
+            setPickingCategory(false);
+            setRecordRequested(false);
+          }}
+        />
 
-      <BackgroundLocationRationale visible={bgRationaleVisible} onRespond={respondToBgRationale} />
+        <BackgroundLocationRationale
+          visible={bgRationaleVisible}
+          onRespond={respondToBgRationale}
+        />
 
-      {/* Waypoint card (pin tap, #505): note/photo at a glance, Edit and
+        {/* Waypoint card (pin tap, #505): note/photo at a glance, Edit and
           hold-to-delete. Hidden while the trail inspector or the editor is up
           so the bottom edge never stacks two cards. Its dock floats above the
           recording panel (position AND z/elevation) — it used to be drawn
           under the panel while recording. */}
-      {/* Drawing tools' chrome (#502/#503): mode chips + hint, the bottom
+        {/* Drawing tools' chrome (#502/#503): mode chips + hint, the bottom
           panel, the save/edit sheets, and a tapped area's card. */}
-      {drawing.chrome}
+        {drawing.chrome}
 
-      {inspectTrack === null &&
-        editWaypoint === null &&
-        viewWaypoint !== null &&
-        !drawing.active && (
-          <View
-            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-            pointerEvents="box-none"
-            testID="waypoint-card-dock"
-          >
-            <WaypointViewerCard
-              waypoint={viewWaypoint}
-              floating={recordingPanelUp}
-              onCopyCoords={() => {
-                if (!viewWaypoint) return;
-                void Clipboard.setStringAsync(
-                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-                );
-                showSnack('Coordinates copied');
-              }}
-              onCopyNote={() => {
-                if (!viewWaypoint?.note) return;
-                void Clipboard.setStringAsync(viewWaypoint.note);
-                showSnack('Note copied');
-              }}
-              onSharePhoto={() => {
-                const uri = viewWaypoint?.photoUri;
-                if (!uri) return;
-                void (async () => {
-                  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-                  else showSnack('Sharing is not available on this device');
-                })();
-              }}
-              onEdit={() => {
-                if (!viewWp) return;
-                discardDraftPhoto(newWp);
-                setNewWp(null);
-                setEditWp(viewWp);
-                setWpName(viewWaypoint?.label ?? '');
-                setWpDraft(viewWaypoint?.note ?? '');
-                setViewWp(null);
-              }}
-              onDelete={deleteViewedWaypoint}
-              onClose={() => setViewWp(null)}
-            />
-          </View>
-        )}
+        {inspectTrack === null &&
+          editWaypoint === null &&
+          viewWaypoint !== null &&
+          !drawing.active && (
+            <View
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              pointerEvents="box-none"
+              testID="waypoint-card-dock"
+            >
+              <WaypointViewerCard
+                waypoint={viewWaypoint}
+                floating={recordingPanelUp}
+                onCopyCoords={() => {
+                  if (!viewWaypoint) return;
+                  void Clipboard.setStringAsync(
+                    formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+                  );
+                  showSnack('Coordinates copied');
+                }}
+                onCopyNote={() => {
+                  if (!viewWaypoint?.note) return;
+                  void Clipboard.setStringAsync(viewWaypoint.note);
+                  showSnack('Note copied');
+                }}
+                onSharePhoto={() => {
+                  const uri = viewWaypoint?.photoUri;
+                  if (!uri) return;
+                  void (async () => {
+                    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                    else showSnack('Sharing is not available on this device');
+                  })();
+                }}
+                onEdit={() => {
+                  if (!viewWp) return;
+                  discardDraftPhoto(newWp);
+                  setNewWp(null);
+                  setEditWp(viewWp);
+                  setWpName(viewWaypoint?.label ?? '');
+                  setWpDraft(viewWaypoint?.note ?? '');
+                  setViewWp(null);
+                }}
+                onDelete={deleteViewedWaypoint}
+                onClose={() => setViewWp(null)}
+              />
+            </View>
+          )}
 
-      {/* ECCC forecast card (weather long-press): nearest citypage forecast +
+        {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as
           the waypoint viewer — hidden while other bottom cards are up. */}
-      {forecastAt !== null &&
-        (weatherLayer !== null || marineActive) &&
-        !offlineOnly &&
-        inspectTrack === null &&
-        editWaypoint === null &&
-        viewWaypoint === null && (
-          <ForecastCard
-            at={forecastAt}
-            layer={weatherLayer}
-            marineActive={marineActive}
-            onClose={() => setForecastAt(null)}
-            // M2: the comparison-table entry from the tap-card (forecast
-            // layers only — the table has nothing to say about radar).
-            onCompareModels={
-              weatherLayer !== null && modelVariableForLayer(weatherLayer) !== null
-                ? openModelCompare
-                : undefined
-            }
-          />
-        )}
+        {forecastAt !== null &&
+          (weatherLayer !== null || marineActive) &&
+          !offlineOnly &&
+          inspectTrack === null &&
+          editWaypoint === null &&
+          viewWaypoint === null && (
+            <ForecastCard
+              at={forecastAt}
+              layer={weatherLayer}
+              marineActive={marineActive}
+              onClose={() => setForecastAt(null)}
+              // M2: the comparison-table entry from the tap-card (forecast
+              // layers only — the table has nothing to say about radar).
+              onCompareModels={
+                weatherLayer !== null && modelVariableForLayer(weatherLayer) !== null
+                  ? openModelCompare
+                  : undefined
+              }
+            />
+          )}
 
-      {/* Coordinate readout + entry (#97): the map centre in all three
+        {/* Coordinate readout + entry (#97): the map centre in all three
           notations (tap a line to copy), and a box that accepts decimal
           degrees, degrees-minutes or degrees-minutes-seconds. "Go" flies the
           camera; "Set destination" plants the pin — with the box empty that
           is the map centre, i.e. drop a pin on the crosshair. */}
-      {goToOpen && (
-        <GoToCoordinatesDialog
-          center={goToCenter}
-          initial={goToSeed}
-          onDismiss={() => setGoToOpen(false)}
-          onCopy={(text) => {
-            void Clipboard.setStringAsync(text);
-            showSnack('Coordinates copied');
-          }}
-          onGo={(at) => {
-            setGoToOpen(false);
-            flyToPoint(at);
-            // Drop the readout chip on the target so the jump lands on
-            // something visible rather than an unmarked patch of map.
-            setPointAt(at);
-          }}
-          onSetDestination={(at) => {
-            setGoToOpen(false);
-            aimAt(at);
-          }}
+        {goToOpen && (
+          <GoToCoordinatesDialog
+            center={goToCenter}
+            initial={goToSeed}
+            onDismiss={() => setGoToOpen(false)}
+            onCopy={(text) => {
+              void Clipboard.setStringAsync(text);
+              showSnack('Coordinates copied');
+            }}
+            onGo={(at) => {
+              setGoToOpen(false);
+              flyToPoint(at);
+              // Drop the readout chip on the target so the jump lands on
+              // something visible rather than an unmarked patch of map.
+              setPointAt(at);
+            }}
+            onSetDestination={(at) => {
+              setGoToOpen(false);
+              aimAt(at);
+            }}
+          />
+        )}
+
+        <WaypointEditorDialog
+          waypoint={editWaypoint}
+          name={wpName}
+          onChangeName={setWpName}
+          draft={wpDraft}
+          onChangeDraft={setWpDraft}
+          onSave={saveWaypoint}
+          onDelete={deleteWaypoint}
+          onSetPhoto={setWaypointPhoto}
+          // Live recording pins take no icon (they end up as trail notes), so
+          // the picker is simply not part of their editor.
+          onSetIcon={editWp?.source === 'live' ? undefined : setWaypointIcon}
         />
-      )}
 
-      <WaypointEditorDialog
-        waypoint={editWaypoint}
-        name={wpName}
-        onChangeName={setWpName}
-        draft={wpDraft}
-        onChangeDraft={setWpDraft}
-        onSave={saveWaypoint}
-        onDelete={deleteWaypoint}
-        onSetPhoto={setWaypointPhoto}
-        // Live recording pins take no icon (they end up as trail notes), so
-        // the picker is simply not part of their editor.
-        onSetIcon={editWp?.source === 'live' ? undefined : setWaypointIcon}
-      />
-
-      <Snackbar
-        visible={snack !== null}
-        onDismiss={dismissSnack}
-        duration={Number.POSITIVE_INFINITY}
-        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
-      >
-        {snack ?? ''}
-      </Snackbar>
-      <Snackbar
-        visible={overlaySnack !== null}
-        onDismiss={dismissOverlaySnack}
-        duration={Number.POSITIVE_INFINITY}
-        wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
-      >
-        {overlaySnack ?? ''}
-      </Snackbar>
-      {downloadProgress !== null && (
         <Snackbar
-          visible
-          onDismiss={() => undefined}
+          visible={snack !== null}
+          onDismiss={dismissSnack}
           duration={Number.POSITIVE_INFINITY}
           wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
         >
-          {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
+          {snack ?? ''}
         </Snackbar>
-      )}
-    </View>
+        <Snackbar
+          visible={overlaySnack !== null}
+          onDismiss={dismissOverlaySnack}
+          duration={Number.POSITIVE_INFINITY}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+        >
+          {overlaySnack ?? ''}
+        </Snackbar>
+        {downloadProgress !== null && (
+          <Snackbar
+            visible
+            onDismiss={() => undefined}
+            duration={Number.POSITIVE_INFINITY}
+            wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          >
+            {`Downloading ${downloadProgress.label}… ${Math.floor(downloadProgress.pct)}%`}
+          </Snackbar>
+        )}
+      </View>
+    </MapAreaBottomContext.Provider>
   );
 }
 

@@ -1,3 +1,5 @@
+import { sheetBodyMaxHeight } from '@core/map/sheetFit';
+import { useMapAreaBottom, useWindowEdge } from '../mapAreaBottom';
 import { WEATHER_LAYERS, weatherLayerById, type WeatherLayerId } from '@core/geo/weatherLayers';
 import { MARINE_LAYER_IDS } from '@core/geo/marineLayers';
 import { MARINE_ENABLED, PARKED_LABEL, WEATHER_ENABLED } from '@core/features/flags';
@@ -448,11 +450,24 @@ export function OverlaysPanel({
 }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
   const { height: windowH } = useWindowDimensions();
+  // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
+  // behind it on a phone and "Live layers" could never be scrolled to.
+  const areaBottom = useMapAreaBottom();
+  const { ref: bodyRef, onLayout: onBodyLayout, value: bodyTop } = useWindowEdge('top');
   return (
     <>
       <SheetHeader title="Overlays" closeLabel="Close overlays" onClose={onClose} />
       <ScrollView
-        style={{ maxHeight: windowH * BODY_MAX_SHARE }}
+        ref={bodyRef as never}
+        onLayout={onBodyLayout}
+        style={{
+          maxHeight: sheetBodyMaxHeight({
+            windowHeight: windowH,
+            maxShare: BODY_MAX_SHARE,
+            areaBottom,
+            bodyTop,
+          }),
+        }}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
