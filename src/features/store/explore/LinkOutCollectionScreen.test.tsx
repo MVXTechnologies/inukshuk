@@ -36,7 +36,7 @@ const names = (view: Awaited<ReturnType<typeof screen>>) =>
 it('lists every place nearest first, with the intro', async () => {
   const view = await screen();
   expect(view.getByText('Parcs Québec')).toBeTruthy();
-  expect(view.getByText(/SÉPAQ’s park maps are published on sepaq\.com/)).toBeTruthy();
+  expect(view.getByText(/SÉPAQ’s maps are published on sepaq\.com/)).toBeTruthy();
   expect(names(view)).toEqual([
     'Parc national de la Jacques-Cartier',
     'Réserve faunique des Laurentides',

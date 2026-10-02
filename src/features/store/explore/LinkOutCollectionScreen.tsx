@@ -62,7 +62,7 @@ export function LinkOutCollectionScreen({ id }: { id: string }) {
           onPress={() => void Linking.openURL(place.url)}
           accessibilityRole="link"
           accessibilityLabel={[place.name, meta, distance].filter(Boolean).join(', ')}
-          accessibilityHint="Opens the park's maps on the publisher's website"
+          accessibilityHint="Opens the place's maps on the publisher's website"
           style={({ pressed }) => [
             styles.place,
             { backgroundColor: t.surface, borderColor: t.outlineVariant },
@@ -108,9 +108,9 @@ export function LinkOutCollectionScreen({ id }: { id: string }) {
   }
 
   const host = /^https?:\/\/(?:www\.)?([^/?#]+)/i.exec(collection.homepage)?.[1];
-  const intro = `${collection.publisher}’s park maps are published on ${
+  const intro = `${collection.publisher}’s maps are published on ${
     host ?? 'their website'
-  }. Tap a park to open its maps there, then open the PDF with Inukshuk.`;
+  }. Tap a place to open its maps there, then open the PDF with Inukshuk.`;
 
   return (
     <View style={[styles.fill, { backgroundColor: t.background }]}>

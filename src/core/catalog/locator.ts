@@ -81,13 +81,18 @@ export function projectToWindow(
   return [(lon - window.west) * window.cosLat * scale, (window.north - lat) * scale];
 }
 
-type Pt = readonly [number, number];
+export type Pt = readonly [number, number];
 
 /**
- * Sutherland–Hodgman polygon clip against an axis-aligned px rect [0, size]².
- * Returns the clipped polygon (possibly empty). Input/output are px points.
+ * Sutherland–Hodgman polygon clip against an axis-aligned px rect
+ * [0, size] × [0, height] (a square unless `height` is given). Returns the
+ * clipped polygon (possibly empty). Input/output are px points.
  */
-export function clipPolygonToSquare(points: readonly Pt[], size: number): Pt[] {
+export function clipPolygonToSquare(
+  points: readonly Pt[],
+  size: number,
+  height: number = size,
+): Pt[] {
   type Edge = (p: Pt) => boolean;
   type Intersect = (a: Pt, b: Pt) => Pt;
   const clipEdge = (input: readonly Pt[], inside: Edge, intersect: Intersect): Pt[] => {
@@ -132,17 +137,22 @@ export function clipPolygonToSquare(points: readonly Pt[], size: number): Pt[] {
   );
   out = clipEdge(
     out,
-    (p) => p[1] <= size,
-    (a, b) => atY(a, b, size),
+    (p) => p[1] <= height,
+    (a, b) => atY(a, b, height),
   );
   return out;
 }
 
 /**
- * Clip a polyline to the px square, splitting it where it leaves. Returns the
- * kept sub-polylines (each ≥ 2 points). Liang–Barsky per segment.
+ * Clip a polyline to the px square (or [0, size] × [0, height] rect), splitting
+ * it where it leaves. Returns the kept sub-polylines (each ≥ 2 points).
+ * Liang–Barsky per segment.
  */
-export function clipPolylineToSquare(points: readonly Pt[], size: number): Pt[][] {
+export function clipPolylineToSquare(
+  points: readonly Pt[],
+  size: number,
+  height: number = size,
+): Pt[][] {
   const out: Pt[][] = [];
   let current: Pt[] = [];
   const flush = (): void => {
@@ -150,7 +160,7 @@ export function clipPolylineToSquare(points: readonly Pt[], size: number): Pt[][
     current = [];
   };
   for (let i = 0; i + 1 < points.length; i++) {
-    const clipped = clipSegment(points[i]!, points[i + 1]!, size);
+    const clipped = clipSegment(points[i]!, points[i + 1]!, size, height);
     if (clipped === null) {
       flush();
       continue;
@@ -172,8 +182,8 @@ export function clipPolylineToSquare(points: readonly Pt[], size: number): Pt[][
   return out;
 }
 
-/** Liang–Barsky segment/square clip; null when fully outside. */
-function clipSegment(a: Pt, b: Pt, size: number): [Pt, Pt] | null {
+/** Liang–Barsky segment/rect clip; null when fully outside. */
+function clipSegment(a: Pt, b: Pt, size: number, height: number): [Pt, Pt] | null {
   let t0 = 0;
   let t1 = 1;
   const dx = b[0] - a[0];
@@ -182,7 +192,7 @@ function clipSegment(a: Pt, b: Pt, size: number): [Pt, Pt] | null {
     [-dx, a[0]], // left: x >= 0
     [dx, size - a[0]], // right: x <= size
     [-dy, a[1]], // top: y >= 0
-    [dy, size - a[1]], // bottom: y <= size
+    [dy, height - a[1]], // bottom: y <= height
   ];
   for (const [p, qv] of checks) {
     if (p === 0) {
@@ -207,14 +217,14 @@ function clipSegment(a: Pt, b: Pt, size: number): [Pt, Pt] | null {
 /** Round px to 1 decimal for compact path strings. */
 const px = (v: number): string => String(Math.round(v * 10) / 10);
 
-function toPath(points: readonly Pt[], close: boolean): string {
+export function toPath(points: readonly Pt[], close: boolean): string {
   let d = `M${px(points[0]![0])} ${px(points[0]![1])}`;
   for (let i = 1; i < points.length; i++) d += `L${px(points[i]![0])} ${px(points[i]![1])}`;
   return close ? `${d}Z` : d;
 }
 
 /** Does a ring's bounds box intersect the geographic window? */
-function ringInWindow(ring: LocatorRing, window: LocatorWindow): boolean {
+export function ringInWindow(ring: LocatorRing, window: LocatorWindow): boolean {
   const [w, s, e, n] = ring.b;
   return w <= window.east && e >= window.west && s <= window.north && n >= window.south;
 }
@@ -241,7 +251,7 @@ export interface LocatorScene {
   sheet: LocatorSheetRect;
 }
 
-function projectRing(ring: LocatorRing, window: LocatorWindow, size: number): Pt[] {
+export function projectRing(ring: LocatorRing, window: LocatorWindow, size: number): Pt[] {
   const points: Pt[] = [];
   for (let i = 0; i + 1 < ring.p.length; i += 2) {
     points.push(projectToWindow(ring.p[i]!, ring.p[i + 1]!, window, size));

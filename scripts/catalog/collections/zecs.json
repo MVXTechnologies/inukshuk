@@ -1,0 +1,768 @@
+{
+  "_comment": "Hand-curated (2026-10-02). All 63 Québec zecs, each linking to its own website on the Réseau Zec network. We link, never rehost: the official 1:40 000 territory maps are free in Avenza Maps and on the Réseau Zec cartothèque, and a few zecs post a PDF on their own site, but no zec states a licence (reseauzec.com: \"Tous droits réservés\"), so no map file is linked directly and nothing enters the download catalog until Réseau Zec agrees. Research and per-zec map URLs: docs/research/zec-maps.md. Activities are assigned by type in build-manifest (see docs/CATALOG.md).",
+  "id": "zecs",
+  "name": "Zecs du Québec",
+  "publisher": "Réseau Zec",
+  "blurb": "Maps from Réseau Zec",
+  "homepage": "https://reseauzec.com/cartotheque/",
+  "places": [
+    {
+      "id": "zec-anse-saint-jean",
+      "name": "Zec Anse-Saint-Jean",
+      "type": "ZEC",
+      "latitude": 48.134,
+      "longitude": -70.2335,
+      "url": "https://zecansestjean.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-70.364,48.029,-70.103,48.239] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-baillargeon",
+      "name": "Zec Baillargeon",
+      "type": "ZEC",
+      "latitude": 48.7895,
+      "longitude": -64.8395,
+      "url": "https://zecbaillargeon.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Gaspésie",
+        "coordinates": "centre of the territory bbox [-64.903,48.753,-64.776,48.826] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-bas-saint-laurent",
+      "name": "Zec Bas-Saint-Laurent",
+      "type": "ZEC",
+      "latitude": 48.1635,
+      "longitude": -68.025,
+      "url": "https://zecbasstlaurent.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Bas-Saint-Laurent",
+        "coordinates": "centre of the territory bbox [-68.465,48.0,-67.585,48.327] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-batiscan-neilson",
+      "name": "Zec Batiscan-Neilson",
+      "type": "ZEC",
+      "latitude": 47.1285,
+      "longitude": -71.8545,
+      "url": "https://zecbatiscanneilson.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Capitale-Nationale",
+        "coordinates": "centre of the territory bbox [-72.15,46.919,-71.559,47.338] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-bessonne",
+      "name": "Zec Bessonne",
+      "type": "ZEC",
+      "latitude": 47.408,
+      "longitude": -72.521,
+      "url": "https://zecdelabessonne.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.713,47.256,-72.329,47.56] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-borgia",
+      "name": "Zec Borgia",
+      "type": "ZEC",
+      "latitude": 47.824,
+      "longitude": -72.522,
+      "url": "https://zecborgia.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.729,47.644,-72.315,48.004] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-boulle",
+      "name": "Zec Boullé",
+      "type": "ZEC",
+      "latitude": 47.027,
+      "longitude": -74.3395,
+      "url": "https://zecboulle.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Lanaudière",
+        "coordinates": "centre of the territory bbox [-74.575,46.872,-74.104,47.182] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-bras-coupe-desert",
+      "name": "Zec Bras-Coupé-Désert",
+      "type": "ZEC",
+      "latitude": 46.5555,
+      "longitude": -76.388,
+      "url": "https://zecbrascoupedesert.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Outaouais",
+        "coordinates": "centre of the territory bbox [-76.706,46.303,-76.07,46.808] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-buteux-bas-saguenay",
+      "name": "Zec Buteux-Bas-Saguenay",
+      "type": "ZEC",
+      "latitude": 48.0515,
+      "longitude": -69.9285,
+      "url": "https://zecbuteux.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Capitale-Nationale",
+        "coordinates": "centre of the territory bbox [-70.065,47.924,-69.792,48.179] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-cap-chat",
+      "name": "Zec Cap-Chat",
+      "type": "ZEC",
+      "latitude": 48.9,
+      "longitude": -66.837,
+      "url": "https://zeccapchat.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Gaspésie",
+        "coordinates": "centre of the territory bbox [-66.98,48.818,-66.694,48.982] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-capitachouane",
+      "name": "Zec Capitachouane",
+      "type": "ZEC",
+      "latitude": 47.707,
+      "longitude": -76.5745,
+      "url": "https://zeccapitachouane.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-76.845,47.511,-76.304,47.903] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-casault",
+      "name": "Zec Casault",
+      "type": "ZEC",
+      "latitude": 48.345,
+      "longitude": -67.029,
+      "url": "https://zeccasault.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Bas-Saint-Laurent",
+        "coordinates": "centre of the territory bbox [-67.247,48.114,-66.811,48.576] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-chapais",
+      "name": "Zec Chapais",
+      "type": "ZEC",
+      "latitude": 47.219,
+      "longitude": -69.7135,
+      "url": "https://zecchapais.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Bas-Saint-Laurent",
+        "coordinates": "centre of the territory bbox [-69.887,47.067,-69.54,47.371] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-chapeau-de-paille",
+      "name": "Zec Chapeau-de-Paille",
+      "type": "ZEC",
+      "latitude": 47.051,
+      "longitude": -73.421,
+      "url": "https://zecchapeaudepaille.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-73.807,46.828,-73.035,47.274] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-chauvin",
+      "name": "Zec Chauvin",
+      "type": "ZEC",
+      "latitude": 48.445,
+      "longitude": -70.054,
+      "url": "https://zecchauvin.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-70.292,48.294,-69.816,48.596] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-collin",
+      "name": "Zec Collin",
+      "type": "ZEC",
+      "latitude": 46.7865,
+      "longitude": -74.1495,
+      "url": "https://zeccollin.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Lanaudière",
+        "coordinates": "centre of the territory bbox [-74.311,46.599,-73.988,46.974] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-des-anses",
+      "name": "Zec des Anses",
+      "type": "ZEC",
+      "latitude": 48.379,
+      "longitude": -64.9175,
+      "url": "https://zecdesanses.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Gaspésie",
+        "coordinates": "centre of the territory bbox [-65.101,48.313,-64.734,48.445] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-des-martres",
+      "name": "Zec des Martres",
+      "type": "ZEC",
+      "latitude": 47.775,
+      "longitude": -70.551,
+      "url": "https://zecdesmartres.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Capitale-Nationale",
+        "coordinates": "centre of the territory bbox [-70.78,47.675,-70.322,47.875] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-des-nymphes",
+      "name": "Zec des Nymphes",
+      "type": "ZEC",
+      "latitude": 46.537,
+      "longitude": -73.5985,
+      "url": "https://zecdesnymphes.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Lanaudière",
+        "coordinates": "centre of the territory bbox [-73.766,46.383,-73.431,46.691] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-des-passes",
+      "name": "Zec des Passes",
+      "type": "ZEC",
+      "latitude": 49.259,
+      "longitude": -71.5805,
+      "url": "https://zecdespasses.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-71.891,48.906,-71.27,49.612] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-dumoine",
+      "name": "Zec Dumoine",
+      "type": "ZEC",
+      "latitude": 46.4805,
+      "longitude": -78.0345,
+      "url": "https://zecdumoine.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-78.327,46.215,-77.742,46.746] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-festubert",
+      "name": "Zec Festubert",
+      "type": "ZEC",
+      "latitude": 47.8455,
+      "longitude": -76.078,
+      "url": "https://zecfestubert.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-76.477,47.655,-75.679,48.036] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-forestville",
+      "name": "Zec Forestville",
+      "type": "ZEC",
+      "latitude": 48.9605,
+      "longitude": -69.3585,
+      "url": "https://zecforestville.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-69.758,48.742,-68.959,49.179] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-fremont",
+      "name": "Zec Frémont",
+      "type": "ZEC",
+      "latitude": 47.5725,
+      "longitude": -73.7075,
+      "url": "https://zecfremont.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-73.929,47.413,-73.486,47.732] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-gros-brochet",
+      "name": "Zec Gros-Brochet",
+      "type": "ZEC",
+      "latitude": 47.329,
+      "longitude": -73.6805,
+      "url": "https://zecgrosbrochet.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-74.029,47.099,-73.332,47.559] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-iberville",
+      "name": "Zec Iberville",
+      "type": "ZEC",
+      "latitude": 48.576,
+      "longitude": -69.5065,
+      "url": "https://zeciberville.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-69.734,48.469,-69.279,48.683] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-jaro",
+      "name": "Zec Jaro",
+      "type": "ZEC",
+      "latitude": 45.9285,
+      "longitude": -70.348,
+      "url": "https://zecjaro.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Chaudière-Appalaches",
+        "coordinates": "centre of the territory bbox [-70.443,45.826,-70.253,46.031] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-jeannotte",
+      "name": "Zec Jeannotte",
+      "type": "ZEC",
+      "latitude": 47.4025,
+      "longitude": -72.266,
+      "url": "https://zecjeannotte.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.39,47.28,-72.142,47.525] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-kipawa",
+      "name": "Zec Kipawa",
+      "type": "ZEC",
+      "latitude": 47.108,
+      "longitude": -78.451,
+      "url": "https://zeckipawa.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-79.0,46.841,-77.902,47.375] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-kiskissink",
+      "name": "Zec Kiskissink",
+      "type": "ZEC",
+      "latitude": 47.832,
+      "longitude": -72.1695,
+      "url": "https://zeckiskissink.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.426,47.66,-71.913,48.004] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-la-croche",
+      "name": "Zec La Croche",
+      "type": "ZEC",
+      "latitude": 47.7195,
+      "longitude": -72.8325,
+      "url": "https://zeclacroche.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.937,47.551,-72.728,47.888] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-la-lievre",
+      "name": "Zec La Lièvre",
+      "type": "ZEC",
+      "latitude": 48.319,
+      "longitude": -72.6405,
+      "url": "https://zeclalievre.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-72.895,48.069,-72.386,48.569] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-labrieville",
+      "name": "Zec Labrieville",
+      "type": "ZEC",
+      "latitude": 49.303,
+      "longitude": -69.7285,
+      "url": "https://zeclabrieville.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-69.904,49.164,-69.553,49.442] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-lac-au-sable",
+      "name": "Zec Lac-au-Sable",
+      "type": "ZEC",
+      "latitude": 47.8725,
+      "longitude": -70.2465,
+      "url": "https://zeclacausable.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Capitale-Nationale",
+        "coordinates": "centre of the territory bbox [-70.398,47.713,-70.095,48.032] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-lac-brebeuf",
+      "name": "Zec Lac-Brébeuf",
+      "type": "ZEC",
+      "latitude": 48.119,
+      "longitude": -70.5845,
+      "url": "https://zecdulacbrebeuf.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-70.743,47.974,-70.426,48.264] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-lac-de-la-boiteuse",
+      "name": "Zec Lac-de-la-Boiteuse",
+      "type": "ZEC",
+      "latitude": 48.881,
+      "longitude": -71.2505,
+      "url": "https://zeclacdelaboiteuse.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-71.368,48.726,-71.133,49.036] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-lavigne",
+      "name": "Zec Lavigne",
+      "type": "ZEC",
+      "latitude": 46.462,
+      "longitude": -73.907,
+      "url": "https://zeclavigne.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Lanaudière",
+        "coordinates": "centre of the territory bbox [-74.112,46.302,-73.702,46.622] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-lesueur",
+      "name": "Zec Lesueur",
+      "type": "ZEC",
+      "latitude": 47.267,
+      "longitude": -75.475,
+      "url": "https://zeclesueur.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-75.754,47.002,-75.196,47.532] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-louise-gosford",
+      "name": "Zec Louise-Gosford",
+      "type": "ZEC",
+      "latitude": 45.3715,
+      "longitude": -70.767,
+      "url": "https://zeclouisegosford.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Estrie",
+        "coordinates": "centre of the territory bbox [-70.913,45.229,-70.621,45.514] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-maganasipi",
+      "name": "Zec Maganasipi",
+      "type": "ZEC",
+      "latitude": 46.4135,
+      "longitude": -78.4725,
+      "url": "https://zecmaganasipi.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-78.853,46.261,-78.092,46.566] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-maison-de-pierre",
+      "name": "Zec Maison-de-Pierre",
+      "type": "ZEC",
+      "latitude": 46.816,
+      "longitude": -74.7835,
+      "url": "https://zecmaisondepierre.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-75.016,46.588,-74.551,47.044] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-mars-moulin",
+      "name": "Zec Mars-Moulin",
+      "type": "ZEC",
+      "latitude": 48.1395,
+      "longitude": -71.0605,
+      "url": "https://zecmarsmoulin.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-71.201,47.989,-70.92,48.29] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-martin-valin",
+      "name": "Zec Martin-Valin",
+      "type": "ZEC",
+      "latitude": 48.634,
+      "longitude": -70.564,
+      "url": "https://zecmartinvalin.com/",
+      "activities": ["paddling", "hunting", "fishing", "camping"],
+      "evidence": {
+        "activities": "the zec publishes its own canoe-camping map (Carte-Martin-Valin-Canot-Camping.pdf, docs/research/zec-maps.md) beside its hunting and fishing territory map",
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean; answers 406 to scripted requests, fine in a browser",
+        "coordinates": "centre of the territory bbox [-70.845,48.428,-70.283,48.84] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-matimek",
+      "name": "Zec Matimek",
+      "type": "ZEC",
+      "latitude": 50.576,
+      "longitude": -66.777,
+      "url": "https://zecmatimek.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-67.098,50.2,-66.456,50.952] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-mazana",
+      "name": "Zec Mazana",
+      "type": "ZEC",
+      "latitude": 47.1155,
+      "longitude": -74.7005,
+      "url": "https://zecmazana.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-74.986,46.997,-74.415,47.234] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-menokeosawin",
+      "name": "Zec Menokéosawin",
+      "type": "ZEC",
+      "latitude": 47.783,
+      "longitude": -72.4255,
+      "url": "https://zecmenokeosawin.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.573,47.657,-72.278,47.909] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-mitchinamecus",
+      "name": "Zec Mitchinamecus",
+      "type": "ZEC",
+      "latitude": 47.2075,
+      "longitude": -75.191,
+      "url": "https://zecmitchinamecus.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-75.504,46.948,-74.878,47.467] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-nordique",
+      "name": "Zec Nordique",
+      "type": "ZEC",
+      "latitude": 48.545,
+      "longitude": -69.8335,
+      "url": "https://zecnordique.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-70.086,48.388,-69.581,48.702] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-normandie",
+      "name": "Zec Normandie",
+      "type": "ZEC",
+      "latitude": 47.3445,
+      "longitude": -74.7695,
+      "url": "https://zecnormandie.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-75.113,47.053,-74.426,47.636] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-onatchiway",
+      "name": "Zec Onatchiway",
+      "type": "ZEC",
+      "latitude": 49.062,
+      "longitude": -70.8175,
+      "url": "https://zeconatchiwayest.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-71.055,48.775,-70.58,49.349] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-owen",
+      "name": "Zec Owen",
+      "type": "ZEC",
+      "latitude": 47.726,
+      "longitude": -68.5245,
+      "url": "https://zecowen.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Bas-Saint-Laurent",
+        "coordinates": "centre of the territory bbox [-68.666,47.49,-68.383,47.962] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-petawaga",
+      "name": "Zec Petawaga",
+      "type": "ZEC",
+      "latitude": 47.068,
+      "longitude": -75.884,
+      "url": "https://zecpetawaga.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Laurentides",
+        "coordinates": "centre of the territory bbox [-76.148,46.817,-75.62,47.319] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-pontiac",
+      "name": "Zec Pontiac",
+      "type": "ZEC",
+      "latitude": 46.473,
+      "longitude": -76.575,
+      "url": "https://zecpontiac.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Outaouais",
+        "coordinates": "centre of the territory bbox [-76.891,46.241,-76.259,46.705] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-rapides-des-joachims",
+      "name": "Zec Rapides-des-Joachims",
+      "type": "ZEC",
+      "latitude": 46.401,
+      "longitude": -77.6405,
+      "url": "https://zecrapidesdesjoachims.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Outaouais",
+        "coordinates": "centre of the territory bbox [-77.859,46.183,-77.422,46.619] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-restigo",
+      "name": "Zec Restigo",
+      "type": "ZEC",
+      "latitude": 46.728,
+      "longitude": -78.391,
+      "url": "https://zecrestigo.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Abitibi-Témiscamingue",
+        "coordinates": "centre of the territory bbox [-78.756,46.514,-78.026,46.942] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-riviere-aux-rats",
+      "name": "Zec Rivière-aux-Rats",
+      "type": "ZEC",
+      "latitude": 49.546,
+      "longitude": -72.279,
+      "url": "https://zecriviereauxrats.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Saguenay–Lac-Saint-Jean",
+        "coordinates": "centre of the territory bbox [-72.51,49.092,-72.048,50.0] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-riviere-blanche",
+      "name": "Zec Rivière-Blanche",
+      "type": "ZEC",
+      "latitude": 47.3745,
+      "longitude": -72.059,
+      "url": "https://zecriviereblanche.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Capitale-Nationale",
+        "coordinates": "centre of the territory bbox [-72.257,47.178,-71.861,47.571] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-saint-romain",
+      "name": "Zec Saint-Romain",
+      "type": "ZEC",
+      "latitude": 45.725,
+      "longitude": -71.0895,
+      "url": "https://zecsaintromain.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Estrie",
+        "coordinates": "centre of the territory bbox [-71.141,45.679,-71.038,45.771] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-st-patrice",
+      "name": "Zec St-Patrice",
+      "type": "ZEC",
+      "latitude": 46.293,
+      "longitude": -77.285,
+      "url": "https://zecstpatrice.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Outaouais",
+        "coordinates": "centre of the territory bbox [-77.625,46.051,-76.945,46.535] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-tawachiche",
+      "name": "Zec Tawachiche",
+      "type": "ZEC",
+      "latitude": 47.065,
+      "longitude": -72.4895,
+      "url": "https://zectawachiche.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-72.624,46.934,-72.355,47.196] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-trinite",
+      "name": "Zec Trinité",
+      "type": "ZEC",
+      "latitude": 49.551,
+      "longitude": -67.363,
+      "url": "https://zectrinite.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-67.493,49.393,-67.233,49.709] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-varin",
+      "name": "Zec Varin",
+      "type": "ZEC",
+      "latitude": 49.5265,
+      "longitude": -68.6765,
+      "url": "https://zecvarin.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Côte-Nord",
+        "coordinates": "centre of the territory bbox [-68.902,49.335,-68.451,49.718] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    },
+    {
+      "id": "zec-wessonneau",
+      "name": "Zec Wessonneau",
+      "type": "ZEC",
+      "latitude": 47.325,
+      "longitude": -73.199,
+      "url": "https://zecwessonneau.reseauzec.com/",
+      "evidence": {
+        "url": "ZEC website, HTTP 200 on 2026-10-02 (listed on reseauzec.com); region Mauricie",
+        "coordinates": "centre of the territory bbox [-73.476,47.137,-72.922,47.513] from the Réseau Zec public boundary layer (services8.arcgis.com/ZejNMjgjXcpVRA8P/arcgis/rest/services/Public_zec/FeatureServer/0)"
+      }
+    }
+  ]
+}
