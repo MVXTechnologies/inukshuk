@@ -6,8 +6,8 @@
  * a scripted pdf.js and a canvas that holds real pixels. Under test: a keyed
  * request runs exactly one pass over what pdf.js painted before the PNG is
  * encoded (paper keyed out, ink and colour kept), an unkeyed one never reads
- * the pixels back, and a keyed page is never handed to a native renderer
- * (which cannot key) — neither by the page nor by the RN side.
+ * the pixels back, and a keyed native-eligible page still goes to the native
+ * renderer: the page keys the tile it drew afterwards (`__pdfKeyImage`).
  */
 import { runInNewContext } from 'node:vm';
 import { writeServedText } from '@data/localServer';
@@ -20,11 +20,16 @@ jest.mock(
   () => ({ beginPdfRender: () => 'token', finishPdfRender: jest.fn() }),
   { virtual: true },
 );
+const mockRenderNative = jest.fn();
+const mockDeleteNative = jest.fn();
 jest.mock('@data/nativePdf', () => ({
   nativePdfAvailable: () => true,
-  renderNativePdfCrop: jest.fn(),
-  deleteNativePdfOutput: jest.fn(),
+  renderNativePdfCrop: (...args: unknown[]) => mockRenderNative(...args),
+  deleteNativePdfOutput: (...args: unknown[]) => mockDeleteNative(...args),
 }));
+const mockCopyToServed = jest.fn(
+  async (_source: string, path: string) => `file:///Documents/${path}`,
+);
 const mockInject = jest.fn();
 let mockProps: { onMessage: (event: { nativeEvent: { data: string } }) => void } | null = null;
 jest.mock('react-native-webview', () => {
@@ -57,6 +62,7 @@ jest.mock('@data/localServer', () => ({
   probeLocalServer: async () => true,
   restartLocalServer: async (origin: string) => origin,
   writeServedText: jest.fn(),
+  copyToServed: (source: string, path: string) => mockCopyToServed(source, path),
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 
@@ -93,6 +99,10 @@ function pixelCanvas() {
   const ctx = {
     fillStyle: '',
     fillRect: () => {
+      canvas.pixels = new Uint8ClampedArray(canvas.width * canvas.height * 4);
+      paint(canvas.pixels);
+    },
+    drawImage: () => {
       canvas.pixels = new Uint8ClampedArray(canvas.width * canvas.height * 4);
       paint(canvas.pixels);
     },
@@ -139,12 +149,24 @@ async function loadPage() {
   expect(runtime).toBeDefined();
   const canvas = pixelCanvas();
   const posted: Posted[] = [];
+  const loaded: string[] = [];
   const window: Record<string, unknown> = {
     location: { href: 'http://127.0.0.1:8080/.rasterizer/index.html' },
     URL,
     document: { getElementById: () => canvas },
     setTimeout,
     clearTimeout,
+    // An <img> that "decodes" at once: drawImage then paints the test pixels.
+    Image: class {
+      naturalWidth = 20;
+      naturalHeight = 16;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(url: string) {
+        loaded.push(url);
+        setTimeout(() => (url.includes('missing') ? this.onerror?.() : this.onload?.()), 0);
+      }
+    },
     pdfjsLib: scriptedPdfjs(),
     ReactNativeWebView: {
       postMessage: (message: string) => {
@@ -172,7 +194,20 @@ async function loadPage() {
     });
     return posted.find((m) => m.id === id);
   };
-  return { view, canvas, render, window };
+  /** The page's entry point for a tile a native renderer drew. */
+  const keyImage = async (id: string, url: string, strength: number) => {
+    await act(async () => {
+      runInNewContext(
+        `window.__pdfKeyImage(${JSON.stringify(id)}, ${JSON.stringify(url)}, ${strength})`,
+        window,
+      );
+      for (let i = 0; i < 20 && !posted.some((m) => m.id === id); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    });
+    return posted.find((m) => m.id === id);
+  };
+  return { view, canvas, render, keyImage, loaded, window };
 }
 
 const pixel = (data: Uint8ClampedArray | undefined, index: number) =>
@@ -219,20 +254,41 @@ it.each([
   await view.unmount();
 });
 
-it('keeps a keyed native-eligible page on pdf.js (the page side)', async () => {
+it('hands a keyed native-eligible page to the native renderer too (the page side)', async () => {
   const { canvas, render, view } = await loadPage();
   const nativePage = { expectedPageWidthPt: 1000, expectedPageHeightPt: 800 };
-  const unkeyed = await render('n0', '{"whiteKey":0}', nativePage);
-  expect(unkeyed?.kind).toBe('native-geometry');
-  const keyed = await render('n1', '{"whiteKey":1}', nativePage);
-  expect(keyed?.kind).toBeUndefined();
-  expect(keyed).toMatchObject({ ok: true });
-  expect(canvas.writes).toHaveLength(1);
+  expect((await render('n0', '{"whiteKey":0}', nativePage))?.kind).toBe('native-geometry');
+  expect((await render('n1', '{"whiteKey":1}', nativePage))?.kind).toBe('native-geometry');
+  expect(canvas.writes).toHaveLength(0);
   await view.unmount();
 });
 
-it('sends the level as a strength and drops the native page for a keyed request (RN side)', async () => {
-  const { view } = await loadPage();
+it('keys a native tile in one pass: paper out, ink and colour kept', async () => {
+  const { canvas, keyImage, loaded, view } = await loadPage();
+  const result = await keyImage('k9', 'http://127.0.0.1:8080/.rasterizer/key-k9.png', 1);
+  expect(result).toMatchObject({ id: 'k9', kind: 'keyed', ok: true, widthPx: 20, heightPx: 16 });
+  expect(loaded).toEqual(['http://127.0.0.1:8080/.rasterizer/key-k9.png']);
+  expect(canvas.reads).toBe(1);
+  const keyed = canvas.writes[0];
+  expect(pixel(keyed, 5)?.[3]).toBe(0); // paper
+  expect(pixel(keyed, INK)).toEqual([0, 0, 0, 255]);
+  expect(pixel(keyed, GREEN)).toEqual([205, 230, 190, 255]);
+  // The same pixels a keyed pdf.js render of that paint produces.
+  const viaPdfjs = await loadPage();
+  await viaPdfjs.render('k10', '{"whiteKey":1}');
+  expect(Array.from(viaPdfjs.canvas.writes[0]!)).toEqual(Array.from(keyed!));
+  await viaPdfjs.view.unmount();
+  await view.unmount();
+});
+
+it('reports a native tile the page cannot load instead of hanging', async () => {
+  const { keyImage, view } = await loadPage();
+  const result = await keyImage('k11', 'http://127.0.0.1:8080/.rasterizer/missing.png', 1);
+  expect(result).toMatchObject({ kind: 'keyed', ok: false });
+  await view.unmount();
+});
+
+describe('a keyed native tile (RN side)', () => {
   const nativePage = {
     fileUri: 'file:///Documents/maps/m.pdf',
     revision: 'r',
@@ -240,13 +296,116 @@ it('sends the level as a strength and drops the native page for a keyed request 
     expectedPageHeightPt: 800,
   };
   const source = { url: 'http://127.0.0.1:8080/maps/m.pdf' };
-  const pending = view.result
-    .current({ source, pageIndex: 0, whiteKey: 4, nativePage })
-    .catch(() => undefined);
-  const injected = String(mockInject.mock.calls.at(-1)?.[0] ?? '');
-  expect(injected).toContain(', null, {"whiteKey":1}); true;');
-  await view.unmount();
-  await pending;
+  const crop = { x0: 0, y0: 0, x1: 0.5, y1: 0.5 };
+  const nativeResult = {
+    fileUri: 'file:///cache/overlays/native.png',
+    widthPx: 20,
+    heightPx: 16,
+    pageWidthPt: 1000,
+    pageHeightPt: 800,
+    pageCount: 1,
+    loadMs: 5,
+    renderMs: 7,
+  };
+  const settle = async () => {
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+  /** Wire the mocked WebView's injected scripts into the VM page. */
+  const connect = (window: Record<string, unknown>) =>
+    mockInject.mockImplementation((script: string) => runInNewContext(script, window));
+  beforeEach(() => {
+    mockRenderNative.mockReset().mockResolvedValue(nativeResult);
+    mockDeleteNative.mockReset();
+    mockCopyToServed.mockClear();
+  });
+
+  it('renders natively, keys the tile in the page and cleans both files up', async () => {
+    const { view, window, canvas, loaded } = await loadPage();
+    connect(window);
+    let result: unknown;
+    await act(async () => {
+      void view.result
+        .current({ source, pageIndex: 0, crop, whiteKey: 2, nativePage })
+        .then((r) => {
+          result = r;
+        });
+    });
+    await settle();
+    expect(mockRenderNative).toHaveBeenCalledTimes(1);
+    expect(mockCopyToServed).toHaveBeenCalledWith(
+      nativeResult.fileUri,
+      expect.stringMatching(/^\.rasterizer\/key-.*\.png$/),
+    );
+    expect(loaded[0]).toMatch(/^http:\/\/127\.0\.0\.1:8080\/\.rasterizer\/key-.*\.png$/);
+    expect(result).toMatchObject({
+      pngDataUri: 'data:image/png;base64,PNG',
+      widthPx: 20,
+      heightPx: 16,
+      pageWidthPt: 1000,
+      pageCount: 1,
+    });
+    expect((result as { fileUri?: string }).fileUri).toBeUndefined();
+    // 50 %: a partial veil, from exactly one pass.
+    expect(canvas.writes).toHaveLength(1);
+    const alpha = pixel(canvas.writes[0], 5)?.[3] ?? -1;
+    expect(alpha).toBeGreaterThan(0);
+    expect(alpha).toBeLessThan(255);
+    const deleted = mockDeleteNative.mock.calls.map(([uri]) => uri as string);
+    expect(deleted).toContain(nativeResult.fileUri);
+    expect(deleted.some((uri) => uri.includes('.rasterizer/key-'))).toBe(true);
+    await view.unmount();
+  });
+
+  it('leaves an unkeyed native tile as the native file', async () => {
+    const { view, window, canvas } = await loadPage();
+    connect(window);
+    let result: unknown;
+    await act(async () => {
+      void view.result.current({ source, pageIndex: 0, crop, nativePage }).then((r) => {
+        result = r;
+      });
+    });
+    await settle();
+    expect(result).toMatchObject({ fileUri: nativeResult.fileUri });
+    expect(mockCopyToServed).not.toHaveBeenCalled();
+    expect(canvas.writes).toHaveLength(0);
+    await view.unmount();
+  });
+
+  it('falls back to a keyed pdf.js render of that crop when the page cannot key the tile', async () => {
+    const { view, window, canvas } = await loadPage();
+    connect(window);
+    mockCopyToServed.mockRejectedValueOnce(new Error('disk full'));
+    let result: unknown;
+    await act(async () => {
+      void view.result
+        .current({ source, pageIndex: 0, crop, whiteKey: 4, nativePage })
+        .then((r) => {
+          result = r;
+        });
+    });
+    await settle();
+    expect(mockRenderNative).toHaveBeenCalledTimes(1);
+    expect(mockDeleteNative).toHaveBeenCalledWith(nativeResult.fileUri);
+    // pdf.js painted and keyed it instead.
+    expect(result).toMatchObject({ pngDataUri: 'data:image/png;base64,PNG' });
+    expect(canvas.writes).toHaveLength(1);
+    await view.unmount();
+  });
+
+  it('sends the level as a strength with the native page attached', async () => {
+    const { view } = await loadPage();
+    const pending = view.result
+      .current({ source, pageIndex: 0, whiteKey: 4, nativePage })
+      .catch(() => undefined);
+    const injected = String(mockInject.mock.calls.at(-1)?.[0] ?? '');
+    expect(injected).toContain('"expectedPageWidthPt":1000');
+    expect(injected).toContain('{"whiteKey":1}); true;');
+    await view.unmount();
+    await pending;
+  });
 });
 
 it.each([

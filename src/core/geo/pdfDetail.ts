@@ -23,6 +23,40 @@ export interface PdfDetailPlan {
   crop: PdfCrop;
   targetWidthPx: number;
   coordinates: [LngLat, LngLat, LngLat, LngLat];
+  /**
+   * A neighbour just outside the view, rendered ahead of a pan at the same
+   * detail level (same key the cell would have when visible). Never shown
+   * until the camera moves onto it.
+   */
+  prefetch?: true;
+}
+
+/** Options for {@link planPdfDetailTiles}. */
+export interface PdfDetailTileOptions {
+  /**
+   * Ring of neighbouring cells to plan as `prefetch` tiles, as a fraction of
+   * the view's span on each side (0.5 = half a view width left and right,
+   * half a view height above and below). 0 or absent plans none.
+   */
+  prefetchMargin?: number;
+  /** Most prefetch tiles returned (nearest first). Default 12. */
+  maxPrefetch?: number;
+}
+
+/**
+ * Tile raster widths a camera may ask for. The width the view would ideally
+ * sample changes with every pinch; snapping it UP to this ladder (each step at
+ * most 1.33x the last) keeps a tile's key, and therefore its cached raster,
+ * valid across small zoom changes instead of re-rendering on each one.
+ */
+export const PDF_TILE_WIDTH_LADDER: readonly number[] = [
+  256, 384, 512, 640, 768, 1024, 1280, 1536, 2048, 2560, 3072,
+];
+
+/** The smallest ladder width at or above `px` (the top step beyond it). */
+export function ladderTileWidth(px: number): number {
+  for (const step of PDF_TILE_WIDTH_LADDER) if (step >= px) return step;
+  return PDF_TILE_WIDTH_LADDER[PDF_TILE_WIDTH_LADDER.length - 1]!;
 }
 
 /** Self-contained: this same function is embedded in the PDF WebView. */
@@ -210,6 +244,7 @@ export function planPdfDetailTiles(
   viewportWidthPx: number,
   pixelBudget = 6 * 1024 * 1024,
   viewport?: PdfDetailViewport,
+  options: PdfDetailTileOptions = {},
 ): PdfDetailPlan[] {
   if (
     (viewport !== undefined &&
@@ -363,7 +398,7 @@ export function planPdfDetailTiles(
     Math.sqrt((3 * 1024 * 1024) / aspect),
     Math.sqrt(pixelBudget / capacity(divisions) / aspect),
   );
-  const desiredWidth = Math.ceil(density / divisions / 32) * 32;
+  const desiredWidth = ladderTileWidth(density / divisions);
   const budgetWidth = Math.floor(maximumWidth / 32) * 32;
   const width = Math.min(desiredWidth, budgetWidth);
   if (width < 1 || width * divisions < 2048 * 1.2) return [];
@@ -374,30 +409,55 @@ export function planPdfDetailTiles(
       tl[1] + ay * u + by * v + ry * diagonal,
     ]);
   };
+  const plan = (x: number, y: number): PdfDetailPlan => {
+    const crop = {
+      x0: x / divisions,
+      y0: y / divisions,
+      x1: (x + 1) / divisions,
+      y1: (y + 1) / divisions,
+    };
+    return {
+      crop,
+      targetWidthPx: width,
+      tileKey: `${divisions}:${x}:${y}:${width}`,
+      coordinates: [
+        geo(crop.x0, crop.y0),
+        geo(crop.x1, crop.y0),
+        geo(crop.x1, crop.y1),
+        geo(crop.x0, crop.y1),
+      ],
+    };
+  };
   const plans: PdfDetailPlan[] = [];
   for (let y = range.y0; y <= range.y1; y++)
-    for (let x = range.x0; x <= range.x1; x++) {
-      const crop = {
-        x0: x / divisions,
-        y0: y / divisions,
-        x1: (x + 1) / divisions,
-        y1: (y + 1) / divisions,
-      };
-      plans.push({
-        crop,
-        targetWidthPx: width,
-        tileKey: `${divisions}:${x}:${y}:${width}`,
-        coordinates: [
-          geo(crop.x0, crop.y0),
-          geo(crop.x1, crop.y0),
-          geo(crop.x1, crop.y1),
-          geo(crop.x0, crop.y1),
-        ],
-      });
-    }
+    for (let x = range.x0; x <= range.x1; x++) plans.push(plan(x, y));
   const cx = (left + right) / 2,
     cy = (top + bottom) / 2;
   const distance = (p: PdfDetailPlan) =>
     ((p.crop.x0 + p.crop.x1) / 2 - cx) ** 2 + ((p.crop.y0 + p.crop.y1) / 2 - cy) ** 2;
-  return plans.sort((a, b) => distance(a) - distance(b));
+  plans.sort((a, b) => distance(a) - distance(b));
+
+  // The ring around the view, at the same level and width: the keys a pan
+  // will ask for next. Nearest first, so a capped ring keeps the cells a
+  // short pan reaches.
+  const margin = options.prefetchMargin ?? 0;
+  const maxPrefetch = Math.max(0, Math.floor(options.maxPrefetch ?? 12));
+  if (!(margin > 0) || !Number.isFinite(margin) || maxPrefetch === 0) return plans;
+  const mu = Math.min(1, margin * spanU),
+    mv = Math.min(1, margin * spanV);
+  const ring = cells(divisions);
+  const outer = {
+    x0: Math.max(0, Math.floor(snapCell((left - mu) * divisions))),
+    x1: Math.min(divisions - 1, Math.ceil(snapCell((right + mu) * divisions)) - 1),
+    y0: Math.max(0, Math.floor(snapCell((top - mv) * divisions))),
+    y1: Math.min(divisions - 1, Math.ceil(snapCell((bottom + mv) * divisions)) - 1),
+  };
+  const extra: PdfDetailPlan[] = [];
+  for (let y = outer.y0; y <= outer.y1; y++)
+    for (let x = outer.x0; x <= outer.x1; x++) {
+      if (x >= ring.x0 && x <= ring.x1 && y >= ring.y0 && y <= ring.y1) continue;
+      extra.push({ ...plan(x, y), prefetch: true });
+    }
+  extra.sort((a, b) => distance(a) - distance(b));
+  return [...plans, ...extra.slice(0, maxPrefetch)];
 }

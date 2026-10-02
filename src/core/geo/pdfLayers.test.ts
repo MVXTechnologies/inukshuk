@@ -68,6 +68,15 @@ describe('planLayers', () => {
       '252R': false,
     });
     expect(plan.changed).toEqual(['252R']);
+    // Its "Images" parent (251R) is off by default: nothing drawn changes.
+    expect(plan.drawnChanged).toEqual([]);
+  });
+
+  it('counts imagery switched off as drawn when no hidden "Images" parent guards it', () => {
+    const older = US_TOPO.map((g) => (g.name === 'Images' ? { ...g, visible: true } : g));
+    expect(planLayers(older, DEFAULT_PDF_LAYER_PREFS).drawnChanged).toEqual(['252R']);
+    const bare = US_TOPO.filter((g) => g.name !== 'Images');
+    expect(planLayers(bare, DEFAULT_PDF_LAYER_PREFS).drawnChanged).toEqual(['252R']);
   });
 
   it('shows imagery on request, including the US Topo "Images" parent it is nested under', () => {
@@ -76,6 +85,7 @@ describe('planLayers', () => {
     expect(plan.visibility['251R']).toBe(true);
     expect(plan.visibility['239R']).toBe(false); // relief is not imagery
     expect(plan.changed).toEqual(['251R']);
+    expect(plan.drawnChanged).toEqual(['251R']);
   });
 
   it('never switches on a bare "Images" group without an imagery layer to go with it', () => {
@@ -94,6 +104,7 @@ describe('planLayers', () => {
     expect(planLayers(null as unknown as PdfLayerGroup[], DEFAULT_PDF_LAYER_PREFS)).toEqual({
       visibility: {},
       changed: [],
+      drawnChanged: [],
     });
     const junk = [null, { name: 'Contours', visible: true }, { id: '1R', name: null, visible: 0 }];
     expect(
@@ -101,7 +112,7 @@ describe('planLayers', () => {
         junk as unknown as PdfLayerGroup[],
         null as unknown as typeof DEFAULT_PDF_LAYER_PREFS,
       ),
-    ).toEqual({ visibility: { '1R': false }, changed: [] });
+    ).toEqual({ visibility: { '1R': false }, changed: [], drawnChanged: [] });
   });
 });
 
