@@ -16,6 +16,7 @@ import { buildImportedTrack, snapWaypointsToNotes } from '@core/geo/track';
 import type { TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { primeTrackGeometry } from '@data/trackGeometry';
+import { primeTrailStats } from '@data/trailStatsStore';
 import { reportError } from '@lib/errorReporting';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -157,6 +158,7 @@ class ImportSession {
     // Draw it from the points in hand: the map and Library never have to
     // parse this GPX back (#465).
     primeTrackGeometry(track, activity.points, activity.segmentStarts);
+    if (timed) primeTrailStats(track, activity.points, activity.segmentStarts);
     this.items.push({ track: { ...track, points: [] }, fileUri, notes });
   }
 

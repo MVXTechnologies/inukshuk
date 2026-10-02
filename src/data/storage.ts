@@ -588,6 +588,33 @@ export function writeTrackGeometryCache(id: string, text: string): void {
   });
 }
 
+// ---- per-trail statistics cache (Logbook statistics) ------------------------
+//
+// One small JSON document: every trail's best efforts and heart-rate
+// histogram, keyed by trail revision (`@data/trailStatsStore`). A cache — if
+// the OS purges it, the summaries are recomputed from the GPX files.
+
+const TRAIL_STATS_FILE = 'trail-stats.json';
+
+/** The cached trail-statistics JSON, or null when absent. */
+export async function readTrailStatsCache(): Promise<string | null> {
+  const file = new File(Paths.cache, TRAIL_STATS_FILE);
+  return file.exists ? file.text() : null;
+}
+
+/** Replace the trail-statistics cache: staged, then moved into place. */
+export function writeTrailStatsCache(text: string): void {
+  const target = new File(Paths.cache, TRAIL_STATS_FILE);
+  const staged = new File(Paths.cache, `${TRAIL_STATS_FILE}.tmp`);
+  guardWrite(() => {
+    if (staged.exists) staged.delete();
+    staged.create();
+    staged.write(text);
+    if (target.exists) target.delete();
+    staged.moveSync(target);
+  });
+}
+
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
 export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
   ensureStorage();

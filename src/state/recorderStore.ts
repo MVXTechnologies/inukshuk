@@ -19,6 +19,7 @@ import { mergeTrackPoints } from '@core/geo/track/mergePoints';
 import { findCategory } from '@core/library/categories';
 import * as checkpoint from '@data/recorderCheckpoint';
 import * as storage from '@data/storage';
+import { primeTrailStats } from '@data/trailStatsStore';
 import { reportError } from '@lib/errorReporting';
 import * as Location from 'expo-location';
 import { create } from 'zustand';
@@ -562,6 +563,8 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         }
         throw new LibraryNotHydratedError();
       }
+      // Logbook statistics from the points in hand (never re-read from the GPX).
+      primeTrailStats(track, points, segmentStarts);
       // Auto-named recording → try for a friendlier region title, async.
       const first = points[0];
       if (first && name === defaultName(startedAt)) {

@@ -229,6 +229,22 @@ export interface SchemeTokens {
     coin: string;
     heart: string;
   };
+  /** Logbook statistics (Statistics, Personal records, Year in review). */
+  stats: {
+    /** The week-streak flame and its count (warm orange). */
+    flame: string;
+    /** Chart bars, and the current period's darker bar. */
+    bar: string;
+    barCurrent: string;
+    /** Heart-rate zones Z1 … Z5, cool to hot. */
+    zones: readonly [string, string, string, string, string];
+    /** Year-in-review heatmap: an empty day, then the four shades. */
+    dayEmpty: string;
+    dayShades: readonly [string, string, string, string];
+    /** The "NEW" record badge and its ink. */
+    newBadge: string;
+    onNewBadge: string;
+  };
 }
 
 export const lightScheme: SchemeTokens = {
@@ -365,6 +381,16 @@ export const lightScheme: SchemeTokens = {
     cairnMid: '#AEB6AA',
     coin: '#E0B94E',
     heart: '#C2410C',
+  },
+  stats: {
+    flame: '#C2410C',
+    bar: palette.sage,
+    barCurrent: palette.sageDeep,
+    zones: ['#8D9AA6', '#5C93B7', '#6F8F3F', '#C98A2B', '#C2410C'],
+    dayEmpty: '#E8E1D2',
+    dayShades: ['#D6DEB8', '#B1C181', '#849E4E', '#566B33'],
+    newBadge: '#C2410C',
+    onNewBadge: palette.white,
   },
 };
 
@@ -510,6 +536,16 @@ export const darkScheme: SchemeTokens = {
     coin: '#E0B94E',
     heart: '#F07A45',
   },
+  stats: {
+    flame: '#F07A45',
+    bar: '#6F7F4A',
+    barCurrent: '#B6C98A',
+    zones: ['#8E9AA5', '#6FA7CC', '#93B35E', '#D9A24A', '#F07A45'],
+    dayEmpty: '#262D33',
+    dayShades: ['#3F4B2A', '#5D7038', '#88A257', '#B6C98A'],
+    newBadge: '#F07A45',
+    onNewBadge: '#13171B',
+  },
 };
 
 /**
@@ -646,6 +682,16 @@ export const sunlightScheme: SchemeTokens = {
     cairnMid: '#CCCCCC',
     coin: '#E0B94E',
     heart: '#B02222',
+  },
+  stats: {
+    flame: '#B02222',
+    bar: '#777777',
+    barCurrent: palette.black,
+    zones: ['#BBBBBB', '#888888', '#555555', '#333333', palette.black],
+    dayEmpty: '#EEEEEE',
+    dayShades: ['#BBBBBB', '#888888', '#555555', palette.black],
+    newBadge: palette.black,
+    onNewBadge: palette.white,
   },
 };
 
@@ -788,6 +834,16 @@ export const nightScheme: SchemeTokens = {
     cairnMid: '#CC2E24',
     coin: NIGHT_INK,
     heart: NIGHT_INK,
+  },
+  stats: {
+    flame: '#FF5C5C',
+    bar: '#7A2626',
+    barCurrent: '#FF5C5C',
+    zones: ['#4A1A1A', '#6E2323', '#9A2E2E', '#C83A3A', '#FF5C5C'],
+    dayEmpty: '#1F0E0E',
+    dayShades: ['#4A1A1A', '#7A2626', '#B03434', '#FF5C5C'],
+    newBadge: '#FF5C5C',
+    onNewBadge: palette.black,
   },
 };
 

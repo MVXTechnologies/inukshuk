@@ -122,6 +122,10 @@ export default function RootLayout() {
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="trail3d/[id]" />
                   <Stack.Screen name="settings" />
+                  {/* Logbook statistics: Statistics, Personal records, Year in review. */}
+                  <Stack.Screen name="logbook/stats" />
+                  <Stack.Screen name="logbook/records" />
+                  <Stack.Screen name="logbook/year" />
                   {/* Support Inukshuk: the tip jar and its thank-you (#476). */}
                   <Stack.Screen name="support/index" />
                   <Stack.Screen name="support/thanks" />

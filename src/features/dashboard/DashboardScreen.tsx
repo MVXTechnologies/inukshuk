@@ -11,6 +11,9 @@ import {
   type ChartGranularity,
 } from '@core/dashboard/logbook';
 import { findCategory } from '@core/library/categories';
+import { weekStreaks } from '@core/stats/streaks';
+import { LogbookHeaderActions } from '@features/logbook/LogbookHeaderActions';
+import { useTrailStatsBackfill } from '@features/logbook/useTrailStats';
 import { useLibraryStore } from '@state/libraryStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { space } from '@ui/tokens';
@@ -52,6 +55,9 @@ export function DashboardScreen() {
   const [granularity, setGranularity] = useState<ChartGranularity>('week');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const now = useDashboardClock();
+  // Statistics' per-trail summaries are computed in the background from here,
+  // so a first-run backfill is usually done before Statistics is opened.
+  useTrailStatsBackfill();
   // Following the current month is the default; explicit browsing pins it.
   const [browsedMonth, setBrowsedMonth] = useState<{ year: number; month: number } | null>(null);
   const visibleMonth = useMemo(() => {
@@ -79,6 +85,15 @@ export function DashboardScreen() {
     [tracks, categoryId],
   );
   const typeCounts = useMemo(() => countsByType(tracks), [tracks]);
+  // The header flame: consecutive weeks with an outing, every activity.
+  const streak = useMemo(
+    () =>
+      weekStreaks(
+        tracks.filter((t) => matchesCategoryFilter(t, null)).map((t) => t.startedAt),
+        now,
+      ).current,
+    [tracks, now],
+  );
   const recent = useMemo(
     () => recentActivities(tracks, categoryId, RECENT_ROWS),
     [tracks, categoryId],
@@ -131,7 +146,14 @@ export function DashboardScreen() {
   // and Settings gear sit exactly where the Library's and Explore's do.
   const header = (
     <View style={{ paddingTop: insets.top }}>
-      <ScreenHeader title="Logbook" />
+      <ScreenHeader title="Logbook">
+        {hasAnyActivity && (
+          <LogbookHeaderActions
+            streakWeeks={streak}
+            onOpenStats={() => router.push('/logbook/stats')}
+          />
+        )}
+      </ScreenHeader>
     </View>
   );
 
