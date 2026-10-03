@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -205,5 +206,73 @@ std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bear
                                    int maxRequests);
 std::optional<int> bestLoadedDemZoom(const TileId& t,
                                      const std::function<bool(const DemId&)>& isLoaded);
+
+// ---- 3D contours (contours3d.ts) ------------------------------------------------
+constexpr int kLevelCount = 7;
+constexpr double kLevelLadder[kLevelCount][2] = {{10, 50},   {20, 100},  {25, 100}, {50, 250},
+                                                 {100, 500}, {200, 1000}, {500, 2500}};
+constexpr double kMinSpacingPx = 5;
+constexpr double kMinorWidthPx = 1.1;
+constexpr double kMajorWidthPx = 2.0;
+std::pair<double, double> contourLevelsForZoom(double zoom);
+int baseLevelIndex(double zoom);
+std::pair<int, double> levelForDensity(int base, double dhPerPx);
+double distanceToLevelPx(double h, double interval, double dhPerPx);
+double lineCoverage(double distPx, double widthPx);
+bool isMajorLevel(double h, double minor, double major);
+std::pair<double, double> contourAt(double h, double dhPerPx, double zoom);
+
+// ---- surface (surface.ts) --------------------------------------------------------
+using Rgb = std::array<double, 3>;
+struct SurfacePalette {
+  Rgb land{}, rock{}, water{}, glacier{}, shadow{}, highlight{};
+};
+struct SurfaceParams {
+  double rockStartM = 2200, rockFullM = 3400, rockMax = 0.35, shadowStrength = 0.62,
+         highlightStrength = 0.45, highlightFrom = 0.72, slopeDarken = 0.18;
+};
+double lambertFor(double slopeX, double slopeY, double exaggeration, const Vec3& light);
+Rgb shadeSurface(const SurfacePalette& pal, const SurfaceParams& s, double heightM, double slopeX,
+                 double slopeY, double exaggeration, const Vec3& light, double water,
+                 double glacier);
+
+// ---- labels (labels.ts) ------------------------------------------------------------
+struct LabelInput {
+  int id = 0;
+  double x = 0, y = 0, h = 0;  // world px, metres
+  int kind = 0;
+  double priority = 0, w = 0, ph = 0;
+};
+struct LabelState {
+  double opacity = 0, shownAt = -1e300;
+};
+struct PlacedLabel {
+  int id = 0;
+  double ax = 0, ay = 0, depth = 0, cx = 0, cy = 0, gx = 0, gy = 0, scale = 1, opacity = 0;
+};
+struct PlaceOptions {
+  Mat4 P{};
+  double width = 0, height = 0, ctc = 1, hRef = 0, heightScale = 0;
+  double stemPx = 26, padPx = 4, fadeMs = 220, dtMs = 0, nowMs = 0;
+  double fadeFromCtc = 7, fadeToCtc = 10;
+  int maxLabels = 64;
+  std::function<bool(const LabelInput&)> occluded;
+};
+double labelScale(double distance, double ctc);
+bool rectsOverlap(const std::array<double, 4>& a, const std::array<double, 4>& b, double pad);
+double stepOpacity(double current, double target, double dtMs, double fadeMs);
+bool occludedByTerrain(const Vec3& eye, const Vec3& anchor,
+                       const std::function<std::optional<double>(double, double)>& terrainZ,
+                       int steps = 24, double clearanceM = 25);
+std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
+                                     std::unordered_map<int, LabelState>& states,
+                                     const PlaceOptions& o);
+
+// ---- lines / masks (lines.ts) --------------------------------------------------------
+using Pt = std::array<double, 2>;
+std::vector<Pt> densify(const std::vector<Pt>& pts, double maxStep);
+std::array<double, 2> extrudeOffset(const Pt& a, const Pt& b, double side, double widthPx,
+                                    const Pt& viewport);
+std::vector<uint8_t> rasterizePolygons(const std::vector<std::vector<Pt>>& rings, int size);
 
 }  // namespace inukshuk::terrain

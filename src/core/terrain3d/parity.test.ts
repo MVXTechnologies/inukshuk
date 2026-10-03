@@ -22,6 +22,12 @@ import { morphFactor, pitchRamp, smoothstep } from './morph';
 import { planDemRequests } from './prefetch';
 import { camera, frameCamera, PLACES, rng, type PlaceName } from './testUtils';
 import { demKey, tileKey } from './tiles';
+import { contourAt, levelForDensity } from './contours3d';
+import { shadeSurface } from './surface';
+import { occludedByTerrain, placeLabels, type LabelInput, type LabelState } from './labels';
+import { densify, extrudeOffset, rasterizePolygons } from './lines';
+import { centerPx, projectionMatrix, cameraToCenterDistance } from './camera';
+import { terrainLook } from './look';
 
 const FIXTURE = path.join(
   __dirname,
@@ -121,7 +127,120 @@ function build() {
     isPending: (d) => d.z === 12 && d.x % 2 === 0,
     maxRequests: 60,
   }).map(demKey);
+  // 3D scene maths (#551 redesign).
+  const contours: number[][] = [];
+  for (const z of [9, 11, 12, 14]) {
+    for (const d of [0.2, 0.9, 2.3, 4.7, 11, 40]) {
+      for (const h of [0, 3.2, 10, 49.6, 50.4, 777.7, 1000, 2512.5, -37]) {
+        const c = contourAt(h, d, z);
+        const l = levelForDensity(z % 3, d);
+        contours.push([h, d, z, c.minor, c.major, l.index, l.finerWeight]);
+      }
+    }
+  }
+  const sl = terrainLook({
+    basemap: 'map',
+    dark: false,
+    land: '#F2ECE0',
+    landAlt: '#E6DFCF',
+    relief: 'natural',
+  });
+  const surface: number[][] = [];
+  for (const [h, sx, sy, w, g] of [
+    [100, 0, 0, 0, 0],
+    [3000, -0.6, -0.9, 0, 0],
+    [3000, 0.6, 0.9, 0, 0.5],
+    [0, 0.2, 0.1, 0, 0],
+    [1800, -1.5, 0.3, 1, 0],
+    [2600, 0.1, -2.2, 0.3, 0.2],
+  ] as const) {
+    surface.push([
+      h,
+      sx,
+      sy,
+      w,
+      g,
+      ...shadeSurface({
+        palette: sl.surface,
+        heightM: h,
+        slopeX: sx,
+        slopeY: sy,
+        exaggeration: 1.3,
+        light: lightDirection(20),
+        water: w,
+        glacier: g,
+      }),
+    ]);
+  }
+  const lc = camera(PLACES.chamonix, 65, 30);
+  const LP = projectionMatrix(lc);
+  const [lx, ly] = centerPx(lc);
+  const lr = rng(7);
+  const labelInputs: LabelInput[] = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    x: lx + (lr() - 0.5) * 900,
+    y: ly + (lr() - 0.5) * 900 - 300,
+    h: 1000 + lr() * 2500,
+    kind: 'peak' as const,
+    priority: Math.floor(lr() * 10),
+    w: 60 + Math.floor(lr() * 60),
+    ph: 22,
+  }));
+  const states = new Map<number, LabelState>();
+  const labelFrames: number[][][] = [];
+  for (let f = 0; f < 4; f++) {
+    const placed = placeLabels(labelInputs.slice(0, 30 - f * 3), states, {
+      P: LP,
+      width: lc.width,
+      height: lc.height,
+      ctc: cameraToCenterDistance(lc.height),
+      hRef: 1100,
+      heightScale: 1.2,
+      dtMs: 70,
+      nowMs: f * 70,
+      occluded: (l) => l.id % 7 === 3,
+    });
+    labelFrames.push(
+      placed.map((p) => [p.id, p.ax, p.ay, p.depth, p.cx, p.cy, p.gx, p.gy, p.scale, p.opacity]),
+    );
+  }
+  const occl = [
+    occludedByTerrain([0, 0, 3000], [1000, 0, 0], (x) => (x > 400 && x < 600 ? 2500 : 0)),
+    occludedByTerrain([0, 0, 3000], [1000, 0, 0], () => 0),
+    occludedByTerrain([0, 0, 3000], [1000, 0, 0], (x) => (x > 980 ? 900 : null)),
+  ];
+  const dens = densify(
+    [
+      [0, 0],
+      [0.003, 0.001],
+      [0.0031, 0.0042],
+    ],
+    0.0004,
+  );
+  const ext = [
+    extrudeOffset([-0.2, 0.1], [0.4, 0.3], 1, 3, [400, 800]),
+    extrudeOffset([0.5, 0.5], [0.5, -0.5], -1, 6, [1080, 2400]),
+  ];
+  const mask = Array.from(
+    rasterizePolygons(
+      [
+        [
+          [0.1, 0.05],
+          [0.9, 0.2],
+          [0.7, 0.95],
+          [0.05, 0.6],
+        ],
+        [
+          [0.3, 0.3],
+          [0.5, 0.35],
+          [0.4, 0.55],
+        ],
+      ],
+      32,
+    ),
+  );
   return {
+    scene: { contours, surface, labelFrames, occl, dens, ext, mask },
     cameras,
     decode,
     mesh: {

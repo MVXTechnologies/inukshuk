@@ -51,6 +51,7 @@ struct Json {
                std::shared_ptr<JsonObj>>
       v;
   double num() const { return std::get<double>(v); }
+  bool boolean() const { return std::get<bool>(v); }
   const std::string& str() const { return std::get<std::string>(v); }
   const JsonArr& arr() const { return *std::get<std::shared_ptr<JsonArr>>(v); }
   const Json& operator[](const std::string& k) const {
@@ -258,6 +259,135 @@ static void testParity(const Json& fx) {
     const auto& want = fx["plan"]["keys"].arr();
     CHECK(plan.size() == want.size());
     for (size_t k = 0; k < std::min(plan.size(), want.size()); k++) CHECK(demKey(plan[k]) == want[k].str());
+  }
+}
+
+// ---- scene parity (#551 redesign) ----------------------------------------------------
+static Mat4 refProjection(double lng, double lat, double zoom, double pitchDeg, double bearingDeg,
+                          double w, double h);
+
+static void testScene(const Json& fx) {
+  const auto& sc = fx["scene"];
+  for (const auto& c : sc["contours"].arr()) {
+    g_cases++;
+    const double h = c[0].num(), d = c[1].num(), z = c[2].num();
+    const auto [mn, mj] = contourAt(h, d, z);
+    CHECK_NEAR(mn, c[3].num(), 1e-9);
+    CHECK_NEAR(mj, c[4].num(), 1e-9);
+    const auto [idx, fw] = levelForDensity(static_cast<int>(z) % 3, d);
+    CHECK(idx == static_cast<int>(c[5].num()));
+    CHECK_NEAR(fw, c[6].num(), 1e-9);
+  }
+  auto hex = [](int r, int g, int b) { return Rgb{r / 255.0, g / 255.0, b / 255.0}; };
+  const Rgb land = hex(0xf2, 0xec, 0xe0), alt = hex(0xe6, 0xdf, 0xcf);
+  auto mixc = [](const Rgb& a, const Rgb& b, double t) {
+    return Rgb{a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
+  };
+  SurfacePalette pal;
+  pal.land = land;
+  pal.rock = alt;
+  pal.water = mixc(land, hex(0x5c, 0x93, 0xb7), 0.45);
+  pal.glacier = mixc(land, hex(0xee, 0xf3, 0xf7), 0.75);
+  pal.shadow = mixc(land, hex(74, 62, 45), 0.78);
+  pal.highlight = mixc(land, Rgb{1, 250 / 255.0, 240 / 255.0}, 0.9);
+  for (const auto& r : sc["surface"].arr()) {
+    g_cases++;
+    const Rgb c = shadeSurface(pal, SurfaceParams{}, r[0].num(), r[1].num(), r[2].num(), 1.3,
+                               lightDirection(20), r[3].num(), r[4].num());
+    for (int k = 0; k < 3; k++) CHECK_NEAR(c[k], r[5 + k].num(), 1e-9);
+  }
+  {
+    struct Mulberry {
+      uint32_t a;
+      double next() {
+        a += 0x6d2b79f5u;
+        uint32_t t = a;
+        t = (t ^ (t >> 15)) * (t | 1u);
+        t ^= t + (t ^ (t >> 7)) * (t | 61u);
+        return (t ^ (t >> 14)) / 4294967296.0;
+      }
+    } r{7};
+    const double lng = 6.8694, lat = 45.9237, zoom = 13, W = 412, H = 892;
+    const Mat4 P = refProjection(lng, lat, zoom, 65, 30, W, H);
+    const double ws = worldSize(zoom);
+    const double cx = lngToMercX(lng) * ws, cy = latToMercY(lat) * ws;
+    std::vector<LabelInput> inputs;
+    for (int i = 0; i < 30; i++) {
+      LabelInput l;
+      l.id = i;
+      l.x = cx + (r.next() - 0.5) * 900;
+      l.y = cy + (r.next() - 0.5) * 900 - 300;
+      l.h = 1000 + r.next() * 2500;
+      l.priority = std::floor(r.next() * 10);
+      l.w = 60 + std::floor(r.next() * 60);
+      l.ph = 22;
+      inputs.push_back(l);
+    }
+    std::unordered_map<int, LabelState> states;
+    const auto& frames = sc["labelFrames"].arr();
+    for (int f = 0; f < 4; f++) {
+      g_cases++;
+      PlaceOptions o;
+      o.P = P;
+      o.width = W;
+      o.height = H;
+      o.ctc = cameraToCenterDistance(H, 0.6435011087932844);
+      o.hRef = 1100;
+      o.heightScale = 1.2;
+      o.dtMs = 70;
+      o.nowMs = f * 70;
+      o.occluded = [](const LabelInput& l) { return l.id % 7 == 3; };
+      std::vector<LabelInput> sub(inputs.begin(), inputs.begin() + (30 - f * 3));
+      const auto placed = placeLabels(sub, states, o);
+      const auto& want = frames[f].arr();
+      CHECK(placed.size() == want.size());
+      for (size_t k = 0; k < std::min(placed.size(), want.size()); k++) {
+        const auto& p = placed[k];
+        const auto& wv = want[k];
+        CHECK(p.id == static_cast<int>(wv[0].num()));
+        const double vals[] = {p.ax, p.ay, p.depth, p.cx, p.cy, p.gx, p.gy, p.scale, p.opacity};
+        for (int j = 0; j < 9; j++)
+          CHECK_NEAR(vals[j], wv[j + 1].num(), 1e-6 * std::max(1.0, std::abs(wv[j + 1].num())));
+      }
+    }
+  }
+  {
+    g_cases++;
+    const auto& oc = sc["occl"].arr();
+    const Vec3 eye{0, 0, 3000}, anchor{1000, 0, 0};
+    CHECK(occludedByTerrain(eye, anchor, [](double x, double) -> std::optional<double> {
+            return (x > 400 && x < 600) ? 2500.0 : 0.0;
+          }) == oc[0].boolean());
+    CHECK(occludedByTerrain(eye, anchor,
+                            [](double, double) -> std::optional<double> { return 0.0; }) ==
+          oc[1].boolean());
+    CHECK(occludedByTerrain(eye, anchor, [](double x, double) -> std::optional<double> {
+            if (x > 980) return 900.0;
+            return std::nullopt;
+          }) == oc[2].boolean());
+  }
+  {
+    g_cases++;
+    const auto d = densify({{0, 0}, {0.003, 0.001}, {0.0031, 0.0042}}, 0.0004);
+    const auto& want = sc["dens"].arr();
+    CHECK(d.size() == want.size());
+    for (size_t k = 0; k < std::min(d.size(), want.size()); k++) {
+      CHECK_NEAR(d[k][0], want[k][0].num(), 1e-15);
+      CHECK_NEAR(d[k][1], want[k][1].num(), 1e-15);
+    }
+    const auto e0 = extrudeOffset({-0.2, 0.1}, {0.4, 0.3}, 1, 3, {400, 800});
+    const auto e1 = extrudeOffset({0.5, 0.5}, {0.5, -0.5}, -1, 6, {1080, 2400});
+    CHECK_NEAR(e0[0], sc["ext"][0][0].num(), 1e-12);
+    CHECK_NEAR(e0[1], sc["ext"][0][1].num(), 1e-12);
+    CHECK_NEAR(e1[0], sc["ext"][1][0].num(), 1e-12);
+    CHECK_NEAR(e1[1], sc["ext"][1][1].num(), 1e-12);
+    const auto m = rasterizePolygons({{{0.1, 0.05}, {0.9, 0.2}, {0.7, 0.95}, {0.05, 0.6}},
+                                      {{0.3, 0.3}, {0.5, 0.35}, {0.4, 0.55}}},
+                                     32);
+    bool same = m.size() == sc["mask"].arr().size();
+    for (size_t k = 0; same && k < m.size(); k++)
+      same = m[k] == static_cast<uint8_t>(sc["mask"][k].num());
+    CHECK(same);
   }
 }
 
@@ -614,6 +744,7 @@ int main(int argc, char** argv) {
   Parser p{text};
   const Json fx = p.parse();
   testParity(fx);
+  testScene(fx);
   testPng();
   testEngine();
   std::printf("terrain C++ tests: %d cases, %d checks, %d failures\n", g_cases, g_checks, g_failures);
