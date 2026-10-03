@@ -37,6 +37,7 @@ class BenchStep : Record {
  */
 class InukshukTerrainModule : Module() {
   private val controllers = HashMap<Int, TerrainController>()
+  private val main = android.os.Handler(android.os.Looper.getMainLooper())
   private var memoryCallbacks: ComponentCallbacks2? = null
 
   override fun definition() = ModuleDefinition {
@@ -84,9 +85,10 @@ class InukshukTerrainModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     Function("update") { viewTag: Int, config: TerrainConfig ->
-      controllers[viewTag]?.update(look(config), config.enabled, config.networkAllowed)
+      val l = look(config)
+      main.post { controllers[viewTag]?.update(l, config.enabled, config.networkAllowed) }
       Unit
-    }.runOnQueue(Queues.MAIN)
+    }
 
     AsyncFunction("detach") { viewTag: Int ->
       controllers.remove(viewTag)?.detach()
