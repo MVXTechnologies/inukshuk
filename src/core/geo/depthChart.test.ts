@@ -7,7 +7,9 @@ import {
   maskLandAbove,
   renderDepthChart,
   selectSoundings,
+  SOUNDING_SORT_BANDS_M,
   soundingLabel,
+  soundingSortKey,
   soundingsFeatureCollection,
 } from './depthChart';
 import { NONNA_NODATA, latToMercY, lonToMercX } from './marineDepth';
@@ -194,6 +196,45 @@ describe('soundingsFeatureCollection', () => {
     expect(fc.features[1]?.properties.shallow).toBe(0);
     expect(fc.features[0]?.properties.sort).toBeLessThan(fc.features[1]?.properties.sort ?? -1);
     expect(fc.features[0]?.geometry.coordinates).toEqual([-71.2, 46.8]);
+  });
+
+  it('keys the soundings by depth band, not by depth, and lists them shallowest first', () => {
+    // One draw per distinct sort key: 500 soundings must not make 500 keys.
+    const soundings = Array.from({ length: 500 }, (_, i) => ({
+      lon: -71 + i * 1e-4,
+      lat: 46.8,
+      depthM: ((i * 37) % 500) * 0.31 - 1.5,
+    }));
+    const fc = soundingsFeatureCollection(soundings, false);
+    const keys = new Set(fc.features.map((f) => f.properties.sort));
+    expect(keys.size).toBeLessThanOrEqual(SOUNDING_SORT_BANDS_M.length + 1);
+    const sorts = fc.features.map((f) => f.properties.sort);
+    expect(sorts).toEqual([...sorts].sort((a, b) => a - b));
+    expect(fc.features[0]?.properties.label).toBe('(1.5)');
+    // The input is not reordered in place.
+    expect(soundings[0]?.depthM).toBe(-1.5);
+    expect(soundings[1]?.depthM).toBeCloseTo(9.97);
+  });
+});
+
+describe('soundingSortKey', () => {
+  it('puts drying heights and the shallowest water first', () => {
+    expect(soundingSortKey(-1.2)).toBe(0);
+    expect(soundingSortKey(0.4)).toBe(0);
+    expect(soundingSortKey(1)).toBe(1);
+    expect(soundingSortKey(4.9)).toBe(3);
+    expect(soundingSortKey(99)).toBe(SOUNDING_SORT_BANDS_M.length - 1);
+    expect(soundingSortKey(100)).toBe(SOUNDING_SORT_BANDS_M.length);
+    expect(soundingSortKey(4000)).toBe(SOUNDING_SORT_BANDS_M.length);
+  });
+
+  it('never ranks a deeper sounding before a shallower one', () => {
+    let last = -1;
+    for (let d = -3; d < 300; d += 0.25) {
+      const key = soundingSortKey(d);
+      expect(key).toBeGreaterThanOrEqual(last);
+      last = key;
+    }
   });
 });
 

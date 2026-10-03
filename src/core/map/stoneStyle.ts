@@ -360,6 +360,61 @@ export function peakDueFilter(lead: number): ExpressionSpecification {
   ];
 }
 
+/**
+ * Collision priority of a summit, as few distinct values as will do.
+ *
+ * MapLibre Native cuts a symbol bucket into one draw segment per distinct
+ * `symbol-sort-key` — and since its drawable renderer, one drawable each,
+ * every frame. The key used to be the height itself (`-ele`), which is all
+ * but unique per summit: the tiles around Zermatt hold ~4 000 summits at z9
+ * and ~350 at z11, so a frame issued thousands of draws for a few dozen
+ * visible names. Measured on the emulator (2026-10, the Alps camera path):
+ * panning at z9 ran at 1 fps and at z11 at 6 fps; with the layer off, 59.
+ * Height bands 100 m wide still cost half the frame rate (21 fps at z9),
+ * 250 m bands 34 fps, 500 m bands 45 fps.
+ *
+ * So the key is mostly the summit's `rank` — its rung on the tileset's
+ * elevation ladder (≥ 3000 m, ≥ 2000 m, ≥ 1500 m, ≥ 1000 m, ≥ 500 m, lower,
+ * unknown; a prominent summit a rung or two up) — so a 3000er still beats a
+ * 2000er to a crowded spot, and two summits on one rung are placed in tile
+ * order. Rank alone ran the Alps at 49 fps at z9 (57 at z11), but it let
+ * Picco Muzio (4187 m, a shoulder of the Matterhorn) take the Matterhorn's
+ * place, and Dom go missing, at z9–10. So the top of the ladder keeps finer
+ * steps: 250 m bands from 4000 m, 1000 m bands from 5000 m — the names a
+ * range is known by. That is at most {@link PEAK_SORT_KEY_MAX_VALUES} values
+ * worldwide and ~10 in an Alpine tile; measured with real drags at z9 near
+ * Zermatt, 35 fps against rank's 38 (and 2 before).
+ *
+ * Protomaps' own peaks (the fallback without our tiles) carry no rank:
+ * {@link PEAK_SORT_BAND_M}-metre height bands instead.
+ */
+export function peakSortKey(ours: boolean, eleField: string): ExpressionSpecification {
+  const ele: ExpressionSpecification = ['to-number', ['coalesce', ['get', eleField], 0], 0];
+  if (!ours) return ['-', 0, ['floor', ['/', ele, PEAK_SORT_BAND_M]]];
+  return [
+    'case',
+    // 5000 m and up: −20 (5000s) … −23 (8000s).
+    ['>=', ele, 5000],
+    ['-', -15, ['floor', ['/', ele, 1000]]],
+    // 4000–4999 m: −16 (4000–4249) … −19 (4750–4999).
+    ['>=', ele, 4000],
+    ['-', 0, ['floor', ['/', ele, 250]]],
+    // Below: the rung, 5 … 12. coalesce first: to-number turns a missing
+    // rank into 0, which would be the best key.
+    ['to-number', ['coalesce', ['get', 'rank'], PEAK_UNRANKED_SORT_KEY], PEAK_UNRANKED_SORT_KEY],
+  ];
+}
+
+/** Sort key of a summit from tiles built before `rank` existed: last. */
+export const PEAK_UNRANKED_SORT_KEY = 12;
+/**
+ * Distinct keys our tiles can produce: 4 bands of 1000 m (5000–8999), 4 of
+ * 250 m (4000–4999) and the 8 ranks (z5 … z12, `infra/tiles/nas/peaks_geojson.py`).
+ */
+export const PEAK_SORT_KEY_MAX_VALUES = 16;
+/** Height band (m) of the fallback key: 18 values from sea level to Everest. */
+export const PEAK_SORT_BAND_M = 500;
+
 /** Rivers and canals draw wider than streams, drains and ditches. */
 function byWaterwayKind(river: number, stream: number): ExpressionSpecification {
   return ['match', ['get', 'kind'], ['river', 'canal'], river, stream];
@@ -584,9 +639,9 @@ export function buildStoneLayers(
   ];
 
   /**
-   * Summits: bold name over its height, higher peaks winning collisions
-   * (`symbol-sort-key`). Drawn BELOW the place labels, so a town keeps its
-   * name where a minor peak would crowd it. Text only: the style has no
+   * Summits: bold name over its height, higher-ranked peaks winning
+   * collisions (`symbol-sort-key`, see {@link peakSortKey}). Drawn BELOW the
+   * place labels, so a town keeps its name where a minor peak would crowd it. Text only: the style has no
    * sprite and Atkinson carries no ▲ (U+25B2) to draw a marker with.
    * Metres only — the style builder doesn't know the units setting.
    */
@@ -627,7 +682,8 @@ export function buildStoneLayers(
         // A little more air than the default 2 px: with summits arriving
         // earlier (#461) the ranges would otherwise read as a wall of names.
         'text-padding': 6,
-        'symbol-sort-key': ['-', 0, ['to-number', ['coalesce', ['get', ele], 0], 0]],
+        // Coarse on purpose: one draw per distinct value (see peakSortKey).
+        'symbol-sort-key': peakSortKey(ours !== undefined, ele),
       },
       paint: { 'text-color': scheme.ink, ...halo },
     };

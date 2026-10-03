@@ -23,7 +23,10 @@ import {
   IMAGERY_ROAD_OPACITY,
   PARK_BAND_WIDTH,
   PARK_PAINT,
+  PEAK_SORT_BAND_M,
+  PEAK_SORT_KEY_MAX_VALUES,
   peakDueFilter,
+  peakSortKey,
   STONE_FONTS_ATKINSON,
   STONE_FONTS_NOTO,
   STONE_IMAGERY_LAYER_KEYS,
@@ -474,12 +477,9 @@ describe('buildStoneLayers', () => {
     expect(peak).toMatchObject({ source: 'peaks', 'source-layer': 'peaks', minzoom: 5 });
     // The tiles hold only named summits; the filter picks how early (#461).
     expect(peak?.filter).toEqual(peakDueFilter(PEAK_LEAD.normal));
-    // Higher summits win collisions.
-    expect(peak?.layout['symbol-sort-key']).toEqual([
-      '-',
-      0,
-      ['to-number', ['coalesce', ['get', 'ele'], 0], 0],
-    ]);
+    // Higher summits win collisions — by rung and coarse bands, never by the
+    // height itself: one draw per distinct sort key made the Alps a slideshow.
+    expect(peak?.layout['symbol-sort-key']).toEqual(peakSortKey(true, 'ele'));
     // Exactly one peak layer: Protomaps' own peaks would duplicate ours at z13+.
     // (What still reads `pois`: the trail POIs and, without parks tiles, the park names.)
     expect(
@@ -494,6 +494,77 @@ describe('buildStoneLayers', () => {
     const peak = peakOf(buildStoneLayers(LIGHT, { source: SOURCE }).labels);
     expect(peak).toMatchObject({ source: SOURCE, 'source-layer': 'pois', minzoom: 11 });
     expect(JSON.stringify(peak?.layout['text-field'])).toContain('"elevation"');
+  });
+
+  // One draw per distinct sort key and tile (see peakSortKey): the key must
+  // take few values however many summits a tile holds.
+  describe('peak collision priority', () => {
+    const keyOf = (key: unknown, properties: Record<string, unknown>): number => {
+      const compiled = createExpression(key, { type: 'number' } as never);
+      if (compiled.result !== 'success') throw new Error(JSON.stringify(compiled.value));
+      return compiled.value.evaluate({ zoom: 9 }, {
+        type: 1,
+        properties,
+        geometry: [],
+      } as never) as number;
+    };
+    // Every 7 m from sea level to Everest: what a crowded Alpine tile holds.
+    const heights = Array.from({ length: 1265 }, (_, i) => i * 7);
+    const rankOf = (ele: number) =>
+      ele >= 4000 ? 5 : ele >= 3000 ? 6 : ele >= 2000 ? 7 : ele >= 1500 ? 8 : ele >= 1000 ? 9 : 10;
+
+    it('takes few values on our tiles, lower for a higher summit', () => {
+      const key = peakSortKey(true, 'ele');
+      const values = new Set(heights.map((ele) => keyOf(key, { ele, rank: rankOf(ele) })));
+      expect(values.size).toBeLessThanOrEqual(PEAK_SORT_KEY_MAX_VALUES);
+      // An Alpine tile (summits of 500–4800 m): about ten.
+      const alpine = new Set(
+        heights
+          .filter((e) => e >= 500 && e <= 4800)
+          .map((ele) => keyOf(key, { ele, rank: rankOf(ele) })),
+      );
+      expect(alpine.size).toBeLessThanOrEqual(10);
+      // A lower key is placed first; never a higher key for a higher summit.
+      let last = Infinity;
+      for (const ele of heights) {
+        const k = keyOf(key, { ele, rank: rankOf(ele) });
+        expect(k).toBeLessThanOrEqual(last);
+        last = k;
+      }
+      expect(keyOf(key, { ele: 4478, rank: 5 })).toBeLessThan(keyOf(key, { ele: 3100, rank: 6 }));
+      // The Matterhorn beats its own shoulder, Picco Muzio, to the spot (2026-10 regression).
+      expect(keyOf(key, { ele: 4478, rank: 5 })).toBeLessThan(keyOf(key, { ele: 4187, rank: 5 }));
+      expect(keyOf(key, { ele: 8849, rank: 5 })).toBeLessThan(keyOf(key, { ele: 5642, rank: 5 }));
+      // Below 4000 m the rung decides: a prominent 2900 m summit promoted to rank 5 …
+      expect(keyOf(key, { ele: 2900, rank: 5 })).toBe(5);
+      // … and tiles from before `rank` put an unranked summit last, not first.
+      expect(keyOf(key, { ele: 1200 })).toBe(12);
+      expect(keyOf(key, { ele: 4478 })).toBe(-17);
+    });
+
+    it("bands Protomaps' peaks by height", () => {
+      const key = peakSortKey(false, 'elevation');
+      const values = new Set(heights.map((elevation) => keyOf(key, { elevation })));
+      expect(values.size).toBe(Math.ceil((1264 * 7 + 1) / PEAK_SORT_BAND_M));
+      expect(keyOf(key, { elevation: 4478 })).toBeLessThan(keyOf(key, { elevation: 3100 }));
+      expect(keyOf(key, {})).toBeCloseTo(0);
+      const peak = peakOf(buildStoneLayers(LIGHT, { source: SOURCE }).labels);
+      expect(peak?.layout['symbol-sort-key']).toEqual(key);
+    });
+
+    it('keeps every other label layer to a coarse key too', () => {
+      const { labels } = buildStoneLayers(LIGHT, {
+        source: SOURCE,
+        peaks: PEAKS,
+        contours: CONTOURS,
+      });
+      for (const l of labels) {
+        const key = (l as { layout?: Record<string, unknown> }).layout?.['symbol-sort-key'];
+        if (key === undefined) continue;
+        // Only small integers ride a sort key: a rank or a Protomaps min_zoom.
+        expect(JSON.stringify(key)).toMatch(/"rank"|"min_zoom"/);
+      }
+    });
   });
 
   it('draws peaks under the place labels, so towns keep their names', () => {

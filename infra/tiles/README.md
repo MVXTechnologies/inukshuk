@@ -82,12 +82,26 @@ it (source `basemap-peaks`, `src/features/map/mapStyle.ts`), labelled "Name / 1 
    | first zoom | 5        | 6      | 7      | 8      | 9      | 10    | 11  | 12      |
 
    An OSM `prominence` ≥ 500 m moves a peak one zoom earlier, ≥ 1500 m two (never before z5).
+
+   **Density** (2026-10, not yet in the published archive — it needs a `peaks.sh` run): the
+   ladder alone floods the great ranges. The six z9 tiles around Zermatt hold 4 100 summits for the
+   two or three dozen names a phone can show, and the map still shapes and collides every one. So a
+   summit's `rank` is also held back until it is one of the 6 best (ladder rank, then height) of
+   its **cell** — a square a quarter of a tile wide (128 px), two zooms earlier, so that at the
+   widest lead ("more" summits) no cell hands the map more than 6. "Normal" then gets 6 per
+   256 px and "fewer" 6 per tile, which makes the density setting mean something in the Alps,
+   where collisions used to make all three look alike. Sparse regions keep the ladder's ranks.
+   Simulated on the live tiles: around Zermatt at z9 the style is handed 130 summits instead of
+   3 757; around Québec City 61 instead of 108. `rank` keeps its meaning, so the app needs no
+   change — but the labels a dense range shows at a given zoom do change: review them on a device
+   before publishing.
    Tests: `python3 -m unittest infra/tiles/nas/test_peaks_geojson.py`.
 
 3. **tippecanoe** 2.79.0 (felt), built once on the NAS from its checksum-pinned release tarball
    (felt publishes no image): `-Z5 -z12 -r1 --no-feature-limit --no-tile-size-limit`, so every
-   summit is in every tile from its own minzoom and nothing is thinned or shed from a crowded tile
-   (the Alps at z7, the densest tile, is ~75 KB gzipped). z12 is the last rung of the ladder, so
+   summit is in every tile from its own minzoom and tippecanoe thins or sheds nothing itself — the
+   thinning is ours, in the ranks above (the Alps at z7, the densest tile, was ~75 KB gzipped
+   before it). z12 is the last rung of the ladder, so
    deeper tiles would only be copies; MapLibre overzooms z12.
 4. **Upload** as `peaks.pmtiles` with `upload.py` — only if the count is ≥ `PEAKS_MIN_FEATURES`
    (400,000; OSM has ~700k named summits) and not more than 30 % below the last run's
