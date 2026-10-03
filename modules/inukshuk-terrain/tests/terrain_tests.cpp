@@ -534,6 +534,7 @@ static void testEngine() {
     const int demsBefore = eng.stats().demCount;
     eng.trimMemory();
     CHECK(eng.stats().demCount < demsBefore);
+    const int meshesBefore = eng.stats().meshCount;
     in.timeMs += 16;
     auto o3 = eng.frame(in);
     CHECK(!o3.tiles.empty());
@@ -541,6 +542,8 @@ static void testEngine() {
     for (const auto& t : o3.tiles)
       if (before.count(t.key) && before[t.key]) CHECK(t.attributes != nullptr);
     CHECK(eng.stats().flatTiles == 0);
+    CHECK(eng.stats().meshCount <= meshesBefore);
+    CHECK(eng.stats().meshCount <= static_cast<int>(o3.tiles.size()) + Engine::kBakesPerFrame);
     // Culled neighbours lose their (unpinned) height bounds, so the walk may
     // admit a few more tiles — never a flat one.
     CHECK(o3.tiles.size() <= out.tiles.size() * 5 / 4);

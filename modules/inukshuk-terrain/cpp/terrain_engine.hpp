@@ -167,6 +167,7 @@ class Engine {
   LookParams look_;
   std::atomic<uint32_t> demGeneration_{0};
   std::atomic<bool> resetMeshes_{false};
+  std::atomic<bool> trimMeshes_{false};
 
   // Render-thread only.
   std::unordered_map<uint64_t, Mesh> meshes_;

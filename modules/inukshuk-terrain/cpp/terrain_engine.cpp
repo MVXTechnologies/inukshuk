@@ -142,8 +142,9 @@ void Engine::trimMemory() {
     }
     it = demLru_.erase(it);
   }
-  // Meshes are render-thread state; mark for the next frame by shrinking the
-  // pins to the current set (frame() trims unpinned meshes past budget).
+  // Meshes are render-thread state: the next frame() drops every one it
+  // doesn't draw.
+  trimMeshes_ = true;
 }
 
 void Engine::reset() {
@@ -469,8 +470,9 @@ FrameOutput Engine::frame(const FrameInput& in) {
     }
     out.tiles.push_back(std::move(d));
   }
-  // Mesh LRU trim.
-  for (auto it = meshLru_.begin(); it != meshLru_.end() && meshes_.size() > kMeshBudget;) {
+  // Mesh LRU trim (to the on-screen set after a low-memory warning).
+  const size_t meshBudget = trimMeshes_.exchange(false) ? 0 : kMeshBudget;
+  for (auto it = meshLru_.begin(); it != meshLru_.end() && meshes_.size() > meshBudget;) {
     if (meshPins_.count(*it)) {
       ++it;
       continue;
