@@ -1,8 +1,12 @@
 import { costStats, frameStats } from '@core/terrain3d/frameStats';
 import { isTiltRelief } from '@core/map/tiltRelief';
 import { writeQaReport } from '@data/qaReports';
+import * as storage from '@data/storage';
+import { importGpxFromUri } from '@features/library/importGpx';
+import { mapDocumentFromStoredPdf } from '@features/library/importMap';
 import { namedTerrainStats, nativeTerrain } from '@lib/nativeTerrain';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
+import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import * as Linking from 'expo-linking';
@@ -17,6 +21,8 @@ import { useEffect, useState, type RefObject } from 'react';
  *   inukshuk://?tqa=1&lat=46.02&lng=7.75&zoom=13&pitch=70&bearing=30
  *     &basemap=map|satellite&theme=light|dark&relief=off|natural|dramatic
  *     &probe=0|1                      (1: attach as a 2D frame-timing probe)
+ *     &n3d=0|1                        (0: native 3D off — the 2D "before")
+ *     &pdf=<url>  &gpx=<url>          (import a GeoPDF overlay / a trail, shown)
  *     &bench=<label>                  (run the standard gesture script)
  *     &stats=<label>                  (dump engine stats)
  *
@@ -27,8 +33,9 @@ export const TERRAIN_QA = process.env.EXPO_PUBLIC_TERRAIN_QA === '1';
 export function useTerrainQa(
   cameraRef: RefObject<CameraRef | null>,
   tagRef: RefObject<number | null>,
-): { probe: boolean } {
+): { probe: boolean; disabled: boolean } {
   const [probe, setProbe] = useState(false);
+  const [disabled, setDisabled] = useState(false);
 
   useEffect(() => {
     if (!TERRAIN_QA) return;
@@ -53,6 +60,12 @@ export function useTerrainQa(
       if (basemap === 'map' || basemap === 'satellite') useMapStore.getState().setBasemap(basemap);
       const p = q('probe');
       if (p === '0' || p === '1') setProbe(p === '1');
+      const n3d = q('n3d');
+      if (n3d === '0' || n3d === '1') setDisabled(n3d === '0');
+      const pdf = q('pdf');
+      if (pdf) void importQaPdf(pdf);
+      const gpx = q('gpx');
+      if (gpx) void importQaGpx(gpx);
       const lat = num('lat');
       const lng = num('lng');
       if (lat !== undefined && lng !== undefined && Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -96,5 +109,30 @@ export function useTerrainQa(
     return () => sub.remove();
   }, [cameraRef, tagRef]);
 
-  return { probe };
+  return { probe, disabled };
+}
+
+async function importQaPdf(url: string): Promise<void> {
+  try {
+    const id = storage.newId();
+    const cached = await storage.downloadToCacheUri(url, `qa-${id}.pdf`);
+    const fileUri = await storage.importPdf(cached, id);
+    const doc = await mapDocumentFromStoredPdf(id, fileUri, 'QA overlay');
+    useLibraryStore.getState().addMap(doc);
+    console.log(`TERRAIN_QA pdf imported ${doc.georeferences.length} page(s)`);
+  } catch (e) {
+    console.log(`TERRAIN_QA pdf failed ${String(e)}`);
+  }
+}
+
+async function importQaGpx(url: string): Promise<void> {
+  try {
+    const cached = await storage.downloadToCacheUri(url, `qa-${storage.newId()}.gpx`);
+    const t = await importGpxFromUri(cached, 'QA trail');
+    const lib = useLibraryStore.getState();
+    if (lib.addTrack(t.track, t.fileUri, t.notes)) lib.toggleTrackOverlay(t.track.id);
+    console.log('TERRAIN_QA gpx imported');
+  } catch (e) {
+    console.log(`TERRAIN_QA gpx failed ${String(e)}`);
+  }
 }

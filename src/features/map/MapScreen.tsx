@@ -850,7 +850,7 @@ export function MapScreen() {
     hostRef: terrainHostRef,
     mapLoaded,
     relief: tiltRelief,
-    allowed: editorStyle === null,
+    allowed: editorStyle === null && !terrainQa.disabled,
     basemap: basemap === 'satellite' ? 'satellite' : 'map',
     dark: theme.dark,
     networkAllowed: !offlineOnly,
