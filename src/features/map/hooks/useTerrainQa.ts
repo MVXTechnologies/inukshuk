@@ -23,6 +23,7 @@ import { useEffect, useState, type RefObject } from 'react';
  *     &probe=0|1                      (1: attach as a 2D frame-timing probe)
  *     &n3d=0|1                        (0: native 3D off — the 2D "before")
  *     &pdf=<url>  &gpx=<url>          (import a GeoPDF overlay / a trail, shown)
+ *     &pdfs=0|1                       (the "PDF maps" master switch)
  *     &bench=<label>                  (run the standard gesture script)
  *     &stats=<label>                  (dump engine stats)
  *
@@ -55,6 +56,8 @@ export function useTerrainQa(
       const settings = useSettingsStore.getState();
       const theme = q('theme');
       if (theme === 'light' || theme === 'dark') settings.set('themeMode', theme);
+      const pdfs = q('pdfs');
+      if (pdfs === '0' || pdfs === '1') settings.set('showPdfOverlay', pdfs === '1');
       const relief = q('relief');
       if (isTiltRelief(relief)) settings.set('tiltRelief', relief);
       const basemap = q('basemap');
