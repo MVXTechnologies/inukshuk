@@ -163,13 +163,14 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       fogDensity: 0.12,
       fogEndCtc: 12,
       surface: {
-        land,
+        // A touch above the 2D ground so the shadows have somewhere to go.
+        land: mix(land, NIGHT_HIGHLIGHT, 0.06),
         rock: mix(land, landAlt, 0.8),
         water: mix(land, river, 0.3),
         glacier: mix(land, mix(ICE, river, 0.2), 0.38),
         // Night relief needs its light: a softer shadow, a brighter lit face.
         shadow: mix(land, BLACK, 0.7),
-        highlight: mix(land, NIGHT_HIGHLIGHT, 0.55),
+        highlight: mix(land, NIGHT_HIGHLIGHT, 0.68),
       },
       // Sunk into the stone, as the 2D night map draws them: bright ochre on
       // near-black reads as a wireframe.
