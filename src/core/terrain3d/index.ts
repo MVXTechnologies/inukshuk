@@ -12,3 +12,7 @@ export * from './prefetch';
 export * from './reference';
 export * from './tiles';
 export * from './frameStats';
+export * from './contours3d';
+export * from './labels';
+export * from './lines';
+export * from './surface';

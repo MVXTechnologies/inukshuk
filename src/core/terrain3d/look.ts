@@ -6,6 +6,7 @@
  * (satellite). Pure numbers for the native shaders.
  */
 import { clamp01 } from './morph';
+import type { SurfacePalette } from './surface';
 
 export type Rgb = [number, number, number];
 export type TerrainBasemap = 'map' | 'satellite';
@@ -71,9 +72,19 @@ export interface TerrainLookInput {
   dark: boolean;
   /** The map's land/background token (CSS colour). */
   land: string;
+  /** Bare ground / rock token (the map's `landAlt`). */
+  landAlt?: string;
+  /** Water token (washed over the land like the 2D map). */
+  water?: string;
+  /** Contour line token. */
+  contour?: string;
+  /** Ink token (index contours lean toward it). */
+  ink?: string;
   /** Optional cool tint for the light map's zenith (e.g. the river token). */
   skyTint?: string;
   relief: TerrainRelief;
+  /** Draw contour lines on the surface (follows the map's contour setting). */
+  contours?: boolean;
 }
 
 export interface TerrainLook {
@@ -81,7 +92,7 @@ export interface TerrainLook {
   fogColor: Rgb;
   skyHorizon: Rgb;
   skyZenith: Rgb;
-  /** Strength of the 3D form (Lambert) term over the draped map, 0–1. */
+  /** Strength of the 3D form term over satellite imagery, 0–1. */
   formStrength: number;
   /** Fog starts this many camera-to-centre distances away… */
   fogStartCtc: number;
@@ -89,11 +100,32 @@ export interface TerrainLook {
   fogDensity: number;
   /** …and is total here (also the LOD's far cut). */
   fogEndCtc: number;
+  /** The relief model's materials and light tints (map style). */
+  surface: SurfacePalette;
+  contourColor: Rgb;
+  contourMajorColor: Rgb;
+  /** 0 hides the contours. */
+  contourOpacity: number;
+  /** 1 = the surface is satellite imagery tiles, 0 = the shaded relief model. */
+  imagery: number;
 }
+
+const UMBER: Rgb = [74 / 255, 62 / 255, 45 / 255];
+const WARM_WHITE: Rgb = [1, 250 / 255, 240 / 255];
+const NIGHT_HIGHLIGHT: Rgb = [235 / 255, 228 / 255, 214 / 255];
+const RIVER_FALLBACK: Rgb = [0x5c / 255, 0x93 / 255, 0xb7 / 255];
+const OCHRE_FALLBACK: Rgb = [0xb0 / 255, 0x7a / 255, 0x3a / 255];
+const ICE: Rgb = [0xee / 255, 0xf3 / 255, 0xf7 / 255];
 
 /** The look for a theme/basemap/setting. */
 export function terrainLook(i: TerrainLookInput): TerrainLook {
   const exaggeration = RELIEF_EXAGGERATION[i.relief];
+  const land = parseColor(i.land) ?? FALLBACK_PAPER;
+  const landAlt = (i.landAlt ? parseColor(i.landAlt) : null) ?? mix(land, BLACK, 0.06);
+  const river = (i.water ? parseColor(i.water) : null) ?? RIVER_FALLBACK;
+  const contour = (i.contour ? parseColor(i.contour) : null) ?? OCHRE_FALLBACK;
+  const ink = (i.ink ? parseColor(i.ink) : null) ?? (i.dark ? WHITE : BLACK);
+  const contoursOn = i.contours ?? true;
   if (i.basemap === 'satellite') {
     const k = i.dark ? 0.86 : 1;
     return {
@@ -105,9 +137,21 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       fogStartCtc: 0.6,
       fogDensity: 0.1,
       fogEndCtc: 12,
+      surface: {
+        land,
+        rock: landAlt,
+        water: river,
+        glacier: ICE,
+        shadow: BLACK,
+        highlight: WHITE,
+      },
+      // Imagery: paper lines, as the 2D map draws contours over satellite.
+      contourColor: FALLBACK_PAPER,
+      contourMajorColor: WHITE,
+      contourOpacity: contoursOn ? 0.75 : 0,
+      imagery: 1,
     };
   }
-  const land = parseColor(i.land) ?? FALLBACK_PAPER;
   if (i.dark) {
     return {
       exaggeration,
@@ -118,6 +162,18 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       fogStartCtc: 2.5,
       fogDensity: 0.12,
       fogEndCtc: 12,
+      surface: {
+        land,
+        rock: mix(land, landAlt, 0.8),
+        water: mix(land, river, 0.3),
+        glacier: mix(land, ICE, 0.3),
+        shadow: mix(land, BLACK, 0.72),
+        highlight: mix(land, NIGHT_HIGHLIGHT, 0.22),
+      },
+      contourColor: mix(land, contour, 0.75),
+      contourMajorColor: mix(contour, ink, 0.2),
+      contourOpacity: contoursOn ? 0.9 : 0,
+      imagery: 0,
     };
   }
   const tint = (i.skyTint ? parseColor(i.skyTint) : null) ?? land;
@@ -130,6 +186,18 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
     fogStartCtc: 2.5,
     fogDensity: 0.12,
     fogEndCtc: 12,
+    surface: {
+      land,
+      rock: landAlt,
+      water: mix(land, river, 0.45),
+      glacier: mix(land, ICE, 0.75),
+      shadow: mix(land, UMBER, 0.78),
+      highlight: mix(land, WARM_WHITE, 0.9),
+    },
+    contourColor: mix(land, contour, 0.8),
+    contourMajorColor: mix(contour, ink, 0.25),
+    contourOpacity: contoursOn ? 0.95 : 0,
+    imagery: 0,
   };
 }
 
@@ -188,11 +256,13 @@ export function rgbArray(c: Rgb): [number, number, number] {
 }
 
 /** Floats the native layer takes (TerrainNative.nativeSetLook / the iOS twin). */
-export const PACKED_LOOK_LENGTH = 14;
+export const PACKED_LOOK_LENGTH = 40;
 
 /**
  * `[exaggeration, fog rgb, horizon rgb, zenith rgb, form, fogStart,
- * fogDensity, fogEnd]` — the order both native modules unpack.
+ * fogDensity, fogEnd, land rgb, rock rgb, water rgb, glacier rgb, shadow rgb,
+ * highlight rgb, contour rgb, contourMajor rgb, contourOpacity, imagery]` —
+ * the order both native modules unpack.
  */
 export function packLook(l: TerrainLook): number[] {
   return [
@@ -204,5 +274,15 @@ export function packLook(l: TerrainLook): number[] {
     l.fogStartCtc,
     l.fogDensity,
     l.fogEndCtc,
+    ...l.surface.land,
+    ...l.surface.rock,
+    ...l.surface.water,
+    ...l.surface.glacier,
+    ...l.surface.shadow,
+    ...l.surface.highlight,
+    ...l.contourColor,
+    ...l.contourMajorColor,
+    l.contourOpacity,
+    l.imagery,
   ];
 }

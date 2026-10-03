@@ -72,7 +72,7 @@ describe('frameStats', () => {
 });
 
 describe('packLook', () => {
-  it('packs 14 floats in the native order', () => {
+  it('packs 40 floats in the native order', () => {
     const l = terrainLook({ basemap: 'map', dark: false, land: '#F2ECE0', relief: 'dramatic' });
     const p = packLook(l);
     expect(p).toHaveLength(PACKED_LOOK_LENGTH);
@@ -80,7 +80,13 @@ describe('packLook', () => {
     expect(p.slice(1, 4)).toEqual(l.fogColor);
     expect(p.slice(4, 7)).toEqual(l.skyHorizon);
     expect(p.slice(7, 10)).toEqual(l.skyZenith);
-    expect(p.slice(10)).toEqual([l.formStrength, l.fogStartCtc, l.fogDensity, l.fogEndCtc]);
+    expect(p.slice(10, 14)).toEqual([l.formStrength, l.fogStartCtc, l.fogDensity, l.fogEndCtc]);
+    expect(p.slice(14, 17)).toEqual(l.surface.land);
+    expect(p.slice(29, 32)).toEqual(l.surface.highlight);
+    expect(p.slice(32, 35)).toEqual(l.contourColor);
+    expect(p.slice(35, 38)).toEqual(l.contourMajorColor);
+    expect(p[38]).toBe(l.contourOpacity);
+    expect(p[39]).toBe(l.imagery);
     for (const v of p) expect(Number.isFinite(v)).toBe(true);
   });
 });
