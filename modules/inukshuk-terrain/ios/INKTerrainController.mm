@@ -171,6 +171,12 @@ fragment float4 terrain_fs(VOut in [[stage_in]], constant FrameU &f [[buffer(0)]
   float3 c = drape.sample(s, clamp(uv, float2(0.0), float2(1.0))).rgb;
   float3 n = normalize(float3(-in.slope * f.fogColor.w, 1.0));
   float lambert = max(dot(n, f.light.xyz), 0.0);
+  // Camera-facing slopes stretched from a few flat-frame rows: fade the
+  // streaks into a clean shaded relief in the theme's fog colour.
+  float rows = length(float2(dfdx(uv.y), dfdy(uv.y))) * float(drape.get_height());
+  float stretch = 1.0 - smoothstep(0.12, 0.4, rows);
+  float3 relief = f.fogColor.rgb * (0.78 + 0.45 * lambert);
+  c = mix(c, relief, stretch * 0.85 * f.misc.x);
   c *= 1.0 + (lambert - f.light.z) * f.light.w;
   float d = in.dist / f.fogParams.w;
   float fog = d > f.fogParams.x ? 1.0 - exp(-f.fogParams.y * (d - f.fogParams.x)) : 0.0;

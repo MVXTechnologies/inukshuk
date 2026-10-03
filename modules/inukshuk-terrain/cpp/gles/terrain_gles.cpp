@@ -89,6 +89,13 @@ void main() {
   vec3 c = texture(u_drape, clamp(uv, vec2(0.0), vec2(1.0))).rgb;
   vec3 n = normalize(vec3(-v_slope * u_exag, 1.0));
   float lambert = max(dot(n, u_light), 0.0);
+  // Where a slope faces the camera far more than the flat frame did, one
+  // source row smears over many screen rows; fade those streaks into a
+  // clean shaded relief in the theme's own fog colour.
+  float rows = length(vec2(dFdx(uv.y), dFdy(uv.y))) * float(textureSize(u_drape, 0).y);
+  float stretch = 1.0 - smoothstep(0.12, 0.4, rows);
+  vec3 relief = u_fogColor * (0.78 + 0.45 * lambert);
+  c = mix(c, relief, stretch * 0.85 * u_ramp);
   c *= 1.0 + (lambert - u_light.z) * u_form;
   float d = v_dist / u_ctc;
   float f = d > u_fogParams.x ? 1.0 - exp(-u_fogParams.y * (d - u_fogParams.x)) : 0.0;
