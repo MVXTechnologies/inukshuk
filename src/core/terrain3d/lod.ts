@@ -15,7 +15,7 @@ import { children, TERRAIN_MAX_ZOOM, tileBoundsPx, type TileId } from './tiles';
 /** Cells per terrain-tile edge (the shared grid is GRID × GRID quads). */
 export const GRID = 32;
 /** Default split threshold: on-screen grid spacing in logical pixels. */
-export const DEFAULT_MAX_ERROR_PX = 8;
+export const DEFAULT_MAX_ERROR_PX = 10;
 /** Default tile budget per frame (≈ 290 k vertices at GRID 32 with skirts). */
 export const DEFAULT_MAX_TILES = 240;
 /** Tiles farther than this many camera-to-centre distances are fog. */

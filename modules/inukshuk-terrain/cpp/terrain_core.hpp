@@ -92,7 +92,7 @@ bool isAncestorOf(const TileId& a, const TileId& b);
 
 // ---- lod ---------------------------------------------------------------------
 constexpr int kGrid = 32;
-constexpr double kDefaultMaxErrorPx = 8.0;
+constexpr double kDefaultMaxErrorPx = 10.0;
 constexpr int kDefaultMaxTiles = 240;
 constexpr double kDefaultFogEndCtc = 12.0;
 constexpr int kMaxZoomAboveCamera = 3;

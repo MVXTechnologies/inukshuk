@@ -70,6 +70,8 @@ struct FrameOutput {
   /** Camera-relative homogeneous far-plane points (x, y, z_px, w) of the full-screen
    * triangle (-1,-1), (3,-1), (-1,3); dir = xyz / w. */
   float skyRays[3][4] = {};
+  /** The horizon (or above) is on screen: the sky pass is needed. */
+  bool skyVisible = true;
   LookParams look;
   std::vector<DrawTile> tiles;
   bool needsRepaint = false;

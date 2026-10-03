@@ -519,6 +519,15 @@ FrameOutput Engine::frame(const FrameInput& in) {
       out.skyRays[i][2] = static_cast<float>((v[2] - e[2] * v[3]) * ppm);
       out.skyRays[i][3] = static_cast<float>(v[3]);
     }
+    // Top screen corners: is any ray at or above the horizon?
+    out.skyVisible = false;
+    for (double x : {-1.0, 1.0}) {
+      const Vec4 v = transform(*invP, {x, 1, 1, 1});
+      if (std::abs(v[3]) < 1e-12) continue;
+      const double dx = v[0] / v[3] - (*sel.eye)[0], dy = v[1] / v[3] - (*sel.eye)[1];
+      const double dz = (v[2] / v[3] - (*sel.eye)[2]) * ppm;
+      if (dz / std::hypot(dx, dy, dz) > -0.06) out.skyVisible = true;
+    }
   }
 
   out.needsRepaint = morphing || bakesPending || hRefSettling;

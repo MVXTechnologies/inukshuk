@@ -11,6 +11,7 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -41,27 +42,34 @@ int64_t nowNs() {
 
 const char* kTerrainVs = R"(#version 300 es
 precision highp float;
+precision highp sampler2D;
 layout(location = 0) in vec3 a_grid;   // u, v, skirt
-layout(location = 1) in vec4 a_attr;   // hFrom, hTo, slopeX, slopeY
-uniform mat4 u_matrix;
-uniform float u_morph;
-uniform float u_fromFlat;
+// Every visible tile in ONE instanced draw: per-tile heights live in an
+// RGBA32F atlas (one row per tile slot: hFrom, hTo, slopeX, slopeY per
+// vertex), per-tile matrix and params in a uniform block.
+uniform sampler2D u_atlas;
+layout(std140) uniform Tiles {
+  mat4 u_m[192];
+  vec4 u_p[192];  // morph, fromFlat, skirt depth * ramp, atlas slot (-1 = flat)
+};
 uniform float u_hRef;
 uniform float u_scale;     // exaggeration * ramp
-uniform float u_skirt;     // skirt depth * ramp
 uniform float u_far;
 out vec3 v_flat;
 out vec2 v_slope;
 out float v_dist;
 void main() {
-  float to = a_attr.y - u_hRef;
-  float from = u_fromFlat > 0.5 ? 0.0 : a_attr.x - u_hRef;
-  float dh = mix(to, from, u_morph);
-  float z = dh * u_scale - a_grid.z * u_skirt;
-  vec4 flatPos = u_matrix * vec4(a_grid.xy, 0.0, 1.0);
-  vec4 pos = u_matrix * vec4(a_grid.xy, z, 1.0);
+  mat4 m = u_m[gl_InstanceID];
+  vec4 p = u_p[gl_InstanceID];
+  vec4 a = p.w < 0.0 ? vec4(0.0) : texelFetch(u_atlas, ivec2(gl_VertexID, int(p.w)), 0);
+  float to = a.y - u_hRef;
+  float from = p.y > 0.5 ? 0.0 : a.x - u_hRef;
+  float dh = mix(to, from, p.x);
+  float z = dh * u_scale - a_grid.z * p.z;
+  vec4 flatPos = m * vec4(a_grid.xy, 0.0, 1.0);
+  vec4 pos = m * vec4(a_grid.xy, z, 1.0);
   v_flat = flatPos.xyw;
-  v_slope = a_attr.zw;
+  v_slope = a.zw;
   v_dist = pos.w;
   // Our own linear depth: MapLibre's far plane would clip mountains.
   pos.z = (2.0 * pos.w / u_far - 1.0) * pos.w;
@@ -173,8 +181,13 @@ GLuint link(const char* vs, const char* fs) {
 
 // ---- GL renderer ---------------------------------------------------------------
 
-struct TileBuffer {
-  GLuint vbo = 0;
+constexpr int kAtlasWidth = 1224;  // >= vertexCount(kGrid) = 1221
+constexpr int kAtlasSlots = 512;
+constexpr int kBatch = 192;         // instances per draw (std140 block <= 16 KB)
+constexpr GLuint kTilesBinding = 20;
+
+struct TileSlot {
+  int slot = -1;
   uint32_t version = 0;
   uint64_t lastFrame = 0;
 };
@@ -184,15 +197,16 @@ struct GlRenderer {
   bool ready = false;
   GLuint terrainProgram = 0, skyProgram = 0;
   GLuint vao = 0, skyVao = 0;
-  GLuint gridVbo = 0, ibo = 0, zeroVbo = 0;
+  GLuint gridVbo = 0, ibo = 0, atlasTex = 0, tilesUbo = 0;
   GLsizei indexCount = 0;
   GLuint drapeTex = 0;
   int drapeW = 0, drapeH = 0;
-  std::unordered_map<uint64_t, TileBuffer> tiles;
+  std::unordered_map<uint64_t, TileSlot> tiles;
+  std::vector<int> freeSlots;
+  std::vector<float> ubo;  // staging, std140
   uint64_t frameNo = 0;
   struct {
-    GLint matrix, morph, fromFlat, hRef, scale, skirt, far, drape, light, form, exag, fogColor,
-        fogParams, ctc, ramp;
+    GLint atlas, hRef, scale, far, drape, light, form, exag, fogColor, fogParams, ctc, ramp;
   } tu{};
   struct {
     GLint rays, horizon, zenith, fogColor, ramp;
@@ -204,12 +218,9 @@ struct GlRenderer {
     skyProgram = link(kSkyVs, kSkyFs);
     if (!terrainProgram || !skyProgram) return;
 #define TU(name) tu.name = glGetUniformLocation(terrainProgram, "u_" #name)
-    TU(matrix);
-    TU(morph);
-    TU(fromFlat);
+    TU(atlas);
     TU(hRef);
     TU(scale);
-    TU(skirt);
     TU(far);
     TU(drape);
     TU(light);
@@ -234,7 +245,19 @@ struct GlRenderer {
     glGenVertexArrays(1, &skyVao);
     glGenBuffers(1, &gridVbo);
     glGenBuffers(1, &ibo);
-    glGenBuffers(1, &zeroVbo);
+    glUniformBlockBinding(terrainProgram, glGetUniformBlockIndex(terrainProgram, "Tiles"), kTilesBinding);
+    glGenBuffers(1, &tilesUbo);
+    glBindBuffer(GL_UNIFORM_BUFFER, tilesUbo);
+    glBufferData(GL_UNIFORM_BUFFER, kBatch * 80, nullptr, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    glGenTextures(1, &atlasTex);
+    glBindTexture(GL_TEXTURE_2D, atlasTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, kAtlasWidth, kAtlasSlots, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    freeSlots.clear();
+    for (int i = kAtlasSlots - 1; i >= 0; i--) freeSlots.push_back(i);
+    ubo.assign(kBatch * 20, 0.f);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, gridVbo);
     glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(float), verts.data(), GL_STATIC_DRAW);
@@ -243,10 +266,6 @@ struct GlRenderer {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint16_t), idx.data(), GL_STATIC_DRAW);
     glBindVertexArray(0);
-    std::vector<float> zeros(static_cast<size_t>(vertexCount(kGrid)) * kAttributesPerVertex, 0.f);
-    glBindBuffer(GL_ARRAY_BUFFER, zeroVbo);
-    glBufferData(GL_ARRAY_BUFFER, zeros.size() * sizeof(float), zeros.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glGenTextures(1, &drapeTex);
     ready = true;
     LOGI("GL renderer ready");
@@ -261,14 +280,14 @@ struct GlRenderer {
       forget();
       return;
     }
-    for (auto& [k, t] : tiles) glDeleteBuffers(1, &t.vbo);
     if (terrainProgram) glDeleteProgram(terrainProgram);
     if (skyProgram) glDeleteProgram(skyProgram);
     glDeleteVertexArrays(1, &vao);
     glDeleteVertexArrays(1, &skyVao);
     glDeleteBuffers(1, &gridVbo);
     glDeleteBuffers(1, &ibo);
-    glDeleteBuffers(1, &zeroVbo);
+    glDeleteBuffers(1, &tilesUbo);
+    glDeleteTextures(1, &atlasTex);
     glDeleteTextures(1, &drapeTex);
     forget();
   }
@@ -285,25 +304,34 @@ struct GlRenderer {
     drapeH = h;
   }
 
-  GLuint bufferFor(const DrawTile& d) {
-    if (!d.attributes) return zeroVbo;
-    auto& tb = tiles[d.key];
-    if (!tb.vbo) glGenBuffers(1, &tb.vbo);
-    if (tb.version != d.version) {
-      glBindBuffer(GL_ARRAY_BUFFER, tb.vbo);
-      glBufferData(GL_ARRAY_BUFFER, d.attributes->size() * sizeof(float), d.attributes->data(),
-                   GL_STATIC_DRAW);
-      tb.version = d.version;
+  /** The tile's atlas row (uploaded if its heights changed), or -1 for a flat tile. */
+  int slotFor(const DrawTile& d) {
+    if (!d.attributes) return -1;
+    auto it = tiles.find(d.key);
+    if (it == tiles.end()) {
+      if (freeSlots.empty()) evictSlots(true);
+      if (freeSlots.empty()) return -1;
+      TileSlot t;
+      t.slot = freeSlots.back();
+      freeSlots.pop_back();
+      it = tiles.emplace(d.key, t).first;
     }
-    tb.lastFrame = frameNo;
-    return tb.vbo;
+    TileSlot& t = it->second;
+    if (t.version != d.version) {
+      glBindTexture(GL_TEXTURE_2D, atlasTex);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, t.slot, vertexCount(kGrid), 1, GL_RGBA, GL_FLOAT,
+                      d.attributes->data());
+      t.version = d.version;
+    }
+    t.lastFrame = frameNo;
+    return t.slot;
   }
 
-  void evictBuffers() {
-    if (tiles.size() <= 420) return;
+  void evictSlots(bool force) {
+    if (!force && freeSlots.size() > 64) return;
     for (auto it = tiles.begin(); it != tiles.end();) {
-      if (frameNo - it->second.lastFrame > 120) {
-        glDeleteBuffers(1, &it->second.vbo);
+      if (frameNo - it->second.lastFrame > (force ? 0u : 120u)) {
+        freeSlots.push_back(it->second.slot);
         it = tiles.erase(it);
       } else {
         ++it;
@@ -341,7 +369,7 @@ struct GlRenderer {
     glUniform3fv(su.fogColor, 1, out.look.fogColor);
     glUniform1f(su.ramp, out.ramp);
     glBindVertexArray(skyVao);
-    if (!(dbg & 4)) glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (!(dbg & 4) && out.skyVisible) glDrawArrays(GL_TRIANGLES, 0, 3);
 
     // 3. Terrain, front to back, our own depth.
     glDisable(GL_BLEND);
@@ -353,6 +381,10 @@ struct GlRenderer {
     glDepthRangef(0.0f, 1.0f);
     glUseProgram(terrainProgram);
     glUniform1i(tu.drape, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, atlasTex);
+    glUniform1i(tu.atlas, 1);
+    glActiveTexture(GL_TEXTURE0);
     glUniform3fv(tu.light, 1, out.light);
     glUniform1f(tu.form, out.look.formStrength * 2.0f * out.ramp);
     glUniform1f(tu.exag, out.exaggeration);
@@ -364,24 +396,33 @@ struct GlRenderer {
     glUniform1f(tu.scale, out.exaggeration * out.ramp);
     glUniform1f(tu.far, out.farW);
     glBindVertexArray(vao);
-    for (const auto& d : out.tiles) {
-      if (dbg & 2) break;
-      const GLuint vbo = bufferFor(d);
-      glBindBuffer(GL_ARRAY_BUFFER, vbo);
-      glEnableVertexAttribArray(1);
-      glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-      glUniformMatrix4fv(tu.matrix, 1, GL_FALSE, d.matrix);
-      glUniform1f(tu.morph, d.morph);
-      glUniform1f(tu.fromFlat, d.fromFlat);
-      glUniform1f(tu.skirt, d.skirtDepth * out.ramp);
-      glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, nullptr);
+    glBindBufferBase(GL_UNIFORM_BUFFER, kTilesBinding, tilesUbo);
+    const size_t total = (dbg & 2) ? 0 : out.tiles.size();
+    for (size_t start = 0; start < total; start += kBatch) {
+      const int n = static_cast<int>(std::min<size_t>(kBatch, total - start));
+      for (int i = 0; i < n; i++) {
+        const DrawTile& d = out.tiles[start + i];
+        const int slot = slotFor(d);
+        std::copy(d.matrix, d.matrix + 16, ubo.begin() + i * 16);
+        float* pp = ubo.data() + kBatch * 16 + i * 4;
+        pp[0] = slot < 0 ? 1.f : d.morph;
+        pp[1] = slot < 0 ? 1.f : d.fromFlat;
+        pp[2] = d.skirtDepth * out.ramp;
+        pp[3] = static_cast<float>(slot);
+      }
+      glBindBuffer(GL_UNIFORM_BUFFER, tilesUbo);
+      glBufferSubData(GL_UNIFORM_BUFFER, 0, kBatch * 16 * sizeof(float), ubo.data());
+      glBufferSubData(GL_UNIFORM_BUFFER, kBatch * 16 * sizeof(float), kBatch * 4 * sizeof(float),
+                      ubo.data() + kBatch * 16);
+      glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_SHORT, nullptr, n);
     }
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glUseProgram(0);
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
-    evictBuffers();
+    evictSlots(false);
   }
 };
 

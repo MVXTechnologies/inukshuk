@@ -660,7 +660,7 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   [enc setDepthStencilState:_depthOff];
   [enc setVertexBytes:&sky length:sizeof(sky) atIndex:0];
   [enc setFragmentBytes:&sky length:sizeof(sky) atIndex:0];
-  [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+  if (out.skyVisible) [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 
   FrameU fu{};
   fu.light = simd_make_float4(out.light[0], out.light[1], out.light[2], out.look.formStrength * 2.0f * out.ramp);
