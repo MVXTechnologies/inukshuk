@@ -1,21 +1,36 @@
 import { selectTiles } from './lod';
-import { bestLoadedDemZoom, COARSE_LEAD, planDemRequests } from './prefetch';
+import { BASE_ZOOM, bestLoadedDemZoom, COARSE_LEAD, planDemRequests } from './prefetch';
 import { camera, frameCamera, PLACES } from './testUtils';
 import { demKey, type DemId, type TileId } from './tiles';
 
 const t = (z: number, x: number, y: number, wrap = 0): TileId => ({ z, x, y, wrap });
 
 describe('planDemRequests', () => {
-  it('asks for a coarse ancestor first, then the tile’s own DEM', () => {
+  it('asks for the base and a coarse ancestor first, then the tile’s own DEM', () => {
     const plan = planDemRequests({
       tiles: [t(13, 4270, 2900)],
+      bearingDeg: 0,
+      isLoaded: () => false,
+      maxRequests: 3,
+    });
+    const k = 13 - BASE_ZOOM;
+    expect(plan).toEqual([
+      { z: BASE_ZOOM, x: 4270 >> k, y: 2900 >> k },
+      { z: 13 - COARSE_LEAD, x: 4270 >> COARSE_LEAD, y: 2900 >> COARSE_LEAD },
+      { z: 13, x: 4270, y: 2900 },
+    ]);
+  });
+
+  it('a tile at or above the base zoom asks for itself once', () => {
+    const plan = planDemRequests({
+      tiles: [t(4, 8, 5)],
       bearingDeg: 0,
       isLoaded: () => false,
       maxRequests: 2,
     });
     expect(plan).toEqual([
-      { z: 13 - COARSE_LEAD, x: 4270 >> COARSE_LEAD, y: 2900 >> COARSE_LEAD },
-      { z: 13, x: 4270, y: 2900 },
+      { z: 4, x: 8, y: 5 },
+      { z: 1, x: 1, y: 0 },
     ]);
   });
 
@@ -40,9 +55,9 @@ describe('planDemRequests', () => {
       tiles: [t(17, 100, 200)],
       bearingDeg: 0,
       isLoaded: () => false,
-      maxRequests: 2,
+      maxRequests: 3,
     });
-    expect(plan[1]).toEqual({ z: 15, x: 25, y: 50 });
+    expect(plan[2]).toEqual({ z: 15, x: 25, y: 50 });
   });
 
   it.each([

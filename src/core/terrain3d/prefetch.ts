@@ -1,14 +1,19 @@
 /**
  * Which DEM tiles to ask for, in what order. Visible tiles fall back to
- * their nearest loaded ancestor DEM, so the order is: a coarse ancestor first
- * (one fetch covers a whole area with approximate heights), then the tile's
- * own DEM, nearest tiles first; then a prefetch ring ahead of the camera, so
+ * their nearest loaded ancestor DEM, so the order is: the z6 base ancestor
+ * and a coarse ancestor first (one fetch covers a whole area with approximate
+ * heights), then the tile's own DEM, nearest tiles first; then a prefetch ring ahead of the camera, so
  * a pan or a rotate finds its heights already decoded.
  */
 import { demKey, demNeighbor, demWindow, type DemId, type TileId } from './tiles';
 
 /** Ancestor this many zooms up is requested before a tile's own DEM. */
 export const COARSE_LEAD = 3;
+/**
+ * Every visible tile's ancestor at this zoom is requested first: a handful of
+ * tiles that bound every height range (stable LOD) and back every fallback.
+ */
+export const BASE_ZOOM = 6;
 /** Never prefetch coarser than this (z0–4 cost almost nothing anyway). */
 export const MIN_PREFETCH_ZOOM = 0;
 
@@ -40,6 +45,8 @@ export function planDemRequests(p: PlanInput): DemId[] {
   const own: DemId[] = [];
   for (const t of p.tiles) {
     const d = demWindow(t).dem;
+    const bz = Math.min(d.z, BASE_ZOOM);
+    want({ z: bz, x: d.x >> (d.z - bz), y: d.y >> (d.z - bz) });
     const az = Math.max(MIN_PREFETCH_ZOOM, d.z - COARSE_LEAD);
     const k = d.z - az;
     want({ z: az, x: d.x >> k, y: d.y >> k });

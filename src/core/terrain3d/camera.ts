@@ -155,7 +155,9 @@ export function groundAtNdc(
   ndcY: number,
   groundZ = 0,
 ): [number, number] | null {
-  const near = dehomogenize(transformVec4(invP, [ndcX, ndcY, -1, 1]));
+  // z = 0 and 1 are in front of the eye in both the GL (−1..1) and the
+  // Metal (0..1) clip conventions.
+  const near = dehomogenize(transformVec4(invP, [ndcX, ndcY, 0, 1]));
   const far = dehomogenize(transformVec4(invP, [ndcX, ndcY, 1, 1]));
   if (!near || !far) return null;
   const dz = far[2] - near[2];
