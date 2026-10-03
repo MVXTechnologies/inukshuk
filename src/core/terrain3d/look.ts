@@ -148,7 +148,7 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       // Imagery: paper lines, as the 2D map draws contours over satellite.
       contourColor: FALLBACK_PAPER,
       contourMajorColor: WHITE,
-      contourOpacity: contoursOn ? 0.75 : 0,
+      contourOpacity: contoursOn ? 0.5 : 0,
       imagery: 1,
     };
   }
@@ -168,14 +168,14 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
         water: mix(land, river, 0.3),
         glacier: mix(land, mix(ICE, river, 0.2), 0.38),
         // Night relief needs its light: a softer shadow, a brighter lit face.
-        shadow: mix(land, BLACK, 0.55),
-        highlight: mix(land, NIGHT_HIGHLIGHT, 0.4),
+        shadow: mix(land, BLACK, 0.7),
+        highlight: mix(land, NIGHT_HIGHLIGHT, 0.55),
       },
       // Sunk into the stone, as the 2D night map draws them: bright ochre on
       // near-black reads as a wireframe.
       contourColor: mix(land, contour, 0.42),
       contourMajorColor: mix(land, contour, 0.62),
-      contourOpacity: contoursOn ? 0.85 : 0,
+      contourOpacity: contoursOn ? 0.7 : 0,
       imagery: 0,
     };
   }

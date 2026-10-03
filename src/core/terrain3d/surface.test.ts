@@ -86,7 +86,8 @@ describe('shadeSurface (map style)', () => {
     const c = shadeSurface({ ...base, palette: night.surface, slopeX: -0.6, slopeY: -0.9 });
     expect(luma(c)).toBeLessThan(luma(night.surface.land));
     const lit = shadeSurface({ ...base, palette: night.surface, slopeX: 0.6, slopeY: 0.9 });
-    expect(luma(lit)).toBeLessThan(0.3);
+    // Lit faces lift enough for the relief to read at night, without glare.
+    expect(luma(lit)).toBeLessThan(0.4);
   });
   it('colours stay in gamut over a sweep', () => {
     for (const s of [-3, -1, -0.2, 0, 0.2, 1, 3]) {
