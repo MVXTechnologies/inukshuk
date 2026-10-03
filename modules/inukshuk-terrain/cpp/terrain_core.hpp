@@ -211,7 +211,7 @@ std::optional<int> bestLoadedDemZoom(const TileId& t,
 constexpr int kLevelCount = 7;
 constexpr double kLevelLadder[kLevelCount][2] = {{10, 50},   {20, 100},  {25, 100}, {50, 250},
                                                  {100, 500}, {200, 1000}, {500, 2500}};
-constexpr double kMinSpacingPx = 5;
+constexpr double kMinSpacingPx = 8;
 constexpr double kMinorWidthPx = 1.1;
 constexpr double kMajorWidthPx = 2.0;
 std::pair<double, double> contourLevelsForZoom(double zoom);

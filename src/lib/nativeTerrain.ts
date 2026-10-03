@@ -7,6 +7,7 @@
  */
 import { requireOptionalNativeModule } from 'expo';
 import { Platform } from 'react-native';
+import type { TerrainLineSpec } from '@core/terrain3d/sceneInput';
 
 export interface NativeTerrainConfig {
   /** `packLook()` floats (@core/terrain3d/look). */
@@ -15,7 +16,15 @@ export interface NativeTerrainConfig {
   enabled: boolean;
   networkAllowed: boolean;
   maxPitch: number;
+  /** Pin plates: plate rgba, ink rgb, muted rgb, water rgb (packLabelTheme). */
+  labelTheme: number[];
+  /** Name properties to try, in order. */
+  nameFields: string[];
+  /** Draw the 3D pin labels. */
+  labels: boolean;
 }
+
+export type { TerrainLineSpec as NativeTerrainLine } from '@core/terrain3d/sceneInput';
 
 export interface NativeBenchStep {
   kind: 'idle' | 'pitch' | 'rotate' | 'pan' | 'fling';
@@ -33,6 +42,9 @@ interface NativeTerrainModule {
   supported: boolean;
   attach(viewTag: number, config: NativeTerrainConfig): Promise<boolean>;
   update(viewTag: number, config: NativeTerrainConfig): void;
+  /** Replaces the whole set of lines lifted onto the terrain. */
+  setLines?(viewTag: number, lines: TerrainLineSpec[]): void;
+  setPuck?(viewTag: number, visible: boolean, lng: number, lat: number): void;
   detach(viewTag: number): Promise<void>;
   stats(viewTag: number): Promise<number[]>;
   trimMemory(viewTag: number): Promise<void>;
@@ -74,7 +86,10 @@ export function namedTerrainStats(s: readonly number[]): Record<string, number> 
     'engineCpuMs',
     'drawMs',
     'pitchDeg',
-    'gpuTileBuffers',
+    'gpuTileSlots',
+    'labelsShown',
+    'imagerySlots',
+    'bakeQueue',
   ];
   const out: Record<string, number> = {};
   names.forEach((n, i) => {

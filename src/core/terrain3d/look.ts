@@ -166,13 +166,16 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
         land,
         rock: mix(land, landAlt, 0.8),
         water: mix(land, river, 0.3),
-        glacier: mix(land, ICE, 0.3),
-        shadow: mix(land, BLACK, 0.72),
-        highlight: mix(land, NIGHT_HIGHLIGHT, 0.22),
+        glacier: mix(land, mix(ICE, river, 0.2), 0.38),
+        // Night relief needs its light: a softer shadow, a brighter lit face.
+        shadow: mix(land, BLACK, 0.55),
+        highlight: mix(land, NIGHT_HIGHLIGHT, 0.4),
       },
-      contourColor: mix(land, contour, 0.75),
-      contourMajorColor: mix(contour, ink, 0.2),
-      contourOpacity: contoursOn ? 0.9 : 0,
+      // Sunk into the stone, as the 2D night map draws them: bright ochre on
+      // near-black reads as a wireframe.
+      contourColor: mix(land, contour, 0.42),
+      contourMajorColor: mix(land, contour, 0.62),
+      contourOpacity: contoursOn ? 0.85 : 0,
       imagery: 0,
     };
   }
@@ -190,11 +193,12 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       land,
       rock: landAlt,
       water: mix(land, river, 0.45),
-      glacier: mix(land, ICE, 0.75),
+      // Ice reads cooler and brighter than the paper (the two are near-twins).
+      glacier: mix(WHITE, river, 0.16),
       shadow: mix(land, UMBER, 0.78),
       highlight: mix(land, WARM_WHITE, 0.9),
     },
-    contourColor: mix(land, contour, 0.8),
+    contourColor: mix(land, contour, 0.68),
     contourMajorColor: mix(contour, ink, 0.25),
     contourOpacity: contoursOn ? 0.95 : 0,
     imagery: 0,

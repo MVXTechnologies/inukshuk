@@ -1,9 +1,10 @@
 import { TERRAIN_MAX_PITCH_DEG } from '@core/terrain3d/morph';
 import { packLook, terrainLook, type TerrainBasemap } from '@core/terrain3d/look';
+import { nameFieldsFor, packLabelTheme, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
 import type { TiltRelief } from '@core/map/tiltRelief';
 import { reportError } from '@lib/errorReporting';
 import { nativeTerrain, type NativeTerrainConfig } from '@lib/nativeTerrain';
-import { palette } from '@ui/tokens';
+import { palette, schemeTokens } from '@ui/tokens';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { findNodeHandle, type View } from 'react-native';
 import { stoneScheme } from '../stoneScheme';
@@ -23,6 +24,11 @@ export interface NativeTerrainOptions {
   probe?: boolean;
   /** QA: native debug switches (see LookParams.debugFlags). */
   debugFlags?: number;
+  /** Contour lines on the 3D surface (the map: always; satellite: its contour setting). */
+  contours: boolean;
+  /** 3D pin labels (peaks, places, huts…). */
+  labels?: boolean;
+  labelLanguage?: 'local' | 'fr' | 'en';
 }
 
 export interface NativeTerrainBinding {
@@ -44,20 +50,47 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
   const [viewTag, setViewTag] = useState<number | null>(null);
 
   const config = useMemo<NativeTerrainConfig>(() => {
+    const scheme = stoneScheme(o.dark);
+    const tokens = schemeTokens(o.dark);
     const look = terrainLook({
       basemap: o.basemap,
       dark: o.dark,
-      land: stoneScheme(o.dark).land,
+      land: scheme.land,
+      landAlt: scheme.landAlt,
+      water: scheme.water,
+      contour: scheme.contour,
+      ink: scheme.ink,
       skyTint: palette.river,
       relief: o.relief === 'dramatic' ? 'dramatic' : 'natural',
+      contours: o.contours,
     });
     return {
-      look: o.debugFlags ? [...packLook(look), o.debugFlags] : packLook(look),
+      look: [...packLook(look), o.debugFlags ?? 0],
       enabled: o.probe !== true && o.relief !== 'off',
       networkAllowed: o.networkAllowed,
       maxPitch: TERRAIN_MAX_PITCH_DEG,
+      // Paper plates on both themes' own surface, inked like the 2D names.
+      labelTheme: packLabelTheme({
+        plate: tokens.surface,
+        plateOpacity: 0.94,
+        ink: scheme.ink,
+        muted: scheme.inkMuted,
+        water: scheme.waterInk,
+      }),
+      nameFields: nameFieldsFor(o.labelLanguage),
+      labels: o.labels ?? true,
     };
-  }, [o.basemap, o.dark, o.relief, o.networkAllowed, o.probe, o.debugFlags]);
+  }, [
+    o.basemap,
+    o.dark,
+    o.relief,
+    o.networkAllowed,
+    o.probe,
+    o.debugFlags,
+    o.contours,
+    o.labels,
+    o.labelLanguage,
+  ]);
 
   const configRef = useRef(config);
   useEffect(() => {
@@ -94,4 +127,36 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
   }, [config, viewTag, module]);
 
   return { active: viewTag !== null && config.enabled, viewTag };
+}
+
+/**
+ * The 3D scene's trails (lifted onto the terrain) and location marker, sent
+ * once per change. `lines` should keep its identity between renders.
+ */
+export function useNativeTerrainScene(
+  viewTag: number | null,
+  lines: readonly TerrainLineSpec[],
+  puck: { lng: number; lat: number } | null,
+): void {
+  const module = nativeTerrain();
+  // Trails and the location marker: once per change (never per frame).
+  useEffect(() => {
+    if (viewTag === null || module === null || module.setLines === undefined) return;
+    try {
+      module.setLines(viewTag, [...lines]);
+    } catch (e) {
+      reportError(e, 'terrain3d-lines');
+    }
+  }, [lines, viewTag, module]);
+
+  const puckLng = puck?.lng ?? null;
+  const puckLat = puck?.lat ?? null;
+  useEffect(() => {
+    if (viewTag === null || module === null || module.setPuck === undefined) return;
+    try {
+      module.setPuck(viewTag, puckLng !== null, puckLng ?? 0, puckLat ?? 0);
+    } catch (e) {
+      reportError(e, 'terrain3d-puck');
+    }
+  }, [puckLng, puckLat, viewTag, module]);
 }

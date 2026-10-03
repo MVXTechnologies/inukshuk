@@ -288,7 +288,7 @@ static void testScene(const Json& fx) {
   pal.land = land;
   pal.rock = alt;
   pal.water = mixc(land, hex(0x5c, 0x93, 0xb7), 0.45);
-  pal.glacier = mixc(land, hex(0xee, 0xf3, 0xf7), 0.75);
+  pal.glacier = mixc(Rgb{1, 1, 1}, hex(0x5c, 0x93, 0xb7), 0.16);
   pal.shadow = mixc(land, hex(74, 62, 45), 0.78);
   pal.highlight = mixc(land, Rgb{1, 250 / 255.0, 240 / 255.0}, 0.9);
   for (const auto& r : sc["surface"].arr()) {

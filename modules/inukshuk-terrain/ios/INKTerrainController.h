@@ -23,6 +23,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)updateWithLook:(NSArray<NSNumber *> *)look
                enabled:(BOOL)enabled
         networkAllowed:(BOOL)networkAllowed;
+/** Pin plates: plate rgba, ink rgb, muted rgb, water rgb; name properties in order. */
+- (void)setLabelTheme:(NSArray<NSNumber *> *)theme
+           nameFields:(NSArray<NSString *> *)nameFields
+               labels:(BOOL)labels;
+/** Replaces every line: dictionaries {id, coords: [lng, lat, …], style: [11 floats]}. */
+- (void)setLines:(NSArray<NSDictionary *> *)lines;
+- (void)setPuckVisible:(BOOL)visible lng:(double)lng lat:(double)lat;
 - (void)detach;
 
 /** See namedTerrainStats (src/lib/nativeTerrain.ts) for the order. */

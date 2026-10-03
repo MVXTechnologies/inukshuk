@@ -15,6 +15,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
+/** A polyline for the 3D scene: mercator x, y pairs and its packed style. */
+class LineSpec(val id: Int, val merc: DoubleArray, val style: FloatArray)
+
 /**
  * One map's native 3D terrain: owns the C++ engine handle, keeps the custom
  * layer on top of the style (RN re-inserts its component layers after every
@@ -33,6 +36,24 @@ class TerrainController(
   private val destroyed = AtomicBoolean(false)
   private val repaintPosted = AtomicBoolean(false)
   private val fetcher = DemFetcher(context) { z, x, y, bytes -> deliver(z, x, y, bytes) }
+  private val imagery = ImageryFetcher(context) { z, x, y, rgba ->
+    lock.read { if (!destroyed.get()) TerrainNative.nativeOnImageryData(handle, z, x, y, rgba) }
+  }
+  private val scene = SceneSource(context, map, object : SceneSource.Sink {
+    override fun uploadSprite(x: Int, y: Int, w: Int, h: Int, rgba: ByteArray) =
+      lock.read { if (!destroyed.get()) TerrainNative.nativeUploadSprite(handle, x, y, w, h, rgba) }
+
+    override fun setLabels(values: DoubleArray, ink: FloatArray) =
+      lock.read { if (!destroyed.get()) TerrainNative.nativeSetLabels(handle, values, ink) }
+
+    override fun setMasks(waterXY: DoubleArray, waterCounts: IntArray, iceXY: DoubleArray, iceCounts: IntArray) =
+      lock.read { if (!destroyed.get()) TerrainNative.nativeSetMasks(handle, waterXY, waterCounts, iceXY, iceCounts) }
+  })
+  private val lineIds = HashSet<Int>()
+  private var lastSceneCamera = ""
+  private var watchTicks = 0
+  private var ticksSinceScene = 0
+  private val idleListener = MapLibreMap.OnCameraIdleListener { refreshScene(force = true) }
   private var layer: CustomLayer? = null
   private var originalShove: ShoveGestureDetector.OnShoveGestureListener? = null
   private var maxPitch = 80.0
@@ -45,6 +66,9 @@ class TerrainController(
     override fun run() {
       if (destroyed.get()) return
       ensureOnTop()
+      ticksSinceScene++
+      // Tiles keep arriving after the camera settles: re-read every ~4 s even when still.
+      if (++watchTicks % SCENE_EVERY_TICKS == 0) refreshScene(force = ticksSinceScene >= SCENE_STALE_TICKS)
       main.postDelayed(this, WATCH_MS)
     }
   }
@@ -56,8 +80,47 @@ class TerrainController(
     applyTileLod(enabled)
     installShoveExtension()
     mapView.addOnDidFinishLoadingStyleListener(styleListener)
+    map.addOnCameraIdleListener(idleListener)
     ensureOnTop()
+    refreshScene(force = true)
     main.postDelayed(watcher, WATCH_MS)
+  }
+
+  fun setScene(theme: LabelTheme, nameFields: List<String>, labels: Boolean) {
+    val changed = theme != scene.theme || nameFields != scene.nameFields || labels != scene.labelsEnabled
+    scene.theme = theme
+    scene.nameFields = nameFields
+    scene.labelsEnabled = labels
+    if (changed) refreshScene(force = true)
+  }
+
+  /** Main thread: re-read labels and masks from the loaded tiles (only when tilted). */
+  private fun refreshScene(force: Boolean) {
+    if (destroyed.get() || !enabled) return
+    val cam = map.cameraPosition
+    if (cam.tilt < SCENE_MIN_PITCH) return
+    val key = "${cam.target?.latitude},${cam.target?.longitude},${cam.zoom},${cam.bearing}"
+    if (!force && key == lastSceneCamera) return
+    lastSceneCamera = key
+    ticksSinceScene = 0
+    scene.refresh()
+  }
+
+  /** Trails/routes lifted onto the terrain; replaces the whole set. */
+  fun setLines(lines: List<LineSpec>) = lock.read {
+    if (destroyed.get()) return@read
+    val keep = HashSet<Int>()
+    for (l in lines) {
+      keep.add(l.id)
+      TerrainNative.nativeSetPolyline(handle, l.id, l.merc, l.style)
+    }
+    for (id in lineIds) if (id !in keep) TerrainNative.nativeRemovePolyline(handle, id)
+    lineIds.clear()
+    lineIds.addAll(keep)
+  }
+
+  fun setPuck(visible: Boolean, lng: Double, lat: Double) = lock.read {
+    if (!destroyed.get()) TerrainNative.nativeSetPuck(handle, visible, mercX(lng), mercY(lat))
   }
 
   fun update(look: FloatArray, enabled: Boolean, networkAllowed: Boolean) {
@@ -67,6 +130,7 @@ class TerrainController(
       TerrainNative.nativeSetEnabled(handle, enabled)
     }
     fetcher.networkAllowed = networkAllowed
+    imagery.networkAllowed = networkAllowed
     if (this.enabled != enabled) {
       this.enabled = enabled
       setCoreMaxPitch(if (enabled) maxPitch else LEGACY_MAX_PITCH)
@@ -79,6 +143,7 @@ class TerrainController(
     if (!destroyed.compareAndSet(false, true)) return
     main.removeCallbacks(watcher)
     mapView.removeOnDidFinishLoadingStyleListener(styleListener)
+    map.removeOnCameraIdleListener(idleListener)
     restoreShove()
     setCoreMaxPitch(LEGACY_MAX_PITCH)
     applyTileLod(false)
@@ -92,6 +157,8 @@ class TerrainController(
     }
     layer = null
     fetcher.shutdown()
+    imagery.shutdown()
+    scene.shutdown()
     lock.write {
       TerrainNative.nativeDestroy(handle)
       handle = 0
@@ -117,6 +184,10 @@ class TerrainController(
 
   override fun requestDem(z: Int, x: Int, y: Int) {
     if (!destroyed.get()) fetcher.fetch(z, x, y)
+  }
+
+  override fun requestImagery(z: Int, x: Int, y: Int) {
+    if (!destroyed.get()) imagery.fetch(z, x, y)
   }
 
   override fun requestRepaint() {
@@ -266,5 +337,15 @@ class TerrainController(
     const val WATCH_MS = 400L
     const val LOD_SCALE_3D = 1.6
     const val LOD_MIN_RADIUS_3D = 2.0
+    const val SCENE_EVERY_TICKS = 3
+    const val SCENE_STALE_TICKS = 10
+    const val SCENE_MIN_PITCH = 20.0
+
+    fun mercX(lng: Double) = (lng + 180.0) / 360.0
+
+    fun mercY(lat: Double): Double {
+      val l = Math.toRadians(lat.coerceIn(-85.05112878, 85.05112878))
+      return 0.5 - Math.log(Math.tan(Math.PI / 4 + l / 2)) / (2 * Math.PI)
+    }
   }
 }

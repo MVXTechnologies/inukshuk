@@ -5,6 +5,7 @@ set(CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../cpp)
 add_library(inukshukterrain SHARED
   ${CPP_DIR}/terrain_core.cpp
   ${CPP_DIR}/terrain_engine.cpp
+  ${CPP_DIR}/terrain_scene.cpp
   ${CPP_DIR}/png_decode.cpp
   ${CPP_DIR}/gles/terrain_gles.cpp)
 target_include_directories(inukshukterrain PRIVATE ${CPP_DIR})

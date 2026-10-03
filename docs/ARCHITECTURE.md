@@ -220,16 +220,18 @@ overlay ("Marked trails"), whose persisted setting is dropped on hydration.
   for deep links) is the 2D MapLibre map.
 - **Native 3D terrain** (store builds with `modules/inukshuk-terrain`; design in
   `docs/plans/native-terrain.md`): with "3D relief" on, tilting the main map
-  past ~25° grows real relief out of the flat map, up to an 80° pitch. A
-  MapLibre custom layer captures the frame MapLibre drew and drapes it on a
-  quadtree terrain mesh (Android: GLES in-layer copy; iOS: a Metal post-pass on
-  MapLibre's command buffer), so every layer — theme, satellite, PDFs,
-  trails, heatmap — shows on the surface. The math is `core/terrain3d` (TS
-  reference, Jest) and its C++ twin `modules/inukshuk-terrain/cpp` (parity
-  tests in `tests/run.sh`); JS only attaches/updates/detaches
-  (`hooks/useNativeTerrain`). Binaries without the module keep the 2D tilt
-  relief. QA builds (`EXPO_PUBLIC_TERRAIN_QA=1`) add a deep-link/file harness
-  (`hooks/useTerrainQa`) for screenshots and the gesture benchmark.
+  past ~25° crossfades into a true 3D scene, up to an 80° pitch. A MapLibre
+  custom layer on top of the style draws its own world in MapLibre's render
+  pass (Android GLES, iOS Metal): the terrain shaded in the theme's palette
+  (or satellite imagery tiles), contour lines evaluated on the 3D surface,
+  trails lifted onto it, 3D pin labels read from the loaded vector tiles, and
+  the location marker. The math is `core/terrain3d` (TS reference, Jest) and
+  its C++ twin `modules/inukshuk-terrain/cpp` (parity tests in
+  `tests/run.sh`); JS only attaches/updates/detaches and sends trails and the
+  fix on change (`hooks/useNativeTerrain`). Binaries without the module keep
+  the 2D tilt relief. QA builds (`EXPO_PUBLIC_TERRAIN_QA=1`) add a
+  deep-link/file harness (`hooks/useTerrainQa`) for screenshots and the
+  gesture benchmark.
 
 ## Error reporting ("no silent fails")
 

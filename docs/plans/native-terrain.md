@@ -1,6 +1,6 @@
 # Native 3D terrain inside the MapLibre map ("Option C")
 
-Status: design + first implementation (branch `feat/native-3d-terrain`, HOLD for owner review).
+Status: redesigned after owner review (true 3D scene, no draping); branch `feat/native-3d-terrain`, HOLD for owner review.
 Store build only — this is native code (a new local Expo module), never an OTA.
 
 ## Goal
@@ -84,62 +84,78 @@ long host)` takes a raw pointer to a C++ `mln::style::CustomLayerHost`
 
 ## Phase 1 — design
 
-### The drape: "frame drape" (screen-space render-to-texture)
+### The scene: real 3D layers, no draping (owner decision on #551)
 
-The hard part is making the terrain show _the same map_. MapLibre GL JS does
-it by rendering every layer into a texture per terrain tile. Native has that
-machinery internally (`RenderTarget`s) but no public hook, so the candidates:
+The first implementation draped the captured 2D frame on the mesh ("frame
+drape"). The owner rejected it on review: _"I don't want draping! I want the
+3D, then the contour lines added as 3D geometry so it doesn't look painted,
+then the labels as 3D pin labels."_ The layer now draws **its own scene**; it
+captures nothing from MapLibre.
 
-| Option                                                                                                                                                                                    | Shows the exact map?                                                               | Cost                                | Verdict                    |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------- | -------------------------- |
-| Per-tile offscreen render of the style (a `MapSnapshotter` per tile)                                                                                                                      | style only — RN runtime layers (trails, heatmap, PDFs, recording) missing or stale | seconds per tile, a second renderer | no                         |
-| Terrain into the depth buffer, let MapLibre project onto it                                                                                                                               | MapLibre's 2D shaders never read depth for displacement                            | —                                   | impossible                 |
-| Shading-only relief pass over the flat map                                                                                                                                                | no geometry: mountains don't rise                                                  | cheap                               | that's today's tilt relief |
-| **Frame drape**: let MapLibre draw the flat map at the _same camera_, capture that frame, then draw the terrain mesh sampling the capture at each vertex's _flat_ (z = 0) screen position | **yes — every layer, by construction**, same colours, same AA, labels included     | one full-screen copy + the mesh     | **chosen**                 |
+Past the pitch ramp the custom layer — kept on top of the style — draws, in
+order, crossfading in with the ramp `t` (alpha = `t`, so the 2D map dissolves
+into the 3D scene over 25°–45°, no hard cut):
 
-Why it is exact: a point of the ground at (x, y) is drawn by MapLibre at
-`P·(x, y, 0)`. The terrain vertex for that ground point sits at
-`P·(x, y, h)` and samples the captured frame at `P·(x, y, 0)`. At zero
-exaggeration this is the identity (the 2D map, pixel for pixel), which is also
-what makes the 2D↔3D transition seamless: the height is scaled by a pitch
-ramp `t` and the frame morphs continuously out of the flat map. Occlusion
-(mountains hiding valleys) comes from the mesh's own depth test.
+1. **Sky** — a horizon→zenith gradient in theme colours, haze below the
+   horizon.
+2. **Terrain surface** — the quadtree mesh, shaded by us:
+   - _Map style (light/dark)_: base colour = the map's `land` token, a rock
+     tint (`landAlt`) above 2200–3400 m (max 35 %), water and glaciers from
+     per-tile **masks** (vector `water` polygons, `landcover` glaciers,
+     rasterised into the tile's 64² detail texture by the bake worker; sea
+     level from the DEM), lit like the 2D hillshade — NW sun (`bearing +
+335°`, 45° altitude), soft shadow toward the theme's `shadow` mix (0.62),
+     highlight on lit faces (0.45), and a slope darkening term (0.18) for crisp
+     ridgelines without a plastic look. `src/core/terrain3d/surface.ts`.
+   - _Satellite_: Esri World Imagery tiles as per-tile textures (192 slots of
+     256², same LOD as the mesh, parent windows while children load, 300 ms
+     crossfades), plus a gentle form term.
+   - Fog / atmospheric perspective toward the theme's fog colour.
+3. **Contours as geometry** — evaluated per fragment from the surface's real
+   height: distance to the nearest level divided by the screen-space height
+   gradient (`fwidth`), so lines are a **constant screen width** (minor 1.1,
+   index 2.0 logical px), anti-aliased, never blurred and never swimming —
+   they sit on the 3D surface, not in a texture. Intervals follow the 2D
+   ladder by zoom (`contourLevels`) and step coarser where the terrain is
+   foreshortened (≥ 5 px between lines), with a crossfade between levels;
+   every 5th (the index line) is thicker and darker. Colours are the map's
+   contour tokens; on satellite they follow the "contours on satellite"
+   setting. We evaluated marching-squares polylines with a depth bias as the
+   alternative: the analytic form needs no extra geometry, has no z-fighting
+   and adapts its density per pixel, so it won. `contours3d.ts`.
+4. **Trails** — shown trails, the focused trail and the live recording as 3D
+   polylines lifted onto the DEM (densified to ~15 m), extruded to a constant
+   screen width with a halo, depth-tested against the terrain with a small
+   bias. `lines.ts`.
+5. **3D pin labels** — peaks (our peaks tiles, banded rank #549), places (by
+   `min_zoom`), huts/shelters/passes/viewpoints and named lakes, read from the
+   vector tiles MapLibre already loaded (native queries on camera idle and
+   every ~1.2 s while moving; no per-frame JS). Each is a paper plate in
+   Atkinson (rendered once into a 2048² sprite atlas), on a thin stem above a
+   ground dot anchored at its real (lon, lat, terrain height). Every frame the
+   engine projects them, declutters by priority with screen-space collision,
+   fades them in/out (220 ms, no popping), scales/fades with distance, and
+   hides those the terrain occludes (a ray march against the displayed
+   heights). `labels.ts`.
+6. **Location marker** — projected at the terrain height under the fix.
 
-Per platform:
+The 2D map is untouched below 25° (the layer returns immediately), and with
+the setting off the module is never attached.
 
-- **Android (GL)**: our custom layer sits at the **top** of the style. In
-  `render()` it `glCopyTexSubImage2D`s the current framebuffer (everything
-  MapLibre drew below it) into a screen-sized texture, clears depth, draws the
-  sky, then the terrain. A UI-thread watcher keeps the layer on top when RN
-  re-inserts its component layers after a style reload.
-- **iOS (Metal)**: a texture cannot be sampled while it is the attachment of
-  the live encoder, and MapLibre owns that encoder. So the layer's
-  `drawInMapView` only records the frame (matrices, command buffer); the
-  terrain is drawn in a **post-pass on the same command buffer**, right after
-  MapLibre ends its pass and before it presents: the MapLibre-created
-  `MTKView` (a plain `MTKView`) is re-classed to a zero-ivar subclass whose
-  `currentDrawable` getter — which MapLibre calls exactly once per frame, in
-  `swap()`, right before `presentDrawable:`+`commit` — first encodes a blit
-  (drawable → capture texture; the view is set `framebufferOnly = NO` while 3D
-  is attached) and our terrain render pass. Public API only (subclassing
-  `MTKView`, `object_setClass`), restored on detach. Because the capture is
-  taken after _every_ layer, ordering does not matter on iOS.
+Per platform, the layer draws straight into MapLibre's render pass:
 
-Limits of the drape (documented, measured in QA):
+- **Android (GLES 3)**: one instanced draw per 128 tiles (heights in an
+  RGBA32F atlas, detail textures in a 2D array, imagery in a lazily created
+  array), lines and sprites after, all inside `render()`.
+- **iOS (Metal)**: `MLNCustomStyleLayer` exposes MapLibre's
+  `renderEncoder`/`renderPassDesc`; we build pipelines matching its
+  attachments (colour, depth-stencil, sample count) and draw directly — no
+  post-pass, no `MTKView` re-classing. Depth is "cleared" with a full-screen
+  draw at z = 1 (MapLibre's 2D depth means nothing to the scene).
 
-1. **Resolution on camera-facing slopes**: the flat frame foreshortens far
-   ground; a slope that faces the camera is stretched from fewer pixels. At
-   pitch ≤ 70° it reads as slightly softer texture on steep faces.
-2. **Off-frame ground**: terrain whose flat position is off-screen has no
-   source pixel. Near the bottom edge this is avoided by the reference height
-   (below); toward the top edge such fragments fade into the fog colour (reads
-   as haze) instead of smearing.
-3. **Overlay views** that are not GL (iOS user-location `UIView`, RN
-   `MarkerView`s) stay at their flat position; GL symbols (labels, Android
-   puck layers below ours) are draped and therefore positionally correct.
-4. **Taps** resolve on the flat map (MapLibre's `queryRenderedFeatures`
-   doesn't know about our terrain). With the reference height at the screen's
-   bottom edge the error is zero there and grows with relief; documented.
+**PDF overlays** are not in the 3D scene yet (they show in 2D below the
+ramp). Next phase: render each overlay's raster into per-tile textures where
+it covers, sampled like the imagery slots.
 
 ### Reference height (camera altitude)
 
@@ -205,21 +221,14 @@ camera rises into view from below the frame (limit 2). Pure:
 
 ### Lighting, colour, sky
 
-- The draped frame **already carries the theme's own shading** (the Stone &
-  Paper hillshade on Map; real sun shadows on Satellite), so the 3D lighting
-  is a gentle _form_ term on top: `lambert` from the hillshade's light (azimuth
-  335° anchored to the viewport, i.e. `bearing + 335°`, altitude 45°),
-  strength 0.22 (map) / 0.18 (satellite), so lit/shadowed faces agree with the
-  2D relief. The extra 2D "tilt relief" hillshade pass is switched off while
-  3D is active (the geometry replaces it).
-- **Map, light and dark**: fog colour = the map's own `land` token (paper /
-  stone-night); sky = a 2-stop gradient derived from it (pure `skyLook`), so
-  the horizon dissolves into the map's paper.
-- **Satellite**: atmospheric perspective (exponential haze toward a
-  blue-white), a daylight sky gradient (horizon haze → zenith blue), and the
-  form term.
-- Everything (height, fog, sky, form) is multiplied by the pitch ramp `t`, so
-  at `t = 0` the output is the 2D frame.
+- Light: the 2D hillshade's — azimuth 335° anchored to the viewport
+  (`bearing + 335°`), altitude 45° — so lit and shadowed faces agree with the
+  2D relief. The 2D "tilt relief" pass is switched off while 3D is active.
+- Map light/dark: all surface colours come from the Stone & Paper tokens
+  (`land`, `landAlt`, river `water`, ochre `contour`, `ink` for the index
+  lines and shadows) via `terrainLook` (`look.ts`); fog = the land colour, so
+  the horizon dissolves into the paper.
+- Satellite: haze toward a blue-white, a daylight sky.
 
 ### Activation, gestures, camera
 
@@ -227,7 +236,7 @@ camera rises into view from below the frame (limit 2). Pure:
   native terrain available it no longer needs Shading (3D works on satellite):
   Natural = 1.0× exaggeration, Dramatic = 1.6×. Off = no native layer at all
   and the 60° ceiling — the 2D path exactly as today.
-- Ramp: `t = smoothstep(25°, 45°, pitch)`; below 25° nothing is captured or
+- Ramp: `t = smoothstep(25°, 45°, pitch)`; below 25° nothing is
   drawn (the layer returns immediately), so flat use pays nothing.
 - Max pitch 80° only while 3D is attached.
 - Gestures stay 100 % native (MapLibre's recognisers); the layer reads the

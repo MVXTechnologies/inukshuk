@@ -7,10 +7,10 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { eyeFromProjection } from './camera';
+import { cameraToCenterDistance, centerPx, eyeFromProjection, projectionMatrix } from './camera';
 import { sampleMosaic, terrariumHeight, type DemNeighborhood } from './dem';
 import { selectTiles } from './lod';
-import { fogAmount, formShade, lightDirection } from './look';
+import { fogAmount, formShade, lightDirection, terrainLook } from './look';
 import {
   bakeSlopes,
   buildGridIndices,
@@ -26,8 +26,6 @@ import { contourAt, levelForDensity } from './contours3d';
 import { shadeSurface } from './surface';
 import { occludedByTerrain, placeLabels, type LabelInput, type LabelState } from './labels';
 import { densify, extrudeOffset, rasterizePolygons } from './lines';
-import { centerPx, projectionMatrix, cameraToCenterDistance } from './camera';
-import { terrainLook } from './look';
 
 const FIXTURE = path.join(
   __dirname,

@@ -30,9 +30,9 @@ export const LEVEL_LADDER: readonly (readonly [number, number])[] = [
 ];
 
 /** Minor/major lines closer than this (px) step to a coarser level. */
-export const MIN_SPACING_PX = 5;
+export const MIN_SPACING_PX = 8;
 /** …fully switched when the coarser level would be this far apart. */
-export const FULL_SPACING_PX = 9;
+export const FULL_SPACING_PX = 12;
 /** Line widths in px (logical): minor and index (major) lines. */
 export const MINOR_WIDTH_PX = 1.1;
 export const MAJOR_WIDTH_PX = 2.0;

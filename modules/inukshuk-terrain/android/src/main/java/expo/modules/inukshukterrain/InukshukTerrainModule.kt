@@ -13,7 +13,7 @@ import expo.modules.kotlin.records.Record
 import org.maplibre.android.maps.MapView
 
 class TerrainConfig : Record {
-  /** 14 floats, see TerrainNative.nativeSetLook. */
+  /** TerrainNative.LOOK_FLOATS floats, see packLook. */
   @Field var look: List<Double> = emptyList()
 
   /** false = probe only (frame timing, no drawing, 60° ceiling). */
@@ -22,6 +22,24 @@ class TerrainConfig : Record {
   @Field var networkAllowed: Boolean = true
 
   @Field var maxPitch: Double = 80.0
+
+  /** Pin plates: plate rgba, ink rgb, muted rgb, water rgb (0–1). */
+  @Field var labelTheme: List<Double> = emptyList()
+
+  /** Name properties to try, in order (the map's label language). */
+  @Field var nameFields: List<String> = listOf("name")
+
+  @Field var labels: Boolean = true
+}
+
+class TerrainLine : Record {
+  @Field var id: Int = 0
+
+  /** lng, lat pairs. */
+  @Field var coords: List<Double> = emptyList()
+
+  /** color rgba, halo rgba, width, haloWidth, order. */
+  @Field var style: List<Double> = emptyList()
 }
 
 class BenchStep : Record {
@@ -79,6 +97,7 @@ class InukshukTerrainModule : Module() {
       mapView.getMapAsync { map ->
         val c = TerrainController(mapView.context.applicationContext, mapView, map)
         c.attach(look(config), config.enabled, config.networkAllowed, config.maxPitch)
+        c.setScene(LabelTheme.from(config.labelTheme), config.nameFields, config.labels)
         controllers[viewTag] = c
         promise.resolve(true)
       }
@@ -86,7 +105,33 @@ class InukshukTerrainModule : Module() {
 
     Function("update") { viewTag: Int, config: TerrainConfig ->
       val l = look(config)
-      main.post { controllers[viewTag]?.update(l, config.enabled, config.networkAllowed) }
+      val theme = LabelTheme.from(config.labelTheme)
+      main.post {
+        controllers[viewTag]?.let {
+          it.update(l, config.enabled, config.networkAllowed)
+          it.setScene(theme, config.nameFields, config.labels)
+        }
+      }
+      Unit
+    }
+
+    Function("setLines") { viewTag: Int, lines: List<TerrainLine> ->
+      val specs = lines.map { l ->
+        val merc = DoubleArray(l.coords.size - l.coords.size % 2)
+        var i = 0
+        while (i + 1 < l.coords.size) {
+          merc[i] = TerrainController.mercX(l.coords[i])
+          merc[i + 1] = TerrainController.mercY(l.coords[i + 1])
+          i += 2
+        }
+        LineSpec(l.id, merc, FloatArray(11) { k -> (l.style.getOrNull(k) ?: 0.0).toFloat() })
+      }
+      main.post { controllers[viewTag]?.setLines(specs) }
+      Unit
+    }
+
+    Function("setPuck") { viewTag: Int, visible: Boolean, lng: Double, lat: Double ->
+      main.post { controllers[viewTag]?.setPuck(visible, lng, lat) }
       Unit
     }
 
@@ -147,7 +192,7 @@ class InukshukTerrainModule : Module() {
     }.runOnQueue(Queues.MAIN)
   }
 
-  private fun look(config: TerrainConfig): FloatArray = FloatArray(15) { i -> (config.look.getOrNull(i) ?: 0.0).toFloat() }
+  private fun look(config: TerrainConfig): FloatArray = FloatArray(TerrainNative.LOOK_FLOATS) { i -> (config.look.getOrNull(i) ?: 0.0).toFloat() }
 
   private fun findMapView(v: View): MapView? {
     if (v is MapView) return v

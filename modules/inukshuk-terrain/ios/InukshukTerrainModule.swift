@@ -6,6 +6,15 @@ struct TerrainConfig: Record {
   @Field var enabled: Bool = true
   @Field var networkAllowed: Bool = true
   @Field var maxPitch: Double = 80
+  @Field var labelTheme: [Double] = []
+  @Field var nameFields: [String] = ["name"]
+  @Field var labels: Bool = true
+}
+
+struct TerrainLine: Record {
+  @Field var id: Int = 0
+  @Field var coords: [Double] = []
+  @Field var style: [Double] = []
 }
 
 struct BenchStep: Record {
@@ -42,7 +51,12 @@ public final class InukshukTerrainModule: Module {
         enabled: config.enabled,
         networkAllowed: config.networkAllowed,
         maxPitch: config.maxPitch)
-      if ok { self.controllers[viewTag] = controller }
+      if ok {
+        controller.setLabelTheme(
+          config.labelTheme.map { NSNumber(value: $0) }, nameFields: config.nameFields,
+          labels: config.labels)
+        self.controllers[viewTag] = controller
+      }
       return ok
     }.runOnQueue(.main)
 
@@ -50,8 +64,26 @@ public final class InukshukTerrainModule: Module {
       let look = config.look.map { NSNumber(value: $0) }
       let enabled = config.enabled
       let net = config.networkAllowed
+      let theme = config.labelTheme.map { NSNumber(value: $0) }
+      let fields = config.nameFields
+      let labels = config.labels
       DispatchQueue.main.async {
-        self.controllers[viewTag]?.update(withLook: look, enabled: enabled, networkAllowed: net)
+        guard let c = self.controllers[viewTag] else { return }
+        c.update(withLook: look, enabled: enabled, networkAllowed: net)
+        c.setLabelTheme(theme, nameFields: fields, labels: labels)
+      }
+    }
+
+    Function("setLines") { (viewTag: Int, lines: [TerrainLine]) in
+      let dicts: [[String: Any]] = lines.map { ["id": $0.id, "coords": $0.coords, "style": $0.style] }
+      DispatchQueue.main.async {
+        self.controllers[viewTag]?.setLines(dicts)
+      }
+    }
+
+    Function("setPuck") { (viewTag: Int, visible: Bool, lng: Double, lat: Double) in
+      DispatchQueue.main.async {
+        self.controllers[viewTag]?.setPuckVisible(visible, lng: lng, lat: lat)
       }
     }
 
