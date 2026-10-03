@@ -1,6 +1,6 @@
 import { costStats, frameStats } from '@core/terrain3d/frameStats';
 import { isTiltRelief } from '@core/map/tiltRelief';
-import { writeQaReport } from '@data/qaReports';
+import { readQaCommand, writeQaReport } from '@data/qaReports';
 import * as storage from '@data/storage';
 import { importGpxFromUri } from '@features/library/importGpx';
 import { mapDocumentFromStoredPdf } from '@features/library/importMap';
@@ -120,7 +120,19 @@ export function useTerrainQa(
     };
     void Linking.getInitialURL().then(handle);
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
-    return () => sub.remove();
+    // The same commands through a file (iOS simulator: no "Open in" prompt).
+    let last: string | null = readQaCommand();
+    const poll = setInterval(() => {
+      const cmd = readQaCommand();
+      if (cmd !== null && cmd !== last) {
+        last = cmd;
+        for (const line of cmd.split('\n')) if (line.trim()) handle(line.trim().replace(/^#\d+ /, ''));
+      }
+    }, 400);
+    return () => {
+      sub.remove();
+      clearInterval(poll);
+    };
   }, [cameraRef, tagRef]);
 
   return { probe, disabled, debugFlags };

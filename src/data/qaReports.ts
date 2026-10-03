@@ -12,3 +12,19 @@ export function writeQaReport(name: string, data: unknown): string {
   file.write(JSON.stringify(data, null, 2));
   return file.uri;
 }
+
+/**
+ * QA builds only: the pending harness command (a deep-link URL) a host
+ * script dropped at `<documents>/qa/command.txt`, or null. The iOS simulator
+ * asks "Open in …?" for every `simctl openurl`, so the harness writes here
+ * instead.
+ */
+export function readQaCommand(): string | null {
+  try {
+    const f = new File(new Directory(Paths.document, 'qa'), 'command.txt');
+    if (!f.exists) return null;
+    return f.textSync();
+  } catch {
+    return null;
+  }
+}
