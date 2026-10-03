@@ -184,7 +184,7 @@ fragment float4 terrain_fs(VOut in [[stage_in]], constant FrameU &f [[buffer(0)]
   float fog = d > f.fogParams.x ? 1.0 - exp(-f.fogParams.y * (d - f.fogParams.x)) : 0.0;
   float t = clamp((d - f.fogParams.z * 0.85) / (f.fogParams.z * 0.15), 0.0, 1.0);
   fog = max(fog, t * t * (3.0 - 2.0 * t));
-  fog = max(fog, clamp(topOut * 12.0, 0.0, 1.0));
+  fog = max(fog, clamp(topOut * 40.0, 0.0, 1.0));
   return float4(mix(c, f.fogColor.rgb, clamp(fog, 0.0, 1.0) * f.misc.x), 1.0);
 }
 

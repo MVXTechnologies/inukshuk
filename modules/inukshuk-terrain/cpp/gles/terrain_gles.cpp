@@ -109,7 +109,7 @@ void main() {
   float f = d > u_fogParams.x ? 1.0 - exp(-u_fogParams.y * (d - u_fogParams.x)) : 0.0;
   float t = clamp((d - u_fogParams.z * 0.85) / (u_fogParams.z * 0.15), 0.0, 1.0);
   f = max(f, t * t * (3.0 - 2.0 * t));
-  f = max(f, clamp(topOut * 12.0, 0.0, 1.0));
+  f = max(f, clamp(topOut * 40.0, 0.0, 1.0));
   fragColor = vec4(mix(c, u_fogColor, clamp(f, 0.0, 1.0) * u_ramp), 1.0);
 }
 )";
