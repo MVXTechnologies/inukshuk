@@ -154,6 +154,8 @@ import {
   CONTOUR_SOURCE_MINZOOM,
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
+import { useNativeTerrain } from './hooks/useNativeTerrain';
+import { useTerrainQa } from './hooks/useTerrainQa';
 import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -837,10 +839,35 @@ export function MapScreen() {
     satelliteImagery,
   ]);
 
+  // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
+  // a binary that ships the module, tilting past ~25° grows real relief out of
+  // the flat map, drawn natively inside MapLibre (no JS per frame). It
+  // replaces the tilted-map hillshade pass below while attached.
+  const terrainHostRef = useRef<View | null>(null);
+  const terrainTagRef = useRef<number | null>(null);
+  const terrainQa = useTerrainQa(cameraRef, terrainTagRef);
+  const terrain3d = useNativeTerrain({
+    hostRef: terrainHostRef,
+    mapLoaded,
+    relief: tiltRelief,
+    allowed: editorStyle === null,
+    basemap: basemap === 'satellite' ? 'satellite' : 'map',
+    dark: theme.dark,
+    networkAllowed: !offlineOnly,
+    probe: terrainQa.probe,
+  });
+  useEffect(() => {
+    terrainTagRef.current = terrain3d.viewTag;
+  }, [terrain3d.viewTag]);
+
   // The tilted-map relief pass (#480): the style carries it hidden whenever
   // it draws the shading and the setting is on; the hook switches it on from
-  // the settled pitch.
-  const tilt = useTiltRelief(style, basemap === 'satellite' && editorStyle === null);
+  // the settled pitch (off while the native 3D terrain draws real relief).
+  const tilt = useTiltRelief(
+    style,
+    basemap === 'satellite' && editorStyle === null,
+    terrain3d.active,
+  );
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -1980,9 +2007,18 @@ export function MapScreen() {
     onLayout: onMapAreaLayout,
     value: mapAreaBottom,
   } = useWindowEdge('bottom');
+  // One host View feeds both the window-edge measure and the native terrain,
+  // which finds the MapLibre view inside it (collapsable: keep it a real view).
+  const setMapAreaView = useCallback(
+    (v: View | null) => {
+      mapAreaRef.current = v;
+      terrainHostRef.current = v;
+    },
+    [mapAreaRef],
+  );
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
-      <View style={styles.fill} ref={mapAreaRef} onLayout={onMapAreaLayout}>
+      <View style={styles.fill} ref={setMapAreaView} collapsable={false} onLayout={onMapAreaLayout}>
         {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
           <Map
             ref={mapRef}

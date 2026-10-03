@@ -186,3 +186,23 @@ export function formShade(
 export function rgbArray(c: Rgb): [number, number, number] {
   return [c[0], c[1], c[2]];
 }
+
+/** Floats the native layer takes (TerrainNative.nativeSetLook / the iOS twin). */
+export const PACKED_LOOK_LENGTH = 14;
+
+/**
+ * `[exaggeration, fog rgb, horizon rgb, zenith rgb, form, fogStart,
+ * fogDensity, fogEnd]` — the order both native modules unpack.
+ */
+export function packLook(l: TerrainLook): number[] {
+  return [
+    l.exaggeration,
+    ...l.fogColor,
+    ...l.skyHorizon,
+    ...l.skyZenith,
+    l.formStrength,
+    l.fogStartCtc,
+    l.fogDensity,
+    l.fogEndCtc,
+  ];
+}

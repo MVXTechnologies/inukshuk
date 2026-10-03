@@ -32,7 +32,12 @@ export interface TiltReliefBinding {
  * layer, and not mounting before the first load keeps it from creating a
  * colourless duplicate.
  */
-export function useTiltRelief(style: StyleSpecification, imagery = false): TiltReliefBinding {
+export function useTiltRelief(
+  style: StyleSpecification,
+  imagery = false,
+  /** The native 3D terrain is drawing real relief: keep the pass hidden. */
+  suppressed = false,
+): TiltReliefBinding {
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const [settledPitch, setSettledPitch] = useState(0);
   const [styleGeneration, setStyleGeneration] = useState(0);
@@ -40,7 +45,7 @@ export function useTiltRelief(style: StyleSpecification, imagery = false): TiltR
   const onSettledPitch = useCallback((p: number) => setSettledPitch(pitchBucket(p)), []);
   const hasPass = useMemo(() => styleHasTiltRelief(style), [style]);
   // Over satellite imagery the pass is lighter (#492).
-  const exaggeration = tiltReliefExaggeration(tiltRelief, settledPitch, imagery);
+  const exaggeration = suppressed ? 0 : tiltReliefExaggeration(tiltRelief, settledPitch, imagery);
   const layer =
     hasPass && styleGeneration > 0 ? (
       <Fragment key={`tilt-relief-${styleGeneration}`}>{tiltReliefLayer(exaggeration)}</Fragment>

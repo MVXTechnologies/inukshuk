@@ -11,3 +11,4 @@ export * from './morph';
 export * from './prefetch';
 export * from './reference';
 export * from './tiles';
+export * from './frameStats';
