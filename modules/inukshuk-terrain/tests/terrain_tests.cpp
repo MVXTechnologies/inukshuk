@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -551,7 +552,9 @@ static Mat4 refProjection(double lng, double lat, double zoom, double pitchDeg, 
 static void testEngine() {
   std::vector<DemId> requested;
   int repaints = 0;
-  Engine eng([&](int z, int x, int y) { requested.push_back({z, x, y}); }, [&] { repaints++; });
+  std::vector<DemId> imgRequested;
+  Engine eng([&](int z, int x, int y) { requested.push_back({z, x, y}); },
+             [&](int z, int x, int y) { imgRequested.push_back({z, x, y}); }, [&] { repaints++; });
   const double lng = 7.7491, lat = 46.0207, zoom = 13, w = 412, h = 892;
   FrameInput in;
   in.P = refProjection(lng, lat, zoom, 60, 20, w, h);
@@ -605,6 +608,14 @@ static void testEngine() {
     requested.clear();
     for (const auto& d : batch) eng.onDemHeights(d.z, d.x, d.y, synth(d));
     in.timeMs += 16;
+    eng.frame(in);  // schedules bakes
+    eng.drainBakes();
+    in.timeMs += 16;
+    out = eng.frame(in);  // installs them
+  }
+  for (int i = 0; i < 6; i++) {
+    eng.drainBakes();
+    in.timeMs += 16;
     out = eng.frame(in);
   }
   {
@@ -622,6 +633,7 @@ static void testEngine() {
   {
     g_cases++;
     for (int i = 0; i < 120; i++) {
+      eng.drainBakes();
       in.timeMs += 16;
       out = eng.frame(in);
     }
@@ -673,7 +685,7 @@ static void testEngine() {
       if (before.count(t.key) && before[t.key]) CHECK(t.attributes != nullptr);
     CHECK(eng.stats().flatTiles == 0);
     CHECK(eng.stats().meshCount <= meshesBefore);
-    CHECK(eng.stats().meshCount <= static_cast<int>(o3.tiles.size()) + Engine::kBakesPerFrame);
+    CHECK(eng.stats().meshCount <= static_cast<int>(o3.tiles.size()) + Engine::kMaxBakeJobs);
     // Culled neighbours lose their (unpinned) height bounds, so the walk may
     // admit a few more tiles — never a flat one.
     CHECK(o3.tiles.size() <= out.tiles.size() * 5 / 4);
@@ -681,7 +693,7 @@ static void testEngine() {
   // 9. Failures back off (no immediate re-request).
   {
     g_cases++;
-    Engine e2([&](int z, int x, int y) { requested.push_back({z, x, y}); }, [] {});
+    Engine e2([&](int z, int x, int y) { requested.push_back({z, x, y}); }, nullptr, [] {});
     requested.clear();
     e2.frame(in);
     auto first = requested;
@@ -710,7 +722,7 @@ static void testEngine() {
   // 12. heightAt reads the deepest loaded DEM.
   {
     g_cases++;
-    Engine e3(nullptr, nullptr);
+    Engine e3(nullptr, nullptr, nullptr);
     std::vector<float> hs(kDemSize * kDemSize, 1234.f);
     e3.onDemHeights(0, 0, 0, hs);
     auto hv = e3.heightAt(0.3, 0.6, 15);
@@ -729,6 +741,165 @@ static void testEngine() {
     const float* bottom = o5.skyRays[0];
     CHECK(top[2] / top[3] > bottom[2] / bottom[3]);
   }
+  // ---- the 3D scene (#551 redesign) ----
+  // A fresh engine with every DEM delivered synchronously.
+  std::vector<DemId> req2, img2;
+  Engine sc([&](int z, int x, int y) { req2.push_back({z, x, y}); },
+            [&](int z, int x, int y) { img2.push_back({z, x, y}); }, nullptr);
+  auto settle = [&](FrameInput fi, int frames) {
+    FrameOutput o;
+    for (int i = 0; i < frames; i++) {
+      auto batch = req2;
+      req2.clear();
+      for (const auto& d : batch) sc.onDemHeights(d.z, d.x, d.y, synth(d));
+      sc.drainBakes();
+      fi.timeMs += 16;
+      o = sc.frame(fi);
+    }
+    return o;
+  };
+  in.P = refProjection(lng, lat, zoom, 60, 20, w, h);
+  in.pitchDeg = 60;
+  FrameOutput so = settle(in, 40);
+  // 14. Every drawn mesh carries a detail texture of the right size.
+  {
+    g_cases++;
+    int withDetail = 0;
+    for (const auto& t : so.tiles) {
+      if (!t.attributes) continue;
+      CHECK(t.detail != nullptr);
+      if (t.detail) {
+        CHECK(t.detail->size() == static_cast<size_t>(kDetailSize * kDetailSize * 4));
+        withDetail++;
+      }
+    }
+    CHECK(withDetail > 0);
+    CHECK(so.contourBase == baseLevelIndex(zoom));
+  }
+  // 15. Masks: a lake polygon over the view lands in the water channel after a re-bake.
+  {
+    g_cases++;
+    const double cxm = lngToMercX(lng), cym = latToMercY(lat);
+    const double r = 0.0004;
+    sc.setMasks({{{cxm - r, cym - r}, {cxm + r, cym - r}, {cxm + r, cym + r}, {cxm - r, cym + r}}},
+                {});
+    so = settle(in, 30);
+    int waterPx = 0;
+    for (const auto& t : so.tiles)
+      if (t.detail)
+        for (size_t k = 2; k < t.detail->size(); k += 4) waterPx += (*t.detail)[k] > 0;
+    CHECK(waterPx > 0);
+  }
+  // 16. Labels: placed, faded in, the more important one wins a shared spot.
+  {
+    g_cases++;
+    const double cxm = lngToMercX(lng), cym = latToMercY(lat);
+    std::vector<LabelData> ls;
+    for (int i = 0; i < 2; i++) {
+      LabelData d;
+      d.id = 100 + i;
+      d.mercX = cxm + i * 1e-7;
+      d.mercY = cym - 0.0001;
+      d.priority = i == 0 ? 5 : 1;
+      d.w = 90;
+      d.h = 26;
+      d.u1 = d.v1 = 0.1f;
+      ls.push_back(d);
+    }
+    LabelData far;
+    far.id = 200;
+    far.mercX = cxm + 0.0006;
+    far.mercY = cym - 0.0002;
+    far.priority = 9;
+    far.w = 60;
+    far.h = 24;
+    ls.push_back(far);
+    sc.setLabels(ls);
+    so = settle(in, 30);
+    std::set<int> shown;
+    for (const auto& l : so.labels)
+      if (l.opacity > 0.99) shown.insert(l.id);
+    CHECK(shown.count(101) == 1);
+    CHECK(shown.count(100) == 0);
+    for (const auto& l : so.labels) {
+      CHECK(l.x1 > l.x0);
+      CHECK(l.y1 > l.y0);
+      CHECK(l.y1 <= l.gy);  // the plate sits above its ground point
+    }
+  }
+  // 17. Polylines: lifted onto the terrain (heights from the DEM), 6 vertices per segment.
+  {
+    g_cases++;
+    const double cxm = lngToMercX(lng), cym = latToMercY(lat);
+    sc.setPolyline(7, {{cxm - 0.0003, cym}, {cxm + 0.0003, cym + 0.0001}}, LineStyle{});
+    so = settle(in, 3);
+    CHECK(so.lines.size() == 1);
+    if (!so.lines.empty()) {
+      const auto& v = *so.lines[0].vertices;
+      CHECK(v.size() % (6 * 8) == 0);
+      CHECK(v.size() / (6 * 8) > 10);  // densified (~15 m steps)
+      const auto ground = sc.heightAt(cxm - 0.0003, cym, kDemMaxZoom);
+      CHECK(ground.has_value());
+      if (ground) CHECK_NEAR(v[2], *ground, 1e-2);
+    }
+    sc.removePolyline(7);
+    so = settle(in, 1);
+    CHECK(so.lines.empty());
+  }
+  // 18. The location marker projects inside the view.
+  {
+    g_cases++;
+    sc.setPuck(true, lngToMercX(lng), latToMercY(lat));
+    so = settle(in, 1);
+    CHECK(so.puck.visible);
+    CHECK(so.puck.gx > 0 && so.puck.gx < w && so.puck.gy > 0 && so.puck.gy < h);
+    sc.setPuck(false, 0, 0);
+    so = settle(in, 1);
+    CHECK(!so.puck.visible);
+  }
+  // 19. Satellite: imagery requested, uploaded into slots, tiles sample their slot.
+  {
+    g_cases++;
+    LookParams lp;
+    lp.imagery = 1;
+    sc.setLook(lp);
+    img2.clear();
+    so = settle(in, 2);
+    CHECK(!img2.empty());
+    for (int round = 0; round < 30 && !img2.empty(); round++) {
+      auto batch = img2;
+      img2.clear();
+      for (const auto& d : batch)
+        sc.onImageryData(d.z, d.x, d.y, std::vector<uint8_t>(kImagerySize * kImagerySize * 4, 128));
+      so = settle(in, 1);
+    }
+    so = settle(in, 40);
+    int withImg = 0;
+    for (const auto& t : so.tiles) withImg += t.imgB >= 0;
+    CHECK(withImg > 0);
+    CHECK(sc.stats().imagerySlots > 0);
+    CHECK(sc.stats().imagerySlots <= Engine::kImagerySlots);
+    // Bad imagery sizes are rejected.
+    sc.onImageryData(3, 1, 1, std::vector<uint8_t>(10, 0));
+  }
+  // 20. The look round-trips through its float packing.
+  {
+    g_cases++;
+    float v[41];
+    for (int i = 0; i < 41; i++) v[i] = static_cast<float>(i) / 100;
+    v[40] = 2;
+    const LookParams l = lookFromFloats(v, 41);
+    CHECK_NEAR(l.exaggeration, 0, 1e-9);
+    CHECK_NEAR(l.fogEndCtc, 0.13, 1e-6);
+    CHECK_NEAR(l.land[0], 0.14, 1e-6);
+    CHECK_NEAR(l.highlight[2], 0.31, 1e-6);
+    CHECK_NEAR(l.contourMajor[2], 0.37, 1e-6);
+    CHECK_NEAR(l.contourOpacity, 0.38, 1e-6);
+    CHECK_NEAR(l.imagery, 0.39, 1e-6);
+    CHECK(l.debugFlags == 2);
+    CHECK(lookFromFloats(v, 12).exaggeration == LookParams{}.exaggeration);
+  }
+
 }
 
 int main(int argc, char** argv) {

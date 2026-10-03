@@ -1,20 +1,26 @@
-// The stateful terrain engine shared by the GLES (Android) and Metal (iOS)
-// renderers: DEM cache, per-tile height meshes, LOD selection, morphs and
-// the per-frame draw list. Backend-agnostic — the renderers only upload the
-// attribute buffers it hands out and issue the draws.
+// The stateful 3D scene engine shared by the GLES (Android) and Metal (iOS)
+// renderers (docs/plans/native-terrain.md, #551 redesign: a true 3D scene,
+// no draping). It owns the DEM cache, per-tile meshes and their detail
+// textures (slopes + water/glacier masks), the LOD selection and morphs,
+// satellite imagery slots, the 3D pin labels' placement, the lifted trails
+// and the location marker — and hands the renderer a per-frame draw list.
 //
-// Threads: `frame()` runs on the render thread; `onDemData`/`onDemFailed`
-// on any worker thread (they decode the PNG there); `setLook`/`trimMemory`
-// on any thread.
+// Threads: `frame()` runs on the render thread; `onDemData`, `onImageryData`
+// and the `on…Failed` calls on any worker thread; the `set…` calls on any
+// thread (usually UI). Mesh baking runs on the engine's own worker thread.
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -22,6 +28,13 @@
 #include "terrain_core.hpp"
 
 namespace inukshuk::terrain {
+
+/** Per-tile detail texture: 64×64 RGBA8 — slopeX, slopeY (encoded), water, glacier. */
+constexpr int kDetailSize = 64;
+/** Slopes (m/m) are stored as s / kSlopeRange · ½ + ½. */
+constexpr double kSlopeRange = 4.0;
+constexpr int kImageryMaxZoom = 18;
+constexpr int kImagerySize = 256;
 
 struct LookParams {
   float exaggeration = 1.0f;
@@ -32,9 +45,22 @@ struct LookParams {
   float fogStartCtc = 2.5f;
   float fogDensity = 0.12f;
   float fogEndCtc = 12.0f;
-  /** QA only: 1 = skip the frame copy, 2 = skip terrain, 4 = skip sky, 8 = half the tiles' detail. */
+  float land[3] = {0.95f, 0.93f, 0.88f};
+  float rock[3] = {0.9f, 0.87f, 0.81f};
+  float water[3] = {0.55f, 0.7f, 0.8f};
+  float glacier[3] = {0.95f, 0.96f, 0.97f};
+  float shadow[3] = {0.4f, 0.35f, 0.28f};
+  float highlight[3] = {1.0f, 0.98f, 0.95f};
+  float contour[3] = {0.7f, 0.55f, 0.35f};
+  float contourMajor[3] = {0.5f, 0.38f, 0.22f};
+  float contourOpacity = 0.95f;
+  float imagery = 0.0f;
+  /** QA only: 2 = skip terrain, 4 = skip sky, 8 = coarser LOD. */
   int debugFlags = 0;
 };
+
+/** Unpack the 40 (+1 debug) floats of `packLook` (src/core/terrain3d/look.ts). */
+LookParams lookFromFloats(const float* v, int n);
 
 struct FrameInput {
   Mat4 P{};
@@ -49,31 +75,87 @@ struct FrameInput {
 
 struct DrawTile {
   uint64_t key = 0;
-  /** Bumped whenever `attributes` change; the renderer re-uploads on change. */
+  /** Bumped whenever `attributes`/`detail` change; the renderer re-uploads on change. */
   uint32_t version = 0;
   /** Interleaved [hFrom, hTo, slopeX, slopeY] per vertex; null = a flat tile. */
   std::shared_ptr<const std::vector<float>> attributes;
+  /** kDetailSize² RGBA8; null with `attributes`. */
+  std::shared_ptr<const std::vector<uint8_t>> detail;
   float matrix[16] = {};
   float morph = 0;
   float fromFlat = 0;
   float skirtDepth = 0;
+  /** Satellite: imagery slots (-1 none) with their window (offX, offY, scale) in the slot. */
+  int imgA = -1, imgB = -1;
+  float winA[3] = {0, 0, 1}, winB[3] = {0, 0, 1};
+  /** 0 → show A, 1 → show B (crossfade on an imagery upgrade). */
+  float imgBlend = 0;
+};
+
+struct LabelData {
+  int id = 0;
+  double mercX = 0, mercY = 0;
+  int kind = 0;  // 0 peak, 1 place, 2 poi, 3 water
+  double priority = 0;
+  /** Plate size (logical px) and its atlas rect (texture uv). */
+  float w = 0, h = 0;
+  float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
+};
+
+struct LabelDraw {
+  int id = 0;
+  /** Plate rect (logical px, origin top-left), ground point, opacity, atlas uv. */
+  float x0 = 0, y0 = 0, x1 = 0, y1 = 0, gx = 0, gy = 0, opacity = 0, scale = 1;
+  float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
+  int kind = 0;
+};
+
+struct LineStyle {
+  float color[4] = {1, 0.4f, 0.1f, 1};
+  float halo[4] = {1, 1, 1, 0.9f};
+  float width = 3.5f, haloWidth = 6.0f;
+  int order = 0;
+};
+
+struct LineDraw {
+  int id = 0;
+  uint32_t version = 0;
+  /** 6 vertices per segment × [ax, ay, ah, bx, by, bh, side, end]. */
+  std::shared_ptr<const std::vector<float>> vertices;
+  float matrix[16] = {};
+  LineStyle style;
+};
+
+struct PuckDraw {
+  bool visible = false;
+  float gx = 0, gy = 0;  // logical px
+  float opacity = 1;
+};
+
+struct ImageryUpload {
+  int slot = 0;
+  std::shared_ptr<const std::vector<uint8_t>> pixels;  // kImagerySize² RGBA8
 };
 
 struct FrameOutput {
   bool active = false;
+  /** Logical viewport size (px): label and line geometry is in these units. */
+  float width = 0, height = 0;
   float ramp = 0;
   float hRef = 0;
   float exaggeration = 1;
   float ctc = 1;
   float farW = 1;
   float light[3] = {0, 0, 1};
-  /** Camera-relative homogeneous far-plane points (x, y, z_px, w) of the full-screen
-   * triangle (-1,-1), (3,-1), (-1,3); dir = xyz / w. */
   float skyRays[3][4] = {};
-  /** The horizon (or above) is on screen: the sky pass is needed. */
   bool skyVisible = true;
+  int contourBase = 0;
   LookParams look;
   std::vector<DrawTile> tiles;
+  std::vector<LabelDraw> labels;
+  std::vector<LineDraw> lines;
+  PuckDraw puck;
+  std::vector<ImageryUpload> imageryUploads;
   bool needsRepaint = false;
 };
 
@@ -88,6 +170,9 @@ struct EngineStats {
   int requested = 0;
   int failed = 0;
   double lastFrameCpuMs = 0;
+  int labelsShown = 0;
+  int imagerySlots = 0;
+  int bakeQueue = 0;
 };
 
 class Engine {
@@ -98,32 +183,45 @@ class Engine {
   static constexpr int kGridN = kGrid;
   static constexpr size_t kDemBudgetBytes = 48u * 1024u * 1024u;
   static constexpr size_t kMeshBudget = 600;
-  static constexpr int kBakesPerFrame = 8;
+  static constexpr int kMaxBakeJobs = 24;
   static constexpr int kMaxInFlight = 16;
   static constexpr int kRequestsPerFrame = 8;
   static constexpr double kRetryMs = 30000;
+  static constexpr int kImagerySlots = 192;
+  static constexpr int kImageryUploadsPerFrame = 6;
+  static constexpr double kImageryFadeMs = 300;
 
-  Engine(RequestFn request, RepaintFn repaint);
+  Engine(RequestFn demRequest, RequestFn imageryRequest, RepaintFn repaint);
+  ~Engine();
 
   void setLook(const LookParams& look);
   LookParams look() const;
 
-  /** PNG bytes for a DEM tile (decoded on the calling thread). */
   bool onDemData(int z, int x, int y, const uint8_t* png, size_t size);
-  /** Raw decoded heights (tests / pre-decoded sources). */
   void onDemHeights(int z, int x, int y, std::vector<float> heights);
   void onDemFailed(int z, int x, int y);
 
-  /** Low-memory: drop every DEM and mesh not needed by the last frame. */
+  /** Decoded imagery (kImagerySize² RGBA8) for a satellite tile. */
+  void onImageryData(int z, int x, int y, std::vector<uint8_t> rgba);
+  void onImageryFailed(int z, int x, int y);
+
+  void setLabels(std::vector<LabelData> labels);
+  void setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style);
+  void removePolyline(int id);
+  void setPuck(bool visible, double mercX, double mercY);
+  /** Water and glacier polygons (rings in mercator [0,1]) for the surface masks. */
+  void setMasks(std::vector<std::vector<Pt>> water, std::vector<std::vector<Pt>> glacier);
+
   void trimMemory();
-  /** Forget everything (detach). */
   void reset();
 
   FrameOutput frame(const FrameInput& in);
 
   EngineStats stats() const;
-  /** Height (m) at a mercator point from the best loaded DEM, or nullopt. */
   std::optional<double> heightAt(double mercX, double mercY, int maxZoom) const;
+
+  /** Test hook: wait for queued bakes to finish (bounded). */
+  void drainBakes(int timeoutMs = 2000);
 
  private:
   struct Dem {
@@ -136,13 +234,63 @@ class Engine {
   };
   struct Mesh {
     int demZoom = -1;
+    uint32_t maskGen = 0;
     std::vector<float> hTo, hFrom;
     std::shared_ptr<const std::vector<float>> attributes;
+    std::shared_ptr<const std::vector<uint8_t>> detail;
     float minH = 0, maxH = 0;
     double morphStart = 0;
     bool fromFlat = false;
     uint32_t version = 0;
     std::list<uint64_t>::iterator lru;
+  };
+  struct MaskSet {
+    std::vector<std::vector<Pt>> water, glacier;
+    std::vector<std::array<double, 4>> waterBox, glacierBox;  // mercator bbox
+  };
+  struct BakeJob {
+    TileId tile;
+    int demZoom = 0;
+    uint32_t maskGen = 0;
+    DemWindow window;
+    std::array<std::shared_ptr<const Dem>, 9> dems;
+    std::shared_ptr<const MaskSet> masks;
+    std::vector<float> hFrom;
+    bool fromFlat = false;
+  };
+  struct BakeResult {
+    TileId tile;
+    int demZoom = 0;
+    uint32_t maskGen = 0;
+    std::vector<float> hTo, hFrom;
+    std::shared_ptr<const std::vector<float>> attributes;
+    std::shared_ptr<const std::vector<uint8_t>> detail;
+    float minH = 0, maxH = 0;
+    bool fromFlat = false;
+  };
+  struct ImgEntry {
+    int slot = -1;
+    std::shared_ptr<const std::vector<uint8_t>> pending;
+    uint64_t lastFrame = 0;
+  };
+  struct TileImagery {
+    uint64_t key = 0;
+    uint64_t prevKey = 0;
+    double since = -1e300;
+  };
+  struct Polyline {
+    std::vector<Pt> points;
+    LineStyle style;
+    uint32_t version = 0;
+    uint32_t liftedDemGen = UINT32_MAX;
+    double liftedAt = -1e300;
+    double originX = 0, originY = 0;
+    std::shared_ptr<const std::vector<float>> vertices;
+  };
+  struct LabelEntry {
+    LabelData data;
+    double h = 0;
+    uint32_t hGen = UINT32_MAX;
   };
 
   std::shared_ptr<const Dem> demLocked(const DemId& d) const;
@@ -151,33 +299,65 @@ class Engine {
   void touchDemLocked(uint64_t key);
   void evictDemsLocked();
 
-  bool bake(const TileId& t, int demZoom, double now);
+  bool scheduleBake(const TileId& t, int demZoom, double now);
+  static BakeResult runBake(const BakeJob& job);
+  void installResults(double now);
+  void workerLoop();
   float morphOf(const Mesh& m, double now) const;
 
-  RequestFn request_;
+  RequestFn demRequest_, imageryRequest_;
   RepaintFn repaint_;
 
-  mutable std::mutex mutex_;  // DEM cache, pending, failed, look
+  mutable std::mutex mutex_;  // DEM cache, pending, failed, look, masks
   std::unordered_map<uint64_t, DemEntry> dems_;
-  std::list<uint64_t> demLru_;  // front = least recent
+  std::list<uint64_t> demLru_;
   size_t demBytes_ = 0;
   std::unordered_set<uint64_t> pending_;
   std::unordered_map<uint64_t, double> failedAt_;
   std::unordered_set<uint64_t> demPins_;
   LookParams look_;
+  std::shared_ptr<const MaskSet> masks_;
+  std::atomic<uint32_t> maskGen_{0};
   std::atomic<uint32_t> demGeneration_{0};
   std::atomic<bool> resetMeshes_{false};
   std::atomic<bool> trimMeshes_{false};
+
+  // Imagery (own mutex: workers deliver pixels).
+  mutable std::mutex imgMutex_;
+  std::unordered_map<uint64_t, ImgEntry> imagery_;
+  std::unordered_set<uint64_t> imgPending_;
+  std::unordered_map<uint64_t, double> imgFailedAt_;
+  std::vector<int> freeImgSlots_;
+
+  // Scene inputs (own mutex: UI thread writes).
+  mutable std::mutex sceneMutex_;
+  std::vector<LabelEntry> labels_;
+  std::unordered_map<int, Polyline> polylines_;
+  uint32_t lineVersion_ = 0;
+  bool puckVisible_ = false;
+  double puckX_ = 0, puckY_ = 0;
+
+  // Bake worker.
+  std::mutex jobMutex_;
+  std::condition_variable jobCv_;
+  std::deque<BakeJob> jobs_;
+  std::vector<BakeResult> results_;
+  bool stop_ = false;
+  std::atomic<int> busy_{0};
+  std::thread worker_;
 
   // Render-thread only.
   std::unordered_map<uint64_t, Mesh> meshes_;
   std::list<uint64_t> meshLru_;
   std::unordered_set<uint64_t> meshPins_;
+  std::unordered_set<uint64_t> inProgress_;
+  std::unordered_map<uint64_t, TileImagery> tileImagery_;
+  std::unordered_map<int, LabelState> labelStates_;
   uint32_t versionCounter_ = 0;
+  uint64_t frameNo_ = 0;
   std::optional<double> hRef_;
   double lastTimeMs_ = -1;
-  double clockMs_ = 0;  // engine clock for failures (render-thread time)
-  std::vector<float> gridVertices_;
+  double clockMs_ = 0;
   EngineStats stats_;
   std::atomic<int> requested_{0};
   std::atomic<int> failed_{0};
