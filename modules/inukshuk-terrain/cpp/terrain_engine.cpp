@@ -9,7 +9,6 @@
 namespace inukshuk::terrain {
 
 namespace {
-constexpr int N = Engine::kGridN;
 
 double tileCenterLat(const TileId& t) {
   const double n = std::pow(2.0, t.z);
@@ -63,8 +62,9 @@ LookParams lookFromFloats(const float* v, int n) {
   return l;
 }
 
-Engine::Engine(RequestFn demRequest, RequestFn imageryRequest, RepaintFn repaint)
-    : demRequest_(std::move(demRequest)),
+Engine::Engine(RequestFn demRequest, RequestFn imageryRequest, RepaintFn repaint, int meshGrid)
+    : meshGrid_(meshGrid > 0 ? meshGrid : kGrid),
+      demRequest_(std::move(demRequest)),
       imageryRequest_(std::move(imageryRequest)),
       repaint_(std::move(repaint)) {
   for (int i = kImagerySlots - 1; i >= 0; i--) freeImgSlots_.push_back(i);
@@ -183,17 +183,55 @@ void Engine::onDemFailed(int z, int x, int y) {
 // ---- imagery -------------------------------------------------------------------
 
 void Engine::onImageryData(int z, int x, int y, std::vector<uint8_t> rgba) {
-  if (rgba.size() != static_cast<size_t>(kImagerySize) * kImagerySize * 4) {
+  onImageryLevels(z, x, y, std::move(rgba), kImagerySize, 1, imgGeneration_.load());
+}
+
+void Engine::onImageryLevels(int z, int x, int y, std::vector<uint8_t> chain, int size, int levels,
+                             uint32_t generation) {
+  if (generation != imgGeneration_.load()) return;  // a texture of a style since replaced
+  if (size < 1 || levels < 1 || chain.size() != mipChainBytes(size, levels)) {
     onImageryFailed(z, x, y);
     return;
   }
   {
     std::lock_guard<std::mutex> lock(imgMutex_);
+    if (generation != imgGeneration_.load()) return;
     const uint64_t k = demKey64({z, x, y});
     imgPending_.erase(k);
     imgFailedAt_.erase(k);
     auto& e = imagery_[k];
-    e.pending = std::make_shared<const std::vector<uint8_t>>(std::move(rgba));
+    e.pending = std::make_shared<const std::vector<uint8_t>>(std::move(chain));
+    e.size = size;
+    e.levels = levels;
+  }
+  if (repaint_) repaint_();
+}
+
+void Engine::resetImageryLocked(int slots) {
+  imgGeneration_++;
+  imagery_.clear();
+  imgPending_.clear();
+  imgFailedAt_.clear();
+  imgSlotCount_ = std::max(1, slots);
+  freeImgSlots_.clear();
+  for (int i = imgSlotCount_ - 1; i >= 0; i--) freeImgSlots_.push_back(i);
+  resetTileImagery_ = true;
+}
+
+void Engine::setDrape(bool on, int slots) {
+  {
+    std::lock_guard<std::mutex> lock(imgMutex_);
+    const bool changed = drape_.load() != on || slots != imgSlotCount_;
+    drape_ = on;
+    if (changed) resetImageryLocked(slots);
+  }
+  if (repaint_) repaint_();
+}
+
+void Engine::resetImagery() {
+  {
+    std::lock_guard<std::mutex> lock(imgMutex_);
+    resetImageryLocked(imgSlotCount_);
   }
   if (repaint_) repaint_();
 }
@@ -346,6 +384,7 @@ Engine::BakeResult Engine::runBake(const BakeJob& job) {
   auto sampler = [&](double u, double v) {
     return sampleMosaic(nb, w.offsetX + u * w.scale, w.offsetY + v * w.scale);
   };
+  const int N = job.grid;
   BakeResult r;
   r.tile = t;
   r.demZoom = job.demZoom;
@@ -441,6 +480,7 @@ bool Engine::scheduleBake(const TileId& t, int demZoom, double now) {
   if (inProgress_.count(key)) return false;
   BakeJob job;
   job.tile = t;
+  job.grid = meshGrid_;
   job.demZoom = demZoom;
   job.maskGen = maskGen_.load();
   job.window = demWindowAt(t, demZoom);
@@ -479,11 +519,12 @@ bool Engine::scheduleBake(const TileId& t, int demZoom, double now) {
       auto it = meshes_.find(meshKeyOf(a));
       if (it == meshes_.end()) continue;
       if (up == 1) {
-        job.hFrom = parentSurfaceForChild(N, it->second.hTo, t.x & 1, t.y & 1);
+        job.hFrom = parentSurfaceForChild(meshGrid_, it->second.hTo, t.x & 1, t.y & 1);
       } else {
         const double k = std::pow(2.0, up);
         const double ox = (t.x - a.x * k) / k, oy = (t.y - a.y * k) / k;
         const auto& ah = it->second.hTo;
+        const int N = meshGrid_;
         job.hFrom = bakeHeights(N, [&](double u, double v) { return surfaceAt(N, ah, ox + u / k, oy + v / k); });
       }
       found = true;
@@ -561,7 +602,10 @@ FrameOutput Engine::frame(const FrameInput& in) {
   out.height = static_cast<float>(in.height);
   const double exag = out.look.exaggeration;
   out.exaggeration = static_cast<float>(exag);
-  const bool imageryMode = out.look.imagery > 0.5f;
+  const bool drape = drape_.load();
+  const bool imageryMode = drape || out.look.imagery > 0.5f;
+  out.drape = drape;
+  if (resetTileImagery_.exchange(false)) tileImagery_.clear();
 
   if (resetMeshes_.exchange(false)) {
     meshes_.clear();
@@ -759,7 +803,12 @@ FrameOutput Engine::frame(const FrameInput& in) {
       ImgEntry& e = found->second;
       e.slot = freeImgSlots_.back();
       freeImgSlots_.pop_back();
-      out.imageryUploads.push_back({e.slot, e.pending});
+      ImageryUpload up;
+      up.slot = e.slot;
+      up.size = e.size;
+      up.levels = e.levels;
+      up.pixels = e.pending;
+      out.imageryUploads.push_back(std::move(up));
       e.pending.reset();
       e.lastFrame = frameNo_;
       uploads++;
@@ -1070,7 +1119,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
   stats_.bakeQueue = queued;
   {
     std::lock_guard<std::mutex> lock(imgMutex_);
-    stats_.imagerySlots = kImagerySlots - static_cast<int>(freeImgSlots_.size());
+    stats_.imagerySlots = imgSlotCount_ - static_cast<int>(freeImgSlots_.size());
   }
   stats_.lastFrameCpuMs = nowCpuMs() - cpuStart;
   return out;

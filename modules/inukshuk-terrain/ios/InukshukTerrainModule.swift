@@ -87,6 +87,12 @@ public final class InukshukTerrainModule: Module {
       }
     }
 
+    Function("setDrapeStyle") { (viewTag: Int, json: String) in
+      DispatchQueue.main.async {
+        self.controllers[viewTag]?.setDrapeStyle(json)
+      }
+    }
+
     AsyncFunction("detach") { (viewTag: Int) in
       self.controllers.removeValue(forKey: viewTag)?.detach()
     }.runOnQueue(.main)
@@ -97,6 +103,10 @@ public final class InukshukTerrainModule: Module {
 
     AsyncFunction("setPitch") { (viewTag: Int, deg: Double) in
       self.controllers[viewTag]?.setPitch(deg)
+    }.runOnQueue(.main)
+
+    AsyncFunction("jumpTo") { (viewTag: Int, lat: Double, lng: Double, zoom: Double, pitch: Double, bearing: Double) in
+      self.controllers[viewTag]?.jump(toLat: lat, lng: lng, zoom: zoom, pitch: pitch, bearing: bearing)
     }.runOnQueue(.main)
 
     AsyncFunction("trimMemory") { (viewTag: Int) in

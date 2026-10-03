@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -95,6 +96,32 @@ typedef struct {
 @property(nonatomic, readonly) NSUInteger pointCount;
 - (void)getCoordinates:(CLLocationCoordinate2D *)coords range:(NSRange)range;
 @property(nonatomic, readonly) NSArray *polygons;
+@end
+
+@protocol INKMLNCameraFactory <NSObject>
++ (id)cameraLookingAtCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate
+                             altitude:(CLLocationDistance)altitude
+                                pitch:(CGFloat)pitch
+                              heading:(CLLocationDirection)heading;
+@end
+
+@protocol INKMLNSnapshotOptions <NSObject>
+- (instancetype)initWithStyleURL:(nullable NSURL *)styleURL camera:(id)camera size:(CGSize)size;
+@property(nonatomic) double zoomLevel;
+@property(nonatomic) CGFloat scale;
+@property(nonatomic) BOOL showsLogo;
+@property(nonatomic) BOOL showsAttribution;
+@end
+
+@protocol INKMLNSnapshot <NSObject>
+@property(nonatomic, readonly) UIImage *image;
+@end
+
+@protocol INKMLNSnapshotter <NSObject>
+- (instancetype)initWithOptions:(id)options;
+- (void)startWithQueue:(dispatch_queue_t)queue completionHandler:(void (^)(id _Nullable snapshot, NSError *_Nullable error))handler;
+- (void)cancel;
+@property(nonatomic) id options;
 @end
 
 static NSString *const kLayerId = @"inukshuk-terrain-3d";
@@ -206,8 +233,9 @@ static float2 levelCov(float h, float d, int i) {
 fragment float4 terrain_fs(VOut in [[stage_in]], constant FrameU &f [[buffer(0)]],
                            constant TileU &u [[buffer(2)]],
                            texture2d<float> detail [[texture(0)]],
-                           texture2d_array<float> imagery [[texture(1)]],
-                           sampler s [[sampler(0)]]) {
+                           texture2d<float> imgA [[texture(1)]],
+                           texture2d<float> imgB [[texture(2)]],
+                           sampler s [[sampler(0)]], sampler ds [[sampler(1)]]) {
   float4 det = detail.sample(s, in.uv);
   float2 slope = (det.rg * 2.0 - 1.0) * 4.0;
   float exag = f.light.w;
@@ -216,11 +244,12 @@ fragment float4 terrain_fs(VOut in [[stage_in]], constant FrameU &f [[buffer(0)]
   float flatL = f.light.z;
   float3 c;
   if (f.rock.w > 0.5) {
-    float3 b = u.ib.x < 0.0 ? f.fogColor.rgb
-                            : imagery.sample(s, u.ib.yz + in.uv * u.ib.w, uint(u.ib.x)).rgb;
-    float3 a = u.ia.x < 0.0 ? b : imagery.sample(s, u.ia.yz + in.uv * u.ia.w, uint(u.ia.x)).rgb;
+    float3 b = u.ib.x < 0.0 ? f.fogColor.rgb : imgB.sample(ds, u.ib.yz + in.uv * u.ib.w).rgb;
+    float3 a = u.ia.x < 0.0 ? b : imgA.sample(ds, u.ia.yz + in.uv * u.ia.w).rgb;
     c = mix(a, b, u.ix.x);
-    c *= 1.0 + (lambert - flatL) * f.water.w;
+    // The drape carries the 2D hillshade's detail; the mesh adds the large forms.
+    float form = lambert - flatL;
+    c *= 1.0 + (form > 0.0 ? form * 0.6 : form) * f.water.w;
   } else {
     float rock = smoothstep(2200.0, 3400.0, in.h) * 0.35;
     c = mix(f.land.rgb, f.rock.rgb, rock);
@@ -439,6 +468,17 @@ struct GpuTile {
   uint64_t lastFrame = 0;
 };
 
+struct DrapeJob {
+  int z, x, y;
+  uint32_t gen;
+};
+
+/** How a drape tile is rendered: the snapshot's zoom shift from the tile's zoom, its size (pt) and scale. */
+struct DrapeParams {
+  int shift;   // snapshot zoom = tile zoom + shift (−1: the 2D map at the scale the tile shows)
+  int texture; // texture edge (px, power of two)
+};
+
 struct GpuLine {
   id<MTLBuffer> buffer;
   uint32_t version = 0;
@@ -447,6 +487,8 @@ struct GpuLine {
 };
 
 constexpr int kAtlasSize = 2048;
+/** Mesh cells per tile edge: twice the LOD grid, so ridges stay sharp (65² + skirt < 2¹⁶ for u16 indices). */
+constexpr int kMeshGrid = 64;
 constexpr int kMaxLabels = 220;
 constexpr size_t kMaxMaskPoints = 60000;
 
@@ -480,10 +522,23 @@ double mercY(double lat) {
   NSUInteger _sampleCount;
   id<MTLRenderPipelineState> _terrainPipeline, _skyPipeline, _clearPipeline, _linePipeline, _spritePipeline;
   id<MTLDepthStencilState> _depthLess, _depthOff, _depthAlways, _depthTest;
-  id<MTLSamplerState> _sampler;
+  id<MTLSamplerState> _sampler, _drapeSampler;
   id<MTLBuffer> _gridBuffer, _indexBuffer, _zeroBuffer;
   NSUInteger _indexCount;
-  id<MTLTexture> _flatDetail, _flatImagery, _imagery, _atlas;
+  id<MTLTexture> _flatDetail, _flatImagery, _atlas;
+  std::vector<id<MTLTexture>> _slotTextures;
+  // drape: the 2D style rendered per terrain tile by MapLibre's snapshotter
+  NSString *_drapeHash;
+  NSURL *_drapeURL;
+  NSString *_drapeDir;
+  uint32_t _drapeGen;
+  NSMutableArray *_snapshotters;       // id<INKMLNSnapshotter>
+  NSMutableArray<NSNumber *> *_snapshotterBusy;
+  std::deque<DrapeJob> _drapeJobs;     // main thread
+  DrapeParams _drapeParams;
+  dispatch_queue_t _drapeDecodeQueue;
+  std::atomic<int> _drapeRendered;
+  double _drapeMsTotal;
   std::unordered_map<uint64_t, GpuTile> _tiles;
   std::unordered_map<int, GpuLine> _lines;
   id<MTLBuffer> _spriteBuffers[3];
@@ -518,6 +573,7 @@ double mercY(double lat) {
   NSDictionary *_benchStep;
   CFTimeInterval _benchStepStart;
   id<INKMLNCamera> _benchBase;
+  double _benchBaseZoom;
   void (^_benchDone)(void);
 }
 
@@ -560,10 +616,16 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
   _regular = [self atkinson:UIFontWeightRegular size:12];
   _bold = [self atkinson:UIFontWeightBold size:12];
   _sceneQueue = dispatch_queue_create("inukshuk.terrain.labels", DISPATCH_QUEUE_SERIAL);
+  _drapeDecodeQueue = dispatch_queue_create("inukshuk.terrain.drape", DISPATCH_QUEUE_CONCURRENT);
+  _snapshotters = [NSMutableArray new];
+  _snapshotterBusy = [NSMutableArray new];
+  _drapeParams = {-1, 512};
 
   NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
   _cacheDir = [caches stringByAppendingPathComponent:@"dem"];
   _imageryDir = [caches stringByAppendingPathComponent:@"terrain-imagery"];
+  _drapeDir = [caches stringByAppendingPathComponent:@"terrain-drape"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:_drapeDir withIntermediateDirectories:YES attributes:nil error:nil];
   [[NSFileManager defaultManager] createDirectoryAtPath:_cacheDir withIntermediateDirectories:YES attributes:nil error:nil];
   [[NSFileManager defaultManager] createDirectoryAtPath:_imageryDir withIntermediateDirectories:YES attributes:nil error:nil];
   NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -583,7 +645,8 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
         dispatch_async(dispatch_get_main_queue(), ^{
           [weakSelf requestRepaint];
         });
-      });
+      },
+      kMeshGrid);
   return self;
 }
 
@@ -626,14 +689,23 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
   smp.sAddressMode = MTLSamplerAddressModeClampToEdge;
   smp.tAddressMode = MTLSamplerAddressModeClampToEdge;
   _sampler = [_device newSamplerStateWithDescriptor:smp];
+  // Drapes: trilinear + anisotropic, so the map stays crisp at grazing angles.
+  MTLSamplerDescriptor *dsm = [MTLSamplerDescriptor new];
+  dsm.minFilter = MTLSamplerMinMagFilterLinear;
+  dsm.magFilter = MTLSamplerMinMagFilterLinear;
+  dsm.mipFilter = MTLSamplerMipFilterLinear;
+  dsm.maxAnisotropy = 16;
+  dsm.sAddressMode = MTLSamplerAddressModeClampToEdge;
+  dsm.tAddressMode = MTLSamplerAddressModeClampToEdge;
+  _drapeSampler = [_device newSamplerStateWithDescriptor:dsm];
 
-  const auto verts = buildGridVertices(kGrid);
-  const auto idx32 = buildGridIndices(kGrid);
+  const auto verts = buildGridVertices(kMeshGrid);
+  const auto idx32 = buildGridIndices(kMeshGrid);
   std::vector<uint16_t> idx(idx32.begin(), idx32.end());
   _indexCount = idx.size();
   _gridBuffer = [_device newBufferWithBytes:verts.data() length:verts.size() * sizeof(float) options:MTLResourceStorageModeShared];
   _indexBuffer = [_device newBufferWithBytes:idx.data() length:idx.size() * sizeof(uint16_t) options:MTLResourceStorageModeShared];
-  std::vector<float> zeros((size_t)vertexCount(kGrid) * kAttributesPerVertex, 0.f);
+  std::vector<float> zeros((size_t)vertexCount(kMeshGrid) * kAttributesPerVertex, 0.f);
   _zeroBuffer = [_device newBufferWithBytes:zeros.data() length:zeros.size() * sizeof(float) options:MTLResourceStorageModeShared];
 
   MTLTextureDescriptor *fd = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
@@ -641,11 +713,10 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
   const uint8_t flatPx[4] = {128, 128, 0, 0};
   [_flatDetail replaceRegion:MTLRegionMake2D(0, 0, 1, 1) mipmapLevel:0 withBytes:flatPx bytesPerRow:4];
   MTLTextureDescriptor *fi = [MTLTextureDescriptor new];
-  fi.textureType = MTLTextureType2DArray;
+  fi.textureType = MTLTextureType2D;
   fi.pixelFormat = MTLPixelFormatRGBA8Unorm;
   fi.width = 1;
   fi.height = 1;
-  fi.arrayLength = 1;
   _flatImagery = [_device newTextureWithDescriptor:fi];
   MTLTextureDescriptor *ad = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:kAtlasSize height:kAtlasSize mipmapped:NO];
   _atlas = [_device newTextureWithDescriptor:ad];
@@ -866,6 +937,11 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
     _layer = nil;
   }
   [_session invalidateAndCancel];
+  for (id snap in _snapshotters) [(id<INKMLNSnapshotter>)snap cancel];
+  [_snapshotters removeAllObjects];
+  [_snapshotterBusy removeAllObjects];
+  _drapeJobs.clear();
+  _slotTextures.clear();
   _tiles.clear();
   _lines.clear();
 }
@@ -964,6 +1040,23 @@ static std::vector<uint8_t> decodeImagery(NSData *data) {
 }
 
 - (void)fetchImageryZ:(int)z x:(int)x y:(int)y {
+  // A drape tile rendered from the 2D style (the map, or satellite with its
+  // overlays); without a drape style, satellite falls back to raw Esri tiles.
+  if (_drapeURL || _engine->look().imagery < 0.5f) {
+    const uint32_t gen = _engine->imageryGeneration();
+    __weak INKTerrainController *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      INKTerrainController *s = weakSelf;
+      if (!s || s->_detached.load()) return;
+      if (!s->_drapeURL) {
+        s->_engine->onImageryFailed(z, x, y);
+        return;
+      }
+      s->_drapeJobs.push_back({z, x, y, gen});
+      [s pumpDrapes];
+    });
+    return;
+  }
   NSString *path = [_imageryDir stringByAppendingPathComponent:[NSString stringWithFormat:@"img-%d-%d-%d.jpg", z, x, y]];
   __weak INKTerrainController *weakSelf = self;
   NSOperationQueue *q = _session.delegateQueue;
@@ -1000,6 +1093,163 @@ static std::vector<uint8_t> decodeImagery(NSData *data) {
         }];
     [task resume];
   }];
+}
+
+// ---- drape: the 2D style rendered per terrain tile ------------------------------------------------
+
+static constexpr int kDrapeSlots = 160;
+static constexpr int kDrapeSnapshotters = 3;
+
+- (DrapeParams)drapeParamsNow {
+  // Map: the tile drawn at one zoom out (the 2D map at the scale a terrain
+  // tile actually shows), at 2×. Satellite: at the tile's zoom, 1× — the
+  // imagery's own 512 px per tile.
+  if (_engine->look().imagery > 0.5f) return {0, 512};
+  return {-1, 512};
+}
+
+- (void)setDrapeStyle:(NSString *)json {
+  if (_detached.load()) return;
+  NSString *hash = json.length ? [NSString stringWithFormat:@"%lx-%lu", (unsigned long)json.hash, (unsigned long)json.length] : nil;
+  const DrapeParams params = [self drapeParamsNow];
+  if ((hash == _drapeHash || [hash isEqualToString:_drapeHash]) && params.shift == _drapeParams.shift &&
+      params.texture == _drapeParams.texture)
+    return;
+  _drapeHash = hash;
+  _drapeParams = params;
+  for (id snap in _snapshotters) [(id<INKMLNSnapshotter>)snap cancel];
+  [_snapshotters removeAllObjects];
+  [_snapshotterBusy removeAllObjects];
+  _drapeJobs.clear();
+  if (!hash) {
+    _drapeURL = nil;
+    _engine->setDrape(false, kDrapeSlots);
+    return;
+  }
+  NSString *path = [_drapeDir stringByAppendingPathComponent:[NSString stringWithFormat:@"style-%@.json", hash]];
+  if (![json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil]) {
+    _drapeURL = nil;
+    _engine->setDrape(false, kDrapeSlots);
+    return;
+  }
+  _drapeURL = [NSURL fileURLWithPath:path];
+  _drapeGen++;
+  _engine->setDrape(true, kDrapeSlots);
+  _engine->resetImagery();  // a new style: every drape re-renders (the generation drops stale ones)
+  [self requestRepaint];
+}
+
+/** Options for a snapshot of the k×k block of tiles at zoom z whose top-left tile is (x0, y0). */
+- (id)snapshotOptionsForZ:(int)z x0:(int)x0 y0:(int)y0 k:(int)k {
+  Class optionsClass = NSClassFromString(@"MLNMapSnapshotOptions");
+  Class cameraClass = NSClassFromString(@"MLNMapCamera");
+  if (!optionsClass || !cameraClass) return nil;
+  const double n = std::pow(2.0, z);
+  CLLocationCoordinate2D c;
+  c.longitude = (x0 + 0.5 * k) / n * 360.0 - 180.0;
+  c.latitude = std::atan(std::sinh(M_PI * (1.0 - 2.0 * (y0 + 0.5 * k) / n))) * 180.0 / M_PI;
+  id cam = [(Class<INKMLNCameraFactory>)cameraClass cameraLookingAtCenterCoordinate:c altitude:1000 pitch:0 heading:0];
+  const double pts = 512.0 * std::pow(2.0, _drapeParams.shift);
+  id<INKMLNSnapshotOptions> o = [(id<INKMLNSnapshotOptions>)[optionsClass alloc] initWithStyleURL:_drapeURL camera:cam size:CGSizeMake(pts * k, pts * k)];
+  o.zoomLevel = z + _drapeParams.shift;
+  o.scale = _drapeParams.texture / pts;
+  o.showsLogo = NO;
+  o.showsAttribution = NO;
+  return o;
+}
+
+- (void)pumpDrapes {
+  if (_detached.load() || !_drapeURL) return;
+  Class snapClass = NSClassFromString(@"MLNMapSnapshotter");
+  if (!snapClass) return;
+  const uint32_t engineGen = _engine->imageryGeneration();
+  while (!_drapeJobs.empty()) {
+    NSInteger idle = -1;
+    for (NSUInteger i = 0; i < _snapshotterBusy.count; i++)
+      if (!_snapshotterBusy[i].boolValue) {
+        idle = (NSInteger)i;
+        break;
+      }
+    if (idle < 0 && (int)_snapshotters.count >= kDrapeSnapshotters) return;
+    // In request order: the engine asks nearest first, a coarse ancestor before each tile.
+    const DrapeJob job = _drapeJobs.front();
+    _drapeJobs.pop_front();
+    if (job.gen != engineGen) continue;
+    // One snapshot renders the 2×2 block around the tile: four drapes for
+    // little more than the cost of one (most of a snapshot is fixed cost).
+    const int k = job.z >= 1 ? 2 : 1;
+    const int x0 = job.x / k * k, y0 = job.y / k * k;
+    for (auto it = _drapeJobs.begin(); it != _drapeJobs.end();) {
+      if (it->z == job.z && it->x / k * k == x0 && it->y / k * k == y0) it = _drapeJobs.erase(it);
+      else ++it;
+    }
+    id options = [self snapshotOptionsForZ:job.z x0:x0 y0:y0 k:k];
+    if (!options) return;
+    if (idle < 0) {
+      id snap = [(id<INKMLNSnapshotter>)[snapClass alloc] initWithOptions:options];
+      if (!snap) return;
+      [_snapshotters addObject:snap];
+      [_snapshotterBusy addObject:@NO];
+      idle = (NSInteger)_snapshotters.count - 1;
+    } else {
+      ((id<INKMLNSnapshotter>)_snapshotters[idle]).options = options;
+    }
+    id<INKMLNSnapshotter> snap = _snapshotters[idle];
+    _snapshotterBusy[idle] = @YES;
+    const uint32_t drapeGen = _drapeGen;
+    const int tex = _drapeParams.texture;
+    const CFTimeInterval started = CACurrentMediaTime();
+    __weak INKTerrainController *weakSelf = self;
+    __weak id weakSnap = snap;
+    [snap startWithQueue:_drapeDecodeQueue
+       completionHandler:^(id snapshot, NSError *error) {
+         INKTerrainController *s = weakSelf;
+         if (!s || s->_detached.load()) return;
+         bool ok = false;
+         const int full = tex * k;
+         CGImageRef cg = (!error && snapshot) ? [(id<INKMLNSnapshot>)snapshot image].CGImage : nil;
+         if (cg) {
+           std::vector<uint8_t> px((size_t)full * full * 4);
+           CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+           CGContextRef ctx = CGBitmapContextCreate(px.data(), full, full, 8, full * 4, cs,
+                                                    kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+           CGColorSpaceRelease(cs);
+           if (ctx) {
+             CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
+             CGContextDrawImage(ctx, CGRectMake(0, 0, full, full), cg);
+             CGContextRelease(ctx);
+             ok = true;
+             std::vector<uint8_t> tile((size_t)tex * tex * 4);
+             for (int j = 0; j < k; j++)
+               for (int i = 0; i < k; i++) {
+                 for (int row = 0; row < tex; row++)
+                   memcpy(tile.data() + (size_t)row * tex * 4,
+                          px.data() + ((size_t)(j * tex + row) * full + (size_t)i * tex) * 4, (size_t)tex * 4);
+                 int levels = 0;
+                 auto chain = buildMipChain(tile.data(), tex, levels);
+                 if (!chain.empty())
+                   s->_engine->onImageryLevels(job.z, x0 + i, y0 + j, std::move(chain), tex, levels, job.gen);
+               }
+           }
+         }
+         if (!ok)
+           for (int j = 0; j < k; j++)
+             for (int i = 0; i < k; i++) s->_engine->onImageryFailed(job.z, x0 + i, y0 + j);
+         const double ms = (CACurrentMediaTime() - started) * 1000.0;
+         dispatch_async(dispatch_get_main_queue(), ^{
+           INKTerrainController *s2 = weakSelf;
+           if (!s2 || s2->_detached.load() || s2->_drapeGen != drapeGen) return;
+           NSUInteger i = [s2->_snapshotters indexOfObjectIdenticalTo:weakSnap];
+           if (i != NSNotFound) s2->_snapshotterBusy[i] = @NO;
+           s2->_drapeRendered++;
+           s2->_drapeMsTotal += ms;
+           if (s2->_drapeRendered.load() % 40 == 0)
+             NSLog(@"[InukshukTerrain] drape snapshots %d (2x2 blocks), mean %.0f ms, queue %zu%@", s2->_drapeRendered.load(),
+                   s2->_drapeMsTotal / s2->_drapeRendered.load(), s2->_drapeJobs.size(), error ? error : @"");
+           [s2 pumpDrapes];
+         });
+       }];
+  }
 }
 
 // ---- scene: labels and masks from the loaded vector tiles -------------------------------------
@@ -1112,7 +1362,8 @@ static BOOL isPoint(id f) { return [f isKindOfClass:NSClassFromString(@"MLNPoint
   // Masks: outer rings of water and glacier polygons.
   auto water = std::make_shared<std::vector<std::vector<Pt>>>();
   auto ice = std::make_shared<std::vector<std::vector<Pt>>>();
-  if (base) {
+  // Under a drape the map paints its own water and glaciers: no masks needed.
+  if (base && !_drapeURL) {
     auto collect = ^(NSArray *features, std::vector<std::vector<Pt>> *out) {
       Class poly = NSClassFromString(@"MLNPolygonFeature");
       Class multi = NSClassFromString(@"MLNMultiPolygonFeature");
@@ -1137,6 +1388,33 @@ static BOOL isPoint(id f) { return [f isKindOfClass:NSClassFromString(@"MLNPoint
     collect([src featuresInSourceLayersWithIdentifiers:[NSSet setWithObjects:@"landcover", @"landuse", nil]
                                              predicate:[NSPredicate predicateWithFormat:@"kind == 'glacier'"]],
             ice.get());
+  }
+  // Keep what the view can show: the vector tiles loaded span far more than
+  // the frame, and the atlas only takes the best kMaxLabels. A generous 2D
+  // footprint (relief lifts summits up the screen, so the band above the top
+  // edge counts too).
+  {
+    UIView *mv = (UIView *)map;
+    const CGSize sz = mv.bounds.size;
+    SEL conv = NSSelectorFromString(@"convertCoordinate:toPointToView:");
+    if (sz.width > 0 && [mv respondsToSelector:conv]) {
+      typedef CGPoint (*ConvFn)(id, SEL, CLLocationCoordinate2D, UIView *);
+      ConvFn fn = (ConvFn)[mv methodForSelector:conv];
+      std::vector<Candidate> kept;
+      kept.reserve(cands->size());
+      for (auto &c : *cands) {
+        const CGPoint p = fn(mv, conv, CLLocationCoordinate2DMake(c.lat, c.lng), mv);
+        if (!std::isfinite(p.x) || !std::isfinite(p.y)) continue;
+        if (p.x < -0.3 * sz.width || p.x > 1.3 * sz.width || p.y < -1.2 * sz.height || p.y > 1.3 * sz.height) continue;
+        kept.push_back(c);
+      }
+      *cands = std::move(kept);
+    }
+  }
+  {
+    int kinds[4] = {0, 0, 0, 0};
+    for (const auto &c : *cands) kinds[std::min(3, std::max(0, c.kind))]++;
+    NSLog(@"[InukshukTerrain] scene: %d peaks, %d places, %d pois, %d lakes (zoom %.2f)", kinds[0], kinds[1], kinds[2], kinds[3], map.zoomLevel);
   }
   NSArray<NSNumber *> *theme = _labelTheme ?: @[];
   NSString *fieldsKey = [_nameFields componentsJoinedByString:@","];
@@ -1251,7 +1529,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   UIColor *waterInk = themeColor(theme, 10, 1, [UIColor colorWithRed:0.25 green:0.45 blue:0.6 alpha:1]);
   const CGFloat plateA = theme.count >= 4 ? theme[3].doubleValue : 0.94;
   UIColor *plate = themeColor(theme, 0, plateA, [UIColor colorWithRed:0.97 green:0.95 blue:0.91 alpha:0.94]);
-  const CGFloat titleSize = c.kind == 1 ? (c.major ? 14.5 : 13) : c.kind == 0 ? 12.5 : 11.5;
+  const CGFloat titleSize = c.kind == 1 ? (c.major ? 13.5 : 12.5) : c.kind == 0 ? 12 : 11;
   UIFont *titleFont = [(c.kind >= 2 ? _regular : _bold) fontWithSize:titleSize * s];
   NSMutableDictionary *ta = [@{NSFontAttributeName : titleFont,
                                NSForegroundColorAttributeName : c.kind == 3 ? waterInk : c.kind == 2 ? muted : ink} mutableCopy];
@@ -1263,9 +1541,9 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     title = [[title substringToIndex:title.length - 2] stringByAppendingString:@"…"];
     ts = [title sizeWithAttributes:ta];
   }
-  NSDictionary *sa = @{NSFontAttributeName : [_regular fontWithSize:10.5 * s], NSForegroundColorAttributeName : muted};
+  NSDictionary *sa = @{NSFontAttributeName : [_regular fontWithSize:9.5 * s], NSForegroundColorAttributeName : muted};
   const CGSize ss = c.sub ? [c.sub sizeWithAttributes:sa] : CGSizeZero;
-  const CGFloat padX = 7 * s, padY = 4 * s, gap = 1 * s;
+  const CGFloat padX = 5 * s, padY = 2.5 * s, gap = 0;
   const int w = (int)std::ceil(std::max(ts.width, ss.width) + padX * 2) + 2;
   const int h = (int)std::ceil(ts.height + (c.sub ? ss.height + gap : 0) + padY * 2) + 2;
   if (!_shelf.allocate(c.key, w, h, rect)) return NO;
@@ -1365,7 +1643,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   const float density = out.width > 0 ? (float)(tw / out.width) : 1.0f;
   const float ramp = out.ramp;
   const int dbg = out.look.debugFlags;
-  const bool imageryMode = out.look.imagery > 0.5f;
+  const bool imageryMode = out.drape || out.look.imagery > 0.5f;
   [enc pushDebugGroup:@"inukshuk-terrain"];
   [enc setViewport:(MTLViewport){0, 0, tw, th, 0, 1}];
   [enc setScissorRect:(MTLScissorRect){0, 0, (NSUInteger)tw, (NSUInteger)th}];
@@ -1380,20 +1658,28 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     _spriteUploads.clear();
     std::copy(_labelInk, _labelInk + 3, ink);
   }
-  if (imageryMode && !_imagery) {
-    MTLTextureDescriptor *id_ = [MTLTextureDescriptor new];
-    id_.textureType = MTLTextureType2DArray;
-    id_.pixelFormat = MTLPixelFormatRGBA8Unorm;
-    id_.width = kImagerySize;
-    id_.height = kImagerySize;
-    id_.arrayLength = Engine::kImagerySlots;
-    id_.usage = MTLTextureUsageShaderRead;
-    _imagery = [_device newTextureWithDescriptor:id_];
+  // Imagery / drape textures: one mip-mapped texture per slot, all levels uploaded.
+  for (const auto &u : out.imageryUploads) {
+    if (u.slot < 0 || !u.pixels) continue;
+    if ((size_t)u.slot >= _slotTextures.size()) _slotTextures.resize(u.slot + 1);
+    id<MTLTexture> t = _slotTextures[u.slot];
+    if (!t || (int)t.width != u.size || (int)t.mipmapLevelCount != u.levels) {
+      MTLTextureDescriptor *td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                    width:u.size
+                                                                                   height:u.size
+                                                                                mipmapped:u.levels > 1];
+      td.mipmapLevelCount = u.levels;
+      td.usage = MTLTextureUsageShaderRead;
+      t = [_device newTextureWithDescriptor:td];
+      _slotTextures[u.slot] = t;
+    }
+    size_t offset = 0;
+    int sz = u.size;
+    for (int l = 0; l < u.levels; l++, sz = std::max(1, sz >> 1)) {
+      [t replaceRegion:MTLRegionMake2D(0, 0, sz, sz) mipmapLevel:l withBytes:u.pixels->data() + offset bytesPerRow:sz * 4];
+      offset += (size_t)sz * sz * 4;
+    }
   }
-  if (_imagery)
-    for (const auto &u : out.imageryUploads)
-      [_imagery replaceRegion:MTLRegionMake2D(0, 0, kImagerySize, kImagerySize) mipmapLevel:0 slice:u.slot
-                    withBytes:u.pixels->data() bytesPerRow:kImagerySize * 4 bytesPerImage:kImagerySize * kImagerySize * 4];
 
   // 1. Sky and haze, crossfading in with the ramp.
   if (!(dbg & 4) && out.skyVisible) {
@@ -1420,9 +1706,12 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   fu.light = simd_make_float4(out.light[0], out.light[1], out.light[2], out.exaggeration);
   fu.fogColor = f4(out.look.fogColor, out.ctc);
   fu.fogParams = simd_make_float4(out.look.fogStartCtc, out.look.fogDensity, out.look.fogEndCtc, ramp);
-  fu.land = f4(out.look.land, out.look.contourOpacity);
+  // Under the drape the contours are the 2D map's own (painted crisply in it).
+  fu.land = f4(out.look.land, out.drape ? 0.0f : out.look.contourOpacity);
   fu.rock = f4(out.look.rock, imageryMode ? 1 : 0);
-  fu.water = f4(out.look.water, out.look.formStrength * 2.0f);
+  // The drape already carries the hillshade: the mesh only adds the large forms.
+  // (Satellite imagery has the sun's own shadows: lighter still.)
+  fu.water = f4(out.look.water, out.look.formStrength * (out.drape ? (out.look.imagery > 0.5f ? 0.45f : 0.9f) : 2.0f));
   fu.glacier = f4(out.look.glacier, density);
   fu.shadow = f4(out.look.shadow, (float)out.contourBase);
   fu.highlight = f4(out.look.highlight, 0);
@@ -1433,7 +1722,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   [enc setVertexBuffer:_gridBuffer offset:0 atIndex:0];
   [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:0];
   [enc setFragmentSamplerState:_sampler atIndex:0];
-  [enc setFragmentTexture:(_imagery ?: _flatImagery) atIndex:1];
+  [enc setFragmentSamplerState:_drapeSampler atIndex:1];
   if (!(dbg & 2)) {
     for (const auto &d : out.tiles) {
       TileU tu{};
@@ -1444,7 +1733,14 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
       tu.ia = simd_make_float4((float)d.imgA, d.winA[0], d.winA[1], d.winA[2]);
       tu.ib = simd_make_float4((float)d.imgB, d.winB[0], d.winB[1], d.winB[2]);
       tu.ix = simd_make_float4(d.imgBlend, 0, 0, 0);
-      if (!_imagery) tu.ia.x = tu.ib.x = -1;
+      auto slotTex = [&](int slot) -> id<MTLTexture> {
+        return slot >= 0 && (size_t)slot < _slotTextures.size() ? _slotTextures[slot] : nil;
+      };
+      id<MTLTexture> ta = slotTex(d.imgA), tb = slotTex(d.imgB);
+      if (!ta) tu.ia.x = -1;
+      if (!tb) tu.ib.x = -1;
+      [enc setFragmentTexture:(ta ?: _flatImagery) atIndex:1];
+      [enc setFragmentTexture:(tb ?: _flatImagery) atIndex:2];
       id<MTLTexture> detail = _flatDetail;
       if (flat) {
         [enc setVertexBuffer:_zeroBuffer offset:0 atIndex:1];
@@ -1559,6 +1855,19 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   [map setCamera:cam animated:NO];
 }
 
+- (void)jumpToLat:(double)lat lng:(double)lng zoom:(double)zoom pitch:(double)pitch bearing:(double)bearing {
+  UIView *mv = _mapView;
+  if (!mv) return;
+  // Pitch first: MLNMapCamera keeps its altitude, so a pitch change moves the
+  // zoom; the centre/zoom/bearing call after it keeps the pitch.
+  [self setPitch:pitch];
+  SEL sel = NSSelectorFromString(@"setCenterCoordinate:zoomLevel:direction:animated:");
+  if ([mv respondsToSelector:sel]) {
+    typedef void (*Fn)(id, SEL, CLLocationCoordinate2D, double, CLLocationDirection, BOOL);
+    ((Fn)[mv methodForSelector:sel])(mv, sel, CLLocationCoordinate2DMake(lat, lng), zoom, bearing, NO);
+  }
+}
+
 - (void)setRecording:(BOOL)on {
   std::lock_guard<std::mutex> lock(_timesMutex);
   if (on) {
@@ -1591,6 +1900,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
       @{@"kind" : @"fling", @"durationMs" : @1000, @"amount" : @0.02},
       @{@"kind" : @"fling", @"durationMs" : @1000, @"amount" : @-0.02},
       @{@"kind" : @"fling", @"durationMs" : @1200, @"amount" : @0.02},
+      @{@"kind" : @"zoom", @"durationMs" : @3000, @"amount" : @1.5},
     ];
   }
   _benchSteps = [steps mutableCopy];
@@ -1621,6 +1931,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     [_benchSteps removeObjectAtIndex:0];
     _benchStepStart = now;
     _benchBase = [map.camera copyWithZone:nil];
+    _benchBaseZoom = map.zoomLevel;
   }
   NSString *kind = _benchStep[@"kind"];
   const double dur = [_benchStep[@"durationMs"] doubleValue] / 1000.0;
@@ -1641,6 +1952,9 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     c.latitude += amount * 0.6 * sin(2 * a);
     cam.centerCoordinate = c;
     [map setCamera:cam animated:NO];
+  } else if ([kind isEqualToString:@"zoom"]) {
+    // In and back out (a pinch), keeping the pitch.
+    map.zoomLevel = _benchBaseZoom + amount * std::sin(M_PI * t);
   } else if ([kind isEqualToString:@"fling"]) {
     const double travel = amount * (1.0 - exp(-5.0 * t)) / (1.0 - exp(-5.0));
     CLLocationCoordinate2D c = _benchBase.centerCoordinate;

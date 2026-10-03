@@ -674,4 +674,45 @@ std::optional<int> bestLoadedDemZoom(const TileId& t,
   return std::nullopt;
 }
 
+// ---- drape textures ----------------------------------------------------------------
+
+int mipLevelCount(int size) {
+  int n = 1;
+  while (size > 1) {
+    size >>= 1;
+    n++;
+  }
+  return n;
+}
+
+size_t mipChainBytes(int size, int levels) {
+  size_t total = 0;
+  for (int l = 0; l < levels && size >= 1; l++, size = std::max(1, size >> 1))
+    total += static_cast<size_t>(size) * size * 4;
+  return total;
+}
+
+std::vector<uint8_t> buildMipChain(const uint8_t* rgba, int size, int& levels) {
+  levels = 0;
+  if (size < 1 || (size & (size - 1)) != 0 || !rgba) return {};
+  levels = mipLevelCount(size);
+  std::vector<uint8_t> out(mipChainBytes(size, levels));
+  std::copy(rgba, rgba + static_cast<size_t>(size) * size * 4, out.begin());
+  size_t src = 0, dst = static_cast<size_t>(size) * size * 4;
+  for (int s = size; s > 1; s >>= 1) {
+    const int d = s >> 1;
+    for (int y = 0; y < d; y++)
+      for (int x = 0; x < d; x++)
+        for (int c = 0; c < 4; c++) {
+          const size_t r0 = src + (static_cast<size_t>(2 * y) * s + 2 * x) * 4 + c;
+          const size_t r1 = r0 + static_cast<size_t>(s) * 4;
+          out[dst + (static_cast<size_t>(y) * d + x) * 4 + c] =
+              static_cast<uint8_t>((out[r0] + out[r0 + 4] + out[r1] + out[r1 + 4] + 2) / 4);
+        }
+    src = dst;
+    dst += static_cast<size_t>(d) * d * 4;
+  }
+  return out;
+}
+
 }  // namespace inukshuk::terrain

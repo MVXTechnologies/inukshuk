@@ -275,4 +275,16 @@ std::array<double, 2> extrudeOffset(const Pt& a, const Pt& b, double side, doubl
                                     const Pt& viewport);
 std::vector<uint8_t> rasterizePolygons(const std::vector<std::vector<Pt>>& rings, int size);
 
+// ---- drape textures ----------------------------------------------------------------
+/** Mip levels of a size² texture down to 1×1 (size a power of two). */
+int mipLevelCount(int size);
+/** Bytes of `levels` RGBA8 mip levels starting at size². */
+size_t mipChainBytes(int size, int levels);
+/**
+ * Level 0 (size² RGBA8) followed by every box-filtered mip level down to 1×1,
+ * tightly packed — what the renderers upload level by level. `levels` gets the
+ * level count. Empty on a bad size.
+ */
+std::vector<uint8_t> buildMipChain(const uint8_t* rgba, int size, int& levels);
+
 }  // namespace inukshuk::terrain

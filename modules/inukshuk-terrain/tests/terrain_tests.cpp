@@ -649,6 +649,31 @@ static void testEngine() {
     for (float v : *t.attributes) finite = finite && std::isfinite(v);
     CHECK(finite);
   }
+  // 5b. A finer mesh grid bakes finer meshes over the same tile selection.
+  {
+    g_cases++;
+    std::vector<DemId> req64;
+    Engine fine([&](int z, int x, int y) { req64.push_back({z, x, y}); }, nullptr, nullptr, 64);
+    CHECK(fine.meshGrid() == 64);
+    FrameInput fi = in;
+    FrameOutput fo = fine.frame(fi);
+    for (int round = 0; round < 40 && !req64.empty(); round++) {
+      auto batch = req64;
+      req64.clear();
+      for (const auto& d : batch) fine.onDemHeights(d.z, d.x, d.y, synth(d));
+      fi.timeMs += 16;
+      fine.frame(fi);
+      fine.drainBakes();
+      fi.timeMs += 16;
+      fo = fine.frame(fi);
+    }
+    CHECK(fo.tiles.size() == out.tiles.size());
+    bool all64 = !fo.tiles.empty();
+    for (const auto& t : fo.tiles)
+      all64 = all64 && t.attributes &&
+              t.attributes->size() == static_cast<size_t>(vertexCount(64) * kAttributesPerVertex);
+    CHECK(all64);
+  }
   // 6. hRef sits on the synthetic range and is smooth.
   {
     g_cases++;
@@ -898,6 +923,55 @@ static void testEngine() {
     CHECK_NEAR(l.imagery, 0.39, 1e-6);
     CHECK(l.debugFlags == 2);
     CHECK(lookFromFloats(v, 12).exaggeration == LookParams{}.exaggeration);
+  }
+  // 21. Drape mode: per-tile textures with mip chains, generations, slot bound.
+  {
+    g_cases++;
+    LookParams lp;  // the map look (no satellite flag): the drape alone turns imagery on
+    sc.setLook(lp);
+    sc.setDrape(true, 24);
+    const uint32_t gen = sc.imageryGeneration();
+    img2.clear();
+    so = settle(in, 2);
+    CHECK(so.drape);
+    CHECK(!img2.empty());
+    std::vector<uint8_t> px(64 * 64 * 4, 200);
+    int levels = 0;
+    for (int round = 0; round < 30 && !img2.empty(); round++) {
+      auto batch = img2;
+      img2.clear();
+      for (const auto& d : batch)
+        sc.onImageryLevels(d.z, d.x, d.y, buildMipChain(px.data(), 64, levels), 64, levels, gen);
+      so = settle(in, 1);
+    }
+    int withImg = 0;
+    for (const auto& t : so.tiles) withImg += t.imgB >= 0;
+    CHECK(withImg > 0);
+    CHECK(sc.stats().imagerySlots <= 24);
+    // A stale generation is dropped; a reset frees every slot.
+    sc.resetImagery();
+    CHECK(sc.imageryGeneration() == gen + 1);
+    sc.onImageryLevels(3, 1, 1, buildMipChain(px.data(), 64, levels), 64, levels, gen);
+    so = settle(in, 1);
+    for (const auto& u : so.imageryUploads) CHECK(u.size == 64);
+    sc.setDrape(false, 24);
+  }
+  // 22. Mip chains: level count, packing, box filter.
+  {
+    g_cases++;
+    CHECK(mipLevelCount(1) == 1);
+    CHECK(mipLevelCount(512) == 10);
+    CHECK(mipChainBytes(4, 3) == (16 + 4 + 1) * 4u);
+    std::vector<uint8_t> px(4 * 4 * 4, 0);
+    for (int i = 0; i < 16; i++) px[i * 4] = static_cast<uint8_t>(i < 8 ? 0 : 255);  // top black, bottom red
+    int levels = 0;
+    const auto chain = buildMipChain(px.data(), 4, levels);
+    CHECK(levels == 3);
+    CHECK(chain.size() == mipChainBytes(4, 3));
+    CHECK(chain[64] == 0);           // level 1 (2×2), top-left
+    CHECK(chain[64 + 2 * 4] == 255);  // level 1, bottom-left
+    CHECK(chain[80] == 128);          // level 2 (1×1): the average
+    CHECK(buildMipChain(px.data(), 3, levels).empty());
   }
 
 }

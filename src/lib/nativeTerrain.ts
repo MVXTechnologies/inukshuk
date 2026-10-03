@@ -27,7 +27,7 @@ export interface NativeTerrainConfig {
 export type { TerrainLineSpec as NativeTerrainLine } from '@core/terrain3d/sceneInput';
 
 export interface NativeBenchStep {
-  kind: 'idle' | 'pitch' | 'rotate' | 'pan' | 'fling';
+  kind: 'idle' | 'pitch' | 'rotate' | 'pan' | 'fling' | 'zoom';
   durationMs: number;
   amount: number;
 }
@@ -45,10 +45,24 @@ interface NativeTerrainModule {
   /** Replaces the whole set of lines lifted onto the terrain. */
   setLines?(viewTag: number, lines: TerrainLineSpec[]): void;
   setPuck?(viewTag: number, visible: boolean, lng: number, lat: number): void;
+  /**
+   * The style (JSON) the terrain drapes per tile — the 2D map without its
+   * names (@core/terrain3d/drapeStyle); '' = no drape (the shaded model).
+   */
+  setDrapeStyle?(viewTag: number, json: string): void;
   detach(viewTag: number): Promise<void>;
   stats(viewTag: number): Promise<number[]>;
   trimMemory(viewTag: number): Promise<void>;
   setPitch(viewTag: number, deg: number): Promise<void>;
+  /** QA: the whole camera in one native move (iOS). */
+  jumpTo?(
+    viewTag: number,
+    lat: number,
+    lng: number,
+    zoom: number,
+    pitch: number,
+    bearing: number,
+  ): Promise<void>;
   runBench(viewTag: number, script: NativeBenchStep[]): Promise<NativeBenchResult | null>;
   record(
     viewTag: number,

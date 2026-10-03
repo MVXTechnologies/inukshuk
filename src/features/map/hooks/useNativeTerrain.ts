@@ -1,3 +1,4 @@
+import { drapeStyle, type DrapeStyleInput } from '@core/terrain3d/drapeStyle';
 import { TERRAIN_MAX_PITCH_DEG } from '@core/terrain3d/morph';
 import { packLook, terrainLook, type TerrainBasemap } from '@core/terrain3d/look';
 import { nameFieldsFor, packLabelTheme, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
@@ -29,7 +30,31 @@ export interface NativeTerrainOptions {
   /** 3D pin labels (peaks, places, huts…). */
   labels?: boolean;
   labelLanguage?: 'local' | 'fr' | 'en';
+  /**
+   * The live 2D style: draped per terrain tile (the map painted crisply on
+   * the relief, as Outmap/Mapbox do). Omitted = the shaded relief model.
+   */
+  style?: DrapeStyleInput;
+  /** Layer ids kept out of the drape besides the names (e.g. the tilt-relief pass). */
+  drapeDropLayerIds?: readonly string[];
+  /** The 2D hillshade layer, shaded at every zoom in the drape. */
+  hillshadeLayerId?: string;
+  /** Contour line layers, softened in the drape. */
+  contourLayerIds?: readonly string[];
+  /** The hillshade's raster-dem source (read deeper in the drape). */
+  demSourceId?: string;
 }
+
+/** Contours in the drape: half as strong (steep 3D slopes pack them tight). */
+const DRAPE_CONTOUR_OPACITY = 0.45;
+/** Seen obliquely the 2D hillshade reads flat: shade the drape harder. */
+const DRAPE_HILLSHADE_BOOST = 2.2;
+/** The draped relief's contrast (alpha × on the theme's own hillshade colours). */
+const DRAPE_HILLSHADE_ALPHA = { shadow: 1.35, highlight: 2, accent: 1.3 };
+/** At night the shadows are already deep: the relief reads through its lit faces. */
+const DRAPE_HILLSHADE_ALPHA_DARK = { shadow: 1.05, highlight: 2.4, accent: 1.1 };
+/** The drape's DEM is read two zooms deeper (256 px tiles declared as 128). */
+const DRAPE_DEM_TILE_SIZE = 128;
 
 export interface NativeTerrainBinding {
   /** The native layer is attached and drawing (3D relief replaces the 2D tilt pass). */
@@ -125,6 +150,32 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
       reportError(e, 'terrain3d-update');
     }
   }, [config, viewTag, module]);
+
+  // The drape: a new JSON only when the draped content really changes (the
+  // native side re-renders every drape texture on a change).
+  const drapeJson = useMemo(() => {
+    if (o.style === undefined) return '';
+    return JSON.stringify(
+      drapeStyle(o.style, {
+        dropLayerIds: o.drapeDropLayerIds,
+        hillshadeLayerId: o.hillshadeLayerId,
+        hillshadeBoost: DRAPE_HILLSHADE_BOOST,
+        hillshadeAlpha: o.dark ? DRAPE_HILLSHADE_ALPHA_DARK : DRAPE_HILLSHADE_ALPHA,
+        contourLayerIds: o.contourLayerIds,
+        contourOpacity: DRAPE_CONTOUR_OPACITY,
+        demSourceId: o.demSourceId,
+        demTileSize: DRAPE_DEM_TILE_SIZE,
+      }),
+    );
+  }, [o.style, o.drapeDropLayerIds, o.hillshadeLayerId, o.contourLayerIds, o.demSourceId, o.dark]);
+  useEffect(() => {
+    if (viewTag === null || module === null || module.setDrapeStyle === undefined) return;
+    try {
+      module.setDrapeStyle(viewTag, drapeJson);
+    } catch (e) {
+      reportError(e, 'terrain3d-drape');
+    }
+  }, [drapeJson, viewTag, module]);
 
   return { active: viewTag !== null && config.enabled, viewTag };
 }

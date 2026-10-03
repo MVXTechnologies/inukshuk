@@ -134,7 +134,11 @@ struct PuckDraw {
 
 struct ImageryUpload {
   int slot = 0;
-  std::shared_ptr<const std::vector<uint8_t>> pixels;  // kImagerySize² RGBA8
+  /** Edge length of level 0 (px) and the number of mip levels in `pixels`. */
+  int size = kImagerySize;
+  int levels = 1;
+  /** RGBA8: level 0 (size²), then each mip level (see buildMipChain), tightly packed. */
+  std::shared_ptr<const std::vector<uint8_t>> pixels;
 };
 
 struct FrameOutput {
@@ -157,6 +161,8 @@ struct FrameOutput {
   PuckDraw puck;
   std::vector<ImageryUpload> imageryUploads;
   bool needsRepaint = false;
+  /** Drape mode: tiles sample the per-tile render of the 2D map style (crisp map, contours included). */
+  bool drape = false;
 };
 
 struct EngineStats {
@@ -191,7 +197,12 @@ class Engine {
   static constexpr int kImageryUploadsPerFrame = 6;
   static constexpr double kImageryFadeMs = 300;
 
-  Engine(RequestFn demRequest, RequestFn imageryRequest, RepaintFn repaint);
+  /**
+   * `meshGrid`: cells per tile edge of the baked meshes (the LOD still splits
+   * on the kGrid spacing, so a finer mesh sharpens ridges without more tiles).
+   */
+  Engine(RequestFn demRequest, RequestFn imageryRequest, RepaintFn repaint, int meshGrid = kGrid);
+  int meshGrid() const { return meshGrid_; }
   ~Engine();
 
   void setLook(const LookParams& look);
@@ -204,6 +215,22 @@ class Engine {
   /** Decoded imagery (kImagerySize² RGBA8) for a satellite tile. */
   void onImageryData(int z, int x, int y, std::vector<uint8_t> rgba);
   void onImageryFailed(int z, int x, int y);
+  /**
+   * A drape/imagery texture of any power-of-two size with its mip chain
+   * (`levels` levels, buildMipChain layout). Results for a generation older
+   * than the current one (see resetImagery) are dropped.
+   */
+  void onImageryLevels(int z, int x, int y, std::vector<uint8_t> chain, int size, int levels,
+                       uint32_t generation);
+  /**
+   * Drape mode: every tile samples a per-tile texture rendered from the 2D map
+   * style by the platform (requested through the imagery callback). `slots`
+   * bounds the textures kept on the GPU.
+   */
+  void setDrape(bool on, int slots);
+  /** Forget every imagery/drape texture (a new style); bumps the generation. */
+  void resetImagery();
+  uint32_t imageryGeneration() const { return imgGeneration_.load(); }
 
   void setLabels(std::vector<LabelData> labels);
   void setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style);
@@ -250,6 +277,7 @@ class Engine {
   };
   struct BakeJob {
     TileId tile;
+    int grid = kGrid;
     int demZoom = 0;
     uint32_t maskGen = 0;
     DemWindow window;
@@ -270,6 +298,7 @@ class Engine {
   };
   struct ImgEntry {
     int slot = -1;
+    int size = kImagerySize, levels = 1;
     std::shared_ptr<const std::vector<uint8_t>> pending;
     uint64_t lastFrame = 0;
   };
@@ -305,6 +334,7 @@ class Engine {
   void workerLoop();
   float morphOf(const Mesh& m, double now) const;
 
+  const int meshGrid_;
   RequestFn demRequest_, imageryRequest_;
   RepaintFn repaint_;
 
@@ -328,6 +358,11 @@ class Engine {
   std::unordered_set<uint64_t> imgPending_;
   std::unordered_map<uint64_t, double> imgFailedAt_;
   std::vector<int> freeImgSlots_;
+  int imgSlotCount_ = kImagerySlots;
+  std::atomic<bool> drape_{false};
+  std::atomic<uint32_t> imgGeneration_{0};
+  std::atomic<bool> resetTileImagery_{false};
+  void resetImageryLocked(int slots);
 
   // Scene inputs (own mutex: UI thread writes).
   mutable std::mutex sceneMutex_;

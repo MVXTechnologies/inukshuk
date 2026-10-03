@@ -75,7 +75,32 @@ export function useTerrainQa(
       if (gpx) void importQaGpx(gpx);
       const lat = num('lat');
       const lng = num('lng');
-      if (lat !== undefined && lng !== undefined && Number.isFinite(lat) && Number.isFinite(lng)) {
+      const jumpMod = nativeTerrain();
+      const jumpTag = tagRef.current;
+      if (
+        lat !== undefined &&
+        lng !== undefined &&
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        jumpMod?.jumpTo !== undefined &&
+        jumpTag !== null
+      ) {
+        // One native move: the RN camera stop can be dropped after a native pitch.
+        useMapStore.getState().setFollowUser(false);
+        void jumpMod.jumpTo(
+          jumpTag,
+          lat,
+          lng,
+          num('zoom') ?? 13,
+          num('pitch') ?? 0,
+          num('bearing') ?? 0,
+        );
+      } else if (
+        lat !== undefined &&
+        lng !== undefined &&
+        Number.isFinite(lat) &&
+        Number.isFinite(lng)
+      ) {
         useMapStore.getState().setFollowUser(false);
         void cameraRef.current?.setStop({
           center: [lng, lat],
@@ -90,7 +115,9 @@ export function useTerrainQa(
         const tag = tagRef.current;
         const mod = nativeTerrain();
         if (pitch > 60 && mod && tag !== null) {
-          setTimeout(() => void mod.setPitch(tag, pitch), 400);
+          // Late enough that the jump above has landed: setPitch re-applies the
+          // camera it reads, so an early call would snap back to the old place.
+          setTimeout(() => void mod.setPitch(tag, pitch), 1500);
         }
       }
       const module = nativeTerrain();

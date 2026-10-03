@@ -154,9 +154,14 @@ import {
   CONTOUR_LINE_LAYER_IDS,
   CONTOUR_SOURCE_MAXZOOM,
   CONTOUR_SOURCE_MINZOOM,
+  HILLSHADE_2D_LAYER_ID,
+  HILLSHADE_DEM_SOURCE_ID,
+  TILT_RELIEF_LAYER_ID,
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
 import { useNativeTerrain, useNativeTerrainScene } from './hooks/useNativeTerrain';
+import type { DrapeStyleInput } from '@core/terrain3d/drapeStyle';
+
 import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
 import { useTerrainQa } from './hooks/useTerrainQa';
 import { useTiltRelief } from './hooks/useTiltRelief';
@@ -187,6 +192,14 @@ import { WeatherPointLine } from './weather/WeatherPointLine';
 import { WeatherTimeScrubber } from './weather/WeatherTimeScrubber';
 import { useTimedSnackbar } from '../common/useTimedSnackbar';
 import { useMapDrawing } from './draw/useMapDrawing';
+
+/** Kept out of the 3D drape: the 2D tilted-relief pass (the mesh is the relief). */
+const TERRAIN_DRAPE_DROP_IDS: readonly string[] = [TILT_RELIEF_LAYER_ID];
+/** Softened in the drape: the contour lines and (over satellite) their casings. */
+const TERRAIN_DRAPE_CONTOUR_IDS: readonly string[] = CONTOUR_LINE_LAYER_IDS.flatMap((id) => [
+  id,
+  `${id}-casing`,
+]);
 
 /** The heat-tap ring mounts with the other markers (`@core/map/layerSlots`). */
 const MARKERS_ANCHOR = overlayAnchor('markers');
@@ -864,6 +877,11 @@ export function MapScreen() {
     debugFlags: terrainQa.debugFlags,
     // The map draws its contours always; satellite follows its contour setting.
     contours: basemap === 'satellite' ? terrainContours : true,
+    style: style as unknown as DrapeStyleInput,
+    drapeDropLayerIds: TERRAIN_DRAPE_DROP_IDS,
+    hillshadeLayerId: HILLSHADE_2D_LAYER_ID,
+    contourLayerIds: TERRAIN_DRAPE_CONTOUR_IDS,
+    demSourceId: HILLSHADE_DEM_SOURCE_ID,
   });
   useEffect(() => {
     terrainTagRef.current = terrain3d.viewTag;
