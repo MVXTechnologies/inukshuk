@@ -1,6 +1,6 @@
 # Native 3D terrain inside the MapLibre map ("Option C")
 
-Status: redesigned after owner review (true 3D scene, no draping); branch `feat/native-3d-terrain`, HOLD for owner review.
+Status: "Match Outmap" checkpoint (per-tile drape of the 2D style on a finer mesh, see below); branch `feat/native-3d-terrain`, HOLD for owner review.
 Store build only — this is native code (a new local Expo module), never an OTA.
 
 ## Goal
@@ -11,6 +11,54 @@ the user sees (Stone & Paper light/dark, satellite, contours, trails, heatmap,
 PDF overlays), at 60 fps, with no hitch when tiles load. The 2D path (pitch
 below the threshold, or the setting off) must be byte-for-byte what ships
 today.
+
+## 2026-10-03 — "Match Outmap": per-tile drape (supersedes the shaded model below)
+
+The owner judged the shaded relief model "not working at all well" (blobby,
+monotone, contours dominant) and chose Outmap's approach: sharp terrain with
+**our map painted on crisply** (forest, water, glaciers in the theme's
+colours), a pin on every summit, smooth movement. Unlike the rejected
+"frame drape" (the screen frame reused as a texture, blurry), each terrain
+tile now samples its own texture rendered from the 2D style at a proper
+resolution — the render-to-texture draping of Mapbox/MapLibre GL terrain.
+
+Architecture decision (evidence 2026-10-03):
+
+- (a) Upstream MapLibre Native terrain (`feature/terrain-3d`, draft #4190):
+  real RTT draping on all backends, Metal verified on device, but measured
+  at **~22 fps at 65° pitch on an iPhone 16 Pro Max** (its TERRAIN.md), the
+  gestures-on-terrain and symbol PRs still open (#4558/#4559/#4711/#4712),
+  the darwin runtime API PRs closed unmerged, the branch 50 commits behind
+  main, and shipping it means a self-built MapLibre fork for iOS _and_
+  Android (Bazel/NDK builds, many GB). Rejected for now; revisit when a
+  release ships terrain.
+- (c) MapLibre GL JS terrain in a WebView: mature, but a second map engine
+  beside the native map (gestures, offline packs, PDF overlays, memory).
+  Rejected.
+- (b) **Chosen**: keep our engine (mesh, LOD, morphs, pins, 80° gestures,
+  0.1–0.2 ms/frame) and drape textures rendered by **MapLibre's own
+  offscreen renderer** (`MLNMapSnapshotter`; Android has `MapSnapshotter`):
+  - `drapeStyle()` (`src/core/terrain3d/drapeStyle.ts`): the live style
+    without symbol layers or the tilt pass, contours softened, the hillshade
+    at every zoom with more contrast, its DEM read two zooms deeper.
+  - A drape tile = a mesh tile. Map: rendered one zoom out at 2× (the 2D map
+    at the scale a terrain tile shows, 512 px); satellite: at the tile's zoom
+    at 1× (the imagery's own 512 px). One snapshot renders a 2×2 block (four
+    drapes), up to three snapshotters in parallel, ~50–60 ms per snapshot.
+  - Engine: drape mode, per-slot textures of any power-of-two size with a
+    CPU mip chain, generations (a new style drops stale renders), parent
+    windows while children render, 160 slots (~224 MB).
+  - Metal: trilinear + 16× anisotropic sampling; analytic contours off
+    under the drape; mesh lighting reduced to the large forms.
+  - Mesh: 64 cells per tile edge on iOS over the same 32-cell LOD (sharper
+    ridges, same tile count); Android still bakes 32 (its GLES height atlas
+    is sized for it).
+  - Pins: candidates filtered to the view footprint before ranking (the
+    loaded tiles held ~10 000 summits, truncated to off-screen ones).
+
+Open: Android port of the drape (MapSnapshotter + GLES per-slot textures),
+texture memory budget per device class, pin density vs Outmap, contour
+legibility at very steep slopes.
 
 ## Phase 0 — what the platform gives us (verified 2026-10-02)
 
