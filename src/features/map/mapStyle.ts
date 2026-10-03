@@ -396,6 +396,12 @@ export interface OsmStyleOptions {
     parks?: string;
     /** "Parks & protected areas": boundaries and names. Default true. */
     protectedAreas?: boolean;
+    /**
+     * Our worldwide province / state label points (a GeoJSON URL, see
+     * `@data/basemapTiles`); unset = Protomaps' regions, which only a few
+     * countries have.
+     */
+    admin1?: string;
   };
   /**
    * "Labels on satellite" (#484): our vector base map's roads, trails and
@@ -413,6 +419,8 @@ export interface OsmStyleOptions {
     /** As on {@link vectorBasemap}: boundary and name only, no fill. */
     parks?: string;
     protectedAreas?: boolean;
+    /** As on {@link vectorBasemap}. */
+    admin1?: string;
   };
   /**
    * Contours on satellite (#492): the Map base's served contour tiles, with
@@ -555,6 +563,30 @@ function parksSource(tiles: string): StyleSpecification['sources'][string] {
   };
 }
 
+/** Source id of our worldwide province / state label points. */
+export const VECTOR_ADMIN1_SOURCE = 'basemap-admin1';
+
+/**
+ * Our province / state label points: ONE small static GeoJSON file (Natural
+ * Earth, public domain — `scripts/map/build-admin1-labels.mjs`), which
+ * MapLibre fetches once, keeps in its tile cache and stores in offline packs
+ * like any other source of the style.
+ */
+function admin1Source(url: string): StyleSpecification['sources'][string] {
+  return {
+    type: 'geojson',
+    data: url,
+    // The labels stop at z8; deeper tiles would only re-cut the same points.
+    maxzoom: 8,
+    attribution: 'Region names: Natural Earth',
+  };
+}
+
+/** The stone option reading {@link admin1Source}, when it is configured. */
+function admin1Options(url: string | undefined): Pick<StoneStyleOptions, 'admin1'> {
+  return url ? { admin1: { source: VECTOR_ADMIN1_SOURCE } } : {};
+}
+
 /** How the stone layers read our parks tiles, and the toggle, as style options. */
 function parksOptions(from: {
   parks?: string;
@@ -650,6 +682,7 @@ export function buildOsmStyle(
             ? { peakDensity: options.vectorBasemap.peakDensity }
             : {}),
           ...parksOptions(options.vectorBasemap),
+          ...admin1Options(options.vectorBasemap.admin1),
         })
       : null;
   if (stone && options.vectorBasemap) {
@@ -665,6 +698,9 @@ export function buildOsmStyle(
     // into offline packs.
     if (options.vectorBasemap.parks && parksOptions(options.vectorBasemap).parks) {
       style.sources[VECTOR_PARKS_SOURCE] = parksSource(options.vectorBasemap.parks);
+    }
+    if (options.vectorBasemap.admin1) {
+      style.sources[VECTOR_ADMIN1_SOURCE] = admin1Source(options.vectorBasemap.admin1);
     }
     style.glyphs = options.vectorBasemap.glyphs ?? OFM_GLYPHS_URL;
     put('base', ...stone.base);
@@ -720,6 +756,8 @@ export function buildOsmStyle(
         style.sources[VECTOR_PEAKS_SOURCE] = peaksSource(imageryLabels.peaks);
       if (imageryLabels.parks && parksOptions(imageryLabels).parks)
         style.sources[VECTOR_PARKS_SOURCE] = parksSource(imageryLabels.parks);
+      if (imageryLabels.admin1)
+        style.sources[VECTOR_ADMIN1_SOURCE] = admin1Source(imageryLabels.admin1);
     }
     if (imageryContours) {
       style.sources[VECTOR_CONTOURS_SOURCE] = contoursSource(imageryContours.tiles);
@@ -735,6 +773,7 @@ export function buildOsmStyle(
         : {}),
       ...(imageryLabels?.peakDensity ? { peakDensity: imageryLabels.peakDensity } : {}),
       ...parksOptions(imageryLabels ?? {}),
+      ...admin1Options(imageryLabels?.admin1),
     });
     put('contours', ...imagery.contours);
     put('linework', ...imagery.linework);

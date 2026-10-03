@@ -13,7 +13,7 @@ const ids = (input: Partial<MapCreditsInput>) => mapCredits({ ...base, ...input 
 
 it('credits the vector map and its peaks with OpenStreetMap and Protomaps', () => {
   const lines = mapCredits(base);
-  expect(lines.map((l) => l.id)).toEqual(['base', 'peaks']);
+  expect(lines.map((l) => l.id)).toEqual(['base', 'peaks', 'regions']);
   expect(lines[0]?.credit).toBe('© OpenStreetMap contributors · Protomaps');
   expect(lines[0]?.link?.url).toBe('https://www.openstreetmap.org/copyright');
 });
@@ -27,9 +27,17 @@ it('credits the raster map with OpenStreetMap only, and no vector peaks', () => 
 it('credits Esri on satellite, plus OSM when its labels ride the imagery', () => {
   expect(ids({ basemap: 'satellite', vector: false })).toEqual(['imagery']);
   const withLabels = mapCredits({ ...base, basemap: 'satellite', vector: false, osmLabels: true });
-  expect(withLabels.map((l) => l.id)).toEqual(['imagery', 'labels', 'peaks']);
+  expect(withLabels.map((l) => l.id)).toEqual(['imagery', 'labels', 'peaks', 'regions']);
   expect(withLabels[0]?.credit).toContain('Esri');
   expect(withLabels[1]?.credit).toContain('OpenStreetMap');
+});
+
+it('credits Natural Earth for the province names wherever the vector labels are drawn', () => {
+  const regions = mapCredits(base).find((l) => l.id === 'regions');
+  expect(regions?.credit).toBe('Natural Earth (public domain)');
+  expect(regions?.link?.url).toMatch(/^https:\/\/www\.naturalearthdata\.com\//);
+  expect(ids({ vector: false })).not.toContain('regions');
+  expect(ids({ basemap: 'satellite', vector: false })).not.toContain('regions');
 });
 
 it('lists contours/relief only while terrain is drawn', () => {
@@ -88,7 +96,7 @@ it('gives every line a non-empty label and credit', () => {
     weather: true,
     marine: true,
   });
-  expect(all).toHaveLength(8);
+  expect(all).toHaveLength(9);
   for (const line of all) {
     expect(line.label.length).toBeGreaterThan(0);
     expect(line.credit.length).toBeGreaterThan(0);

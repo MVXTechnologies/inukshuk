@@ -34,7 +34,11 @@ function withoutDisclaimer(line: string): string {
 const PARTS: readonly string[] = [
   '© OpenStreetMap contributors',
   ...(VECTOR_BASEMAP_ENABLED
-    ? ['Vector map: Protomaps', 'Map font: Atkinson Hyperlegible Next']
+    ? [
+        'Vector map: Protomaps',
+        'Province & state names: Natural Earth (public domain)',
+        'Map font: Atkinson Hyperlegible Next',
+      ]
     : []),
   // The map's ⓘ credits sheet names the imagery providers (`mapCredits`);
   // the full roll must name every one of them too.
