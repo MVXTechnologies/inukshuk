@@ -416,6 +416,7 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   l.fogStartCtc = a[11].floatValue;
   l.fogDensity = a[12].floatValue;
   l.fogEndCtc = a[13].floatValue;
+  if (a.count > 14) l.debugFlags = a[14].intValue;
   return l;
 }
 

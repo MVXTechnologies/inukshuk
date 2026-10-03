@@ -147,7 +147,7 @@ class InukshukTerrainModule : Module() {
     }.runOnQueue(Queues.MAIN)
   }
 
-  private fun look(config: TerrainConfig): FloatArray = FloatArray(14) { i -> (config.look.getOrNull(i) ?: 0.0).toFloat() }
+  private fun look(config: TerrainConfig): FloatArray = FloatArray(15) { i -> (config.look.getOrNull(i) ?: 0.0).toFloat() }
 
   private fun findMapView(v: View): MapView? {
     if (v is MapView) return v

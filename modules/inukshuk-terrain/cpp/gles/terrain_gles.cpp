@@ -321,7 +321,8 @@ struct GlRenderer {
     // 1. Capture what MapLibre drew (every layer below us).
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, drapeTex);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, vp[0], vp[1], vp[2], vp[3]);
+    const int dbg = out.look.debugFlags;
+    if (!(dbg & 1)) glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, vp[0], vp[1], vp[2], vp[3]);
 
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_SCISSOR_TEST);
@@ -340,7 +341,7 @@ struct GlRenderer {
     glUniform3fv(su.fogColor, 1, out.look.fogColor);
     glUniform1f(su.ramp, out.ramp);
     glBindVertexArray(skyVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (!(dbg & 4)) glDrawArrays(GL_TRIANGLES, 0, 3);
 
     // 3. Terrain, front to back, our own depth.
     glDisable(GL_BLEND);
@@ -364,6 +365,7 @@ struct GlRenderer {
     glUniform1f(tu.far, out.farW);
     glBindVertexArray(vao);
     for (const auto& d : out.tiles) {
+      if (dbg & 2) break;
       const GLuint vbo = bufferFor(d);
       glBindBuffer(GL_ARRAY_BUFFER, vbo);
       glEnableVertexAttribArray(1);
@@ -541,9 +543,10 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSet
 JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetLook(
     JNIEnv* env, jclass, jlong h, jfloatArray values) {
   // [exaggeration, fog rgb, horizon rgb, zenith rgb, form, fogStart, fogDensity, fogEnd]
-  if (env->GetArrayLength(values) < 14) return;
-  jfloat v[14];
-  env->GetFloatArrayRegion(values, 0, 14, v);
+  const jsize n = env->GetArrayLength(values);
+  if (n < 14) return;
+  jfloat v[15] = {};
+  env->GetFloatArrayRegion(values, 0, n < 15 ? n : 15, v);
   LookParams look;
   look.exaggeration = v[0];
   for (int i = 0; i < 3; i++) {
@@ -555,6 +558,7 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSet
   look.fogStartCtc = v[11];
   look.fogDensity = v[12];
   look.fogEndCtc = v[13];
+  look.debugFlags = static_cast<int>(v[14]);
   (*handle(h))->engine->setLook(look);
 }
 

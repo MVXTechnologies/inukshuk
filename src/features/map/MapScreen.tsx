@@ -855,6 +855,7 @@ export function MapScreen() {
     dark: theme.dark,
     networkAllowed: !offlineOnly,
     probe: terrainQa.probe,
+    debugFlags: terrainQa.debugFlags,
   });
   useEffect(() => {
     terrainTagRef.current = terrain3d.viewTag;

@@ -33,9 +33,10 @@ export const TERRAIN_QA = process.env.EXPO_PUBLIC_TERRAIN_QA === '1';
 export function useTerrainQa(
   cameraRef: RefObject<CameraRef | null>,
   tagRef: RefObject<number | null>,
-): { probe: boolean; disabled: boolean } {
+): { probe: boolean; disabled: boolean; debugFlags: number } {
   const [probe, setProbe] = useState(false);
   const [disabled, setDisabled] = useState(false);
+  const [debugFlags, setDebugFlags] = useState(0);
 
   useEffect(() => {
     if (!TERRAIN_QA) return;
@@ -62,6 +63,8 @@ export function useTerrainQa(
       if (p === '0' || p === '1') setProbe(p === '1');
       const n3d = q('n3d');
       if (n3d === '0' || n3d === '1') setDisabled(n3d === '0');
+      const dbg = num('dbg');
+      if (dbg !== undefined && Number.isFinite(dbg)) setDebugFlags(dbg);
       const pdf = q('pdf');
       if (pdf) void importQaPdf(pdf);
       const gpx = q('gpx');
@@ -117,7 +120,7 @@ export function useTerrainQa(
     return () => sub.remove();
   }, [cameraRef, tagRef]);
 
-  return { probe, disabled };
+  return { probe, disabled, debugFlags };
 }
 
 async function importQaPdf(url: string): Promise<void> {

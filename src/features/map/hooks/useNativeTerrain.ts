@@ -21,6 +21,8 @@ export interface NativeTerrainOptions {
   networkAllowed: boolean;
   /** QA: attach as a frame-timing probe that draws nothing (the 2D baseline). */
   probe?: boolean;
+  /** QA: native debug switches (see LookParams.debugFlags). */
+  debugFlags?: number;
 }
 
 export interface NativeTerrainBinding {
@@ -50,12 +52,12 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
       relief: o.relief === 'dramatic' ? 'dramatic' : 'natural',
     });
     return {
-      look: packLook(look),
+      look: o.debugFlags ? [...packLook(look), o.debugFlags] : packLook(look),
       enabled: o.probe !== true && o.relief !== 'off',
       networkAllowed: o.networkAllowed,
       maxPitch: TERRAIN_MAX_PITCH_DEG,
     };
-  }, [o.basemap, o.dark, o.relief, o.networkAllowed, o.probe]);
+  }, [o.basemap, o.dark, o.relief, o.networkAllowed, o.probe, o.debugFlags]);
 
   const configRef = useRef(config);
   useEffect(() => {

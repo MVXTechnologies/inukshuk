@@ -340,6 +340,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
   // LOD selection.
   LodOptions opts;
   opts.fogEndCtc = out.look.fogEndCtc;
+  if (out.look.debugFlags & 8) opts.maxErrorPx = kDefaultMaxErrorPx * 2;
   opts.hRef = hRef;
   opts.heightScale = exag * out.ramp;
   opts.heightRange = [this](const TileId& t) -> std::optional<std::pair<double, double>> {

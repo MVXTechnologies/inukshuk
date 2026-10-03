@@ -32,6 +32,8 @@ struct LookParams {
   float fogStartCtc = 2.5f;
   float fogDensity = 0.12f;
   float fogEndCtc = 12.0f;
+  /** QA only: 1 = skip the frame copy, 2 = skip terrain, 4 = skip sky, 8 = half the tiles' detail. */
+  int debugFlags = 0;
 };
 
 struct FrameInput {
