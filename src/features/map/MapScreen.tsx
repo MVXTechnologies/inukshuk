@@ -143,10 +143,12 @@ import {
   pdfOverviewLayer,
   HEAT_LAYERS,
   INSPECT_MARKER_LAYER,
+  LINE_OUTLINE,
   LIVE_TRAIL_LAYERS,
   TRACKS_LINES_LAYERS,
   lineOutlineFor,
 } from './mapLayers';
+import { mapColors } from '@ui/theme';
 import {
   buildOsmStyle,
   CONTOUR_LINE_LAYER_IDS,
@@ -154,6 +156,9 @@ import {
   CONTOUR_SOURCE_MINZOOM,
   VECTOR_CONTOURS_SOURCE,
 } from './mapStyle';
+import { useNativeTerrain, useNativeTerrainScene } from './hooks/useNativeTerrain';
+import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
+import { useTerrainQa } from './hooks/useTerrainQa';
 import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -192,6 +197,9 @@ const MARKERS_ANCHOR = overlayAnchor('markers');
 // new fixes, whichever comes first.
 /** Stable empty id list: trail overlays switched off (#465). */
 const NO_IDS: readonly string[] = [];
+
+/** Stable empty line set for the 3D scene (2D, or nothing to draw). */
+const NO_TERRAIN_LINES: readonly TerrainLineSpec[] = [];
 
 const TRAIL_REBUILD_MS = 1000;
 const TRAIL_REBUILD_POINTS = 5;
@@ -837,10 +845,38 @@ export function MapScreen() {
     satelliteImagery,
   ]);
 
+  // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
+  // a binary that ships the module, tilting past ~25° grows real relief out of
+  // the flat map, drawn natively inside MapLibre (no JS per frame). It
+  // replaces the tilted-map hillshade pass below while attached.
+  const terrainHostRef = useRef<View | null>(null);
+  const terrainTagRef = useRef<number | null>(null);
+  const terrainQa = useTerrainQa(cameraRef, terrainTagRef);
+  const terrain3d = useNativeTerrain({
+    hostRef: terrainHostRef,
+    mapLoaded,
+    relief: tiltRelief,
+    allowed: editorStyle === null && !terrainQa.disabled,
+    basemap: basemap === 'satellite' ? 'satellite' : 'map',
+    dark: theme.dark,
+    networkAllowed: !offlineOnly,
+    probe: terrainQa.probe,
+    debugFlags: terrainQa.debugFlags,
+    // The map draws its contours always; satellite follows its contour setting.
+    contours: basemap === 'satellite' ? terrainContours : true,
+  });
+  useEffect(() => {
+    terrainTagRef.current = terrain3d.viewTag;
+  }, [terrain3d.viewTag]);
+
   // The tilted-map relief pass (#480): the style carries it hidden whenever
   // it draws the shading and the setting is on; the hook switches it on from
-  // the settled pitch.
-  const tilt = useTiltRelief(style, basemap === 'satellite' && editorStyle === null);
+  // the settled pitch (off while the native 3D terrain draws real relief).
+  const tilt = useTiltRelief(
+    style,
+    basemap === 'satellite' && editorStyle === null,
+    terrain3d.active,
+  );
 
   const { message: snack, show: showSnack, dismiss: dismissSnack } = useTimedSnackbar(3000);
 
@@ -1871,6 +1907,65 @@ export function MapScreen() {
     [focusedTrackId, trackHeat],
   );
 
+  // The 3D scene's own trails (lifted onto the relief): the shown trails (or
+  // only the focused one, as in 2D), and the live recording on top.
+  const terrainLines = useMemo(() => {
+    if (!terrain3d.active) return NO_TERRAIN_LINES;
+    const outline = LINE_OUTLINE[lineOutline];
+    const base = {
+      color: mapColors.trail,
+      halo: outline.color,
+      haloOpacity: outline.opacity,
+      haloAdd: outline.widthAdd,
+    };
+    const shown =
+      showTrackOverlays && trackHeat.lines && !hasSelection
+        ? sceneLines(
+            trackHeat.lines.features.map((f) => ({
+              geometry: f.geometry,
+              color: f.properties.color,
+            })),
+            { ...base, width: 3, order: 0 },
+            0,
+          )
+        : [];
+    const focus = focusLine
+      ? sceneLines(
+          [{ geometry: focusLine.geometry, color: focusLine.properties.color }],
+          { ...base, width: 4, order: 1 },
+          1_000_000,
+        )
+      : [];
+    const live = trailFeature
+      ? sceneLines(
+          [{ geometry: trailFeature.geometry }],
+          {
+            color: mapColors.trail,
+            halo: mapColors.trailCasing,
+            haloOpacity: 1,
+            width: 5,
+            haloAdd: 4,
+            order: 2,
+          },
+          2_000_000,
+        )
+      : [];
+    return [...shown, ...focus, ...live];
+  }, [
+    terrain3d.active,
+    lineOutline,
+    showTrackOverlays,
+    trackHeat.lines,
+    hasSelection,
+    focusLine,
+    trailFeature,
+  ]);
+  useNativeTerrainScene(
+    terrain3d.active ? terrain3d.viewTag : null,
+    terrainLines,
+    location ? { lng: location.longitude, lat: location.latitude } : null,
+  );
+
   // --- Offline marine packs (marine wave D §D4) ---------------------------
   // Hydrate the inventory once, then sweep for packs older than 30 days each
   // time the app comes forward online. The sweep is silent by design: it
@@ -1980,9 +2075,18 @@ export function MapScreen() {
     onLayout: onMapAreaLayout,
     value: mapAreaBottom,
   } = useWindowEdge('bottom');
+  // One host View feeds both the window-edge measure and the native terrain,
+  // which finds the MapLibre view inside it (collapsable: keep it a real view).
+  const setMapAreaView = useCallback(
+    (v: View | null) => {
+      mapAreaRef.current = v;
+      terrainHostRef.current = v;
+    },
+    [mapAreaRef],
+  );
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
-      <View style={styles.fill} ref={mapAreaRef} onLayout={onMapAreaLayout}>
+      <View style={styles.fill} ref={setMapAreaView} collapsable={false} onLayout={onMapAreaLayout}>
         {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
           <Map
             ref={mapRef}

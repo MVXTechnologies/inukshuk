@@ -99,6 +99,11 @@ jobs:
       - name: Verify native PDF geometry and private paths
         run: sh modules/inukshuk-pdf/scripts/test-geometry.sh
 
+      # The C++ 3D-terrain engine shared by Android and iOS, checked against
+      # the TS reference's parity fixtures (src/core/terrain3d/parity.test.ts).
+      - name: Verify native 3D terrain engine (C++)
+        run: sh modules/inukshuk-terrain/tests/run.sh
+
       - uses: android-actions/setup-android@v4
 
       # Gradle's dependency caches live in ~/.gradle regardless of the

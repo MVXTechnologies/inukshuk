@@ -1,0 +1,39 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.inukshukterrain'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.inukshukterrain'
+  ndkVersion rootProject.ext.has('ndkVersion') ? rootProject.ext.ndkVersion : '27.1.12297006'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    externalNativeBuild {
+      cmake {
+        cppFlags '-std=c++17 -fexceptions -frtti -O2'
+        arguments '-DANDROID_STL=c++_shared'
+      }
+    }
+  }
+  externalNativeBuild {
+    cmake {
+      path 'CMakeLists.txt'
+    }
+  }
+  packagingOptions {
+    jniLibs {
+      pickFirsts += ['**/libc++_shared.so']
+    }
+  }
+}
+
+dependencies {
+  // Provided at runtime by @maplibre/maplibre-react-native. Keep in step with
+  // its org.maplibre.reactnative.nativeVersion: the custom-layer ABI in
+  // cpp/mln_abi.hpp was checked against this exact version.
+  compileOnly 'org.maplibre.gl:android-sdk-opengl:13.6.1'
+}
