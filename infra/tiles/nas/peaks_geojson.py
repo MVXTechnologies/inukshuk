@@ -10,8 +10,9 @@ tileset from OpenStreetMap: every node tagged natural=peak|volcano with a name.
 
 Each feature carries `name` (+ `name:en` / `name:fr` when they differ), `ele`
 (integer metres, when the OSM `ele` tag parses), `kind` (peak|volcano) and
-`rank`, the zoom ELEVATION_LADDER gives it, so the big summits show from z5
-and smaller ones join as you zoom in. Its `tippecanoe.minzoom` is PEAK_MAX_LEAD
+`rank`, the zoom ELEVATION_LADDER gives it — held back where summits crowd
+(see "Density" below) — so the big summits show from z5 and smaller ones join
+as you zoom in. Its `tippecanoe.minzoom` is PEAK_MAX_LEAD
 zooms before the rank, so the app can draw summits earlier (#461). Local prominence would rank better than
 raw height, but OSM rarely has it; when the `prominence` tag is there it
 promotes the peak (PROMINENCE_PROMOTION).
@@ -125,6 +126,104 @@ def minzoom_for(ele, prominence=None):
 def tile_minzoom(rank):
     """The first zoom whose tiles carry a summit of this rank (PEAK_MAX_LEAD earlier)."""
     return max(MIN_ZOOM, rank - PEAK_MAX_LEAD)
+
+
+# --- Density: no more summits in a place than its labels have room for --------
+#
+# The elevation ladder alone floods the great ranges: every 1000 m summit is
+# due at z9, and the six z9 tiles around Zermatt hold 4 100 of them (Québec
+# City: 148) for the two or three dozen names a phone can show. Each one is
+# still parsed, shaped and collided by the map on every tile load and camera
+# move — measured in 2026-10 as most of what made the Alps slow to pan.
+#
+# So a summit's rank is also held back until it is among the best of its
+# CELL: the map cut into squares CELL_ZOOM_SHIFT zooms finer than the tiles
+# (128 px of a 512-px tile), each keeping its CELL_KEEP best summits (ladder
+# rank, then height). A summit label is ~90 x 32 px: six is about what a cell
+# has room for, and collisions still pick among them. The squares halve with
+# every zoom, so a summit that makes it once stays.
+#
+# The density setting falls out of it: "more" (lead 2) hands the map six
+# summits per 128-px cell — as crowded as collisions allow, which is what
+# EVERY setting drew in the Alps before — "normal" six per 256 px, "fewer" six
+# per tile. Where summits are sparse (most of the world) each is among the
+# best of its cell at once and its rank is the ladder's, unchanged.
+#
+# Simulated on the live tiles (2026-10, a 411 x 914 px phone, "normal"):
+# around Zermatt the tiles in view hand the style 130 summits at z9 instead
+# of 3 757 (36 of them on screen: Dufourspitze, Dom, Weisshorn, Matterhorn …
+# down to the best of each side valley); around Québec City 61 instead of 108
+# (19 on screen, of 26).
+CELL_ZOOM_SHIFT = 2
+CELL_KEEP = 6
+# The last zoom the tiles are built at (peaks.sh -z): every summit is in by then.
+MAX_ZOOM = 12
+
+
+def cell_of(lon, lat, zoom):
+    """The (x, y) of the web-mercator square at `zoom` holding a point."""
+    n = 2**zoom
+    lat = max(-85.0511, min(85.0511, lat))
+    x = int((lon + 180.0) / 360.0 * n)
+    s = math.sin(math.radians(lat))
+    y = int((0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi)) * n)
+    return min(n - 1, max(0, x)), min(n - 1, max(0, y))
+
+
+def density_zooms(summits):
+    """For each (lon, lat, ladder_rank, ele): the first zoom at which it is
+    among the CELL_KEEP best summits of its cell (MAX_ZOOM at the latest).
+
+    Best = lowest ladder rank, then highest, then input order (stable, so a
+    rebuild from the same data ranks the same).
+    """
+    order = sorted(
+        range(len(summits)),
+        key=lambda i: (summits[i][2], -(summits[i][3] if summits[i][3] is not None else -1e9), i),
+    )
+    out = [MAX_ZOOM] * len(summits)
+    for zoom in range(0, MAX_ZOOM):
+        taken = {}
+        left = 0
+        # Every summit competes at every zoom — one already in still holds its
+        # cell — best first, so a cell's first CELL_KEEP comers are its best.
+        for i in order:
+            lon, lat = summits[i][0], summits[i][1]
+            cell = cell_of(lon, lat, zoom + CELL_ZOOM_SHIFT)
+            n = taken.get(cell, 0)
+            taken[cell] = n + 1
+            if out[i] == MAX_ZOOM:
+                if n < CELL_KEEP:
+                    out[i] = zoom
+                else:
+                    left += 1
+        if left == 0:
+            break
+    return out
+
+
+def dense_rank(ladder_rank, density_zoom):
+    """The rank a summit is published with: its ladder rank, held back until
+    the zoom its cell has room for it at the widest lead (PEAK_MAX_LEAD)."""
+    return min(MAX_ZOOM, max(ladder_rank, density_zoom + PEAK_MAX_LEAD))
+
+
+def apply_density(features):
+    """Re-rank GeoJSON features (from `feature`) in place by local density."""
+    summits = [
+        (
+            f['geometry']['coordinates'][0],
+            f['geometry']['coordinates'][1],
+            f['properties']['rank'],
+            f['properties'].get('ele'),
+        )
+        for f in features
+    ]
+    for f, zoom in zip(features, density_zooms(summits)):
+        rank = dense_rank(f['properties']['rank'], zoom)
+        f['properties']['rank'] = rank
+        f['tippecanoe'] = {'minzoom': tile_minzoom(rank)}
+    return features
 
 
 def feature(element):
@@ -249,23 +348,26 @@ def fetch(pieces_path, out_dir):
 def convert(in_dir, out_path):
     """Merge the per-piece answers (deduplicated by OSM id) into GeoJSONSeq."""
     seen = set()
-    count = 0
+    features = []
+    for name in sorted(os.listdir(in_dir)):
+        if not name.endswith('.json'):
+            continue
+        with open(os.path.join(in_dir, name), encoding='utf-8') as f:
+            elements = json.load(f).get('elements', [])
+        for element in elements:
+            osm_id = element.get('id')
+            if osm_id in seen:
+                continue  # pieces share their edges
+            seen.add(osm_id)
+            feat = feature(element)
+            if feat is not None:
+                features.append(feat)
+    # A rank depends on the summit's neighbours, so only now (apply_density).
+    apply_density(features)
     with open(out_path, 'w', encoding='utf-8') as out:
-        for name in sorted(os.listdir(in_dir)):
-            if not name.endswith('.json'):
-                continue
-            with open(os.path.join(in_dir, name), encoding='utf-8') as f:
-                elements = json.load(f).get('elements', [])
-            for element in elements:
-                osm_id = element.get('id')
-                if osm_id in seen:
-                    continue  # pieces share their edges
-                seen.add(osm_id)
-                feat = feature(element)
-                if feat is not None:
-                    out.write(json.dumps(feat, ensure_ascii=False, separators=(',', ':')) + '\n')
-                    count += 1
-    return count
+        for feat in features:
+            out.write(json.dumps(feat, ensure_ascii=False, separators=(',', ':')) + '\n')
+    return len(features)
 
 
 def main(argv):

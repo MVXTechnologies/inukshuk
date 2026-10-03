@@ -422,23 +422,46 @@ export type SoundingProperties = {
   label: string;
   /** 1 = shallower than the hazard threshold (blue ink, wins collisions). */
   shallow: 0 | 1;
-  /** Symbol sort key — shallowest first. */
+  /** Symbol sort key — shallower bands first (see {@link soundingSortKey}). */
   sort: number;
 };
 
-/** The soundings as a GeoJSON FeatureCollection for a symbol layer. */
+/**
+ * Depth bands (m) of the soundings' collision priority: finer where a
+ * shallower sounding matters to a boat, one band beyond 100 m.
+ */
+export const SOUNDING_SORT_BANDS_M: readonly number[] = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 100];
+
+/**
+ * A sounding's `symbol-sort-key`: the index of its depth band, shallowest
+ * (and drying heights) first. A band, not the depth itself: MapLibre Native
+ * draws one segment per distinct sort key, and a key that is unique per
+ * feature turned every label into its own draw (measured on the summit
+ * names, 2026-10 — `peakSortKey` in `@core/map/stoneStyle`).
+ */
+export function soundingSortKey(depthM: number): number {
+  const band = SOUNDING_SORT_BANDS_M.findIndex((limit) => depthM < limit);
+  return band < 0 ? SOUNDING_SORT_BANDS_M.length : band;
+}
+
+/**
+ * The soundings as a GeoJSON FeatureCollection for a symbol layer, shallowest
+ * first, so soundings of one band keep their depth order in the source.
+ */
 export function soundingsFeatureCollection(
   soundings: readonly Sounding[],
   imperial: boolean,
 ): FeatureCollection<Point, SoundingProperties> {
-  const features: Feature<Point, SoundingProperties>[] = soundings.map((s) => ({
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-    properties: {
-      label: soundingLabel(s.depthM, imperial),
-      shallow: s.depthM < SOUNDING_SHALLOW_M ? 1 : 0,
-      sort: s.depthM,
-    },
-  }));
+  const features: Feature<Point, SoundingProperties>[] = [...soundings]
+    .sort((a, b) => a.depthM - b.depthM)
+    .map((s) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+      properties: {
+        label: soundingLabel(s.depthM, imperial),
+        shallow: s.depthM < SOUNDING_SHALLOW_M ? 1 : 0,
+        sort: soundingSortKey(s.depthM),
+      },
+    }));
   return { type: 'FeatureCollection', features };
 }
