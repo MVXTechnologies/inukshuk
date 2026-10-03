@@ -318,9 +318,13 @@ struct GlRenderer {
     }
     TileSlot& t = it->second;
     if (t.version != d.version) {
+      // Upload through the atlas's own unit: binding it on unit 0 would
+      // replace the drape mid-draw (heights sampled as colour).
+      glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, atlasTex);
       glTexSubImage2D(GL_TEXTURE_2D, 0, 0, t.slot, vertexCount(kGrid), 1, GL_RGBA, GL_FLOAT,
                       d.attributes->data());
+      glActiveTexture(GL_TEXTURE0);
       t.version = d.version;
     }
     t.lastFrame = frameNo;
