@@ -126,7 +126,8 @@ export function useTerrainQa(
       const cmd = readQaCommand();
       if (cmd !== null && cmd !== last) {
         last = cmd;
-        for (const line of cmd.split('\n')) if (line.trim()) handle(line.trim().replace(/^#\d+ /, ''));
+        for (const line of cmd.split('\n'))
+          if (line.trim()) handle(line.trim().replace(/^#\d+ /, ''));
       }
     }, 400);
     return () => {
