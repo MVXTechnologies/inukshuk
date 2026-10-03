@@ -26,6 +26,7 @@ import { useEffect, useState, type RefObject } from 'react';
  *     &pdfs=0|1                       (the "PDF maps" master switch)
  *     &bench=<label>                  (run the standard gesture script)
  *     &stats=<label>                  (dump engine stats)
+ *     &trim=1                         (the low-memory path, as on a warning)
  *
  * Reports land in `<documents>/qa/*.json`.
  */
@@ -110,6 +111,7 @@ export function useTerrainQa(
           console.log(`TERRAIN_BENCH ${JSON.stringify({ ...report, raw: undefined })}`);
         });
       }
+      if (q('trim') === '1' && module && tag !== null) void module.trimMemory(tag);
       const stats = q('stats');
       if (stats && module && tag !== null) {
         void module.stats(tag).then((s) => {
