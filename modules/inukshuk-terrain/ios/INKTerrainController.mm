@@ -704,6 +704,14 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   _engine->trimMemory();
 }
 
+- (void)setPitch:(double)deg {
+  id<INKMLNMapView> map = (id<INKMLNMapView>)_mapView;
+  if (!map) return;
+  id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
+  cam.pitch = fmax(0, fmin(deg, _enabled.load() ? _maxPitch : 60.0));
+  [map setCamera:cam animated:NO];
+}
+
 - (void)setRecording:(BOOL)on {
   std::lock_guard<std::mutex> lock(_timesMutex);
   if (on) {

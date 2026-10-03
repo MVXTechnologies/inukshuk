@@ -36,6 +36,7 @@ interface NativeTerrainModule {
   detach(viewTag: number): Promise<void>;
   stats(viewTag: number): Promise<number[]>;
   trimMemory(viewTag: number): Promise<void>;
+  setPitch(viewTag: number, deg: number): Promise<void>;
   runBench(viewTag: number, script: NativeBenchStep[]): Promise<NativeBenchResult | null>;
   record(
     viewTag: number,

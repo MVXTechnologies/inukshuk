@@ -99,6 +99,11 @@ class InukshukTerrainModule : Module() {
       controllers[viewTag]?.stats()?.toList() ?: emptyList()
     }.runOnQueue(Queues.MAIN)
 
+    AsyncFunction("setPitch") { viewTag: Int, deg: Double ->
+      controllers[viewTag]?.setPitch(deg)
+      Unit
+    }.runOnQueue(Queues.MAIN)
+
     AsyncFunction("trimMemory") { viewTag: Int ->
       controllers[viewTag]?.trimMemory()
       Unit

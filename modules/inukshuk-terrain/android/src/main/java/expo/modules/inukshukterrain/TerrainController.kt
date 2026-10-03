@@ -173,6 +173,9 @@ class TerrainController(
     }
   }
 
+  /** Programmatic pitch past 60 (CameraPosition.Builder clamps to 60; QA camera). */
+  fun setPitch(deg: Double) = setTiltDirect(deg.coerceIn(0.0, if (enabled) maxPitch else LEGACY_MAX_PITCH))
+
   private fun setTiltDirect(deg: Double) {
     try {
       val gt = MapLibreMap::class.java.getDeclaredMethod("getTransform")

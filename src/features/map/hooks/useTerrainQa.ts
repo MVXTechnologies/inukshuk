@@ -77,6 +77,14 @@ export function useTerrainQa(
           bearing: num('bearing') ?? 0,
           duration: 0,
         });
+        // MapLibre Android's CameraPosition.Builder clamps a programmatic
+        // pitch to 60°; past that, set it natively (gestures are unaffected).
+        const pitch = num('pitch') ?? 0;
+        const tag = tagRef.current;
+        const mod = nativeTerrain();
+        if (pitch > 60 && mod && tag !== null) {
+          setTimeout(() => void mod.setPitch(tag, pitch), 400);
+        }
       }
       const module = nativeTerrain();
       const tag = tagRef.current;

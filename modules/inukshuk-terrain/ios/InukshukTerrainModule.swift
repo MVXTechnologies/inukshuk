@@ -63,6 +63,10 @@ public final class InukshukTerrainModule: Module {
       (self.controllers[viewTag]?.stats() ?? []).map { $0.doubleValue }
     }.runOnQueue(.main)
 
+    AsyncFunction("setPitch") { (viewTag: Int, deg: Double) in
+      self.controllers[viewTag]?.setPitch(deg)
+    }.runOnQueue(.main)
+
     AsyncFunction("trimMemory") { (viewTag: Int) in
       self.controllers[viewTag]?.trimMemory()
     }.runOnQueue(.main)
