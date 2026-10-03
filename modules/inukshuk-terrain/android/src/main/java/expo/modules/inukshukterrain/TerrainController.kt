@@ -37,6 +37,8 @@ class TerrainController(
   private var originalShove: ShoveGestureDetector.OnShoveGestureListener? = null
   private var maxPitch = 80.0
   private var enabled = true
+  private val defaultLodScale = map.tileLodScale
+  private val defaultLodMinRadius = map.tileLodMinRadius
 
   private val styleListener = MapView.OnDidFinishLoadingStyleListener { ensureOnTop() }
   private val watcher = object : Runnable {
@@ -51,6 +53,7 @@ class TerrainController(
     this.maxPitch = maxPitch
     update(look, enabled, networkAllowed)
     setCoreMaxPitch(if (enabled) maxPitch else LEGACY_MAX_PITCH)
+    applyTileLod(enabled)
     installShoveExtension()
     mapView.addOnDidFinishLoadingStyleListener(styleListener)
     ensureOnTop()
@@ -67,6 +70,7 @@ class TerrainController(
     if (this.enabled != enabled) {
       this.enabled = enabled
       setCoreMaxPitch(if (enabled) maxPitch else LEGACY_MAX_PITCH)
+      applyTileLod(enabled)
     }
     map.triggerRepaint()
   }
@@ -77,6 +81,7 @@ class TerrainController(
     mapView.removeOnDidFinishLoadingStyleListener(styleListener)
     restoreShove()
     setCoreMaxPitch(LEGACY_MAX_PITCH)
+    applyTileLod(false)
     if (map.cameraPosition.tilt > LEGACY_MAX_PITCH) {
       map.moveCamera(CameraUpdateFactory.tiltTo(LEGACY_MAX_PITCH))
     }
@@ -150,6 +155,20 @@ class TerrainController(
       map.triggerRepaint()
     } catch (e: Exception) {
       Log.w(TAG, "could not (re)insert the terrain layer", e)
+    }
+  }
+
+  /**
+   * Past ~60° MapLibre itself renders tiles out to the horizon; in 3D that far
+   * band is fog, so let MapLibre's pitch LOD coarsen it sooner (its own
+   * knobs, restored on detach).
+   */
+  private fun applyTileLod(on: Boolean) {
+    try {
+      map.tileLodScale = if (on) LOD_SCALE_3D else defaultLodScale
+      map.tileLodMinRadius = if (on) LOD_MIN_RADIUS_3D else defaultLodMinRadius
+    } catch (e: Exception) {
+      Log.w(TAG, "tile LOD not set", e)
     }
   }
 
@@ -245,5 +264,7 @@ class TerrainController(
     const val LEGACY_MAX_PITCH = 60.0
     const val SHOVE_FACTOR = 0.1
     const val WATCH_MS = 400L
+    const val LOD_SCALE_3D = 1.6
+    const val LOD_MIN_RADIUS_3D = 2.0
   }
 }

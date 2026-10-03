@@ -61,6 +61,8 @@ typedef struct {
 
 @protocol INKMLNMapView <NSObject>
 @property(nonatomic) CGFloat maximumPitch;
+@property(nonatomic, assign) double tileLodScale;
+@property(nonatomic, assign) double tileLodMinRadius;
 @property(nonatomic, copy) id<INKMLNCamera> camera;
 @property(nonatomic, readonly, nullable) id<INKMLNStyle> style;
 - (void)setCamera:(id<INKMLNCamera>)camera animated:(BOOL)animated;
@@ -236,6 +238,7 @@ struct SkyU {
   std::atomic<bool> _enabled;
   std::atomic<bool> _detached;
   double _maxPitch;
+  double _defaultLodScale, _defaultLodMinRadius;
   BOOL _networkAllowed;
   NSURLSession *_session;
   NSString *_cacheDir;
@@ -425,6 +428,9 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
         networkAllowed:(BOOL)networkAllowed
               maxPitch:(double)maxPitch {
   _maxPitch = maxPitch;
+  id<INKMLNMapView> m = (id<INKMLNMapView>)_mapView;
+  _defaultLodScale = m.tileLodScale;
+  _defaultLodMinRadius = m.tileLodMinRadius;
   [self updateWithLook:look enabled:enabled networkAllowed:networkAllowed];
   objc_setAssociatedObject(_mtkView, &kControllerKey, self, OBJC_ASSOCIATION_ASSIGN);
   _originalMtkClass = object_getClass(_mtkView);
@@ -452,7 +458,12 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   _enabled = enabled;
   _networkAllowed = networkAllowed;
   id<INKMLNMapView> map = (id<INKMLNMapView>)_mapView;
-  if (map) map.maximumPitch = enabled ? _maxPitch : 60;
+  if (map) {
+    map.maximumPitch = enabled ? _maxPitch : 60;
+    // In 3D the far band is fog: let MapLibre's pitch LOD coarsen it sooner.
+    map.tileLodScale = enabled ? 1.6 : _defaultLodScale;
+    map.tileLodMinRadius = enabled ? 2.0 : _defaultLodMinRadius;
+  }
   [self requestRepaint];
 }
 
@@ -468,6 +479,8 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   id<INKMLNMapView> map = (id<INKMLNMapView>)_mapView;
   if (map) {
     map.maximumPitch = 60;
+    map.tileLodScale = _defaultLodScale;
+    map.tileLodMinRadius = _defaultLodMinRadius;
     id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
     if (cam.pitch > 60) {
       cam.pitch = 60;
