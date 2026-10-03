@@ -329,6 +329,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     vectorTilesUrl: process.env.VECTOR_TILES_URL,
     vectorGlyphsUrl: process.env.VECTOR_GLYPHS_URL,
     vectorContoursUrl: process.env.VECTOR_CONTOURS_URL,
+    // Worldwide province / state label points (src/data/basemapTiles). Unset
+    // = the Pages site's docs/data/admin1-labels-v1.json.
+    admin1LabelsUrl: process.env.ADMIN1_LABELS_URL,
   },
   updates: {
     // OTA self-correction channel; CI (ota-update.yml) publishes JS-only fixes

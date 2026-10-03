@@ -946,6 +946,38 @@ describe('vector Stone & Paper basemap (VECTOR_BASEMAP_ENABLED)', () => {
     });
   });
 
+  describe('province and state names (Natural Earth points)', () => {
+    const admin1 = 'https://pages.example/data/admin1-labels-v1.json';
+    const province = (s: ReturnType<typeof buildOsmStyle>) =>
+      s.layers.filter((l) => l.id === 'stone-place-province');
+
+    it("draws Protomaps' regions without our points, with no extra source", () => {
+      const s = withFlag(true)(TILE, 'map', false, { vectorBasemap });
+      expect(s.sources['basemap-admin1']).toBeUndefined();
+      expect(province(s)).toEqual([expect.objectContaining({ source: 'basemap-vector' })]);
+    });
+
+    it('reads one static GeoJSON file instead when given, on the map and over imagery', () => {
+      const s = withFlag(true)(TILE, 'map', false, { vectorBasemap: { ...vectorBasemap, admin1 } });
+      expect(s.sources['basemap-admin1']).toMatchObject({
+        type: 'geojson',
+        data: admin1,
+        maxzoom: 8,
+      });
+      expect(province(s)).toEqual([expect.objectContaining({ source: 'basemap-admin1' })]);
+      expect(s.layers.some((l) => l.id === 'stone-place-country')).toBe(true);
+      expect(validateStyle(s as never).map((e) => e.message)).toEqual([]);
+
+      const sat = buildOsmStyle(TILE, 'satellite', false, {
+        imageryLabels: { tiles: vectorBasemap.tiles, admin1 },
+      });
+      expect(sat.sources['basemap-admin1']).toMatchObject({ type: 'geojson', data: admin1 });
+      expect(province(sat)).toEqual([expect.objectContaining({ source: 'basemap-admin1' })]);
+      expect(sat.layers.some((l) => l.id === 'stone-place-country')).toBe(true);
+      expect(validateStyle(sat as never).map((e) => e.message)).toEqual([]);
+    });
+  });
+
   it('flag on: the dark scheme yields a different stone style', () => {
     const build = withFlag(true);
     const light = build(TILE, 'map', false, { vectorBasemap });
