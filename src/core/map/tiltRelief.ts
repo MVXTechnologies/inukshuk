@@ -10,6 +10,11 @@
  * over the same Terrarium DEM, faded in with the pitch, so the relief's
  * shadows deepen as the view lowers and ridges stand out against the
  * foreshortened slopes. Pure decisions here; `features/map` renders them.
+ *
+ * Since the native terrain module (docs/plans/native-terrain.md), binaries
+ * that ship it draw REAL 3D relief instead (and raise the pitch ceiling to
+ * 80° natively); this pass is then switched off and remains the fallback for
+ * older binaries running a newer bundle.
  */
 import { hillshadeLook, type HillshadeLook } from './terrainOptions';
 
@@ -19,7 +24,8 @@ import { hillshadeLook, type HillshadeLook } from './terrainOptions';
  * on Android, `MLNMapView.maximumPitch` on iOS). The core would accept more
  * — `Transform::setMaxPitch` clamps only to `PITCH_MAX = M_PI` — but the
  * React Native wrapper exposes no max-pitch prop, and a Camera `pitch` above
- * this is clamped natively. Raising it needs native code (a store build).
+ * this is clamped natively. Raising it needs native code (a store build) —
+ * the native terrain module does (see `TERRAIN_MAX_PITCH_DEG`).
  */
 export const MAP_MAX_PITCH_DEG = 60;
 
