@@ -15,7 +15,16 @@ import { ECCC_ATTRIBUTION } from '@core/geo/weatherLayers';
 export interface MapCreditLine {
   /** Stable key (tests, React keys). */
   id:
-    'base' | 'labels' | 'imagery' | 'terrain' | 'peaks' | 'pdf' | 'routing' | 'weather' | 'marine';
+    | 'base'
+    | 'labels'
+    | 'imagery'
+    | 'terrain'
+    | 'peaks'
+    | 'regions'
+    | 'pdf'
+    | 'routing'
+    | 'weather'
+    | 'marine';
   /** The section label ("Base map", "Routing"). */
   label: string;
   /** The © line itself. */
@@ -44,6 +53,7 @@ export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright';
 /** OpenStreetMap's "report a problem" page, the link the routing engines' terms ask for. */
 export const FIX_THE_MAP_URL = 'https://www.openstreetmap.org/fixthemap';
 const PROTOMAPS_URL = 'https://protomaps.com';
+const NATURAL_EARTH_URL = 'https://www.naturalearthdata.com/about/terms-of-use/';
 const ESRI_IMAGERY_URL =
   'https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9';
 /** Tilezen's attribution page for the Terrain Tiles' underlying DEMs. */
@@ -101,6 +111,13 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
       label: 'Peaks',
       credit: '© OpenStreetMap contributors',
       link: { label: 'protomaps.com', url: PROTOMAPS_URL },
+    });
+    // Province and state names worldwide ride the same labels (Natural Earth).
+    lines.push({
+      id: 'regions',
+      label: 'Province & state names',
+      credit: 'Natural Earth (public domain)',
+      link: { label: 'naturalearthdata.com', url: NATURAL_EARTH_URL },
     });
   }
   if (input.pdfMaps.length > 0) {
