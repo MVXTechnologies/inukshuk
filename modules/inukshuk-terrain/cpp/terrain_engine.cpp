@@ -280,6 +280,12 @@ void Engine::removePolyline(int id) {
   if (repaint_) repaint_();
 }
 
+void Engine::setLabelInsets(double topPx, double bottomPx) {
+  std::lock_guard<std::mutex> lock(sceneMutex_);
+  labelTopPx_ = std::max(0.0, topPx);
+  labelBottomPx_ = std::max(0.0, bottomPx);
+}
+
 void Engine::setPuck(bool visible, double mercX, double mercY) {
   std::lock_guard<std::mutex> lock(sceneMutex_);
   puckVisible_ = visible;
@@ -1010,6 +1016,8 @@ FrameOutput Engine::frame(const FrameInput& in) {
     po.ctc = sel.ctc;
     po.hRef = hRef;
     po.heightScale = heightScale;
+    po.topPx = labelTopPx_;
+    po.bottomPx = labelBottomPx_;
     po.dtMs = dt;
     po.nowMs = now;
     po.fadeFromCtc = out.look.fogEndCtc * 0.55;

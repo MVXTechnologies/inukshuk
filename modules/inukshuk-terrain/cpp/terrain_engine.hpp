@@ -236,6 +236,8 @@ class Engine {
   void setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style);
   void removePolyline(int id);
   void setPuck(bool visible, double mercX, double mercY);
+  /** UI bands (logical px) pins stay clear of: top (search/status bar) and bottom bar. */
+  void setLabelInsets(double topPx, double bottomPx);
   /** Water and glacier polygons (rings in mercator [0,1]) for the surface masks. */
   void setMasks(std::vector<std::vector<Pt>> water, std::vector<std::vector<Pt>> glacier);
 
@@ -370,6 +372,7 @@ class Engine {
   std::unordered_map<int, Polyline> polylines_;
   uint32_t lineVersion_ = 0;
   bool puckVisible_ = false;
+  double labelTopPx_ = 0, labelBottomPx_ = 0;
   double puckX_ = 0, puckY_ = 0;
 
   // Bake worker.

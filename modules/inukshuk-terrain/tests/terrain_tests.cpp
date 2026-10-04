@@ -340,6 +340,15 @@ static void testScene(const Json& fx) {
       o.occluded = [](const LabelInput& l) { return l.id % 7 == 3; };
       std::vector<LabelInput> sub(inputs.begin(), inputs.begin() + (30 - f * 3));
       const auto placed = placeLabels(sub, states, o);
+      if (f == 0) {
+        // UI bands covering the whole screen hide every plate (labels.ts parity).
+        PlaceOptions banded = o;
+        banded.topPx = H / 2;
+        banded.bottomPx = H / 2;
+        std::unordered_map<int, LabelState> fresh;
+        banded.dtMs = 1000;
+        CHECK(placeLabels(sub, fresh, banded).empty());
+      }
       const auto& want = frames[f].arr();
       CHECK(placed.size() == want.size());
       for (size_t k = 0; k < std::min(placed.size(), want.size()); k++) {

@@ -9,6 +9,7 @@ struct TerrainConfig: Record {
   @Field var labelTheme: [Double] = []
   @Field var nameFields: [String] = ["name"]
   @Field var labels: Bool = true
+  @Field var labelInsets: [Double] = []
 }
 
 struct TerrainLine: Record {
@@ -55,6 +56,8 @@ public final class InukshukTerrainModule: Module {
         controller.setLabelTheme(
           config.labelTheme.map { NSNumber(value: $0) }, nameFields: config.nameFields,
           labels: config.labels)
+        controller.setLabelInsetsTop(
+          config.labelInsets.first ?? 0, bottom: config.labelInsets.dropFirst().first ?? 0)
         self.controllers[viewTag] = controller
       }
       return ok
@@ -67,10 +70,13 @@ public final class InukshukTerrainModule: Module {
       let theme = config.labelTheme.map { NSNumber(value: $0) }
       let fields = config.nameFields
       let labels = config.labels
+      let insetTop = config.labelInsets.first ?? 0
+      let insetBottom = config.labelInsets.dropFirst().first ?? 0
       DispatchQueue.main.async {
         guard let c = self.controllers[viewTag] else { return }
         c.update(withLook: look, enabled: enabled, networkAllowed: net)
         c.setLabelTheme(theme, nameFields: fields, labels: labels)
+        c.setLabelInsetsTop(insetTop, bottom: insetBottom)
       }
     }
 

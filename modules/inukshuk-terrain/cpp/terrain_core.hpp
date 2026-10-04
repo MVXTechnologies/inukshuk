@@ -257,6 +257,8 @@ struct PlaceOptions {
   double fadeFromCtc = 7, fadeToCtc = 10;
   int maxLabels = 64;
   std::function<bool(const LabelInput&)> occluded;
+  /** UI bands (px) a plate stays clear of: search/status bar, bottom bar (labels.ts). */
+  double topPx = 0, bottomPx = 0;
 };
 double labelScale(double distance, double ctc);
 bool rectsOverlap(const std::array<double, 4>& a, const std::array<double, 4>& b, double pad);

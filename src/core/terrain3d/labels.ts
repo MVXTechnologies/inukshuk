@@ -73,6 +73,12 @@ export interface PlaceOptions {
   /** True when the terrain hides the anchor (see {@link occludedByTerrain}). */
   occluded?: (l: LabelInput, eye: Vec3 | null) => boolean;
   eye?: Vec3 | null;
+  /**
+   * UI bands (px) a plate must stay clear of entirely: the search/status bar
+   * at the top and the bottom bar. 0 = the plain screen edge.
+   */
+  topPx?: number;
+  bottomPx?: number;
 }
 
 export const DEFAULT_STEM_PX = 26;
@@ -188,7 +194,11 @@ export function placeLabels(
     seen.add(c.l.id);
     const st = states.get(c.l.id) ?? { opacity: 0, shownAt: -Infinity };
     const r = plateRect(c.gx, c.gy, c.l.w * c.scale, c.l.ph * c.scale, stem * c.scale);
-    const onScreen = r.x1 > 0 && r.x0 < o.width && r.y1 > 0 && r.y0 < o.height;
+    const top = o.topPx ?? 0;
+    const bottom = o.bottomPx ?? 0;
+    const clearTop = top > 0 ? r.y0 >= top : r.y1 > 0;
+    const clearBottom = bottom > 0 ? r.y1 <= o.height - bottom : r.y0 < o.height;
+    const onScreen = r.x1 > 0 && r.x0 < o.width && clearTop && clearBottom;
     let want = onScreen && taken.length < maxLabels && !taken.some((t) => rectsOverlap(r, t, pad));
     if (want && o.occluded && o.occluded(c.l, o.eye ?? null)) want = false;
     if (want) {

@@ -183,7 +183,9 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
     LabelState st = it == states.end() ? LabelState{} : it->second;
     const double w = c.l->w * c.scale, h = c.l->ph * c.scale, stem = o.stemPx * c.scale;
     const std::array<double, 4> r = {c.gx - w / 2, c.gy - stem - h, c.gx + w / 2, c.gy - stem};
-    const bool onScreen = r[2] > 0 && r[0] < o.width && r[3] > 0 && r[1] < o.height;
+    const bool clearTop = o.topPx > 0 ? r[1] >= o.topPx : r[3] > 0;
+    const bool clearBottom = o.bottomPx > 0 ? r[3] <= o.height - o.bottomPx : r[1] < o.height;
+    const bool onScreen = r[2] > 0 && r[0] < o.width && clearTop && clearBottom;
     bool want = onScreen && static_cast<int>(taken.size()) < o.maxLabels;
     if (want) {
       for (const auto& t : taken) {

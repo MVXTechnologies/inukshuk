@@ -30,6 +30,8 @@ export interface NativeTerrainOptions {
   /** 3D pin labels (peaks, places, huts…). */
   labels?: boolean;
   labelLanguage?: 'local' | 'fr' | 'en';
+  /** UI bands (logical px) the pins stay clear of: the top chrome and the bottom bar. */
+  labelInsets?: { top: number; bottom: number };
   /**
    * The live 2D style: draped per terrain tile (the map painted crisply on
    * the relief, as Outmap/Mapbox do). Omitted = the shaded relief model.
@@ -104,6 +106,7 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
       }),
       nameFields: nameFieldsFor(o.labelLanguage),
       labels: o.labels ?? true,
+      labelInsets: [o.labelInsets?.top ?? 0, o.labelInsets?.bottom ?? 0],
     };
   }, [
     o.basemap,
@@ -115,6 +118,8 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
     o.contours,
     o.labels,
     o.labelLanguage,
+    o.labelInsets?.top,
+    o.labelInsets?.bottom,
   ]);
 
   const configRef = useRef(config);

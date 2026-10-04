@@ -50,6 +50,11 @@ export function useTerrainQa(
         return typeof v === 'string' ? v : undefined;
       };
       if (q('tqa') !== '1') return;
+      // QA builds only (this hook is inert without EXPO_PUBLIC_TERRAIN_QA=1):
+      // the harness always drives the beta 3D terrain.
+      if (!useSettingsStore.getState().betaTerrain3d) {
+        useSettingsStore.getState().set('betaTerrain3d', true);
+      }
       const num = (k: string) => {
         const v = q(k);
         return v === undefined ? undefined : Number(v);

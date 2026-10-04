@@ -14,6 +14,7 @@ import {
 import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
+import { BetaFeaturesSection } from './BetaFeaturesSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
@@ -562,6 +563,21 @@ export function SettingsScreen() {
           >
             <View style={styles.accordionBody}>
               <ConnectionsSection showSnack={showSnack} />
+            </View>
+          </List.Accordion>
+
+          <Divider />
+
+          <List.Accordion
+            id="beta"
+            title="Beta features"
+            description="Try features before they are finished"
+            left={(p) => <List.Icon {...p} icon="flask-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
+          >
+            <View style={styles.accordionBody}>
+              <BetaFeaturesSection />
             </View>
           </List.Accordion>
 

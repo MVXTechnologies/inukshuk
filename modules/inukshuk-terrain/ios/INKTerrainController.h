@@ -27,6 +27,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setLabelTheme:(NSArray<NSNumber *> *)theme
            nameFields:(NSArray<NSString *> *)nameFields
                labels:(BOOL)labels;
+/** UI bands (logical px) the pins stay clear of: top chrome, bottom bar. */
+- (void)setLabelInsetsTop:(double)top bottom:(double)bottom;
 /** Replaces every line: dictionaries {id, coords: [lng, lat, …], style: [11 floats]}. */
 - (void)setLines:(NSArray<NSDictionary *> *)lines;
 - (void)setPuckVisible:(BOOL)visible lng:(double)lng lat:(double)lat;

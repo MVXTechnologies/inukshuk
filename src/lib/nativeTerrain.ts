@@ -22,6 +22,8 @@ export interface NativeTerrainConfig {
   nameFields: string[];
   /** Draw the 3D pin labels. */
   labels: boolean;
+  /** UI bands (logical px) the pins stay clear of: [top (search/status bar), bottom bar]. */
+  labelInsets: number[];
 }
 
 export type { TerrainLineSpec as NativeTerrainLine } from '@core/terrain3d/sceneInput';

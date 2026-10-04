@@ -875,6 +875,11 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   if (changed) [self refreshScene:YES];
 }
 
+- (void)setLabelInsetsTop:(double)top bottom:(double)bottom {
+  if (_detached.load()) return;
+  _engine->setLabelInsets(top, bottom);
+}
+
 - (void)setLines:(NSArray<NSDictionary *> *)lines {
   if (_detached.load()) return;
   std::unordered_set<int> keep;
@@ -1097,7 +1102,17 @@ static std::vector<uint8_t> decodeImagery(NSData *data) {
 
 // ---- drape: the 2D style rendered per terrain tile ------------------------------------------------
 
-static constexpr int kDrapeSlots = 160;
+/**
+ * Drape textures kept on the GPU (512² RGBA8 + mips ≈ 1.4 MB each), by the
+ * device's memory: ~90 MB under 4 GB, ~157 MB under 6 GB, ~224 MB above.
+ * Fewer slots only mean more re-renders when panning back.
+ */
+static int drapeSlotBudget(void) {
+  const unsigned long long gb = NSProcessInfo.processInfo.physicalMemory >> 30;
+  if (gb < 4) return 64;
+  if (gb < 6) return 112;
+  return 160;
+}
 static constexpr int kDrapeSnapshotters = 3;
 
 - (DrapeParams)drapeParamsNow {
@@ -1123,18 +1138,18 @@ static constexpr int kDrapeSnapshotters = 3;
   _drapeJobs.clear();
   if (!hash) {
     _drapeURL = nil;
-    _engine->setDrape(false, kDrapeSlots);
+    _engine->setDrape(false, drapeSlotBudget());
     return;
   }
   NSString *path = [_drapeDir stringByAppendingPathComponent:[NSString stringWithFormat:@"style-%@.json", hash]];
   if (![json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil]) {
     _drapeURL = nil;
-    _engine->setDrape(false, kDrapeSlots);
+    _engine->setDrape(false, drapeSlotBudget());
     return;
   }
   _drapeURL = [NSURL fileURLWithPath:path];
   _drapeGen++;
-  _engine->setDrape(true, kDrapeSlots);
+  _engine->setDrape(true, drapeSlotBudget());
   _engine->resetImagery();  // a new style: every drape re-renders (the generation drops stale ones)
   [self requestRepaint];
 }

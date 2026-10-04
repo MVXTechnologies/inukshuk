@@ -195,6 +195,10 @@ import { useMapDrawing } from './draw/useMapDrawing';
 
 /** Kept out of the 3D drape: the 2D tilted-relief pass (the mesh is the relief). */
 const TERRAIN_DRAPE_DROP_IDS: readonly string[] = [TILT_RELIEF_LAYER_ID];
+/** Height (px) of the floating search row under the status bar: 3D pins stay below it. */
+const TERRAIN_PIN_TOP_CHROME = 72;
+/** The scale-bar row at the map's bottom edge: 3D pins stay above it. */
+const TERRAIN_PIN_BOTTOM_CHROME = 56;
 /** Softened in the drape: the contour lines and (over satellite) their casings. */
 const TERRAIN_DRAPE_CONTOUR_IDS: readonly string[] = CONTOUR_LINE_LAYER_IDS.flatMap((id) => [
   id,
@@ -498,6 +502,7 @@ export function MapScreen() {
   const showParks = useSettingsStore((s) => s.showParks);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
+  const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
   /**
    * Non-null while the map maker is open: the print style whose raster the
    * live map must render so the framed preview matches the sheet (#349).
@@ -869,7 +874,9 @@ export function MapScreen() {
     hostRef: terrainHostRef,
     mapLoaded,
     relief: tiltRelief,
-    allowed: editorStyle === null && !terrainQa.disabled,
+    // Beta (Settings → Beta features): off = the native layer is never
+    // attached and the map tilts to 60° with its 2D relief pass, as before.
+    allowed: betaTerrain3d && editorStyle === null && !terrainQa.disabled,
     basemap: basemap === 'satellite' ? 'satellite' : 'map',
     dark: theme.dark,
     networkAllowed: !offlineOnly,
@@ -877,10 +884,13 @@ export function MapScreen() {
     debugFlags: terrainQa.debugFlags,
     // The map draws its contours always; satellite follows its contour setting.
     contours: basemap === 'satellite' ? terrainContours : true,
-    style: style as unknown as DrapeStyleInput,
+    // Only while the beta is on: no drape JSON is built otherwise.
+    style: betaTerrain3d ? (style as unknown as DrapeStyleInput) : undefined,
     drapeDropLayerIds: TERRAIN_DRAPE_DROP_IDS,
     hillshadeLayerId: HILLSHADE_2D_LAYER_ID,
     contourLayerIds: TERRAIN_DRAPE_CONTOUR_IDS,
+    // Pins stay clear of the search/status band and the scale-bar row.
+    labelInsets: { top: insets.top + TERRAIN_PIN_TOP_CHROME, bottom: TERRAIN_PIN_BOTTOM_CHROME },
     demSourceId: HILLSHADE_DEM_SOURCE_ID,
   });
   useEffect(() => {

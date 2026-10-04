@@ -189,3 +189,35 @@ describe('priorities', () => {
     expect(poiPriority(null)).toBeGreaterThan(peakPriority(9, 2000));
   });
 });
+
+describe('placeLabels UI bands', () => {
+  it('keeps plates out of the top and bottom bands', () => {
+    // The base camera puts label (0,0) at the screen centre; a tall top band
+    // covering it and a bottom band each hide it, no band shows it.
+    const states = new Map<number, LabelState>();
+    const shown = placeLabels([lbl(1, 0, 0, 5)], states, { ...base, dtMs: 1000 });
+    expect(shown.length).toBe(1);
+    const p = shown[0];
+    if (!p) throw new Error('placed');
+    const plateTop = p.cy - 11;
+    const hidTop = placeLabels([lbl(1, 0, 0, 5)], new Map(), {
+      ...base,
+      dtMs: 1000,
+      topPx: plateTop + 5,
+    });
+    expect(hidTop.length).toBe(0);
+    const hidBottom = placeLabels([lbl(1, 0, 0, 5)], new Map(), {
+      ...base,
+      dtMs: 1000,
+      bottomPx: base.height - p.cy,
+    });
+    expect(hidBottom.length).toBe(0);
+    const clear = placeLabels([lbl(1, 0, 0, 5)], new Map(), {
+      ...base,
+      dtMs: 1000,
+      topPx: 10,
+      bottomPx: 10,
+    });
+    expect(clear.length).toBe(1);
+  });
+});
