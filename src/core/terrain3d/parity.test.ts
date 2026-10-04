@@ -264,6 +264,32 @@ describe('C++ parity fixtures', () => {
       fs.writeFileSync(FIXTURE, JSON.stringify(data));
     }
     const committed = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as unknown;
-    expect(committed).toEqual(data);
+    expectClose(committed, data, '$');
   });
 });
+
+/**
+ * Deep equality that allows last-bit float differences: Math.sin/cos/atan2
+ * are not correctly rounded, so V8 on Linux x86 and macOS arm64 disagree in
+ * the final ULP and an exact comparison fails on CI only.
+ */
+function expectClose(a: unknown, b: unknown, at: string): void {
+  if (typeof a === 'number' && typeof b === 'number') {
+    const tol = 1e-12 * Math.max(1, Math.abs(a), Math.abs(b));
+    if (Math.abs(a - b) > tol) throw new Error(`${at}: ${a} !== ${b}`);
+    return;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    expect(a.length).toBe(b.length);
+    a.forEach((v, i) => expectClose(v, b[i], `${at}[${i}]`));
+    return;
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const ra = a as Record<string, unknown>;
+    const rb = b as Record<string, unknown>;
+    expect(Object.keys(ra).sort()).toEqual(Object.keys(rb).sort());
+    for (const k of Object.keys(ra)) expectClose(ra[k], rb[k], `${at}.${k}`);
+    return;
+  }
+  expect(a).toEqual(b);
+}
