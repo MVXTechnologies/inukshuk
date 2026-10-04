@@ -196,6 +196,8 @@ class Engine {
   static constexpr int kImagerySlots = 192;
   static constexpr int kImageryUploadsPerFrame = 6;
   static constexpr double kImageryFadeMs = 300;
+  /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
+  static constexpr size_t kMaxUnwantedImagery = 48;
 
   /**
    * `meshGrid`: cells per tile edge of the baked meshes (the LOD still splits
@@ -302,6 +304,13 @@ class Engine {
     int slot = -1;
     int size = kImagerySize, levels = 1;
     std::shared_ptr<const std::vector<uint8_t>> pending;
+    /**
+     * Uploaded only when wanted: requested by the engine, or asked for since it
+     * arrived as a block sibling. Unwanted siblings wait CPU-side (bounded) so
+     * they never evict textures still on screen.
+     */
+    bool wanted = false;
+    uint64_t arrived = 0;
     uint64_t lastFrame = 0;
   };
   struct TileImagery {
@@ -360,6 +369,7 @@ class Engine {
   std::unordered_set<uint64_t> imgPending_;
   std::unordered_map<uint64_t, double> imgFailedAt_;
   std::vector<int> freeImgSlots_;
+  uint64_t imgArrivals_ = 0;
   int imgSlotCount_ = kImagerySlots;
   std::atomic<bool> drape_{false};
   std::atomic<uint32_t> imgGeneration_{0};

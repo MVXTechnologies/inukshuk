@@ -39,7 +39,19 @@ class TerrainController(
   private val imagery = ImageryFetcher(context) { z, x, y, rgba ->
     lock.read { if (!destroyed.get()) TerrainNative.nativeOnImageryData(handle, z, x, y, rgba) }
   }
-  private val scene = SceneSource(context, map, object : SceneSource.Sink {
+  private val drapes = DrapeRenderer(
+    context,
+    { z, x, y, rgba, size, gen ->
+      lock.read {
+        if (!destroyed.get()) TerrainNative.nativeOnDrapeData(handle, z, x, y, rgba, size, gen)
+      }
+    },
+    { lock.read { if (destroyed.get()) 0 else TerrainNative.nativeImageryGeneration(handle) } },
+  )
+  private var drapeJson: String? = null
+  private var drapeSatellite = false
+  private var lastLook: FloatArray? = null
+  private val scene = SceneSource(context, map, mapView, object : SceneSource.Sink {
     override fun uploadSprite(x: Int, y: Int, w: Int, h: Int, rgba: ByteArray) =
       lock.read { if (!destroyed.get()) TerrainNative.nativeUploadSprite(handle, x, y, w, h, rgba) }
 
@@ -119,11 +131,56 @@ class TerrainController(
     lineIds.addAll(keep)
   }
 
+  /**
+   * The style JSON draped per tile ('' = none: the shaded relief model).
+   * Satellite (from the look) renders at the tile's zoom; the map one zoom out.
+   */
+  fun setDrapeStyle(json: String) {
+    if (destroyed.get()) return
+    val satellite = (lastLook?.getOrNull(LOOK_IMAGERY_INDEX) ?: 0f) > 0.5f
+    // QA (debug flag 16): the top drape tier whatever the device's memory.
+    val full = ((lastLook?.getOrNull(LOOK_DEBUG_INDEX) ?: 0f).toInt() and DEBUG_FULL_DRAPE) != 0
+    val next = json.ifEmpty { null }
+    if (next == drapeJson && satellite == drapeSatellite && full == drapes.full) return
+    drapeJson = next
+    drapeSatellite = satellite
+    drapes.full = full
+    drapes.setStyle(next, satellite)
+    scene.masksWanted = next == null
+    lock.read {
+      if (destroyed.get()) return
+      TerrainNative.nativeSetDrape(handle, next != null, drapes.slotBudget)
+      if (next != null) TerrainNative.nativeResetImagery(handle)
+    }
+    map.triggerRepaint()
+  }
+
+  /** UI bands (logical px) the pins stay clear of. */
+  fun setLabelInsets(top: Double, bottom: Double) = lock.read {
+    if (!destroyed.get()) TerrainNative.nativeSetLabelInsets(handle, top, bottom)
+  }
+
+  /** QA camera: centre, zoom, bearing, then the pitch past 60 directly. */
+  fun jumpTo(lat: Double, lng: Double, zoom: Double, pitch: Double, bearing: Double) {
+    map.moveCamera(
+      CameraUpdateFactory.newCameraPosition(
+        org.maplibre.android.camera.CameraPosition.Builder()
+          .target(org.maplibre.android.geometry.LatLng(lat, lng))
+          .zoom(zoom)
+          .bearing(bearing)
+          .tilt(minOf(pitch, LEGACY_MAX_PITCH))
+          .build(),
+      ),
+    )
+    if (pitch > LEGACY_MAX_PITCH) setPitch(pitch)
+  }
+
   fun setPuck(visible: Boolean, lng: Double, lat: Double) = lock.read {
     if (!destroyed.get()) TerrainNative.nativeSetPuck(handle, visible, mercX(lng), mercY(lat))
   }
 
   fun update(look: FloatArray, enabled: Boolean, networkAllowed: Boolean) {
+    lastLook = look
     lock.read {
       if (destroyed.get()) return
       TerrainNative.nativeSetLook(handle, look)
@@ -158,6 +215,7 @@ class TerrainController(
     layer = null
     fetcher.shutdown()
     imagery.shutdown()
+    drapes.shutdown()
     scene.shutdown()
     lock.write {
       TerrainNative.nativeDestroy(handle)
@@ -187,7 +245,13 @@ class TerrainController(
   }
 
   override fun requestImagery(z: Int, x: Int, y: Int) {
-    if (!destroyed.get()) imagery.fetch(z, x, y)
+    if (destroyed.get()) return
+    // A drape tile from the 2D style; without one, satellite falls back to raw Esri tiles.
+    if (drapeJson != null || (lastLook?.getOrNull(LOOK_IMAGERY_INDEX) ?: 0f) < 0.5f) {
+      drapes.request(z, x, y)
+    } else {
+      imagery.fetch(z, x, y)
+    }
   }
 
   override fun requestRepaint() {
@@ -340,6 +404,11 @@ class TerrainController(
     const val SCENE_EVERY_TICKS = 3
     const val SCENE_STALE_TICKS = 10
     const val SCENE_MIN_PITCH = 20.0
+    /** Index of the satellite flag in a packed look (src/core/terrain3d/look.ts packLook). */
+    const val LOOK_IMAGERY_INDEX = 39
+    const val LOOK_DEBUG_INDEX = 40
+    /** Look debug flag: force the top drape tier (QA screenshots on a low-RAM emulator). */
+    const val DEBUG_FULL_DRAPE = 16
 
     fun mercX(lng: Double) = (lng + 180.0) / 360.0
 

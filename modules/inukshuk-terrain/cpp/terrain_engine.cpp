@@ -197,12 +197,24 @@ void Engine::onImageryLevels(int z, int x, int y, std::vector<uint8_t> chain, in
     std::lock_guard<std::mutex> lock(imgMutex_);
     if (generation != imgGeneration_.load()) return;
     const uint64_t k = demKey64({z, x, y});
-    imgPending_.erase(k);
+    const bool requested = imgPending_.erase(k) > 0;
     imgFailedAt_.erase(k);
     auto& e = imagery_[k];
     e.pending = std::make_shared<const std::vector<uint8_t>>(std::move(chain));
     e.size = size;
     e.levels = levels;
+    e.wanted = e.wanted || requested || e.slot >= 0;
+    e.arrived = ++imgArrivals_;
+    if (!e.wanted) {
+      // Bound the unrequested siblings waiting CPU-side: drop the oldest.
+      std::vector<std::pair<uint64_t, uint64_t>> unwanted;
+      for (const auto& [key, en] : imagery_)
+        if (!en.wanted && en.slot < 0 && en.pending) unwanted.push_back({en.arrived, key});
+      if (unwanted.size() > kMaxUnwantedImagery) {
+        std::sort(unwanted.begin(), unwanted.end());
+        for (size_t i = 0; i + kMaxUnwantedImagery < unwanted.size(); i++) imagery_.erase(unwanted[i].second);
+      }
+    }
   }
   if (repaint_) repaint_();
 }
@@ -786,7 +798,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
     int uploads = 0;
     std::vector<uint64_t> ready;
     for (auto& [key, e] : imagery_)
-      if (e.pending) ready.push_back(key);
+      if (e.pending && e.wanted) ready.push_back(key);
     for (uint64_t key : ready) {
       if (uploads >= kImageryUploadsPerFrame) break;
       auto found = imagery_.find(key);
@@ -940,7 +952,12 @@ FrameOutput Engine::frame(const FrameInput& in) {
           const DemId id = demWindowAt(t, z).dem;
           const uint64_t k = demKey64(id);
           if (!seen.insert(k).second) continue;
-          if (imagery_.count(k) || imgPending_.count(k)) continue;
+          auto have = imagery_.find(k);
+          if (have != imagery_.end()) {
+            have->second.wanted = true;  // a block sibling that arrived earlier: upload it
+            continue;
+          }
+          if (imgPending_.count(k)) continue;
           auto f = imgFailedAt_.find(k);
           if (f != imgFailedAt_.end() && now - f->second < kRetryMs) continue;
           imgPending_.insert(k);

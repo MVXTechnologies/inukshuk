@@ -56,9 +56,29 @@ Architecture decision (evidence 2026-10-03):
   - Pins: candidates filtered to the view footprint before ranking (the
     loaded tiles held ~10 000 summits, truncated to off-screen ones).
 
-Open: Android port of the drape (MapSnapshotter + GLES per-slot textures),
-texture memory budget per device class, pin density vs Outmap, contour
-legibility at very steep slopes.
+Shipping as a beta (2026-10-04):
+
+- **Settings → Beta features → "3D terrain"** (`betaTerrain3d`, off by
+  default; registry in `src/core/settings/betaFeatures.ts`). Off = the native
+  layer is never attached and no drape style is built: the map tilts to 60°
+  with its 2D relief pass exactly as before. QA builds force it on from the
+  `tqa` deep link (`beta3d=0` keeps it off).
+- **Pins** stay clear of the search/status band and the bottom scale-bar row
+  (`placeLabels` `topPx`/`bottomPx`, both implementations).
+- **Drape budget by device memory** (both platforms): at least 128 slots
+  so every tile in view and its fallbacks fit, the texture size scaled
+  instead — 256² × 160 (~56 MB) under 4 GB, 512² × 128 (~179 MB) under 6 GB,
+  512² × 160 (~224 MB) above. Block siblings a 2×2 render produces are kept
+  CPU-side (≤ 48) and uploaded only once a tile asks for them — before, they
+  evicted on-screen textures and the drapes re-rendered in a loop.
+- **Android parity**: `DrapeRenderer` (MapLibre Android `MapSnapshotter`
+  subclass without logo/attribution, 2×2 blocks, three in parallel), a
+  mip-mapped `GL_TEXTURE_2D_ARRAY` with anisotropic filtering, 64-cell meshes
+  (height atlas rows of 2304 texels, two per tile), the same pin footprint
+  filter and compact plates.
+
+Open: pin density vs Outmap, contour legibility at very steep slopes,
+drape throughput on low-end GPUs (~350 ms per snapshot on the emulator).
 
 ## Phase 0 — what the platform gives us (verified 2026-10-02)
 

@@ -30,6 +30,9 @@ class TerrainConfig : Record {
   @Field var nameFields: List<String> = listOf("name")
 
   @Field var labels: Boolean = true
+
+  /** UI bands (logical px) the pins stay clear of: [top, bottom]. */
+  @Field var labelInsets: List<Double> = emptyList()
 }
 
 class TerrainLine : Record {
@@ -98,6 +101,7 @@ class InukshukTerrainModule : Module() {
         val c = TerrainController(mapView.context.applicationContext, mapView, map)
         c.attach(look(config), config.enabled, config.networkAllowed, config.maxPitch)
         c.setScene(LabelTheme.from(config.labelTheme), config.nameFields, config.labels)
+        c.setLabelInsets(config.labelInsets.getOrNull(0) ?: 0.0, config.labelInsets.getOrNull(1) ?: 0.0)
         controllers[viewTag] = c
         promise.resolve(true)
       }
@@ -110,6 +114,7 @@ class InukshukTerrainModule : Module() {
         controllers[viewTag]?.let {
           it.update(l, config.enabled, config.networkAllowed)
           it.setScene(theme, config.nameFields, config.labels)
+          it.setLabelInsets(config.labelInsets.getOrNull(0) ?: 0.0, config.labelInsets.getOrNull(1) ?: 0.0)
         }
       }
       Unit
@@ -129,6 +134,16 @@ class InukshukTerrainModule : Module() {
       main.post { controllers[viewTag]?.setLines(specs) }
       Unit
     }
+
+    Function("setDrapeStyle") { viewTag: Int, json: String ->
+      main.post { controllers[viewTag]?.setDrapeStyle(json) }
+      Unit
+    }
+
+    AsyncFunction("jumpTo") { viewTag: Int, lat: Double, lng: Double, zoom: Double, pitch: Double, bearing: Double ->
+      controllers[viewTag]?.jumpTo(lat, lng, zoom, pitch, bearing)
+      Unit
+    }.runOnQueue(Queues.MAIN)
 
     Function("setPuck") { viewTag: Int, visible: Boolean, lng: Double, lat: Double ->
       main.post { controllers[viewTag]?.setPuck(visible, lng, lat) }

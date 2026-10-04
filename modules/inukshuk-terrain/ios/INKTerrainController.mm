@@ -1103,24 +1103,27 @@ static std::vector<uint8_t> decodeImagery(NSData *data) {
 // ---- drape: the 2D style rendered per terrain tile ------------------------------------------------
 
 /**
- * Drape textures kept on the GPU (512² RGBA8 + mips ≈ 1.4 MB each), by the
- * device's memory: ~90 MB under 4 GB, ~157 MB under 6 GB, ~224 MB above.
- * Fewer slots only mean more re-renders when panning back.
+ * Drape budget by device memory (Android twin: DrapeRenderer): enough slots
+ * for every tile in view plus its fallbacks (≥ 128; fewer starve near tiles
+ * onto coarse ancestors), the texture size scaled instead — 256² × 160
+ * (~56 MB) under 4 GB, 512² × 128 (~179 MB) under 6 GB, 512² × 160
+ * (~224 MB) above.
  */
+static unsigned long long deviceGb(void) { return NSProcessInfo.processInfo.physicalMemory >> 30; }
 static int drapeSlotBudget(void) {
-  const unsigned long long gb = NSProcessInfo.processInfo.physicalMemory >> 30;
-  if (gb < 4) return 64;
-  if (gb < 6) return 112;
-  return 160;
+  const unsigned long long gb = deviceGb();
+  return gb >= 4 && gb < 6 ? 128 : 160;
 }
+static int drapeTextureSize(void) { return deviceGb() < 4 ? 256 : 512; }
 static constexpr int kDrapeSnapshotters = 3;
 
 - (DrapeParams)drapeParamsNow {
   // Map: the tile drawn at one zoom out (the 2D map at the scale a terrain
   // tile actually shows), at 2×. Satellite: at the tile's zoom, 1× — the
   // imagery's own 512 px per tile.
-  if (_engine->look().imagery > 0.5f) return {0, 512};
-  return {-1, 512};
+  const int tex = drapeTextureSize();
+  if (_engine->look().imagery > 0.5f) return {0, tex};
+  return {-1, tex};
 }
 
 - (void)setDrapeStyle:(NSString *)json {

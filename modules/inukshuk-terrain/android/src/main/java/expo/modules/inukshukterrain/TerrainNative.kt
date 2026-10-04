@@ -41,6 +41,23 @@ object TerrainNative {
   /** 256² RGBA8 satellite pixels, or null when the tile failed. */
   @JvmStatic external fun nativeOnImageryData(handle: Long, z: Int, x: Int, y: Int, rgba: ByteArray?)
 
+  /** Drape mode on/off and its GPU texture slots (resets every drape texture when changed). */
+  @JvmStatic external fun nativeSetDrape(handle: Long, on: Boolean, slots: Int)
+
+  /** Forget every drape texture (a new style). */
+  @JvmStatic external fun nativeResetImagery(handle: Long)
+
+  /** The current drape generation: results tagged with an older one are dropped. */
+  @JvmStatic external fun nativeImageryGeneration(handle: Long): Int
+
+  /** A drape tile, size² RGBA8; the mip chain is built natively. */
+  @JvmStatic external fun nativeOnDrapeData(
+    handle: Long, z: Int, x: Int, y: Int, rgba: ByteArray?, size: Int, generation: Int,
+  )
+
+  /** UI bands (logical px) the pins stay clear of. */
+  @JvmStatic external fun nativeSetLabelInsets(handle: Long, top: Double, bottom: Double)
+
   /**
    * 11 doubles per label: id, mercX, mercY, kind, priority, w, h, u0, v0, u1, v1; `ink`
    * (rgb) colours the stems and ground dots.

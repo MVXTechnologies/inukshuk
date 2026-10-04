@@ -60,6 +60,8 @@ data class LabelTheme(
 class SceneSource(
   context: Context,
   private val map: MapLibreMap,
+  /** The map view (its size bounds the label footprint). */
+  private val view: android.view.View,
   private val sink: Sink,
 ) {
   interface Sink {
@@ -73,6 +75,9 @@ class SceneSource(
   @Volatile var theme = LabelTheme()
   @Volatile var nameFields: List<String> = listOf("name")
   var labelsEnabled = true
+
+  /** Under a drape the map paints its own water and glaciers: no masks needed. */
+  @Volatile var masksWanted = true
 
   private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
     Thread(r, "terrain-labels").apply {
@@ -112,7 +117,7 @@ class SceneSource(
           for (f in base.querySourceFeatures(arrayOf("water"), null)) lake(f)?.let(candidates::add)
         }
       }
-      if (base != null) {
+      if (base != null && masksWanted) {
         water = rings(base.querySourceFeatures(arrayOf("water"), null))
         val isGlacier = Expression.eq(Expression.get("kind"), Expression.literal("glacier"))
         // Generalised glaciers at low zoom (landcover), the real outlines from z~10 (landuse).
@@ -122,11 +127,28 @@ class SceneSource(
       Log.w(TAG, "scene query failed", e)
       return
     }
+    // Keep what the view can show: the loaded vector tiles span far more than
+    // the frame, and the atlas only takes the best MAX_LABELS. A generous 2D
+    // footprint (relief lifts summits up the screen, so the band above the
+    // top edge counts too). Twin of the iOS controller's filter.
+    val proj = map.projection
+    val w = view.width.toDouble()
+    val h = view.height.toDouble()
+    val inView = if (w > 0 && h > 0) {
+      candidates.filter { c ->
+        val p = proj.toScreenLocation(org.maplibre.android.geometry.LatLng(c.lat, c.lng))
+        val x = p.x.toDouble()
+        val y = p.y.toDouble()
+        x.isFinite() && y.isFinite() && x >= -0.3 * w && x <= 1.3 * w && y >= -1.2 * h && y <= 1.3 * h
+      }
+    } else {
+      candidates
+    }
     val t = theme
     worker.execute {
       try {
         publishMasks(water, ice)
-        publishLabels(candidates, t)
+        publishLabels(inView, t)
       } catch (e: Throwable) {
         Log.w(TAG, "scene publish failed", e)
       }
@@ -278,9 +300,9 @@ class SceneSource(
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
       typeface = if (c.kind == KIND_POI || c.kind == KIND_WATER) regular else bold
       textSize = s * when (c.kind) {
-        KIND_PLACE -> if (c.major) 14.5f else 13f
-        KIND_PEAK -> 12.5f
-        else -> 11.5f
+        KIND_PLACE -> if (c.major) 13.5f else 12.5f
+        KIND_PEAK -> 12f
+        else -> 11f
       }
       color = when (c.kind) {
         KIND_WATER -> color(t.water)
@@ -291,13 +313,13 @@ class SceneSource(
     }
     val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       typeface = regular
-      textSize = s * 10.5f
+      textSize = s * 9.5f
       color = color(t.muted)
     }
     val title = ellipsize(c.title, titlePaint, s * 150f)
-    val padX = 7f * s
-    val padY = 4f * s
-    val gap = 1f * s
+    val padX = 5f * s
+    val padY = 2.5f * s
+    val gap = 0f
     val tw = titlePaint.measureText(title)
     val sw = c.sub?.let { subPaint.measureText(it) } ?: 0f
     val tfm = titlePaint.fontMetrics

@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -48,6 +49,8 @@ layout(location = 0) in vec3 a_grid;   // u, v, skirt
 // Every visible tile in ONE instanced draw: per-tile heights in an RGBA32F
 // atlas row (hFrom, hTo, slopeX, slopeY per vertex), per-tile data in a block.
 uniform sampler2D u_atlas;
+const int ATLAS_W = 2304;
+const int ATLAS_ROWS = 2;
 layout(std140) uniform Tiles {
   mat4 u_m[128];
   vec4 u_p[128];   // morph, fromFlat, skirt depth * ramp, slot (-1 flat)
@@ -67,7 +70,10 @@ flat out float v_blend;
 void main() {
   mat4 m = u_m[gl_InstanceID];
   vec4 p = u_p[gl_InstanceID];
-  vec4 a = p.w < 0.0 ? vec4(0.0) : texelFetch(u_atlas, ivec2(gl_VertexID, int(p.w)), 0);
+  // Each tile's vertices span ATLAS_ROWS rows of ATLAS_W texels (64-cell meshes).
+  vec4 a = p.w < 0.0 ? vec4(0.0)
+                     : texelFetch(u_atlas, ivec2(gl_VertexID % ATLAS_W,
+                                                 int(p.w) * ATLAS_ROWS + gl_VertexID / ATLAS_W), 0);
   float to = a.y - u_hRef;
   float from = p.y > 0.5 ? 0.0 : a.x - u_hRef;
   float dh = mix(to, from, p.x);
@@ -89,7 +95,7 @@ const char* kTerrainFs = R"(#version 300 es
 precision highp float;
 precision highp sampler2DArray;
 uniform sampler2DArray u_detail;   // 64² per slot: slopeX, slopeY, water, glacier
-uniform sampler2DArray u_imagery;  // 256² per slot
+uniform sampler2DArray u_imagery;  // drape/imagery per slot (mip-mapped)
 uniform vec3 u_light;
 uniform float u_exag;
 uniform vec3 u_fogColor;
@@ -144,7 +150,9 @@ void main() {
                           : texture(u_imagery, vec3(v_ib.yz + v_uvs.xy * v_ib.w, v_ib.x)).rgb;
     vec3 a = v_ia.x < 0.0 ? b : texture(u_imagery, vec3(v_ia.yz + v_uvs.xy * v_ia.w, v_ia.x)).rgb;
     c = mix(a, b, v_blend);
-    c *= 1.0 + (lambert - flatL) * u_form;
+    // The drape carries the 2D hillshade's detail; the mesh adds the large forms.
+    float form = lambert - flatL;
+    c *= 1.0 + (form > 0.0 ? form * 0.6 : form) * u_form;
   } else {
     // shadeSurface (src/core/terrain3d/surface.ts)
     float rock = smoothstep(2200.0, 3400.0, v_h) * 0.35;
@@ -343,8 +351,13 @@ GLuint link(const char* vs, const char* fs) {
 
 // ---- GL renderer ---------------------------------------------------------------
 
-constexpr int kAtlasWidth = 1224;  // >= vertexCount(kGrid) = 1221
-constexpr int kAtlasSlots = 512;
+/** Mesh cells per tile edge: twice the LOD grid (iOS twin: kMeshGrid in INKTerrainController.mm). */
+constexpr int kMeshGrid = 64;
+/** Height-atlas rows: each tile's vertexCount(kMeshGrid) = 4485 texels span kAtlasRows rows. */
+constexpr int kAtlasWidth = 2304;
+constexpr int kAtlasRows = 2;
+constexpr int kAtlasSlots = 384;
+static_assert(kAtlasWidth * kAtlasRows >= 4485, "atlas rows hold a 64-cell tile");
 constexpr int kBatch = 128;        // instances per draw (std140 block ≤ 16 KB)
 constexpr int kInstanceFloats = 16 + 4 * 4;
 constexpr GLuint kTilesBinding = 20;
@@ -448,8 +461,8 @@ struct GlRenderer {
     pu.view = glGetUniformLocation(spriteProgram, "u_view");
     pu.sprites = glGetUniformLocation(spriteProgram, "u_sprites");
 
-    const auto verts = buildGridVertices(kGrid);
-    const auto idx32 = buildGridIndices(kGrid);
+    const auto verts = buildGridVertices(kMeshGrid);
+    const auto idx32 = buildGridIndices(kMeshGrid);
     std::vector<uint16_t> idx(idx32.begin(), idx32.end());
     indexCount = static_cast<GLsizei>(idx.size());
     glGenVertexArrays(1, &vao);
@@ -474,7 +487,8 @@ struct GlRenderer {
 
     glGenTextures(1, &atlasTex);
     glBindTexture(GL_TEXTURE_2D, atlasTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, kAtlasWidth, kAtlasSlots, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, kAtlasWidth, kAtlasSlots * kAtlasRows, 0, GL_RGBA, GL_FLOAT,
+                 nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -513,22 +527,38 @@ struct GlRenderer {
 
     freeSlots.clear();
     for (int i = kAtlasSlots - 1; i >= 0; i--) freeSlots.push_back(i);
+    const char* ext = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+    if (ext && std::strstr(ext, "GL_EXT_texture_filter_anisotropic")) {
+      GLfloat maxA = 1.f;
+      glGetFloatv(0x84FF /* MAX_TEXTURE_MAX_ANISOTROPY_EXT */, &maxA);
+      anisotropy = std::min(16.f, maxA);
+    }
     ubo.assign(kBatch * kInstanceFloats, 0.f);
     ready = true;
     LOGI("GL renderer ready");
   }
 
-  void ensureImageryTex() {
-    if (imageryTex) return;
+  /** The drape/imagery array matching `size`/`levels`/`layers` (recreated when they change). */
+  int imgSize = 0, imgLevels = 0, imgLayers = 0;
+  void ensureImageryTex(int size, int levels, int layers) {
+    if (imageryTex && size == imgSize && levels == imgLevels && layers == imgLayers) return;
+    if (imageryTex) glDeleteTextures(1, &imageryTex);
+    imageryTex = 0;
+    if (size <= 0 || layers <= 0) return;
     glGenTextures(1, &imageryTex);
     glBindTexture(GL_TEXTURE_2D_ARRAY, imageryTex);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, kImagerySize, kImagerySize, Engine::kImagerySlots,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, std::max(1, levels), GL_RGBA8, size, size, layers);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER,
+                    levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (anisotropy > 1.f) glTexParameterf(GL_TEXTURE_2D_ARRAY, 0x84FE /* MAX_ANISOTROPY_EXT */, anisotropy);
+    imgSize = size;
+    imgLevels = levels;
+    imgLayers = layers;
   }
+  float anisotropy = 0.f;
 
   void forget() { *this = GlRenderer{}; }
 
@@ -567,8 +597,14 @@ struct GlRenderer {
       // Upload through the textures' own units (unit 0 is not ours to rebind mid-draw).
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, atlasTex);
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, t.slot, vertexCount(kGrid), 1, GL_RGBA, GL_FLOAT,
-                      d.attributes->data());
+      const int nv = vertexCount(kMeshGrid);
+      for (int r = 0; r < kAtlasRows; r++) {
+        const int first = r * kAtlasWidth;
+        const int count = std::min(kAtlasWidth, nv - first);
+        if (count <= 0) break;
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, t.slot * kAtlasRows + r, count, 1, GL_RGBA, GL_FLOAT,
+                        d.attributes->data() + static_cast<size_t>(first) * kAttributesPerVertex);
+      }
       if (d.detail) {
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D_ARRAY, detailTex);
@@ -614,7 +650,7 @@ struct GlRenderer {
       spriteVerts.insert(spriteVerts.end(), {p[0], p[1], p[2], p[3], col[0], col[1], col[2], col[3], mode});
   }
 
-  void draw(const FrameOutput& out, const float* ink) {
+  void draw(const FrameOutput& out, const float* ink, int imagerySlots) {
     frameNo++;
     GLint vp[4];
     glGetIntegerv(GL_VIEWPORT, vp);
@@ -622,7 +658,7 @@ struct GlRenderer {
     const float density = static_cast<float>(vp[2]) / out.width;
     const int dbg = out.look.debugFlags;
     const float ramp = out.ramp;
-    const bool imageryMode = out.look.imagery > 0.5f;
+    const bool imageryMode = out.drape || out.look.imagery > 0.5f;
 
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_SCISSOR_TEST);
@@ -645,14 +681,23 @@ struct GlRenderer {
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
-    // 2. Imagery uploads (satellite).
+    // 2. Drape / imagery uploads: every mip level of each new slot.
     if (imageryMode && !out.imageryUploads.empty()) {
-      ensureImageryTex();
+      const auto& first = out.imageryUploads.front();
+      ensureImageryTex(first.size, first.levels, imagerySlots);
       glActiveTexture(GL_TEXTURE4);
       glBindTexture(GL_TEXTURE_2D_ARRAY, imageryTex);
-      for (const auto& u : out.imageryUploads)
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, u.slot, kImagerySize, kImagerySize, 1, GL_RGBA,
-                        GL_UNSIGNED_BYTE, u.pixels->data());
+      for (const auto& u : out.imageryUploads) {
+        if (!imageryTex || u.size != imgSize || u.levels != imgLevels || u.slot >= imgLayers || !u.pixels)
+          continue;
+        size_t offset = 0;
+        int sz = u.size;
+        for (int l = 0; l < u.levels; l++, sz = std::max(1, sz >> 1)) {
+          glTexSubImage3D(GL_TEXTURE_2D_ARRAY, l, 0, 0, u.slot, sz, sz, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                          u.pixels->data() + offset);
+          offset += static_cast<size_t>(sz) * sz * 4;
+        }
+      }
       glActiveTexture(GL_TEXTURE0);
     }
 
@@ -668,8 +713,8 @@ struct GlRenderer {
     glBindTexture(GL_TEXTURE_2D, atlasTex);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D_ARRAY, detailTex);
-    if (imageryMode) {
-      ensureImageryTex();
+    const bool hasImagery = imageryMode && imageryTex != 0;
+    if (hasImagery) {
       glActiveTexture(GL_TEXTURE4);
       glBindTexture(GL_TEXTURE_2D_ARRAY, imageryTex);
     }
@@ -692,9 +737,11 @@ struct GlRenderer {
     glUniform3fv(tu.highlight, 1, out.look.highlight);
     glUniform3fv(tu.contour, 1, out.look.contour);
     glUniform3fv(tu.contourMajor, 1, out.look.contourMajor);
-    glUniform1f(tu.contourOpacity, out.look.contourOpacity);
+    // Under the drape the contours are the 2D map's own (painted crisply in it).
+    glUniform1f(tu.contourOpacity, out.drape ? 0.f : out.look.contourOpacity);
     glUniform1f(tu.imageryMode, imageryMode ? 1.f : 0.f);
-    glUniform1f(tu.form, out.look.formStrength * 2.0f);
+    glUniform1f(tu.form,
+                out.look.formStrength * (out.drape ? (out.look.imagery > 0.5f ? 0.45f : 0.9f) : 2.0f));
     glUniform1i(tu.contourBase, out.contourBase);
     glUniform1f(tu.hRef, out.hRef);
     glUniform1f(tu.scale, out.exaggeration * ramp);
@@ -717,11 +764,11 @@ struct GlRenderer {
         Pp[i * 4 + 1] = slot < 0 ? 1.f : d.fromFlat;
         Pp[i * 4 + 2] = d.skirtDepth * ramp;
         Pp[i * 4 + 3] = static_cast<float>(slot);
-        IA[i * 4] = static_cast<float>(d.imgA);
+        IA[i * 4] = hasImagery ? static_cast<float>(d.imgA) : -1.f;
         IA[i * 4 + 1] = d.winA[0];
         IA[i * 4 + 2] = d.winA[1];
         IA[i * 4 + 3] = d.winA[2];
-        IB[i * 4] = static_cast<float>(d.imgB);
+        IB[i * 4] = hasImagery ? static_cast<float>(d.imgB) : -1.f;
         IB[i * 4 + 1] = d.winB[0];
         IB[i * 4 + 2] = d.winB[1];
         IB[i * 4 + 3] = d.winB[2];
@@ -844,6 +891,8 @@ struct Wrapper {
   std::atomic<double> lastPitchDeg{0};
   std::atomic<double> lastDrawMs{0};
   std::atomic<int> drawnTiles{0};
+  /** Drape texture slots (the GPU array's layers); set with the drape mode. */
+  std::atomic<int> imagerySlots{Engine::kImagerySlots};
 
   JNIEnv* env() {
     JNIEnv* e = nullptr;
@@ -908,7 +957,7 @@ class Host final : public mln::style::CustomLayerHost {
         w_->gl.uploadSprites(w_->spriteUploads);
         std::copy(w_->labelInk, w_->labelInk + 3, ink);
       }
-      w_->gl.draw(out, ink);
+      w_->gl.draw(out, ink, w_->imagerySlots.load());
     }
     w_->drawnTiles = static_cast<int>(out.tiles.size());
     const int64_t cost = nowNs() - t0;
@@ -989,7 +1038,8 @@ JNIEXPORT jlong JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeCr
       [raw] {
         JNIEnv* e = raw->env();
         if (e && raw->bridge) e->CallVoidMethod(raw->bridge, raw->requestRepaint);
-      });
+      },
+      kMeshGrid);
   return reinterpret_cast<jlong>(new WrapperPtr(std::move(w)));
 }
 
@@ -1043,6 +1093,48 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeOnI
   std::vector<uint8_t> buf(static_cast<size_t>(n));
   env->GetByteArrayRegion(rgba, 0, n, reinterpret_cast<jbyte*>(buf.data()));
   (*handle(h))->engine->onImageryData(z, x, y, std::move(buf));
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetDrape(
+    JNIEnv*, jclass, jlong h, jboolean on, jint slots) {
+  auto& w = *handle(h);
+  w->imagerySlots = std::max(1, static_cast<int>(slots));
+  w->engine->setDrape(on == JNI_TRUE, w->imagerySlots.load());
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeResetImagery(JNIEnv*, jclass,
+                                                                                         jlong h) {
+  (*handle(h))->engine->resetImagery();
+}
+
+JNIEXPORT jint JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeImageryGeneration(JNIEnv*,
+                                                                                              jclass,
+                                                                                              jlong h) {
+  return static_cast<jint>((*handle(h))->engine->imageryGeneration());
+}
+
+/** A drape tile: size² RGBA8 (level 0); the mip chain is built here, off the render thread. */
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeOnDrapeData(
+    JNIEnv* env, jclass, jlong h, jint z, jint x, jint y, jbyteArray rgba, jint size, jint generation) {
+  auto& w = *handle(h);
+  if (!rgba || env->GetArrayLength(rgba) != size * size * 4) {
+    w->engine->onImageryFailed(z, x, y);
+    return;
+  }
+  std::vector<uint8_t> buf(static_cast<size_t>(size) * size * 4);
+  env->GetByteArrayRegion(rgba, 0, static_cast<jsize>(buf.size()), reinterpret_cast<jbyte*>(buf.data()));
+  int levels = 0;
+  auto chain = buildMipChain(buf.data(), size, levels);
+  if (chain.empty()) {
+    w->engine->onImageryFailed(z, x, y);
+    return;
+  }
+  w->engine->onImageryLevels(z, x, y, std::move(chain), size, levels, static_cast<uint32_t>(generation));
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetLabelInsets(
+    JNIEnv*, jclass, jlong h, jdouble top, jdouble bottom) {
+  (*handle(h))->engine->setLabelInsets(top, bottom);
 }
 
 JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetLabels(

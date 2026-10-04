@@ -963,6 +963,15 @@ static void testEngine() {
     sc.onImageryLevels(3, 1, 1, buildMipChain(px.data(), 64, levels), 64, levels, gen);
     so = settle(in, 1);
     for (const auto& u : so.imageryUploads) CHECK(u.size == 64);
+    // A block sibling nobody asked for waits CPU-side: it never takes a GPU slot.
+    so = settle(in, 3);
+    const int slotsBefore = sc.stats().imagerySlots;
+    const uint32_t gen2 = sc.imageryGeneration();
+    for (int i = 0; i < 8; i++)
+      sc.onImageryLevels(17, 1000 + i, 1000, buildMipChain(px.data(), 64, levels), 64, levels, gen2);
+    so = settle(in, 3);
+    CHECK(sc.stats().imagerySlots == slotsBefore);
+    for (const auto& u : so.imageryUploads) CHECK(u.slot >= 0);
     sc.setDrape(false, 24);
   }
   // 22. Mip chains: level count, packing, box filter.
