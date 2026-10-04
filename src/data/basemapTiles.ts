@@ -72,7 +72,7 @@ export const DEFAULT_VECTOR_PARKS_URL = `${TILE_HOST}/parks/{z}/{x}/{y}.mvt`;
  * behind it draws nothing from it. Until then the map draws the parks
  * Protomaps has. Flip this after the first upload (it is OTA-updatable).
  */
-export const PARKS_TILES_PUBLISHED = false;
+export const PARKS_TILES_PUBLISHED = true;
 
 /**
  * The parks tile template this build reads: a build-time override, ours once
