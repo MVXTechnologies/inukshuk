@@ -13,6 +13,7 @@ import {
   type ShadingLevel,
 } from '@core/map/terrainOptions';
 import { TILT_RELIEF_LABEL, TILT_RELIEFS } from '@core/map/tiltRelief';
+import { nativeTerrainAvailable } from '@lib/nativeTerrain';
 import { IMAGERY_LOOK_LABEL, IMAGERY_LOOKS } from '@core/map/satelliteImagery';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -143,6 +144,7 @@ function OverlayRows({
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
+  const nativeTerrain3d = nativeTerrainAvailable();
   const set = useSettingsStore((s) => s.set);
 
   // "None" is the hillshade switch off (#230 keeps its platform default);
@@ -258,16 +260,24 @@ function OverlayRows({
         selected={shading}
         onSelect={setShading}
       />
-      {/* #480: how much that shading deepens when the map is tilted (two
-          fingers). It deepens the hillshade, so it rests with Shading None. */}
+      {/* #480: how much the relief deepens when the map is tilted (two
+          fingers). With the native 3D terrain the mountains really rise —
+          on every base map, so it no longer needs Shading; without it
+          (older binaries) it deepens the hillshade and rests with Shading None. */}
       <LevelsRow
         icon="rotate-3d-variant"
         label="3D relief"
-        hint={showHillshade ? 'When you tilt the map' : 'Needs shading'}
+        hint={
+          nativeTerrain3d
+            ? 'Real 3D when you tilt the map'
+            : showHillshade
+              ? 'When you tilt the map'
+              : 'Needs shading'
+        }
         levels={TILT}
         selected={tiltRelief}
         onSelect={(r) => set('tiltRelief', r)}
-        disabled={!showHillshade}
+        disabled={!showHillshade && !nativeTerrain3d}
       />
       <SwitchRow
         icon="vector-curve"

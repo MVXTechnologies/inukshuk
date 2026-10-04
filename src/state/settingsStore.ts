@@ -200,6 +200,13 @@ export interface Settings {
    * None there is nothing to deepen.
    */
   tiltRelief: TiltRelief;
+  /**
+   * Beta "3D terrain" (Settings → Beta features, @core/settings/betaFeatures):
+   * tilting the map grows real relief with the map draped on it. Off by
+   * default; off = the native 3D layer is never mounted (zero cost) and the
+   * map tilts to 60° with the 2D relief pass as before.
+   */
+  betaTerrain3d: boolean;
   /** Automatically report app errors as GitHub issues (see src/lib/errorReporting). */
   errorReporting: boolean;
   /** Terrain overlay: CalTopo-style slope-angle shading. */
@@ -298,6 +305,7 @@ const DEFAULTS: Settings = {
   peakDensity: DEFAULT_PEAK_DENSITY,
   showParks: true,
   tiltRelief: DEFAULT_TILT_RELIEF,
+  betaTerrain3d: false,
   errorReporting: true,
   terrainSlope: false,
   terrainContours: false,
@@ -378,6 +386,7 @@ function snapshot(s: SettingsState): Settings {
     peakDensity,
     showParks,
     tiltRelief,
+    betaTerrain3d,
     errorReporting,
     terrainSlope,
     terrainContours,
@@ -425,6 +434,7 @@ function snapshot(s: SettingsState): Settings {
     peakDensity,
     showParks,
     tiltRelief,
+    betaTerrain3d,
     errorReporting,
     terrainSlope,
     terrainContours,
