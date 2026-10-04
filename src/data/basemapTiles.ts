@@ -72,7 +72,7 @@ export const DEFAULT_VECTOR_PARKS_URL = `${TILE_HOST}/parks/{z}/{x}/{y}.mvt`;
  * behind it draws nothing from it. Until then the map draws the parks
  * Protomaps has. Flip this after the first upload (it is OTA-updatable).
  */
-export const PARKS_TILES_PUBLISHED = false;
+export const PARKS_TILES_PUBLISHED = true;
 
 /**
  * The parks tile template this build reads: a build-time override, ours once
@@ -82,6 +82,22 @@ export function vectorParksUrl(): string | null {
   const value: unknown = Constants.expoConfig?.extra?.vectorParksUrl;
   if (typeof value === 'string' && value !== '') return value;
   return PARKS_TILES_PUBLISHED ? DEFAULT_VECTOR_PARKS_URL : null;
+}
+
+/**
+ * Worldwide province / state label points (Natural Earth admin-1, public
+ * domain): one ~470 KB GeoJSON file (~70 KB gzipped) on the GitHub Pages
+ * site, built by `scripts/map/build-admin1-labels.mjs`. The Protomaps tiles
+ * name provinces in only a few countries. A static file needs no NAS run and
+ * no Worker deploy: merging it to main publishes it.
+ */
+export const DEFAULT_ADMIN1_LABELS_URL =
+  'https://inukshuk.mvxtechnologies.com/data/admin1-labels-v1.json';
+
+/** The province-label URL this build reads (build-time override or ours). */
+export function admin1LabelsUrl(): string {
+  const value: unknown = Constants.expoConfig?.extra?.admin1LabelsUrl;
+  return typeof value === 'string' && value !== '' ? value : DEFAULT_ADMIN1_LABELS_URL;
 }
 
 /**
@@ -101,6 +117,7 @@ export function vectorBasemapOption(
   contours?: string;
   peaks: string;
   parks?: string;
+  admin1: string;
 } {
   const glyphs = vectorGlyphsUrl();
   const parks = vectorParksUrl();
@@ -108,6 +125,7 @@ export function vectorBasemapOption(
     tiles: [vectorTilesUrl()],
     dark,
     peaks: vectorPeaksUrl(),
+    admin1: admin1LabelsUrl(),
     ...(parks !== null ? { parks } : {}),
     ...(glyphs !== null ? { glyphs } : {}),
     ...(withContours ? { contours: vectorContoursUrl() } : {}),

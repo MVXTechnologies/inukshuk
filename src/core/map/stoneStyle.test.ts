@@ -1270,3 +1270,206 @@ describe('parks and protected areas', () => {
     });
   });
 });
+
+describe('country and province names worldwide', () => {
+  const ADMIN1 = { source: 'admin1' };
+  type Loose = LayerSpecification & {
+    filter?: unknown;
+    layout?: Record<string, unknown>;
+    paint?: Record<string, unknown>;
+    source?: string;
+    'source-layer'?: string;
+    minzoom?: number;
+    maxzoom?: number;
+  };
+  const labelsOf = (
+    scheme: StoneBasemapScheme,
+    extra: Partial<Parameters<typeof buildStoneLayers>[1]> = {},
+  ): Loose[] => buildStoneLayers(scheme, { source: SOURCE, ...extra }).labels as Loose[];
+  const layer = (layers: Loose[], key: string): Loose => {
+    const found = layers.find((l) => l.id === `${STONE_LAYER_PREFIX}${key}`);
+    if (!found) throw new Error(`no ${key}`);
+    return found;
+  };
+  const passes = (l: Loose) => {
+    const f = featureFilter(l.filter as FilterSpecification, 'filter');
+    return (zoom: number, properties: Record<string, unknown>) =>
+      f.filter({ zoom }, { type: 1, properties, geometry: [] } as unknown as Parameters<
+        typeof f.filter
+      >[1]);
+  };
+  const text = (l: Loose, properties: Record<string, unknown>): unknown => {
+    const parsed = createExpression(l.layout?.['text-field'], {
+      type: 'string',
+      'property-type': 'data-driven',
+      expression: { interpolated: false, parameters: ['zoom', 'feature'] },
+    } as never);
+    if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+    return parsed.value.evaluate({ zoom: 5 }, { type: 1, properties } as never);
+  };
+  const SWISS = {
+    kind: 'country',
+    min_zoom: 4,
+    name: 'Schweiz/Suisse/Svizzera/Svizra',
+    'name:fr': 'Suisse',
+    'name:en': 'Switzerland',
+  };
+
+  describe('place-country', () => {
+    it.each([
+      ['light', LIGHT],
+      ['dark', DARK],
+    ])('draws Protomaps countries z2–7, uppercase, wide-tracked, muted (%s)', (_, scheme) => {
+      const c = layer(labelsOf(scheme), 'place-country');
+      expect(c).toMatchObject({ type: 'symbol', source: SOURCE, 'source-layer': 'places' });
+      expect(c.minzoom).toBe(2);
+      expect(c.maxzoom).toBe(8);
+      expect(c.layout?.['text-transform']).toBe('uppercase');
+      expect(c.layout?.['text-letter-spacing']).toBeGreaterThanOrEqual(0.2);
+      expect(c.layout?.['text-max-width']).toBeGreaterThan(0);
+      expect(c.paint?.['text-color']).toBe(scheme.inkMuted);
+      expect(c.paint?.['text-halo-color']).toBe(scheme.halo);
+    });
+
+    it('is due from its min_zoom, countries only', () => {
+      const due = passes(layer(labelsOf(LIGHT), 'place-country'));
+      expect(due(4, SWISS)).toBe(true);
+      expect(due(3, SWISS)).toBe(false);
+      expect(due(6, { ...SWISS, kind: 'region' })).toBe(false);
+      expect(due(6, { ...SWISS, kind: 'locality' })).toBe(false);
+    });
+
+    it.each([
+      ['local', 'Schweiz'],
+      ['fr', 'Suisse'],
+      ['en', 'Switzerland'],
+    ] as const)('names one country, not four (%s)', (language, expected) => {
+      const c = layer(labelsOf(LIGHT, { language }), 'place-country');
+      expect(text(c, SWISS)).toBe(expected);
+      expect(text(c, { name: 'België / Belgique / Belgien', 'name:fr': 'Belgique' })).toBe(
+        language === 'fr' ? 'Belgique' : 'België',
+      );
+    });
+
+    it('sizes by zoom and gives cities, then towns and villages, the collision edge', () => {
+      const labels = labelsOf(LIGHT, { admin1: ADMIN1 });
+      const ids = labels.map((l) => l.id.slice(STONE_LAYER_PREFIX.length));
+      // MapLibre places the top layer's labels first.
+      expect(ids.indexOf('place-province')).toBeLessThan(ids.indexOf('place-country'));
+      expect(ids.indexOf('place-country')).toBeLessThan(ids.indexOf('place-village'));
+      expect(ids.indexOf('place-country')).toBeLessThan(ids.indexOf('place-city'));
+      const size = layer(labels, 'place-country').layout?.['text-size'] as unknown[];
+      expect(size.slice(0, 3)).toEqual(['interpolate', ['linear'], ['zoom']]);
+    });
+  });
+
+  describe('place-province', () => {
+    it("draws Protomaps' regions without our points, with one name each", () => {
+      const p = layer(labelsOf(LIGHT, { language: 'local' }), 'place-province');
+      expect(p).toMatchObject({ source: SOURCE, 'source-layer': 'places' });
+      expect(passes(p)(5, { kind: 'region' })).toBe(true);
+      expect(text(p, { name: 'New Brunswick;Nouveau-Brunswick' })).toBe('New Brunswick');
+    });
+
+    it("draws our Natural Earth points INSTEAD of Protomaps' regions", () => {
+      const labels = labelsOf(LIGHT, { admin1: ADMIN1 });
+      const provinces = labels.filter((l) => l.id === `${STONE_LAYER_PREFIX}place-province`);
+      expect(provinces).toHaveLength(1);
+      const p = provinces[0] as Loose;
+      expect(p.source).toBe(ADMIN1.source);
+      expect(p['source-layer']).toBeUndefined();
+      expect(p.minzoom).toBe(4);
+      expect(p.maxzoom).toBe(9);
+      // No layer reads a Protomaps region any more: names are never doubled.
+      for (const l of labels.filter((x) => x.source === SOURCE)) {
+        expect(JSON.stringify(l.filter ?? null)).not.toContain('"region"');
+      }
+    });
+
+    it('is due from its rank, and a grouped région hides where its départements start', () => {
+      const due = passes(layer(labelsOf(LIGHT, { admin1: ADMIN1 }), 'place-province'));
+      const valais = { name: 'Valais', r: 6 };
+      expect(due(5, valais)).toBe(false);
+      expect(due(6, valais)).toBe(true);
+      expect(due(8, valais)).toBe(true);
+      const region = { name: 'Occitanie', r: 4, u: 7 };
+      expect(due(4, region)).toBe(true);
+      expect(due(6, region)).toBe(true);
+      expect(due(7, region)).toBe(false);
+      expect(due(4, {})).toBe(false);
+    });
+
+    it('sorts bigger provinces first, with only whole-zoom keys', () => {
+      const p = layer(labelsOf(LIGHT, { admin1: ADMIN1 }), 'place-province');
+      expect(p.layout?.['symbol-sort-key']).toEqual([
+        'to-number',
+        ['coalesce', ['get', 'r'], 99],
+        99,
+      ]);
+      expect(text(p, { name: 'Graubünden', 'name:fr': 'Grisons' })).toBe('Graubünden');
+      const fr = layer(labelsOf(LIGHT, { admin1: ADMIN1, language: 'fr' }), 'place-province');
+      expect(text(fr, { name: 'Graubünden', 'name:fr': 'Grisons' })).toBe('Grisons');
+    });
+  });
+
+  describe('every variant', () => {
+    /** Is any ['zoom'] anywhere but the input of a TOP-level interpolate/step? */
+    const nestedZoom = (v: unknown, top: boolean): boolean => {
+      if (!Array.isArray(v)) return false;
+      if (v.length === 1 && v[0] === 'zoom') return !top;
+      const isCurve = v[0] === 'interpolate' || v[0] === 'step';
+      return v.some((x, i) => {
+        const zoomInput = isCurve && top && i === (v[0] === 'interpolate' ? 2 : 1);
+        return nestedZoom(x, zoomInput);
+      });
+    };
+    const variants = (['light', 'dark', 'imagery'] as const).flatMap((look) =>
+      (['local', 'fr', 'en'] as const).flatMap((language) =>
+        [false, true].map((ours) => [look, language, ours] as const),
+      ),
+    );
+
+    it.each(variants)(
+      '%s, %s, Natural Earth %s: valid, iOS-safe zoom use',
+      (look, language, ours) => {
+        const scheme = look === 'dark' ? DARK : LIGHT;
+        const options = {
+          source: SOURCE,
+          language,
+          peaks: PEAKS,
+          ...(ours ? { admin1: ADMIN1 } : {}),
+        };
+        const built = buildStoneLayers(scheme, options);
+        const layers =
+          look === 'imagery'
+            ? buildStoneImageryLayers(scheme, options)
+            : [...built.base, ...built.labels];
+        const ids = layers.map((l) => l.id);
+        expect(ids).toContain(`${STONE_LAYER_PREFIX}place-country`);
+        expect(ids).toContain(`${STONE_LAYER_PREFIX}place-province`);
+        const errors = validateStyleMin({
+          version: 8,
+          glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+          sources: {
+            [SOURCE]: { type: 'vector', tiles: ['https://tiles.example/{z}/{x}/{y}.pbf'] },
+            peaks: { type: 'vector', tiles: ['https://peaks.example/{z}/{x}/{y}.pbf'] },
+            ...(ours ? { admin1: { type: 'geojson', data: 'https://x.example/admin1.json' } } : {}),
+          },
+          layers,
+        } as Parameters<typeof validateStyleMin>[0]);
+        expect(errors.map((e) => e.message)).toEqual([]);
+        for (const l of layers as Loose[]) {
+          for (const value of [...Object.values(l.layout ?? {}), ...Object.values(l.paint ?? {})]) {
+            expect([l.id, nestedZoom(value, true)]).toEqual([l.id, false]);
+          }
+        }
+      },
+    );
+
+    it('keeps both place labels over satellite imagery', () => {
+      expect(STONE_IMAGERY_LAYER_KEYS).toEqual(
+        expect.arrayContaining(['place-country', 'place-province']),
+      );
+    });
+  });
+});

@@ -27,6 +27,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from '@maplibre/maplibre-react-native';
+import { placeNameExpression } from './placeNames';
 import { DEFAULT_PEAK_DENSITY, PEAK_LEAD, type PeakDensity } from './terrainOptions';
 
 /**
@@ -284,6 +285,24 @@ export interface StoneParksSource {
   labelLayer: string;
 }
 
+/**
+ * Our worldwide province / state label points (`docs/data/admin1-labels-v1.json`,
+ * built from Natural Earth by `scripts/map/build-admin1-labels.mjs`), as a
+ * GeoJSON source. Each point carries `name` (+ `name:fr` / `name:en`), `r` —
+ * the zoom it is due from, sized by its area — and, for the régions /
+ * regioni / comunidades grouped from their members, `u`: the zoom it hides
+ * from again, where its members take over.
+ *
+ * It exists because the Protomaps tiles only carry `region` points for a
+ * few countries (US, Canada, Australia, Brazil): with it, the provinces are
+ * drawn from it EVERYWHERE and Protomaps' regions not at all — one source
+ * and one ranking, so no name is ever doubled. Without it, the map draws
+ * Protomaps' regions as before.
+ */
+export interface StoneAdmin1Source {
+  source: string;
+}
+
 export interface StoneStyleOptions {
   /** Id of the Protomaps vector source in the style. */
   source: string;
@@ -292,6 +311,7 @@ export interface StoneStyleOptions {
   contours?: StoneContourSource;
   peaks?: StonePeaksSource;
   parks?: StoneParksSource;
+  admin1?: StoneAdmin1Source;
   /**
    * "Parks & protected areas" (overlays menu): the boundary of every national
    * park, reserve and protected area, and its name in green italic. Default
@@ -625,6 +645,9 @@ export function buildStoneLayers(
   const { source } = options;
   const fonts = options.fonts ?? STONE_FONTS_ATKINSON;
   const name = nameField(options.language ?? 'local');
+  // Countries and provinces: one name even where OSM lists several.
+  const placeName = placeNameExpression(options.language ?? 'local');
+  const provinceLayer = () => provinceLayerOf(scheme, options, fonts, placeName);
   const dark = scheme.dark;
   const id = (s: string) => `${STONE_LAYER_PREFIX}${s}`;
   // The board washes woods at 30 % over paper (28 % on stone night) and
@@ -1227,6 +1250,31 @@ export function buildStoneLayers(
     // a park's would crowd it.
     ...(parks.label ? [parks.label] : []),
     peakLayer(),
+    // Provinces, then countries, then the settlements: MapLibre places the
+    // TOP layer's labels first, so a city keeps its name where a country or
+    // a province would crowd it (z4–7), and a country wins over a province.
+    provinceLayer(),
+    {
+      id: id('place-country'),
+      type: 'symbol',
+      source,
+      'source-layer': 'places',
+      // Worldwide from Protomaps (France z2, Italia z3, Schweiz z4 …), gone
+      // where the provinces and towns take over.
+      minzoom: 2,
+      maxzoom: 8,
+      filter: ['all', ['==', ['get', 'kind'], 'country'], dueAtZoom],
+      layout: {
+        'text-field': placeName,
+        'text-font': fonts.regular,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10.5, 4, 12.5, 7, 15],
+        'text-transform': 'uppercase',
+        'text-letter-spacing': COUNTRY_LETTER_SPACING,
+        'text-max-width': 7,
+        'symbol-sort-key': ['coalesce', ['get', 'min_zoom'], 99],
+      },
+      paint: { 'text-color': scheme.inkMuted, ...halo },
+    },
     {
       id: id('place-village'),
       type: 'symbol',
@@ -1297,27 +1345,78 @@ export function buildStoneLayers(
       },
       paint: { 'text-color': scheme.ink, ...halo },
     },
-    {
-      id: id('place-province'),
-      type: 'symbol',
-      source,
-      'source-layer': 'places',
-      minzoom: 4,
-      maxzoom: 8,
-      filter: ['==', ['get', 'kind'], 'region'],
-      layout: {
-        'text-field': name,
-        'text-font': fonts.bold,
-        'text-size': 12,
-        'text-transform': 'uppercase',
-        'text-letter-spacing': 0.12,
-        'text-max-width': 9,
-      },
-      paint: { 'text-color': scheme.inkMuted, ...halo },
-    },
   ];
 
   return { base, labels };
+}
+
+/** Countries: wide-tracked capitals, a step quieter than a province's bold. */
+export const COUNTRY_LETTER_SPACING = 0.22;
+
+/** Zoom range of the province / state labels (maxzoom exclusive: drawn through z8). */
+export const PROVINCE_MINZOOM = 4;
+export const PROVINCE_MAXZOOM = 9;
+
+/**
+ * Province, state, canton and région names: from our Natural Earth points
+ * when configured (worldwide, ranked by size — see {@link StoneAdmin1Source}),
+ * else Protomaps' `region` points (a few countries only).
+ */
+function provinceLayerOf(
+  scheme: StoneBasemapScheme,
+  options: StoneStyleOptions,
+  fonts: StoneFonts,
+  placeName: ExpressionSpecification,
+): SymbolLayerSpecification {
+  const look = {
+    'text-field': placeName,
+    'text-font': fonts.bold,
+    'text-transform': 'uppercase',
+    'text-letter-spacing': 0.12,
+    'text-max-width': 9,
+  } as const;
+  const paint = {
+    'text-color': scheme.inkMuted,
+    'text-halo-color': scheme.halo,
+    'text-halo-width': 1.4,
+    'text-halo-blur': 0.3,
+  };
+  const layerId = `${STONE_LAYER_PREFIX}place-province`;
+  const ours = options.admin1;
+  if (!ours) {
+    return {
+      id: layerId,
+      type: 'symbol',
+      source: options.source,
+      'source-layer': 'places',
+      minzoom: PROVINCE_MINZOOM,
+      maxzoom: 8,
+      filter: ['==', ['get', 'kind'], 'region'],
+      layout: { ...look, 'text-size': 12 },
+      paint,
+    };
+  }
+  return {
+    id: layerId,
+    type: 'symbol',
+    source: ours.source,
+    minzoom: PROVINCE_MINZOOM,
+    maxzoom: PROVINCE_MAXZOOM,
+    filter: [
+      'all',
+      // Due from its rank (the zoom its width spans ~90 px) …
+      ['<=', ['to-number', ['coalesce', ['get', 'r'], 99], 99], ['zoom']],
+      // … and a grouped région hides where its départements take over.
+      ['<', ['zoom'], ['to-number', ['coalesce', ['get', 'u'], 99], 99]],
+    ],
+    layout: {
+      ...look,
+      'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11, 8, 13],
+      // Bigger provinces first; the rank is a whole zoom, so ≤ 6 values.
+      'symbol-sort-key': ['to-number', ['coalesce', ['get', 'r'], 99], 99],
+    },
+    paint,
+  };
 }
 
 /**
@@ -1347,10 +1446,11 @@ export const STONE_IMAGERY_LAYER_KEYS: readonly string[] = [
   'poi',
   'park-label',
   'peak',
+  'place-province',
+  'place-country',
   'place-village',
   'place-town',
   'place-city',
-  'place-province',
 ];
 
 /** The imagery layers, split by the slot each draws in (`@core/map/layerSlots`). */
