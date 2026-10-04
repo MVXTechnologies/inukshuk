@@ -27,6 +27,7 @@ import { useEffect, useState, type RefObject } from 'react';
  *     &bench=<label>                  (run the standard gesture script)
  *     &stats=<label>                  (dump engine stats)
  *     &trim=1                         (the low-memory path, as on a warning)
+ *     &beta3d=0                       (keep the beta 3D terrain off; default: forced on)
  *
  * Reports land in `<documents>/qa/*.json`.
  */
@@ -51,9 +52,11 @@ export function useTerrainQa(
       };
       if (q('tqa') !== '1') return;
       // QA builds only (this hook is inert without EXPO_PUBLIC_TERRAIN_QA=1):
-      // the harness always drives the beta 3D terrain.
-      if (!useSettingsStore.getState().betaTerrain3d) {
-        useSettingsStore.getState().set('betaTerrain3d', true);
+      // the harness drives the beta 3D terrain on, unless `beta3d=0` asks to
+      // verify the shipped default (off).
+      const beta = q('beta3d') !== '0';
+      if (useSettingsStore.getState().betaTerrain3d !== beta) {
+        useSettingsStore.getState().set('betaTerrain3d', beta);
       }
       const num = (k: string) => {
         const v = q(k);
