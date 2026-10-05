@@ -29,6 +29,13 @@ export interface PdfDetailPlan {
    * until the camera moves onto it.
    */
   prefetch?: true;
+  /**
+   * Device pixels the whole page width spans on screen at this camera (the
+   * planner's sampling density): a cell `divisions` wide drawn
+   * `targetWidthPx` wide shows `targetWidthPx * divisions / pageDensityPx`
+   * raster pixels per device pixel.
+   */
+  pageDensityPx?: number;
 }
 
 /** Options for {@link planPdfDetailTiles}. */
@@ -425,6 +432,7 @@ export function planPdfDetailTiles(
     return {
       crop,
       targetWidthPx: width,
+      pageDensityPx: density,
       tileKey: `${divisions}:${x}:${y}:${width}`,
       coordinates: [
         geo(crop.x0, crop.y0),

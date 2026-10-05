@@ -546,7 +546,10 @@ export function usePdfBench(args: {
                 const onScreen = ((o.bbox.maxLng - o.bbox.minLng) / viewSpan) * screenPx;
                 ratios.push(rasterW / onScreen);
               }
-              if (ratios.length) density = Math.max(...ratios);
+              const planned = (lastDetails as Extract<PdfBenchEvent, { kind: 'details' }> | null)
+                ?.resolution;
+              if (planned !== undefined && Number.isFinite(planned)) density = planned;
+              else if (ratios.length) density = Math.max(...ratios);
               else {
                 const o = probe.current.overlays.find((x) => x.id.startsWith(`${id}:`));
                 if (o) density = 2048 / (((o.bbox.maxLng - o.bbox.minLng) / viewSpan) * screenPx);

@@ -300,7 +300,10 @@ it('keeps stable tile keys and geometry across a small pan and orders the neares
     1320,
   );
   expect(next.map((p) => p.tileKey).sort()).toEqual(first.map((p) => p.tileKey).sort());
-  for (const tile of next) expect(tile).toEqual(first.find((p) => p.tileKey === tile.tileKey));
+  // Same tiles, same geometry (the camera's sampling density is not identity).
+  const geometry = ({ pageDensityPx, ...rest }: PdfDetailPlan) => (void pageDensityPx, rest);
+  for (const tile of next)
+    expect(geometry(tile)).toEqual(geometry(first.find((p) => p.tileKey === tile.tileKey)!));
   const cx = (0.44194141709535734 + 0.5445819140784652) / 2,
     cy = (0.5327179887793808 + 0.7430712886580432) / 2;
   const distance = (p: (typeof first)[number]) =>

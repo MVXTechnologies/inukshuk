@@ -105,11 +105,6 @@ function holdersOf(cache: Map<string, Detail>, pageKey: string, cell: TileCell):
   return out;
 }
 
-/** True when a cached raster (a tile or a block) holds `cell` at its level, at least as wide. */
-function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell): boolean {
-  return holdersOf(cache, pageKey, cell).length > 0;
-}
-
 /** One in-flight refinement; later camera positions replace waiting work. */
 export function usePdfDetails(
   maps: MapDocument[],
@@ -382,6 +377,13 @@ export function usePdfDetails(
           visible: visible.length,
           covered: visible.filter((target) => covered.has(target.key)).length,
           shown: current.map((detail) => detail.imageUri),
+          resolution: Math.min(
+            ...visible.map((t) =>
+              t.cell && t.plan.pageDensityPx
+                ? (t.cell.width * t.cell.divisions) / t.plan.pageDensityPx
+                : Infinity,
+            ),
+          ),
         });
       }
       setDisplayed((previous) =>
@@ -461,12 +463,18 @@ export function usePdfDetails(
       if (w.busy || w.epoch !== epoch) return;
       w.busy = true;
       void (async () => {
+        // Cells a block rendered for this camera snapshot (across passes):
+        // never rendered twice, even when the visible budget cannot show
+        // the raster holding them, so a pass can always end.
+        let drawnFor: Target[] | null = null;
+        let drawn = new Set<string>();
         while (w.epoch === epoch) {
           const snapshot = w.desired;
+          if (drawnFor !== snapshot) {
+            drawnFor = snapshot;
+            drawn = new Set<string>();
+          }
           const attempted = new Set<string>();
-          // Cells a block rendered in this snapshot: never rendered twice,
-          // even when the visible budget cannot show the block holding them.
-          const drawn = new Set<string>();
           // Tiles skipped because stand-ins showed them when their turn came.
           const stoodIn: Target[] = [];
           const failed = new Set<string>();
@@ -476,12 +484,10 @@ export function usePdfDetails(
             // its place is rendered before the ring starts.
             if (
               target.prefetch &&
-              stoodIn.some(
-                (t) =>
-                  !w.covered.has(t.key) &&
-                  !w.cache.has(t.key) &&
-                  !(t.cell && heldByCache(w.cache, t.pageKey, t.cell)),
-              )
+              // A cell an older raster stood for, which the visible budget
+              // then gave to newer ones: render it (once) rather than leave
+              // it blank behind a raster that is no longer shown.
+              stoodIn.some((t) => !w.covered.has(t.key) && !drawn.has(t.key))
             )
               break;
             let dispatched = false;
@@ -687,12 +693,10 @@ export function usePdfDetails(
             // A stand-in can lose its place to tiles rendered after it (the
             // visible budget): go round again for the tile it stood in for.
             if (
-              stoodIn.some(
-                (t) =>
-                  !w.covered.has(t.key) &&
-                  !w.cache.has(t.key) &&
-                  !(t.cell && heldByCache(w.cache, t.pageKey, t.cell)),
-              )
+              // A cell an older raster stood for, which the visible budget
+              // then gave to newer ones: render it (once) rather than leave
+              // it blank behind a raster that is no longer shown.
+              stoodIn.some((t) => !w.covered.has(t.key) && !drawn.has(t.key))
             )
               continue;
             for (const statusKey of attempted) {

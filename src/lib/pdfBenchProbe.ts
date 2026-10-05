@@ -40,6 +40,8 @@ export type PdfBenchEvent =
       covered: number;
       /** Image files the hook publishes for this camera. */
       shown: string[];
+      /** Least raster px per device px among the visible cells (planner density). */
+      resolution?: number;
     };
 
 type Listener = (event: PdfBenchEvent) => void;

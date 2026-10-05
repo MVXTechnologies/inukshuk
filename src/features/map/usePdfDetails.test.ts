@@ -1075,7 +1075,8 @@ describe('reusing rendered detail across zooms and pans', () => {
       Array.from({ length: x1 - x0 + 1 }, (_, i) => cell(8, x0 + i, y, 1024));
     mockPlans.mockReturnValue([...row(2, 4, 4), ...row(2, 4, 5)]);
     const v = await renderHook(
-      ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+      ({ b }: { b: typeof bounds }) =>
+        usePdfDetails([map], [overview], b, 1200, { heightPx: 900, bearing: 0 }),
       { initialProps: { b: bounds } },
     );
     await flush();
