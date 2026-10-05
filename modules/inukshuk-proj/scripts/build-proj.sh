@@ -99,7 +99,7 @@ build_one() {
   cmake -S "$WORK/src/proj-$PROJ_VERSION" -B "$b/proj" "${PROJ_OPTS[@]}" "$@" \
     "-DCMAKE_INSTALL_PREFIX=$prefix" "-DCMAKE_PREFIX_PATH=$prefix" \
     "-DTIFF_INCLUDE_DIR=$prefix/include" "-DTIFF_LIBRARY=$prefix/lib/libtiff.a" \
-    "${sqlite_args[@]}" > "$b/proj.log"
+    ${sqlite_args[@]+"${sqlite_args[@]}"} > "$b/proj.log"
   cmake --build "$b/proj" -j "$JOBS" >> "$b/proj.log"
   cmake --install "$b/proj" >> "$b/proj.log"
   echo "built $name"
