@@ -456,8 +456,9 @@ appId: com.inukshuk.app
 - tapOn:
     text: 'Activity: .*'
     index: 0
+# The trail view mounted (its layers FAB; the old "Notes" tab is gone, #511).
 - extendedWaitUntil:
-    visible: 'Notes.*'
+    visible: 'Trail layers'
     timeout: 30000
 - tapOn: 'Back'
 # 'Map actions' is NOT a reliable pop-complete signal here — and since wave
@@ -466,8 +467,9 @@ appId: com.inukshuk.app
 # hidden a11y nodes under the deck). Gate on the departing screen's own
 # (unique) content going away instead; 'Map actions' is asserted only AFTER
 # the carousel below is closed and the rail remounts.
+# ("Export PDF" left with the trail-view revamp; it would pass vacuously.)
 - extendedWaitUntil:
-    notVisible: 'Export PDF'
+    notVisible: 'Trail layers'
     timeout: 15000
 # The departing trail viewer's teardown (its MapLibre map) can starve the JS
 # thread for several seconds after the screen itself is gone from the

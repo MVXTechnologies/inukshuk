@@ -80,8 +80,9 @@ appId: com.inukshuk.app
       - tapOn:
           text: '(Morning|Afternoon|Evening|Night|Trail).*'
           index: 0
+# The trail view mounted (its layers FAB; the old "Notes" tab is gone, #511).
 - extendedWaitUntil:
-    visible: 'Notes.*'
+    visible: 'Trail layers'
     timeout: 30000
 # The trail viewer's floating back arrow (paper BackAction default label);
 # 'back' the Maestro command is Android-only.
