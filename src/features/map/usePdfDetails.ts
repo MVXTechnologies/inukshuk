@@ -86,8 +86,9 @@ export const DETAIL_START_DELAY_MS = 40;
 /** Largest neighbour-ring block (background work), in raster pixels. */
 const RING_BLOCK_PIXELS = 1.5 * 1024 * 1024;
 
-/** True when a cached raster (a tile or a block) holds `cell` at its level, at least as wide. */
-function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell): boolean {
+/** Cached rasters (tiles or blocks) holding `cell` at its level, at least as wide. */
+function holdersOf(cache: Map<string, Detail>, pageKey: string, cell: TileCell): Detail[] {
+  const out: Detail[] = [];
   for (const d of cache.values()) {
     const c = d.cell;
     if (d.pageKey !== pageKey || c === null || c.divisions !== cell.divisions) continue;
@@ -98,9 +99,14 @@ function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell
       cell.y >= c.y &&
       cell.y < c.y + (c.rows ?? 1)
     )
-      return true;
+      out.push(d);
   }
-  return false;
+  return out;
+}
+
+/** True when a cached raster (a tile or a block) holds `cell` at its level, at least as wide. */
+function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell): boolean {
+  return holdersOf(cache, pageKey, cell).length > 0;
 }
 
 /** One in-flight refinement; later camera positions replace waiting work. */
@@ -295,33 +301,66 @@ export function usePdfDetails(
       const fresh = new Map<string, Detail>();
       const covered = new Set<string>();
       let pixels = 0;
-      // Exact tiles first, then stand-ins with what is left of the budget: a
-      // stand-in (four children) costs up to four times the texture of the
-      // tile it replaces and must never crowd out a tile already rendered.
-      for (const exactPass of [true, false]) {
-        for (const target of w.desired) {
-          const exact = w.cache.get(target.key);
-          if ((exact !== undefined) !== exactPass) continue;
-          // A wider raster of the same cell, or its four children from the
-          // previous zoom, show it at least as sharp: zooming out reuses them
-          // instead of rendering (and blurring) again.
-          const cover = exact
-            ? [exact]
-            : target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
-          if (!cover) continue;
-          if (target.prefetch) {
-            covered.add(target.key);
-            continue;
-          }
-          const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
-          const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
-          // Native result dimensions are authoritative, even if an unexpected
-          // backend result is larger than the planner's requested raster.
-          if (pixels + addedPixels > visiblePixels) continue;
-          pixels += addedPixels;
-          for (const detail of added) fresh.set(detail.cacheKey, detail);
-          covered.add(target.key);
+      // Rasters of the cells themselves first (a tile, a wider tile or a
+      // block holding the cell at its level), then stand-ins with what is
+      // left of the budget: a stand-in (four children) costs up to four
+      // times the texture of the tile it replaces and must never crowd out
+      // a tile already rendered.
+      const holdersByTarget = new Map<Target, Detail[]>();
+      for (const target of w.desired) {
+        const holders = target.cell ? holdersOf(w.cache, target.pageKey, target.cell) : [];
+        const own = w.cache.get(target.key);
+        if (own && !holders.includes(own)) holders.push(own);
+        if (holders.length === 0) continue;
+        if (target.prefetch) covered.add(target.key);
+        else holdersByTarget.set(target, holders);
+      }
+      // Choose the rasters greedily by visible cells shown per pixel: a
+      // block that is mostly off screen never crowds the cells the camera
+      // wants out of the visible budget (those cells render again instead).
+      for (;;) {
+        const gain = new Map<Detail, number>();
+        for (const [target, holders] of holdersByTarget) {
+          if (covered.has(target.key)) continue;
+          for (const d of holders) gain.set(d, (gain.get(d) ?? 0) + 1);
         }
+        let best: Detail | null = null;
+        let bestScore = 0;
+        for (const [d, n] of gain) {
+          const cost = fresh.has(d.cacheKey) ? 0 : d.pixels;
+          if (pixels + cost > visiblePixels) continue;
+          const score = cost === 0 ? Infinity : n / cost;
+          if (score > bestScore) {
+            best = d;
+            bestScore = score;
+          }
+        }
+        if (best === null) break;
+        if (!fresh.has(best.cacheKey)) {
+          pixels += best.pixels;
+          fresh.set(best.cacheKey, best);
+        }
+        for (const [target, holders] of holdersByTarget)
+          if (holders.includes(best)) covered.add(target.key);
+      }
+      for (const target of w.desired) {
+        if (covered.has(target.key)) continue;
+        // Its four children from the previous zoom show it at least as
+        // sharp: zooming out reuses them instead of rendering.
+        const cover = target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
+        if (!cover) continue;
+        if (target.prefetch) {
+          covered.add(target.key);
+          continue;
+        }
+        const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
+        const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
+        // Native result dimensions are authoritative, even if an unexpected
+        // backend result is larger than the planner's requested raster.
+        if (pixels + addedPixels > visiblePixels) continue;
+        pixels += addedPixels;
+        for (const detail of added) fresh.set(detail.cacheKey, detail);
+        covered.add(target.key);
       }
       w.covered = covered;
       // Keep the detail already rendered until its replacement arrives (#344):
@@ -375,7 +414,7 @@ export function usePdfDetails(
      * cells, at the cells' own scale. A lone cell (or a crop off the grid)
      * renders as itself, under its own key.
      */
-    const blockJob = (target: Target, snapshot: Target[]) => {
+    const blockJob = (target: Target, snapshot: Target[], drawn: ReadonlySet<string>) => {
       const single = {
         cacheKey: target.key,
         id: target.id,
@@ -393,10 +432,7 @@ export function usePdfDetails(
           t.cell !== null &&
           t.cell.divisions === cell.divisions &&
           t.cell.width === cell.width &&
-          (t === target ||
-            (!w.covered.has(t.key) &&
-              !w.cache.has(t.key) &&
-              !heldByCache(w.cache, t.pageKey, t.cell))),
+          (t === target || (!w.covered.has(t.key) && !drawn.has(t.key))),
       );
       const blocks = planDetailBlocks({
         corners: target.corners,
@@ -442,6 +478,9 @@ export function usePdfDetails(
         while (w.epoch === epoch) {
           const snapshot = w.desired;
           const attempted = new Set<string>();
+          // Cells a block rendered in this snapshot: never rendered twice,
+          // even when the visible budget cannot show the block holding them.
+          const drawn = new Set<string>();
           // Tiles skipped because stand-ins showed them when their turn came.
           const stoodIn: Target[] = [];
           const failed = new Set<string>();
@@ -468,11 +507,7 @@ export function usePdfDetails(
               }
               // Already on screen through a wider raster, a block or its
               // children; or held by a block the budget could not show yet.
-              if (
-                !detail &&
-                (w.covered.has(target.key) ||
-                  (target.cell !== null && heldByCache(w.cache, target.pageKey, target.cell)))
-              ) {
+              if (!detail && (w.covered.has(target.key) || drawn.has(target.key))) {
                 stoodIn.push(target);
                 continue;
               }
@@ -522,7 +557,7 @@ export function usePdfDetails(
                   source = { base64 };
                 }
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
-                const job = blockJob(target, snapshot);
+                const job = blockJob(target, snapshot, drawn);
                 dispatched = true;
                 const result = await rasterize({
                   source,
@@ -577,6 +612,22 @@ export function usePdfDetails(
                   bbox: bboxFromLngLats(job.coordinates),
                 };
                 w.cache.set(job.cacheKey, detail);
+                const jobCell = job.cell;
+                for (const t of snapshot) {
+                  const c = t.cell;
+                  if (
+                    t === target ||
+                    (jobCell !== null &&
+                      c !== null &&
+                      t.pageKey === target.pageKey &&
+                      c.divisions === jobCell.divisions &&
+                      c.x >= jobCell.x &&
+                      c.x < jobCell.x + (jobCell.cols ?? 1) &&
+                      c.y >= jobCell.y &&
+                      c.y < jobCell.y + (jobCell.rows ?? 1))
+                  )
+                    drawn.add(t.key);
+                }
                 w.backoff = recordSuccess(w.backoff, target.parentId);
               }
               // Touch LRU order. Cache stale completions, but never display them.

@@ -122,6 +122,9 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(body or b'{}')
             data['_kind'] = u.path[1:]
             data['_t'] = time.time()
+            # Host load (1-min average): the emulator shares the machine, and a
+            # busy host slows every render. Reported with the numbers.
+            data['_load'] = round(os.getloadavg()[0], 1)
             with LOCK:
                 with open(os.path.join(run_dir(data.get('runId', 'run')), 'results.jsonl'), 'a') as f:
                     f.write(json.dumps(data) + '\n')

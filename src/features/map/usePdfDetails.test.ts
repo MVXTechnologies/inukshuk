@@ -1038,6 +1038,40 @@ describe('reusing rendered detail across zooms and pans', () => {
     await v.unmount();
   });
 
+  it('never leaves a cell blank behind a mostly off-screen block the budget cannot show', async () => {
+    // Rasters as big as asked: 1024 px cells are 1 Mi px each.
+    mockRasterize.mockImplementation(
+      async (args: {
+        targetWidthPx: number;
+        crop: { x0: number; x1: number; y0: number; y1: number };
+      }) => ({
+        ...raster,
+        widthPx: args.targetWidthPx,
+        heightPx: Math.round(
+          (args.targetWidthPx * (args.crop.y1 - args.crop.y0)) / (args.crop.x1 - args.crop.x0),
+        ),
+      }),
+    );
+    const row = (x0: number, x1: number, y: number) =>
+      Array.from({ length: x1 - x0 + 1 }, (_, i) => cell(8, x0 + i, y, 1024));
+    mockPlans.mockReturnValue([...row(2, 4, 4), ...row(2, 4, 5)]);
+    const v = await renderHook(
+      ({ b }: { b: typeof bounds }) => usePdfDetails([map], [overview], b, 1200),
+      { initialProps: { b: bounds } },
+    );
+    await flush();
+    const first = mockRasterize.mock.calls.length;
+    // One column east: two thirds of the view is in the old (6 Mi px) blocks.
+    const panned = [...row(3, 5, 4), ...row(3, 5, 5)];
+    mockPlans.mockReturnValue(panned);
+    await v.rerender({ b: { ...bounds, east: bounds.east + 0.01 } });
+    for (let i = 0; i < 6; i++) await flush();
+    for (const p of panned) expect(heldBy(v.result.current, p.tileKey!)).toBeDefined();
+    // Bounded: no render loop.
+    expect(mockRasterize.mock.calls.length - first).toBeLessThanOrEqual(6);
+    await v.unmount();
+  });
+
   it('shows the wider raster of the same cell after a small zoom-out', async () => {
     mockPlans.mockReturnValue([cell(8, 3, 4, 1024)]);
     const v = await renderHook(
