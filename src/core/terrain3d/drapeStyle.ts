@@ -65,8 +65,12 @@ export interface DrapeStyleOptions {
   rasterTileSize?: number;
 }
 
-/** Default lowest zoom for the draped hillshade (tiles further out are fogged). */
-export const DRAPE_HILLSHADE_MIN_ZOOM = 7;
+/**
+ * Default lowest zoom for the draped hillshade: low enough that the coarse
+ * 360° base-ring drapes (2.2.1), the fallback on a fast tilt or turn, are
+ * shaded too rather than flat paper.
+ */
+export const DRAPE_HILLSHADE_MIN_ZOOM = 4;
 
 /**
  * A constant for a zoom-ramped paint value: the last stop of an

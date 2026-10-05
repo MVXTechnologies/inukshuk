@@ -669,17 +669,11 @@ int baseRingZoom(double zoom, double fogDistancePx) {
   return std::max(0, std::min(z, kDemMaxZoom));
 }
 
-std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bearingDeg,
-                                   const std::function<bool(const DemId&)>& isLoaded,
-                                   const std::function<bool(const DemId&)>& isPending,
-                                   int maxRequests) {
+std::vector<DemId> wantedDems(const std::vector<TileId>& tiles, double bearingDeg) {
   std::vector<DemId> out;
   std::unordered_set<uint64_t> seen;
   auto want = [&](const DemId& d) {
-    if (static_cast<int>(out.size()) >= maxRequests) return;
-    if (!seen.insert(demKey64(d)).second) return;
-    if (isLoaded(d) || (isPending && isPending(d))) return;
-    out.push_back(d);
+    if (seen.insert(demKey64(d)).second) out.push_back(d);
   };
   std::vector<DemId> own;
   own.reserve(tiles.size());
@@ -703,6 +697,19 @@ std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bear
         if (auto n = demNeighbor(d, dx, dy)) want(*n);
       }
     }
+  }
+  return out;
+}
+
+std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bearingDeg,
+                                   const std::function<bool(const DemId&)>& isLoaded,
+                                   const std::function<bool(const DemId&)>& isPending,
+                                   int maxRequests) {
+  std::vector<DemId> out;
+  for (const auto& d : wantedDems(tiles, bearingDeg)) {
+    if (static_cast<int>(out.size()) >= maxRequests) break;
+    if (isLoaded(d) || (isPending && isPending(d))) continue;
+    out.push_back(d);
   }
   return out;
 }

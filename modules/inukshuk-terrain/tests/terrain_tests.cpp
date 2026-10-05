@@ -649,6 +649,20 @@ static void testEngine() {
     for (const auto& t : out.tiles) CHECK(t.morph == 0);
     CHECK(!out.needsRepaint);
   }
+  // 4b. At rest nothing is re-requested (2.2.1: 2.2.0 could evict each fresh
+  // DEM on arrival and fetch it again, forever).
+  {
+    g_cases++;
+    const int before = eng.stats().requested;
+    for (int i = 0; i < 60; i++) {
+      for (const auto& d : requested) eng.onDemHeights(d.z, d.x, d.y, synth(d));
+      requested.clear();
+      eng.drainBakes();
+      in.timeMs += 16;
+      out = eng.frame(in);
+    }
+    CHECK(eng.stats().requested - before <= 2);
+  }
   // 5. Attribute sanity: hTo equals the synthetic surface at a vertex.
   {
     g_cases++;

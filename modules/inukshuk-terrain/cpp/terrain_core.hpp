@@ -215,6 +215,12 @@ std::vector<TileId> baseRing(double mx, double my, int zoom, int radius = 2);
 /** The base ring's zoom: tiles of about half the fog distance, `zoom` − 7 … `zoom` − 2. */
 int baseRingZoom(double zoom, double fogDistancePx);
 constexpr int kCoarseLead = 3;
+/**
+ * Every DEM planDemRequests may ask for, in its order (coarse base, coarse
+ * lead, own, the neighbours ahead): the engine pins the loaded ones, so a
+ * DEM it asked for is never evicted while still wanted (2.2.1).
+ */
+std::vector<DemId> wantedDems(const std::vector<TileId>& tiles, double bearingDeg);
 constexpr int kBaseZoom = 6;
 std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bearingDeg,
                                    const std::function<bool(const DemId&)>& isLoaded,

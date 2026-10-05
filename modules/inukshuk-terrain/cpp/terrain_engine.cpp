@@ -107,7 +107,15 @@ void Engine::touchDemLocked(uint64_t key) {
 }
 
 void Engine::evictDemsLocked() {
-  for (auto it = demLru_.begin(); it != demLru_.end() && demBytes_ > kDemBudgetBytes;) {
+  // Never below what is pinned (with room for the newest arrivals), and the
+  // kDemGrace most recent arrivals are never evicted: a DEM that just loaded
+  // survives until the next frame pins it.
+  const size_t perDem = static_cast<size_t>(kDemSize) * kDemSize * sizeof(float);
+  const size_t budget = std::max(kDemBudgetBytes, (demPins_.size() + kDemGrace) * perDem);
+  const size_t evictable = demLru_.size() > kDemGrace ? demLru_.size() - kDemGrace : 0;
+  size_t visited = 0;
+  for (auto it = demLru_.begin(); it != demLru_.end() && demBytes_ > budget && visited < evictable;
+       visited++) {
     const uint64_t k = *it;
     if (demPins_.count(k)) {
       ++it;
@@ -771,12 +779,11 @@ FrameOutput Engine::frame(const FrameInput& in) {
         pins.insert(demKey64(w.dem));
         touchDemLocked(demKey64(w.dem));
       }
-      const DemId own = demWindow(s.tile).dem;
-      for (int z = std::min(own.z, best.value_or(own.z + 1) - 1); z >= 0; z--) {
-        const int k = own.z - z;
-        const uint64_t key = demKey64({z, own.x >> k, own.y >> k});
-        if (dems_.count(key)) pins.insert(key);
-      }
+      // 2.2.1: only the DEM each tile bakes from is pinned (plus the base
+      // ring's). 2.2.0 also pinned every loaded ancestor; at a steep tilt the
+      // pinned set outgrew the budget, every fresh DEM was evicted on arrival
+      // and re-requested (~400/s at rest), and the height lookups behind the
+      // reference height and the pins flickered.
     }
     if (!best) continue;
     auto it = meshes_.find(meshKeyOf(s.tile));
@@ -796,6 +803,15 @@ FrameOutput Engine::frame(const FrameInput& in) {
   bakesPending = bakesPending || !inProgress_.empty();
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Pin everything the request planner still wants (and the ring), so a
+    // DEM it fetched is never evicted while wanted and then fetched again.
+    std::vector<TileId> wantedFor;
+    wantedFor.reserve(bakeOrder.size());
+    for (const auto& t : bakeOrder) wantedFor.push_back(t);
+    for (const auto& d : wantedDems(wantedFor, in.bearingDeg)) {
+      const uint64_t key = demKey64(d);
+      if (dems_.count(key)) pins.insert(key);
+    }
     demPins_ = std::move(pins);
     evictDemsLocked();
   }
