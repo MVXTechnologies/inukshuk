@@ -63,6 +63,14 @@ import {
   TIDE_SOURCE_MINZOOM,
   CHS_TIDE_SOURCE,
 } from '@core/map/tideStyle';
+import {
+  buildCragTileLayers,
+  buildSavedCragLayers,
+  CRAG_SOURCE,
+  CRAG_SOURCE_MAXZOOM,
+  CRAG_SOURCE_MINZOOM,
+  SAVED_CRAG_SOURCE,
+} from '@core/map/climbingStyle';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -467,6 +475,20 @@ export interface OsmStyleOptions {
     glyphs?: string;
     /** CHS (Canada) stations the phone fetched live from CHS (`@core/tides/chs`). */
     chs?: GeoJSON.FeatureCollection | null;
+  };
+  /**
+   * Climbing crags (Settings → Extensions, `@core/map/climbingStyle`): the
+   * saved crags from a local GeoJSON source (badges, sector pins, route
+   * starts) and, with "Show every crag" on, every crag from our tiles (the
+   * saved ones skipped there: they draw filled from the local source).
+   */
+  climbing?: {
+    dark: boolean;
+    glyphs?: string;
+    /** `crags.pmtiles` tile template; unset = saved crags only. */
+    tiles?: string;
+    saved?: GeoJSON.FeatureCollection;
+    savedUids?: readonly string[];
   };
   /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
@@ -1198,6 +1220,38 @@ export function buildOsmStyle(
           chs: true,
         }),
       );
+    }
+  }
+
+  // Climbing crags, in the trails slot above the geodetic marks: the streamed
+  // crags (hollow) under the saved ones (filled, with their sectors).
+  if (options.climbing) {
+    const c = options.climbing;
+    style.glyphs ??= c.glyphs ?? OFM_GLYPHS_URL;
+    const font =
+      style.glyphs !== OFM_GLYPHS_URL ? STONE_FONTS_ATKINSON.bold : STONE_FONTS_NOTO.bold;
+    const theme = c.dark ? 'dark' : 'light';
+    if (c.tiles) {
+      style.sources[CRAG_SOURCE] = {
+        type: 'vector',
+        tiles: [c.tiles],
+        minzoom: CRAG_SOURCE_MINZOOM,
+        maxzoom: CRAG_SOURCE_MAXZOOM,
+      };
+      put(
+        'trails',
+        ...buildCragTileLayers({
+          theme,
+          font,
+          prefix: 'map-crags',
+          saved: c.savedUids ?? [],
+          savedMode: 'skip',
+        }),
+      );
+    }
+    if (c.saved && c.saved.features.length > 0) {
+      style.sources[SAVED_CRAG_SOURCE] = { type: 'geojson', data: c.saved };
+      put('trails', ...buildSavedCragLayers({ theme, font }));
     }
   }
 

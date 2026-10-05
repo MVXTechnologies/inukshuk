@@ -1,3 +1,4 @@
+import type { SavedCrag } from '@core/climbing/saved';
 import type { Area, Folder, MapDocument, TrackSummary, Waypoint } from '@core/models';
 
 import { groupByFolder } from './folders';
@@ -72,7 +73,9 @@ const shape = (items: LibraryListItem[]) =>
             ? `${i.divider ? '-' : ''}map ${i.map.id}`
             : i.kind === 'area'
               ? `${i.divider ? '-' : ''}area ${i.area.id}`
-              : `${i.divider ? '-' : ''}wp ${i.waypoint.id}`,
+              : i.kind === 'crag'
+                ? `${i.divider ? '-' : ''}crag ${i.crag.uid}`
+                : `${i.divider ? '-' : ''}wp ${i.waypoint.id}`,
   );
 
 describe('libraryListItems without folders', () => {
@@ -298,5 +301,53 @@ describe('libraryListItems — drawn areas (#503)', () => {
       }),
     );
     expect(items[0]).toMatchObject({ kind: 'header', first: true, section: 'areas' });
+  });
+});
+
+describe('libraryListItems — the Climbing shelf', () => {
+  const crag = (uid: string, name: string) =>
+    ({ uid, name, routes: 3, sectors: [], starts: [], attachments: [] }) as unknown as SavedCrag;
+
+  it('lists saved crags by name after everything else', () => {
+    const items = libraryListItems(
+      input({
+        maps: [map('m1')],
+        crags: [crag('ob-b', 'Weir'), crag('ob-a', 'Lac Long')],
+        showClimbing: true,
+      }),
+    );
+    expect(shape(items).slice(-3)).toEqual(['# Climbing (2)', 'crag ob-a', '-crag ob-b']);
+  });
+
+  it('hides while empty unless its chip asks, and under a trail search', () => {
+    expect(shape(libraryListItems(input({ crags: [], showClimbing: true })))).not.toContain(
+      '# Climbing',
+    );
+    expect(
+      shape(
+        libraryListItems(
+          input({
+            crags: [],
+            showClimbing: true,
+            showMaps: false,
+            showTrails: false,
+            showWaypoints: false,
+            effectiveType: 'climbing',
+          }),
+        ),
+      ),
+    ).toEqual(['# Climbing', '~ No crags yet']);
+    expect(
+      shape(
+        libraryListItems(input({ crags: [crag('a', 'A')], showClimbing: true, narrowed: true })),
+      ),
+    ).not.toContain('# Climbing');
+    expect(
+      shape(
+        libraryListItems(
+          input({ crags: [crag('a', 'A')], showClimbing: true, collapsed: { climbing: true } }),
+        ),
+      ).slice(-1),
+    ).toEqual(['# Climbing (1)']);
   });
 });

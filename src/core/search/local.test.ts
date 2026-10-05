@@ -118,3 +118,34 @@ describe('searchLocal', () => {
     expect(sheet?.place.context).toBe('Map sheet · CA-QC');
   });
 });
+
+describe('climbing crags', () => {
+  it('finds crags by folded name, as climbing crags', () => {
+    const out = searchLocal(
+      'belair',
+      {
+        ...EMPTY,
+        crags: [
+          { uid: 'ob-1', name: 'Val-Bélair', lng: -71.5, lat: 46.85, region: 'Portneuf' },
+          { uid: 'ob-2', name: 'Weir', folded: 'weir', lng: -74.5, lat: 45.9 },
+        ],
+      },
+      { lang: 'en', origin: null },
+    );
+    expect(out.map((r) => [r.place.id, r.place.type, r.place.context])).toEqual([
+      ['crag:ob-1', 'crag', 'Climbing crag · Portneuf'],
+    ]);
+  });
+
+  it('caps a common word before ranking', () => {
+    const crags = Array.from({ length: 200 }, (_, i) => ({
+      uid: `c${i}`,
+      name: `Lac ${i}`,
+      lng: 0,
+      lat: 0,
+    }));
+    expect(
+      searchLocal('lac', { ...EMPTY, crags }, { lang: 'en', origin: null, max: 100 }),
+    ).toHaveLength(50);
+  });
+});

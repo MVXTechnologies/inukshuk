@@ -1,0 +1,32 @@
+{
+  "document_id": 999001,
+  "version": 3,
+  "waypoint_type": "climbing_outdoor",
+  "locales": [
+    {
+      "version": 2,
+      "lang": "fr",
+      "title": "Palissades de Charlevoix",
+      "summary": "Texte inventé pour les tests.",
+      "access": "Depuis le **stationnement**, suivre le [[routes/1|sentier]] 15 min.\n\n\n[warning]Texte inventé.[/warning]"
+    },
+    {
+      "version": 1,
+      "lang": "en",
+      "title": "Charlevoix Palisades",
+      "access": "Made-up text for tests."
+    }
+  ],
+  "geometry": {
+    "version": 1,
+    "geom": "{\"type\": \"Point\", \"coordinates\": [-7789168.0, 6093550.0]}"
+  },
+  "routes_quantity": 40,
+  "climbing_rating_min": "5a",
+  "climbing_rating_max": "7a",
+  "orientations": ["S", "SE"],
+  "rock_types": ["anorthosite"],
+  "height_max": 120,
+  "access_time": "45min",
+  "climbing_outdoor_types": ["single", "multi"]
+}

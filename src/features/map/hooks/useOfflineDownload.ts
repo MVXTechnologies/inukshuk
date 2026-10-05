@@ -22,6 +22,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { geodeticTilesUrl, tideTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
+import { cragTilesUrl } from '@data/climbing';
 import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
 import { resolveRegionName } from '../regionNaming';
 
@@ -315,6 +316,7 @@ export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat)
   const geodetic = {
     ...geodeticPackOption(),
     ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),
+    ...climbingPackOption(),
   };
   if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
   // Packs always keep the contours, so they work offline whichever way the
@@ -323,6 +325,18 @@ export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat)
     vectorBasemap: vectorBasemapOption(false, true),
     ...geodetic,
   });
+}
+
+/**
+ * `{ climbing }` for a pack style once the climbing-crags extension is
+ * installed: every crag in the region rides in its pack (badges and the
+ * tile-level card offline; a crag's full topo is its own download).
+ */
+export function climbingPackOption(): { climbing?: { tiles: string; dark: boolean } } {
+  const tiles = cragTilesUrl();
+  return tiles !== null && useSettingsStore.getState().climbingInstalledAt > 0
+    ? { climbing: { tiles, dark: false } }
+    : {};
 }
 
 /** `{ geodetic }` for a pack style when the extension wants its marks offline, else `{}`. */

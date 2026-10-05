@@ -42,7 +42,8 @@ export type PlaceType =
   | 'waypoint'
   | 'track'
   | 'map'
-  | 'longTrail';
+  | 'longTrail'
+  | 'crag';
 
 export interface PlaceTypeInfo {
   /** MaterialCommunityIcons glyph. */
@@ -118,6 +119,7 @@ export const PLACE_TYPES: Readonly<Record<PlaceType, PlaceTypeInfo>> = {
   track: { icon: 'map-marker-path', label: 'Your trail', zoom: 14, boost: 1, fitBounds: true },
   map: { icon: 'map', label: 'Map', zoom: 13, boost: 1, fitBounds: true },
   longTrail: { icon: 'routes', label: 'Long trail', zoom: 10, boost: 1, fitBounds: true },
+  crag: { icon: 'terrain', label: 'Climbing crag', zoom: 15, boost: 1, fitBounds: false },
 };
 
 /** `osm_key:osm_value` → type, for the tags that name one kind outright. */

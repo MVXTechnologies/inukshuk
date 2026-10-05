@@ -1,0 +1,28 @@
+{
+  "light": {
+    "crag": "#A8641C",
+    "cragInk": "#FFFFFF",
+    "cragSoft": "#F1E2CC",
+    "closed": "#7A7D80",
+    "halo": "#FBF8F2",
+    "label": "#5A3510",
+    "labelHalo": "#FBF8F2",
+    "sector": "#A8641C",
+    "bands": ["#3F8A3A", "#2F6FA8", "#B5761F", "#8B4A9C"],
+    "bandInk": "#FFFFFF",
+    "none": "#8A8B8C"
+  },
+  "dark": {
+    "crag": "#E0A458",
+    "cragInk": "#2A1B0A",
+    "cragSoft": "#4A3520",
+    "closed": "#9AA0A6",
+    "halo": "#13171B",
+    "label": "#F0C48A",
+    "labelHalo": "#13171B",
+    "sector": "#E0A458",
+    "bands": ["#6CC067", "#6EA8E8", "#E3A24E", "#C792D8"],
+    "bandInk": "#13171B",
+    "none": "#A9ADB2"
+  }
+}

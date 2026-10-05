@@ -102,3 +102,11 @@ it('gives every line a non-empty label and credit', () => {
     expect(line.credit.length).toBeGreaterThan(0);
   }
 });
+
+it('credits the climbing crags with their three open sources', () => {
+  expect(ids({ climbing: true })).toContain('climbing');
+  const line = mapCredits({ ...base, climbing: true }).find((l) => l.id === 'climbing');
+  expect(line?.credit).toContain('OpenBeta (CC0)');
+  expect(line?.credit).toContain('OpenStreetMap contributors (ODbL)');
+  expect(line?.credit).toContain('camptocamp.org (CC BY-SA)');
+});

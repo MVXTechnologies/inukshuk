@@ -35,6 +35,20 @@ export interface LocalSearchSources {
     mid: [number, number];
     region?: string;
   }[];
+  /**
+   * Climbing crags: the saved ones always, the world's index once the
+   * extension is installed (`@core/climbing/search`). `folded` is the name
+   * already folded (the index is ~50k names: folding them per keystroke is
+   * what would cost).
+   */
+  crags?: readonly {
+    uid: string;
+    name: string;
+    folded?: string;
+    lng: number;
+    lat: number;
+    region?: string;
+  }[];
 }
 
 const toBbox = (b: BoundingBox): PlaceBbox => [b.minLng, b.minLat, b.maxLng, b.maxLat];
@@ -107,6 +121,22 @@ export function searchLocal(
     };
     if (other !== undefined && other !== preferred) place.altName = other;
     found.push(place);
+  }
+  let crags = 0;
+  for (const c of sources.crags ?? []) {
+    const folded = c.folded ?? foldForSearch(c.name);
+    if (!terms.every((t) => folded.includes(t))) continue;
+    found.push({
+      id: `crag:${c.uid}`,
+      source: 'crag',
+      type: 'crag',
+      name: c.name,
+      latitude: c.lat,
+      longitude: c.lng,
+      context: c.region ? `Climbing crag · ${c.region}` : 'Climbing crag',
+    });
+    // A common word ("lac") can match thousands: the ranking needs a few.
+    if (++crags >= 50) break;
   }
   for (const c of sources.catalog) {
     if (c.bbox === undefined || !matches(c.title, terms)) continue;

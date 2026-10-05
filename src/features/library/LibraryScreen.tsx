@@ -78,6 +78,8 @@ import {
   TypeFilterChips,
 } from './components/LibraryChrome';
 import { AreaRow, MapRow, OnMapChip, RowDivider, WaypointRow } from './components/LibraryRows';
+import { CragShelfRow } from '../climbing/CragShelfRow';
+import { useClimbingStore } from '@state/climbingStore';
 import { writeAreaGeoJson } from '../map/draw/saveDrawn';
 import { MoveToFolderItems } from './components/MoveToFolderItems';
 import { TrackListRow, type TrackRowActions } from './components/TrackListRow';
@@ -176,6 +178,11 @@ export function LibraryScreen() {
   const renameWaypoint = useLibraryStore((s) => s.renameWaypoint);
   // Drawn areas (#503) and the map's drawing-tool requests (#502/#503).
   const areas = useLibraryStore((s) => s.areas);
+  // Saved crags: the Climbing shelf (`@features/climbing`).
+  const savedCrags = useClimbingStore((s) => s.saved);
+  useEffect(() => {
+    void useClimbingStore.getState().hydrate();
+  }, []);
   const removeArea = useLibraryStore((s) => s.removeArea);
   const setDrawRequest = useMapStore((s) => s.setDrawRequest);
   const setFocusBounds = useMapStore((s) => s.setFocusBounds);
@@ -321,6 +328,7 @@ export function LibraryScreen() {
     maps: maps.length,
     waypoints: waypoints.length,
     areas: areas.length,
+    climbing: savedCrags.length,
   });
   // A source chip shows that source's trails only (like the Trails chip).
   const effectiveType: LibraryTypeFilter = activeSource ? 'trails' : typeFilter;
@@ -328,6 +336,7 @@ export function LibraryScreen() {
   const showTrails = showsKind(effectiveType, 'trails');
   const showWaypoints = showsKind(effectiveType, 'waypoints');
   const showAreas = showsKind(effectiveType, 'areas');
+  const showClimbing = showsKind(effectiveType, 'climbing');
   const sourceChips = (Object.keys(sourceCounts) as ActivitySourceId[]).map((id) => ({
     id,
     label: `From ${sourceLabel(id)}`,
@@ -1070,8 +1079,12 @@ export function LibraryScreen() {
         activeFilterCount,
         sortedAreas,
         showAreas,
+        crags: savedCrags,
+        showClimbing,
       }),
     [
+      savedCrags,
+      showClimbing,
       maps,
       tracks.length,
       visibleTracks,
@@ -1132,6 +1145,13 @@ export function LibraryScreen() {
             {renderAreaRow(item.area)}
           </>
         );
+      case 'crag':
+        return (
+          <>
+            {item.divider && <RowDivider />}
+            <CragShelfRow crag={item.crag} />
+          </>
+        );
       case 'track': {
         const t = item.track;
         const expanded = expandedTrack === t.id;
@@ -1180,6 +1200,7 @@ export function LibraryScreen() {
     tracks.length === 0 &&
     waypoints.length === 0 &&
     areas.length === 0 &&
+    savedCrags.length === 0 &&
     !hasFolders;
 
   const importMenu = (
