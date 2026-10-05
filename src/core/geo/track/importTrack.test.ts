@@ -83,7 +83,9 @@ describe('imported GPX timing', () => {
       const timedDistance = haversineMeters(points[1]!, points[2]!);
       expect(track.stats.distanceM).toBeGreaterThan(timedDistance * (points.length - 1.1));
       expect(track.stats.avgSpeedMps).toBeCloseTo(timedDistance / 60);
-      expect(computeTrackStats(parseGpx(buildGpx({ points })).points)).toEqual(track.stats);
+      expect(
+        computeTrackStats(parseGpx(buildGpx({ points })).points, { robustClimb: true }),
+      ).toEqual(track.stats);
     },
   );
 
@@ -104,6 +106,6 @@ describe('imported GPX timing', () => {
     expect(track.stats.durationS).toBe(60);
     const loadedAgain = parseGpx(buildGpx({ points })).points;
     expect(importPoints(loadedAgain).startedAt).toBe(0);
-    expect(computeTrackStats(loadedAgain)).toEqual(track.stats);
+    expect(computeTrackStats(loadedAgain, { robustClimb: true })).toEqual(track.stats);
   });
 });

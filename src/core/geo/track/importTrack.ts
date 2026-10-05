@@ -44,6 +44,8 @@ export function buildImportedTrack(args: {
     endedAt: maxT === -Infinity ? undefined : maxT,
     status: 'finished',
     points: [...points],
-    stats: computeSegmentedTrackStats(points, segmentStarts, { category }),
+    // The saved-trail climb rule: a course's terrain-lookup stepping
+    // (Garmin Connect) must not read as thousands of metres of climb.
+    stats: computeSegmentedTrackStats(points, segmentStarts, { category, robustClimb: true }),
   };
 }

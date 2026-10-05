@@ -513,7 +513,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
     const endedAt = Date.now();
     // The category picks the moving-time stop threshold (#504).
-    const finalStats = computeSegmentedTrackStats(points, segmentStarts, { category });
+    // The saved-trail climb rule too: identical to the live climb unless the
+    // altitude stream was stepping noise (then the smoothed profile's).
+    const finalStats = computeSegmentedTrackStats(points, segmentStarts, {
+      category,
+      robustClimb: true,
+    });
     const track: Track = {
       id: storage.newId(),
       name,

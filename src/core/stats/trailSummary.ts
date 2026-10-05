@@ -1,4 +1,10 @@
-import { haversineMeters, stepElevationGainLoss, type ElevationAccumulator } from '@core/geo/track';
+import {
+  climbElevations,
+  haversineMeters,
+  splitSegments,
+  stepElevationGainLoss,
+  type ElevationAccumulator,
+} from '@core/geo/track';
 import type { TrackPoint, TrackSummary } from '@core/models';
 
 import { bestEffortTimes } from './bestEfforts';
@@ -11,14 +17,20 @@ import { bestEffortTimes } from './bestEfforts';
  * (distance, moving time, climb, highest point) is read from there instead.
  */
 
-/** Bump when the summary's shape or meaning changes: every cached one is recomputed. */
-export const TRAIL_STATS_VERSION = 1;
+/**
+ * Bump when the summary's shape or meaning changes: every cached one is recomputed.
+ * 2: climbs measured on the saved-trail climb rule (`climbElevations`).
+ */
+export const TRAIL_STATS_VERSION = 2;
 
 /** Distances timed for "fastest" records, metres (run: 1k…marathon; bike: 5/20/40 km). */
 export const EFFORT_DISTANCES_M = [1000, 5000, 10000, 20000, 21097.5, 40000, 42195] as const;
 
 /** Climbs timed for the hiking "fastest climbs", metres of ascent. */
 export const EFFORT_CLIMBS_M = [100, 500, 1000] as const;
+
+/** The hysteresis the trail's own D+ uses (`computeTrackStats`' default). */
+const CLIMB_THRESHOLD_M = 3;
 
 /** A step faster than this (m/s) is a GPS jump, not movement: the effort chain breaks there. */
 export const MAX_PLAUSIBLE_SPEED_MPS = 30;
@@ -81,13 +93,18 @@ export function summarizeTrail(
   const segmentSet = new Set(segmentStarts);
   let allTimed = n > 1;
   let elevation: ElevationAccumulator = { reference: undefined, ascentM: 0, descentM: 0 };
+  // The same climb rule as the trail's saved D+ (per segment): a course's
+  // terrain-lookup stepping must not make a record-breaking "fastest climb".
+  const heights = splitSegments(points, segmentStarts).flatMap((segment) =>
+    climbElevations(segment, CLIMB_THRESHOLD_M),
+  );
 
   for (let k = 0; k < n; k++) {
     const p = points[k]!;
     if (!timed(p)) allTimed = false;
     timeS[k] = p.time / 1000;
     if (k === 0) {
-      elevation = stepElevationGainLoss(elevation, p.altitude);
+      elevation = stepElevationGainLoss(elevation, heights[k]);
       continue;
     }
     const prev = points[k - 1]!;
@@ -103,7 +120,7 @@ export function summarizeTrail(
     } else {
       dist[k] = dist[k - 1]! + d;
     }
-    elevation = stepElevationGainLoss(elevation, p.altitude);
+    elevation = stepElevationGainLoss(elevation, heights[k]);
     asc[k] = elevation.ascentM;
   }
 
