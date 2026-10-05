@@ -515,12 +515,38 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // to its main-thread "fake worker" if the Android System WebView can't spin up
   // a real Blob Worker. The manual workerPort path had no such fallback and hung
   // forever (30s render timeout) when the worker initialized silently-broken.
+  //
+  // pdf.js's "fake worker" is NOT self-contained (#554): it runs the worker's
+  // WorkerMessageHandler on this thread, which it takes from
+  // window.pdfjsWorker or else loads with a <script src=workerSrc>. An empty
+  // workerSrc, or a blob URL the page cannot load as a script, fails every
+  // render with 'Setting up fake worker failed: "…"' — and pdf.js caches that
+  // failure for the page's lifetime. useMainThreadWorker() evaluates the
+  // bundled worker into this page instead, which needs no URL at all.
+  function useMainThreadWorker() {
+    if (window.pdfjsWorker && window.pdfjsWorker.WorkerMessageHandler) return true;
+    try {
+      var script = document.createElement('script');
+      script.text = WORKER_SOURCE;
+      (document.head || document.documentElement || document.body).appendChild(script);
+    } catch (e) {}
+    return !!(window.pdfjsWorker && window.pdfjsWorker.WorkerMessageHandler);
+  }
+  // Inline mode (no loopback server) loads this page as about:blank, an
+  // opaque origin. pdf.js then cannot treat the blob URL as same-origin and
+  // wraps it in a second blob that importScripts() it — the path that left
+  // one Android 11 phone failing every render (#554). Inline mode only takes
+  // small files, so parse them on this (hidden) page's thread from the start.
+  var opaqueOrigin = false;
+  try {
+    opaqueOrigin = window.location.origin === 'null' || /^(about|data):/.test(window.location.href);
+  } catch (e) {}
+  if (opaqueOrigin) useMainThreadWorker();
   try {
     var blob = new Blob([WORKER_SOURCE], { type: 'application/javascript' });
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
   } catch (e) {
-    // Last resort: empty workerSrc forces the main-thread fake worker.
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    useMainThreadWorker();
   }
 
   // Incremental base64 assembly (inline mode) so multi-MB PDFs never exceed
@@ -650,8 +676,13 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
       stalled = true;
       releaseDocument().then(function () {
         if (attempt === 0) {
-          // Drop to the main-thread fake worker and retry once.
-          try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = ''; } catch (e) {}
+          // Drop to the main-thread fake worker and retry once. (Emptying
+          // workerSrc, as this used to, makes pdf.js throw 'No
+          // "GlobalWorkerOptions.workerSrc" specified' instead, #554.)
+          if (!useMainThreadWorker()) {
+            post({ id: id, ok: false, error: 'pdf load stalled and the pdf.js worker could not run on the page' + fetchSummary() });
+            return;
+          }
           renderOnce(id, pageIndex, targetWidthPx, input, 1, crop, nativePage, look);
         } else {
           post({ id: id, ok: false, error: 'pdf load stalled in both worker modes' + fetchSummary() });
