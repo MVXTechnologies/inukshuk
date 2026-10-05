@@ -1,5 +1,5 @@
 # Tide stations extension e2e: Settings → Extensions → "Get Tide stations"
-# installs it; the overlays sheet's Extensions panel then carries its switch
+# installs it; the overlays sheet's Extensions tab then carries its switch
 # and legend (NOAA, SHOM, Kartverket, JMA, and Canada live from CHS); the flow
 # flips it off and on, then removes the extension again so other flows see
 # the default state. The station card itself (levels in three datums, copy
@@ -37,13 +37,15 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 3
     commands:
+      # The section's first row: Geodetic points, installed or not (the tide
+      # rows may be below the fold).
       - runFlow:
           when:
-            notVisible: 'Tide stations.*'
+            notVisible: 'Geodetic points.*'
           commands:
             - tapOn: 'Extensions.*'
       - extendedWaitUntil:
-          visible: 'Tide stations.*'
+          visible: 'Geodetic points.*'
           timeout: 5000
 # Start from "not installed" whatever a previous run left (its rows may be
 # below the fold: scroll to whichever of Get / Remove is there).
@@ -69,17 +71,7 @@ appId: com.inukshuk.app
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
 - tapOn: 'Map overlays'
-# The sheet's rows scroll under its header, and Maestro calls a row there
-# "visible" (a tap then lands on the scrim). Scroll it in, then nudge down.
-- scrollUntilVisible:
-    element: 'Extensions'
-    direction: DOWN
-- swipe:
-    start: 50%, 60%
-    end: 50%, 72%
-    duration: 600
-- waitForAnimationToEnd
-- tapOn: 'Extensions'
+- tapOn: 'Extensions tab'
 - assertVisible: 'Tide stations'
 - assertVisible: 'Live gauge'
 - assertVisible: 'Get more extensions'
@@ -100,13 +92,15 @@ appId: com.inukshuk.app
 - retry:
     maxRetries: 3
     commands:
+      # The section's first row: Geodetic points, installed or not (the tide
+      # rows may be below the fold).
       - runFlow:
           when:
-            notVisible: 'Tide coverage & sources.*'
+            notVisible: 'Geodetic points.*'
           commands:
             - tapOn: 'Extensions.*'
       - extendedWaitUntil:
-          visible: 'Tide coverage & sources.*'
+          visible: 'Geodetic points.*'
           timeout: 5000
 - scrollUntilVisible:
     element: 'Remove Tide stations extension'

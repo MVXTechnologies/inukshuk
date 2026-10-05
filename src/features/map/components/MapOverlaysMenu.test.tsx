@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
+import type { OverlayTab } from '@core/map/overlayTabs';
 import { OverlaysPanel } from './MapOverlaysMenu';
 
 /**
@@ -45,6 +46,9 @@ async function renderMenu(
   );
 }
 
+/** Open the sheet on a tab (the remembered tab is the one it opens on). */
+const onTab = (tab: OverlayTab) => useSettingsStore.setState({ overlaysTab: tab });
+
 const checked = (label: string): unknown =>
   screen.getByLabelText(label).props.accessibilityState?.checked;
 const selected = (label: string): unknown =>
@@ -61,28 +65,67 @@ afterEach(async () => {
 });
 
 describe('Overlays sheet layout (#484)', () => {
-  it('groups the rows under On the map / Terrain / Live layers', async () => {
+  it('has four tabs, each with its rows; the last tab is remembered', async () => {
     await renderMenu();
-    for (const title of ['ON THE MAP', 'TERRAIN', 'LIVE LAYERS']) {
-      expect(screen.getByText(title)).toBeTruthy();
+    for (const t of ['Map', 'Terrain', 'Sports', 'Extensions']) {
+      expect(screen.getByLabelText(`${t} tab`).props.accessibilityRole).toBe('tab');
     }
-    for (const label of [
-      'Content: everything',
-      'PDF maps',
-      'Personal heatmap',
-      'Labels on satellite',
-      'Imagery',
-      'Shading',
-      '3D relief',
-      'Contours',
-      'Slope',
-      'Peaks',
-    ]) {
-      expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByText('Ext.')).toBeTruthy();
+    expect(screen.getByLabelText('Map tab').props.accessibilityState).toEqual({ selected: true });
+    const tabs: [string, string[], string[]][] = [
+      [
+        'Map',
+        [
+          'Content: everything',
+          'PDF maps',
+          'Parks & protected areas',
+          'Labels on satellite',
+          'Imagery',
+        ],
+        ['Shading', 'Personal heatmap'],
+      ],
+      [
+        'Terrain',
+        ['Shading', '3D relief', 'Contours', 'Slope', 'Peaks', 'See-through white'],
+        ['PDF maps', 'Personal heatmap'],
+      ],
+      ['Sports', ['Personal heatmap', 'LIVE LAYERS'], ['PDF maps', 'Shading']],
+    ];
+    for (const [tab, shown, hidden] of tabs) {
+      await fireEvent.press(screen.getByLabelText(`${tab} tab`));
+      for (const label of shown) expect(screen.getByText(label)).toBeTruthy();
+      for (const label of hidden) expect(screen.queryByText(label)).toBeNull();
     }
+    expect(useSettingsStore.getState().overlaysTab).toBe('sports');
     // The drill-down group is gone; the ✕ is the open-state handle now.
     expect(screen.queryByLabelText('Topology')).toBeNull();
     expect(screen.getByLabelText('Close overlays')).toBeTruthy();
+  });
+
+  it('reopens on the remembered tab', async () => {
+    onTab('terrain');
+    await renderMenu();
+    expect(screen.getByLabelText('Terrain tab').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(screen.getByText('Peaks')).toBeTruthy();
+  });
+
+  it('opens on a row’s tab when asked (the geodetic filter)', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1 });
+    await render(
+      <OverlaysPanel
+        onSlopeEnabled={noop}
+        onOpenFolders={noop}
+        onClose={noop}
+        openOn="geodeticFilter"
+      />,
+    );
+    expect(screen.getByText('Filter geodetic points')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Back to extensions'));
+    expect(screen.getByLabelText('Extensions tab').props.accessibilityState).toEqual({
+      selected: true,
+    });
   });
 
   it('closes from the ✕', async () => {
@@ -100,8 +143,9 @@ describe('Overlays sheet layout (#484)', () => {
   });
 
   it('never wraps a row label (the owner’s stray "s" of Contours)', async () => {
+    onTab('terrain');
     await renderMenu();
-    for (const label of ['Contours', 'Shading', '3D relief', 'Peaks', 'Slope', 'PDF maps']) {
+    for (const label of ['Contours', 'Shading', '3D relief', 'Peaks', 'Slope']) {
       expect(screen.getByText(label).props.numberOfLines).toBe(1);
     }
   });
@@ -114,12 +158,13 @@ describe('Overlays sheet layout (#484)', () => {
 
 describe('switches drive the same settings as the old checkboxes', () => {
   it.each([
-    ['PDF maps', 'showPdfOverlay'],
-    ['Personal heatmap', 'showHeatmap'],
-    ['Contours', 'terrainContours'],
-    ['Slope', 'terrainSlope'],
-  ] as const)('%s toggles %s and reports it as a switch state', async (label, key) => {
+    ['PDF maps', 'showPdfOverlay', 'map'],
+    ['Personal heatmap', 'showHeatmap', 'sports'],
+    ['Contours', 'terrainContours', 'terrain'],
+    ['Slope', 'terrainSlope', 'terrain'],
+  ] as const)('%s toggles %s and reports it as a switch state', async (label, key, tab) => {
     const before = useSettingsStore.getState()[key];
+    onTab(tab);
     await renderMenu();
     expect(checked(label)).toBe(before);
     expect(screen.getByLabelText(label).props.accessibilityRole).toBe('switch');
@@ -138,6 +183,7 @@ describe('switches drive the same settings as the old checkboxes', () => {
 
   it('turning Slope on fires the one-time disclaimer hook', async () => {
     const onSlopeEnabled = jest.fn();
+    onTab('terrain');
     await render(
       <OverlaysPanel onSlopeEnabled={onSlopeEnabled} onOpenFolders={noop} onClose={noop} />,
     );
@@ -146,6 +192,7 @@ describe('switches drive the same settings as the old checkboxes', () => {
   });
 
   it('keeps the slope range thumbs (Maestro keys on "Slope minimum")', async () => {
+    onTab('terrain');
     await renderMenu();
     expect(screen.getByLabelText('Slope minimum')).toBeTruthy();
     expect(screen.getByLabelText('Slope maximum')).toBeTruthy();
@@ -153,6 +200,7 @@ describe('switches drive the same settings as the old checkboxes', () => {
 
   it('Contours density picks the interval', async () => {
     useSettingsStore.setState({ terrainContours: true, terrainContourIntervalM: 0 });
+    onTab('terrain');
     await renderMenu();
     expect(selected('Auto')).toBe(true);
     fireEvent.press(screen.getByLabelText('50 m'));
@@ -213,25 +261,23 @@ describe('Parks & protected areas', () => {
   });
 });
 
-describe('Extensions (Settings → Extensions)', () => {
-  it('with nothing installed, one row leads to Settings → Extensions', async () => {
+describe('Extensions tab', () => {
+  beforeEach(() => onTab('extensions'));
+
+  it('with nothing installed, an empty state leads to Settings → Extensions', async () => {
     await renderMenu();
+    expect(screen.getByText('No extensions yet')).toBeTruthy();
     expect(screen.queryByLabelText('Geodetic points')).toBeNull();
-    expect(screen.queryByLabelText('Tide stations')).toBeNull();
-    expect(screen.getByText('Get survey marks, tide stations…')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Extensions'));
+    await fireEvent.press(screen.getByLabelText('Get extensions'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/settings',
       params: { open: 'extensions' },
     });
   });
 
-  it('opens the Extensions panel once one is installed, with "Get more extensions"', async () => {
+  it('lists what is installed, then "Get more extensions"', async () => {
     useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true, tidesInstalledAt: 0 });
     await renderMenu();
-    expect(screen.getByText('Geodetic points')).toBeTruthy(); // the row's hint
-    await fireEvent.press(screen.getByLabelText('Extensions'));
-    expect(mockPush).not.toHaveBeenCalled();
     expect(checked('Geodetic points')).toBe(true);
     expect(screen.queryByLabelText('Tide stations')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Get more extensions'));
@@ -244,17 +290,16 @@ describe('Extensions (Settings → Extensions)', () => {
   it('geodetic: a switch with its legend', async () => {
     useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
     await renderMenu();
-    await fireEvent.press(screen.getByLabelText('Extensions'));
     expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Geodetic points'));
     expect(useSettingsStore.getState().showGeodetic).toBe(false);
   });
 
-  it('geodetic: filters from its funnel, back to the panel, badge counted, reset', async () => {
+  it('geodetic: filters from its funnel, back to the tab, badge counted, reset', async () => {
     useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
     await renderMenu();
-    await fireEvent.press(screen.getByLabelText('Extensions'));
     await fireEvent.press(screen.getByLabelText('Filter geodetic points'));
+    expect(screen.queryByLabelText('Map tab')).toBeNull(); // the filter takes the sheet
     await fireEvent.press(screen.getByLabelText('GNSS'));
     await fireEvent.press(screen.getByLabelText('Has heights'));
     const f = useSettingsStore.getState().geodeticFilter;
@@ -271,15 +316,11 @@ describe('Extensions (Settings → Extensions)', () => {
   it('tide stations: its own switch and legend once installed', async () => {
     useSettingsStore.setState({ tidesInstalledAt: 1, showTideStations: true });
     await renderMenu();
-    expect(screen.getByText('Tide stations')).toBeTruthy(); // the row's hint
-    await fireEvent.press(screen.getByLabelText('Extensions'));
     expect(screen.queryByLabelText('Geodetic points')).toBeNull();
     expect(checked('Tide stations')).toBe(true);
     expect(screen.getByLabelText('Gauge symbols legend')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Tide stations'));
     expect(useSettingsStore.getState().showTideStations).toBe(false);
-    await fireEvent.press(screen.getByLabelText('Back to overlays'));
-    expect(screen.getByText('All off')).toBeTruthy();
   });
 });
 
@@ -307,6 +348,7 @@ describe('Imagery brightness (#495)', () => {
 });
 
 describe('Terrain levels', () => {
+  beforeEach(() => onTab('terrain'));
   it('shows Shading and Peaks with their current values', async () => {
     useSettingsStore.setState({ showHillshade: true, hillshadeStrength: 'heavy' });
     await renderMenu();
@@ -369,14 +411,15 @@ describe('Terrain levels', () => {
   });
 });
 
-describe('See-through white (PDF maps)', () => {
+describe('See-through white (PDF maps; last in Terrain)', () => {
+  beforeEach(() => onTab('terrain'));
   const slider = () => screen.getByLabelText('See-through white');
   const adjust = (actionName: 'increment' | 'decrement') =>
     act(async () => {
       fireEvent(slider(), 'accessibilityAction', { nativeEvent: { actionName } });
     });
 
-  it('sits under PDF maps as a 5-stop slider, Off by default', async () => {
+  it('is a 5-stop slider, Off by default', async () => {
     await renderMenu();
     expect(screen.getByText('See-through white')).toBeTruthy();
     expect(slider().props.accessibilityRole).toBe('adjustable');
@@ -420,7 +463,8 @@ describe('See-through white (PDF maps)', () => {
   });
 });
 
-describe('Live layers', () => {
+describe('Live layers (Sports tab)', () => {
+  beforeEach(() => onTab('sports'));
   describe('with weather and marine parked', () => {
     it('keeps both rows visible, greyed and labelled "Coming soon"', async () => {
       await renderMenu();

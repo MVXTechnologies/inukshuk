@@ -77,6 +77,11 @@ appId: com.inukshuk.app
             notVisible: 'Marine'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Marine'
           timeout: 10000
@@ -151,6 +156,11 @@ appId: com.inukshuk.app
             notVisible: 'Marine'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Marine'
           timeout: 10000

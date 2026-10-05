@@ -53,6 +53,11 @@ appId: com.inukshuk.app
             notVisible: 'Weather(: .*)?'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Weather(: .*)?'
           timeout: 10000
