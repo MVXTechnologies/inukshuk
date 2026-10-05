@@ -7,7 +7,8 @@
 # - Runs standalone (needs no saved trail); geo comes from the launch
 #   permission + the workflow's geo-fix feed.
 # - The overlays menu is ONE themed plain-View sheet under the "Map overlays"
-#   rail button (#484): sections On the map / Terrain / Live layers, Switch
+#   rail button (#484), in four tabs (Map · Terrain · Sports · Extensions,
+#   'Map tab'… labels; it reopens on the last one): Switch
 #   rows and segmented level pickers, scrolling inside a capped height. Its ✕
 #   ('Close overlays') is the open-state sentinel — it exists nowhere outside
 #   the open sheet. The sheet mounts fresh (scrolled to the top) on each open.
@@ -58,6 +59,9 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 10000
+# The sheet has four tabs (Map · Terrain · Sports · Extensions) and reopens
+# on the last one: pick each section's tab explicitly.
+- tapOn: 'Map tab'
 # --- 'PDF maps' master switch (#233), first section. It is a switch row (a11y
 # label 'PDF maps', trailing .* for iOS merged strings) whose OFF state is
 # explained by a 'Hidden on the map' hint under the label. The switch is
@@ -76,6 +80,7 @@ appId: com.inukshuk.app
 - assertNotVisible: 'Hidden on the map.*'
 - assertVisible: 'PDF maps.*'
 # --- Terrain: Contours with its density, Slope with its window ---
+- tapOn: 'Terrain tab'
 - scrollUntilVisible:
     element: 'Slope'
     direction: DOWN
@@ -112,6 +117,7 @@ appId: com.inukshuk.app
 # a11y LABELS, not the visible hint text: the rows set `accessible`, which
 # merges each into one element whose label is authoritative on both
 # platforms. The trailing .* covers iOS merging extra state into the string.
+- tapOn: 'Sports tab'
 - scrollUntilVisible:
     element: 'Marine.*coming soon.*'
     direction: DOWN
@@ -140,6 +146,7 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 10000
+- tapOn: 'Terrain tab'
 - scrollUntilVisible:
     element: 'Slope'
     direction: DOWN

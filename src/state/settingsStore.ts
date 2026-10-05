@@ -6,6 +6,7 @@ import {
 } from '@core/geodetic/filter';
 import { isDisplayCondition, type DisplayCondition } from '@core/display/condition';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
+import { sanitizeOverlayTab, type OverlayTab } from '@core/map/overlayTabs';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
 import { SETTINGS_SCHEMA_VERSION, migrateSettings } from '@core/library/migrations';
 import { DEFAULT_SORT, isSortKey, type SortKey } from '@core/library/sortTracks';
@@ -220,6 +221,8 @@ export interface Settings {
   tidesInstalledAt: number;
   /** The Tide stations switch (Overlays → Extensions; only while installed). */
   showTideStations: boolean;
+  /** The overlays sheet's last tab (`@core/map/overlayTabs`), reopened next time. */
+  overlaysTab: OverlayTab;
   /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
    * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
@@ -336,6 +339,7 @@ const DEFAULTS: Settings = {
   geodeticFilter: DEFAULT_GEODETIC_FILTER,
   tidesInstalledAt: 0,
   showTideStations: true,
+  overlaysTab: 'map',
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
   errorReporting: true,
@@ -423,6 +427,7 @@ function snapshot(s: SettingsState): Settings {
     geodeticFilter,
     tidesInstalledAt,
     showTideStations,
+    overlaysTab,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -477,6 +482,7 @@ function snapshot(s: SettingsState): Settings {
     geodeticFilter,
     tidesInstalledAt,
     showTideStations,
+    overlaysTab,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -519,6 +525,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       next.marineLayers = sanitizeMarineLayers(next.marineLayers);
       // An object default: the ladder's typeof check would pass object junk.
       next.geodeticFilter = sanitizeGeodeticFilter(next.geodeticFilter);
+      next.overlaysTab = sanitizeOverlayTab(next.overlaysTab);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration
       // ladder's typeof check DROPS a valid persisted string id (and would pass

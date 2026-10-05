@@ -73,6 +73,11 @@ appId: com.inukshuk.app
             notVisible: 'Weather(: .*)?'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Weather(: .*)?'
           timeout: 10000
@@ -115,6 +120,11 @@ appId: com.inukshuk.app
             notVisible: 'Weather: Temperature'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Weather: Temperature'
           timeout: 10000
@@ -162,6 +172,11 @@ appId: com.inukshuk.app
             notVisible: 'Weather: Rain radar'
           commands:
             - tapOn: 'Map overlays'
+      - runFlow:
+          when:
+            visible: 'Sports tab'
+          commands:
+            - tapOn: 'Sports tab'
       - extendedWaitUntil:
           visible: 'Weather: Rain radar'
           timeout: 10000

@@ -1,5 +1,5 @@
 # Tide stations extension e2e: Settings → Extensions → "Get Tide stations"
-# installs it; the overlays sheet's Extensions panel then carries its switch
+# installs it; the overlays sheet's Extensions tab then carries its switch
 # and legend (NOAA, SHOM, Kartverket, JMA, and Canada live from CHS); the flow
 # flips it off and on, then removes the extension again so other flows see
 # the default state. The station card itself (levels in three datums, copy
@@ -69,17 +69,7 @@ appId: com.inukshuk.app
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
 - tapOn: 'Map overlays'
-# The sheet's rows scroll under its header, and Maestro calls a row there
-# "visible" (a tap then lands on the scrim). Scroll it in, then nudge down.
-- scrollUntilVisible:
-    element: 'Extensions'
-    direction: DOWN
-- swipe:
-    start: 50%, 60%
-    end: 50%, 72%
-    duration: 600
-- waitForAnimationToEnd
-- tapOn: 'Extensions'
+- tapOn: 'Extensions tab'
 - assertVisible: 'Tide stations'
 - assertVisible: 'Live gauge'
 - assertVisible: 'Get more extensions'

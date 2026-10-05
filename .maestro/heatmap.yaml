@@ -250,6 +250,7 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 10000
+      - tapOn: 'Map tab' # the sheet reopens on its last tab
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 10000
@@ -271,6 +272,7 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 10000
+      - tapOn: 'Map tab' # the sheet reopens on its last tab
       - extendedWaitUntil:
           visible: 'Content: 1 folder'
           timeout: 10000
@@ -539,6 +541,7 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 30000
+      - tapOn: 'Map tab' # the sheet reopens on its last tab
       - extendedWaitUntil:
           visible: 'Content.*'
           timeout: 30000
@@ -556,6 +559,7 @@ appId: com.inukshuk.app
       - extendedWaitUntil:
           visible: 'Close overlays'
           timeout: 30000
+      - tapOn: 'Map tab' # the sheet reopens on its last tab
       - extendedWaitUntil:
           visible: 'Content: everything'
           timeout: 30000
