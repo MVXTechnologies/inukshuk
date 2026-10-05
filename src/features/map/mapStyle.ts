@@ -55,6 +55,7 @@ import {
   GEODETIC_SOURCE_MAXZOOM,
   GEODETIC_SOURCE_MINZOOM,
 } from '@core/map/geodeticStyle';
+import type { GeodeticLayerFilters } from '@core/geodetic/filter';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -442,7 +443,13 @@ export interface OsmStyleOptions {
    * survey-mark tiles, drawn above the trails on every base map. `glyphs`
    * serves the ID labels when the style has no glyph host of its own.
    */
-  geodetic?: { tiles: string; dark: boolean; glyphs?: string };
+  geodetic?: {
+    tiles: string;
+    dark: boolean;
+    glyphs?: string;
+    /** The user's attribute filter (`@core/geodetic/filter`); unset = every mark. */
+    filters?: GeodeticLayerFilters;
+  };
   /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
@@ -1139,6 +1146,7 @@ export function buildOsmStyle(
       ...buildGeodeticLayers({
         theme: options.geodetic.dark ? 'dark' : 'light',
         font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
+        ...(options.geodetic.filters ? { filters: options.geodetic.filters } : {}),
       }),
     );
   }

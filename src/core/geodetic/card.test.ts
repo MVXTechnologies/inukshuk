@@ -1,6 +1,11 @@
 import { buildGeodeticCard, displayAccuracyM, formatLatLng, groupDigits } from './card';
 import { GEODETIC_CATALOG, OSM_SOURCE_INDEX } from './catalog';
 import { parseGeodeticFeature, type GeodeticMark } from './record';
+import type { CardLine } from './card';
+
+/** What a line SHOWS (its copy payload is tested on its own). */
+const shown = (lines: readonly CardLine[] | undefined) =>
+  (lines ?? []).map(({ copy: _c, copyName: _n, ...rest }) => rest);
 
 const src = (key: string) => GEODETIC_CATALOG.sources.findIndex((s) => s.key === key);
 const datum = (key: string) => GEODETIC_CATALOG.datums.findIndex((d) => d.key === key);
@@ -36,7 +41,7 @@ describe('buildGeodeticCard', () => {
     expect(card.title).toBe('M15KM007');
     expect(card.subtitle).toBe('MRNF Québec · Réseau géodésique du Québec');
     expect(card.chips.map((c) => c.label)).toEqual(['3D', 'Good condition']);
-    const rows = Object.fromEntries(card.rows.map((r) => [r.key, r.lines]));
+    const rows = Object.fromEntries(card.rows.map((r) => [r.key, shown(r.lines)]));
     expect(rows.native).toEqual([
       { text: 'NAD83(CSRS) · epoch 1997.0' },
       { text: '46° 48\' 47.36926" N, 71° 12\' 27.45735" W' },
@@ -61,18 +66,38 @@ describe('buildGeodeticCard', () => {
 
   it('labels the only computed value: the display position', () => {
     const wgs = buildGeodeticCard(SHEET).rows.find((r) => r.key === 'wgs84');
-    expect(wgs).toEqual({
-      key: 'wgs84',
-      label: '≈ WGS 84',
-      lines: [{ text: '46.813158° N, 71.207627° W', note: 'display, ±2 m' }],
-    });
+    expect(wgs?.label).toBe('≈ WGS 84');
+    expect(shown(wgs?.lines)).toEqual([
+      { text: '46.813158° N, 71.207627° W', note: 'display, ±2 m' },
+    ]);
   });
 
   it('copies the published values, labelled', () => {
     const text = buildGeodeticCard(SHEET).copyText;
     expect(text).toContain('MTM zone 7 (SCOPQ): E 250798.875 N 5186200.480');
     expect(text).toContain('H 51.158 m CGVD2013');
-    expect(text).toContain('≈ WGS 84 (display, ±2 m)');
+    expect(text).toContain('(≈ WGS 84, display ±2 m)');
+  });
+
+  it('gives every coordinate and height line its own copy: value plus its label', () => {
+    const copies = buildGeodeticCard(SHEET)
+      .rows.flatMap((r) => r.lines)
+      .flatMap((l) => (l.copy ? [[l.copy, l.copyName]] : []));
+    expect(copies).toEqual([
+      ['46° 48\' 47.36926" N, 71° 12\' 27.45735" W (NAD83(CSRS) · epoch 1997.0)', 'coordinates'],
+      ['UTM zone 19N: E 331582.278 N 5186767.681 (NAD83(CSRS) · epoch 1997.0)', 'UTM zone 19N'],
+      [
+        'MTM zone 7 (SCOPQ): E 250798.875 N 5186200.480 (NAD83(CSRS) · epoch 1997.0)',
+        'MTM zone 7 (SCOPQ)',
+      ],
+      ['46.813158° N, 71.207627° W (≈ WGS 84, display ±2 m)', 'WGS 84 display position'],
+      ['H 51.158 m CGVD2013', 'CGVD2013 height'],
+      ['H 51.54 m CGVD28', 'CGVD28 height'],
+      ['h 23.393 m ellipsoidal NAD83(CSRS) · epoch 1997.0', 'ellipsoidal height'],
+    ]);
+    // the datum label and the monument prose have no button
+    const datumLine = buildGeodeticCard(SHEET).rows[0]?.lines[0];
+    expect(datumLine?.copy).toBeUndefined();
   });
 
   it('has no empty rows when the mark has nothing but a position (bulk layer)', () => {
@@ -96,7 +121,7 @@ describe('buildGeodeticCard', () => {
       }),
     );
     expect(card.rows.find((r) => r.key === 'heights')).toBeUndefined();
-    expect(card.rows.find((r) => r.key === 'chart')?.lines).toEqual([
+    expect(shown(card.rows.find((r) => r.key === 'chart')?.lines)).toEqual([
       { text: '1.234 m', note: 'Chart datum (local tidal)' },
     ]);
   });
@@ -113,7 +138,7 @@ describe('buildGeodeticCard', () => {
       mark({ i: '4242', s: OSM_SOURCE_INDEX, k: 'u', H: '312', n: 'Repère 12' }),
     );
     expect(card.chips.map((c) => c.label)).toEqual(['Survey point']);
-    expect(card.rows.find((r) => r.key === 'elevation')?.lines).toEqual([
+    expect(shown(card.rows.find((r) => r.key === 'elevation')?.lines)).toEqual([
       { text: '312 m', note: 'datum not stated' },
     ]);
     expect(card.link).toEqual({

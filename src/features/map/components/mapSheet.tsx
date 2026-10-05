@@ -1,6 +1,6 @@
 import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -146,6 +146,7 @@ export function SwitchRow({
   disabled = false,
   accessibilityLabel,
   below,
+  accessory,
 }: {
   icon: string;
   label: string;
@@ -155,36 +156,65 @@ export function SwitchRow({
   disabled?: boolean;
   accessibilityLabel?: string;
   below?: ReactNode;
+  /** A control of its own before the switch (e.g. a filter button); takes its own taps. */
+  accessory?: ReactNode;
 }) {
   const { accent } = useSheetAccent();
+  // Where the switch starts in the row (measured: platform switches differ in
+  // width), so the accessory can sit just before it.
+  const [switchX, setSwitchX] = useState<number | null>(null);
   return (
     <View>
-      <TouchableRipple
-        onPress={onToggle}
-        disabled={disabled}
-        accessible
-        accessibilityRole="switch"
-        accessibilityLabel={accessibilityLabel ?? label}
-        accessibilityState={{ checked: value, disabled }}
-        style={styles.rowTouch}
-        borderless
-      >
-        <View style={[styles.row, disabled && styles.dimmed]}>
-          <RowText icon={icon} label={label} hint={hint} />
-          <View
-            pointerEvents="none"
-            accessible={false}
-            importantForAccessibility="no-hide-descendants"
-            accessibilityElementsHidden
-          >
-            <Switch value={value} color={accent} disabled={disabled} />
+      <View>
+        <TouchableRipple
+          onPress={onToggle}
+          disabled={disabled}
+          accessible
+          accessibilityRole="switch"
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityState={{ checked: value, disabled }}
+          style={styles.rowTouch}
+          borderless
+        >
+          <View style={[styles.row, disabled && styles.dimmed]}>
+            <RowText icon={icon} label={label} hint={hint} />
+            {/* Room for the accessory, which is NOT inside this touchable: a
+                button nested in an `accessible` row is unreachable (screen
+                readers fold it into the row; its taps toggle the row). */}
+            {accessory !== undefined && <View style={styles.accessorySpace} />}
+            <View
+              pointerEvents="none"
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden
+              onLayout={(e) => setSwitchX(e.nativeEvent.layout.x)}
+            >
+              <Switch value={value} color={accent} disabled={disabled} />
+            </View>
           </View>
-        </View>
-      </TouchableRipple>
+        </TouchableRipple>
+        {accessory !== undefined && (
+          <View
+            style={[
+              styles.accessory,
+              // + the touchable's 4 px margin, − the slot and the row gap;
+              // before the first layout, a typical switch width from the right.
+              switchX !== null
+                ? { left: switchX + 4 - ACCESSORY_W - 12 }
+                : { right: 4 + 12 + 51 + 12 },
+            ]}
+          >
+            {accessory}
+          </View>
+        )}
+      </View>
       {below !== undefined && <View style={styles.below}>{below}</View>}
     </View>
   );
 }
+
+/** The accessory slot's width: one compact icon button. */
+const ACCESSORY_W = 40;
 
 /** A drill-in / action row: label (+ hint) with a trailing chevron. */
 export function NavRow({
@@ -376,6 +406,15 @@ const styles = StyleSheet.create({
   // flex:1 is load-bearing: without it the label column shrinks to nothing
   // beside the icon (the old "label-less rows" bug).
   rowText: { flex: 1 },
+  accessorySpace: { width: ACCESSORY_W },
+  accessory: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: ACCESSORY_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   label: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   hint: { fontSize: 12.5, lineHeight: 16 },
   dimmed: { opacity: 0.4 },

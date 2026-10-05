@@ -23,6 +23,8 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { geodeticTilesUrl } from '@data/basemapTiles';
 import { GeodeticLegend } from './GeodeticLegend';
+import { GeodeticFilterButton, GeodeticFilterPanel } from './GeodeticFilterPanel';
+import { activeFilterCount } from '@core/geodetic/filter';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
@@ -118,10 +120,12 @@ function OverlayRows({
   onSlopeEnabled,
   onOpenFolders,
   onOpenWeather,
+  onOpenGeodeticFilter,
 }: {
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onOpenWeather: () => void;
+  onOpenGeodeticFilter: () => void;
 }) {
   const { accent } = useSheetAccent();
   const tokens = useSchemeTokens();
@@ -148,6 +152,8 @@ function OverlayRows({
   const showParks = useSettingsStore((s) => s.showParks);
   const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
   const showGeodetic = useSettingsStore((s) => s.showGeodetic);
+  const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
+  const geodeticFilterCount = activeFilterCount(geodeticFilter);
   const router = useRouter();
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
@@ -245,10 +251,15 @@ function OverlayRows({
           <SwitchRow
             icon="map-marker-radius-outline"
             label="Geodetic points"
-            hint="Survey marks and benchmarks"
+            hint={
+              geodeticFilterCount > 0
+                ? `Filtered · ${geodeticFilterCount} filter${geodeticFilterCount === 1 ? '' : 's'}`
+                : 'Survey marks and benchmarks'
+            }
             value={showGeodetic}
             onToggle={() => set('showGeodetic', !showGeodetic)}
-            below={<GeodeticLegend disabled={!showGeodetic} />}
+            accessory={<GeodeticFilterButton onPress={onOpenGeodeticFilter} />}
+            below={<GeodeticLegend disabled={!showGeodetic} types={geodeticFilter.types} />}
           />
         ) : (
           <NavRow
@@ -498,6 +509,7 @@ export function OverlaysPanel({
   onClose: () => void;
 }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [geodeticFilterOpen, setGeodeticFilterOpen] = useState(false);
   const { height: windowH } = useWindowDimensions();
   // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
   // behind it on a phone and "Live layers" could never be scrolled to.
@@ -523,11 +535,14 @@ export function OverlaysPanel({
       >
         {weatherOpen ? (
           <WeatherList onBack={() => setWeatherOpen(false)} />
+        ) : geodeticFilterOpen ? (
+          <GeodeticFilterPanel onBack={() => setGeodeticFilterOpen(false)} />
         ) : (
           <OverlayRows
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
             onOpenWeather={() => setWeatherOpen(true)}
+            onOpenGeodeticFilter={() => setGeodeticFilterOpen(true)}
           />
         )}
       </ScrollView>

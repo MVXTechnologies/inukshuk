@@ -29,6 +29,7 @@ import type {
   SymbolLayerSpecification,
 } from '@maplibre/maplibre-react-native';
 import { GEODETIC_CATALOG } from '@core/geodetic/catalog';
+import type { GeodeticLayerFilters } from '@core/geodetic/filter';
 import palette from '@core/geodetic/palette.json';
 
 export type GeodeticTheme = 'light' | 'dark';
@@ -104,6 +105,32 @@ export interface GeodeticLayerOptions {
   font: readonly string[];
   /** Style source id; default {@link GEODETIC_SOURCE}. */
   source?: string;
+  /** The user's attribute filter (`@core/geodetic/filter`), ANDed into every layer. */
+  filters?: GeodeticLayerFilters;
+}
+
+/** AND a user filter into a layer's own filter; drop OSM layers the filter hides. */
+function applyUserFilters(
+  layers: LayerSpecification[],
+  filters: GeodeticLayerFilters | undefined,
+): LayerSpecification[] {
+  if (!filters) return layers;
+  const out: LayerSpecification[] = [];
+  for (const layer of layers) {
+    const sourceLayer = 'source-layer' in layer ? layer['source-layer'] : undefined;
+    const user = sourceLayer === GEODETIC_OSM_LAYER ? filters.osm : filters.official;
+    if (user === 'hidden') continue;
+    if (user === null) {
+      out.push(layer);
+      continue;
+    }
+    const own = 'filter' in layer ? layer.filter : undefined;
+    out.push({
+      ...layer,
+      filter: (own ? ['all', own, user] : user) as SymbolLayerSpecification['filter'],
+    } as LayerSpecification);
+  }
+  return out;
 }
 
 export function buildGeodeticLayers(options: GeodeticLayerOptions): LayerSpecification[] {
@@ -197,33 +224,36 @@ export function buildGeodeticLayers(options: GeodeticLayerOptions): LayerSpecifi
     },
   });
 
-  return [
-    dot(GEODETIC_LAYER_IDS.osmDots, GEODETIC_OSM_LAYER),
-    dot(GEODETIC_LAYER_IDS.dots, GEODETIC_OFFICIAL_LAYER),
-    symbol(
-      GEODETIC_LAYER_IDS.osmSymbols13,
-      GEODETIC_OSM_LAYER,
-      osmIcon,
-      { minzoom: 13, maxzoom: 14 },
-      ['!', ['has', 'z']],
-    ),
-    symbol(GEODETIC_LAYER_IDS.osmSymbols, GEODETIC_OSM_LAYER, osmIcon, { minzoom: 14 }),
-    symbol(
-      GEODETIC_LAYER_IDS.symbols13,
-      GEODETIC_OFFICIAL_LAYER,
-      officialIcon,
-      { minzoom: 13, maxzoom: 14 },
-      ['!', ['has', 'z']],
-    ),
-    symbol(
-      GEODETIC_LAYER_IDS.symbols14,
-      GEODETIC_OFFICIAL_LAYER,
-      officialIcon,
-      { minzoom: 14, maxzoom: 15 },
-      precise,
-    ),
-    symbol(GEODETIC_LAYER_IDS.symbols15, GEODETIC_OFFICIAL_LAYER, officialIcon, { minzoom: 15 }),
-    label(GEODETIC_LAYER_IDS.osmLabels, GEODETIC_OSM_LAYER, ['coalesce', ['get', 'n'], '']),
-    label(GEODETIC_LAYER_IDS.labels, GEODETIC_OFFICIAL_LAYER, ['get', 'i']),
-  ];
+  return applyUserFilters(
+    [
+      dot(GEODETIC_LAYER_IDS.osmDots, GEODETIC_OSM_LAYER),
+      dot(GEODETIC_LAYER_IDS.dots, GEODETIC_OFFICIAL_LAYER),
+      symbol(
+        GEODETIC_LAYER_IDS.osmSymbols13,
+        GEODETIC_OSM_LAYER,
+        osmIcon,
+        { minzoom: 13, maxzoom: 14 },
+        ['!', ['has', 'z']],
+      ),
+      symbol(GEODETIC_LAYER_IDS.osmSymbols, GEODETIC_OSM_LAYER, osmIcon, { minzoom: 14 }),
+      symbol(
+        GEODETIC_LAYER_IDS.symbols13,
+        GEODETIC_OFFICIAL_LAYER,
+        officialIcon,
+        { minzoom: 13, maxzoom: 14 },
+        ['!', ['has', 'z']],
+      ),
+      symbol(
+        GEODETIC_LAYER_IDS.symbols14,
+        GEODETIC_OFFICIAL_LAYER,
+        officialIcon,
+        { minzoom: 14, maxzoom: 15 },
+        precise,
+      ),
+      symbol(GEODETIC_LAYER_IDS.symbols15, GEODETIC_OFFICIAL_LAYER, officialIcon, { minzoom: 15 }),
+      label(GEODETIC_LAYER_IDS.osmLabels, GEODETIC_OSM_LAYER, ['coalesce', ['get', 'n'], '']),
+      label(GEODETIC_LAYER_IDS.labels, GEODETIC_OFFICIAL_LAYER, ['get', 'i']),
+    ],
+    options.filters,
+  );
 }

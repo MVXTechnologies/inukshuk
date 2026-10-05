@@ -1,6 +1,7 @@
 // The reference validator ships with maplibre-react-native (its style-spec dependency).
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import palette from '@core/geodetic/palette.json';
+import { buildGeodeticFilters, DEFAULT_GEODETIC_FILTER } from '@core/geodetic/filter';
 import {
   buildGeodeticLayers,
   GEODETIC_SOURCE,
@@ -82,6 +83,28 @@ describe('geodetic layers', () => {
     for (const k of ['3d', 'h', 'v', 'gnss', 'u'] as const)
       expect(color).toContain(palette.dark[k]);
     expect(new Set(Object.values(palette.light)).size).toBe(Object.keys(palette.light).length);
+  });
+
+  it('ANDs the user filter into every layer, still spec-valid; hidden OSM layers go', () => {
+    const filters = buildGeodeticFilters({
+      ...DEFAULT_GEODETIC_FILTER,
+      types: ['v'],
+      datum: 'modern',
+    });
+    const layers = buildGeodeticLayers({ theme: 'light', font: FONT, filters });
+    expect(layers.some((l) => l.id.startsWith('geodetic-osm'))).toBe(false);
+    const sym13 = layers.find((l) => l.id === 'geodetic-symbols-13') as { filter?: unknown };
+    expect(sym13.filter).toEqual(['all', ['!', ['has', 'z']], filters.official]);
+    expect(zoomInsideMatchOrCase(layers)).toBe(false);
+    expect(validateStyleMin({ ...styleFor('light'), layers }).map((e) => e.message)).toEqual([]);
+    // the default filter changes nothing
+    expect(
+      buildGeodeticLayers({
+        theme: 'light',
+        font: FONT,
+        filters: buildGeodeticFilters(DEFAULT_GEODETIC_FILTER),
+      }),
+    ).toEqual(buildGeodeticLayers({ theme: 'light', font: FONT }));
   });
 
   it('names one image per type × fill × theme', () => {

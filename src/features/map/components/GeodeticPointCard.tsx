@@ -1,7 +1,7 @@
 import { buildGeodeticCard, type CardChip } from '@core/geodetic/card';
 import type { GeodeticMark } from '@core/geodetic/record';
 import { geodeticColors } from '@core/map/geodeticStyle';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, IconButton, Surface, Text, useTheme } from 'react-native-paper';
 import { geodeticImage } from '../geodeticImages';
@@ -11,7 +11,8 @@ interface Props {
   /** Open the agency datasheet (or its page) — the system browser. */
   onOpenLink: (url: string) => void;
   onNavigate: () => void;
-  onCopy: (text: string) => void;
+  /** Copy `text`; `what` names it for the confirmation ("UTM zone 19N", "all values"). */
+  onCopy: (text: string, what: string) => void;
   onClose: () => void;
   /** No network: the datasheet can't open. */
   offline?: boolean;
@@ -36,6 +37,13 @@ export function GeodeticPointCard({
 }: Props) {
   const theme = useTheme();
   const model = useMemo(() => (mark ? buildGeodeticCard(mark) : null), [mark]);
+  // The line whose copy button shows a check (briefly, after a copy).
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => {
+    if (copied === null) return;
+    const t = setTimeout(() => setCopied(null), 1400);
+    return () => clearTimeout(t);
+  }, [copied]);
   if (!mark || !model) return null;
   const scheme = theme.dark ? 'dark' : 'light';
   const colors = geodeticColors(scheme);
@@ -100,21 +108,43 @@ export function GeodeticPointCard({
               {row.label.toUpperCase()}
             </Text>
             <View style={styles.values}>
-              {row.lines.map((line, i) => (
-                <Text
-                  key={i}
-                  variant={line.muted ? 'bodySmall' : 'bodyMedium'}
-                  style={line.muted ? { color: muted } : undefined}
-                  selectable
-                >
-                  {line.text}
-                  {line.note !== undefined && (
-                    <Text variant="bodySmall" style={{ color: muted }}>
-                      {`  ${line.note}`}
-                    </Text>
-                  )}
-                </Text>
-              ))}
+              {row.lines.map((line, i) => {
+                const key = `${row.key}-${i}`;
+                const text = (
+                  <Text
+                    variant={line.muted ? 'bodySmall' : 'bodyMedium'}
+                    style={[line.muted ? { color: muted } : undefined, styles.lineText]}
+                    selectable
+                  >
+                    {line.text}
+                    {line.note !== undefined && (
+                      <Text variant="bodySmall" style={{ color: muted }}>
+                        {`  ${line.note}`}
+                      </Text>
+                    )}
+                  </Text>
+                );
+                if (line.copy === undefined) return <View key={key}>{text}</View>;
+                const copyText = line.copy;
+                const done = copied === key;
+                return (
+                  <View key={key} style={styles.lineRow}>
+                    {text}
+                    <IconButton
+                      icon={done ? 'check' : 'content-copy'}
+                      size={14}
+                      iconColor={done ? theme.colors.primary : muted}
+                      onPress={() => {
+                        onCopy(copyText, line.copyName ?? 'value');
+                        setCopied(key);
+                      }}
+                      accessibilityLabel={`Copy ${line.copyName ?? 'value'}`}
+                      accessibilityHint={copyText}
+                      style={styles.lineCopy}
+                    />
+                  </View>
+                );
+              })}
             </View>
           </View>
         ))}
@@ -139,7 +169,7 @@ export function GeodeticPointCard({
           icon="content-copy"
           mode="outlined"
           size={18}
-          onPress={() => onCopy(model.copyText)}
+          onPress={() => onCopy(model.copyText, 'all published values')}
           accessibilityLabel="Copy published values"
           style={styles.tight}
         />
@@ -171,6 +201,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', paddingVertical: 3 },
   label: { width: 84, paddingTop: 2, letterSpacing: 0.4 },
   values: { flex: 1 },
+  lineRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  lineText: { flex: 1 },
+  lineCopy: { margin: 0, marginTop: -6, marginRight: -8, width: 28, height: 28 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   grow: { flexGrow: 1 },
   tight: { margin: 0 },

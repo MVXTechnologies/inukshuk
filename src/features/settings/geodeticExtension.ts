@@ -10,8 +10,8 @@
  * Everything here is network-light: the marks themselves stream from the tile
  * Worker like the base map; only the companion packs download ahead.
  */
-import { parseGeodeticCoverage } from '@core/geodetic/coverage';
-import { TILE_HOST, geodeticTilesUrl, vectorGlyphsUrl } from '@data/basemapTiles';
+import { geodeticTilesUrl, vectorGlyphsUrl } from '@data/basemapTiles';
+import { refreshGeodeticCoverage } from '@data/geodeticCoverage';
 import {
   createRegionPack,
   deleteCompanionPacks,
@@ -22,18 +22,6 @@ import { reportError } from '@lib/errorReporting';
 import { useGeodeticStore } from '@state/geodeticStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { buildGeodeticPackStyle } from '../map/mapStyle';
-
-/** Fetch the archive's coverage (sources, counts, build date) from its TileJSON. */
-export async function refreshGeodeticCoverage(): Promise<void> {
-  try {
-    const res = await fetch(`${TILE_HOST}/geodetic.json`);
-    if (!res.ok) return;
-    const coverage = parseGeodeticCoverage(await res.json());
-    if (coverage) useGeodeticStore.getState().patch({ coverage });
-  } catch {
-    // Offline: the screen lists the catalogue without counts.
-  }
-}
 
 export async function refreshCompanions(): Promise<void> {
   try {
@@ -122,3 +110,5 @@ export async function removeGeodetic(): Promise<void> {
   );
   await refreshCompanions();
 }
+
+export { refreshGeodeticCoverage };

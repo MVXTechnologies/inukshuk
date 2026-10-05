@@ -143,7 +143,7 @@ def cmd_assemble(norm, out):
             h.close()
         handles = {}
     counts = {s: {'marks': 0, 'types': {}} for s in sources_in}
-    merged, hist = {}, {}
+    merged, hist, vd_counts = {}, {}, {}
     official = open(os.path.join(out, 'geodetic.geojsonl.tmp'), 'w', encoding='utf-8')
     osm = open(os.path.join(out, 'geodetic_osm.geojsonl.tmp'), 'w', encoding='utf-8')
     for name in sorted(os.listdir(parts_dir)):
@@ -156,6 +156,10 @@ def cmd_assemble(norm, out):
             c = counts[r['src']]
             c['marks'] += 1
             c['types'][r['type']] = c['types'].get(r['type'], 0) + 1
+            for h in (r.get('hOrtho') or [])[:2]:
+                i = catalog.VDATUM_INDEX.get(h.get('datum'))
+                if i is not None:
+                    vd_counts[i] = vd_counts.get(i, 0) + 1
         os.remove(os.path.join(parts_dir, name))
     official.close()
     osm.close()
@@ -168,11 +172,14 @@ def cmd_assemble(norm, out):
         'sources': counts,
         'minzoom': dict(sorted(hist.items())),
         'merged': dict(sorted(merged.items(), key=lambda kv: -kv[1])),
+        'vdatums': {catalog.VDATUMS[i][0]: n for i, n in sorted(vd_counts.items())},
     }
     json.dump(report, open(os.path.join(out, 'report.json'), 'w'), indent=1, ensure_ascii=False)
     # What the app reads from the archive's TileJSON `description`: date + per-source counts.
     desc = {'v': 1, 'updated': report['updated'],
-            'counts': {str(catalog.SOURCE_INDEX[s]): c['marks'] for s, c in counts.items()}}
+            'counts': {str(catalog.SOURCE_INDEX[s]): c['marks'] for s, c in counts.items()},
+            # Marks with a height on each vertical datum: the filter's datum chips.
+            'vd': {str(i): n for i, n in sorted(vd_counts.items())}}
     print(json.dumps(desc, separators=(',', ':')))
 
 

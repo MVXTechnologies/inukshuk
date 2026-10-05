@@ -3,7 +3,8 @@ import { coverageRows, coverageSummary, formatCount, parseGeodeticCoverage } fro
 /** The live archive's TileJSON on 2026-10-05 (trimmed). */
 const TILEJSON = {
   name: 'Inukshuk geodetic points',
-  description: '{"v":1,"updated":"2026-10-05","counts":{"0":80322,"2":632695,"3":0}}',
+  description:
+    '{"v":1,"updated":"2026-10-05","counts":{"0":80322,"2":632695,"3":0},"vd":{"0":31000,"2":350000}}',
   attribution: '© Gouvernement du Québec (MRNF) · CC BY 4.0 · NOAA National Geodetic Survey',
 };
 
@@ -15,6 +16,12 @@ describe('geodetic coverage', () => {
       [0, 80322],
       [2, 632695],
     ]);
+    expect([...(c?.vdatums ?? new Map())]).toEqual([
+      [0, 31000],
+      [2, 350000],
+    ]);
+    // archives built before the vd counts: none, not an error
+    expect(parseGeodeticCoverage('{"updated":"2026-10-05","counts":{}}')?.vdatums.size).toBe(0);
   });
 
   it('lists sources with marks, most first, and sums them up', () => {

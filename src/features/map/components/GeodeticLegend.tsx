@@ -14,7 +14,14 @@ const ENTRIES = [
  * The four mark symbols with their names (overlays menu and Settings →
  * Extensions), plus "hollow = legacy datum". Same images as the map.
  */
-export function GeodeticLegend({ disabled = false }: { disabled?: boolean }) {
+export function GeodeticLegend({
+  disabled = false,
+  types,
+}: {
+  disabled?: boolean;
+  /** Types the user's filter shows (default all); the others are struck through. */
+  types?: readonly string[];
+}) {
   const tokens = useSchemeTokens();
   const theme = useTheme().dark ? 'dark' : 'light';
   const color = disabled ? tokens.inkMuted : tokens.ink;
@@ -25,10 +32,15 @@ export function GeodeticLegend({ disabled = false }: { disabled?: boolean }) {
     >
       {ENTRIES.map((e) => {
         const src = geodeticImage(theme, e.kind);
+        const shown = types === undefined || types.includes(e.kind);
         return (
-          <View key={e.kind} style={styles.entry}>
+          <View
+            key={e.kind}
+            style={[styles.entry, !shown && styles.filteredOut]}
+            accessibilityLabel={shown ? e.label : `${e.label} (filtered out)`}
+          >
             {src !== undefined && <Image source={src} style={styles.icon} />}
-            <Text variant="labelSmall" style={{ color }}>
+            <Text variant="labelSmall" style={[{ color }, !shown && styles.struck]}>
               {e.label}
             </Text>
           </View>
@@ -51,4 +63,6 @@ const styles = StyleSheet.create({
   entry: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   icon: { width: 14, height: 14 },
   disabled: { opacity: 0.5 },
+  filteredOut: { opacity: 0.35 },
+  struck: { textDecorationLine: 'line-through' },
 });

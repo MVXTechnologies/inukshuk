@@ -108,6 +108,8 @@ import {
 } from '@data/basemapTiles';
 import { pickTappedMark, type GeodeticMark } from '@core/geodetic/record';
 import { GEODETIC_TAP_LAYERS, geodeticColors } from '@core/map/geodeticStyle';
+import { cardCameraCenterPx } from '@core/map/cardCamera';
+import { buildGeodeticFilters } from '@core/geodetic/filter';
 import { GeodeticPointCard } from './components/GeodeticPointCard';
 import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
@@ -218,6 +220,9 @@ const TERRAIN_DRAPE_CONTOUR_IDS: readonly string[] = CONTOUR_LINE_LAYER_IDS.flat
 
 /** The heat-tap ring mounts with the other markers (`@core/map/layerSlots`). */
 const MARKERS_ANCHOR = overlayAnchor('markers');
+
+/** The search pill and its row below the safe-area top: the map's top chrome, px. */
+const MAP_TOP_CHROME_PX = 60;
 
 /** Half the side of the box a tap searches for a geodetic mark, px (DESIGN §7.2: ~12). */
 const GEODETIC_HIT_PX = 12;
@@ -524,6 +529,8 @@ export function MapScreen() {
   const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
   const showGeodetic = useSettingsStore((s) => s.showGeodetic);
   const geodeticTiles = geodeticInstalled && showGeodetic ? geodeticTilesUrl() : null;
+  const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
+  const geodeticFilters = useMemo(() => buildGeodeticFilters(geodeticFilter), [geodeticFilter]);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -847,7 +854,12 @@ export function MapScreen() {
       // the map maker (its frame shows what the printed sheet will carry).
       ...(geodeticTiles !== null && editorStyle === null
         ? {
-            geodetic: { tiles: geodeticTiles, dark: theme.dark, ...geodeticGlyphs() },
+            geodetic: {
+              tiles: geodeticTiles,
+              dark: theme.dark,
+              filters: geodeticFilters,
+              ...geodeticGlyphs(),
+            },
           }
         : {}),
     };
@@ -893,6 +905,7 @@ export function MapScreen() {
     imageryContours,
     satelliteImagery,
     geodeticTiles,
+    geodeticFilters,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1465,6 +1478,15 @@ export function MapScreen() {
   const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
   /** The tapped geodetic mark (its summary card is up). */
   const [geodeticMark, setGeodeticMark] = useState<GeodeticMark | null>(null);
+  /**
+   * The mark whose card still has to bring it into view: set by the tap,
+   * consumed ONCE by the card's first layout (when its height is known).
+   * After that the camera is the user's — a pan, or the card growing, never
+   * moves it back.
+   */
+  const geodeticRecenterRef = useRef<GeodeticMark | null>(null);
+  const geodeticDockRef = useRef<View>(null);
+  const mapSizeRef = useRef<{ width: number; height: number } | null>(null);
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1854,6 +1876,7 @@ export function MapScreen() {
           setPointAt(null);
           setViewWp(null);
           setForecastAt(null);
+          geodeticRecenterRef.current = mark;
           setGeodeticMark(mark);
           return;
         }
@@ -1973,6 +1996,42 @@ export function MapScreen() {
       runPointChipHit,
     ],
   );
+  // A tapped survey mark slides into the middle of the map left visible
+  // between the top chrome and its card (owner, 2026-10-05) — once, at the
+  // card's first layout, keeping the user's zoom. `cardTop` is the dock's y
+  // in the map area, the same pixel space as `map.project`.
+  const recenterOnGeodeticCard = useCallback(
+    (cardTop: number) => {
+      const mark = geodeticRecenterRef.current;
+      const size = mapSizeRef.current;
+      const map = mapRef.current;
+      geodeticRecenterRef.current = null;
+      if (!mark || !size || !map) return;
+      void (async () => {
+        try {
+          const px = await map.project([mark.lng, mark.lat]);
+          const centerPx = cardCameraCenterPx({
+            featurePx: [px[0], px[1]],
+            mapSize: size,
+            visibleTop: insets.top + MAP_TOP_CHROME_PX,
+            visibleBottom: cardTop,
+          });
+          if (centerPx === null) return;
+          const center = await map.unproject(centerPx);
+          // Following would drag the camera straight back to the puck.
+          if (useMapStore.getState().followUser) setFollowUser(false);
+          // A jump, not an ease: an animated move got cut short on iOS (the
+          // card mounting mid-flight), and a jump can't fight a user who
+          // starts panning straight away.
+          cameraRef.current?.jumpTo({ center: [center[0], center[1]] });
+        } catch {
+          // map mid-teardown: the mark just stays where it is
+        }
+      })();
+    },
+    [insets.top, setFollowUser],
+  );
+
   const onMapPress = useCallback(
     (e: MapPressEvent) => {
       gesturePause.tap();
@@ -2188,7 +2247,18 @@ export function MapScreen() {
   );
   return (
     <MapAreaBottomContext.Provider value={mapAreaBottom}>
-      <View style={styles.fill} ref={setMapAreaView} collapsable={false} onLayout={onMapAreaLayout}>
+      <View
+        style={styles.fill}
+        ref={setMapAreaView}
+        collapsable={false}
+        onLayout={(e) => {
+          mapSizeRef.current = {
+            width: e.nativeEvent.layout.width,
+            height: e.nativeEvent.layout.height,
+          };
+          onMapAreaLayout();
+        }}
+      >
         {!settingsHydrated ? null : ( // wait for the persisted camera seed (a few ms at launch)
           <Map
             ref={mapRef}
@@ -3323,6 +3393,21 @@ export function MapScreen() {
               style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
               pointerEvents="box-none"
               testID="geodetic-card-dock"
+              ref={geodeticDockRef}
+              onLayout={() => {
+                // The dock's own y is relative to its container, not the map:
+                // measure both in window space and take the difference.
+                const dock = geodeticDockRef.current;
+                const area = mapAreaRef.current;
+                if (!dock || !area || geodeticRecenterRef.current === null) return;
+                area.measureInWindow((_ax, areaTop) => {
+                  dock.measureInWindow((_dx, dockTop) => {
+                    if (Number.isFinite(areaTop) && Number.isFinite(dockTop)) {
+                      recenterOnGeodeticCard(dockTop - areaTop);
+                    }
+                  });
+                });
+              }}
             >
               <GeodeticPointCard
                 mark={geodeticMark}
@@ -3335,9 +3420,9 @@ export function MapScreen() {
                   setDestination({ latitude: geodeticMark.lat, longitude: geodeticMark.lng });
                   setGeodeticMark(null);
                 }}
-                onCopy={(text) => {
+                onCopy={(text, what) => {
                   void Clipboard.setStringAsync(text);
-                  showSnack('Published values copied');
+                  showSnack(`Copied ${what}`);
                 }}
                 onClose={() => setGeodeticMark(null)}
               />

@@ -20,6 +20,13 @@ export interface CardLine {
   note?: string;
   /** Muted (secondary) line. */
   muted?: boolean;
+  /**
+   * What this line's own copy button puts on the clipboard: the value as
+   * shown plus its datum / system label. Absent = no button (labels, prose).
+   */
+  copy?: string;
+  /** Short name of the value, for the copy button's accessibility label. */
+  copyName?: string;
 }
 
 export interface CardRow {
@@ -120,27 +127,33 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
   // geographic and grid values, verbatim.
   if (datum && (mark.geo || mark.grids.length > 0 || !mark.osm)) {
     const lines: CardLine[] = [{ text: datumLabel }];
-    if (mark.geo) lines.push({ text: mark.geo });
+    if (mark.geo) {
+      lines.push({ text: mark.geo, copy: `${mark.geo} (${datumLabel})`, copyName: 'coordinates' });
+    }
     for (const g of mark.grids) {
       lines.push({
         text: `E ${groupDigits(g.e)} · N ${groupDigits(g.n)}`,
         note: g.system,
         muted: true,
+        copy: `${g.system}: E ${g.e} N ${g.n} (${datumLabel})`,
+        copyName: g.system,
       });
     }
     rows.push({ key: 'native', label: 'Published', lines });
-    copy.push(`${datumLabel}${mark.geo ? `: ${mark.geo}` : ''}`);
-    for (const g of mark.grids) copy.push(`${g.system}: E ${g.e} N ${g.n}`);
+    if (!mark.geo) copy.push(datumLabel);
   }
 
   const accuracy = displayAccuracyM(mark);
+  const accuracyText = accuracy < 1 ? accuracy.toFixed(1) : String(Math.round(accuracy));
   rows.push({
     key: 'wgs84',
     label: '≈ WGS 84',
     lines: [
       {
         text: formatLatLng(mark.lat, mark.lng),
-        note: `display, ±${accuracy < 1 ? accuracy.toFixed(1) : Math.round(accuracy)} m`,
+        note: `display, ±${accuracyText} m`,
+        copy: `${formatLatLng(mark.lat, mark.lng)} (≈ WGS 84, display ±${accuracyText} m)`,
+        copyName: 'WGS 84 display position',
       },
     ],
   });
@@ -151,18 +164,27 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
   for (const h of mark.heights) {
     const vd = vdatumAt(h.vdatum);
     if (h.vdatum === undefined || !vd) {
-      unstated.push({ text: `${h.text} m`, note: 'datum not stated' });
-      copy.push(`Elevation ${h.text} m (datum not stated)`);
+      unstated.push({
+        text: `${h.text} m`,
+        note: 'datum not stated',
+        copy: `Elevation ${h.text} m (datum not stated)`,
+        copyName: 'elevation',
+      });
     } else if (vd.kind === 'chart') {
-      chart.push({ text: `${h.text} m`, note: vd.name });
-      copy.push(`${h.text} m ${vd.name}`);
+      chart.push({
+        text: `${h.text} m`,
+        note: vd.name,
+        copy: `${h.text} m ${vd.name}`,
+        copyName: vd.name,
+      });
     } else {
       ortho.push({
         text: `${h.text} m`,
         note: vd.name,
         ...(ortho.length > 0 ? { muted: true } : {}),
+        copy: `H ${h.text} m ${vd.name}`,
+        copyName: `${vd.name} height`,
       });
-      copy.push(`H ${h.text} m ${vd.name}`);
     }
   }
   if (mark.hEll !== undefined) {
@@ -170,8 +192,9 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
       text: `${mark.hEll} m`,
       note: `ellipsoidal${datumLabel ? ` · ${datumLabel}` : ''}`,
       ...(ortho.length > 0 ? { muted: true } : {}),
+      copy: `h ${mark.hEll} m ellipsoidal${datumLabel ? ` ${datumLabel}` : ''}`,
+      copyName: 'ellipsoidal height',
     });
-    copy.push(`h ${mark.hEll} m ellipsoidal${datumLabel ? ` ${datumLabel}` : ''}`);
   }
   if (ortho.length > 0) rows.push({ key: 'heights', label: 'Heights', lines: ortho });
   if (chart.length > 0) rows.push({ key: 'chart', label: 'Chart datum', lines: chart });
@@ -204,9 +227,9 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
     url: `https://www.openstreetmap.org/?mlat=${mark.lat}&mlon=${mark.lng}#map=18/${mark.lat}/${mark.lng}`,
     label: 'Map',
   };
-  copy.push(
-    `≈ WGS 84 (display, ±${Math.round(accuracy)} m): ${mark.lat.toFixed(7)}, ${mark.lng.toFixed(7)}`,
-  );
+  // "Copy all" = every line's own copy, in card order (published values
+  // first, the display position after them), so the two can never disagree.
+  for (const row of rows) for (const line of row.lines) if (line.copy) copy.push(line.copy);
   return {
     title: mark.id,
     subtitle: source ? `${source.name} · ${source.network}` : 'Survey mark',

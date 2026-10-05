@@ -13,6 +13,8 @@ export interface GeodeticCoverage {
   updated: string;
   /** Source index → live marks in the archive. */
   counts: Map<number, number>;
+  /** Vertical-datum index → marks with a height on it (absent on older archives). */
+  vdatums: Map<number, number>;
 }
 
 /** Parse a TileJSON (or its description) into coverage; null when it isn't ours. */
@@ -30,16 +32,20 @@ export function parseGeodeticCoverage(tileJson: unknown): GeodeticCoverage | nul
     }
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
-  const { updated, counts } = parsed as { updated?: unknown; counts?: unknown };
+  const { updated, counts, vd } = parsed as { updated?: unknown; counts?: unknown; vd?: unknown };
   if (typeof updated !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(updated)) return null;
+  return { updated, counts: indexCounts(counts), vdatums: indexCounts(vd) };
+}
+
+function indexCounts(raw: unknown): Map<number, number> {
   const out = new Map<number, number>();
-  if (typeof counts === 'object' && counts !== null) {
-    for (const [k, v] of Object.entries(counts)) {
+  if (typeof raw === 'object' && raw !== null) {
+    for (const [k, v] of Object.entries(raw)) {
       const i = Number(k);
       if (Number.isInteger(i) && i >= 0 && typeof v === 'number' && v > 0) out.set(i, v);
     }
   }
-  return { updated, counts: out };
+  return out;
 }
 
 export interface CoverageRow {
