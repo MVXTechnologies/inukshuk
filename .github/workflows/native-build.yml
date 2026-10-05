@@ -122,6 +122,19 @@ jobs:
 
       - run: npm ci
 
+      # Convert's PROJ static libs + proj.db + bundled grids (gitignored; built
+      # from sha-pinned sources), cached on the scripts that pin them.
+      - name: Cache PROJ build (Convert)
+        uses: actions/cache@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-android-${{ runner.os }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh') }}
+
+      - name: Build PROJ for Android (Convert)
+        run: npm run proj:prepare -- android
+
       - name: Prebuild native Android project
         run: npx expo prebuild --platform android --no-install
 
@@ -170,6 +183,31 @@ jobs:
 
       - name: Verify iOS PDF paint and JPEG guards
         run: sh modules/inukshuk-pdf/ios/Tests/run.sh
+
+      - name: Cache PROJ build (Convert)
+        uses: actions/cache@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-ios-${{ runner.os }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh') }}
+
+      - name: Build PROJ for iOS (Convert)
+        run: npm run proj:prepare -- ios
+
+      # The Convert regression gate through the app's own C++ facade + PROJ
+      # (macOS libc++, which matches the phones; Linux libstdc++ picks another
+      # NTv2 sub-grid in NA83SCRS). The official-tool reference suite, every pair.
+      - name: Cache PROJ-data grids for the Convert suite
+        uses: actions/cache@v6
+        with:
+          path: ~/convert-grids
+          key: convert-grids-${{ hashFiles('src/core/convert/fixtures/reference.json') }}
+
+      - name: Convert reference suite (host PROJ)
+        run: |
+          bash scripts/convert-native-suite.sh --fetch-grids ~/convert-grids
+          npm run proj:test-host -- ~/convert-grids
 
       - name: Prebuild native iOS project
         run: npx expo prebuild --platform ios --no-install

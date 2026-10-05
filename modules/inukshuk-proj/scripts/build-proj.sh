@@ -144,8 +144,17 @@ fi
 
 if [ "$WHAT" = android ] || [ "$WHAT" = all ]; then
   ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}
-  NDK=${ANDROID_NDK:-$ANDROID_HOME/ndk/27.1.12297006}
+  # React Native's own NDK (node_modules/react-native/gradle/libs.versions.toml).
+  NDK_VERSION=27.1.12297006
+  NDK=${ANDROID_NDK:-$ANDROID_HOME/ndk/$NDK_VERSION}
   TC="$NDK/build/cmake/android.toolchain.cmake"
+  if [ ! -f "$TC" ]; then
+    # CI / EAS images may not have it yet (Gradle would fetch it later): install it now.
+    SDKM=$(command -v sdkmanager || ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)
+    [ -n "$SDKM" ] || { echo "no NDK at $NDK and no sdkmanager to install it" >&2; exit 1; }
+    (yes | "$SDKM" --install "ndk;$NDK_VERSION" > /dev/null) || true # `yes` dies of SIGPIPE
+    [ -f "$TC" ] || { echo "NDK $NDK_VERSION install failed" >&2; exit 1; }
+  fi
   for abi in "${ABIS[@]}"; do
     pre="$WORK/install/android-$abi"
     rm -rf "$WORK/build/sqlite-$abi"

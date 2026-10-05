@@ -18,6 +18,12 @@ android {
         arguments '-DANDROID_STL=c++_shared'
       }
     }
+    // Only the ABIs being built (-PreactNativeArchitectures=x86_64 in E2E), so a
+    // single-ABI build needs only that ABI's prebuilt libs (ANDROID_ABIS=…).
+    def rnArchs = findProperty('reactNativeArchitectures')
+    if (rnArchs) {
+      ndk { abiFilters.addAll(rnArchs.toString().split(',').collect { it.trim() }) }
+    }
   }
   externalNativeBuild {
     cmake {
