@@ -1711,8 +1711,10 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   if ((int)chosen.size() > kMaxLabels) chosen.resize(kMaxLabels);
 
   std::string tk = std::string([[theme componentsJoinedByString:@","] UTF8String]) + "|" + fieldsKey.UTF8String;
+  bool atlasReset = false;
   if (tk != _themeKey) {
     _themeKey = tk;
+    atlasReset = true;
     _shelf.reset();
     _lastLabelHash = 0;
   }
@@ -1738,6 +1740,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     }
     if (!full) break;
     _shelf.reset();  // atlas full: start over with only what is wanted now
+    atlasReset = true;
   }
   std::vector<LabelData> out;
   for (size_t i = 0; i < chosen.size(); i++) {
@@ -1758,7 +1761,9 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
     d.v1 = (float)(r.y + r.h) / kAtlasSize;
     out.push_back(d);
   }
-  _engine->setLabels(std::move(out));
+  // Kept pins (absent while their tile reloads) reuse their atlas rects: only
+  // while the atlas has not been reset.
+  _engine->setLabels(std::move(out), !atlasReset);
 }
 
 /** Rasterise a plate: the name (and a summit's height) on a rounded paper card. */
@@ -2082,7 +2087,7 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
             @(s.labelsShown), @(s.imagerySlots), @(s.bakeQueue), @(s.hRef), @(s.hRefTravelM), @(s.morphs),
             @(s.maxMorphM), @(s.meshBakes), @(s.imageryUploads), @(_drapeRendered.load()), @(_drapeDiskHits.load()),
             @(_demDisk.load()), @(_demNetwork.load()), @(_tfCounts[1]), @(_tfCounts[2]), @(_tfCounts[3]),
-            @(_tfCounts[4]) ];
+            @(_tfCounts[4]), @(s.labelToggles) ];
 }
 
 - (void)trimMemory {

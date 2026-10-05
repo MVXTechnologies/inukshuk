@@ -271,12 +271,13 @@ void Engine::onImageryFailed(int z, int x, int y) {
 
 // ---- scene inputs -------------------------------------------------------------------
 
-void Engine::setLabels(std::vector<LabelData> labels) {
+void Engine::setLabels(std::vector<LabelData> labels, bool keepMissing) {
   std::lock_guard<std::mutex> lock(sceneMutex_);
   std::unordered_map<int, LabelEntry> old;
   for (auto& e : labels_) old[e.data.id] = e;
   labels_.clear();
   labels_.reserve(labels.size());
+  std::unordered_set<int> ids;
   for (auto& d : labels) {
     LabelEntry e;
     auto it = old.find(d.id);
@@ -286,7 +287,16 @@ void Engine::setLabels(std::vector<LabelData> labels) {
       e.hGen = it->second.hGen;
     }
     e.data = d;
+    ids.insert(d.id);
     labels_.push_back(e);
+  }
+  if (keepMissing) {
+    // Round 3: a pin whose vector tile is reloading is not hidden meanwhile.
+    for (auto& [id, e] : old) {
+      if (ids.count(id)) continue;
+      if (e.missingSince < 0) e.missingSince = clockMs_;
+      if (clockMs_ - e.missingSince < kLabelKeepMs) labels_.push_back(e);
+    }
   }
   if (repaint_) repaint_();
 }
@@ -945,11 +955,20 @@ FrameOutput Engine::frame(const FrameInput& in) {
     draw = std::move(pruned);
   }
 
+  // Satellite (round 3): one imagery zoom across the near view. Esri World
+  // Imagery mixes sources by zoom level (capture dates, colour), so tiles of
+  // neighbouring LOD zooms draped from their own zooms showed hard seams and
+  // abrupt changes as they refined. Tiles deeper than the cap sample their
+  // capped ancestor's drape (the right sub-rect: demWindowAt).
+  const bool satellite = out.look.imagery > 0.5f;
+  const int imageryCap = satellite && !legacy
+                             ? std::clamp(static_cast<int>(std::floor(in.zoom)) + kSatelliteCapLead, 0, kImageryMaxZoom)
+                             : kImageryMaxZoom;
   // Imagery: uploads for newly arrived tiles, slot pins, requests.
   std::unordered_set<uint64_t> imgUsed;
   bool imageryFading = false;
   auto imageryBest = [&](const TileId& t, int& slotOut, std::array<float, 3>& win) -> uint64_t {
-    const int zOwn = std::min(t.z, kImageryMaxZoom);
+    const int zOwn = std::min({t.z, kImageryMaxZoom, imageryCap});
     for (int z = zOwn; z >= 0; z--) {
       const DemWindow w = demWindowAt(t, z);
       const uint64_t key = demKey64(w.dem);
@@ -1150,7 +1169,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
       for (const auto& t : ring) order.push_back({t, true});
       for (const auto& [t, ringTile] : order) {
         if (room <= 0 || static_cast<int>(want.size()) >= kRequestsPerFrame) break;
-        const int zOwn = std::min(t.z, kImageryMaxZoom);
+        const int zOwn = std::min({t.z, kImageryMaxZoom, imageryCap});
         for (int z : {ringTile ? zOwn : std::max(0, zOwn - 3), zOwn}) {
           const DemId id = demWindowAt(t, z).dem;
           const uint64_t k = demKey64(id);
@@ -1245,6 +1264,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
     po.ctc = sel.ctc;
     po.hRef = hRef;
     po.heightScale = heightScale;
+    po.toggles = &stats_.labelToggles;
     po.topPx = labelTopPx_;
     po.bottomPx = labelBottomPx_;
     po.dtMs = dt;

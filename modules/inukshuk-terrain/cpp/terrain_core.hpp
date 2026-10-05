@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <unordered_map>
 #include <string>
@@ -272,7 +273,13 @@ struct LabelInput {
 };
 struct LabelState {
   double opacity = 0, shownAt = -1e300;
+  /** labels.ts: the show/hide decision with hysteresis, and when it lost its place (NaN: has it). */
+  bool shown = false;
+  double blockedAt = std::numeric_limits<double>::quiet_NaN();
 };
+constexpr double kLabelHoldMs = 350;
+constexpr double kLabelSticky = 1;
+constexpr double kLabelEdgeSlackPx = 8;
 struct PlacedLabel {
   int id = 0;
   double ax = 0, ay = 0, depth = 0, cx = 0, cy = 0, gx = 0, gy = 0, scale = 1, opacity = 0;
@@ -286,6 +293,8 @@ struct PlaceOptions {
   std::function<bool(const LabelInput&)> occluded;
   /** UI bands (px) a plate stays clear of: search/status bar, bottom bar (labels.ts). */
   double topPx = 0, bottomPx = 0;
+  /** Show/hide decision flips are added here (round 3 counter); may be null. */
+  int* toggles = nullptr;
 };
 double labelScale(double distance, double ctc);
 bool rectsOverlap(const std::array<double, 4>& a, const std::array<double, 4>& b, double pad);

@@ -186,6 +186,7 @@ struct EngineStats {
   double maxMorphM = 0;      // the largest such change (m)
   int meshBakes = 0;         // meshes installed
   int imageryUploads = 0;    // drape textures uploaded to the GPU
+  int labelToggles = 0;      // pin show/hide decision flips
 };
 
 class Engine {
@@ -224,6 +225,8 @@ class Engine {
    * moving, intermediate coarse bakes, no fog LOD) for A/B measurements.
    */
   static constexpr int kDebugLegacy = 32;
+  /** Satellite drapes go no deeper than camera zoom + this (one capture across the near view). */
+  static constexpr int kSatelliteCapLead = 1;
   /** The reference height holds until the camera has rested this long (ms). */
   static constexpr double kRefSettleMs = 350;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
@@ -264,7 +267,13 @@ class Engine {
   void resetImagery();
   uint32_t imageryGeneration() const { return imgGeneration_.load(); }
 
-  void setLabels(std::vector<LabelData> labels);
+  /**
+   * `keepMissing`: pins absent from the new set (their vector tile reloading)
+   * stay for kLabelKeepMs instead of fading out and back. Only when their
+   * atlas rects are still valid (the platform did not reset its atlas).
+   */
+  void setLabels(std::vector<LabelData> labels, bool keepMissing = false);
+  static constexpr double kLabelKeepMs = 4000;
   void setPolyline(int id, std::vector<Pt> mercPoints, const LineStyle& style);
   void removePolyline(int id);
   void setPuck(bool visible, double mercX, double mercY);
@@ -363,6 +372,7 @@ class Engine {
     LabelData data;
     double h = 0;
     double hTarget = 0;
+    double missingSince = -1;  // ms; ≥ 0 while kept after leaving the scene set
     uint32_t hGen = UINT32_MAX;
   };
 

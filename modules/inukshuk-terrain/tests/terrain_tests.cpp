@@ -989,6 +989,16 @@ static void testEngine() {
     CHECK(sc.stats().imagerySlots <= Engine::kImagerySlots);
     // Bad imagery sizes are rejected.
     sc.onImageryData(3, 1, 1, std::vector<uint8_t>(10, 0));
+    // Round 3: satellite imagery never deeper than camera zoom + 1 (one capture).
+    {
+      img2.clear();
+      sc.resetImagery();
+      so = settle(in, 3);
+      int deepest = 0;
+      for (const auto& d : img2) deepest = std::max(deepest, d.z);
+      CHECK(!img2.empty());
+      CHECK(deepest <= static_cast<int>(std::floor(in.zoom)) + Engine::kSatelliteCapLead);
+    }
   }
   // 20. The look round-trips through its float packing.
   {

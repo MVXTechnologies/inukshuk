@@ -124,6 +124,7 @@ export function namedTerrainStats(s: readonly number[]): Record<string, number> 
     'gestureRotate',
     'gesturePinch',
     'gesturePan',
+    'labelToggles',
   ];
   const out: Record<string, number> = {};
   names.forEach((n, i) => {
