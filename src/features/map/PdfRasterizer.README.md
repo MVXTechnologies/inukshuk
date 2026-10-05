@@ -209,7 +209,8 @@ with the file.
   retains the slot until native work settles, then deletes its abandoned file.
 - A **12s load watchdog** inside the page guards against the Android System
   WebView's Blob worker wedging silently: if `getDocument` makes no progress
-  for 12s the page forces pdf.js's main-thread fake worker and retries once.
+  for 12s the page moves pdf.js to its main-thread fake worker (see "Worker
+  mode") and retries once.
   On the served path every range request re-arms it, so a big file that takes
   longer than 12s to open (but is progressing) is not mistaken for a stall.
 - Errors after the document opened (page out of range, render failure) are
@@ -287,10 +288,28 @@ pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(URL.createObjectURL(blob));
 ```
 
 Blob URLs are same-origin and require no network, so this works offline on both
-iOS (WKWebView) and Android (System WebView). If `new Worker(...)` throws on a
-given WebView, the code falls back to pdf.js's **main-thread "fake worker"** by
-clearing `workerSrc`; rendering still succeeds, just on the UI thread of the
-WebView (which is fine because the WebView is hidden/offscreen).
+iOS (WKWebView) and Android (System WebView).
+
+**Main-thread fallback (#554).** pdf.js's "fake worker" is not self-contained:
+it runs the worker's `WorkerMessageHandler` on the page's thread, taken from
+`window.pdfjsWorker` or else loaded with `<script src=workerSrc>`, and it
+caches a failure for the page's lifetime. So the page never relies on loading
+the worker by URL: `useMainThreadWorker()` evaluates the bundled worker source
+into the page, which defines `window.pdfjsWorker`, and pdf.js then uses it for
+every later document. This happens
+
+- at startup in **inline mode**, whose `about:blank` page has an opaque origin.
+  There pdf.js would wrap the blob URL in a second blob that `importScripts()`
+  it, and one Android 11 WebView failed every render with
+  `Setting up fake worker failed: "…"`;
+- when the Blob worker cannot be created;
+- on the load watchdog's retry. The retry used to clear `workerSrc`, which
+  makes pdf.js throw `No "GlobalWorkerOptions.workerSrc" specified` before it
+  starts, so the request hung until the 45 s timeout.
+
+Rendering on the main thread is fine because the WebView is hidden and
+offscreen. `PdfRasterizer.fakeWorker.test.tsx` runs the page with the real
+pdf.js bundles, with no usable Worker and no script loading by URL.
 
 ## PDF layers (optional content, #477)
 
