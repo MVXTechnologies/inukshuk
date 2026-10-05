@@ -70,7 +70,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Keyboard,
-  Linking,
   type NativeSyntheticEvent,
   Pressable,
   StyleSheet,
@@ -87,6 +86,7 @@ import { exploreItemHref, exploreListHref } from './exploreRoutes';
 import { itemFacets } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
 import { useLinkOutCollections } from './useLinkOutCollections';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * Explore on a map (#447, board `MapView.dc.html`): the loaded catalog AND the
@@ -723,7 +723,7 @@ export function ExploreMapScreen({
                 </>
               ) : selected.kind === 'place' ? (
                 <Pressable
-                  onPress={() => void Linking.openURL(selected.place.url).catch(() => undefined)}
+                  onPress={() => void openExternalLink(selected.place.url)}
                   accessibilityRole="link"
                   accessibilityHint="Opens the place's maps on the publisher's website"
                   style={[styles.details, styles.linkOut, { backgroundColor: t.library.chipOn }]}

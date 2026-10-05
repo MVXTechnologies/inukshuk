@@ -14,12 +14,13 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterChip } from './ExploreParts';
 import { useLinkOutCollections } from './useLinkOutCollections';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * A link-out collection (#447, board `Collection.dc.html` — Parcs Québec):
@@ -59,7 +60,7 @@ export function LinkOutCollectionScreen({ id }: { id: string }) {
       const distance = distanceMeters !== null ? formatDistanceShort(distanceMeters, units) : null;
       return (
         <Pressable
-          onPress={() => void Linking.openURL(place.url)}
+          onPress={() => void openExternalLink(place.url)}
           accessibilityRole="link"
           accessibilityLabel={[place.name, meta, distance].filter(Boolean).join(', ')}
           accessibilityHint="Opens the place's maps on the publisher's website"

@@ -11,12 +11,13 @@ import { space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Icon, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSupportCosts } from './useSupportCosts';
 import { useTipJar, type TipJar } from './useTipJar';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * Settings › Support Inukshuk (#476, board `Main.dc.html`): why the app is
@@ -122,9 +123,7 @@ export function SupportScreen() {
 
         <Pressable
           accessibilityRole="link"
-          onPress={() =>
-            void Linking.openURL(supportPageUrl(deviceLocale())).catch(() => undefined)
-          }
+          onPress={() => void openExternalLink(supportPageUrl(deviceLocale()))}
           style={({ pressed }) => [styles.link, pressed && styles.pressed]}
           hitSlop={8}
         >

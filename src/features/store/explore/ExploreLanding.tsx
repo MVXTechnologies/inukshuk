@@ -29,7 +29,7 @@ import { space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Linking, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -52,6 +52,7 @@ import { LongTrailsSection } from '../trails/LongTrailsSection';
 import { indexFacetCounts, itemFacets } from './facetsAdapter';
 import { OrganisationMapsCta } from './OrganisationMapsCta';
 import { useLinkOutCollections } from './useLinkOutCollections';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * The Explore tab's Discover landing (#447, board `Main.dc.html`):
@@ -259,7 +260,7 @@ export function ExploreLanding({
                     position={position}
                     marker
                     external
-                    onPress={() => void Linking.openURL(card.place.url).catch(() => undefined)}
+                    onPress={() => void openExternalLink(card.place.url)}
                   />
                 ),
               )}

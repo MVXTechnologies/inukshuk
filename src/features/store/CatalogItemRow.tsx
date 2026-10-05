@@ -5,10 +5,11 @@ import type { Units } from '@core/format';
 import { tabularNums } from '@ui/fonts';
 import { radius, space } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, ProgressBar, Text, useTheme } from 'react-native-paper';
 
 import { LocatorThumb } from './LocatorThumb';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * One Maps-tab row (revamp `After-Maps.html`): a 56 dp locator thumbnail,
@@ -200,7 +201,7 @@ export function CatalogItemRow({
               compact
               icon="open-in-new"
               style={styles.sourceLink}
-              onPress={() => void Linking.openURL(source.homepage ?? '')}
+              onPress={() => void openExternalLink(source.homepage ?? '')}
             >
               About this source
             </Button>

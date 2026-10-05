@@ -2,10 +2,11 @@ import { FIX_THE_MAP_URL, type MapCreditLine } from '@core/map/mapCredits';
 import { useChromeOutline } from '@ui/useChromeOutline';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
 import { MapSheet, SectionTitle, SheetHeader } from './mapSheet';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * The map's credits (2.1.1, owner request): a small ⓘ button to the LEFT of
@@ -80,7 +81,7 @@ export function MapCreditsSheet({
             ))}
             <View style={[styles.footer, { borderTopColor: t.outlineVariant }]}>
               <Pressable
-                onPress={() => void Linking.openURL(FIX_THE_MAP_URL)}
+                onPress={() => void openExternalLink(FIX_THE_MAP_URL)}
                 accessibilityRole="link"
                 accessibilityLabel="Report a map error"
                 style={styles.footerRow}
@@ -113,7 +114,7 @@ function CreditLink({ label, url }: { label: string; url: string }) {
   const t = useSchemeTokens();
   return (
     <Pressable
-      onPress={() => void Linking.openURL(url)}
+      onPress={() => void openExternalLink(url)}
       accessibilityRole="link"
       accessibilityLabel={label}
       hitSlop={6}
