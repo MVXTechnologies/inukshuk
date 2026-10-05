@@ -53,6 +53,8 @@ export interface MapActions {
    * one row for both drawing tools. Omitted in 3D.
    */
   onDraw?: () => void;
+  /** Open Convert empty, to type a coordinate you have not tapped (appended last). */
+  onConvert?: () => void;
 }
 
 export function MapActionsMenu({
@@ -106,6 +108,8 @@ export function MapActionsMenu({
           {actions.onOpenSettings !== undefined &&
             row('cog-outline', 'Settings', run(actions.onOpenSettings))}
           {actions.onDraw !== undefined && row('draw', 'Draw', run(actions.onDraw))}
+          {actions.onConvert !== undefined &&
+            row('swap-vertical', 'Convert coordinates', run(actions.onConvert))}
         </View>
       )}
     </>

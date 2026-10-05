@@ -79,9 +79,11 @@ class MapModel {
 // Where each part of the chip sits relative to its coordinate.
 const { buttonWidth, buttonHeight, gap, bottomOffset } = MAP_POINT_ACTION_LAYOUT;
 const ROW_Y = -(bottomOffset + buttonHeight / 2);
-const onNavigate = (c: Px): Px => [c[0] - (gap / 2 + buttonWidth / 2), c[1] + ROW_Y];
-const onWaypoint = (c: Px): Px => [c[0] + gap / 2 + buttonWidth / 2, c[1] + ROW_Y];
-const onReadout = (c: Px): Px => [c[0], c[1] - 20];
+// The row's three buttons are centred on the point: Navigate, Waypoint, Convert.
+const onNavigate = (c: Px): Px => [c[0] - (gap + buttonWidth), c[1] + ROW_Y];
+const onWaypoint = (c: Px): Px => [c[0], c[1] + ROW_Y];
+// The readout lines sit just above the action row.
+const onReadout = (c: Px): Px => [c[0], c[1] - (bottomOffset + buttonHeight + 6)];
 
 const A: Px = [200, 400];
 

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
+import { palette } from '@ui/tokens';
 import { weatherChrome as wc } from '../weather/weatherChrome';
 
 /**
@@ -35,8 +36,9 @@ import { weatherChrome as wc } from '../weather/weatherChrome';
  * Each line owns its own data hook (see WeatherPointLine / DepthPointLine),
  * so a line that has nothing to say costs nothing and never blocks the rest.
  *
- * #232 gives the chip an ACTION ROW: the tapped point is the hub for the two
- * things you can do with a coordinate — navigate to it, or keep it. They live
+ * #232 gives the chip an ACTION ROW: the tapped point is the hub for the
+ * things you can do with a coordinate — navigate to it, keep it, or convert
+ * it (Convert, appended third so the first two never move). They live
  * in the chip rather than in a second popup or in permanent map chrome, so
  * they appear and disappear with the tap that summoned them.
  */
@@ -82,6 +84,8 @@ export interface MapPointChipActions {
   onNavigate: () => void;
   /** Open the waypoint editor on the tapped point. */
   onAddWaypoint: () => void;
+  /** Open Convert on the tapped point (its ≈ WGS 84 position). */
+  onConvert: () => void;
   /**
    * Fired the instant the row TAKES a touch, before the press itself. On iOS
    * MapLibre's own tap recognizer fires for the same tap even though the row
@@ -92,11 +96,16 @@ export interface MapPointChipActions {
   onClaimTouch?: () => void;
 }
 
-/** The two point actions the chip offers, stable a11y strings (#232). */
+/** The point actions the chip offers, stable a11y strings (#232; Convert appended). */
 export const MAP_POINT_ACTION_LABELS = {
   navigate: 'Navigate to coordinates',
   waypoint: 'Add waypoint here',
+  convert: 'Convert coordinates',
 } as const;
+
+/** Left to right. Convert is APPENDED so the first two keep their place (Maestro contracts). */
+export const MAP_POINT_ACTIONS = ['navigate', 'waypoint', 'convert'] as const;
+export type MapPointAction = (typeof MAP_POINT_ACTIONS)[number];
 
 /**
  * Fixed layout of the action row, in px — fixed because the MAP also
@@ -104,9 +113,10 @@ export const MAP_POINT_ACTION_LABELS = {
  * and the hit rectangles have to be the same rectangles, so both read here.
  */
 export const MAP_POINT_ACTION_LAYOUT = {
-  buttonWidth: 104,
+  /** Three buttons + two gaps = 220 px, the chip's 240 px max minus its padding. */
+  buttonWidth: 70,
   buttonHeight: 28,
-  gap: 6,
+  gap: 5,
   /**
    * Gap between the tapped coordinate and the BOTTOM of the action row:
    * the marker is bottom-anchored, so below the chip sit the anchor dot
@@ -122,12 +132,16 @@ export const MAP_POINT_ACTION_LAYOUT = {
  * `null` when the tap is anywhere else (the caller then falls through to its
  * own dismiss/copy hit-test).
  */
-export function hitMapPointChipAction(dx: number, dy: number): 'navigate' | 'waypoint' | null {
+export function hitMapPointChipAction(dx: number, dy: number): MapPointAction | null {
   const { buttonWidth, buttonHeight, gap, bottomOffset } = MAP_POINT_ACTION_LAYOUT;
   if (dy > -bottomOffset || dy < -(bottomOffset + buttonHeight)) return null;
-  const half = gap / 2;
-  if (dx <= -half && dx >= -(half + buttonWidth)) return 'navigate';
-  if (dx >= half && dx <= half + buttonWidth) return 'waypoint';
+  // The row is centred on the tapped coordinate.
+  const n = MAP_POINT_ACTIONS.length;
+  const start = -(n * buttonWidth + (n - 1) * gap) / 2;
+  for (let i = 0; i < n; i++) {
+    const left = start + i * (buttonWidth + gap);
+    if (dx >= left && dx <= left + buttonWidth) return MAP_POINT_ACTIONS[i] ?? null;
+  }
   return null;
 }
 
@@ -171,10 +185,19 @@ export function runMapPointChipAction(
     actions.onAddWaypoint();
     return true;
   }
+  if (hit === 'convert') {
+    actions.onConvert();
+    return true;
+  }
   return false;
 }
 
-function MapPointChipActionRow({ onNavigate, onAddWaypoint, onClaimTouch }: MapPointChipActions) {
+function MapPointChipActionRow({
+  onNavigate,
+  onAddWaypoint,
+  onConvert,
+  onClaimTouch,
+}: MapPointChipActions) {
   return (
     <View style={styles.actions} pointerEvents="box-none">
       <ActionButton
@@ -188,6 +211,13 @@ function MapPointChipActionRow({ onNavigate, onAddWaypoint, onClaimTouch }: MapP
         accessibilityLabel={MAP_POINT_ACTION_LABELS.waypoint}
         onPress={onAddWaypoint}
         onClaimTouch={onClaimTouch}
+      />
+      <ActionButton
+        text="Convert"
+        accessibilityLabel={MAP_POINT_ACTION_LABELS.convert}
+        onPress={onConvert}
+        onClaimTouch={onClaimTouch}
+        accent
       />
     </View>
   );
@@ -204,15 +234,18 @@ function ActionButton({
   accessibilityLabel,
   onPress,
   onClaimTouch,
+  accent = false,
 }: {
   text: string;
   accessibilityLabel: string;
   onPress: () => void;
   onClaimTouch?: (() => void) | undefined;
+  /** The sage fill of the mockup's Convert button. */
+  accent?: boolean;
 }) {
   return (
     <View
-      style={styles.action}
+      style={[styles.action, accent && styles.actionAccent]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onStartShouldSetResponder={() => {
@@ -221,7 +254,7 @@ function ActionButton({
       }}
       onResponderRelease={onPress}
     >
-      <Text style={styles.actionText} numberOfLines={1}>
+      <Text style={[styles.actionText, accent && styles.actionTextAccent]} numberOfLines={1}>
         {text}
       </Text>
     </View>
@@ -269,6 +302,8 @@ const styles = StyleSheet.create({
     borderColor: wc.hairline,
   },
   actionText: { fontSize: 12, lineHeight: 15, fontWeight: '700', color: wc.ink },
+  actionAccent: { backgroundColor: palette.sage, borderColor: palette.sage },
+  actionTextAccent: { color: palette.ink },
   tail: {
     width: 8,
     height: 8,

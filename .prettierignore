@@ -28,3 +28,10 @@ modules/inukshuk-terrain/tests/fixtures/
 infra/tiles/nas/tides/fixtures/
 # Frozen NAS validation run (generated, compact on purpose)
 src/core/tides/__fixtures__/validation-*.json
+
+# Convert: PROJ build outputs (modules/inukshuk-proj/scripts/prepare.sh) and a
+# recorded NOAA NCAT answer file, kept as captured.
+modules/inukshuk-proj/prebuilt/
+modules/inukshuk-proj/assets/
+scripts/convert-extra-references.json
+src/core/convert/fixtures/

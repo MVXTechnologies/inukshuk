@@ -1,3 +1,4 @@
+import { CONVERT_CREDITS } from '@core/convert/credits';
 import { MARINE_ENABLED, VECTOR_BASEMAP_ENABLED, WEATHER_ENABLED } from '@core/features/flags';
 import { MARINE_DISCLAIMER, OPENSEAMAP_ATTRIBUTION } from '@core/geo/marineLayers';
 import { MARINE_SOURCES, NOAA_ENC_ATTRIBUTION } from '@core/geo/marineSources';
@@ -60,6 +61,8 @@ const PARTS: readonly string[] = [
   'Geodetic points: national and provincial survey agencies (see Settings › Extensions › Coverage & sources) and OpenStreetMap contributors',
   // Overlays → Tide stations (infra/tiles/nas/tides.sh). CHS is not in it.
   'Tide stations: NOAA/NOS/CO-OPS (public domain) · Shom, 2025. Références Altimétriques Maritimes, doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · 出典：気象庁 (Japan Meteorological Agency, Public Data Licence 1.0) · Canada: contains data of the Canadian Hydrographic Service (DFO), fetched live by this device from CHS IWLS, under the CHS Licence Agreement · not for navigation',
+  // Convert (PROJ, the EPSG Dataset's terms, every grid agency's licence).
+  CONVERT_CREDITS,
   // Tides ride the forecast card, which is gated on weather OR marine.
   ...(WEATHER_ENABLED || MARINE_ENABLED ? [`Tides: ${CHS_TIDES_ATTRIBUTION}`] : []),
 ];

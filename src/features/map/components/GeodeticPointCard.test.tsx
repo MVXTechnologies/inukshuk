@@ -28,7 +28,7 @@ afterEach(async () => {
   jest.useRealTimers();
 });
 
-async function setup() {
+async function setup(onConvert: jest.Mock = jest.fn()) {
   const onCopy = jest.fn();
   await render(
     <PaperProvider>
@@ -36,6 +36,7 @@ async function setup() {
         mark={MARK}
         onOpenLink={jest.fn()}
         onNavigate={jest.fn()}
+        onConvert={onConvert}
         onCopy={onCopy}
         onClose={jest.fn()}
       />
@@ -45,8 +46,9 @@ async function setup() {
 }
 
 describe('GeodeticPointCard copy buttons', () => {
-  it('copies each line with its datum / system label, and keeps copy-all', async () => {
-    const onCopy = await setup();
+  it('copies each line with its datum / system label, and offers Convert', async () => {
+    const onConvert = jest.fn();
+    const onCopy = await setup(onConvert);
     fireEvent.press(screen.getByLabelText('Copy coordinates'));
     expect(onCopy).toHaveBeenLastCalledWith(
       '46° 48\' 47.36926" N, 71° 12\' 27.45735" W (NAD83(CSRS) · epoch 1997.0)',
@@ -64,9 +66,11 @@ describe('GeodeticPointCard copy buttons', () => {
       '46.813158° N, 71.207627° W (≈ WGS 84, display ±2 m)',
       'WGS 84 display position',
     );
-    // ...and the copy-all button stays
-    fireEvent.press(screen.getByLabelText('Copy published values'));
-    expect(onCopy.mock.lastCall?.[1]).toBe('all published values');
-    expect(onCopy.mock.lastCall?.[0]).toContain('H 51.158 m CGVD2013');
+    // The bottom row: Convert replaced the copy-all button (owner, 2026-10-05).
+    // (One render per file: a second render in this file comes up empty.)
+    expect(screen.queryByLabelText('Copy published values')).toBeNull();
+    expect(screen.getByText('Datasheet')).toBeOnTheScreen();
+    fireEvent.press(screen.getByLabelText('Convert M15KM007'));
+    expect(onConvert).toHaveBeenCalledTimes(1);
   });
 });

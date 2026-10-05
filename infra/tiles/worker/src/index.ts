@@ -37,6 +37,7 @@ import { decodeBudgetFrom } from './contourGrid';
 import { contourR2Key } from './contourMath';
 import { CONTOUR_MAX_ZOOM, contourTile } from './contours';
 import { handleSearch, type SearchEnv } from './search';
+import { isProjGridPath, PROJ_GRID_UPLOAD_KEY, serveProjGrids, type GridBucket } from './projGrids';
 import { handleDonor, memoryLimiter } from './donors';
 import {
   CODE_TTL_MS,
@@ -499,6 +500,10 @@ async function serve(
     return serveTrails(env, url, cors);
   }
 
+  if (isProjGridPath(url.pathname)) {
+    return serveProjGrids(env.BUCKET as unknown as GridBucket, request, url.pathname, cors);
+  }
+
   return new Response('not found', { status: 404, headers: cors });
 }
 
@@ -618,7 +623,13 @@ async function upload(request: Request, env: Env, url: URL, key: string): Promis
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    const [, uploadKey] = UPLOAD_PATH.exec(url.pathname) ?? [];
+    const gridKey = url.pathname.startsWith('/_upload/proj-grids/')
+      ? url.pathname.slice('/_upload/'.length)
+      : undefined;
+    const [, archiveKey] = UPLOAD_PATH.exec(url.pathname) ?? [];
+    const uploadKey =
+      archiveKey ??
+      (gridKey !== undefined && PROJ_GRID_UPLOAD_KEY.test(gridKey) ? gridKey : undefined);
     if (uploadKey !== undefined) {
       try {
         return await upload(request, env, url, uploadKey);

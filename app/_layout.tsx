@@ -139,6 +139,9 @@ export default function RootLayout() {
                   {/* Long-distance trails (#467). */}
                   <Stack.Screen name="explore/trails" />
                   <Stack.Screen name="explore/trail/[id]" />
+                  {/* Convert: coordinates, heights, epochs, chart datum (pinned PROJ pipelines). */}
+                  <Stack.Screen name="convert" />
+                  <Stack.Screen name="convert-selftest" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />

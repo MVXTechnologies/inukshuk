@@ -11,6 +11,8 @@ interface Props {
   /** Open the agency datasheet (or its page) — the system browser. */
   onOpenLink: (url: string) => void;
   onNavigate: () => void;
+  /** Open Convert on the mark's published values (`@core/convert/prefill` prefillFromMark). */
+  onConvert: () => void;
   /** Copy `text`; `what` names it for the confirmation ("UTM zone 19N", "all values"). */
   onCopy: (text: string, what: string) => void;
   onClose: () => void;
@@ -30,6 +32,7 @@ export function GeodeticPointCard({
   mark,
   onOpenLink,
   onNavigate,
+  onConvert,
   onCopy,
   onClose,
   offline = false,
@@ -169,14 +172,17 @@ export function GeodeticPointCard({
         <Button mode="outlined" icon="navigation-variant-outline" compact onPress={onNavigate}>
           Navigate
         </Button>
-        <IconButton
-          icon="content-copy"
+        {/* Convert on the mark's own published values, datum and epoch (replaced "Copy all"). */}
+        <Button
           mode="outlined"
-          size={18}
-          onPress={() => onCopy(model.copyText, 'all published values')}
-          accessibilityLabel="Copy published values"
-          style={styles.tight}
-        />
+          icon="swap-vertical"
+          compact
+          onPress={onConvert}
+          accessibilityLabel={`Convert ${mark.id}`}
+          testID="geodetic-convert"
+        >
+          Convert
+        </Button>
       </View>
       {model.credit !== '' && (
         <Text variant="labelSmall" style={[styles.credit, { color: muted }]} numberOfLines={2}>
@@ -210,6 +216,5 @@ const styles = StyleSheet.create({
   lineCopy: { margin: 0, marginTop: -6, marginRight: -8, width: 28, height: 28 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   grow: { flexGrow: 1 },
-  tight: { margin: 0 },
   credit: { marginTop: 6, textAlign: 'center' },
 });

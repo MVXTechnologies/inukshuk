@@ -1,0 +1,4 @@
+# Built by scripts/prepare.sh (scripts/build-proj.sh) from pinned sources: PROJ
+# static libs per platform, proj.db, the two bundled grids. Never committed.
+prebuilt/
+assets/inukshukproj/

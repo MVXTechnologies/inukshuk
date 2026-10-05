@@ -1,0 +1,40 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.inukshukproj'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.inukshukproj'
+  ndkVersion rootProject.ext.has('ndkVersion') ? rootProject.ext.ndkVersion : '27.1.12297006'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    externalNativeBuild {
+      cmake {
+        cppFlags '-std=c++17 -fexceptions -frtti -O2'
+        arguments '-DANDROID_STL=c++_shared'
+      }
+    }
+  }
+  externalNativeBuild {
+    cmake {
+      path 'CMakeLists.txt'
+    }
+  }
+  // proj.db + the bundled grids (scripts/prepare.sh), packaged under
+  // assets/inukshukproj/ and copied to the files dir on first use (SQLite
+  // needs a real file).
+  sourceSets {
+    main {
+      assets.srcDirs += ["${projectDir}/../assets"]
+    }
+  }
+  packagingOptions {
+    jniLibs {
+      pickFirsts += ['**/libc++_shared.so']
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "platforms": ["android", "apple"],
+  "android": {
+    "modules": ["expo.modules.inukshukproj.InukshukProjModule"]
+  },
+  "apple": {
+    "podspecPath": "InukshukProj.podspec",
+    "modules": ["InukshukProjModule"]
+  }
+}
