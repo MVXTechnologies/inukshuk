@@ -26,6 +26,9 @@ jest.mock('@core/features/flags', () => ({
   PARKED_LABEL: 'Coming soon',
 }));
 
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+
 const noop = (): void => undefined;
 
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
@@ -206,6 +209,27 @@ describe('Parks & protected areas', () => {
     expect(screen.getByText('Needs labels on satellite')).toBeTruthy();
     fireEvent.press(row);
     expect(useSettingsStore.getState().showParks).toBe(true);
+  });
+});
+
+describe('Geodetic points (Settings → Extensions)', () => {
+  it('leads to Settings → Extensions while the extension is not installed', async () => {
+    await renderMenu();
+    expect(screen.getByText('Get the extension in Settings')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings',
+      params: { open: 'extensions' },
+    });
+  });
+
+  it('is a switch with its legend once installed', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    await renderMenu();
+    expect(checked('Geodetic points')).toBe(true);
+    expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(useSettingsStore.getState().showGeodetic).toBe(false);
   });
 });
 

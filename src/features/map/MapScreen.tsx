@@ -53,6 +53,7 @@ import {
   Camera,
   type CameraRef,
   GeoJSONSource,
+  Images,
   ImageSource,
   Layer,
   Map,
@@ -72,7 +73,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { createGesturePause } from '@core/support/gesturePause';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AppState, Linking, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Banner, Snackbar, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RegionSelectOverlay } from './RegionSelectOverlay';
@@ -98,7 +99,17 @@ import { SearchHitMarker } from './search/SearchHitMarker';
 import { cameraTargetFor } from '@core/search/camera';
 import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
-import { imageryContoursOption, vectorBasemapOption, vectorContoursUrl } from '@data/basemapTiles';
+import {
+  geodeticTilesUrl,
+  imageryContoursOption,
+  vectorBasemapOption,
+  vectorContoursUrl,
+  vectorGlyphsUrl,
+} from '@data/basemapTiles';
+import { pickTappedMark, type GeodeticMark } from '@core/geodetic/record';
+import { GEODETIC_TAP_LAYERS, geodeticColors } from '@core/map/geodeticStyle';
+import { GeodeticPointCard } from './components/GeodeticPointCard';
+import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
 import { NightExitPill } from '@features/display/NightExitPill';
@@ -207,6 +218,15 @@ const TERRAIN_DRAPE_CONTOUR_IDS: readonly string[] = CONTOUR_LINE_LAYER_IDS.flat
 
 /** The heat-tap ring mounts with the other markers (`@core/map/layerSlots`). */
 const MARKERS_ANCHOR = overlayAnchor('markers');
+
+/** Half the side of the box a tap searches for a geodetic mark, px (DESIGN §7.2: ~12). */
+const GEODETIC_HIT_PX = 12;
+
+/** Our glyph host for the geodetic ID labels, when the build has one. */
+function geodeticGlyphs(): { glyphs?: string } {
+  const glyphs = vectorGlyphsUrl();
+  return glyphs !== null ? { glyphs } : {};
+}
 
 // Live-recording line throttle: rebuilding the LineString on every GPS fix
 // re-serializes the entire track so far and pushes it across the bridge each
@@ -500,6 +520,10 @@ export function MapScreen() {
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   /** "Parks & protected areas": boundaries and names on the vector layers. */
   const showParks = useSettingsStore((s) => s.showParks);
+  /** Settings → Extensions → Geodetic points: installed, and its overlay switch on. */
+  const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
+  const showGeodetic = useSettingsStore((s) => s.showGeodetic);
+  const geodeticTiles = geodeticInstalled && showGeodetic ? geodeticTilesUrl() : null;
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -819,6 +843,13 @@ export function MapScreen() {
             },
           }
         : {}),
+      // Geodetic points (Settings → Extensions): on every base map, not in
+      // the map maker (its frame shows what the printed sheet will carry).
+      ...(geodeticTiles !== null && editorStyle === null
+        ? {
+            geodetic: { tiles: geodeticTiles, dark: theme.dark, ...geodeticGlyphs() },
+          }
+        : {}),
     };
     // While the map maker is open the base raster becomes the source the
     // composer stitches, so the frame and the sheet cannot disagree (#349).
@@ -861,6 +892,7 @@ export function MapScreen() {
     imageryLabels,
     imageryContours,
     satelliteImagery,
+    geodeticTiles,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1431,6 +1463,8 @@ export function MapScreen() {
   const [newWp, setNewWp] = useState<WaypointDraft | null>(null);
   // Read-only viewer target (pin tap). Editing is an explicit step from it.
   const [viewWp, setViewWp] = useState<{ source: 'live' | 'saved'; id: string } | null>(null);
+  /** The tapped geodetic mark (its summary card is up). */
+  const [geodeticMark, setGeodeticMark] = useState<GeodeticMark | null>(null);
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1793,7 +1827,36 @@ export function MapScreen() {
             ? null
             : { source: pin.source, id: pin.id },
         );
+        setGeodeticMark(null);
         return;
+      }
+
+      // Geodetic points (Settings → Extensions): under the waypoint pins and
+      // the chip, above the trails, heat spots and the bare map. A small box
+      // round the finger, the nearest mark in it wins; nothing there (or the
+      // query unavailable mid-teardown) falls through to the routes below.
+      if (geodeticTiles !== null && lngLatArr) {
+        let mark: GeodeticMark | null = null;
+        try {
+          const features = await map.queryRenderedFeatures(
+            [
+              [px - GEODETIC_HIT_PX, py - GEODETIC_HIT_PX],
+              [px + GEODETIC_HIT_PX, py + GEODETIC_HIT_PX],
+            ],
+            { layers: [...GEODETIC_TAP_LAYERS] },
+          );
+          mark = pickTappedMark(features, [lngLatArr[0], lngLatArr[1]]);
+        } catch {
+          mark = null;
+        }
+        if (mark !== null) {
+          drawingRef.current.closeAreaCard();
+          setPointAt(null);
+          setViewWp(null);
+          setForecastAt(null);
+          setGeodeticMark(mark);
+          return;
+        }
       }
 
       // No waypoint pin hit — route through the heat lookup, but only when
@@ -1877,6 +1940,12 @@ export function MapScreen() {
           // behaviour) made it follow the finger around the map with no
           // obvious way to be rid of it. The NEXT tap, on a clean map, drops
           // a fresh chip as before.
+          // A survey-mark card is up: this tap only closes it (#258's rule —
+          // the chip never drops in the same tap that dismisses a card).
+          if (geodeticMark !== null) {
+            setGeodeticMark(null);
+            return;
+          }
           setPointAt(
             pointChipAfterBareTap(pointAt, { latitude: lngLatArr[1], longitude: lngLatArr[0] }),
           );
@@ -1884,8 +1953,11 @@ export function MapScreen() {
       }
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
       setForecastAt(null); // ... and the forecast card
+      setGeodeticMark(null); // ... and the survey-mark card
     },
     [
+      geodeticTiles,
+      geodeticMark,
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
@@ -2486,6 +2558,39 @@ export function MapScreen() {
                     'circle-color': 'transparent',
                     'circle-stroke-width': 2.5,
                     'circle-stroke-color': theme.colors.primary,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
+
+            {/* Geodetic points: the symbols the style's layers name, and a
+              ring under the mark whose card is up. */}
+            {geodeticTiles !== null && (
+              <Images images={geodeticImages(theme.dark ? 'dark' : 'light')} />
+            )}
+            {geodeticTiles !== null && geodeticMark !== null && (
+              <GeoJSONSource
+                id="geodetic-selected"
+                data={{
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: [geodeticMark.lng, geodeticMark.lat] },
+                  properties: {},
+                }}
+              >
+                <Layer
+                  id="geodetic-selected-ring"
+                  beforeId={MARKERS_ANCHOR}
+                  type="circle"
+                  paint={{
+                    'circle-radius': 13,
+                    'circle-color': geodeticColors(theme.dark ? 'dark' : 'light')[
+                      geodeticMark.type
+                    ],
+                    'circle-opacity': 0.18,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': geodeticColors(theme.dark ? 'dark' : 'light')[
+                      geodeticMark.type
+                    ],
                   }}
                 />
               </GeoJSONSource>
@@ -3112,6 +3217,7 @@ export function MapScreen() {
               routingEngines: drawing.routingEngines,
               weather: weatherLayer !== null && !offlineOnly,
               marine: marineActive,
+              geodetic: geodeticTiles !== null,
             })}
             bottom={
               // The bottom column's own lift, same precedence as its style.
@@ -3201,6 +3307,39 @@ export function MapScreen() {
                 }}
                 onDelete={deleteViewedWaypoint}
                 onClose={() => setViewWp(null)}
+              />
+            </View>
+          )}
+
+        {/* Geodetic points: the tapped survey mark's summary card. Same
+          bottom-card slot rules as the waypoint viewer. */}
+        {geodeticTiles !== null &&
+          geodeticMark !== null &&
+          inspectTrack === null &&
+          editWaypoint === null &&
+          viewWaypoint === null &&
+          !drawing.active && (
+            <View
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              pointerEvents="box-none"
+              testID="geodetic-card-dock"
+            >
+              <GeodeticPointCard
+                mark={geodeticMark}
+                floating={recordingPanelUp}
+                offline={offlineOnly}
+                onOpenLink={(url) => {
+                  Linking.openURL(url).catch(() => showSnack("Couldn't open the datasheet"));
+                }}
+                onNavigate={() => {
+                  setDestination({ latitude: geodeticMark.lat, longitude: geodeticMark.lng });
+                  setGeodeticMark(null);
+                }}
+                onCopy={(text) => {
+                  void Clipboard.setStringAsync(text);
+                  showSnack('Published values copied');
+                }}
+                onClose={() => setGeodeticMark(null)}
               />
             </View>
           )}

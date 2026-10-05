@@ -49,6 +49,12 @@ import {
   SATELLITE_TILE_SIZE,
   type ImageryLook,
 } from '@core/map/satelliteImagery';
+import {
+  buildGeodeticLayers,
+  GEODETIC_SOURCE,
+  GEODETIC_SOURCE_MAXZOOM,
+  GEODETIC_SOURCE_MINZOOM,
+} from '@core/map/geodeticStyle';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -431,6 +437,12 @@ export interface OsmStyleOptions {
    * glyph host).
    */
   imageryContours?: { tiles: string; glyphs?: string };
+  /**
+   * Geodetic points (Settings → Extensions, `@core/map/geodeticStyle`): our
+   * survey-mark tiles, drawn above the trails on every base map. `glyphs`
+   * serves the ID labels when the style has no glyph host of its own.
+   */
+  geodetic?: { tiles: string; dark: boolean; glyphs?: string };
   /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
@@ -1109,6 +1121,52 @@ export function buildOsmStyle(
     });
   }
 
+  // Geodetic points, in the trails slot after its anchor: above every trail
+  // line mounted under it, below the reference labels and the position puck.
+  // Built last so the glyph host above is settled.
+  if (options.geodetic) {
+    style.sources[GEODETIC_SOURCE] = {
+      type: 'vector',
+      tiles: [options.geodetic.tiles],
+      minzoom: GEODETIC_SOURCE_MINZOOM,
+      // Built to z13 (`geodetic.sh`); MapLibre overzooms past that.
+      maxzoom: GEODETIC_SOURCE_MAXZOOM,
+    };
+    style.glyphs ??= options.geodetic.glyphs ?? OFM_GLYPHS_URL;
+    const atkinson = style.glyphs !== OFM_GLYPHS_URL;
+    put(
+      'trails',
+      ...buildGeodeticLayers({
+        theme: options.geodetic.dark ? 'dark' : 'light',
+        font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
+      }),
+    );
+  }
+
   style.layers = stackLayers(slots);
   return style;
+}
+
+/**
+ * The style of a geodetic companion pack (`@data/offline`): ONLY the
+ * survey-mark tiles (and the label glyphs), so a region downloaded before the
+ * extension was installed gains its marks without re-downloading its map.
+ */
+export function buildGeodeticPackStyle(tiles: string, glyphs: string | null): StyleSpecification {
+  return {
+    version: 8,
+    glyphs: glyphs ?? OFM_GLYPHS_URL,
+    sources: {
+      [GEODETIC_SOURCE]: {
+        type: 'vector',
+        tiles: [tiles],
+        minzoom: GEODETIC_SOURCE_MINZOOM,
+        maxzoom: GEODETIC_SOURCE_MAXZOOM,
+      },
+    },
+    layers: buildGeodeticLayers({
+      theme: 'light',
+      font: glyphs ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
+    }),
+  };
 }

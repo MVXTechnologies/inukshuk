@@ -85,6 +85,27 @@ export function vectorParksUrl(): string | null {
 }
 
 /**
+ * Geodetic points (Settings → Extensions): the world's survey marks, one
+ * archive built on the NAS (`infra/tiles/nas/geodetic.sh`, weekly) and served
+ * by the same Worker. Opt-in: only drawn once the extension is installed.
+ */
+export const DEFAULT_GEODETIC_URL = `${TILE_HOST}/geodetic/{z}/{x}/{y}.mvt`;
+
+/**
+ * Whether `geodetic.pmtiles` is on the tile host. While false the extension
+ * is not offered at all (Settings shows no Extensions entry). Live since
+ * 2026-10-05; OTA-updatable.
+ */
+export const GEODETIC_TILES_PUBLISHED = true;
+
+/** The geodetic tile template (build-time override or ours), or null while unpublished. */
+export function geodeticTilesUrl(): string | null {
+  const value: unknown = Constants.expoConfig?.extra?.geodeticTilesUrl;
+  if (typeof value === 'string' && value !== '') return value;
+  return GEODETIC_TILES_PUBLISHED ? DEFAULT_GEODETIC_URL : null;
+}
+
+/**
  * Worldwide province / state label points (Natural Earth admin-1, public
  * domain): one ~470 KB GeoJSON file (~70 KB gzipped) on the GitHub Pages
  * site, built by `scripts/map/build-admin1-labels.mjs`. The Protomaps tiles

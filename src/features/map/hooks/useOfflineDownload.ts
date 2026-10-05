@@ -21,7 +21,7 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { vectorBasemapOption } from '@data/basemapTiles';
+import { geodeticTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
 import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
 import { resolveRegionName } from '../regionNaming';
 
@@ -305,10 +305,24 @@ export function useOfflineDownload({
  * references our vector tiles (and glyphs), not the OSM raster.
  */
 export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat) {
-  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap);
+  // The geodetic-points extension, when installed with "Offline in your
+  // regions" on: its tiles ride in every new pack (a pack stores every source
+  // of its style). Regions from before the install get a companion pack.
+  const geodetic = geodeticPackOption();
+  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
   // Packs always keep the contours, so they work offline whichever way the
   // Contours toggle is set later.
   return buildOsmStyle(tileUrl, basemap, false, {
     vectorBasemap: vectorBasemapOption(false, true),
+    ...geodetic,
   });
+}
+
+/** `{ geodetic }` for a pack style when the extension wants its marks offline, else `{}`. */
+export function geodeticPackOption(): { geodetic?: { tiles: string; dark: boolean } } {
+  const s = useSettingsStore.getState();
+  const tiles = geodeticTilesUrl();
+  return tiles !== null && s.geodeticInstalledAt > 0 && s.geodeticOffline
+    ? { geodetic: { tiles, dark: false } }
+    : {};
 }

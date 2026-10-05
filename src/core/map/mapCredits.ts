@@ -24,7 +24,8 @@ export interface MapCreditLine {
     | 'pdf'
     | 'routing'
     | 'weather'
-    | 'marine';
+    | 'marine'
+    | 'geodetic';
   /** The section label ("Base map", "Routing"). */
   label: string;
   /** The © line itself. */
@@ -47,6 +48,8 @@ export interface MapCreditsInput {
   routingEngines: readonly string[] | null;
   weather?: boolean;
   marine?: boolean;
+  /** Geodetic points (Settings → Extensions) drawn on the map. */
+  geodetic?: boolean;
 }
 
 export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright';
@@ -147,6 +150,16 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
   }
   if (input.weather) {
     lines.push({ id: 'weather', label: 'Weather', credit: ECCC_ATTRIBUTION });
+  }
+  if (input.geodetic) {
+    lines.push({
+      id: 'geodetic',
+      label: 'Geodetic points',
+      credit:
+        "Survey agencies' published data (each mark's card names its source and licence) · " +
+        'survey points © OpenStreetMap contributors',
+      link: OSM_LINK,
+    });
   }
   if (input.marine) {
     lines.push({

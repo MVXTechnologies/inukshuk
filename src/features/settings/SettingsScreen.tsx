@@ -15,6 +15,7 @@ import { formatBytes } from '@core/format';
 import { useLibraryStore } from '@state/libraryStore';
 import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 import { BetaFeaturesSection } from './BetaFeaturesSection';
+import { ExtensionsSection } from './ExtensionsSection';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
@@ -563,6 +564,21 @@ export function SettingsScreen() {
           >
             <View style={styles.accordionBody}>
               <ConnectionsSection showSnack={showSnack} />
+            </View>
+          </List.Accordion>
+
+          <Divider />
+
+          <List.Accordion
+            id="extensions"
+            title="Extensions"
+            description="Extra layers you can add to the map"
+            left={(p) => <List.Icon {...p} icon="puzzle-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
+          >
+            <View style={styles.accordionBody}>
+              <ExtensionsSection />
             </View>
           </List.Accordion>
 

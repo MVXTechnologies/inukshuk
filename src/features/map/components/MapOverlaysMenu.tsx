@@ -20,6 +20,9 @@ import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { geodeticTilesUrl } from '@data/basemapTiles';
+import { GeodeticLegend } from './GeodeticLegend';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
@@ -143,6 +146,9 @@ function OverlayRows({
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
+  const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
+  const showGeodetic = useSettingsStore((s) => s.showGeodetic);
+  const router = useRouter();
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
   const set = useSettingsStore((s) => s.set);
@@ -232,6 +238,26 @@ function OverlayRows({
         disabled={!parksAvailable}
         onToggle={() => set('showParks', !showParks)}
       />
+      {/* Settings → Extensions → Geodetic points. Installed: a switch with
+          the symbol legend under it; not yet: a row that leads to "Get". */}
+      {geodeticTilesUrl() !== null &&
+        (geodeticInstalled ? (
+          <SwitchRow
+            icon="map-marker-radius-outline"
+            label="Geodetic points"
+            hint="Survey marks and benchmarks"
+            value={showGeodetic}
+            onToggle={() => set('showGeodetic', !showGeodetic)}
+            below={<GeodeticLegend disabled={!showGeodetic} />}
+          />
+        ) : (
+          <NavRow
+            icon="map-marker-radius-outline"
+            label="Geodetic points"
+            hint="Get the extension in Settings"
+            onPress={() => router.push({ pathname: '/settings', params: { open: 'extensions' } })}
+          />
+        ))}
       <SwitchRow
         icon="label-outline"
         label="Labels on satellite"

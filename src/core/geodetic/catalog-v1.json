@@ -1,0 +1,589 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "key": "qc-mrnf",
+      "name": "MRNF Québec",
+      "network": "Réseau géodésique du Québec",
+      "licence": "CC BY 4.0",
+      "attribution": "© Gouvernement du Québec (MRNF) · CC BY 4.0",
+      "licenceUrl": "https://www.donneesquebec.ca/recherche/dataset/points-geodesiques",
+      "sheet": "https://fichegeodesique.mern.gouv.qc.ca/matricule-datum/{id}/2"
+    },
+    {
+      "key": "ca-nrcan",
+      "name": "NRCan",
+      "network": "Canadian Geodetic Survey",
+      "licence": "OGL-Canada",
+      "attribution": "Contains information licensed under the Open Government Licence – Canada (NRCan)",
+      "licenceUrl": "https://open.canada.ca/en/open-government-licence-canada",
+      "sheet": "https://webapp.csrs-scrs.nrcan-rncan.gc.ca/geod/data-donnees/station/report-rapport.php?id={id}"
+    },
+    {
+      "key": "us-ngs",
+      "name": "NOAA NGS",
+      "network": "National Spatial Reference System",
+      "licence": "Public domain",
+      "attribution": "NOAA National Geodetic Survey",
+      "licenceUrl": "https://geodesy.noaa.gov/datasheets/",
+      "sheet": "https://geodesy.noaa.gov/cgi-bin/ds_mark.prl?PidBox={id}"
+    },
+    {
+      "key": "osm",
+      "name": "OpenStreetMap",
+      "network": "man_made=survey_point",
+      "licence": "ODbL 1.0",
+      "attribution": "© OpenStreetMap contributors",
+      "licenceUrl": "https://www.openstreetmap.org/copyright",
+      "sheet": "https://www.openstreetmap.org/node/{id}"
+    },
+    {
+      "key": "fr-ign",
+      "name": "IGN France",
+      "network": "Géodésie et nivellement",
+      "licence": "Etalab 2.0",
+      "attribution": "IGN – Géodésie et nivellement · Licence Ouverte 2.0",
+      "licenceUrl": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+      "sheet": null
+    },
+    {
+      "key": "ch-swisstopo",
+      "name": "swisstopo",
+      "network": "Fixpunkte LFP1 / HFP1 / AGNES",
+      "licence": "OGD swisstopo",
+      "attribution": "© swisstopo",
+      "licenceUrl": "https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices",
+      "sheet": null
+    },
+    {
+      "key": "ch-cantons",
+      "name": "Swiss cantons",
+      "network": "Fixpunkte LFP2 / HFP2 (geodienste.ch)",
+      "licence": "Free with credit",
+      "attribution": "© cantonal surveys (geodienste.ch)",
+      "licenceUrl": "https://www.geodienste.ch/services/fixpunkte",
+      "sheet": null
+    },
+    {
+      "key": "uk-os-trig",
+      "name": "Ordnance Survey",
+      "network": "Trig pillar archive",
+      "licence": "OGL v3",
+      "attribution": "Contains OS data © Crown copyright and database right",
+      "licenceUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "sheet": null
+    },
+    {
+      "key": "uk-os-bm",
+      "name": "Ordnance Survey",
+      "network": "Benchmark archive",
+      "licence": "OGL v3",
+      "attribution": "Contains OS data © Crown copyright and database right",
+      "licenceUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "sheet": null
+    },
+    {
+      "key": "es-ign",
+      "name": "IGN España",
+      "network": "ROI · REGENTE · REDNAP · ERGNSS",
+      "licence": "CC BY 4.0",
+      "attribution": "© Instituto Geográfico Nacional de España · CC BY 4.0",
+      "licenceUrl": "https://www.ign.es/resources/licencia/Condiciones_licenciaUso_IGN.pdf",
+      "sheet": null
+    },
+    {
+      "key": "nl-rws",
+      "name": "Rijkswaterstaat",
+      "network": "NAP-peilmerken",
+      "licence": "CC0",
+      "attribution": "Rijkswaterstaat (CC0)",
+      "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sheet": null
+    },
+    {
+      "key": "nl-kadaster",
+      "name": "Kadaster",
+      "network": "RDinfo",
+      "licence": "Public Domain",
+      "attribution": "Kadaster RDinfo",
+      "licenceUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+      "sheet": null
+    },
+    {
+      "key": "no-kartverket",
+      "name": "Kartverket",
+      "network": "Fastmerker",
+      "licence": "CC BY 4.0",
+      "attribution": "© Kartverket · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "at-bev",
+      "name": "BEV",
+      "network": "Festpunkte",
+      "licence": "CC BY 4.0",
+      "attribution": "© BEV · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "de-nw",
+      "name": "Geobasis NRW",
+      "network": "Höhenfestpunkte",
+      "licence": "dl-de/zero-2.0",
+      "attribution": "Geobasis NRW (dl-de/zero-2.0)",
+      "licenceUrl": "https://www.govdata.de/dl-de/zero-2-0",
+      "sheet": null
+    },
+    {
+      "key": "de-mv",
+      "name": "LAiV M-V",
+      "network": "Festpunkte",
+      "licence": "CC BY 4.0",
+      "attribution": "© GeoBasis-DE/M-V · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "de-be",
+      "name": "Berlin",
+      "network": "Festpunkte",
+      "licence": "dl-de/zero-2.0",
+      "attribution": "Geoportal Berlin (dl-de/zero-2.0)",
+      "licenceUrl": "https://www.govdata.de/dl-de/zero-2-0",
+      "sheet": null
+    },
+    {
+      "key": "de-hh",
+      "name": "LGV Hamburg",
+      "network": "Festpunkte",
+      "licence": "dl-de/by-2.0",
+      "attribution": "Freie und Hansestadt Hamburg, LGV (dl-de/by-2.0)",
+      "licenceUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "sheet": null
+    },
+    {
+      "key": "is-natt",
+      "name": "Náttúrufræðistofnun",
+      "network": "Landmælingapunktar",
+      "licence": "CC BY 4.0",
+      "attribution": "Náttúrufræðistofnun Íslands · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "eu-epn",
+      "name": "EUREF EPN",
+      "network": "EUREF Permanent GNSS Network",
+      "licence": "CC BY 4.0",
+      "attribution": "EUREF Permanent GNSS Network · CC BY 4.0",
+      "licenceUrl": "https://epncb.oma.be/",
+      "sheet": "https://epncb.oma.be/_networkdata/siteinfo4onestation.php?station={id}"
+    },
+    {
+      "key": "au-nsw",
+      "name": "NSW Spatial Services",
+      "network": "SCIMS survey marks",
+      "licence": "CC BY 4.0",
+      "attribution": "© State of New South Wales (Spatial Services) · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "au-vic",
+      "name": "Vicmap Position",
+      "network": "Survey marks",
+      "licence": "CC BY 4.0",
+      "attribution": "© State of Victoria · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": null
+    },
+    {
+      "key": "au-qld",
+      "name": "Queensland",
+      "network": "Survey control",
+      "licence": "CC BY 4.0",
+      "attribution": "© State of Queensland · CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sheet": "https://qspatial.information.qld.gov.au/SurveyReport/{id}.pdf"
+    },
+    {
+      "key": "au-sa",
+      "name": "South Australia",
+      "network": "Survey marks",
+      "licence": "CC BY 3.0 AU",
+      "attribution": "© Government of South Australia · CC BY 3.0 AU",
+      "licenceUrl": "https://creativecommons.org/licenses/by/3.0/au/",
+      "sheet": null
+    },
+    {
+      "key": "au-tas",
+      "name": "Tasmania",
+      "network": "theLIST survey control",
+      "licence": "CC BY 3.0 AU",
+      "attribution": "© State of Tasmania (theLIST) · CC BY 3.0 AU",
+      "licenceUrl": "https://creativecommons.org/licenses/by/3.0/au/",
+      "sheet": null
+    },
+    {
+      "key": "br-ibge",
+      "name": "IBGE",
+      "network": "Banco de Dados Geodésicos",
+      "licence": "Free with credit",
+      "attribution": "Fonte: IBGE",
+      "licenceUrl": "https://www.ibge.gov.br/",
+      "sheet": "http://www.bdg.ibge.gov.br/bdg/pdf/relatorio.asp?L1={id}"
+    },
+    {
+      "key": "gl-ngl",
+      "name": "Nevada Geodetic Laboratory",
+      "network": "GNSS station list",
+      "licence": "Citation requested",
+      "attribution": "Nevada Geodetic Laboratory (Blewitt et al., 2018)",
+      "licenceUrl": "http://geodesy.unr.edu/",
+      "sheet": "http://geodesy.unr.edu/NGLStationPages/stations/{id}.sta"
+    },
+    {
+      "key": "gl-igs",
+      "name": "IGS",
+      "network": "IGS network",
+      "licence": "IGS open data",
+      "attribution": "International GNSS Service",
+      "licenceUrl": "https://igs.org/data-access/",
+      "sheet": "https://network.igs.org/{id}"
+    }
+  ],
+  "datums": [
+    {
+      "key": "nad83csrs-qc",
+      "name": "NAD83(CSRS)",
+      "epoch": "1997.0",
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83csrs",
+      "name": "NAD83(CSRS)",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-approx",
+      "name": "NAD83 (approx. / scaled)",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 10
+    },
+    {
+      "key": "nad83-2011",
+      "name": "NAD83(2011)",
+      "epoch": "2010.0",
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-1986",
+      "name": "NAD83(1986)",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-harn",
+      "name": "NAD83(HARN)",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-2007",
+      "name": "NAD83(NSRS2007)",
+      "epoch": "2002.0",
+      "modern": false,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-ma11",
+      "name": "NAD83(MA11)",
+      "epoch": "2010.0",
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad83-pa11",
+      "name": "NAD83(PA11)",
+      "epoch": "2010.0",
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "nad27",
+      "name": "NAD27",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 100
+    },
+    {
+      "key": "wgs84",
+      "name": "WGS 84",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "itrf",
+      "name": "ITRF",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "rgf93",
+      "name": "RGF93",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "lv95",
+      "name": "CH1903+ / LV95",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "osgb36",
+      "name": "OSGB36",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 5
+    },
+    {
+      "key": "etrs89",
+      "name": "ETRS89",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "etrs89-rd",
+      "name": "ETRS89",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "mgi",
+      "name": "MGI (Gauss-Krüger)",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 5
+    },
+    {
+      "key": "gda2020",
+      "name": "GDA2020",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "gda94",
+      "name": "GDA94",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "sirgas2000",
+      "name": "SIRGAS2000",
+      "epoch": "2000.4",
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "isn2016",
+      "name": "ISN2016",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "rd-bessel",
+      "name": "RD (Amersfoort)",
+      "epoch": null,
+      "modern": false,
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "rgaf09",
+      "name": "RGAF09",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "rgr92",
+      "name": "RGR92",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "rgfg95",
+      "name": "RGFG95",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "rgm23",
+      "name": "RGM23",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    },
+    {
+      "key": "rgspm06",
+      "name": "RGSPM06",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 2
+    }
+  ],
+  "vdatums": [
+    {
+      "name": "CGVD2013",
+      "kind": "ortho"
+    },
+    {
+      "name": "CGVD28",
+      "kind": "ortho"
+    },
+    {
+      "name": "NAVD88",
+      "kind": "ortho"
+    },
+    {
+      "name": "NGVD29",
+      "kind": "ortho"
+    },
+    {
+      "name": "IGLD85",
+      "kind": "ortho"
+    },
+    {
+      "name": "NGF-IGN69",
+      "kind": "ortho"
+    },
+    {
+      "name": "NGF-IGN78",
+      "kind": "ortho"
+    },
+    {
+      "name": "LN02",
+      "kind": "ortho"
+    },
+    {
+      "name": "LHN95",
+      "kind": "ortho"
+    },
+    {
+      "name": "ODN",
+      "kind": "ortho"
+    },
+    {
+      "name": "REDNAP (Alicante)",
+      "kind": "ortho"
+    },
+    {
+      "name": "NAP",
+      "kind": "ortho"
+    },
+    {
+      "name": "NN2000",
+      "kind": "ortho"
+    },
+    {
+      "name": "NN1954",
+      "kind": "ortho"
+    },
+    {
+      "name": "GHA (Adria)",
+      "kind": "ortho"
+    },
+    {
+      "name": "DHHN2016",
+      "kind": "ortho"
+    },
+    {
+      "name": "DHHN92",
+      "kind": "ortho"
+    },
+    {
+      "name": "ISH2004",
+      "kind": "ortho"
+    },
+    {
+      "name": "AHD",
+      "kind": "ortho"
+    },
+    {
+      "name": "Imbituba",
+      "kind": "ortho"
+    },
+    {
+      "name": "PRVD02",
+      "kind": "ortho"
+    },
+    {
+      "name": "GUVD04",
+      "kind": "ortho"
+    },
+    {
+      "name": "ASVD02",
+      "kind": "ortho"
+    },
+    {
+      "name": "NMVD03",
+      "kind": "ortho"
+    },
+    {
+      "name": "VIVD09",
+      "kind": "ortho"
+    },
+    {
+      "name": "Chart datum (local tidal)",
+      "kind": "chart"
+    },
+    {
+      "name": "Local vertical datum",
+      "kind": "ortho"
+    },
+    {
+      "name": "IGN 1988 (Guadeloupe)",
+      "kind": "ortho"
+    },
+    {
+      "name": "IGN 1987 (Martinique)",
+      "kind": "ortho"
+    },
+    {
+      "name": "IGN 1989 (Réunion)",
+      "kind": "ortho"
+    },
+    {
+      "name": "NGG 1977 (Guyane)",
+      "kind": "ortho"
+    },
+    {
+      "name": "IGN 2023 (Mayotte)",
+      "kind": "ortho"
+    },
+    {
+      "name": "Danger 1950 (Saint-Pierre-et-Miquelon)",
+      "kind": "ortho"
+    }
+  ]
+}

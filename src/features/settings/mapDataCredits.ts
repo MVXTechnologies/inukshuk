@@ -55,6 +55,9 @@ const PARTS: readonly string[] = [
         OPENSEAMAP_ATTRIBUTION,
       ]
     : []),
+  // The geodetic-points extension: each agency's credit and licence are
+  // listed in full under Coverage & sources, and on every mark's card.
+  'Geodetic points: national and provincial survey agencies (see Settings › Extensions › Coverage & sources) and OpenStreetMap contributors',
   // Tides ride the forecast card, which is gated on weather OR marine.
   ...(WEATHER_ENABLED || MARINE_ENABLED ? [`Tides: ${CHS_TIDES_ATTRIBUTION}`] : []),
 ];
