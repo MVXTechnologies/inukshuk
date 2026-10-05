@@ -5,6 +5,7 @@ import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import { mapDocumentFromStoredPdf } from '@features/library/importMap';
 import * as storage from '@data/storage';
+import { readQaCommand } from '@data/qaReports';
 import {
   PDF_BENCH,
   PDF_BENCH_JS_START,
@@ -632,6 +633,19 @@ export function usePdfBench(args: {
 
     void Linking.getInitialURL().then(handle);
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
-    return () => sub.remove();
+    // The same link through a file (iOS simulator: `simctl openurl` asks
+    // "Open in …?" every time): <documents>/qa/command.txt.
+    let last: string | null = readQaCommand();
+    const poll = setInterval(() => {
+      const cmd = readQaCommand();
+      if (cmd !== null && cmd !== last) {
+        last = cmd;
+        handle(cmd.trim());
+      }
+    }, 300);
+    return () => {
+      sub.remove();
+      clearInterval(poll);
+    };
   }, [cameraRef, renderedFramesRef, framesRef, rasterize, serverOrigin]);
 }
