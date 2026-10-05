@@ -93,7 +93,10 @@ export function runPlan(
       refusal: { code: 'ballpark', message: 'PROJ reported a ballpark operation: refused' },
     };
   if (reply.gridsUsed) {
-    const missing = plan.gridsNeeded.filter((g) => !reply.gridsUsed?.includes(g));
+    // The engine names a grid as the pipeline did: the bare file name, or the
+    // absolute path of the crop that covers the point (`withGridPaths`).
+    const used = new Set(reply.gridsUsed.map((g) => g.slice(g.lastIndexOf('/') + 1)));
+    const missing = plan.gridsNeeded.filter((g) => !used.has(g));
     if (missing.length > 0)
       return {
         ok: false,

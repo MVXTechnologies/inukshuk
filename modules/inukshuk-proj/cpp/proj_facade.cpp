@@ -132,9 +132,10 @@ InitInfo init(const std::string& projDbPath, const std::vector<std::string>& gri
   }
   PJ_INFO pi = proj_info();
   info.projVersion = pi.version ? pi.version : "";
+  // The returned string lives only until the next call: copy each at once.
   const char* v = proj_context_get_database_metadata(gCtx, "EPSG.VERSION");
-  const char* d = proj_context_get_database_metadata(gCtx, "EPSG.DATE");
   info.epsgVersion = v ? v : "";
+  const char* d = proj_context_get_database_metadata(gCtx, "EPSG.DATE");
   info.epsgDate = d ? d : "";
   info.ok = true;
   return info;

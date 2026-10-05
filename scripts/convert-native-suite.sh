@@ -58,7 +58,10 @@ if [ "$PLATFORM" = ios ]; then
   xcrun simctl terminate "$DEVICE" "$APP" 2>/dev/null || true
   xcrun simctl launch "$DEVICE" "$APP" >/dev/null
   sleep 6
-  xcrun simctl openurl "$DEVICE" "inukshuk://convert-selftest"
+  # simctl openurl triggers iOS's "Open in Inukshuk?" prompt: Maestro opens and accepts it.
+  JH=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}
+  JAVA_HOME=$JH PATH="$JH/bin:$PATH" maestro --device "$DEVICE" test \
+    "$ROOT/scripts/convert-selftest-open.yaml" >"$OUT/maestro.log" 2>&1 || true
   wait_for "[ -f '$D/result.txt' ]" 600 || { echo "no result after 10 min" >&2; exit 2; }
   cp "$D/result.txt" "$D/result.json" "$OUT/"
 elif [ "$PLATFORM" = android ]; then

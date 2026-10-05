@@ -125,6 +125,12 @@ function stationHub(st: CdStation): StationDatum | null {
   return st.offsets.navd88 !== undefined ? 'navd88' : null;
 }
 
+/** The height-system id of a station's national hub datum (CGVD2013 → cgvd2013a, NAVD88 → navd88). */
+function hubSystemId(st: CdStation): string | null {
+  const hub = stationHub(st);
+  return hub === 'cgvd2013' ? 'cgvd2013a' : hub === 'navd88' ? 'navd88' : null;
+}
+
 function stationValidation(st: CdStation): string[] {
   return st.country === 'ca'
     ? ['CD-CHS-NAD83-vs-CGVD2013+CGG2013a', 'CD-CHS-BM-vs-NRCan']
@@ -729,6 +735,27 @@ function planOrThrow(spec: ConvertSpec, point: SourcePoint, ctx: PlanContext): P
           datumLabel(s2),
           offsetOf(s2) - offsetOf(s1),
           stationValidation(s1.st),
+        ),
+      );
+      w.z = { kind: 'H', sys: v2.id };
+    } else if ((s1 && hubSystemId(s1.st) === v2.id) || (s2 && hubSystemId(s2.st) === v1.id)) {
+      // A station datum ↔ the station's own national datum: just its published
+      // offset (going through the geoid and back would cancel exactly).
+      const ref = (s1 ?? s2) as StationRef;
+      checkStation(ref, point);
+      const hub = stationHub(ref.st) as StationDatum;
+      const toHub = s1 !== null;
+      const dh = toHub
+        ? (ref.st.offsets[hub] ?? NaN) - offsetOf(ref)
+        : offsetOf(ref) - (ref.st.offsets[hub] ?? NaN);
+      w.steps.push(
+        stationOffsetStep(
+          ref.st.name,
+          ref.st.agency,
+          toHub ? datumLabel(ref) : STATION_DATUM_NAME[hub],
+          toHub ? STATION_DATUM_NAME[hub] : datumLabel(ref),
+          dh,
+          stationValidation(ref.st),
         ),
       );
       w.z = { kind: 'H', sys: v2.id };

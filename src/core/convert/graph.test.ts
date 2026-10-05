@@ -584,6 +584,36 @@ describe('chart-datum stations', () => {
     expect(r.plan.validation).toContain('CD-CHS-NAD83-vs-CGVD2013+CGG2013a');
   });
 
+  it('CD ↔ the station’s own national datum is the offset alone (no geoid round trip)', () => {
+    const r = plan(
+      {
+        from: 'csrs:geo',
+        fromHeight: 'cd@ca-chs:03248',
+        to: 'same',
+        toHeight: 'cgvd2013a',
+        epoch: 2010,
+      },
+      near,
+      { stations: [lauzon] },
+    );
+    if (!r.ok) throw new Error(r.refusal.message);
+    expect(r.plan.gridsNeeded).toEqual([]);
+    expect(r.plan.pipeline).toContain('+proj=geogoffset +dh=-2.34');
+    const back = plan(
+      {
+        from: 'csrs:geo',
+        fromHeight: 'cgvd2013a',
+        to: 'same',
+        toHeight: 'cd@ca-chs:03248',
+        epoch: 2010,
+      },
+      near,
+      { stations: [lauzon] },
+    );
+    if (!back.ok) throw new Error(back.refusal.message);
+    expect(back.plan.pipeline).toContain('+proj=geogoffset +dh=2.34');
+  });
+
   it('refuses beyond 10 km from the gauge', () => {
     const r = plan(
       { from: 'csrs:geo', fromHeight: 'cd@ca-chs:03248', to: 'same', toHeight: 'ell', epoch: 2010 },

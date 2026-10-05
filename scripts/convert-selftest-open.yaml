@@ -1,0 +1,14 @@
+# Used by scripts/convert-native-suite.sh: opens the Convert self-test and
+# accepts iOS's "Open in Inukshuk?" prompt when it appears.
+appId: com.inukshuk.app
+---
+- openLink: 'inukshuk://convert-selftest'
+- runFlow:
+    when:
+      visible: 'Open'
+    commands:
+      - tapOn: 'Open'
+- extendedWaitUntil:
+    visible:
+      id: 'convert-selftest-result'
+    timeout: 30000

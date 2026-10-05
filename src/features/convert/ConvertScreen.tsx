@@ -460,7 +460,7 @@ export function ConvertScreen({ params }: { params: Record<string, unknown> }) {
                 </Text>
                 <View style={styles.flex}>
                   <Text
-                    variant="headlineSmall"
+                    variant="titleLarge"
                     style={[styles.value, { color: tokens.ink }]}
                     selectable
                     accessibilityLabel={`${r.label} ${r.value}`}
@@ -721,7 +721,12 @@ function Field({
         keyboardType={keyboardType}
         autoCorrect={false}
         autoCapitalize="characters"
-        style={[styles.fieldInput, { color: tokens.ink }]}
+        // Long values (a DMS coordinate as the agency prints it) step down so they stay readable.
+        style={[
+          styles.fieldInput,
+          value.length > 11 && styles.fieldInputLong,
+          { color: tokens.ink },
+        ]}
         accessibilityLabel={label}
         testID={testID}
         selectTextOnFocus
@@ -742,8 +747,8 @@ const styles = StyleSheet.create({
     paddingRight: space.xs,
   },
   headerTitle: { flex: 1, fontWeight: '800', marginLeft: space.xs },
-  content: { padding: space.lg, paddingBottom: space.xl },
-  card: { borderRadius: radius.lg + 4, borderWidth: 1, padding: space.lg, gap: space.md },
+  content: { padding: space.md, paddingBottom: space.xl },
+  card: { borderRadius: radius.lg + 4, borderWidth: 1, padding: space.md, gap: space.sm },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   caps: { letterSpacing: 1.2 },
   origin: {
@@ -758,8 +763,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     borderRadius: radius.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   pillTitle: { fontWeight: '700' },
   fields: { flexDirection: 'row', gap: space.md },
@@ -767,14 +772,15 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: radius.md,
     paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    paddingBottom: 4,
+    paddingTop: space.xs,
+    paddingBottom: 2,
   },
-  fieldInput: { fontSize: 20, paddingVertical: 4, fontVariant: ['tabular-nums'] },
+  fieldInput: { fontSize: 19, paddingVertical: 2, fontVariant: ['tabular-nums'] },
+  fieldInputLong: { fontSize: 15 },
   swapWrap: { alignItems: 'center', marginVertical: -space.md, zIndex: 1 },
-  swap: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  swap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   result: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
-  resultLabel: { width: 108, paddingTop: 8 },
+  resultLabel: { width: 96, paddingTop: 6 },
   value: { fontWeight: '700', fontVariant: ['tabular-nums'] },
   actions: {
     flexDirection: 'row',

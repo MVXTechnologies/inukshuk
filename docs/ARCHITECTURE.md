@@ -233,6 +233,36 @@ overlay ("Marked trails"), whose persisted setting is dropped on hydration.
   deep-link/file harness (`hooks/useTerrainQa`) for screenshots and the
   gesture benchmark.
 
+## Convert (coordinates, heights, epochs, chart datum)
+
+Field operators rely on it, so **PROJ never chooses an operation**:
+
+- `core/convert/graph.ts` plans a conversion as ONE pinned PROJ pipeline made
+  only of steps (`steps.ts`) copied from pipelines validated against the
+  defining agency's own tool, or returns a typed refusal (unvalidated pair,
+  outside a region/zone/grid, missing grid, needs an epoch or a height…).
+  Systems with no official-tool validation are not in the catalogue
+  (`systems.ts`, `HIDDEN_SYSTEMS`).
+- The reference suite (`core/convert/fixtures/reference.json`, from
+  `scripts/convert-fixtures.py`) is the gate: Jest checks the planner emits
+  exactly the validated pipelines and `lite.ts` reproduces the grid-free
+  pairs; the same suite runs through the real engine on the build machine
+  (`npm run proj:test-host GRID_DIR`) and on a simulator / emulator
+  (`scripts/convert-native-suite.sh`, via the inert `convert-selftest` route).
+- Engine: `modules/inukshuk-proj` — PROJ 9.8.1 + libtiff (+ SQLite on
+  Android) static libs built from pinned sources (`scripts/prepare.sh`), a
+  C++ facade shared by iOS and Android, proj.db + EGM96 + the NAD83(CSRS) v7
+  velocity grid bundled. Store-release only; on an older runtime Convert
+  falls back to `lite.ts` (proj4js, grid-free only).
+- Grids come in packs (`infra/tiles/nas/projgrids.sh`: exact pixel-window
+  crops per province/state/country, gated on the suite), served at
+  `/proj-grids/*` and kept in `Documents/proj-grids/<pack>/`
+  (`data/projGrids.ts`). Each conversion runs on the absolute path of the
+  crop that covers the point (`core/convert/packs.ts`).
+- UI: `features/convert` (route `app/convert.tsx`); entry points share
+  `openConvert` + the `core/convert/prefill` builders (map chip, geodetic and
+  tide cards, map-actions row, deep link).
+
 ## Error reporting ("no silent fails")
 
 - Capture: a chained `ErrorUtils` global handler (fatal + non-fatal), Hermes'

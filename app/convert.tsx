@@ -9,5 +9,6 @@ import { useLocalSearchParams } from 'expo-router';
  */
 export default function ConvertRoute() {
   const params = useLocalSearchParams();
-  return <ConvertScreen params={params} />;
+  // A new link while Convert is open (another mark, a deep link) starts a new request.
+  return <ConvertScreen key={JSON.stringify(params)} params={params} />;
 }

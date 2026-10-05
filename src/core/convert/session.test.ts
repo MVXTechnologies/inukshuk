@@ -51,7 +51,12 @@ function fakeNative(N = -27.6): Engine & { calls: EngineRequest[] } {
       );
       const c = [...r.coords];
       if (req.dim >= 3) c[2] = (c[2] ?? 0) - inv * N + fwd * N + dh;
-      return { ok: true, coords: c };
+      // Like the real facade: grids named exactly as the pipeline names them
+      // (absolute crop paths after withGridPaths).
+      const gridsUsed = [...req.pipeline.matchAll(/\+grids=(\S+)/g)].flatMap((m) =>
+        (m[1] ?? '').split(','),
+      );
+      return { ok: true, coords: c, gridsUsed };
     },
   };
 }

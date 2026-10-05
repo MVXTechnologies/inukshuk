@@ -7,7 +7,7 @@
 #   ANDROID_ABIS="arm64-v8a" … (subset)
 #
 # Output (gitignored, read by InukshukProj.podspec and android/CMakeLists.txt):
-#   prebuilt/ios/Proj.xcframework, Tiff.xcframework  (ios-arm64 + ios-arm64-simulator)
+#   prebuilt/ios/Proj.xcframework, Tiff.xcframework  (ios-arm64 + ios-arm64_x86_64-simulator)
 #   prebuilt/ios/include/                            proj.h …
 #   prebuilt/android/<abi>/lib/lib{proj,tiff,sqlite3}.a, prebuilt/android/include/
 #   assets/inukshukproj/proj.db                      EPSG database built by this PROJ
@@ -108,9 +108,12 @@ build_one() {
 if [ "$WHAT" = ios ] || [ "$WHAT" = all ]; then
   for sdk in iphoneos iphonesimulator; do
     SDKP=$(xcrun --sdk "$sdk" --show-sdk-path)
+    # The simulator slice is fat: a generic-simulator Release build links x86_64 too.
+    archs=arm64
+    [ "$sdk" = iphonesimulator ] && archs="arm64;x86_64"
     SQLITE_INC="$SDKP/usr/include" SQLITE_LIB="$SDKP/usr/lib/libsqlite3.tbd" \
       build_one "ios-$sdk" "$WORK/install/ios-$sdk" \
-      -DCMAKE_SYSTEM_NAME=iOS "-DCMAKE_OSX_SYSROOT=$sdk" -DCMAKE_OSX_ARCHITECTURES=arm64 \
+      -DCMAKE_SYSTEM_NAME=iOS "-DCMAKE_OSX_SYSROOT=$sdk" "-DCMAKE_OSX_ARCHITECTURES=$archs" \
       "-DCMAKE_OSX_DEPLOYMENT_TARGET=$IOS_MIN" \
       "-DZLIB_INCLUDE_DIR=$SDKP/usr/include" "-DZLIB_LIBRARY=$SDKP/usr/lib/libz.tbd"
   done
