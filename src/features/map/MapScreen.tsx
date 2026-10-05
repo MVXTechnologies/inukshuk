@@ -3551,6 +3551,7 @@ export function MapScreen() {
                 showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
               }}
               onClose={() => setTideStation(null)}
+              onConvert={(req) => openConvert(router, req)}
             />
           </View>
         )}
