@@ -1,0 +1,102 @@
+# Geodetic points extension e2e: Settings → Extensions → Get installs it,
+# the installed rows appear (layer switch, offline, coverage, remove), and the
+# overlays menu then carries the "Geodetic points" switch with its legend.
+# Leaves the extension removed again so other flows see the default state.
+#
+# iOS merges a row's title + subtitle into one accessibility string, so row
+# matches are wildcard regexes (see settings.yaml).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Geodetic points.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Geodetic points.*'
+          timeout: 5000
+# Start from "not installed" whatever a previous run left.
+- runFlow:
+    when:
+      visible: 'Coverage & sources.*'
+    commands:
+      - scrollUntilVisible:
+          element: 'Remove Geodetic points extension'
+          direction: DOWN
+      - tapOn: 'Remove Geodetic points extension'
+      - tapOn: 'Remove'
+- scrollUntilVisible:
+    element: 'Get Geodetic points'
+    direction: DOWN
+- tapOn: 'Get Geodetic points'
+- extendedWaitUntil:
+    visible: 'Coverage & sources.*'
+    timeout: 10000
+- assertVisible: 'Offline in your regions.*'
+- assertVisible: 'Remove Geodetic points extension'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Map overlays'
+- scrollUntilVisible:
+    element: 'Labels on satellite.*'
+    direction: DOWN
+- assertVisible: 'Geodetic points.*'
+- tapOn: 'Close overlays'
+# Leave it uninstalled.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Coverage & sources.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Coverage & sources.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element: 'Remove Geodetic points extension'
+    direction: DOWN
+- tapOn: 'Remove Geodetic points extension'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible: 'Get Geodetic points'
+    timeout: 5000
