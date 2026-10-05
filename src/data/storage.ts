@@ -615,6 +615,20 @@ export function writeTrailStatsCache(text: string): void {
   });
 }
 
+/**
+ * Move a downloaded PDF into the maps store under `id`, without reading it
+ * (#345: a 200 MB catalog sheet read whole OOMs a 256 MB heap). Returns its uri.
+ */
+export function adoptMapPdf(id: string, sourceUri: string): string {
+  ensureStorage();
+  const file = new File(mapsDir(), `${id}.pdf`);
+  guardWrite(() => {
+    if (file.exists) file.delete();
+    new File(sourceUri).moveSync(file);
+  });
+  return file.uri;
+}
+
 /** Write generated PDF bytes (a made map) into the maps store; returns its uri. */
 export function writeMapPdfBytes(id: string, bytes: Uint8Array): string {
   ensureStorage();

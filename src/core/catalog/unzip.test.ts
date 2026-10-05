@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
-import { extractPdf, looksLikePdf } from './unzip';
+import { MAX_CATALOG_ZIP_BYTES, extractPdf, looksLikePdf, planCatalogPayload } from './unzip';
 
 const pdfBytes = (marker: string, pad = 0) =>
   strToU8(`%PDF-1.7\n% ${marker}\n${'x'.repeat(pad)}\n%%EOF`);
@@ -51,5 +51,26 @@ describe('extractPdf', () => {
   it('returns null for corrupt bytes without throwing', () => {
     expect(extractPdf(strToU8('PK\x03\x04garbage'))).toBeNull();
     expect(extractPdf(new Uint8Array([1, 2, 3]))).toBeNull();
+  });
+});
+
+describe('planCatalogPayload (#345)', () => {
+  const pdfHead = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  const zipHead = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+
+  it('moves a bare PDF of any size, never reading it', () => {
+    expect(planCatalogPayload(pdfHead, 222 * 1024 * 1024)).toEqual({ kind: 'move-pdf' });
+    expect(planCatalogPayload(pdfHead, 1024)).toEqual({ kind: 'move-pdf' });
+  });
+
+  it('unpacks a zip up to the cap', () => {
+    expect(planCatalogPayload(zipHead, 16 * 1024 * 1024)).toEqual({ kind: 'unzip' });
+    expect(planCatalogPayload(zipHead, MAX_CATALOG_ZIP_BYTES)).toEqual({ kind: 'unzip' });
+  });
+
+  it('refuses a zip too large to unpack in memory', () => {
+    const plan = planCatalogPayload(zipHead, MAX_CATALOG_ZIP_BYTES + 1);
+    expect(plan.kind).toBe('refuse');
+    expect(plan.kind === 'refuse' && plan.reason).toMatch(/too large to unpack \(64 MB\)/);
   });
 });

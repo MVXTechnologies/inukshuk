@@ -2,7 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as LegacyFS from 'expo-file-system/legacy';
 
 import type { CatalogItem } from '@core/catalog/schema';
-import { extractPdf } from '@core/catalog/unzip';
+import { extractPdf, planCatalogPayload } from '@core/catalog/unzip';
 import * as storage from './storage';
 
 /**
@@ -12,8 +12,9 @@ import * as storage from './storage';
  * `File.downloadFileAsync` has neither a progress callback nor cancellation,
  * and a CanTopo sheet is a multi-MB download the UI must show a real bar for.
  * The transfer stages into `Paths.cache/catalog/` and only the extracted,
- * verified PDF is written into `maps/<id>.pdf` — a killed or failed download
- * can never leave a partial file in the library directory.
+ * verified PDF lands in `maps/<id>.pdf` — a killed or failed download can
+ * never leave a partial file in the library directory. A bare PDF is moved
+ * there unread; only a zip is read into memory to be unpacked (#345).
  */
 
 /** Thrown when the download was canceled by the user. */
@@ -77,8 +78,15 @@ export function downloadCatalogPdf(
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`Download failed: HTTP ${result.status}`);
     }
-    const bytes = await storage.readFileBytes(staged.uri);
-    const pdf = extractPdf(bytes);
+    // A bare PDF (every US Topo / USFS sheet, up to ~220 MB) is moved into
+    // place unread; only a (small) zip is read to be unpacked (#345).
+    const plan = planCatalogPayload(
+      storage.readFileHead(staged.uri, 8),
+      storage.fileSizeAt(staged.uri),
+    );
+    if (plan.kind === 'move-pdf') return storage.adoptMapPdf(mapId, staged.uri);
+    if (plan.kind === 'refuse') throw new Error(plan.reason);
+    const pdf = extractPdf(await storage.readFileBytes(staged.uri));
     if (pdf === null) {
       throw new Error('The downloaded file does not contain a PDF map.');
     }
