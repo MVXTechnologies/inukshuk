@@ -350,6 +350,65 @@ imagery out.
   are not guaranteed in older Android System WebViews, so v3 is the safer floor
   for an offline trail app that may run on older devices.
 
+### Security: CVE-2024-4367 (GHSA-wgrm-67xf-hhpq)
+
+pdf.js up to 4.1.392 can run JavaScript embedded in a malicious PDF: a font's
+`FontMatrix` reaches glyph-drawing code that pdf.js compiles with
+`new Function`. In 3.11.174 that compile only happens when `isEvalSupported` is
+true, which is pdf.js' default. The same flag also gates the worker's
+PostScript (Type 4) function compiler, the build's only other eval sink.
+
+**Mitigation (in place).** Every `getDocument` call on the page passes
+`isEvalSupported: false`: served, inline, and the watchdog's retry of each.
+pdf.js then draws glyphs through a plain command loop and never evaluates
+PDF-derived text. `PdfRasterizer.security.test.tsx` checks the option on all
+four calls. It also checks that the shipped asset's eval sinks are still the
+gated ones, so replacing the asset fails the test until someone re-reviews it.
+There is no scripting surface: pdf.js 3.11's `getDocument` has no
+`enableScripting`, and the page never loads `pdf.sandbox` or an annotation
+layer.
+
+If script did run, it would run in the hidden WebView. It could
+post forged results to RN and read the loopback allowlist (`maps/`,
+`offline-styles/`, `.rasterizer/`). It has no file access
+(`allowFileAccess={false}`). There is no page CSP and no navigation filter, so
+the network is not blocked.
+
+**Real fix: upgrade.** There is no patched 3.x (3.11.174 is the last). The
+first fixed release is 4.2.67 and the current one is 6.4.299, which has no
+`new Function` at all. The audit gate stays red on this advisory until the
+upgrade ships; it is deliberately not allowlisted. The upgrade is a migration,
+not a bump:
+
+- **ESM only since v4.** `legacy/build/pdf.min.mjs` (524 KB) and
+  `pdf.worker.min.mjs` (1.3 MB). The page must load pdf.js as an inline
+  `<script type="module">`, which still sets `globalThis.pdfjsLib`. Module
+  scripts run deferred, so the page script must wait for it. pdf.js creates
+  the Blob worker as `{type: "module"}`. The main-thread fallback (#554/#560)
+  must define `globalThis.pdfjsWorker` from the worker module.
+- **Layers.** `OptionalContentConfig.getGroups()` is gone (6.x has
+  `getGroup(id)` and iteration), so `prepareLayers` would silently return "no
+  layers" and US Topo orthoimage would be painted again.
+- **Worker patch.** The four exact-text insertions (`pdfWorkerPatch`) target
+  the 3.11 minified evaluator. They will not match 6.x. The page then renders
+  unfiltered (about 5× slower on US Topo, #478) until the patch is redone, or
+  until 6.x is shown to skip hidden content on its own.
+- **JPEG 2000 / JBIG2.** In 6.x these decoders are wasm modules
+  (`openjpeg`, `jbig2`, plus `*_nowasm_fallback.js`) loaded from `wasmUrl`. They
+  must be bundled and served from the loopback server. Inline mode
+  (`about:blank`) has nowhere to load them from.
+- **Runtime APIs.** 6.x uses `Promise.withResolvers`, `structuredClone`,
+  `Uint8Array.fromBase64` and `Map.prototype.getOrInsertComputed`. Check the
+  legacy build's polyfills against iOS 16.4 WKWebView and the oldest Android
+  System WebView we support.
+- **Tests.** `orientation.pdfjs.test.ts` and `pdfWorkerPatch.pdfjs.test.ts`
+  load `pdfjs-dist/legacy/build/pdf.js` (CJS) in Jest. 6.x has no CJS entry and
+  needs Node ≥ 22.13.
+
+All of it ships OTA: pdf.js is a Metro asset (below) and the page is built at
+runtime. It still needs on-device validation on both platforms before it can
+go out.
+
 ## Limitations
 
 - **One render at a time.** Calls queue; a long page blocks subsequent ones.
