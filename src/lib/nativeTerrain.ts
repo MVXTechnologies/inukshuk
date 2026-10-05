@@ -56,6 +56,8 @@ interface NativeTerrainModule {
   stats(viewTag: number): Promise<number[]>;
   trimMemory(viewTag: number): Promise<void>;
   setPitch(viewTag: number, deg: number): Promise<void>;
+  /** Animate the pitch (past MapLibre's JS 60° clamp while 3D is attached). */
+  animatePitch?(viewTag: number, deg: number, durationMs: number): Promise<void>;
   /** QA: the whole camera in one native move (iOS). */
   jumpTo?(
     viewTag: number,
@@ -106,6 +108,22 @@ export function namedTerrainStats(s: readonly number[]): Record<string, number> 
     'labelsShown',
     'imagerySlots',
     'bakeQueue',
+    // round 3: stability and cache counters (cumulative unless noted)
+    'hRef',
+    'hRefTravelM',
+    'morphs',
+    'maxMorphM',
+    'meshBakes',
+    'imageryUploads',
+    'drapeRenders',
+    'drapeDiskHits',
+    'demDisk',
+    'demNetwork',
+    // two-finger gestures classified (cumulative)
+    'gestureTilt',
+    'gestureRotate',
+    'gesturePinch',
+    'gesturePan',
   ];
   const out: Record<string, number> = {};
   names.forEach((n, i) => {

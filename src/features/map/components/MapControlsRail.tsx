@@ -35,6 +35,11 @@ interface Props {
   onCompactOpenChange: (open: boolean) => void;
   /** Any of the rail's sheets (map type, overlays, "+" actions) opened or closed. */
   onMenuOpenChange?: (open: boolean) => void;
+  /**
+   * The 3D/2D button (Settings → Beta features → 3D terrain only; undefined
+   * hides it): `is3d` = the map is tilted, so the button offers 2D.
+   */
+  viewToggle?: { is3d: boolean; onPress: () => void };
 }
 
 /**
@@ -95,6 +100,13 @@ export function MapControlsRail(props: Props) {
           onPress={following ? onStopFollowing : onLocate}
           accessibilityLabel="Locate"
         />
+        {props.viewToggle !== undefined && (
+          <MapButton
+            icon={props.viewToggle.is3d ? 'video-2d' : 'video-3d'}
+            onPress={props.viewToggle.onPress}
+            accessibilityLabel={props.viewToggle.is3d ? 'Switch to 2D view' : 'Switch to 3D view'}
+          />
+        )}
         {showFitControl && (
           <MapButton icon="fit-to-page-outline" onPress={onFit} accessibilityLabel="Fit map" />
         )}

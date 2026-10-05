@@ -732,6 +732,34 @@ static void testEngine() {
     CHECK(withMesh == static_cast<int>(o2.tiles.size()));
     in.timeMs = turned.timeMs;
   }
+  // 7c. Round 3: the reference holds while the camera moves (a pan no longer
+  // lifts and lowers the whole terrain), then settles once it rests.
+  {
+    g_cases++;
+    FrameInput m = in;
+    m.timeMs += 2000;  // rested
+    for (int i = 0; i < 40; i++) {
+      m.timeMs += 16;
+      eng.frame(m);
+    }
+    const double rested = eng.stats().hRef;
+    const double travelBefore = eng.stats().hRefTravelM;
+    for (int i = 1; i <= 60; i++) {  // a 1 s pan
+      m.lng = lng + 0.0004 * i;
+      m.P = refProjection(m.lng, lat, zoom, 60, 20, w, h);
+      m.timeMs += 16;
+      eng.frame(m);
+    }
+    CHECK(std::abs(eng.stats().hRef - rested) < 1.0 || eng.stats().hRef > rested);  // only the guard may raise it
+    const double travelMoving = eng.stats().hRefTravelM - travelBefore;
+    for (int i = 0; i < 300; i++) {  // rest: settles on the new centre
+      m.timeMs += 16;
+      eng.frame(m);
+    }
+    CHECK(travelMoving < 5.0);
+    in.timeMs = m.timeMs;
+    in.lng = lng;
+  }
   // 8. Low memory drops unpinned DEMs but keeps what's on screen drawable.
   {
     g_cases++;
@@ -1030,6 +1058,40 @@ static void testEngine() {
     CHECK(baseRingZoom(13, 15600) == 9);
     CHECK(baseRingZoom(13, 100) == 11);
     CHECK(baseRingZoom(13, 1e9) == 6);
+  }
+  // 24. Fog LOD factor (lod.ts twin).
+  {
+    g_cases++;
+    CHECK_NEAR(fogLodFactor(100, 2, 8, 2, 100), 1, 1e-12);
+    CHECK_NEAR(fogLodFactor(800, 2, 8, 2, 100), 3, 1e-12);
+    CHECK_NEAR(fogLodFactor(500, 2, 8, 2, 100), 2, 1e-9);
+    CHECK_NEAR(fogLodFactor(5000, 2, 8, 0, 100), 1, 1e-12);
+  }
+  // 25. Two-finger gestures: tilt vs rotate vs pinch vs pan, with noise.
+  {
+    g_cases++;
+    using I = TwoFingerIntent;
+    const TwoFingerPoints s0{100, 400, 260, 400};  // side by side, 160 pt apart
+    auto moved = [&](double dy, double spread, double turnDeg, double dx = 0) {
+      const double cx = 180 + dx, cy = 400 + dy, half = 80 * spread;
+      const double a = turnDeg * kPi / 180;
+      return TwoFingerPoints{cx - half * std::cos(a), cy - half * std::sin(a), cx + half * std::cos(a),
+                             cy + half * std::sin(a)};
+    };
+    CHECK(classifyTwoFinger(s0, moved(-20, 1, 0)) == I::Tilt);            // both up 20 pt
+    CHECK(classifyTwoFinger(s0, moved(24, 1.03, 3)) == I::Tilt);          // down, with spread/turn noise
+    CHECK(classifyTwoFinger(s0, moved(0, 1, 15)) == I::Rotate);
+    CHECK(classifyTwoFinger(s0, moved(4, 1.02, 14)) == I::Rotate);        // turn with drift
+    CHECK(classifyTwoFinger(s0, moved(0, 1.2, 0)) == I::Pinch);
+    CHECK(classifyTwoFinger(s0, moved(5, 0.82, 4)) == I::Pinch);          // pinch in, a little turn
+    CHECK(classifyTwoFinger(s0, moved(-3, 1.02, 2)) == I::Undecided);     // too small yet
+    CHECK(classifyTwoFinger(s0, moved(0, 1, 0, 30)) == I::Pan);           // sideways together
+    // One finger above the other, moving up together: a pan, never a tilt.
+    const TwoFingerPoints v0{180, 320, 180, 480};
+    const TwoFingerPoints v1{180, 290, 180, 450};
+    CHECK(classifyTwoFinger(v0, v1) == I::Pan);
+    // Ambiguous (turn and spread equally past their thresholds): wait.
+    CHECK(classifyTwoFinger(s0, moved(0, 1.105, 10.2)) == I::Undecided);
   }
   // 22. Mip chains: level count, packing, box filter.
   {

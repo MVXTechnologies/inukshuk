@@ -106,12 +106,18 @@ void Engine::touchDemLocked(uint64_t key) {
   demLru_.splice(demLru_.end(), demLru_, it->second.lru);
 }
 
+void Engine::setDemBudget(size_t bytes) {
+  demBudget_ = std::max<size_t>(bytes, 16u * 1024u * 1024u);
+  std::lock_guard<std::mutex> lock(mutex_);
+  evictDemsLocked();
+}
+
 void Engine::evictDemsLocked() {
   // Never below what is pinned (with room for the newest arrivals), and the
   // kDemGrace most recent arrivals are never evicted: a DEM that just loaded
   // survives until the next frame pins it.
   const size_t perDem = static_cast<size_t>(kDemSize) * kDemSize * sizeof(float);
-  const size_t budget = std::max(kDemBudgetBytes, (demPins_.size() + kDemGrace) * perDem);
+  const size_t budget = std::max(demBudget_.load(), (demPins_.size() + kDemGrace) * perDem);
   const size_t evictable = demLru_.size() > kDemGrace ? demLru_.size() - kDemGrace : 0;
   size_t visited = 0;
   for (auto it = demLru_.begin(); it != demLru_.end() && demBytes_ > budget && visited < evictable;
@@ -592,6 +598,17 @@ void Engine::installResults(double now) {
     const bool sameHeights = existing != meshes_.end() && existing->second.demZoom == r.demZoom &&
                              !existing->second.fromFlat;
     mesh.morphStart = sameHeights ? -1e300 : now;
+    stats_.meshBakes++;
+    if (!sameHeights) {
+      // How far the surface visibly moves: peak |hTo − hFrom| (flat: from hRef).
+      double d = 0;
+      for (size_t k = 0; k < mesh.hTo.size() && k < mesh.hFrom.size(); k++)
+        d = std::max(d, static_cast<double>(std::abs(mesh.hTo[k] - (mesh.fromFlat ? static_cast<float>(hRef_.value_or(mesh.hTo[k])) : mesh.hFrom[k]))));
+      if (d > kVisibleMorphM) {
+        stats_.morphs++;
+        stats_.maxMorphM = std::max(stats_.maxMorphM, d);
+      }
+    }
     if (existing != meshes_.end()) {
       mesh.lru = existing->second.lru;
       meshLru_.splice(meshLru_.end(), meshLru_, mesh.lru);
@@ -686,6 +703,14 @@ FrameOutput Engine::frame(const FrameInput& in) {
   const int refZoom = std::min(kDemMaxZoom, static_cast<int>(std::floor(in.zoom)) + 1);
   const auto invP = invert(in.P);
 
+  const bool legacy = (out.look.debugFlags & kDebugLegacy) != 0;
+  {
+    const double cam[5] = {in.lat, in.lng, in.zoom, in.bearingDeg, in.pitchDeg};
+    bool moved = false;
+    for (int i = 0; i < 5; i++) moved = moved || std::abs(cam[i] - lastCam_[i]) > 1e-7;
+    if (moved) lastMoveMs_ = now;
+    std::copy(cam, cam + 5, lastCam_);
+  }
   // Reference height (2.2.1): the ground under the map centre — the tilt
   // pivot, so tilting never moves it — raised only when the nearest visible
   // ground (under the bottom edge) would come too close to the camera. The
@@ -708,10 +733,22 @@ FrameOutput Engine::frame(const FrameInput& in) {
           any ? std::optional<double>(referenceHeight(samples)) : std::nullopt;
       const auto eye = eyeFromProjection(in.P);
       const double eyeAlt = eye ? (*eye)[2] : 1e9;
-      const double target =
-          stableReferenceHeight(center, nearMax, eyeAlt, exag * pitchRamp(in.pitchDeg));
-      hRef_ = smoothToward(hRef_, target, dt, 300, 0.5);
-      hRefSettling = *hRef_ != target;
+      const double scale = exag * pitchRamp(in.pitchDeg);
+      const double desired = stableReferenceHeight(center, nearMax, eyeAlt, scale);
+      const double prev = hRef_.value_or(desired);
+      if (legacy) {
+        hRef_ = smoothToward(hRef_, desired, dt, 300, 0.5);
+      } else if (hRef_ && now - lastMoveMs_ < kRefSettleMs) {
+        // Round 3: held while the camera moves (the terrain no longer rides
+        // the ground under the centre during a pan); only the camera-clearance
+        // guard may raise it. It settles on the centre once the camera rests.
+        const double guard = stableReferenceHeight(-1e9, nearMax, eyeAlt, scale);
+        hRef_ = smoothToward(hRef_, std::max(*hRef_, guard), dt, 150, 0.5);
+      } else {
+        hRef_ = smoothToward(hRef_, desired, dt, 700, 0.5);
+      }
+      hRefSettling = *hRef_ != desired;
+      stats_.hRefTravelM += std::abs(*hRef_ - prev);
     }
   }
   const double hRef = hRef_.value_or(0.0);
@@ -721,6 +758,11 @@ FrameOutput Engine::frame(const FrameInput& in) {
   // LOD selection.
   LodOptions opts;
   opts.fogEndCtc = out.look.fogEndCtc;
+  if (!(out.look.debugFlags & kDebugLegacy)) {
+    // Round 3: coarser toward the fog — the far band costs little and is hazed anyway.
+    opts.fogStartCtc = out.look.fogStartCtc;
+    opts.fogLodBoost = kFogLodBoost;
+  }
   // A finer mesh (and so drape) near the camera than the 2.2.0 default.
   opts.maxErrorPx = kLodMaxErrorPx;
   if (out.look.debugFlags & 8) opts.maxErrorPx = kLodMaxErrorPx * 2;
@@ -790,6 +832,27 @@ FrameOutput Engine::frame(const FrameInput& in) {
     const bool stale = it == meshes_.end() || it->second.demZoom < *best ||
                        (it->second.maskGen != maskGen && !imageryMode);
     if (!stale) continue;
+    if (!legacy) {
+      // Round 3: no intermediate coarse bakes. While the tile's own DEM is on
+      // its way, keep what is drawn (its mesh, or a placeholder from an
+      // ancestor) instead of baking from a coarser DEM and morphing twice —
+      // coarse DEMs flatten peaks by hundreds of metres ("peaks regrow").
+      const DemId own = demWindow(s.tile).dem;
+      bool ownPending;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ownPending = *best < own.z && pending_.count(demKey64(own)) > 0;
+      }
+      if (ownPending) {
+        bool hasFallback = it != meshes_.end();
+        for (int up = 1; up <= s.tile.z && !hasFallback; up++)
+          hasFallback = meshes_.count(meshKeyOf({s.tile.z - up, s.tile.x >> up, s.tile.y >> up, s.tile.wrap})) > 0;
+        if (hasFallback) {
+          bakesPending = true;
+          continue;
+        }
+      }
+    }
     if (inProgress_.count(meshKeyOf(s.tile))) {
       bakesPending = true;
       continue;
@@ -1117,8 +1180,17 @@ FrameOutput Engine::frame(const FrameInput& in) {
     std::unordered_map<int, const LabelData*> byId;
     for (auto& e : labels_) {
       if (e.hGen != demGen) {
-        if (auto h = heightAt(e.data.mercX, e.data.mercY, refZoom)) e.h = *h;
+        const bool first = e.hGen == UINT32_MAX;
+        if (auto h = heightAt(e.data.mercX, e.data.mercY, refZoom)) {
+          e.hTarget = *h;
+          if (first || legacy) e.h = *h;
+        }
         e.hGen = demGen;
+      }
+      // Round 3: a pin glides to a refined height instead of jumping.
+      if (e.h != e.hTarget) {
+        e.h = smoothToward(e.h, e.hTarget, dt, 250, 0.5);
+        labelsFading = true;
       }
       LabelInput li;
       li.id = e.data.id;
@@ -1252,6 +1324,8 @@ FrameOutput Engine::frame(const FrameInput& in) {
     std::lock_guard<std::mutex> lock(imgMutex_);
     stats_.imagerySlots = imgSlotCount_ - static_cast<int>(freeImgSlots_.size());
   }
+  stats_.hRef = hRef;
+  stats_.imageryUploads += static_cast<int>(out.imageryUploads.size());
   stats_.lastFrameCpuMs = nowCpuMs() - cpuStart;
   return out;
 }

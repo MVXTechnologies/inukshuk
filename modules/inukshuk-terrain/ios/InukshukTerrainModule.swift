@@ -111,6 +111,10 @@ public final class InukshukTerrainModule: Module {
       self.controllers[viewTag]?.setPitch(deg)
     }.runOnQueue(.main)
 
+    AsyncFunction("animatePitch") { (viewTag: Int, deg: Double, durationMs: Double) in
+      self.controllers[viewTag]?.animatePitch(deg, duration: durationMs)
+    }.runOnQueue(.main)
+
     AsyncFunction("jumpTo") { (viewTag: Int, lat: Double, lng: Double, zoom: Double, pitch: Double, bearing: Double) in
       self.controllers[viewTag]?.jump(toLat: lat, lng: lng, zoom: zoom, pitch: pitch, bearing: bearing)
     }.runOnQueue(.main)

@@ -16,7 +16,7 @@ Pod::Spec.new do |s|
   s.source_files = 'ios/*.{swift,h,mm}', 'cpp/*.{hpp,cpp}'
   s.public_header_files = 'ios/INKTerrainController.h'
   s.private_header_files = 'cpp/*.hpp'
-  s.frameworks = 'Metal', 'MetalKit', 'QuartzCore', 'CoreLocation'
+  s.frameworks = 'Metal', 'MetalKit', 'QuartzCore', 'CoreLocation', 'ImageIO'
   s.libraries = 'z', 'c++'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

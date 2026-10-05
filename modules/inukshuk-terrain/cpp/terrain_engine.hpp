@@ -179,6 +179,13 @@ struct EngineStats {
   int labelsShown = 0;
   int imagerySlots = 0;
   int bakeQueue = 0;
+  // Round 3 counters (cumulative unless noted).
+  double hRef = 0;           // current reference height (m)
+  double hRefTravelM = 0;    // sum of |ΔhRef| per frame: how much the whole terrain moved
+  int morphs = 0;            // height morphs started with a peak change > kVisibleMorphM
+  double maxMorphM = 0;      // the largest such change (m)
+  int meshBakes = 0;         // meshes installed
+  int imageryUploads = 0;    // drape textures uploaded to the GPU
 };
 
 class Engine {
@@ -208,6 +215,17 @@ class Engine {
   static constexpr int kBaseRingRadius = 2;
   /** Placeholder surfaces (sampled from an ancestor) built per frame at most. */
   static constexpr int kMaxInheritPerFrame = 24;
+  /** A morph whose peak height change exceeds this (m) counts as visible (stats.morphs). */
+  static constexpr double kVisibleMorphM = 15;
+  /** Split threshold ×(1 + this) at the fog end (lod.ts fogLodFactor). */
+  static constexpr double kFogLodBoost = 2.0;
+  /**
+   * debugFlags bit: the 2.2.1 behaviour (reference follows the centre while
+   * moving, intermediate coarse bakes, no fog LOD) for A/B measurements.
+   */
+  static constexpr int kDebugLegacy = 32;
+  /** The reference height holds until the camera has rested this long (ms). */
+  static constexpr double kRefSettleMs = 350;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
   static constexpr size_t kMaxUnwantedImagery = 48;
 
@@ -256,6 +274,8 @@ class Engine {
   void setMasks(std::vector<std::vector<Pt>> water, std::vector<std::vector<Pt>> glacier);
 
   void trimMemory();
+  /** Decoded-DEM byte budget (per device class; default kDemBudgetBytes). */
+  void setDemBudget(size_t bytes);
   void reset();
 
   FrameOutput frame(const FrameInput& in);
@@ -342,6 +362,7 @@ class Engine {
   struct LabelEntry {
     LabelData data;
     double h = 0;
+    double hTarget = 0;
     uint32_t hGen = UINT32_MAX;
   };
 
@@ -418,6 +439,9 @@ class Engine {
   uint32_t versionCounter_ = 0;
   uint64_t frameNo_ = 0;
   std::optional<double> hRef_;
+  double lastCam_[5] = {0, 0, -1, 0, 0};  // lat, lng, zoom, bearing, pitch
+  double lastMoveMs_ = -1e300;
+  std::atomic<size_t> demBudget_{kDemBudgetBytes};
   double lastTimeMs_ = -1;
   double clockMs_ = 0;
   EngineStats stats_;

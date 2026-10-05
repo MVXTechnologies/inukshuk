@@ -45,6 +45,12 @@ export interface LodOptions {
   maxTiles?: number;
   maxZoom?: number;
   fogEndCtc?: number;
+  /**
+   * Coarser LOD toward the fog (round 3): the split threshold grows by up to
+   * ×(1 + fogLodBoost) between fogStartCtc and fogEndCtc (smoothstep). 0 = off.
+   */
+  fogStartCtc?: number;
+  fogLodBoost?: number;
   /** Absolute [min, max] elevation (m) known for a tile, or null when unknown. */
   heightRange?: (t: TileId) => readonly [number, number] | null;
   /** Reference height subtracted from every elevation (m). */
@@ -92,6 +98,20 @@ export function screenSpaceError(
   return ((tileSizePx / grid) * ctc) / Math.max(distance, 1e-6);
 }
 
+/** The split-threshold multiplier at `distance` px: 1 up to the fog start, 1 + boost at its end. */
+export function fogLodFactor(
+  distance: number,
+  o: { fogStartCtc: number; fogEndCtc: number; fogLodBoost: number },
+  ctc: number,
+): number {
+  if (!(o.fogLodBoost > 0)) return 1;
+  const a = o.fogStartCtc * ctc;
+  const b = o.fogEndCtc * ctc;
+  if (!(b > a)) return 1;
+  const t = Math.min(Math.max((distance - a) / (b - a), 0), 1);
+  return 1 + o.fogLodBoost * t * t * (3 - 2 * t);
+}
+
 function walk(
   cam: FrameCamera,
   opts: Required<Omit<LodOptions, 'heightRange'>> & Pick<LodOptions, 'heightRange'>,
@@ -133,7 +153,7 @@ function walk(
     const distance = distanceToAabb(eye[0], eye[1], eye[2], box, ppm);
     if (distance > fogEnd) continue;
     const sse = screenSpaceError(b.size, opts.grid, ctc, distance);
-    if (sse > threshold && t.z < maxZ) {
+    if (sse > threshold * fogLodFactor(distance, opts, ctc) && t.z < maxZ) {
       for (const c of children(t)) stack.push(c);
     } else {
       out.push({ tile: t, distance, sse });
@@ -157,6 +177,8 @@ export function selectTiles(cam: FrameCamera, options: LodOptions = {}): Selecti
     maxTiles: options.maxTiles ?? DEFAULT_MAX_TILES,
     maxZoom: options.maxZoom ?? TERRAIN_MAX_ZOOM,
     fogEndCtc: options.fogEndCtc ?? DEFAULT_FOG_END_CTC,
+    fogStartCtc: options.fogStartCtc ?? 0,
+    fogLodBoost: options.fogLodBoost ?? 0,
     heightRange: options.heightRange,
     hRef: options.hRef ?? 0,
     heightScale: options.heightScale ?? 1,

@@ -6,6 +6,7 @@ import {
   GRID,
   MAX_ZOOM_ABOVE_CAMERA,
   screenSpaceError,
+  fogLodFactor,
   selectTiles,
   vertexBudget,
   type Selection,
@@ -218,5 +219,28 @@ describe('ctc reported', () => {
     const sel = selectTiles(frameCamera(c));
     expect(sel.ctc).toBeCloseTo(cameraToCenterDistance(c.height), 9);
     expect(projectionMatrix(c)).toHaveLength(16);
+  });
+});
+
+describe('fog LOD (round 3)', () => {
+  it('is 1 before the fog and 1 + boost at its end, smooth between', () => {
+    const o = { fogStartCtc: 2, fogEndCtc: 8, fogLodBoost: 2 };
+    expect(fogLodFactor(100, o, 100)).toBe(1);
+    expect(fogLodFactor(800, o, 100)).toBe(3);
+    expect(fogLodFactor(500, o, 100)).toBeCloseTo(2, 9);
+    expect(fogLodFactor(5000, { ...o, fogLodBoost: 0 }, 100)).toBe(1);
+  });
+  it('draws fewer tiles toward the fog, and no farther', () => {
+    const cam = frameCamera(camera(PLACES.zermatt, 75, 30));
+    const base = selectTiles(cam, { heightScale: 0, fogEndCtc: 8 });
+    const boosted = selectTiles(cam, {
+      heightScale: 0,
+      fogEndCtc: 8,
+      fogStartCtc: 2,
+      fogLodBoost: 2,
+    });
+    expect(boosted.tiles.length).toBeLessThan(base.tiles.length);
+    const far = (s: typeof base) => Math.max(...s.tiles.map((t) => t.distance));
+    expect(far(boosted)).toBeLessThanOrEqual(8 * boosted.ctc + 1e-6);
   });
 });

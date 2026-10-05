@@ -13,9 +13,11 @@
 #import "INKTerrainController.h"
 
 #import <CoreLocation/CoreLocation.h>
+#import <ImageIO/ImageIO.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <UIKit/UIGestureRecognizerSubclass.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -125,6 +127,69 @@ typedef struct {
 @end
 
 static NSString *const kLayerId = @"inukshuk-terrain-3d";
+
+// ---- two-finger disambiguation (round 3) -----------------------------------------------------------
+
+/**
+ * A passive observer of two-finger touches on the map view: it never
+ * recognizes (MapLibre's own recognizers keep doing the work), it only
+ * reports where the two fingers are so the controller can classify the
+ * gesture and lock out the competing ones.
+ */
+@interface INKTwoFingerObserver : UIGestureRecognizer
+@property(nonatomic, copy) void (^onStart)(CGPoint a, CGPoint b);
+@property(nonatomic, copy) void (^onMove)(CGPoint a, CGPoint b);
+@property(nonatomic, copy) void (^onEnd)(void);
+@end
+
+@implementation INKTwoFingerObserver {
+  NSMutableArray<UITouch *> *_down;
+  BOOL _two;
+}
+- (instancetype)initWithTarget:(id)target action:(SEL)action {
+  if ((self = [super initWithTarget:target action:action])) {
+    _down = [NSMutableArray new];
+    self.cancelsTouchesInView = NO;
+    self.delaysTouchesBegan = NO;
+    self.delaysTouchesEnded = NO;
+  }
+  return self;
+}
+- (CGPoint)at:(NSUInteger)i {
+  return [_down[i] locationInView:self.view];
+}
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+  for (UITouch *t in touches)
+    if (![_down containsObject:t]) [_down addObject:t];
+  if (_down.count == 2 && !_two) {
+    _two = YES;
+    if (self.onStart) self.onStart([self at:0], [self at:1]);
+  }
+}
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+  if (_two && _down.count >= 2 && self.onMove) self.onMove([self at:0], [self at:1]);
+}
+- (void)lift:(NSSet<UITouch *> *)touches {
+  for (UITouch *t in touches) [_down removeObject:t];
+  if (_two && _down.count < 2) {
+    _two = NO;
+    if (self.onEnd) self.onEnd();
+  }
+  if (_down.count == 0) self.state = UIGestureRecognizerStateFailed;
+}
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+  [self lift:touches];
+}
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+  [self lift:touches];
+}
+- (void)reset {
+  [super reset];
+  if (_two && self.onEnd) self.onEnd();
+  _two = NO;
+  [_down removeAllObjects];
+}
+@end
 static char kControllerKey;
 
 @interface INKTerrainController ()
@@ -540,6 +605,16 @@ double mercY(double lat) {
   DrapeParams _drapeParams;
   dispatch_queue_t _drapeDecodeQueue;
   std::atomic<int> _drapeRendered;
+  // Round 3: drape textures persist on disk per style (revisits never re-render).
+  NSString *_drapeTileDir;
+  // two-finger disambiguation
+  INKTwoFingerObserver *_twoFinger;
+  TwoFingerPoints _tfStart;
+  TwoFingerIntent _tfIntent;
+  double _tfHeading, _tfPitch, _tfZoom;
+  NSDictionary<NSString *, NSNumber *> *_tfSaved;
+  int _tfCounts[5];
+  std::atomic<int> _drapeDiskHits, _drapeDiskWrites, _demDisk, _demNetwork;
   double _drapeMsTotal;
   std::unordered_map<uint64_t, GpuTile> _tiles;
   std::unordered_map<int, GpuLine> _lines;
@@ -649,6 +724,11 @@ static int64_t nowNs() { return (int64_t)(CACurrentMediaTime() * 1e9); }
         });
       },
       kMeshGrid);
+  // Decoded DEMs by device class: a whole place (every bearing, a few zooms) stays in memory.
+  {
+    const unsigned long long gb = NSProcessInfo.processInfo.physicalMemory >> 30;
+    _engine->setDemBudget(gb < 4 ? 48ull << 20 : gb < 6 ? 96ull << 20 : 160ull << 20);
+  }
   return self;
 }
 
@@ -835,6 +915,7 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   _defaultLodMinRadius = m.tileLodMinRadius;
   [self updateWithLook:look enabled:enabled networkAllowed:networkAllowed];
   [self ensureLayer];
+  [self installTwoFingerObserver];
   __weak INKTerrainController *weakSelf = self;
   _watcher = [NSTimer scheduledTimerWithTimeInterval:0.4
                                              repeats:YES
@@ -922,6 +1003,11 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
   _enabled = false;
   [_watcher invalidate];
   _watcher = nil;
+  if (_twoFinger) {
+    [self twoFingerEnded];
+    [_twoFinger.view removeGestureRecognizer:_twoFinger];
+    _twoFinger = nil;
+  }
   [_benchLink invalidate];
   _benchLink = nil;
   if (_memoryObserver) [[NSNotificationCenter defaultCenter] removeObserver:_memoryObserver];
@@ -1001,7 +1087,10 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
     if (!s || s->_detached.load()) return;
     NSData *cached = [NSData dataWithContentsOfFile:path];
     if (cached.length > 8) {
-      if (s->_engine->onDemData(z, x, y, (const uint8_t *)cached.bytes, cached.length)) return;
+      if (s->_engine->onDemData(z, x, y, (const uint8_t *)cached.bytes, cached.length)) {
+        s->_demDisk++;
+        return;
+      }
       [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     }
     if (!net) {
@@ -1024,6 +1113,7 @@ static LookParams lookFrom(NSArray<NSNumber *> *a) {
             [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
             [[NSFileManager defaultManager] moveItemAtPath:tmp toPath:path error:nil];
           }
+          s2->_demNetwork++;
           s2->_engine->onDemData(z, x, y, (const uint8_t *)data.bytes, data.length);
         }];
     [task resume];
@@ -1057,6 +1147,30 @@ static std::vector<uint8_t> decodeImagery(NSData *data) {
       if (!s || s->_detached.load()) return;
       if (!s->_drapeURL) {
         s->_engine->onImageryFailed(z, x, y);
+        return;
+      }
+      NSString *file = [s drapeFileZ:z x:x y:y];
+      const int tex = s->_drapeParams.texture;
+      if (file && [[NSFileManager defaultManager] fileExistsAtPath:file]) {
+        dispatch_async(s->_drapeDecodeQueue, ^{
+          INKTerrainController *s2 = weakSelf;
+          if (!s2 || s2->_detached.load()) return;
+          auto px = decodeTexture(file, tex);
+          int levels = 0;
+          auto chain = px.empty() ? std::vector<uint8_t>() : buildMipChain(px.data(), tex, levels);
+          if (!chain.empty()) {
+            s2->_drapeDiskHits++;
+            s2->_engine->onImageryLevels(z, x, y, std::move(chain), tex, levels, gen);
+            return;
+          }
+          [[NSFileManager defaultManager] removeItemAtPath:file error:nil];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            INKTerrainController *s3 = weakSelf;
+            if (!s3 || s3->_detached.load()) return;
+            s3->_drapeJobs.push_back({z, x, y, gen});
+            [s3 pumpDrapes];
+          });
+        });
         return;
       }
       s->_drapeJobs.push_back({z, x, y, gen});
@@ -1119,6 +1233,102 @@ static int drapeSlotBudget(void) {
 static int drapeTextureSize(void) { return deviceGb() < 4 ? 256 : 512; }
 static constexpr int kDrapeSnapshotters = 3;
 
+// ---- the drape disk cache (round 3) -----------------------------------------------------------
+
+/** Drapes kept on disk across all styles (oldest dropped first). */
+static constexpr unsigned long long kDrapeDiskBytes = 150ull * 1024 * 1024;
+
+/** RGBA8 size² from an encoded image file, or empty. */
+static std::vector<uint8_t> decodeTexture(NSString *file, int size) {
+  CGImageSourceRef src = CGImageSourceCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:file], nullptr);
+  if (!src) return {};
+  CGImageRef cg = CGImageSourceCreateImageAtIndex(src, 0, nullptr);
+  CFRelease(src);
+  if (!cg) return {};
+  std::vector<uint8_t> px((size_t)size * size * 4);
+  CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+  CGContextRef ctx = CGBitmapContextCreate(px.data(), size, size, 8, size * 4, cs,
+                                           kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+  CGColorSpaceRelease(cs);
+  if (!ctx) {
+    CGImageRelease(cg);
+    return {};
+  }
+  CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
+  CGContextDrawImage(ctx, CGRectMake(0, 0, size, size), cg);
+  CGContextRelease(ctx);
+  CGImageRelease(cg);
+  return px;
+}
+
+/** JPEG (q 0.9) of an RGBA8 size² texture, written atomically. */
+static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
+  CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+  CGContextRef ctx = CGBitmapContextCreate((void *)rgba, size, size, 8, size * 4, cs,
+                                           kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+  CGColorSpaceRelease(cs);
+  if (!ctx) return false;
+  CGImageRef img = CGBitmapContextCreateImage(ctx);
+  CGContextRelease(ctx);
+  if (!img) return false;
+  NSString *tmp = [file stringByAppendingFormat:@".%u.tmp", arc4random()];
+  CGImageDestinationRef dst = CGImageDestinationCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:tmp],
+                                                              CFSTR("public.jpeg"), 1, nullptr);
+  bool ok = false;
+  if (dst) {
+    NSDictionary *props = @{(__bridge NSString *)kCGImageDestinationLossyCompressionQuality : @0.9};
+    CGImageDestinationAddImage(dst, img, (__bridge CFDictionaryRef)props);
+    ok = CGImageDestinationFinalize(dst);
+    CFRelease(dst);
+  }
+  CGImageRelease(img);
+  if (ok) {
+    [[NSFileManager defaultManager] removeItemAtPath:file error:nil];
+    ok = [[NSFileManager defaultManager] moveItemAtPath:tmp toPath:file error:nil];
+  }
+  if (!ok) [[NSFileManager defaultManager] removeItemAtPath:tmp error:nil];
+  return ok;
+}
+
+/** The cache file of a drape tile under the current style and drape parameters; nil without a style. */
+- (nullable NSString *)drapeFileZ:(int)z x:(int)x y:(int)y {
+  NSString *dir = _drapeTileDir;
+  if (!dir) return nil;
+  return [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d-%d-%d.jpg", z, x, y]];
+}
+
+/** Oldest-first trim of every style's drapes down to 3/4 of kDrapeDiskBytes. */
+- (void)trimDrapeCache {
+  NSString *root = [_drapeDir stringByAppendingPathComponent:@"tiles"];
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSDirectoryEnumerator *en = [fm enumeratorAtURL:[NSURL fileURLWithPath:root]
+                       includingPropertiesForKeys:@[ NSURLContentModificationDateKey, NSURLFileSizeKey ]
+                                          options:0
+                                     errorHandler:nil];
+  NSMutableArray<NSURL *> *files = [NSMutableArray new];
+  unsigned long long total = 0;
+  for (NSURL *u in en) {
+    NSNumber *size = nil;
+    [u getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+    if (![u.pathExtension isEqualToString:@"jpg"]) continue;
+    total += size.unsignedLongLongValue;
+    [files addObject:u];
+  }
+  if (total <= kDrapeDiskBytes) return;
+  [files sortUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) {
+    NSDate *da = nil, *db = nil;
+    [a getResourceValue:&da forKey:NSURLContentModificationDateKey error:nil];
+    [b getResourceValue:&db forKey:NSURLContentModificationDateKey error:nil];
+    return [da compare:db];
+  }];
+  for (NSURL *u in files) {
+    if (total <= kDrapeDiskBytes * 3 / 4) break;
+    NSNumber *size = nil;
+    [u getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+    if ([fm removeItemAtURL:u error:nil]) total -= size.unsignedLongLongValue;
+  }
+}
+
 - (DrapeParams)drapeParamsNow {
   // Map: the tile drawn at one zoom out (the 2D map at the scale a terrain
   // tile actually shows), at 2×. Satellite: at the tile's zoom, 1× — the
@@ -1143,6 +1353,7 @@ static constexpr int kDrapeSnapshotters = 3;
   _drapeJobs.clear();
   if (!hash) {
     _drapeURL = nil;
+    _drapeTileDir = nil;
     _engine->setDrape(false, drapeSlotBudget());
     return;
   }
@@ -1153,6 +1364,9 @@ static constexpr int kDrapeSnapshotters = 3;
     return;
   }
   _drapeURL = [NSURL fileURLWithPath:path];
+  _drapeTileDir = [[_drapeDir stringByAppendingPathComponent:@"tiles"]
+      stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%d-%d", hash, params.texture, params.shift]];
+  [[NSFileManager defaultManager] createDirectoryAtPath:_drapeTileDir withIntermediateDirectories:YES attributes:nil error:nil];
   _drapeGen++;
   _engine->setDrape(true, drapeSlotBudget());
   _engine->resetImagery();  // a new style: every drape re-renders (the generation drops stale ones)
@@ -1249,6 +1463,11 @@ static constexpr int kDrapeSnapshotters = 3;
                  auto chain = buildMipChain(tile.data(), tex, levels);
                  if (!chain.empty())
                    s->_engine->onImageryLevels(job.z, x0 + i, y0 + j, std::move(chain), tex, levels, job.gen);
+                 if (NSString *file = [s drapeFileZ:job.z x:x0 + i y:y0 + j]) {
+                   if (writeTexture(tile.data(), tex, file)) {
+                     if (++s->_drapeDiskWrites % 64 == 0) [s trimDrapeCache];
+                   }
+                 }
                }
            }
          }
@@ -1860,7 +2079,10 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   const EngineStats s = _engine->stats();
   return @[ @(s.demCount), @(s.demBytes), @(s.meshCount), @(_drawnTiles), @(s.flatTiles), @(s.inFlight),
             @(s.requested), @(s.failed), @(s.lastFrameCpuMs), @(_lastDrawMs), @(_lastPitchDeg), @(_tiles.size()),
-            @(s.labelsShown), @(s.imagerySlots), @(s.bakeQueue) ];
+            @(s.labelsShown), @(s.imagerySlots), @(s.bakeQueue), @(s.hRef), @(s.hRefTravelM), @(s.morphs),
+            @(s.maxMorphM), @(s.meshBakes), @(s.imageryUploads), @(_drapeRendered.load()), @(_drapeDiskHits.load()),
+            @(_demDisk.load()), @(_demNetwork.load()), @(_tfCounts[1]), @(_tfCounts[2]), @(_tfCounts[3]),
+            @(_tfCounts[4]) ];
 }
 
 - (void)trimMemory {
@@ -1873,6 +2095,123 @@ static UIColor *themeColor(NSArray<NSNumber *> *t, int at, CGFloat alpha, UIColo
   id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
   cam.pitch = fmax(0, fmin(deg, _enabled.load() ? _maxPitch : 60.0));
   [map setCamera:cam animated:NO];
+}
+
+// ---- two-finger disambiguation (round 3) ----------------------------------------------------------
+//
+// MapLibre runs pinch, rotate and two-finger-tilt recognizers at once, so a
+// tilt that drifts a few degrees also turns the map, and a pinch with a
+// slight vertical slide also tilts it. Here: classify the gesture from its
+// first points (classifyTwoFinger: the leading cue must clearly lead, with
+// thresholds per cue), then for the rest of the gesture disable the
+// competing MapLibre gestures (hysteresis: locked until the fingers lift)
+// and undo what they changed before the decision.
+
+- (void)installTwoFingerObserver {
+  if (_twoFinger || !_mapView) return;
+  INKTwoFingerObserver *o = [[INKTwoFingerObserver alloc] initWithTarget:nil action:nil];
+  o.delegate = (id<UIGestureRecognizerDelegate>)self;
+  __weak INKTerrainController *weakSelf = self;
+  o.onStart = ^(CGPoint a, CGPoint b) {
+    [weakSelf twoFingerStartA:a b:b];
+  };
+  o.onMove = ^(CGPoint a, CGPoint b) {
+    [weakSelf twoFingerMoveA:a b:b];
+  };
+  o.onEnd = ^{
+    [weakSelf twoFingerEnded];
+  };
+  [_mapView addGestureRecognizer:o];
+  _twoFinger = o;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)g shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+  return YES;
+}
+
+- (void)twoFingerStartA:(CGPoint)a b:(CGPoint)b {
+  if (_detached.load() || !_enabled.load()) return;
+  _tfStart = {a.x, a.y, b.x, b.y};
+  _tfIntent = TwoFingerIntent::Undecided;
+  id<INKMLNMapView> map = (id<INKMLNMapView>)_mapView;
+  id<INKMLNCamera> cam = map.camera;
+  _tfHeading = cam.heading;
+  _tfPitch = cam.pitch;
+  _tfZoom = map.zoomLevel;
+}
+
+- (void)twoFingerMoveA:(CGPoint)a b:(CGPoint)b {
+  if (_tfIntent != TwoFingerIntent::Undecided || _detached.load() || !_enabled.load()) return;
+  const TwoFingerIntent intent = classifyTwoFinger(_tfStart, {a.x, a.y, b.x, b.y});
+  if (intent == TwoFingerIntent::Undecided) return;
+  _tfIntent = intent;
+  _tfCounts[(int)intent]++;
+  UIView *mv = _mapView;
+  const BOOL tilt = intent == TwoFingerIntent::Tilt, rotate = intent == TwoFingerIntent::Rotate,
+             pinch = intent == TwoFingerIntent::Pinch;
+  // What stays on: tilt alone, rotate alone, pinch (zoom) alone; a two-finger pan keeps zoom.
+  NSDictionary<NSString *, NSNumber *> *want = @{
+    @"pitchEnabled" : @(tilt),
+    @"rotateEnabled" : @(rotate),
+    @"zoomEnabled" : @(pinch || intent == TwoFingerIntent::Pan),
+  };
+  NSMutableDictionary *saved = [NSMutableDictionary new];
+  for (NSString *k in want) {
+    NSNumber *cur = [mv valueForKey:k];
+    if (!cur) continue;
+    saved[k] = cur;
+    if (cur.boolValue && !want[k].boolValue) [mv setValue:@NO forKey:k];
+  }
+  _tfSaved = saved;
+  // Undo what the locked-out gestures did before the decision.
+  id<INKMLNMapView> map = (id<INKMLNMapView>)mv;
+  id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
+  BOOL changed = NO;
+  if (!rotate && std::abs(cam.heading - _tfHeading) > 0.05) {
+    cam.heading = _tfHeading;
+    changed = YES;
+  }
+  if (!tilt && std::abs(cam.pitch - _tfPitch) > 0.05) {
+    const double distance = cam.viewingDistance;
+    cam.pitch = _tfPitch;
+    cam.viewingDistance = distance;
+    changed = YES;
+  }
+  if (changed) [map setCamera:cam animated:NO];
+  if (!pinch && intent != TwoFingerIntent::Pan && std::abs(map.zoomLevel - _tfZoom) > 0.001) map.zoomLevel = _tfZoom;
+}
+
+- (void)twoFingerEnded {
+  NSDictionary<NSString *, NSNumber *> *saved = _tfSaved;
+  _tfSaved = nil;
+  _tfIntent = TwoFingerIntent::Undecided;
+  UIView *mv = _mapView;
+  if (!mv) return;
+  for (NSString *k in saved) [mv setValue:saved[k] forKey:k];
+}
+
+- (NSArray<NSNumber *> *)gestureCounts {
+  return @[ @(_tfCounts[1]), @(_tfCounts[2]), @(_tfCounts[3]), @(_tfCounts[4]) ];
+}
+
+- (void)animatePitch:(double)deg duration:(double)ms {
+  id<INKMLNMapView> map = (id<INKMLNMapView>)_mapView;
+  if (!map) return;
+  id<INKMLNCamera> cam = [map.camera copyWithZone:nil];
+  const double distance = cam.viewingDistance;
+  cam.pitch = fmax(0, fmin(deg, _enabled.load() ? _maxPitch : 60.0));
+  // MLNMapCamera keeps its altitude across a pitch change (the zoom would
+  // drift); keeping the viewing distance keeps the zoom.
+  cam.viewingDistance = distance;
+  SEL sel = NSSelectorFromString(@"setCamera:withDuration:animationTimingFunction:");
+  UIView *mv = _mapView;
+  if ([mv respondsToSelector:sel]) {
+    typedef void (*Fn)(id, SEL, id, NSTimeInterval, CAMediaTimingFunction *);
+    ((Fn)[mv methodForSelector:sel])(mv, sel, cam, ms / 1000.0,
+                                     [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]);
+  } else {
+    [map setCamera:cam animated:YES];
+  }
 }
 
 - (void)jumpToLat:(double)lat lng:(double)lng zoom:(double)zoom pitch:(double)pitch bearing:(double)bearing {
