@@ -25,7 +25,8 @@ export interface MapCreditLine {
     | 'routing'
     | 'weather'
     | 'marine'
-    | 'geodetic';
+    | 'geodetic'
+    | 'tides';
   /** The section label ("Base map", "Routing"). */
   label: string;
   /** The © line itself. */
@@ -50,6 +51,8 @@ export interface MapCreditsInput {
   marine?: boolean;
   /** Geodetic points (Settings → Extensions) drawn on the map. */
   geodetic?: boolean;
+  /** Tide stations (Overlays → Tide stations) drawn on the map. */
+  tides?: boolean;
 }
 
 export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright';
@@ -159,6 +162,16 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
         "Survey agencies' published data (each mark's card names its source and licence) · " +
         'survey points © OpenStreetMap contributors',
       link: OSM_LINK,
+    });
+  }
+  if (input.tides) {
+    lines.push({
+      id: 'tides',
+      label: 'Tide stations',
+      credit:
+        'NOAA/NOS/CO-OPS · Shom, 2025. Références Altimétriques Maritimes, ' +
+        'doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · ' +
+        '出典：気象庁 (JMA) · Not for navigation',
     });
   }
   if (input.marine) {

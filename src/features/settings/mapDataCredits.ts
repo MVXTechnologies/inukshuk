@@ -58,6 +58,8 @@ const PARTS: readonly string[] = [
   // The geodetic-points extension: each agency's credit and licence are
   // listed in full under Coverage & sources, and on every mark's card.
   'Geodetic points: national and provincial survey agencies (see Settings › Extensions › Coverage & sources) and OpenStreetMap contributors',
+  // Overlays → Tide stations (infra/tiles/nas/tides.sh). CHS is not in it.
+  'Tide stations: NOAA/NOS/CO-OPS (public domain) · Shom, 2025. Références Altimétriques Maritimes, doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · 出典：気象庁 (Japan Meteorological Agency, Public Data Licence 1.0) · not for navigation',
   // Tides ride the forecast card, which is gated on weather OR marine.
   ...(WEATHER_ENABLED || MARINE_ENABLED ? [`Tides: ${CHS_TIDES_ATTRIBUTION}`] : []),
 ];

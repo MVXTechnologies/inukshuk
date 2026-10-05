@@ -205,6 +205,13 @@ export function GeodeticFilterPanel({ onBack }: { onBack: () => void }) {
             onPress={() => set({ types: toggle(filter.types, k) })}
           />
         ))}
+        {/* Tidal benchmarks (@core/tides/tidalBenchmark): their own symbol. */}
+        <FilterChip
+          label="Tidal"
+          icon={geodeticImage(dark ? 'dark' : 'light', 'tbm')}
+          selected={filter.tidal}
+          onPress={() => set({ tidal: !filter.tidal })}
+        />
       </View>
 
       <SectionTitle>Datum</SectionTitle>

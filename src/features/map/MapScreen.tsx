@@ -101,6 +101,7 @@ import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
 import {
   geodeticTilesUrl,
+  tideTilesUrl,
   imageryContoursOption,
   vectorBasemapOption,
   vectorContoursUrl,
@@ -111,6 +112,11 @@ import { GEODETIC_TAP_LAYERS, geodeticColors } from '@core/map/geodeticStyle';
 import { cardCameraCenterPx } from '@core/map/cardCamera';
 import { buildGeodeticFilters } from '@core/geodetic/filter';
 import { GeodeticPointCard } from './components/GeodeticPointCard';
+import type { TideStation } from '@core/tides/station';
+import { tideColors } from '@core/map/tideStyle';
+import { TideStationCard } from './components/TideStationCard';
+import { tideImages } from './tideImages';
+import { tideStationAt } from './tideTap';
 import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
@@ -531,6 +537,9 @@ export function MapScreen() {
   const geodeticTiles = geodeticInstalled && showGeodetic ? geodeticTilesUrl() : null;
   const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
   const geodeticFilters = useMemo(() => buildGeodeticFilters(geodeticFilter), [geodeticFilter]);
+  /** Overlays → Tide stations (`@core/map/tideStyle`). */
+  const showTideStations = useSettingsStore((s) => s.showTideStations);
+  const tideTiles = showTideStations ? tideTilesUrl() : null;
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -862,6 +871,9 @@ export function MapScreen() {
             },
           }
         : {}),
+      ...(tideTiles !== null && editorStyle === null
+        ? { tides: { tiles: tideTiles, dark: theme.dark, ...geodeticGlyphs() } }
+        : {}),
     };
     // While the map maker is open the base raster becomes the source the
     // composer stitches, so the frame and the sheet cannot disagree (#349).
@@ -906,6 +918,7 @@ export function MapScreen() {
     satelliteImagery,
     geodeticTiles,
     geodeticFilters,
+    tideTiles,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1487,6 +1500,8 @@ export function MapScreen() {
   const geodeticRecenterRef = useRef<GeodeticMark | null>(null);
   const geodeticDockRef = useRef<View>(null);
   const mapSizeRef = useRef<{ width: number; height: number } | null>(null);
+  /** The tapped tide station (its card is up). */
+  const [tideStation, setTideStation] = useState<TideStation | null>(null);
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1850,7 +1865,22 @@ export function MapScreen() {
             : { source: pin.source, id: pin.id },
         );
         setGeodeticMark(null);
+        setTideStation(null);
         return;
+      }
+
+      // Tide stations (Overlays → Tide stations): above the survey marks.
+      if (tideTiles !== null && lngLatArr) {
+        const station = await tideStationAt(map, px, py, [lngLatArr[0], lngLatArr[1]]);
+        if (station !== null) {
+          drawingRef.current.closeAreaCard();
+          setPointAt(null);
+          setViewWp(null);
+          setForecastAt(null);
+          setGeodeticMark(null);
+          setTideStation(station);
+          return;
+        }
       }
 
       // Geodetic points (Settings → Extensions): under the waypoint pins and
@@ -1877,6 +1907,7 @@ export function MapScreen() {
           setViewWp(null);
           setForecastAt(null);
           geodeticRecenterRef.current = mark;
+          setTideStation(null);
           setGeodeticMark(mark);
           return;
         }
@@ -1965,8 +1996,9 @@ export function MapScreen() {
           // a fresh chip as before.
           // A survey-mark card is up: this tap only closes it (#258's rule —
           // the chip never drops in the same tap that dismisses a card).
-          if (geodeticMark !== null) {
+          if (geodeticMark !== null || tideStation !== null) {
             setGeodeticMark(null);
+            setTideStation(null);
             return;
           }
           setPointAt(
@@ -1977,10 +2009,13 @@ export function MapScreen() {
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
       setForecastAt(null); // ... and the forecast card
       setGeodeticMark(null); // ... and the survey-mark card
+      setTideStation(null); // ... and the tide-station card
     },
     [
       geodeticTiles,
       geodeticMark,
+      tideTiles,
+      tideStation,
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
@@ -2638,6 +2673,30 @@ export function MapScreen() {
             {geodeticTiles !== null && (
               <Images images={geodeticImages(theme.dark ? 'dark' : 'light')} />
             )}
+            {tideTiles !== null && <Images images={tideImages(theme.dark ? 'dark' : 'light')} />}
+            {tideTiles !== null && tideStation !== null && (
+              <GeoJSONSource
+                id="tide-selected"
+                data={{
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: [tideStation.lng, tideStation.lat] },
+                  properties: {},
+                }}
+              >
+                <Layer
+                  id="tide-selected-ring"
+                  beforeId={MARKERS_ANCHOR}
+                  type="circle"
+                  paint={{
+                    'circle-radius': 17,
+                    'circle-color': tideColors(theme.dark ? 'dark' : 'light').station,
+                    'circle-opacity': 0.16,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': tideColors(theme.dark ? 'dark' : 'light').station,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
             {geodeticTiles !== null && geodeticMark !== null && (
               <GeoJSONSource
                 id="geodetic-selected"
@@ -3288,6 +3347,7 @@ export function MapScreen() {
               weather: weatherLayer !== null && !offlineOnly,
               marine: marineActive,
               geodetic: geodeticTiles !== null,
+              tides: tideTiles !== null,
             })}
             bottom={
               // The bottom column's own lift, same precedence as its style.
@@ -3425,6 +3485,39 @@ export function MapScreen() {
                   showSnack(`Copied ${what}`);
                 }}
                 onClose={() => setGeodeticMark(null)}
+              />
+            </View>
+          )}
+
+        {/* Tide stations: the tapped station's card. Same bottom-card slot
+          rules as the survey-mark card. */}
+        {tideTiles !== null &&
+          tideStation !== null &&
+          inspectTrack === null &&
+          editWaypoint === null &&
+          viewWaypoint === null &&
+          !drawing.active && (
+            <View
+              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+              pointerEvents="box-none"
+              testID="tide-card-dock"
+            >
+              <TideStationCard
+                station={tideStation}
+                floating={recordingPanelUp}
+                offline={offlineOnly}
+                onOpenLink={(url) => {
+                  Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
+                }}
+                onNavigate={() => {
+                  setDestination({ latitude: tideStation.lat, longitude: tideStation.lng });
+                  setTideStation(null);
+                }}
+                onCopy={(text) => {
+                  void Clipboard.setStringAsync(text);
+                  showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
+                }}
+                onClose={() => setTideStation(null)}
               />
             </View>
           )}

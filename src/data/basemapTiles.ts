@@ -110,6 +110,25 @@ export function geodeticTilesUrl(): string | null {
 }
 
 /**
+ * Tide stations (Overlays → Tide stations): NOAA CO-OPS, SHOM, Kartverket and
+ * JMA stations with their published tidal levels, one small archive built on
+ * the NAS (`infra/tiles/nas/tides.sh`) and served by the same Worker. CHS
+ * (Canada) is never in it (owner decision: CHS stays live-only).
+ */
+// `v` versions the TILE SCHEMA (`@core/tides/station`); bump it when the keys change.
+export const DEFAULT_TIDES_URL = `${TILE_HOST}/tides/{z}/{x}/{y}.mvt?v=1`;
+
+/** Whether `tides.pmtiles` is on the tile host. While false the overlay row is hidden. */
+export const TIDES_TILES_PUBLISHED = true;
+
+/** The tide-station tile template (build-time override or ours), or null while unpublished. */
+export function tideTilesUrl(): string | null {
+  const value: unknown = Constants.expoConfig?.extra?.tideTilesUrl;
+  if (typeof value === 'string' && value !== '') return value;
+  return TIDES_TILES_PUBLISHED ? DEFAULT_TIDES_URL : null;
+}
+
+/**
  * Worldwide province / state label points (Natural Earth admin-1, public
  * domain): one ~470 KB GeoJSON file (~70 KB gzipped) on the GitHub Pages
  * site, built by `scripts/map/build-admin1-labels.mjs`. The Protomaps tiles

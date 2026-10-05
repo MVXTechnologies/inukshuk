@@ -21,10 +21,11 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { geodeticTilesUrl } from '@data/basemapTiles';
+import { geodeticTilesUrl, tideTilesUrl } from '@data/basemapTiles';
 import { GeodeticLegend } from './GeodeticLegend';
 import { GeodeticFilterButton, GeodeticFilterPanel } from './GeodeticFilterPanel';
 import { activeFilterCount } from '@core/geodetic/filter';
+import { TideLegend } from './TideLegend';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
@@ -154,6 +155,7 @@ function OverlayRows({
   const showGeodetic = useSettingsStore((s) => s.showGeodetic);
   const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
   const geodeticFilterCount = activeFilterCount(geodeticFilter);
+  const showTideStations = useSettingsStore((s) => s.showTideStations);
   const router = useRouter();
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
@@ -259,7 +261,13 @@ function OverlayRows({
             value={showGeodetic}
             onToggle={() => set('showGeodetic', !showGeodetic)}
             accessory={<GeodeticFilterButton onPress={onOpenGeodeticFilter} />}
-            below={<GeodeticLegend disabled={!showGeodetic} types={geodeticFilter.types} />}
+            below={
+              <GeodeticLegend
+                disabled={!showGeodetic}
+                types={geodeticFilter.types}
+                tidal={geodeticFilter.tidal}
+              />
+            }
           />
         ) : (
           <NavRow
@@ -269,6 +277,17 @@ function OverlayRows({
             onPress={() => router.push({ pathname: '/settings', params: { open: 'extensions' } })}
           />
         ))}
+      {/* Tide stations (@core/map/tideStyle): NOAA, SHOM, Kartverket, JMA. */}
+      {tideTilesUrl() !== null && (
+        <SwitchRow
+          icon="waves"
+          label="Tide stations"
+          hint="Gauges, tidal levels, chart datum"
+          value={showTideStations}
+          onToggle={() => set('showTideStations', !showTideStations)}
+          below={<TideLegend disabled={!showTideStations} />}
+        />
+      )}
       <SwitchRow
         icon="label-outline"
         label="Labels on satellite"

@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "key": "us-coops",
+      "name": "NOAA CO-OPS",
+      "network": "Tides & Currents",
+      "licence": "Public domain",
+      "attribution": "NOAA/NOS/CO-OPS",
+      "licenceUrl": "https://tidesandcurrents.noaa.gov/disclaimers.html",
+      "page": "https://tidesandcurrents.noaa.gov/datums.html?id={id}",
+      "disclaimer": "Not for navigation. Tidal datums are averages over the National Tidal Datum Epoch."
+    },
+    {
+      "key": "fr-shom",
+      "name": "Shom",
+      "network": "Références Altimétriques Maritimes",
+      "licence": "Licence Ouverte 2.0",
+      "attribution": "Shom, 2025. Références Altimétriques Maritimes, doi:10.17183/MAREE_COURANTS_RAM · Licence Ouverte 2.0",
+      "licenceUrl": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+      "page": "https://dx.doi.org/10.17183/MAREE_COURANTS_RAM",
+      "disclaimer": "Ne pas utiliser pour la navigation (not for navigation)."
+    },
+    {
+      "key": "no-kartverket",
+      "name": "Kartverket",
+      "network": "Se havnivå",
+      "licence": "CC BY 4.0",
+      "attribution": "© Kartverket · CC BY 4.0",
+      "licenceUrl": "https://www.kartverket.no/en/api-and-data/terms-of-use",
+      "page": "https://www.kartverket.no/en/at-sea/se-havniva",
+      "disclaimer": "Not for navigation."
+    },
+    {
+      "key": "jp-jma",
+      "name": "JMA",
+      "network": "潮位表掲載地点 (tide-table stations)",
+      "licence": "Public Data Licence 1.0",
+      "attribution": "出典：気象庁ホームページ (Japan Meteorological Agency)",
+      "licenceUrl": "https://www.jma.go.jp/jma/kishou/info/coment.html",
+      "page": "https://www.data.jma.go.jp/kaiyou/db/tide/suisan/suisan.php?stn={id}",
+      "disclaimer": "Not for navigation. The tide-table datum is close to, but not guaranteed equal to, the chart datum."
+    }
+  ],
+  "cdKinds": [
+    {
+      "key": "mllw",
+      "label": "MLLW",
+      "description": "Chart datum = Mean Lower Low Water (MLLW), US tidal datum, National Tidal Datum Epoch"
+    },
+    {
+      "key": "lwd",
+      "label": "LWD",
+      "description": "Chart datum = Low Water Datum of the lake (IGLD 1985)"
+    },
+    {
+      "key": "zh",
+      "label": "ZH",
+      "description": "Zéro hydrographique (chart datum), ≈ lowest astronomical tide"
+    },
+    {
+      "key": "sjokartnull",
+      "label": "CD",
+      "description": "Sjøkartnull (chart datum) = lowest astronomical tide (LAT)"
+    },
+    {
+      "key": "jma-tt",
+      "label": "Tide-table datum",
+      "description": "JMA tide-table datum (潮位表基準面) — close to, not guaranteed equal to, chart datum"
+    }
+  ],
+  "levels": {
+    "HAT": "Highest astronomical tide",
+    "MHHW": "Mean higher high water",
+    "MHWS": "Mean high water springs",
+    "MHW": "Mean high water",
+    "MHWN": "Mean high water neaps",
+    "DTL": "Mean diurnal tide level",
+    "MTL": "Mean tide level",
+    "MSL": "Mean sea level",
+    "MLWN": "Mean low water neaps",
+    "MLW": "Mean low water",
+    "MLWS": "Mean low water springs",
+    "MLLW": "Mean lower low water",
+    "LAT": "Lowest astronomical tide",
+    "PHMA": "Plus haute mer astronomique (≈ HAT)",
+    "PMVE": "Pleine mer de vives-eaux moyenne (≈ MHWS)",
+    "PMME": "Pleine mer de mortes-eaux moyenne (≈ MHWN)",
+    "NM": "Niveau moyen (≈ MSL)",
+    "BMME": "Basse mer de mortes-eaux moyenne (≈ MLWN)",
+    "BMVE": "Basse mer de vives-eaux moyenne (≈ MLWS)",
+    "PBMA": "Plus basse mer astronomique (≈ LAT)",
+    "HOWL": "Highest observed water level",
+    "LOWL": "Lowest observed water level"
+  },
+  "national": {
+    "NAVD88": "NAVD88",
+    "IGLD85": "IGLD 1985",
+    "IGN69": "NGF-IGN69",
+    "IGN78": "NGF-IGN78 (Corse)",
+    "NN2000": "NN2000",
+    "JGD2024": "標高 (GSI 測地成果2024)"
+  }
+}

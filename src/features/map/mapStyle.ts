@@ -56,6 +56,12 @@ import {
   GEODETIC_SOURCE_MINZOOM,
 } from '@core/map/geodeticStyle';
 import type { GeodeticLayerFilters } from '@core/geodetic/filter';
+import {
+  buildTideLayers,
+  TIDE_SOURCE,
+  TIDE_SOURCE_MAXZOOM,
+  TIDE_SOURCE_MINZOOM,
+} from '@core/map/tideStyle';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -450,6 +456,11 @@ export interface OsmStyleOptions {
     /** The user's attribute filter (`@core/geodetic/filter`); unset = every mark. */
     filters?: GeodeticLayerFilters;
   };
+  /**
+   * Tide stations (Overlays → Tide stations, `@core/map/tideStyle`): drawn
+   * above the geodetic marks. `glyphs` serves the station names.
+   */
+  tides?: { tiles: string; dark: boolean; glyphs?: string };
   /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
@@ -1147,6 +1158,27 @@ export function buildOsmStyle(
         theme: options.geodetic.dark ? 'dark' : 'light',
         font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
         ...(options.geodetic.filters ? { filters: options.geodetic.filters } : {}),
+      }),
+    );
+  }
+
+  // Tide stations, after the geodetic marks in the trails slot (a station
+  // symbol draws over the survey marks round its harbour).
+  if (options.tides) {
+    style.sources[TIDE_SOURCE] = {
+      type: 'vector',
+      tiles: [options.tides.tiles],
+      minzoom: TIDE_SOURCE_MINZOOM,
+      // Built to z10 (`tides.sh`); MapLibre overzooms past that.
+      maxzoom: TIDE_SOURCE_MAXZOOM,
+    };
+    style.glyphs ??= options.tides.glyphs ?? OFM_GLYPHS_URL;
+    const atkinson = style.glyphs !== OFM_GLYPHS_URL;
+    put(
+      'trails',
+      ...buildTideLayers({
+        theme: options.tides.dark ? 'dark' : 'light',
+        font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
       }),
     );
   }

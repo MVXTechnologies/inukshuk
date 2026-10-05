@@ -90,7 +90,14 @@ def join(bms, norm_dir):
             t['cm'] = b['alsoMHW']
         if row['pass'] is None:
             t['cu'] = 1  # identity by PID, no levelled height to check against
+        # One mark can be the reference of two neighbouring sites: keep the nearer station.
+        d = haversine_m(rec['lat'], rec['lng'], b['lat'], b['lng'])
+        if rec['uid'] in joins and joins[rec['uid']]['_d'] <= d:
+            continue
+        t['_d'] = d
         joins[rec['uid']] = t
+    for t in joins.values():
+        t.pop('_d', None)
     log(f'join: {len(joins)} tidal benchmarks joined of {len(bms)} published '
         f'({sum(1 for r in rows if r["pass"] is False)} rejected by the height check)')
     return joins, rows

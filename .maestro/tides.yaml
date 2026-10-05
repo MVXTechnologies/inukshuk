@@ -1,0 +1,54 @@
+# Tide stations overlay e2e: the overlays menu carries the "Tide stations"
+# switch (NOAA, SHOM, Kartverket, JMA — never CHS) with its legend; switching
+# it on keeps the menu usable and the legend live; the flow leaves it off.
+# The station card itself (levels in three datums, copy buttons) is covered
+# by src/core/tides/card.test.ts and the sim screenshots
+# (chart-datum-convert/build/), since a station's screen position depends
+# on the camera.
+#
+# iOS merges a row's title + subtitle into one accessibility string, so row
+# matches are wildcard regexes (see settings.yaml).
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn: 'Map overlays'
+- scrollUntilVisible:
+    element: 'Tide stations.*'
+    direction: DOWN
+    centerElement: true
+- assertVisible: 'Tide stations.*Gauges, tidal levels, chart datum.*'
+- assertVisible: 'Tide stations legend'
+# Off by default: switch it on (a previous run may have left it on).
+- runFlow:
+    when:
+      notVisible: 'Tide stations.*(on|checked|1).*'
+    commands:
+      - tapOn: 'Tide stations.*'
+- assertVisible: 'Tide stations legend'
+- tapOn: 'Close overlays'
+- assertVisible: 'Map actions'
+# Leave it off for the other flows.
+- tapOn: 'Map overlays'
+- scrollUntilVisible:
+    element: 'Tide stations.*'
+    direction: DOWN
+    centerElement: true
+- tapOn: 'Tide stations.*'
+- tapOn: 'Close overlays'
+- assertVisible: 'Map actions'
