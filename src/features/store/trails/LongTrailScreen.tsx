@@ -24,7 +24,7 @@ import { radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, ProgressBar, Snackbar, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -38,6 +38,7 @@ import { TrailRouteMap } from './TrailRouteMap';
 import { TrailDownloadButton, useTrailDownload } from './useTrailDownload';
 import { useTrailOrigin } from './useLongTrails';
 import { useTrailClimb } from './useTrailClimb';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * One long-distance trail (#467, boards `Detail.dc.html` light and dark):
@@ -368,7 +369,7 @@ export function LongTrailScreen({ id }: { id: string }) {
                 <Text style={[styles.rowLabel, { color: t.inkMuted }]}>{row.label}</Text>
                 {row.url !== undefined ? (
                   <Pressable
-                    onPress={() => void Linking.openURL(row.url ?? '')}
+                    onPress={() => void openExternalLink(row.url ?? '')}
                     accessibilityRole="link"
                     accessibilityLabel={`Open ${row.value}`}
                     hitSlop={target.compactHitSlop}

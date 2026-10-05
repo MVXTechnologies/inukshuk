@@ -3,8 +3,9 @@ import { radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
+import { openExternalLink } from '@lib/openLink';
 
 /** How long the Copy button reads "Copied". */
 export const COPIED_FEEDBACK_MS = 2000;
@@ -77,7 +78,7 @@ export function OrganisationMapsCta({ style }: { style?: StyleProp<ViewStyle> })
       </View>
 
       <Pressable
-        onPress={() => void Linking.openURL(orgMapsIssueUrl()).catch(() => undefined)}
+        onPress={() => void openExternalLink(orgMapsIssueUrl())}
         accessibilityRole="link"
         accessibilityLabel="Suggest a map source on GitHub"
         hitSlop={target.compactHitSlop}

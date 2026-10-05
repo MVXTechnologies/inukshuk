@@ -18,14 +18,7 @@ import { radius, space, target } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, ProgressBar, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +26,7 @@ import { CoverageMap, coverageText } from './CoverageMap';
 import { ExploreStat, MapPreview, TagChip } from './ExploreParts';
 import { itemFacets, itemScaleDenominator } from './facetsAdapter';
 import { useCatalogDownloadFlow } from './useCatalogDownloadFlow';
+import { openExternalLink } from '@lib/openLink';
 
 /**
  * One map's detail page (#447, board `Detail.dc.html`): preview (the
@@ -196,7 +190,7 @@ export function CatalogDetailScreen({ id }: { id: string }) {
               <Text style={[styles.rowLabel, { color: t.inkMuted }]}>{row.label}</Text>
               {row.url !== undefined ? (
                 <Pressable
-                  onPress={() => void Linking.openURL(row.url ?? '')}
+                  onPress={() => void openExternalLink(row.url ?? '')}
                   accessibilityRole="link"
                   accessibilityLabel={`Open ${row.value}`}
                   hitSlop={target.compactHitSlop}
