@@ -211,8 +211,9 @@ def normalize(raw_elements, takedowns=None):
 
     sectors = _merge_same_sectors(sectors)
     _assign_routes(sectors, routes)
+    cliff_grid = cliff_index(cliffs)
     for s in sectors:
-        _order_sector(s, cliffs)
+        _order_sector(s, cliffs, cliff_grid)
 
     # Areas take the sectors they list or contain; the rest stand alone.
     taken = set()
@@ -256,24 +257,52 @@ def _in_polygon(pt, ring):
     return inside
 
 
+class CellIndex:
+    """Items by ~1 km cell (each of their points / line vertices), for
+    neighbour lookups: the world has ~15k walls and ~45k route starts."""
+
+    CELL = 0.01
+
+    def __init__(self):
+        self.cells = {}
+
+    def _key(self, lat, lng):
+        return (int(lat // self.CELL), int(lng // self.CELL))
+
+    def add(self, item, points):
+        for key in {self._key(lat, lng) for lat, lng in points}:
+            self.cells.setdefault(key, []).append(item)
+
+    def near(self, lat, lng):
+        cy, cx = self._key(lat, lng)
+        seen = set()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                for item in self.cells.get((cy + dy, cx + dx), ()):
+                    if id(item) not in seen:
+                        seen.add(id(item))
+                        yield item
+
+
 def _merge_same_sectors(sectors):
     """A wall mapped twice (a cliff way + a `type=site` relation of the same
     name, as at Weir) is one sector: relation members + way line."""
     prio = {'relation': 0, 'way': 1, 'node': 2}
     sectors.sort(key=lambda s: prio[s['key'][0]])
     out = []
+    by_name = {}
     for s in sectors:
         twin = None
         if s['name']:
-            for o in out:
-                if o['name'] and fold(o['name']) == fold(s['name']) and (
-                    haversine_m(*o['pt'], *s['pt']) <= SAME_SECTOR_M
-                ):
+            for o in by_name.get(fold(s['name']), ()):
+                if haversine_m(*o['pt'], *s['pt']) <= SAME_SECTOR_M:
                     twin = o
                     break
         if twin is None:
             s['alias_keys'] = []
             out.append(s)
+            if s['name']:
+                by_name.setdefault(fold(s['name']), []).append(s)
             continue
         twin['alias_keys'].append(s['key'])
         twin['members'] = twin['members'] + s['members']
@@ -297,14 +326,15 @@ def _assign_routes(sectors, routes):
             if m in routes and m not in claimed:
                 s['routes'].append(routes[m])
                 claimed.add(m)
+    grid = CellIndex()
+    for s in sectors:
+        grid.add(s, [s['pt'], *s['line']])
     for key, r in routes.items():
         if key in claimed:
             continue
         lng, lat = r['pos']
         best, best_d = None, ROUTE_SECTOR_M
-        for s in sectors:
-            if abs(s['pt'][0] - lat) > 0.01 or abs(s['pt'][1] - lng) > 0.02:
-                continue
+        for s in grid.near(lat, lng):
             d = _sector_distance(s, lat, lng)
             if d < best_d:
                 best, best_d = s, d
@@ -313,7 +343,15 @@ def _assign_routes(sectors, routes):
             claimed.add(key)
 
 
-def _wall_line(s, cliffs):
+def cliff_index(cliffs):
+    grid = CellIndex()
+    for line in cliffs.values():
+        if line:
+            grid.add(line, line)
+    return grid
+
+
+def _wall_line(s, cliffs, cliff_grid=None):
     if s['line'] and s['tags'].get('natural') == 'cliff' and s['line'][0] != s['line'][-1]:
         return s['line']
     for typ, ref in s['members']:
@@ -325,16 +363,14 @@ def _wall_line(s, cliffs):
     lat = sum(p[0] for p in starts) / len(starts)
     lng = sum(p[1] for p in starts) / len(starts)
     best, best_d = None, order.CLIFF_NEAR_M
-    for line in cliffs.values():
-        if not line or abs(line[0][0] - lat) > 0.05 or abs(line[0][1] - lng) > 0.08:
-            continue
+    for line in (cliff_grid or cliff_index(cliffs)).near(lat, lng):
         d = order.line_distance_m(line, lat, lng)
         if d < best_d:
             best, best_d = line, d
     return best
 
 
-def _order_sector(s, cliffs):
+def _order_sector(s, cliffs, cliff_grid=None):
     rs = s['routes']
     s['ordered'] = False
     if len(rs) >= 2:
@@ -342,7 +378,7 @@ def _order_sector(s, cliffs):
         idx = order.order_routes(
             starts,
             facing=order.facing_azimuth(s['tags'].get('climbing:orientation')),
-            line_ll=_wall_line(s, cliffs),
+            line_ll=_wall_line(s, cliffs, cliff_grid),
         )
         if idx is not None:
             s['routes'] = [rs[i] for i in idx]

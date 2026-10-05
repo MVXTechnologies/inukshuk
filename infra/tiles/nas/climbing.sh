@@ -42,7 +42,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 PMTILES_IMAGE=${PMTILES_IMAGE:-protomaps/go-pmtiles:v1.31.2}
 TIPPECANOE_IMAGE=inukshuk-tippecanoe:2.79.0
 PY_IMAGE=inukshuk-climbing-py:1
-MIN_CRAGS=${CLIMBING_MIN_CRAGS:-30000}
+MIN_CRAGS=${CLIMBING_MIN_CRAGS:-20000}
 mkdir -p "$CL/raw" "$CL/norm" "$CL/out" "$CL/logs"
 # Natural Earth (regions / countries), shared with trails.sh.
 NE=$WORK/trails/ne
@@ -132,7 +132,7 @@ docker run --rm -u "$OWNER" -v "$CL/out:/data" "$TIPPECANOE_IMAGE" \
   -n 'Inukshuk climbing crags' -A "$ATTRIBUTION" -N "$DESC" \
   -Z4 -z14 -r1 --no-feature-limit --no-tile-size-limit \
   -T r:int -T s:int -T st:int -T a:int -T src:int -T ord:int -T ap:int \
-  -T g0:int -T g1:int -T v0:int -T v1:int -T w0:int -T w1:int -T o:int \
+  -T g0:int -T g1:int -T v0:int -T v1:int -T w0:int -T w1:int -T o:int -T bd:int \
   -T i:string -T n:string -T b:string -T v:string -T rg:string -T c:string -T g:string \
   --read-parallel --quiet \
   -L crags:/data/crags.geojsonl -L route_starts:/data/route_starts.geojsonl

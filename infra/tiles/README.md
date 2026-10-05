@@ -239,6 +239,38 @@ every 2.5 s, keeps only the extracted text, and re-checks daily for new or chang
 The app's tile URL carries `?v=N` (`@data/basemapTiles`): bump it only when the tile SCHEMA
 changes — tiles are edge- and device-cached for a day.
 
+## Climbing crags (Explore → Climbing, Settings → Extensions)
+
+`nas/climbing.sh` + `nas/climbing/` (Python in the pinned image `climbing/Dockerfile`; tests:
+`python3 -m unittest discover -s infra/tiles/nas/climbing -p 'test_*.py'`). Spec, sources and
+owner decisions: `~/Documents/inukshuk-saved/climbing-topos/` (DESIGN.md, SOURCES.md, PLAN.md).
+
+1. **fetch** (side by side, one log each in `work/climbing/logs/`): OpenBeta's weekly Parquet
+   export from GitHub (CC0; facts only — never descriptions or first ascents), OSM climbing
+   features through an Overpass mirror (ODbL), camptocamp collaborative `climbing_outdoor`
+   waypoints (CC BY-SA, 1 request/s, cached by document version).
+2. **normalize** — crag records per source; gate = minimum and −30 % vs last good, else the
+   last good records stay. `climbing/takedowns.json` removes records by source id.
+3. **assemble** — OSM walls fold into the OpenBeta crag they belong to; one source per sector;
+   left-to-right order only from OSM route starts + a facing or a wall line (`order.py`);
+   camptocamp enriches (approach text, rock, aspect). Access is never "open" from missing data;
+   FQME is a partner slot (`partners.py`) read only with `CLIMBING_FQME_AGREEMENT=signed`.
+4. **publish** — `crags.pmtiles` (layers `crags`, `route_starts`; z4–14, thinning ladder),
+   `climbing-{version}.details.bin` + `.offsets.json` (one topo per crag), then
+   `climbing-v1.index.json` LAST (search; it names the version).
+
+Served as `/crags/{z}/{x}/{y}.mvt` + `/crags.json` (generic archive route; coverage and topo
+version in the TileJSON description) and `/climbing/v1/index.json`,
+`/climbing/v1/d/{version}/{uid}.json` (`worker/src/details.ts`, shared with the trails).
+`scheduler.sh` runs it monthly on the third Thursday from 03:00 (never the 1st, never a
+Monday, and not while a geodetic build holds its lock).
+
+```sh
+~/inukshuk-tiles/infra/nas/climbing.sh                  # fetch then build (~2 h, mostly camptocamp)
+~/inukshuk-tiles/infra/nas/climbing.sh build            # publish what is on disk
+CLIMBING_UPLOAD=0 ~/inukshuk-tiles/infra/nas/climbing.sh build   # dry run
+```
+
 ## Long-distance trails (Explore, #467)
 
 Explore's "Long-distance trails near you" reads OpenStreetMap route relations built by
