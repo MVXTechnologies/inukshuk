@@ -1,4 +1,5 @@
 import type { Track } from '@core/models';
+import { decodeXmlText } from '@core/geo/activityFiles';
 import { parseGpx } from '@core/geo/gpx';
 import { buildImportedTrack, snapWaypointsToNotes, type ImportedNote } from '@core/geo/track';
 import * as storage from '@data/storage';
@@ -67,7 +68,9 @@ async function buildOrCleanUp(
 /** Import a GPX from an arbitrary opened URI (e.g. an Android "Open with" intent). */
 export async function importGpxFromUri(uri: string, fallbackName: string): Promise<ImportedTrack> {
   const id = storage.newId();
-  const text = await storage.readFileText(uri);
+  // Bytes, decoded by the file's own encoding: `File.text()` assumes UTF-8
+  // and on iOS rejects a Latin-1 or UTF-16 GPX outright (#360, #361).
+  const text = decodeXmlText(await storage.readFileBytes(uri));
   const fileUri = storage.writeTrackGpx(id, text);
   return buildOrCleanUp(text, id, fileUri, fallbackName);
 }
