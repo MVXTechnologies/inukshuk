@@ -18,7 +18,7 @@ export function TideLegend({ disabled = false }: { disabled?: boolean }) {
   return (
     <View
       style={[styles.wrap, disabled && styles.disabled]}
-      accessibilityLabel="Tide stations legend"
+      accessibilityLabel="Gauge symbols legend"
     >
       <View style={styles.row}>
         <View style={styles.entry}>

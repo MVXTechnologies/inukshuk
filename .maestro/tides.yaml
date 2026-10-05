@@ -6,8 +6,8 @@
 # (chart-datum-convert/build/), since a station's screen position depends
 # on the camera.
 #
-# iOS merges a row's title + subtitle into one accessibility string, so row
-# matches are wildcard regexes (see settings.yaml).
+# The row's accessibility text is exactly "Tide stations" (a switch); the
+# legend is "Gauge symbols legend" so the two never collide.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -29,26 +29,23 @@ appId: com.inukshuk.app
     timeout: 30000
 - tapOn: 'Map overlays'
 - scrollUntilVisible:
-    element: 'Tide stations.*'
+    element: 'Tide stations'
     direction: DOWN
     centerElement: true
-- assertVisible: 'Tide stations.*Gauges, tidal levels, chart datum.*'
-- assertVisible: 'Tide stations legend'
-# Off by default: switch it on (a previous run may have left it on).
-- runFlow:
-    when:
-      notVisible: 'Tide stations.*(on|checked|1).*'
-    commands:
-      - tapOn: 'Tide stations.*'
-- assertVisible: 'Tide stations legend'
+- assertVisible: 'Gauge symbols legend'
+- assertVisible: 'Live gauge'
+# Flip the switch, close and reopen the menu (the map restyles with or
+# without the tide layer), then flip it back: the flow leaves the setting as
+# it found it (off by default).
+- tapOn: 'Tide stations'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
-# Leave it off for the other flows.
 - tapOn: 'Map overlays'
 - scrollUntilVisible:
-    element: 'Tide stations.*'
+    element: 'Tide stations'
     direction: DOWN
     centerElement: true
-- tapOn: 'Tide stations.*'
+- assertVisible: 'Gauge symbols legend'
+- tapOn: 'Tide stations'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
