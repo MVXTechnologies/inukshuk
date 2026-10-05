@@ -320,7 +320,11 @@ export function Trail3DGLScreen({ trackId }: Props) {
         ...routeClimb(points.map((p) => p.altitude)),
       };
     }
-    return demPoints ? computeSegmentedTrackStats(demPoints, segmentStarts, { category }) : null;
+    // The saved-trail climb rule, so the terrain-sampled climb is measured
+    // the way the Library's is.
+    return demPoints
+      ? computeSegmentedTrackStats(demPoints, segmentStarts, { category, robustClimb: true })
+      : null;
   }, [planned, points, demPoints, segmentStarts, category]);
   // Trails saved before moving time existed (#504), or re-filed under another
   // activity, get their moving stats recomputed here — once, from the points

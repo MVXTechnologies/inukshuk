@@ -124,6 +124,8 @@ interface SegmentedStatsOpts {
   maxAccuracyM?: number;
   /** The trail's activity category: picks the moving-time stop threshold (#504). */
   category?: string | null;
+  /** See `computeTrackStats`: the saved-trail climb rule, decided per segment. */
+  robustClimb?: boolean;
 }
 
 /**
@@ -151,6 +153,7 @@ export function computeSegmentedTrackStats(
   let maxSpeedMps = 0;
   let pointCount = 0;
   let movingModel: string | undefined;
+  let climbModel: string | undefined;
   let minAltitudeM: number | undefined;
   let maxAltitudeM: number | undefined;
   let bbox: TrackStats['bbox'];
@@ -167,6 +170,7 @@ export function computeSegmentedTrackStats(
     if (s.maxSpeedMps > maxSpeedMps) maxSpeedMps = s.maxSpeedMps;
     pointCount += s.pointCount;
     movingModel = s.movingModel;
+    climbModel = s.climbModel;
     if (
       s.minAltitudeM !== undefined &&
       (minAltitudeM === undefined || s.minAltitudeM < minAltitudeM)
@@ -202,6 +206,7 @@ export function computeSegmentedTrackStats(
     bbox,
     pointCount,
     ...(movingModel !== undefined ? { movingModel } : {}),
+    ...(climbModel !== undefined ? { climbModel } : {}),
   };
 }
 

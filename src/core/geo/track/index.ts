@@ -1,5 +1,6 @@
 import type { BoundingBox, TrackPoint, TrackStats } from '@core/models';
 import { haversineMeters } from '@core/geo/geomath';
+import { CLIMB_MODEL_KEY, climbElevations } from './elevationSmoothing';
 import { computeMovingTime, movingModelKey, movingProfileFor } from './movingTime';
 
 /**
@@ -16,6 +17,15 @@ export type { ElevationProfile, ElevationSample } from './elevationProfile';
 export { buildImportedTrack } from './importTrack';
 export { snapWaypointsToNotes } from './snapWaypoints';
 export { withDemElevations, type DemGrid } from './demElevations';
+export {
+  CLIMB_MODEL_KEY,
+  CLIMB_MODEL_VERSION,
+  CLIMB_NOISE_RATIO,
+  CLIMB_SMOOTHING_WINDOW_M,
+  climbElevations,
+  smoothElevationsByDistance,
+} from './elevationSmoothing';
+export { refreshClimbStats } from './refreshClimb';
 export type { ImportedNote } from './snapWaypoints';
 export { interpolateTrackAtDistance } from './interpolate';
 export type { TrackPointAt } from './interpolate';
@@ -184,6 +194,14 @@ interface ComputeOpts {
   maxAccuracyM?: number;
   /** The trail's activity category: picks the moving-time stop threshold (#504). */
   category?: string | null;
+  /**
+   * Measure climb/descent on {@link climbElevations} — the trail's own
+   * elevations unless they are terrain-lookup stepping noise (a Garmin
+   * Connect course), then a smoothed profile — and stamp `climbModel`. Every
+   * saved trail uses it; it is off by default only so the live recorder's
+   * incremental hysteresis and its batch twin stay byte-identical.
+   */
+  robustClimb?: boolean;
 }
 
 /** The `movingModel` stamp for these options (none when the threshold is overridden). */
@@ -206,6 +224,7 @@ const emptyStats = (opts?: ComputeOpts): TrackStats => ({
   bbox: undefined,
   pointCount: 0,
   ...movingModelOf(opts),
+  ...(opts?.robustClimb ? { climbModel: CLIMB_MODEL_KEY } : {}),
 });
 
 /** Full statistics for an ordered series of track points. */
@@ -269,9 +288,10 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
     }
   }
 
-  const { ascentM, descentM } = elevationGainLoss(elevations, {
-    threshold: elevationThresholdM,
-  });
+  const { ascentM, descentM } = elevationGainLoss(
+    opts?.robustClimb ? climbElevations(pts, elevationThresholdM) : elevations,
+    { threshold: elevationThresholdM },
+  );
 
   const durationS =
     firstTime !== undefined && lastTime !== undefined
@@ -298,6 +318,7 @@ export function computeTrackStats(points: readonly TrackPoint[], opts?: ComputeO
     bbox,
     pointCount: pts.length,
     ...movingModelOf(opts),
+    ...(opts?.robustClimb ? { climbModel: CLIMB_MODEL_KEY } : {}),
   };
 }
 

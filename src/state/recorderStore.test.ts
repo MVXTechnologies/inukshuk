@@ -1123,7 +1123,7 @@ describe('index writes on save (stop())', () => {
   it('saves the same trail, stats, notes and photos as the per-note writes did', async () => {
     recordWithWaypoints();
     const live = useRecorderStore.getState();
-    const expectedStats = computeTrackStats(live.points);
+    const expectedStats = computeTrackStats(live.points, { robustClimb: true });
     const expectedDistances = live.waypoints.map((w) =>
       Math.min(w.distanceM, expectedStats.distanceM),
     );

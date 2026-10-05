@@ -47,6 +47,13 @@ export interface TrackStats {
    * stale or missing stamp is recomputed lazily when the trail's points load.
    */
   movingModel?: string;
+  /**
+   * Which climb rule produced `ascentM` / `descentM` (`CLIMB_MODEL_KEY`,
+   * `@core/geo/track/elevationSmoothing`). Absent on trails saved before it
+   * existed: their climb is recomputed lazily when the trail's points load,
+   * which is what corrects a Garmin course imported with an inflated D+.
+   */
+  climbModel?: string;
   /** Peak smoothed speed in m/s. */
   maxSpeedMps: number;
   minAltitudeM?: number;
