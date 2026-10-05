@@ -31,3 +31,30 @@ export function isPageLevelUnsupported(message: string): boolean {
   if (!message.trim()) return false;
   return !CROP_SPECIFIC.some((pattern) => pattern.test(message));
 }
+
+/**
+ * A page's native-geometry verification, as remembered across launches.
+ *
+ * Before a native crop, pdf.js opens the page once to check that the native
+ * renderer would draw what pdf.js draws (rotation 0, UserUnit 1, the page box
+ * the georeference expects, default layers). That check is a property of the
+ * file's bytes, so it is remembered by the file (its last two path segments,
+ * which survive iOS container moves), its revision, the page and its size,
+ * and by `planVersion`, the layer-plan code that decided "default layers",
+ * so an update that changes the plan verifies again. With it, a cold launch
+ * can draw native detail before the pdf.js page has even loaded.
+ */
+export function persistentNativeGeometryKey(
+  page: { fileUri: string; revision: string; pageIndex: number; widthPt: number; heightPt: number },
+  planVersion: string,
+): string {
+  const tail = page.fileUri.split('/').filter(Boolean).slice(-2).join('/');
+  return JSON.stringify([
+    tail,
+    page.revision,
+    page.pageIndex,
+    page.widthPt,
+    page.heightPt,
+    planVersion,
+  ]);
+}

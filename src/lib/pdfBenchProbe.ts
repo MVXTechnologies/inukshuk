@@ -45,10 +45,20 @@ export type PdfBenchEvent =
 type Listener = (event: PdfBenchEvent) => void;
 const listeners = new Set<Listener>();
 let nextId = 0;
+let lastDetails: Extract<PdfBenchEvent, { kind: 'details' }> | null = null;
+
+/** When this bundle started running (bench builds: the cold-launch baseline). */
+export const PDF_BENCH_JS_START = Date.now();
 
 export function pdfBenchEmit(event: PdfBenchEvent): void {
   if (!PDF_BENCH) return;
+  if (event.kind === 'details') lastDetails = event;
   for (const listener of listeners) listener(event);
+}
+
+/** The detail hook's latest report, even one sent before anyone listened. */
+export function pdfBenchLastDetails(): Extract<PdfBenchEvent, { kind: 'details' }> | null {
+  return lastDetails;
 }
 
 /** A fresh id for a raster request (bench builds only; 0 otherwise). */

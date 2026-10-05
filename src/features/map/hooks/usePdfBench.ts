@@ -5,7 +5,13 @@ import { primaryGeoreferenceForPage } from '@core/geo/geopdf/primary';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import { mapDocumentFromStoredPdf } from '@features/library/importMap';
 import * as storage from '@data/storage';
-import { PDF_BENCH, pdfBenchSubscribe, type PdfBenchEvent } from '@lib/pdfBenchProbe';
+import {
+  PDF_BENCH,
+  PDF_BENCH_JS_START,
+  pdfBenchLastDetails,
+  pdfBenchSubscribe,
+  type PdfBenchEvent,
+} from '@lib/pdfBenchProbe';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -196,10 +202,10 @@ export function usePdfBench(args: {
     p.details = args.details;
     p.commits += 1;
   });
-  const sizeRef = useRef({ w: window.width, h: window.height });
+  const sizeRef = useRef({ w: window.width, h: window.height, scale: window.scale });
   useEffect(() => {
-    sizeRef.current = { w: window.width, h: window.height };
-  }, [window.width, window.height]);
+    sizeRef.current = { w: window.width, h: window.height, scale: window.scale };
+  }, [window.width, window.height, window.scale]);
   const { cameraRef, renderedFramesRef, framesRef } = args;
 
   useEffect(() => {
@@ -211,9 +217,77 @@ export function usePdfBench(args: {
       const planUrl = queryParams?.pbench;
       if (typeof planUrl !== 'string') return;
       running = true;
-      void run(planUrl).finally(() => {
+      const open = queryParams?.open;
+      const t0 = Number(queryParams?.t0);
+      void (typeof open === 'string' ? runOpen(planUrl, open, t0) : run(planUrl)).finally(() => {
         running = false;
       });
+    };
+
+    /**
+     * Cold launch: the host force-stopped the app and started it again with
+     * this link (`open=<slug>`, `t0` = device ms just before the launch).
+     * Times the map's first view, wherever the camera came up (the map
+     * starts at z14 on the device's location), until it is sharp.
+     */
+    const runOpen = async (planUrl: string, slug: string, t0: number) => {
+      const plan = (await (await fetch(planUrl)).json()) as Plan;
+      const doc = useLibraryStore.getState().maps.find((m) => m.name === slug);
+      const result: Record<string, unknown> = {
+        runId: plan.runId,
+        map: slug,
+        kind: 'open',
+        jsStartMs: Number.isFinite(t0) ? PDF_BENCH_JS_START - t0 : null,
+      };
+      if (doc) {
+        let tSharp = 0;
+        let tFirstSettle = 0;
+        const from = Date.now();
+        while (!tSharp && Date.now() - from < plan.timeoutMs) {
+          await sleep(16);
+          const p = probe.current;
+          if (!p.bounds) continue;
+          if (!tFirstSettle) tFirstSettle = Date.now();
+          const overview = p.overlays.some((o) => o.id.startsWith(`${doc.id}:`) && o.imageUri);
+          const d = pdfBenchLastDetails();
+          if (!overview || !d || d.bounds !== p.bounds || d.covered < d.visible) continue;
+          const want = [...d.shown].sort().join('|');
+          const shownNow = () =>
+            probe.current.details
+              .filter((o) => o.id.startsWith(`${doc.id}:`))
+              .map((o) => o.imageUri)
+              .sort()
+              .join('|');
+          const waitFrom = Date.now();
+          while (shownNow() !== want && Date.now() - waitFrom < 2000) await sleep(8);
+          const full = renderedFramesRef.current ?? 0;
+          const plain = framesRef.current ?? 0;
+          const frameFrom = Date.now();
+          while (Date.now() - frameFrom < 1500) {
+            if ((renderedFramesRef.current ?? 0) > full || (framesRef.current ?? 0) >= plain + 3)
+              break;
+            await sleep(4);
+          }
+          tSharp = Date.now();
+          result.visibleTiles = d.visible;
+          result.bounds = p.bounds;
+        }
+        result.sharpMs = tSharp && Number.isFinite(t0) ? tSharp - t0 : null;
+        result.sharpFromJsMs = tSharp ? tSharp - PDF_BENCH_JS_START : null;
+        result.firstSettleFromJsMs = tFirstSettle ? tFirstSettle - PDF_BENCH_JS_START : null;
+        result.timedOut = !tSharp;
+      } else result.error = 'map not in library';
+      console.log(`PDF_BENCH open ${JSON.stringify(result)}`);
+      await fetch(`${plan.host}/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result),
+      }).catch(() => undefined);
+      await fetch(`${plan.host}/done`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: plan.runId }),
+      }).catch(() => undefined);
     };
 
     const run = async (planUrl: string) => {
@@ -449,8 +523,39 @@ export function usePdfBench(args: {
               }
             }
             const d = lastDetails as Extract<PdfBenchEvent, { kind: 'details' }> | null;
+            // Delivered resolution at the view centre: raster pixels per
+            // device pixel of the raster drawn there (>= 1 is full density).
+            let density: number | null = null;
+            try {
+              const view = JSON.parse(settledBounds || probe.current.bounds) as Bounds;
+              const screenPx = sizeRef.current.w * Math.min(sizeRef.current.scale, 3);
+              const viewSpan = view.east - view.west;
+              const cx = (view.east + view.west) / 2,
+                cy = (view.north + view.south) / 2;
+              const contains = (o: PdfOverlay) =>
+                o.bbox.minLng <= cx &&
+                o.bbox.maxLng >= cx &&
+                o.bbox.minLat <= cy &&
+                o.bbox.maxLat >= cy;
+              const ratios: number[] = [];
+              for (const o of probe.current.details) {
+                const m = /:tile:\d+:\d+:\d+:(\d+)(?::(\d+)x\d+)?$/.exec(o.id);
+                if (!m || !o.id.startsWith(`${id}:`) || !contains(o)) continue;
+                const rasterW = Number(m[1]) * Number(m[2] ?? 1);
+                const onScreen = ((o.bbox.maxLng - o.bbox.minLng) / viewSpan) * screenPx;
+                ratios.push(rasterW / onScreen);
+              }
+              if (ratios.length) density = Math.max(...ratios);
+              else {
+                const o = probe.current.overlays.find((x) => x.id.startsWith(`${id}:`));
+                if (o) density = 2048 / (((o.bbox.maxLng - o.bbox.minLng) / viewSpan) * screenPx);
+              }
+            } catch {
+              density = null;
+            }
             const result = {
               runId: plan.runId,
+              density: density === null ? null : Math.round(density * 100) / 100,
               map: target.slug,
               kind: 'step',
               step: step.name,

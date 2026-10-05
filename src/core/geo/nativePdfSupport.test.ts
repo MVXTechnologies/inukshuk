@@ -1,4 +1,32 @@
-import { isPageLevelUnsupported } from './nativePdfSupport';
+import { isPageLevelUnsupported, persistentNativeGeometryKey } from './nativePdfSupport';
+
+describe('persistentNativeGeometryKey', () => {
+  const page = {
+    fileUri: 'file:///var/mobile/Containers/Data/Application/AAA/Documents/maps/abc.pdf',
+    revision: '17',
+    pageIndex: 0,
+    widthPt: 1600,
+    heightPt: 1940,
+  };
+
+  it('survives the iOS container moving', () => {
+    const moved = { ...page, fileUri: page.fileUri.replace('/AAA/', '/BBB/') };
+    expect(persistentNativeGeometryKey(moved, 'v1')).toBe(persistentNativeGeometryKey(page, 'v1'));
+  });
+
+  it('changes with the file, its revision, the page, its size and the layer plan', () => {
+    const base = persistentNativeGeometryKey(page, 'v1');
+    for (const other of [
+      { ...page, fileUri: page.fileUri.replace('abc', 'abd') },
+      { ...page, revision: '18' },
+      { ...page, pageIndex: 1 },
+      { ...page, widthPt: 1601 },
+      { ...page, heightPt: 1 },
+    ])
+      expect(persistentNativeGeometryKey(other, 'v1')).not.toBe(base);
+    expect(persistentNativeGeometryKey(page, 'v2')).not.toBe(base);
+  });
+});
 
 describe('isPageLevelUnsupported', () => {
   it.each([

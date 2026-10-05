@@ -1,7 +1,7 @@
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
-import { isPageLevelUnsupported } from '@core/geo/nativePdfSupport';
+import { isPageLevelUnsupported, persistentNativeGeometryKey } from '@core/geo/nativePdfSupport';
 import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
 import {
   PDF_WHITE_KEY_RUNTIME_SOURCE,
@@ -65,6 +65,7 @@ import {
 } from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
+import { loadVerifiedNativePages, saveVerifiedNativePages } from '@data/nativePdfGeometry';
 import { reportError } from '@lib/errorReporting';
 import { PDF_BENCH, pdfBenchEmit, pdfBenchId } from '@lib/pdfBenchProbe';
 import { Asset } from 'expo-asset';
@@ -263,6 +264,26 @@ function nativeRequestKey(args: Required<RasterizeArgs>): string | null {
     : null;
 }
 const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
+
+/** The layer-plan code a persisted verification was made with (see below). */
+const LAYER_PLAN_VERSION = fnv1a32(PDF_LAYER_RUNTIME_SOURCE);
+
+/** A verification that outlives this launch: the page, not the served URL. */
+function persistedGeometryKey(args: Required<RasterizeArgs>): string | null {
+  const page = args.nativePage;
+  return page
+    ? persistentNativeGeometryKey(
+        {
+          fileUri: page.fileUri,
+          revision: page.revision,
+          pageIndex: args.pageIndex,
+          widthPt: page.expectedPageWidthPt,
+          heightPt: page.expectedPageHeightPt,
+        },
+        LAYER_PLAN_VERSION,
+      )
+    : null;
+}
 
 interface PendingRequest {
   backendDispatched: boolean;
@@ -926,6 +947,28 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const nativeActiveRef = useRef<string | null>(null);
   const verifiedGeometryRef = useRef(new Set<string>());
   const unsupportedRequestsRef = useRef(new Set<string>());
+  // Verifications from earlier launches: a verified page's crops go native
+  // at once, even before the pdf.js page has loaded (a cold launch).
+  const persistedGeometryRef = useRef<Set<string> | null>(null);
+  const persistedGeometry = useCallback(() => {
+    if (persistedGeometryRef.current === null)
+      persistedGeometryRef.current = new Set(loadVerifiedNativePages());
+    return persistedGeometryRef.current;
+  }, []);
+  /** May this request go to the native renderer without the pdf.js page? */
+  const nativeReady = useCallback(
+    (args: Required<RasterizeArgs>) => {
+      if (!args.nativePage || whiteKeyStrength(args.whiteKey) > 0) return false;
+      const key = nativeGeometryKey(args);
+      if (key === null || unsupportedPagesRef.current.has(key)) return false;
+      const requestKey = nativeRequestKey(args);
+      if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) return false;
+      if (verifiedGeometryRef.current.has(key)) return true;
+      const persisted = persistedGeometryKey(args);
+      return persisted !== null && persistedGeometry().has(persisted);
+    },
+    [persistedGeometry],
+  );
   // Pages (geometry keys) a native renderer refused for the page itself: their
   // crops go straight to pdf.js (`@core/geo/nativePdfSupport`).
   const unsupportedPagesRef = useRef(new Set<string>());
@@ -1098,6 +1141,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           }
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);
+          const persisted = persistedGeometryKey(pending.args);
+          if (persisted !== null) {
+            // Same bound and recency order as the in-memory cache.
+            const set = persistedGeometry();
+            const known = set.delete(persisted);
+            set.add(persisted);
+            while (set.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+              const oldest = set.values().next().value;
+              if (oldest === undefined) break;
+              set.delete(oldest);
+            }
+            if (!known) saveVerifiedNativePages([...set]);
+          }
           if (cacheKey !== null) {
             const cache = verifiedGeometryRef.current;
             cache.delete(cacheKey);
@@ -1125,6 +1181,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         } catch (error) {
           if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
+          const persisted = persistedGeometryKey(pending.args);
+          if (persisted !== null && persistedGeometry().delete(persisted))
+            saveVerifiedNativePages([...persistedGeometry()]);
           if (
             mountedRef.current &&
             pendingRef.current.get(id) === pending &&
@@ -1195,13 +1254,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       })();
     },
-    [keyNativeTile],
+    [keyNativeTile, persistedGeometry],
   );
 
   const pumpQueue = useCallback(() => {
-    if (busyRef.current || nativeActiveRef.current !== null || !readyRef.current) {
-      return;
-    }
+    if (busyRef.current || nativeActiveRef.current !== null) return;
+    // The pdf.js page is only needed for pdf.js work and first verifications:
+    // a crop of a verified page goes native even while the page loads.
+    const first = queueRef.current[0];
+    if (!readyRef.current && !(first && nativeReady(first.args))) return;
     // A liveness check pumps again when it is done.
     if (verifyingRef.current !== null) return;
     const head = queueRef.current[0];
@@ -1248,7 +1309,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       unsupportedRequestsRef.current.delete(requestKey);
       unsupportedRequestsRef.current.add(requestKey);
       args.nativePage = null;
-    } else if (cachedKey !== null && verifiedGeometryRef.current.has(cachedKey) && nativePending) {
+    } else if (cachedKey !== null && nativePending && nativeReady(args)) {
       startNative(id, nativePending);
       return;
     }
@@ -1304,7 +1365,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     wv.injectJavaScript(
       `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}, ${lookLiteral}); true;`,
     );
-  }, [startNative]);
+  }, [startNative, nativeReady]);
 
   // Whenever the engine becomes ready (initial load or after a reload), drain
   // any queued requests.
@@ -1706,6 +1767,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             if (nativeActiveRef.current === id) {
               const key = nativeGeometryKey(normalized);
               if (key !== null) verifiedGeometryRef.current.delete(key);
+              const persisted = persistedGeometryKey(normalized);
+              if (persisted !== null && persistedGeometry().delete(persisted))
+                saveVerifiedNativePages([...persistedGeometry()]);
               // PdfRenderer cannot be interrupted by replacing a WebView. Keep
               // queue ownership until its promise settles; delete late output.
               return;
@@ -1764,7 +1828,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         pumpQueueRef.current();
       });
     },
-    [replaceEngine],
+    [replaceEngine, persistedGeometry],
   );
 
   const rasterize = useCallback<RasterizeFn>(

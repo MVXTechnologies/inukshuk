@@ -83,6 +83,9 @@ const pageRevision = (t: Target) => `${t.fileUri}@${t.revision}`;
  */
 export const DETAIL_START_DELAY_MS = 40;
 
+/** Largest neighbour-ring block (background work), in raster pixels. */
+const RING_BLOCK_PIXELS = 1.5 * 1024 * 1024;
+
 /** True when a cached raster (a tile or a block) holds `cell` at its level, at least as wide. */
 function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell): boolean {
   for (const d of cache.values()) {
@@ -402,6 +405,9 @@ export function usePdfDetails(
         cellWidthPx: cell.width,
         cells: peers.map((t) => t.cell!),
         focus: { x: cell.x + 0.5, y: cell.y + 0.5 },
+        // A render cannot be interrupted: keep ring blocks small enough that
+        // a gesture landing outside the ring waits little for the one in flight.
+        ...(target.prefetch ? { maxPixels: RING_BLOCK_PIXELS } : {}),
       });
       const block = blocks.find(
         (b) => cell.x >= b.x && cell.x < b.x + b.cols && cell.y >= b.y && cell.y < b.y + b.rows,

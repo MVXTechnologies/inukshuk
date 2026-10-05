@@ -53,6 +53,7 @@ def table(rows):
             'p50': round(pct(v, .5)), 'p95': round(pct(v, .95)), 'max': max(v),
             'over1s': sum(1 for x in v if x > 1000), 'timeouts': sum(1 for d in ds if d['timedOut']),
             'renders': round(sum(len([r for r in d['rasters'] if r.get('priority') != 'background']) for d in ds) / len(ds), 1),
+            'density': min((d['density'] for d in ds if d.get('density') is not None), default=None),
         })
     return out
 
@@ -60,9 +61,15 @@ def table(rows):
 def show(run):
     rows = load(run)
     print(f'## {os.path.basename(run.rstrip("/"))}  ({len(rows)} steps)')
-    print(f"{'map':32} {'z+':>3} {'class':7} {'n':>3} {'p50':>6} {'p95':>6} {'max':>6} {'>1s':>4} {'rend':>5}")
+    print(f"{'map':32} {'z+':>3} {'class':7} {'n':>3} {'p50':>6} {'p95':>6} {'max':>6} {'>1s':>4} {'rend':>5} {'dens':>5}")
     for r in table(rows):
-        print(f"{r['map'][:32]:32} {r['level']:>3} {r['class']:7} {r['n']:>3} {r['p50']:>6} {r['p95']:>6} {r['max']:>6} {r['over1s']:>4} {r['renders']:>5}")
+        dens = '-' if r['density'] is None else f"{r['density']:.2f}"
+        print(f"{r['map'][:32]:32} {r['level']:>3} {r['class']:7} {r['n']:>3} {r['p50']:>6} {r['p95']:>6} {r['max']:>6} {r['over1s']:>4} {r['renders']:>5} {dens:>5}")
+    for line in open(os.path.join(run, 'results.jsonl')):
+        d = json.loads(line)
+        if d.get('kind') == 'import':
+            print(f"  import {d['map']}: download {d.get('downloadMs')} ms, parse {d.get('parseMs')} ms, "
+                  f"first overview {d.get('overviewMs', '?')} ms")
     allv = [ms(d) for d in rows]
     print(f"ALL n={len(allv)} p50={round(pct(allv,.5))} p95={round(pct(allv,.95))} max={max(allv)} over1s={sum(1 for x in allv if x>1000)}")
 
