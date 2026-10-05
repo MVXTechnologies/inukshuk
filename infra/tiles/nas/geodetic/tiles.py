@@ -80,6 +80,9 @@ def props(rec):
     acc = rec.get('posAcc')
     if acc is not None and acc >= 1:
         p['p'] = int(round(acc * 10))
+    if rec.get('url'):
+        # A per-mark datasheet link the source's URL template can't express.
+        p['w'] = rec['url'][:200]
     return p
 
 

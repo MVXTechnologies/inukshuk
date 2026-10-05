@@ -102,8 +102,10 @@ function sheetLink(mark: GeodeticMark): { url: string; label: string } | null {
     if (mark.url) return { url: mark.url, label: 'Datasheet' };
     return source?.sheet ? { url: fill(source.sheet), label: 'OpenStreetMap' } : null;
   }
-  if (source?.sheet) return { url: fill(source.sheet), label: 'Full datasheet' };
+  // The agency's own per-mark link wins over the source's template (some
+  // report names can't be derived from the id, e.g. Queensland zero-pads).
   if (mark.url) return { url: mark.url, label: 'Full datasheet' };
+  if (source?.sheet) return { url: fill(source.sheet), label: 'Full datasheet' };
   return source ? { url: source.licenceUrl, label: 'Agency page' } : null;
 }
 

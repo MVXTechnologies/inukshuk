@@ -57,7 +57,7 @@ SOURCES = [
      'https://www.ign.es/resources/licencia/Condiciones_licenciaUso_IGN.pdf',
      None, 30000),
     ('nl-rws', 'Rijkswaterstaat', 'NAP-peilmerken', 'CC0',
-     'Rijkswaterstaat (CC0)', 'https://creativecommons.org/publicdomain/zero/1.0/', None, 100000),
+     'Rijkswaterstaat (CC0)', 'https://creativecommons.org/publicdomain/zero/1.0/', None, 25000),
     ('nl-kadaster', 'Kadaster', 'RDinfo', 'Public Domain',
      'Kadaster RDinfo', 'https://creativecommons.org/publicdomain/mark/1.0/', None, 3000),
     ('no-kartverket', 'Kartverket', 'Fastmerker', 'CC BY 4.0',
@@ -93,10 +93,10 @@ SOURCES = [
      'https://creativecommons.org/licenses/by/3.0/au/', None, 8000),
     ('br-ibge', 'IBGE', 'Banco de Dados Geodésicos', 'Free with credit',
      'Fonte: IBGE', 'https://www.ibge.gov.br/',
-     'http://www.bdg.ibge.gov.br/bdg/pdf/relatorio.asp?L1={id}', 80000),
+     'http://www.bdg.ibge.gov.br/bdg/pdf/relatorio.asp?L1={id}', 35000),
     ('gl-ngl', 'Nevada Geodetic Laboratory', 'GNSS station list', 'Citation requested',
      'Nevada Geodetic Laboratory (Blewitt et al., 2018)', 'http://geodesy.unr.edu/',
-     'http://geodesy.unr.edu/NGLStationPages/stations/{id}.sta', 10000),
+     'https://geodesy.unr.edu/NGLStationPages/stations/{id}.sta', 10000),
     ('gl-igs', 'IGS', 'IGS network', 'IGS open data',
      'International GNSS Service', 'https://igs.org/data-access/',
      'https://network.igs.org/{id}', 300),
@@ -149,6 +149,7 @@ WGS_OFFSET_M = {
     'nad83-harn': 2, 'nad83-2007': 2, 'nad83-ma11': 2, 'nad83-pa11': 2, 'nad27': 100,
     'wgs84': 1, 'itrf': 1, 'rgf93': 1, 'lv95': 1, 'osgb36': 5, 'etrs89': 1, 'etrs89-rd': 1,
     'mgi': 5, 'gda2020': 1, 'gda94': 2, 'sirgas2000': 1, 'isn2016': 1, 'rd-bessel': 1,
+    'rgaf09': 1, 'rgr92': 1, 'rgfg95': 1, 'rgm23': 1, 'rgspm06': 1, 'regcan95': 1,
 }
 
 

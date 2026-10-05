@@ -242,7 +242,7 @@
       "licence": "Citation requested",
       "attribution": "Nevada Geodetic Laboratory (Blewitt et al., 2018)",
       "licenceUrl": "http://geodesy.unr.edu/",
-      "sheet": "http://geodesy.unr.edu/NGLStationPages/stations/{id}.sta"
+      "sheet": "https://geodesy.unr.edu/NGLStationPages/stations/{id}.sta"
     },
     {
       "key": "gl-igs",
@@ -421,35 +421,42 @@
       "name": "RGAF09",
       "epoch": null,
       "modern": true,
-      "wgsOffsetM": 2
+      "wgsOffsetM": 1
     },
     {
       "key": "rgr92",
       "name": "RGR92",
       "epoch": null,
       "modern": true,
-      "wgsOffsetM": 2
+      "wgsOffsetM": 1
     },
     {
       "key": "rgfg95",
       "name": "RGFG95",
       "epoch": null,
       "modern": true,
-      "wgsOffsetM": 2
+      "wgsOffsetM": 1
     },
     {
       "key": "rgm23",
       "name": "RGM23",
       "epoch": null,
       "modern": true,
-      "wgsOffsetM": 2
+      "wgsOffsetM": 1
     },
     {
       "key": "rgspm06",
       "name": "RGSPM06",
       "epoch": null,
       "modern": true,
-      "wgsOffsetM": 2
+      "wgsOffsetM": 1
+    },
+    {
+      "key": "regcan95",
+      "name": "REGCAN95",
+      "epoch": null,
+      "modern": true,
+      "wgsOffsetM": 1
     }
   ],
   "vdatums": [
@@ -583,6 +590,18 @@
     },
     {
       "name": "Danger 1950 (Saint-Pierre-et-Miquelon)",
+      "kind": "ortho"
+    },
+    {
+      "name": "AHD83 (Tasmania)",
+      "kind": "ortho"
+    },
+    {
+      "name": "AHD79 (Tasmania)",
+      "kind": "ortho"
+    },
+    {
+      "name": "Santana",
       "kind": "ortho"
     }
   ]

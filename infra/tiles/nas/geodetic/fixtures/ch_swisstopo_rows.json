@@ -1,0 +1,332 @@
+[
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lfp_tsp",
+   "ORDNUNG": "PFP 1 primo ordine",
+   "STATUS": "attivo",
+   "NBIDENT": "CH0300001352",
+   "NUMMER": "13526010",
+   "L_GEN_LV95": "0.05",
+   "H_GEN_LV95": "7",
+   "ZUGANG": "Sulla vetta del monte omonimo",
+   "PUNKTNAME": "Campo dei Fiori",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001352_13526010.pdf",
+   "H02": "",
+   "E95": "2702790.950",
+   "N95": "1080560.040",
+   "L_ZUV_LV95": "Si",
+   "H_ZUV_LV95": "No",
+   "TSP": "PST",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Pilastro",
+   "BEGEHBAR": "Si"
+  },
+  "reframe": {
+   "lat": "45.868865689212704",
+   "lon": "8.76230814683276"
+  }
+ },
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lv95_tsp",
+   "ORDNUNG": "LV95-Hauptpunkt",
+   "STATUS": "Aktiv",
+   "NBIDENT": "CH0300001155",
+   "NUMMER": "11555000",
+   "L_GEN_LV95": "0.005",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "gut",
+   "PUNKTNAME": "Sargans",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001155_11555000.pdf",
+   "H02": "514.030",
+   "E95": "2752006.630",
+   "N95": "1212822.530",
+   "L_ZUV_LV95": "Ja",
+   "H_ZUV_LV95": "Ja",
+   "TSP": "TSP",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Kappenbolzen",
+   "BEGEHBAR": "Ja"
+  },
+  "reframe": {
+   "lat": "47.04899389637997",
+   "lon": "9.43927302788664"
+  }
+ },
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lfp",
+   "ORDNUNG": "PFP1 2ème ordre",
+   "STATUS": "actif",
+   "NBIDENT": "CH0300001307",
+   "NUMMER": "13076017",
+   "L_GEN_LV95": "0.05",
+   "H_GEN_LV95": "7",
+   "ZUGANG": "",
+   "PUNKTNAME": "Bella Tola",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001307_13076017.pdf",
+   "H02": "",
+   "E95": "2615777.750",
+   "N95": "1121443.860",
+   "L_ZUV_LV95": "Oui",
+   "H_ZUV_LV95": "Non",
+   "TSP": "pas un PAT",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Autre",
+   "BEGEHBAR": "Oui"
+  },
+  "reframe": {
+   "lat": "46.244247449076845",
+   "lon": "7.6432101473203415"
+  }
+ },
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lv95_tsp",
+   "ORDNUNG": "LV95-Verdichtung",
+   "STATUS": "Aktiv",
+   "NBIDENT": "CH0300001069",
+   "NUMMER": "10697400",
+   "L_GEN_LV95": "0.005",
+   "H_GEN_LV95": "0.01",
+   "ZUGANG": "Schlüssel bei der Gemeindeverwaltung, 5224 Unterbözberg (Ursprung) Toröffnung mit KABA 5000",
+   "PUNKTNAME": "Bözberg",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001069_10697400.pdf",
+   "H02": "537.951",
+   "E95": "2652253.860",
+   "N95": "1259230.090",
+   "L_ZUV_LV95": "Ja",
+   "H_ZUV_LV95": "Ja",
+   "TSP": "TSP",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Bolzen",
+   "BEGEHBAR": "Ja"
+  },
+  "reframe": {
+   "lat": "47.481762980689474",
+   "lon": "8.13189799507643"
+  }
+ },
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lv95_tsp",
+   "ORDNUNG": "LV95-Hauptpunkt",
+   "STATUS": "Aktiv",
+   "NBIDENT": "CH0300001151",
+   "NUMMER": "11515000",
+   "L_GEN_LV95": "0.005",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Bei Benützung des Punktes Eigentümer benachrichtigen, wenn nötig Gras mähen lassen",
+   "PUNKTNAME": "Oberarth",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001151_11515000.pdf",
+   "H02": "455.667",
+   "E95": "2683113.950",
+   "N95": "1212157.700",
+   "L_ZUV_LV95": "Ja",
+   "H_ZUV_LV95": "Ja",
+   "TSP": "TSP",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Kappenbolzen",
+   "BEGEHBAR": "Ja"
+  },
+  "reframe": {
+   "lat": "47.05523565770578",
+   "lon": "8.532583046340232"
+  }
+ },
+ {
+  "layer": "lfp1",
+  "row": {
+   "SYMBOL": "lfp_tsp",
+   "ORDNUNG": "PFP1 2ème ordre",
+   "STATUS": "actif",
+   "NBIDENT": "CH0300001261",
+   "NUMMER": "12615340",
+   "L_GEN_LV95": "0.05",
+   "H_GEN_LV95": "0.1",
+   "ZUGANG": "",
+   "PUNKTNAME": "Nyon",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-lfp1/protokolle/CH0300001261_12615340.pdf",
+   "H02": "422.600",
+   "E95": "2508133.004",
+   "N95": "1138347.239",
+   "L_ZUV_LV95": "Oui",
+   "H_ZUV_LV95": "Oui",
+   "TSP": "PAT",
+   "EUREFNUMME": "",
+   "KENNZEICHN": "Cheville à trou",
+   "BEGEHBAR": "Oui"
+  },
+  "reframe": {
+   "lat": "46.390182693127365",
+   "lon": "6.244296850278951"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH02000000SG",
+   "NUMMER": "369a",
+   "L_GEN_LV95": "0.1",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "SG 369a",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH02000000SG_369a.pdf",
+   "H02": "580.163",
+   "E95": "2723874.537",
+   "N95": "1246391.567",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "Nein",
+   "H_ZUV_LV95": "Ja",
+   "KENNZEICHN": "Bolzen l+t, horizontal",
+   "BEGEHBAR": "Ja"
+  },
+  "reframe": {
+   "lat": "47.35672636330204",
+   "lon": "9.07836370661856"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH02000000NE",
+   "NUMMER": "237",
+   "L_GEN_LV95": "0.1",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "NE 237",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH02000000NE_237.pdf",
+   "H02": "840.859",
+   "E95": "2548213.405",
+   "N95": "1201025.430",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "Non",
+   "H_ZUV_LV95": "Oui",
+   "KENNZEICHN": "Rivet s+t, vertical",
+   "BEGEHBAR": "Oui"
+  },
+  "reframe": {
+   "lat": "46.958279816496294",
+   "lon": "6.758257598253526"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH02000000TI",
+   "NUMMER": "108a",
+   "L_GEN_LV95": "0.1",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "TI 108a",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH02000000TI_108a.pdf",
+   "H02": "330.906",
+   "E95": "2713252.880",
+   "N95": "1137417.889",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "No",
+   "H_ZUV_LV95": "Si",
+   "KENNZEICHN": "Bollone di livellazione uft, orizzontale",
+   "BEGEHBAR": "Si"
+  },
+  "reframe": {
+   "lat": "46.37857449857905",
+   "lon": "8.910736402747853"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH02000000SG",
+   "NUMMER": "481a",
+   "L_GEN_LV95": "0.1",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "SG 481a",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH02000000SG_481a.pdf",
+   "H02": "425.367",
+   "E95": "2723215.664",
+   "N95": "1221675.631",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "Nein",
+   "H_ZUV_LV95": "Ja",
+   "KENNZEICHN": "Bolzen l+t, horizontal",
+   "BEGEHBAR": "Ja"
+  },
+  "reframe": {
+   "lat": "47.134588355268306",
+   "lon": "9.062872167163945"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH0200000VDE",
+   "NUMMER": "302",
+   "L_GEN_LV95": "0.035",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "VDE 302",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH0200000VDE_302.pdf",
+   "H02": "384.270",
+   "E95": "2557805.819",
+   "N95": "1143522.854",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "Non",
+   "H_ZUV_LV95": "Oui",
+   "KENNZEICHN": "Cheville s+t, horizontal",
+   "BEGEHBAR": "Oui"
+  },
+  "reframe": {
+   "lat": "46.441711555042296",
+   "lon": "6.889578153894877"
+  }
+ },
+ {
+  "layer": "hfp1",
+  "row": {
+   "ORDNUNG": "HFP1.HFP1",
+   "NBIDENT": "CH0200000VSF",
+   "NUMMER": "280",
+   "L_GEN_LV95": "0.1",
+   "H_GEN_LV95": "0.003",
+   "ZUGANG": "Ja",
+   "PUNKTNAME": "VSF 280",
+   "ZUST_HAUPT": "CH",
+   "ZUSTAENDIG": "CH",
+   "PROTO_URL": "https://api3.geo.admin.ch/featureattachments/ch.swisstopo.fixpunkte-hfp1/protokolle/CH0200000VSF_280.pdf",
+   "H02": "1525.470",
+   "E95": "2566189.075",
+   "N95": "1100843.441",
+   "H95_ELL": "",
+   "L_ZUV_LV95": "Non",
+   "H_ZUV_LV95": "Oui",
+   "KENNZEICHN": "Cheville s+t, verticale",
+   "BEGEHBAR": "Oui"
+  },
+  "reframe": {
+   "lat": "46.0582676749962",
+   "lon": "7.001766429427367"
+  }
+ }
+]

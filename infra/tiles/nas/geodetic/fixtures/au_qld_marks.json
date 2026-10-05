@@ -1,0 +1,325 @@
+{
+ "cors": [
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "753436",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "MIRANI",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": "MRNI",
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "CORS METAL POST ON ROOF ON BUILDING",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1383523200000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -21.159885753,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 148.863388075,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.014,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 112.206,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 56.77,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 2764,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR753436.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "753766",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "DTMR MT SURPRISE",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": "JAE1",
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "CORS",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1728172800000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -18.13046132,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 144.290572405,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.012,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 500.525,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 3172,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR753766.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "753751",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "DES FINGAL HEAD",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": "FGHD",
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "CORS",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Unstable",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1651104000000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -28.171720131,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 153.558812744,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.027,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 50.767,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 3876,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR753751.pdf"
+   }
+  }
+ ],
+ "gda_datum": [
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "171643",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Star Picket (PM)",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1404086400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -17.523601264,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 145.610531069,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.016,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 828.697,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 766.123,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 3,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR171643.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "181352",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Star Picket (PM)",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1416873600000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -26.194138065,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 149.429171465,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.017,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 394.451,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 354.112,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 16,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR181352.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "117676",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Other STEEL BOLT IN CONC",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1268870400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -21.380937777,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 149.273277037,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.08,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 61.134,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 5.953,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class C",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 25,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR117676.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "51848",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "HE 11",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": "HILL 524",
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 896918400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -27.626956373,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 152.012190662,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.018,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 571.714,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 529.743,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 38,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR051848.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "186054",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1472601600000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -28.113449618,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 153.439401165,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.016,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": 47.994,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 43,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR186054.pdf"
+   }
+  }
+ ],
+ "gda_derived": [
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "102697",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "HORNY",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 692496000000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -26.286971174,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 143.791061483,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.07,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "GNSS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 198.833,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 2,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR102697.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "40843",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 189302400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -27.583071575,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 151.937107526,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 0.15,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "Trig",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 662.857,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 5,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR040843.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "28784",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1716422400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -27.395066597,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 152.965619519,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 2.5,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "ISS",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 56.8,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "No Class",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 9,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR028784.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "30668",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Star Picket (PM)",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1738540800000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -27.596791312,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 152.803318992,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 2.5,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "Cadastral Survey",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": 31.154,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": "Class D",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": "Datum",
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 11,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR030668.pdf"
+   }
+  }
+ ],
+ "gda_scaled": [
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "1",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "HSC87",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1651795200000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -18.476791516,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 145.884586185,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 250.0,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "Scaled",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 1,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR000001.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "195567",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Mini Mark",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 1736726400000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -26.658511981,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 150.18946892,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 250.0,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "Cadastral Survey",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 4,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR195567.pdf"
+   }
+  },
+  {
+   "attributes": {
+    "sirpub.prop.qld_surveycontrol_scdb.mrk_id": "50432",
+    "sirpub.prop.qld_surveycontrol_scdb.alt1_nm": "H&M",
+    "sirpub.prop.qld_surveycontrol_scdb.alt2_nm": null,
+    "sirpub.prop.qld_surveycontrol_scdb.mrktype_de": "Standard Plaque",
+    "sirpub.prop.qld_surveycontrol_scdb.mrkcnd_de": "Good",
+    "sirpub.prop.qld_surveycontrol_scdb.lastvisit_dt": 243648000000,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020lineage_de": "Derived",
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020latitude": -23.164161883,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020longitude": 150.787461594,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020hrzposu": 250.0,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020height": null,
+    "sirpub.prop.qld_surveycontrol_scdb.gda2020fix_de": "Scaled",
+    "sirpub.prop.qld_surveycontrol_scdb.ahdheight": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdcls_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.ahdlineage_de": null,
+    "sirpub.prop.qld_surveycontrol_scdb.objectid": 6,
+    "sirpub.prop.qld_surveycontrol_rpt_link.report_url": "https://qspatial.information.qld.gov.au/SurveyReport/SCR050432.pdf"
+   }
+  }
+ ]
+}

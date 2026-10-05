@@ -1,0 +1,380 @@
+[
+ {
+  "attributes": {
+   "OBJECTID": 3067,
+   "SITE_PK_ID": "SPM6690",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 524247.204,
+   "GDA2020_N": 5255490.444,
+   "GDA2020_PU": 0.04,
+   "PU_METHOD": "Estimated",
+   "HEIGHT": 36.35,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV4",
+   "HGT_ORDER": "4TH",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Brass Lands disc in kerb.",
+   "GDA94_E": 524246.796,
+   "GDA94_N": 5255489.018
+  },
+  "geometry": {
+   "x": 147.29676865347986,
+   "y": -42.85279619252823
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3097,
+   "SITE_PK_ID": "SPM7776",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 537113.496,
+   "GDA2020_N": 5453339.941,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 50.822,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Brass Lands disc in concrete core.",
+   "GDA94_E": 537113.079,
+   "GDA94_N": 5453338.548
+  },
+  "geometry": {
+   "x": 147.4417584642038,
+   "y": -41.07035744892103
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3128,
+   "SITE_PK_ID": "DSM1112-55",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 512044.316,
+   "GDA2020_N": 5412850.946,
+   "GDA2020_PU": 0.04,
+   "PU_METHOD": "Estimated",
+   "HEIGHT": 41.613,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Pin in cover box",
+   "GDA94_E": 512043.881,
+   "GDA94_N": 5412849.521
+  },
+  "geometry": {
+   "x": 147.14416020657683,
+   "y": -41.43583260677033
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3158,
+   "SITE_PK_ID": "SPM7389",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 533110.328,
+   "GDA2020_N": 5252442.643,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 18.244,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Brass Lands disc in Telecom pit. Mark found good order 7/6/2013.",
+   "GDA94_E": 533109.926,
+   "GDA94_N": 5252441.228
+  },
+  "geometry": {
+   "x": 147.40542620225057,
+   "y": -42.8799092209773
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3189,
+   "SITE_PK_ID": "DSM0910-03",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 510099.775,
+   "GDA2020_N": 5410866.751,
+   "GDA2020_PU": 0.04,
+   "PU_METHOD": "Estimated",
+   "HEIGHT": 192.174,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": null,
+   "GDA94_E": 510099.341,
+   "GDA94_N": 5410865.33
+  },
+  "geometry": {
+   "x": 147.12091810780723,
+   "y": -41.45373205960473
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3219,
+   "SITE_PK_ID": "SPM10492",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 561734.361,
+   "GDA2020_N": 5433952.13,
+   "GDA2020_PU": 0.029,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 284.48,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "GPS",
+   "HGT_ORDER": "3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Bronze SPM disc in rock.",
+   "GDA94_E": 561733.948,
+   "GDA94_N": 5433950.737
+  },
+  "geometry": {
+   "x": 147.7367560532692,
+   "y": -41.24349226808605
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3249,
+   "SITE_PK_ID": "DSM1010-10",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 510518.065,
+   "GDA2020_N": 5411054.41,
+   "GDA2020_PU": 0.04,
+   "PU_METHOD": "Estimated",
+   "HEIGHT": 162.697,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": null,
+   "GDA94_E": 510517.629,
+   "GDA94_N": 5411052.988
+  },
+  "geometry": {
+   "x": 147.1259229357671,
+   "y": -41.45203635576704
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3279,
+   "SITE_PK_ID": "SPM10313",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 408740.813,
+   "GDA2020_N": 5453756.347,
+   "GDA2020_PU": 0.032,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 4.238,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "GPS",
+   "HGT_ORDER": "3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Bronze SPM disc in Telstra pit.",
+   "GDA94_E": 408740.385,
+   "GDA94_N": 5453754.901
+  },
+  "geometry": {
+   "x": 145.913872720315,
+   "y": -41.06233498306778
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3312,
+   "SITE_PK_ID": "DSM1310-09",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 513670.591,
+   "GDA2020_N": 5410770.333,
+   "GDA2020_PU": 0.04,
+   "PU_METHOD": "Estimated",
+   "HEIGHT": 75.232,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": null,
+   "GDA94_E": 513670.156,
+   "GDA94_N": 5410768.913
+  },
+  "geometry": {
+   "x": 147.163673053649,
+   "y": -41.454547653001356
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3342,
+   "SITE_PK_ID": "SPM9737",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 506615.186,
+   "GDA2020_N": 5384633.289,
+   "GDA2020_PU": 0.018,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 161.9,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "GPS",
+   "HGT_ORDER": "3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Brass SPM disc in concrete kerb.",
+   "GDA94_E": 506614.743,
+   "GDA94_N": 5384631.863
+  },
+  "geometry": {
+   "x": 147.07948665167015,
+   "y": -41.69006190863686
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3376,
+   "SITE_PK_ID": "SPM9926",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 529285.634,
+   "GDA2020_N": 5259774.844,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 50.049,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "GPS",
+   "HGT_ORDER": "3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Bronze SPM disc in stormwater pit.",
+   "GDA94_E": 529285.224,
+   "GDA94_N": 5259773.418
+  },
+  "geometry": {
+   "x": 147.35821252329333,
+   "y": -42.81403796951423
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3406,
+   "SITE_PK_ID": "SPM8639",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 485845.511,
+   "GDA2020_N": 5450607.537,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 24.217,
+   "HGT_DATUM": "STATE",
+   "HGT_CLASS": "LEVU",
+   "HGT_ORDER": null,
+   "HOR_CLASS": "GPS",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "EXISTING",
+   "DESCRIPT": "Brass survey disc in kerb top.",
+   "GDA94_E": 485845.09,
+   "GDA94_N": 5450606.125
+  },
+  "geometry": {
+   "x": 146.83144861804968,
+   "y": -41.09569487761468
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3099,
+   "SITE_PK_ID": "SPM8981",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 527141.336,
+   "GDA2020_N": 5252175.783,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 1.955,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "NOT FOUND",
+   "DESCRIPT": "Brass Lands disc in concrete steps.Mark REPORTED NOT FOUND 7/11/2006. Mark REPORTED NOT FOUND 1/12/2011.",
+   "GDA94_E": 527140.93,
+   "GDA94_N": 5252174.36
+  },
+  "geometry": {
+   "x": 147.33235095062994,
+   "y": -42.88254788796022
+  }
+ },
+ {
+  "attributes": {
+   "OBJECTID": 3134,
+   "SITE_PK_ID": "SPM3020",
+   "SCS_NAME": null,
+   "MGA_ZONE": 55,
+   "GDA2020_E": 447390.465,
+   "GDA2020_N": 5441020.712,
+   "GDA2020_PU": 0.017,
+   "PU_METHOD": "Rigorous",
+   "HEIGHT": 13.082,
+   "HGT_DATUM": "AHD83",
+   "HGT_CLASS": "LEV3",
+   "HGT_ORDER": "L3RD",
+   "HOR_CLASS": "B",
+   "HOR_ORDER": "2ND",
+   "TARGET_STR": null,
+   "MARKSTATUS": "RMs ONLY",
+   "DESCRIPT": "The original mark was a brass pin in a concrete block with a cast iron coverbox. The brass pin has been replaced with a galvanised bolt.",
+   "GDA94_E": 447390.046,
+   "GDA94_N": 5441019.264
+  },
+  "geometry": {
+   "x": 146.37273477615082,
+   "y": -41.180468704289076
+  }
+ }
+]
