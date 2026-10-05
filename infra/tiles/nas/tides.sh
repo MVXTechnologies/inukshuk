@@ -9,10 +9,10 @@
 #   ~/inukshuk-tiles/infra/nas/tides.sh build      # skip the fetch: use what is on disk
 #   TIDES_SOURCES="fr-shom no-kartverket" …         # a subset (the others keep last run's records)
 #   TIDES_REFETCH=1 …                               # ignore the monthly fetch cadence
-#   TIDES_UPLOAD=1 …                                # also upload tides.pmtiles (OFF by default:
-#                                                    the owner decides when chart-datum data ships)
+#   TIDES_UPLOAD=0 …                                # build only (uploading is ON since the
+#                                                    owner approved shipping, 2026-10-05)
 #
-# geodetic.sh runs this (only with GEODETIC_TIDAL_JOIN=1) after normalizing the geodetic sources
+# geodetic.sh runs this (GEODETIC_TIDAL_JOIN, on by default) after normalizing the geodetic sources
 # (the join reads $WORK/geodetic/norm) and before tiling them.
 #
 # Sources: NOAA CO-OPS, SHOM RAM, Kartverket, JMA — open, no key. CHS (Canada)
@@ -114,7 +114,7 @@ docker run --rm -v "$T/out:/data" "$PMTILES_IMAGE" verify /data/tides.new.pmtile
 mv "$T/out/tides.new.pmtiles" "$T/out/tides.pmtiles"
 echo "$(date) tides.pmtiles $(du -h "$T/out/tides.pmtiles" | cut -f1)"
 cp "$T/out/tides-report.json" "$T/report-$(date +%Y-%m-%d).json"
-if [ "${TIDES_UPLOAD:-0}" = 1 ]; then
+if [ "${TIDES_UPLOAD:-1}" = 1 ]; then
   python3 "$HERE/upload.py" "$T/out/tides.pmtiles" tides.pmtiles | tail -1
   echo "$COUNT" >"$T/count"
 fi
