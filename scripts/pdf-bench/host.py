@@ -7,7 +7,7 @@ server), the run plan, and collects what the app posts back:
   GET  /corpus/<file>        a corpus PDF
   GET  /plan.json            the plan for the current run
   POST /log, /result, /done  JSON lines appended to <out>/<runId>/results.jsonl
-  POST /tile?...             a displayed raster (multipart), saved as a PNG + meta
+  POST /tile?...             a displayed raster (JSON, base64 PNG), saved as a PNG + meta
   GET  /shot?...             runs `adb exec-out screencap` (Android) or
                              `xcrun simctl io <udid> screenshot` (iOS), saves the PNG
 
@@ -18,8 +18,6 @@ Usage:
 The app reaches it at http://127.0.0.1:<port> (Android: `adb reverse tcp:<port> tcp:<port>`).
 """
 import argparse
-import email.parser
-import email.policy
 import json
 import os
 import re
@@ -135,23 +133,16 @@ class Handler(BaseHTTPRequestHandler):
                 DONE.set()
             return self._send(200, b'ok', 'text/plain')
         if u.path == '/tile':
-            ctype = self.headers.get('Content-Type', '')
-            msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
-                b'Content-Type: ' + ctype.encode() + b'\r\n\r\n' + body)
-            meta, png = {}, None
-            for part in msg.iter_parts():
-                name = part.get_param('name', header='content-disposition')
-                if name == 'meta':
-                    meta = json.loads(part.get_content())
-                elif name == 'file':
-                    png = part.get_payload(decode=True)
+            import base64
+            data = json.loads(body or b'{}')
+            png = base64.b64decode(data.pop('png64', '') or b'')
             d = os.path.join(run_dir(q.get('run', 'run')), 'tiles', safe(q.get('map', '')))
             os.makedirs(d, exist_ok=True)
             base = safe(f"{q.get('step', '')}__{q.get('id', '')}")
             if png:
                 open(os.path.join(d, base + '.png'), 'wb').write(png)
-            meta.update({'step': q.get('step'), 'map': q.get('map')})
-            json.dump(meta, open(os.path.join(d, base + '.json'), 'w'))
+            data.update({'step': q.get('step'), 'map': q.get('map')})
+            json.dump(data, open(os.path.join(d, base + '.json'), 'w'))
             return self._send(200, b'ok', 'text/plain')
         return self._send(404, b'not found', 'text/plain')
 

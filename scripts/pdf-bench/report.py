@@ -35,8 +35,11 @@ def load(run):
     return rows
 
 
+TIMEOUT_MS = 60000  # the plans' timeoutMs: a view never sharp counts as this
+
+
 def ms(d):
-    return d['sharpMs'] if d['sharpMs'] is not None else 90000
+    return d['sharpMs'] if d['sharpMs'] is not None else TIMEOUT_MS
 
 
 def table(rows):
@@ -77,12 +80,20 @@ def show(run):
 def compare(a, b):
     ta = {(r['map'], r['level'], r['class']): r for r in table(load(a))}
     tb = {(r['map'], r['level'], r['class']): r for r in table(load(b))}
-    print(f"{'map':32} {'z+':>3} {'class':7} | {'before p50/p95/max':>20} | {'after p50/p95/max':>20}")
+    print(f"| map | z+ | n | before p50 / p95 / max (ms) | before res | after p50 / p95 / max (ms) | after res |")
+    print('|---|---:|---:|---:|---:|---:|---:|')
     for k in sorted(set(ta) | set(tb)):
+        if k[2] != 'first':
+            continue
         fa = ta.get(k)
         fb = tb.get(k)
-        f = lambda r: f"{r['p50']}/{r['p95']}/{r['max']}" if r else '-'
-        print(f"{k[0][:32]:32} {k[1]:>3} {k[2]:7} | {f(fa):>20} | {f(fb):>20}")
+        f = lambda r: f"{r['p50']} / {r['p95']} / {r['max']}" if r else '-'
+        dn = lambda r: '-' if not r or r['density'] is None else f"{r['density']:.2f}"
+        n = (fb or fa)['n']
+        print(f"| {k[0]} | {k[1]} | {n} | {f(fa)} | {dn(fa)} | {f(fb)} | {dn(fb)} |")
+    for name, run in (('before', a), ('after', b)):
+        v = [ms(d) for d in load(run)]
+        print(f"{name}: n={len(v)} p50={round(pct(v,.5))} p95={round(pct(v,.95))} max={max(v)} over1s={sum(1 for x in v if x>1000)}")
 
 
 if __name__ == '__main__':

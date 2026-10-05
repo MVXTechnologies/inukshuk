@@ -607,18 +607,22 @@ export function usePdfBench(args: {
               );
               for (const o of shown) {
                 uploaded.add(o.imageUri);
-                const form = new FormData();
-                form.append('meta', JSON.stringify({ id: o.id, coordinates: o.coordinates }));
-                form.append('file', {
-                  uri: o.imageUri,
-                  name: 'tile.png',
-                  type: 'image/png',
-                } as unknown as Blob);
+                let png64 = '';
+                try {
+                  png64 = await new File(o.imageUri).base64();
+                } catch (e) {
+                  log(`tile unreadable ${o.imageUri}: ${String(e)}`);
+                  continue;
+                }
                 await fetch(
                   `${plan.host}/tile?run=${encodeURIComponent(plan.runId)}&map=${encodeURIComponent(
                     target.slug,
                   )}&step=${encodeURIComponent(step.name)}&id=${encodeURIComponent(o.id)}`,
-                  { method: 'POST', body: form },
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: o.id, coordinates: o.coordinates, png64 }),
+                  },
                 ).catch(() => undefined);
               }
             }
