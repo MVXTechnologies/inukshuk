@@ -21,9 +21,18 @@ interface Props {
   floating?: boolean;
 }
 
+/** "13:18 EDT": the phone's time, with its zone — the gauge may be in another one. */
 function clock(ms: number): string {
   const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  try {
+    const zone = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
+      .formatToParts(d)
+      .find((p) => p.type === 'timeZoneName')?.value;
+    return zone ? `${hm} ${zone}` : hm;
+  } catch {
+    return hm;
+  }
 }
 
 /**
