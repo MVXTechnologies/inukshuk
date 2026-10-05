@@ -6,6 +6,8 @@ jest.mock('@data/pdfRenderRecovery', () => ({
   readInterruptedPdfRender: jest.fn(() => null),
   clearInterruptedPdfRender: jest.fn(),
   protectInterruptedPdfRender: jest.fn(),
+  // Most tests start from a page's second interruption, which pauses it.
+  recordPdfRenderInterruption: jest.fn(() => true),
 }));
 jest.mock('@lib/errorReporting', () => ({ reportError: jest.fn() }));
 jest.mock('@data/storage', () => ({
@@ -44,6 +46,45 @@ beforeEach(() => {
     fileUri: 'file:///doc/maps/large.pdf',
     pageIndex: 1,
   });
+  jest.mocked(recovery.recordPdfRenderInterruption).mockReturnValue(true);
+});
+
+it('retries a page after its first interruption instead of turning it off', async () => {
+  jest.mocked(recovery.recordPdfRenderInterruption).mockReturnValue(false);
+  await useLibraryStore.getState().hydrate();
+  const map = useLibraryStore.getState().maps.find((m) => m.id === 'large');
+  expect(recovery.recordPdfRenderInterruption).toHaveBeenCalledWith({
+    token: 'interrupted',
+    fileUri: 'file:///doc/maps/large.pdf',
+    pageIndex: 1,
+  });
+  expect(map?.activePages).toEqual([0, 1]);
+  expect(map?.renderRecoveryErrors).toBeUndefined();
+  expect(useLibraryStore.getState().pdfRecoveryNotice).toBeNull();
+  expect(storage.writeIndex).not.toHaveBeenCalled();
+  // The strike is saved before the checkpoint is consumed.
+  expect(recovery.clearInterruptedPdfRender).toHaveBeenCalledWith('interrupted');
+  expect(
+    jest.mocked(recovery.recordPdfRenderInterruption).mock.invocationCallOrder[0],
+  ).toBeLessThan(jest.mocked(recovery.clearInterruptedPdfRender).mock.invocationCallOrder[0]!);
+});
+
+it('pauses the page when its interruption strike cannot be saved', async () => {
+  jest.mocked(recovery.recordPdfRenderInterruption).mockImplementation(() => {
+    throw new Error('ENOSPC');
+  });
+  await useLibraryStore.getState().hydrate();
+  expect(useLibraryStore.getState().maps.find((m) => m.id === 'large')?.activePages).toEqual([0]);
+  expect(useLibraryStore.getState().pdfRecoveryNotice).toContain('page 2');
+});
+
+it('does not count an interruption against a page the library no longer has', async () => {
+  jest
+    .mocked(recovery.readInterruptedPdfRender)
+    .mockReturnValue({ token: 'gone', fileUri: 'file:///doc/maps/deleted.pdf', pageIndex: 0 });
+  await useLibraryStore.getState().hydrate();
+  expect(recovery.recordPdfRenderInterruption).not.toHaveBeenCalled();
+  expect(recovery.clearInterruptedPdfRender).toHaveBeenCalledWith('gone');
 });
 
 it('pauses only the interrupted page before publishing the restored library', async () => {
