@@ -15,6 +15,12 @@ the app's layer plan hides it, and compare:
 A calibration row per map renders the reference at half resolution and
 upscales it, so the reader sees what a "reduced quality" raster scores.
 
+Limitation: on layered USGS US Topo sheets this MuPDF build still paints
+the orthoimage the app hides (setting the groups off, by config or UI, did
+not stop it), so their absolute SSIM is meaningless; use the same-renderer
+before/after screenshots (shots_compare.py) and the delivered-resolution
+column of report.py for those. Placement is identical either way.
+
   venv/bin/python quality.py RUN_DIR CORPUS_DIR [--max N]
 """
 import glob
@@ -59,13 +65,20 @@ def grad_energy(a):
 
 def open_doc(path):
     doc = fitz.open(path)
+    # The app's layer plan (@core/geo/pdfLayers): aerial imagery off.
     try:
-        ui = doc.layer_ui_configs()
-        for item in ui:
-            if IMAGERY.match(item.get('text', '')) and item.get('on'):
-                doc.set_layer_ui_config(item['number'], 2)  # off
-    except Exception:
-        pass
+        ocgs = doc.get_ocgs()
+        # The document's own default-off groups (/OCProperties /D /OFF), which
+        # this MuPDF build does not apply by itself, plus imagery.
+        kind, value = doc.xref_get_key(doc.pdf_catalog(), 'OCProperties/D/OFF')
+        default_off = [int(n) for n in re.findall(r'(\d+) 0 R', value)] if kind == 'array' else []
+        off = [xref for xref, g in ocgs.items()
+               if xref in default_off or IMAGERY.match(g.get('name') or '')]
+        on = [xref for xref, g in ocgs.items() if g.get('on') and xref not in off]
+        if off:
+            doc.set_layer(-1, on=on, off=off)
+    except Exception as e:
+        print('layer config failed', path, e)
     return doc
 
 
