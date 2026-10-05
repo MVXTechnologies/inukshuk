@@ -96,13 +96,14 @@ def main():
         calibrated = False
         for png in sorted(glob.glob(os.path.join(mapdir, '*.png')))[:limit]:
             meta = json.load(open(png[:-4] + '.json'))
-            m = re.match(r'^[^:]+:(\d+)(?::tile:(\d+):(\d+):(\d+):(\d+))?$', meta['id'])
+            m = re.match(r'^[^:]+:(\d+)(?::tile:(\d+):(\d+):(\d+):(\d+)(?::(\d+)x(\d+))?)?$', meta['id'])
             if not m:
                 continue
             page_index = int(m.group(1))
             if m.group(2):
                 div, x, y = int(m.group(2)), int(m.group(3)), int(m.group(4))
-                crop = (x / div, y / div, (x + 1) / div, (y + 1) / div)
+                cols, rows = int(m.group(6) or 1), int(m.group(7) or 1)
+                crop = (x / div, y / div, (x + cols) / div, (y + rows) / div)
             else:
                 crop = (0, 0, 1, 1)
             app = Image.open(png)

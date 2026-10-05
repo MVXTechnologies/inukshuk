@@ -7,8 +7,10 @@ import {
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
 import { chooseFallbackDetails } from '@core/geo/detailFallback';
+import { planDetailBlocks } from '@core/geo/pdfDetailBlocks';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import {
+  blockTileKey,
   coverFromCache,
   parseTileKey,
   pdfTileBudgets,
@@ -63,6 +65,8 @@ interface Target {
   nativeGeometry: { expectedPageWidthPt: number; expectedPageHeightPt: number } | null;
   revision: string;
   plan: PdfDetailPlan;
+  /** The overview's corners: the page placement every tile and block follows. */
+  corners: PdfOverlay['coordinates'];
   bbox: PdfOverlay['bbox'];
   /** The overview's "See-through white" level; tiles are drawn to match it. */
   whiteKey: WhiteKeyLevel;
@@ -70,6 +74,31 @@ interface Target {
 const overviewKey = (o: PdfOverlay) => JSON.stringify([o.id, o.imageUri, o.coordinates]);
 /** A page's file revision: a re-import or replacement starts its backoff over. */
 const pageRevision = (t: Target) => `${t.fileUri}@${t.revision}`;
+
+/**
+ * Delay between a camera settle and the first render. The map reports one
+ * settle per gesture, so this only coalesces the few re-renders that follow
+ * it (overview list, layout); it used to be 250 ms, a quarter of the whole
+ * one-second budget for a sharp view.
+ */
+export const DETAIL_START_DELAY_MS = 40;
+
+/** True when a cached raster (a tile or a block) holds `cell` at its level, at least as wide. */
+function heldByCache(cache: Map<string, Detail>, pageKey: string, cell: TileCell): boolean {
+  for (const d of cache.values()) {
+    const c = d.cell;
+    if (d.pageKey !== pageKey || c === null || c.divisions !== cell.divisions) continue;
+    if (c.width < cell.width) continue;
+    if (
+      cell.x >= c.x &&
+      cell.x < c.x + (c.cols ?? 1) &&
+      cell.y >= c.y &&
+      cell.y < c.y + (c.rows ?? 1)
+    )
+      return true;
+  }
+  return false;
+}
 
 /** One in-flight refinement; later camera positions replace waiting work. */
 export function usePdfDetails(
@@ -184,6 +213,7 @@ export function usePdfDetails(
           nativeGeometry: nativePageGeometry(geo),
           revision: String(map.importedAt),
           plan,
+          corners: o.coordinates,
           bbox: o.bbox,
           whiteKey,
         });
@@ -335,6 +365,66 @@ export function usePdfDetails(
     };
     const prune = (budget: number) =>
       trimTileCache(w.cache, w.pinned, w.desired, w.budgets.cacheFiles, budget);
+    /**
+     * What to render for `target`: the block (`@core/geo/pdfDetailBlocks`)
+     * holding its cell among every cell of the same page, level and kind
+     * (visible or ring) that is still to draw — one renderer call for many
+     * cells, at the cells' own scale. A lone cell (or a crop off the grid)
+     * renders as itself, under its own key.
+     */
+    const blockJob = (target: Target, snapshot: Target[]) => {
+      const single = {
+        cacheKey: target.key,
+        id: target.id,
+        cell: target.cell,
+        crop: target.plan.crop,
+        targetWidthPx: target.plan.targetWidthPx,
+        coordinates: target.plan.coordinates,
+      };
+      const cell = target.cell;
+      if (cell === null) return single;
+      const peers = snapshot.filter(
+        (t) =>
+          t.prefetch === target.prefetch &&
+          t.pageKey === target.pageKey &&
+          t.cell !== null &&
+          t.cell.divisions === cell.divisions &&
+          t.cell.width === cell.width &&
+          (t === target ||
+            (!w.covered.has(t.key) &&
+              !w.cache.has(t.key) &&
+              !heldByCache(w.cache, t.pageKey, t.cell))),
+      );
+      const blocks = planDetailBlocks({
+        corners: target.corners,
+        page: { width: target.pageWidthPt, height: target.pageHeightPt },
+        divisions: cell.divisions,
+        cellWidthPx: cell.width,
+        cells: peers.map((t) => t.cell!),
+        focus: { x: cell.x + 0.5, y: cell.y + 0.5 },
+      });
+      const block = blocks.find(
+        (b) => cell.x >= b.x && cell.x < b.x + b.cols && cell.y >= b.y && cell.y < b.y + b.rows,
+      );
+      if (!block || (block.cols === 1 && block.rows === 1)) return single;
+      const blockCell = {
+        divisions: cell.divisions,
+        x: block.x,
+        y: block.y,
+        width: cell.width,
+        cols: block.cols,
+        rows: block.rows,
+      };
+      const tileKey = blockTileKey(blockCell);
+      return {
+        cacheKey: `${target.pageKey}|${tileKey}`,
+        id: `${target.parentId}:tile:${tileKey}`,
+        cell: blockCell as TileCell,
+        crop: block.crop,
+        targetWidthPx: block.targetWidthPx,
+        coordinates: block.coordinates,
+      };
+    };
     // Reuse every cached tile in the new desired snapshot immediately. Waiting
     // for a new center tile must not hide matching neighbors during a pan.
     publish();
@@ -355,7 +445,12 @@ export function usePdfDetails(
             // its place is rendered before the ring starts.
             if (
               target.prefetch &&
-              stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))
+              stoodIn.some(
+                (t) =>
+                  !w.covered.has(t.key) &&
+                  !w.cache.has(t.key) &&
+                  !(t.cell && heldByCache(w.cache, t.pageKey, t.cell)),
+              )
             )
               break;
             let dispatched = false;
@@ -365,8 +460,13 @@ export function usePdfDetails(
                 w.cache.delete(target.key);
                 detail = undefined;
               }
-              // Already on screen through a wider raster or its children.
-              if (!detail && w.covered.has(target.key)) {
+              // Already on screen through a wider raster, a block or its
+              // children; or held by a block the budget could not show yet.
+              if (
+                !detail &&
+                (w.covered.has(target.key) ||
+                  (target.cell !== null && heldByCache(w.cache, target.pageKey, target.cell)))
+              ) {
                 stoodIn.push(target);
                 continue;
               }
@@ -416,12 +516,13 @@ export function usePdfDetails(
                   source = { base64 };
                 }
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
+                const job = blockJob(target, snapshot);
                 dispatched = true;
                 const result = await rasterize({
                   source,
                   pageIndex: target.pageIndex,
-                  targetWidthPx: target.plan.targetWidthPx,
-                  crop: target.plan.crop,
+                  targetWidthPx: job.targetWidthPx,
+                  crop: job.crop,
                   whiteKey: target.whiteKey,
                   // Neighbours wait behind anything the map is waiting for.
                   priority: target.prefetch ? 'background' : 'interactive',
@@ -443,38 +544,38 @@ export function usePdfDetails(
                   result.fileUri !== undefined
                     ? result.fileUri
                     : storage.writeOverlayPng(
-                        `pdf-detail-${fnv1a32(target.key)}-${++w.serial}`,
+                        `pdf-detail-${fnv1a32(job.cacheKey)}-${++w.serial}`,
                         result.pngDataUri.replace(/^data:image\/png;base64,/, ''),
                       );
                 const estimate = rasterCropGeometry(
                   target.pageWidthPt,
                   target.pageHeightPt,
-                  target.plan.targetWidthPx,
-                  target.plan.crop,
+                  job.targetWidthPx,
+                  job.crop,
                 );
                 const actualPixels = result.widthPx * result.heightPx;
                 detail = {
-                  cacheKey: target.key,
+                  cacheKey: job.cacheKey,
                   pageKey: target.pageKey,
-                  cell: target.cell,
+                  cell: job.cell,
                   pixels:
                     Number.isFinite(actualPixels) && actualPixels > 0
                       ? actualPixels
                       : estimate.widthPx * estimate.heightPx,
-                  id: target.id,
+                  id: job.id,
                   parentId: target.parentId,
                   overviewKey: target.overviewKey,
                   imageUri,
-                  coordinates: target.plan.coordinates,
-                  // The tile's own footprint: what it covers as a fallback.
-                  bbox: bboxFromLngLats(target.plan.coordinates),
+                  coordinates: job.coordinates,
+                  // The raster's own footprint: what it covers as a fallback.
+                  bbox: bboxFromLngLats(job.coordinates),
                 };
-                w.cache.set(target.key, detail);
+                w.cache.set(job.cacheKey, detail);
                 w.backoff = recordSuccess(w.backoff, target.parentId);
               }
               // Touch LRU order. Cache stale completions, but never display them.
-              w.cache.delete(target.key);
-              w.cache.set(target.key, detail);
+              w.cache.delete(detail.cacheKey);
+              w.cache.set(detail.cacheKey, detail);
               // A stale completion may be useful on a later pan. Only tiles
               // belonging to the latest desired snapshot can become visible.
               publish();
@@ -542,7 +643,15 @@ export function usePdfDetails(
           if (w.desired === snapshot) {
             // A stand-in can lose its place to tiles rendered after it (the
             // visible budget): go round again for the tile it stood in for.
-            if (stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))) continue;
+            if (
+              stoodIn.some(
+                (t) =>
+                  !w.covered.has(t.key) &&
+                  !w.cache.has(t.key) &&
+                  !(t.cell && heldByCache(w.cache, t.pageKey, t.cell)),
+              )
+            )
+              continue;
             for (const statusKey of attempted) {
               if (!failed.has(statusKey)) {
                 useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendered' });
@@ -554,7 +663,7 @@ export function usePdfDetails(
       })().finally(() => {
         if (w.epoch === epoch) w.busy = false;
       });
-    }, 250);
+    }, DETAIL_START_DELAY_MS);
     return () => {
       clearTimeout(timer);
       clearLoading();
@@ -593,6 +702,23 @@ function trimTileCache(
 ): void {
   let pixels = [...cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
   const wanted = new Set(desired.map((target) => target.key));
+  for (const [cacheKey, detail] of cache) {
+    const c = detail.cell;
+    if (c === null || wanted.has(cacheKey) || (c.cols ?? 1) * (c.rows ?? 1) === 1) continue;
+    if (
+      desired.some(
+        (t) =>
+          t.pageKey === detail.pageKey &&
+          t.cell !== null &&
+          t.cell.divisions === c.divisions &&
+          t.cell.x >= c.x &&
+          t.cell.x < c.x + (c.cols ?? 1) &&
+          t.cell.y >= c.y &&
+          t.cell.y < c.y + (c.rows ?? 1),
+      )
+    )
+      wanted.add(cacheKey);
+  }
   for (const keepWanted of [true, false]) {
     for (const [cacheKey, detail] of cache) {
       if (cache.size <= maxFiles && pixels <= maxPixels) return;

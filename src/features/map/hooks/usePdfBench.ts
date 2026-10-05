@@ -264,6 +264,7 @@ export function usePdfBench(args: {
             continue;
           }
           rasters = [];
+          const tAdded = Date.now();
           useLibraryStore.getState().addMap(doc);
           // Wait for the page's placement (an overview id) to learn its extent.
           let sheet: Bounds | null = null;
@@ -282,6 +283,7 @@ export function usePdfBench(args: {
             log(`${target.slug} never placed`);
             continue;
           }
+          const tPlaced = Date.now();
           if (plan.probeSizes?.length) {
             // Cost of ONE crop as a function of its size, per backend: what
             // a tile costs, and what one bigger crop instead of many costs.
@@ -307,7 +309,8 @@ export function usePdfBench(args: {
                         pageIndex: geo.pageIndex,
                         targetWidthPx: size,
                         crop: { x0, y0, x1: x0 + fw, y1: y0 + fh },
-                        holdKey: backend === 'pdfjs' ? `probe-${id}` : undefined,
+                        // (as object: older trees, bisected with this file, lack holdKey)
+                        ...(backend === 'pdfjs' ? ({ holdKey: `probe-${id}` } as object) : {}),
                         nativePage:
                           backend === 'native' && native
                             ? {
@@ -358,6 +361,8 @@ export function usePdfBench(args: {
             downloadMs: tDownloaded - t0,
             parseMs: tParsed - tDownloaded,
             pages: doc.georeferences.length,
+            // Import to the page's overview on the map (first render, cold).
+            overviewMs: tPlaced - tAdded,
             sheet,
             window: sizeRef.current,
           });

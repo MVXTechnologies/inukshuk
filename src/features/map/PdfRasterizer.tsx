@@ -1,6 +1,7 @@
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
+import { isPageLevelUnsupported } from '@core/geo/nativePdfSupport';
 import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
 import {
   PDF_WHITE_KEY_RUNTIME_SOURCE,
@@ -925,6 +926,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const nativeActiveRef = useRef<string | null>(null);
   const verifiedGeometryRef = useRef(new Set<string>());
   const unsupportedRequestsRef = useRef(new Set<string>());
+  // Pages (geometry keys) a native renderer refused for the page itself: their
+  // crops go straight to pdf.js (`@core/geo/nativePdfSupport`).
+  const unsupportedPagesRef = useRef(new Set<string>());
   const pumpQueueRef = useRef<() => void>(() => {});
   const mountedRef = useRef(true);
   const activeRequestRef = useRef<string | null>(null);
@@ -1133,6 +1137,17 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             // Unsupported can describe either the page encoding or this crop's
             // decoder budget. Cache only the exact crop and output width, never
             // disable valid small crops after a full-page request is refused.
+            const reason = error instanceof Error ? error.message : String(error);
+            if (cacheKey !== null && isPageLevelUnsupported(reason)) {
+              const pages = unsupportedPagesRef.current;
+              pages.delete(cacheKey);
+              pages.add(cacheKey);
+              while (pages.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+                const oldest = pages.values().next().value;
+                if (oldest === undefined) break;
+                pages.delete(oldest);
+              }
+            }
             if (requestKey !== null) {
               const unsupported = unsupportedRequestsRef.current;
               unsupported.delete(requestKey);
@@ -1227,7 +1242,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     // Check at dispatch: an identical request may already be queued when
     // the first probe reports an unsupported encoding or decoder budget.
     const requestKey = nativeRequestKey(args);
-    if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) {
+    if (cachedKey !== null && unsupportedPagesRef.current.has(cachedKey)) {
+      args.nativePage = null;
+    } else if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) {
       unsupportedRequestsRef.current.delete(requestKey);
       unsupportedRequestsRef.current.add(requestKey);
       args.nativePage = null;
@@ -1810,6 +1827,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     const pending = pendingRef.current;
     const verifiedGeometry = verifiedGeometryRef.current;
     const unsupportedRequests = unsupportedRequestsRef.current;
+    const unsupportedPages = unsupportedPagesRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -1821,6 +1839,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.clear();
       verifiedGeometry.clear();
       unsupportedRequests.clear();
+      unsupportedPages.clear();
       // StrictMode can replay setup on these same refs. Discard abandoned JS
       // queue entries, but never release an unfinished native operation.
       queueRef.current = [];
