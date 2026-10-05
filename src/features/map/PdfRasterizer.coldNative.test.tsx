@@ -12,6 +12,7 @@ import { PdfRasterizerProvider, usePdfRasterizer } from './PdfRasterizer';
  * verified this page for the native renderer. Its crop must not wait.
  */
 const mockInject = jest.fn();
+let mockOnMessage: ((event: { nativeEvent: { data: string } }) => void) | null = null;
 const mockLoad = jest.fn<string[], []>(() => []);
 jest.mock('@data/nativePdfGeometry', () => ({
   loadVerifiedNativePages: () => mockLoad(),
@@ -24,7 +25,11 @@ jest.mock('@data/pdfRenderRecovery', () => ({
 jest.mock('react-native-webview', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   return {
-    WebView: React.forwardRef(function MockWebView(_props, ref) {
+    WebView: React.forwardRef(function MockWebView(
+      props: { onMessage: (event: { nativeEvent: { data: string } }) => void },
+      ref,
+    ) {
+      mockOnMessage = props.onMessage;
       React.useImperativeHandle(ref, () => ({ injectJavaScript: mockInject }));
       return null;
     }),
@@ -124,6 +129,26 @@ it('never skips the page for a see-through tile (keying needs it)', async () => 
   await settle();
   expect(renderNativePdfCrop).not.toHaveBeenCalled();
   expect(saveVerifiedNativePages).not.toHaveBeenCalled();
+  await view.unmount();
+  await pending;
+});
+
+it('skips the native renderer for a page it refused in an earlier launch', async () => {
+  mockLoad.mockReturnValue([`U${persistedKey}`]);
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await settle();
+  const pending = view.result.current(request).catch(() => undefined);
+  await settle();
+  await act(async () => {
+    mockOnMessage?.({ nativeEvent: { data: JSON.stringify({ id: '__ready__', ok: true }) } });
+  });
+  // pdf.js draws the crop itself, without the native handoff.
+  const renders = mockInject.mock.calls
+    .map(([s]) => String(s))
+    .filter((s) => s.includes('__pdfRender'));
+  expect(renders).toHaveLength(1);
+  expect(renders[0]).not.toContain('expectedPageWidthPt');
+  expect(renderNativePdfCrop).not.toHaveBeenCalled();
   await view.unmount();
   await pending;
 });
