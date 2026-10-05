@@ -29,3 +29,4 @@ export {
 } from './limits';
 export { activityTrackName, categoryForSport, stravaTypeToSport } from './naming';
 export { looksLikeZip } from './zip';
+export { decodeXmlText, sniffXmlEncoding, type XmlEncoding } from './xmlText';

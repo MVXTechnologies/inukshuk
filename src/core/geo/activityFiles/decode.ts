@@ -1,5 +1,3 @@
-import { strFromU8 } from 'fflate';
-
 import { decodeFit, looksLikeFit } from '@core/geo/fit';
 import { buildGpx, parseGpx, type GpxWaypoint } from '@core/geo/gpx';
 import { looksLikeTcx, parseTcx } from '@core/geo/tcx';
@@ -7,6 +5,7 @@ import type { TrackPoint } from '@core/models';
 
 import { DEFAULT_IMPORT_LIMITS, gunzipBounded, looksLikeGzip, type ByteBudget } from './limits';
 import { stravaTypeToSport } from './naming';
+import { decodeXmlText } from './xmlText';
 import { looksLikeZip } from './zip';
 
 export type ActivityFileFormat = 'fit' | 'tcx' | 'gpx' | 'gzip' | 'zip' | 'unknown';
@@ -48,7 +47,8 @@ export function sniffActivityFormat(bytes: Uint8Array, name?: string): ActivityF
   if (looksLikeFit(bytes)) return 'fit';
   if (looksLikeGzip(bytes)) return 'gzip';
   if (looksLikeZip(bytes)) return 'zip';
-  const head = strFromU8(bytes.subarray(0, 4096), true);
+  // Encoding-aware, so a UTF-16 GPX/TCX is still recognized by its root.
+  const head = decodeXmlText(bytes.subarray(0, 4096));
   if (looksLikeTcx(head)) return 'tcx';
   if (/<([A-Za-z0-9_]+:)?gpx[\s>]/.test(head)) return 'gpx';
   const ext = /\.([a-z0-9]+)$/i.exec(name ?? '')?.[1]?.toLowerCase();
@@ -93,10 +93,15 @@ export function decodeActivityFile(
       break;
     }
     case 'tcx':
-      out = parseTcx(strFromU8(data)).map((a) => ({ format: 'tcx' as const, sourceName, ...a }));
+      out = parseTcx(decodeXmlText(data)).map((a) => ({
+        format: 'tcx' as const,
+        sourceName,
+        ...a,
+      }));
       break;
     case 'gpx': {
-      const gpxText = strFromU8(data);
+      // Not always UTF-8: Latin-1 and UTF-16 GPX exist (#360, #361).
+      const gpxText = decodeXmlText(data);
       const doc = parseGpx(gpxText);
       const activity: DecodedActivity = {
         format: 'gpx',
