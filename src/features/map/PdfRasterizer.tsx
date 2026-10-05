@@ -65,6 +65,7 @@ import {
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
 import { reportError } from '@lib/errorReporting';
+import { PDF_BENCH, pdfBenchEmit, pdfBenchId } from '@lib/pdfBenchProbe';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import React, {
@@ -1637,7 +1638,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     pumpQueueRef.current = pumpQueue;
   }, [pumpQueue]);
 
-  const rasterize = useCallback<RasterizeFn>(
+  const enqueue = useCallback<RasterizeFn>(
     (args) => {
       return new Promise<RasterResult>((resolve, reject) => {
         if (!mountedRef.current) {
@@ -1749,6 +1750,52 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     [replaceEngine],
   );
 
+  const rasterize = useCallback<RasterizeFn>(
+    (args) => {
+      if (!PDF_BENCH) return enqueue(args);
+      const id = pdfBenchId();
+      const at = Date.now();
+      pdfBenchEmit({
+        kind: 'raster-start',
+        id,
+        at,
+        priority: args.priority ?? 'interactive',
+        targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
+        crop: !!args.crop,
+        native: !!args.nativePage,
+      });
+      return enqueue(args).then(
+        (result) => {
+          pdfBenchEmit({
+            kind: 'raster-end',
+            id,
+            at: Date.now(),
+            ok: true,
+            ms: Date.now() - at,
+            path: result.fileUri !== undefined ? 'file' : 'data',
+            loadMs: result.loadMs,
+            renderMs: result.renderMs,
+            widthPx: result.widthPx,
+            heightPx: result.heightPx,
+          });
+          return result;
+        },
+        (error: unknown) => {
+          pdfBenchEmit({
+            kind: 'raster-end',
+            id,
+            at: Date.now(),
+            ok: false,
+            ms: Date.now() - at,
+            path: 'data',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        },
+      );
+    },
+    [enqueue],
+  );
   const serverOrigin = useCallback<ServerOriginFn>(async () => {
     while (mountedRef.current) {
       const settled = settledRef.current;

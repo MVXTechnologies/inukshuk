@@ -27,6 +27,7 @@ import { overlayDetailStatusKey } from '@core/library/overlayStatus';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
+import { PDF_BENCH, pdfBenchEmit } from '@lib/pdfBenchProbe';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { isPdfRenderCancellation, PdfRenderNotStartedError } from './pdfRenderFailure';
@@ -290,7 +291,6 @@ export function usePdfDetails(
         }
       }
       w.covered = covered;
-
       // Keep the detail already rendered until its replacement arrives (#344):
       // tiles of a page still on screen stay under the fresh ones. Cached
       // tiles are ordered least-recently-used first, so reverse for MRU.
@@ -315,6 +315,17 @@ export function usePdfDetails(
       );
       const current: Detail[] = [...keep, ...freshList];
       w.pinned = new Set(current.map((detail) => detail.imageUri));
+      if (PDF_BENCH) {
+        const visible = w.desired.filter((target) => !target.prefetch);
+        pdfBenchEmit({
+          kind: 'details',
+          at: Date.now(),
+          bounds: boundsKey,
+          visible: visible.length,
+          covered: visible.filter((target) => covered.has(target.key)).length,
+          shown: current.map((detail) => detail.imageUri),
+        });
+      }
       setDisplayed((previous) =>
         previous.length === current.length &&
         previous.every((detail, index) => detail === current[index])

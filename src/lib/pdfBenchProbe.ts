@@ -1,0 +1,62 @@
+/**
+ * PDF rendering benchmark probe — compiled in only when the bundle is built
+ * with `EXPO_PUBLIC_PDF_BENCH=1` (a local perf build), a no-op otherwise.
+ *
+ * The rasterizer and the detail-tile hook report what they do here; the
+ * bench harness (`usePdfBench`) listens and turns it into time-to-sharp
+ * numbers. Nothing here changes behaviour.
+ */
+export const PDF_BENCH = process.env.EXPO_PUBLIC_PDF_BENCH === '1';
+
+export type PdfBenchEvent =
+  | {
+      kind: 'raster-start';
+      id: number;
+      at: number;
+      priority: string;
+      targetWidthPx: number;
+      crop: boolean;
+      native: boolean;
+    }
+  | {
+      kind: 'raster-end';
+      id: number;
+      at: number;
+      ok: boolean;
+      ms: number;
+      path: 'file' | 'data';
+      loadMs?: number;
+      renderMs?: number;
+      widthPx?: number;
+      heightPx?: number;
+      error?: string;
+    }
+  | {
+      /** The detail hook's view of the current camera: visible tiles and how many are shown. */
+      kind: 'details';
+      at: number;
+      bounds: string;
+      visible: number;
+      covered: number;
+      /** Image files the hook publishes for this camera. */
+      shown: string[];
+    };
+
+type Listener = (event: PdfBenchEvent) => void;
+const listeners = new Set<Listener>();
+let nextId = 0;
+
+export function pdfBenchEmit(event: PdfBenchEvent): void {
+  if (!PDF_BENCH) return;
+  for (const listener of listeners) listener(event);
+}
+
+/** A fresh id for a raster request (bench builds only; 0 otherwise). */
+export function pdfBenchId(): number {
+  return PDF_BENCH ? ++nextId : 0;
+}
+
+export function pdfBenchSubscribe(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
