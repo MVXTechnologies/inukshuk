@@ -89,7 +89,11 @@ export function vectorParksUrl(): string | null {
  * archive built on the NAS (`infra/tiles/nas/geodetic.sh`, weekly) and served
  * by the same Worker. Opt-in: only drawn once the extension is installed.
  */
-export const DEFAULT_GEODETIC_URL = `${TILE_HOST}/geodetic/{z}/{x}/{y}.mvt`;
+// `v` versions the TILE SCHEMA (record.ts): bump it when the build's keys
+// change, so the day-long edge and device caches can't serve old-schema
+// tiles to a new app. Weekly data refreshes need no bump (a day of staleness
+// on weekly data is fine).
+export const DEFAULT_GEODETIC_URL = `${TILE_HOST}/geodetic/{z}/{x}/{y}.mvt?v=2`;
 
 /**
  * Whether `geodetic.pmtiles` is on the tile host. While false the extension

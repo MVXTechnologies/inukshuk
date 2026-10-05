@@ -16,6 +16,8 @@ phones ──▶ inukshuk-tiles.…workers.dev (worker/, edge-cached) ──▶ 
 | `/basemap.json`                    | TileJSON                                             |
 | `/peaks/{z}/{x}/{y}.mvt`           | named summits (gzip), z5–12, from `peaks.pmtiles`    |
 | `/parks/{z}/{x}/{y}.mvt`           | national parks (gzip), z4–12 — **not published yet** |
+| `/geodetic/{z}/{x}/{y}.mvt`        | survey marks (gzip), z5–13, from `geodetic.pmtiles`  |
+| `/geodetic.json`                   | its TileJSON; `description` = build date + counts    |
 | `/contours/{z}/{x}/{y}.mvt`        | contour lines, generated on demand from DEM tiles    |
 | `/fonts/{fontstack}/{range}.pbf`   | MapLibre glyphs (Atkinson Hyperlegible Next)         |
 | `/trails/v1/index.json`            | long-distance trail index (Explore, #467)            |
@@ -203,6 +205,39 @@ Same Overpass etiquette and attribution as the peaks.
 "Parks & protected areas" switch of the overlays menu. With these tiles the strong boundary is
 ours and every name comes from `park_labels`; without them it is Protomaps' three protected kinds,
 its `park` polygons are dashed, and names appear when Protomaps' `min_zoom` says.
+
+## Geodetic points (Settings → Extensions)
+
+**Status: live since 2026-10-05** (`geodetic.pmtiles` on R2; first build Québec + NGS, more
+sources each week). The app's extension draws it; the card shows each agency's published values.
+
+`nas/geodetic.sh` + `nas/geodetic/` (Python in the pinned image `geodetic/Dockerfile`; tests:
+`python3 -m unittest discover -s infra/tiles/nas/geodetic -p 'test_*.py'`):
+
+1. **fetch** — one job per source (= per agency server), at most `GEODETIC_JOBS` (6) at a time,
+   each polite to its own server, resumable, logged to `work/geodetic/logs/fetch-SRC.log`.
+   Monthly cadence (Québec weekly); a failed fetch keeps the previous raw copy.
+2. **normalize** — per-source build records; gate = catalogue minimum and −30 % vs last good
+   run, else last run's records stay. Agency coordinates and heights are kept as published text.
+3. **assemble** — per z5 tile: ID-first dedupe (destroyed / not-found marks dropped and never
+   revived by a twin), the thinning ladder (one mark per 18 px cell z5–13, all from z14), tile
+   features: `geodetic` (official) and `geodetic_osm` (ODbL, own credit).
+4. **tile** z5–13 (`-r1`, no limits) → verify → gate → `upload.py`.
+
+```sh
+~/inukshuk-tiles/infra/nas/geodetic.sh              # fetch then build
+~/inukshuk-tiles/infra/nas/geodetic.sh fetch        # fetchers only (background-safe)
+~/inukshuk-tiles/infra/nas/geodetic.sh build        # publish what is on disk
+~/inukshuk-tiles/infra/nas/geodetic/harvest_qc.sh status   # Québec datasheet harvest
+```
+
+`scheduler.sh` starts `fetch` and `build` side by side every Monday (never on the 1st), so each
+week's build ships newly harvested Québec datasheets and newly fetched sources. The Québec
+harvester (`harvest_qc.sh`, container `inukshuk-geodetic-harvest`) fetches one MRNF datasheet
+every 2.5 s, keeps only the extracted text, and re-checks daily for new or changed marks.
+
+The app's tile URL carries `?v=N` (`@data/basemapTiles`): bump it only when the tile SCHEMA
+changes — tiles are edge- and device-cached for a day.
 
 ## Long-distance trails (Explore, #467)
 
