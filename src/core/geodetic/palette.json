@@ -1,0 +1,22 @@
+{
+  "light": {
+    "3d": "#D2302A",
+    "h": "#1F63C6",
+    "v": "#0B8578",
+    "gnss": "#8A3FC0",
+    "u": "#6B6F73",
+    "halo": "#FFFFFF",
+    "label": "#2B2F33",
+    "labelHalo": "#F7F3EA"
+  },
+  "dark": {
+    "3d": "#FF6252",
+    "h": "#6EA8FF",
+    "v": "#3CCFB8",
+    "gnss": "#C792F2",
+    "u": "#A9ADB2",
+    "halo": "#13171B",
+    "label": "#ECE8E0",
+    "labelHalo": "#13171B"
+  }
+}

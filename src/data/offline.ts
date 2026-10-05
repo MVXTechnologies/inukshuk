@@ -71,6 +71,8 @@ export interface OfflineRegion {
    * map carry no format and are raster.
    */
   format: PackFormat;
+  /** Extensions whose tiles the pack already holds (absent: none). */
+  includes?: ExtensionKind[];
 }
 
 // MapLibre LngLatBounds is [west, south, east, north].
@@ -94,6 +96,26 @@ interface PackMeta {
   maxZoom?: number;
   // 'vector' for our Protomaps base map; absent (= raster) on older packs.
   format?: PackFormat;
+  /**
+   * An extension's companion pack (Settings → Extensions): the extension's
+   * tiles for a region downloaded before the extension was installed. Never
+   * listed as a region; deleted with the region it belongs to (`companionOf`).
+   */
+  extension?: ExtensionKind;
+  companionOf?: string;
+  /** Extensions whose tiles this pack's own style already carried. */
+  includes?: ExtensionKind[];
+}
+
+/** Extensions that can add a companion pack to an offline region. */
+export type ExtensionKind = 'geodetic';
+
+/** An extension's companion pack, as the extension's settings list it. */
+export interface CompanionPack {
+  id: string;
+  companionOf: string;
+  sizeBytes: number;
+  complete: boolean;
 }
 
 function regionFromPack(
@@ -116,6 +138,9 @@ function regionFromPack(
     sizeBytes: status ? status.completedTileSize || status.completedResourceSize : 0,
     complete: (status?.percentage ?? 0) >= 100,
     format: meta.format === 'vector' ? 'vector' : 'raster',
+    ...(Array.isArray(meta.includes) && meta.includes.includes('geodetic')
+      ? { includes: ['geodetic' as const] }
+      : {}),
     // Only trust a sane recorded number; legacy packs simply omit it.
     ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
       ? { maxZoom: meta.maxZoom }
@@ -151,6 +176,15 @@ function describeNativeError(message: string, zoomRange: string): string {
   return `${raw} (${zoomRange})`;
 }
 
+function styleHasSource(styleJSON: string, source: string): boolean {
+  try {
+    const sources = (JSON.parse(styleJSON) as { sources?: Record<string, unknown> }).sources;
+    return sources !== undefined && source in sources;
+  } catch {
+    return false;
+  }
+}
+
 export async function createRegionPack(
   args: {
     id: string;
@@ -163,6 +197,8 @@ export async function createRegionPack(
     bounds: BoundingBox;
     minZoom: number;
     maxZoom: number;
+    /** Set for an extension's companion pack (see {@link PackMeta.extension}). */
+    companion?: { extension: ExtensionKind; of: string };
   },
   onProgress: (pct: number, sizeBytes: number) => void,
 ): Promise<void> {
@@ -183,6 +219,12 @@ export async function createRegionPack(
     basemap: args.basemap,
     maxZoom,
     format,
+    ...(args.companion
+      ? { extension: args.companion.extension, companionOf: args.companion.of }
+      : {}),
+    ...(!args.companion && styleHasSource(args.styleJSON, 'geodetic')
+      ? { includes: ['geodetic'] }
+      : {}),
   };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can
@@ -313,6 +355,8 @@ export async function listRegionPacks(): Promise<OfflineRegion[]> {
   const packs = await OfflineManager.getPacks();
   const out: OfflineRegion[] = [];
   for (const p of packs) {
+    // An extension's companion pack is part of its region, not a region.
+    if ((p.metadata as Partial<PackMeta>).extension !== undefined) continue;
     const status = await packStatusWithSizeRetry(p);
     out.push(
       regionFromPack(p.id, p.metadata, p.bounds as [number, number, number, number], status),
@@ -321,22 +365,48 @@ export async function listRegionPacks(): Promise<OfflineRegion[]> {
   return out;
 }
 
+/** An extension's companion packs (one per region downloaded before it was installed). */
+export async function listCompanionPacks(extension: ExtensionKind): Promise<CompanionPack[]> {
+  const packs = await OfflineManager.getPacks();
+  const out: CompanionPack[] = [];
+  for (const p of packs) {
+    const meta = p.metadata as Partial<PackMeta>;
+    if (meta.extension !== extension || typeof meta.companionOf !== 'string') continue;
+    const status = await packStatusWithSizeRetry(p);
+    out.push({
+      id: meta.appId ?? p.id,
+      companionOf: meta.companionOf,
+      sizeBytes: status ? status.completedTileSize || status.completedResourceSize : 0,
+      complete: (status?.percentage ?? 0) >= 100,
+    });
+  }
+  return out;
+}
+
+/** Remove every companion pack of an extension (its "Remove extension"). */
+export async function deleteCompanionPacks(extension: ExtensionKind): Promise<void> {
+  for (const c of await listCompanionPacks(extension)) await deleteRegionPack(c.id);
+}
+
 /**
- * Deletes the offline pack whose app-level id matches the given string.
+ * Deletes the offline pack whose app-level id matches the given string, and
+ * any extension companion packs that belong to it.
  * Because MapLibre uses auto-generated UUIDs as the native pack identifier,
  * we scan the pack list to find the matching pack by its metadata.appId.
  */
 export async function deleteRegionPack(id: string): Promise<void> {
   const packs = await OfflineManager.getPacks();
-  const target = packs.find((p) => {
+  for (const p of packs) {
     const meta = p.metadata as Partial<PackMeta>;
     // Fall back to native pack UUID for packs created before metadata.appId was added.
-    return meta.appId === id || p.id === id;
-  });
-  if (target) {
-    await OfflineManager.deletePack(target.id);
+    const mine = meta.appId === id || p.id === id;
+    const companion = meta.companionOf === id;
+    if (!mine && !companion) continue;
+    await OfflineManager.deletePack(p.id);
+    // Remove the serialized style file we wrote for this pack (best-effort).
+    const f = styleFile(meta.appId ?? id);
+    if (f.exists) f.delete();
   }
-  // Remove the serialized style file we wrote for this region (best-effort).
   const f = styleFile(id);
   if (f.exists) f.delete();
 }

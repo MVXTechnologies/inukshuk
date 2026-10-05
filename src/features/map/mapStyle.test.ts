@@ -25,6 +25,7 @@ import {
 import { peakDueFilter } from '@core/map/stoneStyle';
 import { validateStyleMin as validateStyle } from '@maplibre/maplibre-gl-style-spec';
 import {
+  buildGeodeticPackStyle,
   buildOsmStyle,
   CONTOUR_SOURCE_MAXZOOM,
   CONTOUR_SOURCE_MINZOOM,
@@ -1600,5 +1601,32 @@ describe('satellite imagery look + tile budget (#495)', () => {
     expect(
       baseSource(buildOsmStyle(TILE, 'satellite', false, { rasterTileSize: 128 })).tileSize,
     ).toBe(128);
+  });
+});
+
+describe('geodetic points (Settings → Extensions)', () => {
+  const GEO = 'https://tiles.example/geodetic/{z}/{x}/{y}.mvt';
+
+  it('draws the marks above the trails, on any base, with a glyph host for the ids', () => {
+    for (const basemap of ['map', 'satellite'] as const) {
+      const s = buildOsmStyle(TILE, basemap, false, { geodetic: { tiles: GEO, dark: false } });
+      const ids = layerIds(s);
+      expect(ids.indexOf('geodetic-symbols-15')).toBeGreaterThan(ids.indexOf(TRAILS_ANCHOR));
+      expect(s.sources.geodetic).toMatchObject({ type: 'vector', tiles: [GEO], maxzoom: 13 });
+      expect(s.glyphs).toBeDefined();
+      expect(validateStyle(s).map((e) => e.message)).toEqual([]);
+    }
+  });
+
+  it('is absent unless asked for', () => {
+    const s = buildOsmStyle(TILE, 'map');
+    expect(s.sources.geodetic).toBeUndefined();
+    expect(layerIds(s).some((id) => id.startsWith('geodetic-'))).toBe(false);
+  });
+
+  it('builds a marks-only companion-pack style', () => {
+    const s = buildGeodeticPackStyle(GEO, null);
+    expect(Object.keys(s.sources)).toEqual(['geodetic']);
+    expect(validateStyle(s).map((e) => e.message)).toEqual([]);
   });
 });

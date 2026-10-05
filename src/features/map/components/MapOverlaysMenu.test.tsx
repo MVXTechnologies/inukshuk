@@ -26,6 +26,9 @@ jest.mock('@core/features/flags', () => ({
   PARKED_LABEL: 'Coming soon',
 }));
 
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+
 const noop = (): void => undefined;
 
 // `render` resolves asynchronously here (React 19 act); awaiting it is what
@@ -206,6 +209,44 @@ describe('Parks & protected areas', () => {
     expect(screen.getByText('Needs labels on satellite')).toBeTruthy();
     fireEvent.press(row);
     expect(useSettingsStore.getState().showParks).toBe(true);
+  });
+});
+
+describe('Geodetic points (Settings → Extensions)', () => {
+  it('leads to Settings → Extensions while the extension is not installed', async () => {
+    await renderMenu();
+    expect(screen.getByText('Get the extension in Settings')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings',
+      params: { open: 'extensions' },
+    });
+  });
+
+  it('filters from its funnel: live, persisted, counted on the badge, reset', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Filter geodetic points'));
+    await fireEvent.press(screen.getByLabelText('GNSS'));
+    await fireEvent.press(screen.getByLabelText('Has heights'));
+    const f = useSettingsStore.getState().geodeticFilter;
+    expect(f.types).not.toContain('gnss');
+    expect(f.hasHeights).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(screen.getByText('Filtered · 2 filters')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Filter geodetic points, 2 filters on'));
+    await fireEvent.press(screen.getByLabelText('Reset geodetic filters'));
+    expect(useSettingsStore.getState().geodeticFilter.hasHeights).toBe(false);
+    expect(useSettingsStore.getState().geodeticFilter.types).toContain('gnss');
+  });
+
+  it('is a switch with its legend once installed', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    await renderMenu();
+    expect(checked('Geodetic points')).toBe(true);
+    expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(useSettingsStore.getState().showGeodetic).toBe(false);
   });
 });
 

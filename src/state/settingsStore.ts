@@ -1,4 +1,9 @@
 import { type Units } from '@core/format';
+import {
+  DEFAULT_GEODETIC_FILTER,
+  sanitizeGeodeticFilter,
+  type GeodeticFilter,
+} from '@core/geodetic/filter';
 import { isDisplayCondition, type DisplayCondition } from '@core/display/condition';
 import { sanitizeLastKnownPosition } from '@core/geo/lastKnownPosition';
 import { DEFAULT_CATEGORY_ID } from '@core/library/categories';
@@ -195,6 +200,19 @@ export interface Settings {
    */
   showParks: boolean;
   /**
+   * Settings → Extensions → Geodetic points (`@core/map/geodeticStyle`):
+   * "Get" installs the extension (epoch ms of the install; 0 = not installed).
+   * Installed, the map can draw the world's survey marks and new offline
+   * regions carry them.
+   */
+  geodeticInstalledAt: number;
+  /** "Geodetic points" switch of the overlays menu (only while installed). */
+  showGeodetic: boolean;
+  /** Installed extension: include the marks in offline region downloads. */
+  geodeticOffline: boolean;
+  /** Geodetic points shown, by attribute (overlays menu → the funnel; `@core/geodetic/filter`). */
+  geodeticFilter: GeodeticFilter;
+  /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
    * Topology menu's "3D relief" row. Rides on the hillshade: with Shading
    * None there is nothing to deepen.
@@ -304,6 +322,10 @@ const DEFAULTS: Settings = {
   hillshadeStrength: DEFAULT_HILLSHADE_STRENGTH,
   peakDensity: DEFAULT_PEAK_DENSITY,
   showParks: true,
+  geodeticInstalledAt: 0,
+  showGeodetic: true,
+  geodeticOffline: true,
+  geodeticFilter: DEFAULT_GEODETIC_FILTER,
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
   errorReporting: true,
@@ -385,6 +407,10 @@ function snapshot(s: SettingsState): Settings {
     hillshadeStrength,
     peakDensity,
     showParks,
+    geodeticInstalledAt,
+    showGeodetic,
+    geodeticOffline,
+    geodeticFilter,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -433,6 +459,10 @@ function snapshot(s: SettingsState): Settings {
     hillshadeStrength,
     peakDensity,
     showParks,
+    geodeticInstalledAt,
+    showGeodetic,
+    geodeticOffline,
+    geodeticFilter,
     tiltRelief,
     betaTerrain3d,
     errorReporting,
@@ -473,6 +503,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // `trailViewMode` and `terrainHypso`, left behind when the parked
       // three.js 3D views were removed: dropped on read, gone at next write.
       next.marineLayers = sanitizeMarineLayers(next.marineLayers);
+      // An object default: the ladder's typeof check would pass object junk.
+      next.geodeticFilter = sanitizeGeodeticFilter(next.geodeticFilter);
       next.marinePackSnoozes = sanitizeMarinePackSnoozes(next.marinePackSnoozes, Date.now());
       // weatherLayer's default is null (typeof 'object'), so the migration
       // ladder's typeof check DROPS a valid persisted string id (and would pass

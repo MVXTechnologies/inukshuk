@@ -1,0 +1,380 @@
+{
+ "red_roi": [
+  {
+   "type": "Feature",
+   "properties": {
+    "provincia": "A Coruña",
+    "cod_provincia": 15,
+    "fecha_const": "1981-11-18T00:00:00",
+    "lat_etrs89": 43.6768018638889,
+    "x_etrs89": 575639.457,
+    "huso": 29,
+    "alt_orto": 318.065,
+    "cod_municipio": 15022,
+    "nombre": "Monte Eixil",
+    "municipio": "Cedeira",
+    "hoja": "0001",
+    "long_etrs89": -8.06164083527778,
+    "alt_elip": 372.277,
+    "y_etrs89": 4836404.719,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0001/000130.pdf"
+   },
+   "id": 130,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -8.061640835,
+     43.676801864
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "provincia": "A Coruña",
+    "cod_provincia": 15,
+    "fecha_const": "1981-11-20T00:00:00",
+    "lat_etrs89": 43.6749954158333,
+    "x_etrs89": 585240.429,
+    "huso": 29,
+    "alt_orto": 569.942,
+    "cod_municipio": 15061,
+    "nombre": "Couce do Penido",
+    "municipio": "Ortigueira",
+    "hoja": "0001",
+    "long_etrs89": -7.94256655,
+    "alt_elip": 624.356,
+    "y_etrs89": 4836319.55,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0001/000170.pdf"
+   },
+   "id": 170,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -7.94256655,
+     43.674995416
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "provincia": "A Coruña",
+    "cod_provincia": 15,
+    "fecha_const": "1981-11-21T00:00:00",
+    "lat_etrs89": 43.7234810908333,
+    "x_etrs89": 591209.715,
+    "huso": 29,
+    "alt_orto": 213.176,
+    "cod_municipio": 15901,
+    "nombre": "Alto do Masanteo",
+    "municipio": "Cariño",
+    "hoja": "0001",
+    "long_etrs89": -7.86760392916667,
+    "alt_elip": 267.195,
+    "y_etrs89": 4841784.267,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0001/000193.pdf"
+   },
+   "id": 193,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -7.867603929,
+     43.723481091
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "provincia": "A Coruña",
+    "cod_provincia": 15,
+    "fecha_const": "1982-04-08T00:00:00",
+    "lat_etrs89": 43.6911111175,
+    "x_etrs89": 600270.851,
+    "huso": 29,
+    "alt_orto": 427.951,
+    "cod_municipio": 15061,
+    "nombre": "Rande",
+    "municipio": "Ortigueira",
+    "hoja": "0002",
+    "long_etrs89": -7.7557778225,
+    "alt_elip": 482.042,
+    "y_etrs89": 4838318.287,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0002/000221.pdf"
+   },
+   "id": 221,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -7.755777822,
+     43.691111118
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre": "Montaña Clara",
+    "municipio": "Teguise",
+    "cod_municipio": 35024,
+    "hoja": "1079",
+    "long_etrs89": -13.534895763889,
+    "alt_elip": null,
+    "y_etrs89": 3241974.172,
+    "alt_orto": 255.424,
+    "provincia": "Las Palmas",
+    "cod_provincia": 35,
+    "fecha_const": "1991-08-06T00:00:00",
+    "lat_etrs89": 29.298735938889,
+    "x_etrs89": 642296.948,
+    "huso": 28,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja1079/107952.pdf"
+   },
+   "id": 107952,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -13.534895764,
+     29.298735939
+    ]
+   }
+  }
+ ],
+ "red_regente": [
+  {
+   "type": "Feature",
+   "properties": {
+    "municipio": "Cariño",
+    "cod_municipio": 15901,
+    "hoja": "0001",
+    "long_etrs89": -7.94207205,
+    "alt_elip": 664.121,
+    "y_etrs89": 4841890.953,
+    "alt_orto": 608.857,
+    "provincia": "A Coruña",
+    "nombre": "Monte Herbeira",
+    "cod_provincia": 15,
+    "fecha_const": "1981-11-20T00:00:00",
+    "lat_etrs89": 43.7251552638889,
+    "x_etrs89": 585209.217,
+    "huso": 29,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0001/000173.pdf"
+   },
+   "id": 173,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -7.94207205,
+     43.725155264
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "municipio": "Mañón",
+    "cod_municipio": 15044,
+    "hoja": "0002",
+    "long_etrs89": -7.7007629611111,
+    "alt_elip": 371.5096,
+    "y_etrs89": 4845989.583,
+    "alt_orto": 316.866,
+    "provincia": "A Coruña",
+    "nombre": "Facho Maeda",
+    "cod_provincia": 15,
+    "fecha_const": "2014-11-03T00:00:00",
+    "lat_etrs89": 43.759569975,
+    "x_etrs89": 604585.295,
+    "huso": 29,
+    "resena": "https://datos-geodesia.ign.es/Red_Geodesica/Hoja0002/000246.pdf"
+   },
+   "id": 246,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -7.700762961,
+     43.759569975
+    ]
+   }
+  }
+ ],
+ "red_nap": [
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre": "NAPH421* (Villava)",
+    "tipo": "Principal",
+    "nombre_prov": "Navarra",
+    "grupo": 12,
+    "latitud_etrs89": 42.8288467916667,
+    "ortometrica": 429.99656,
+    "linea": "Puntos Nodales",
+    "nombre_muni": "Villava/Atarrabia",
+    "nodo": "Línea",
+    "longitud_etrs89": -1.61258615,
+    "altitud_elipsoidal": 480.1877,
+    "resena": "https://datos-geodesia.ign.es/REDNAP/Lin00000/12.pdf",
+    "resena_linea": "https://datos-geodesia.ign.es/REDNAP/Lin00000/Lin00000.pdf"
+   },
+   "id": 12.0,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.61258615,
+     42.828846792
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre": "NGV61* (Urroz)",
+    "tipo": "Principal",
+    "nombre_prov": "Navarra",
+    "grupo": 13,
+    "latitud_etrs89": 42.7793984666667,
+    "ortometrica": 488.62276,
+    "linea": "Puntos Nodales",
+    "nombre_muni": "Urroz-Villa",
+    "nodo": "Línea",
+    "longitud_etrs89": -1.45309606666667,
+    "altitud_elipsoidal": 538.8805,
+    "resena": "https://datos-geodesia.ign.es/REDNAP/Lin00000/13.pdf",
+    "resena_linea": "https://datos-geodesia.ign.es/REDNAP/Lin00000/Lin00000.pdf"
+   },
+   "id": 13.0,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.453096067,
+     42.779398467
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre": "E.A.P3U3-17* (Puente Internacional Arnegui)",
+    "tipo": "Principal",
+    "nombre_prov": "Navarra",
+    "grupo": 14,
+    "latitud_etrs89": 43.1091666666667,
+    "ortometrica": 243.01507,
+    "linea": "Puntos Nodales",
+    "nombre_muni": "Luzaide/Valcarlos",
+    "nodo": "Línea",
+    "longitud_etrs89": -1.28222222222222,
+    "altitud_elipsoidal": null,
+    "resena": "https://datos-geodesia.ign.es/REDNAP/Lin00000/14.pdf",
+    "resena_linea": "https://datos-geodesia.ign.es/REDNAP/Lin00000/Lin00000.pdf"
+   },
+   "id": 14.0,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.282222222,
+     43.109166667
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre": "NAPF825* (Liédena)",
+    "tipo": "Principal",
+    "nombre_prov": "Navarra",
+    "grupo": 15,
+    "latitud_etrs89": 42.6148348638889,
+    "ortometrica": 408.93676,
+    "linea": "Puntos Nodales",
+    "nombre_muni": "Liédena",
+    "nodo": "Línea",
+    "longitud_etrs89": -1.27680898611111,
+    "altitud_elipsoidal": 459.3965,
+    "resena": "https://datos-geodesia.ign.es/REDNAP/Lin00000/15.pdf",
+    "resena_linea": "https://datos-geodesia.ign.es/REDNAP/Lin00000/Lin00000.pdf"
+   },
+   "id": 15.0,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -1.276808986,
+     42.614834864
+    ]
+   }
+  }
+ ],
+ "red_ergnss": [
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre_prov": "Zamora",
+    "cartY": -527730.905,
+    "nombre_muni": "Alcañices",
+    "cartX": 4740593.652,
+    "cartZ": 4221366.673,
+    "huso": 29.0,
+    "altura_elipsoidal": 871.197,
+    "x_UTM": 720327.96,
+    "red_secundaria": [
+     "ERGNSS"
+    ],
+    "nombre": "Alcañices",
+    "y_UTM": 4619861.825,
+    "fecha_ins": "2008-02-14T00:00:00",
+    "alt_orto": 814.829,
+    "resena": "https://datos-geodesia.ign.es/ERGNSS/fichas/ACNS.pdf",
+    "localizacion": "Alcañices, Zamora, Castilla y León",
+    "longitud": -6.352109717,
+    "latitud": 41.70004774,
+    "red_principal": "ITACyL",
+    "log": "https://datos-geodesia.ign.es/ERGNSS/log/",
+    "cod_iers": "19306M001"
+   },
+   "id": "ACNS",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -6.352109717,
+     41.70004774
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "nombre_prov": "A Coruña",
+    "cartY": -678367.977,
+    "nombre_muni": "A Coruña",
+    "cartX": 4594489.86,
+    "cartZ": 4357065.862,
+    "huso": 29.0,
+    "altura_elipsoidal": 66.863,
+    "x_UTM": 548701.37,
+    "red_secundaria": [
+     "EUREF"
+    ],
+    "nombre": "A Coruña",
+    "y_UTM": 4801455.354,
+    "fecha_ins": "1998-06-03T00:00:00",
+    "alt_orto": 12.522,
+    "resena": "https://datos-geodesia.ign.es/ERGNSS/fichas/ACOR.pdf",
+    "localizacion": "A Coruña, Galicia",
+    "longitud": -8.398935058,
+    "latitud": 43.36438072,
+    "red_principal": "ERGNSS",
+    "log": "https://datos-geodesia.ign.es/ERGNSS/log/",
+    "cod_iers": "13434M001"
+   },
+   "id": "ACOR",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -8.398935058,
+     43.36438072
+    ]
+   }
+  }
+ ]
+}
