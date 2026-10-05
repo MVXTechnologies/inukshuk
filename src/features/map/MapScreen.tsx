@@ -117,6 +117,7 @@ import { tideColors } from '@core/map/tideStyle';
 import { TideStationCard } from './components/TideStationCard';
 import { tideImages } from './tideImages';
 import { tideStationAt } from './tideTap';
+import { bottomCardSlotFree } from '@core/map/bottomCardSlot';
 import { useChsStations } from './hooks/useChs';
 import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
@@ -1554,6 +1555,15 @@ export function MapScreen() {
   const drawingRef = useRef(drawing);
   useEffect(() => {
     drawingRef.current = drawing;
+  });
+  // The bottom-card slot (@core/map/bottomCardSlot): cards step aside for an
+  // open rail sheet (they used to draw over Overlays), an inspection, an edit
+  // or a drawing tool.
+  const cardSlotFree = bottomCardSlotFree({
+    railMenuOpen,
+    inspecting: inspectTrack !== null,
+    editingWaypoint: editWaypoint !== null,
+    drawing: drawing.active,
   });
 
   const saveWaypoint = () => {
@@ -3398,61 +3408,56 @@ export function MapScreen() {
           panel, the save/edit sheets, and a tapped area's card. */}
         {drawing.chrome}
 
-        {inspectTrack === null &&
-          editWaypoint === null &&
-          viewWaypoint !== null &&
-          !drawing.active && (
-            <View
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-              pointerEvents="box-none"
-              testID="waypoint-card-dock"
-            >
-              <WaypointViewerCard
-                waypoint={viewWaypoint}
-                floating={recordingPanelUp}
-                onCopyCoords={() => {
-                  if (!viewWaypoint) return;
-                  void Clipboard.setStringAsync(
-                    formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-                  );
-                  showSnack('Coordinates copied');
-                }}
-                onCopyNote={() => {
-                  if (!viewWaypoint?.note) return;
-                  void Clipboard.setStringAsync(viewWaypoint.note);
-                  showSnack('Note copied');
-                }}
-                onSharePhoto={() => {
-                  const uri = viewWaypoint?.photoUri;
-                  if (!uri) return;
-                  void (async () => {
-                    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-                    else showSnack('Sharing is not available on this device');
-                  })();
-                }}
-                onEdit={() => {
-                  if (!viewWp) return;
-                  discardDraftPhoto(newWp);
-                  setNewWp(null);
-                  setEditWp(viewWp);
-                  setWpName(viewWaypoint?.label ?? '');
-                  setWpDraft(viewWaypoint?.note ?? '');
-                  setViewWp(null);
-                }}
-                onDelete={deleteViewedWaypoint}
-                onClose={() => setViewWp(null)}
-              />
-            </View>
-          )}
+        {cardSlotFree && viewWaypoint !== null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+            testID="waypoint-card-dock"
+          >
+            <WaypointViewerCard
+              waypoint={viewWaypoint}
+              floating={recordingPanelUp}
+              onCopyCoords={() => {
+                if (!viewWaypoint) return;
+                void Clipboard.setStringAsync(
+                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+                );
+                showSnack('Coordinates copied');
+              }}
+              onCopyNote={() => {
+                if (!viewWaypoint?.note) return;
+                void Clipboard.setStringAsync(viewWaypoint.note);
+                showSnack('Note copied');
+              }}
+              onSharePhoto={() => {
+                const uri = viewWaypoint?.photoUri;
+                if (!uri) return;
+                void (async () => {
+                  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                  else showSnack('Sharing is not available on this device');
+                })();
+              }}
+              onEdit={() => {
+                if (!viewWp) return;
+                discardDraftPhoto(newWp);
+                setNewWp(null);
+                setEditWp(viewWp);
+                setWpName(viewWaypoint?.label ?? '');
+                setWpDraft(viewWaypoint?.note ?? '');
+                setViewWp(null);
+              }}
+              onDelete={deleteViewedWaypoint}
+              onClose={() => setViewWp(null)}
+            />
+          </View>
+        )}
 
         {/* Geodetic points: the tapped survey mark's summary card. Same
           bottom-card slot rules as the waypoint viewer. */}
-        {geodeticTiles !== null &&
+        {cardSlotFree &&
+          geodeticTiles !== null &&
           geodeticMark !== null &&
-          inspectTrack === null &&
-          editWaypoint === null &&
-          viewWaypoint === null &&
-          !drawing.active && (
+          viewWaypoint === null && (
             <View
               style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
               pointerEvents="box-none"
@@ -3495,36 +3500,31 @@ export function MapScreen() {
 
         {/* Tide stations: the tapped station's card. Same bottom-card slot
           rules as the survey-mark card. */}
-        {tideTiles !== null &&
-          tideStation !== null &&
-          inspectTrack === null &&
-          editWaypoint === null &&
-          viewWaypoint === null &&
-          !drawing.active && (
-            <View
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-              pointerEvents="box-none"
-              testID="tide-card-dock"
-            >
-              <TideStationCard
-                station={tideStation}
-                floating={recordingPanelUp}
-                offline={offlineOnly}
-                onOpenLink={(url) => {
-                  Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
-                }}
-                onNavigate={() => {
-                  setDestination({ latitude: tideStation.lat, longitude: tideStation.lng });
-                  setTideStation(null);
-                }}
-                onCopy={(text) => {
-                  void Clipboard.setStringAsync(text);
-                  showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
-                }}
-                onClose={() => setTideStation(null)}
-              />
-            </View>
-          )}
+        {cardSlotFree && tideTiles !== null && tideStation !== null && viewWaypoint === null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+            testID="tide-card-dock"
+          >
+            <TideStationCard
+              station={tideStation}
+              floating={recordingPanelUp}
+              offline={offlineOnly}
+              onOpenLink={(url) => {
+                Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
+              }}
+              onNavigate={() => {
+                setDestination({ latitude: tideStation.lat, longitude: tideStation.lng });
+                setTideStation(null);
+              }}
+              onCopy={(text) => {
+                void Clipboard.setStringAsync(text);
+                showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
+              }}
+              onClose={() => setTideStation(null)}
+            />
+          </View>
+        )}
 
         {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as
@@ -3532,8 +3532,7 @@ export function MapScreen() {
         {forecastAt !== null &&
           (weatherLayer !== null || marineActive) &&
           !offlineOnly &&
-          inspectTrack === null &&
-          editWaypoint === null &&
+          cardSlotFree &&
           viewWaypoint === null && (
             <ForecastCard
               at={forecastAt}
