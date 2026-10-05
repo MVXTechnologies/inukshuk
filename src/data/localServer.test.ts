@@ -169,12 +169,27 @@ describe('start failures (#290)', () => {
     expect(serverMock.__instances[1]?.stop).toHaveBeenCalledTimes(1);
   });
 
+  // lighttpd writes its reason while it starts, then exits -1.
+  const crashLogging = (line: string) => () => {
+    fsMock.__files.set(LOG, `${fsMock.__files.get(LOG) ?? ''}${line}\n`);
+    return crash();
+  };
+
+  // #327: the log only exists when the library is asked for one. Without
+  // `errorLog`, lighttpd logs to syslog and every report said "no log".
+  it('asks the library for a lighttpd error log file', async () => {
+    const mod = freshModule();
+    const lease = await mod.acquireLocalServer();
+    expect(serverMock.__instances[0]?.options).toMatchObject({ errorLog: true });
+    await lease.release();
+  });
+
   it('gives up after two attempts with the tail of the lighttpd error log', async () => {
-    serverMock.__startPlan.push(crash, crash);
-    fsMock.__files.set(
-      LOG,
-      '2026-09-08 22:57:12: (configfile.c.1900) unknown config-key: url.access-deny (ignored)\n' +
-        "2026-09-08 22:57:12: (server.c.1500) can't bind to socket: 127.0.0.1:41234: Permission denied\n",
+    serverMock.__startPlan.push(
+      crashLogging('2026-09-08 22:57:12: (configfile.c.1900) unknown config-key: url.access-deny'),
+      crashLogging(
+        "2026-09-08 22:57:13: (server.c.1500) can't bind to socket: 127.0.0.1:41234: Permission denied",
+      ),
     );
     const mod = freshModule();
     await expect(mod.acquireLocalServer()).rejects.toThrow(
@@ -182,6 +197,21 @@ describe('start failures (#290)', () => {
     );
     expect(serverMock.__instances).toHaveLength(2);
     expect(mod.localServerLeases()).toBe(0);
+  });
+
+  it("reports the last attempt's log, not one left over from an earlier start", async () => {
+    fsMock.__files.set(
+      LOG,
+      '2026-09-01 10:00:00: (server.c.1700) server started (lighttpd/1.4.76)\n',
+    );
+    serverMock.__startPlan.push(
+      crash,
+      crashLogging('(network.c.400) bind: Address already in use'),
+    );
+    const mod = freshModule();
+    const failure = mod.acquireLocalServer();
+    await expect(failure).rejects.toThrow(/Address already in use/);
+    await expect(failure).rejects.not.toThrow(/server started/);
   });
 
   it('reports the failure even when there is no error log to read', async () => {

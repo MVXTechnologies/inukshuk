@@ -4,7 +4,11 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { PROBE_TIMEOUT_MS } from '@core/storage/loopbackLiveness';
 import { refCounted, type RefCountedLease } from '@core/storage/refCounted';
 import { SERVED_DOCUMENT_PREFIXES, lighttpdAccessConfig } from '@core/storage/servedPaths';
-import { describeServerStartFailure, logTail } from '@core/storage/serverStartFailure';
+import {
+  describeServerStartFailure,
+  fileUriOfPath,
+  logTail,
+} from '@core/storage/serverStartFailure';
 
 import { documentDirUri } from './storage';
 
@@ -36,6 +40,14 @@ import { documentDirUri } from './storage';
  * start is retried once on a FRESH instance (the library forbids restarting
  * a crashed one), and if that fails too the thrown error carries the tail of
  * lighttpd's own error log — the only place the real reason is written.
+ *
+ * The log only exists because the server is built with `errorLog: true`
+ * (#327). Without it the library hands lighttpd an empty log path and a
+ * `server.errorlog-use-syslog` line, so every start failure went to logcat and
+ * 37 field reports from that phone said "(no lighttpd error log)". With it,
+ * the native launcher redirects lighttpd's stderr to {@link ERROR_LOG_FILE}
+ * before it parses the config, so config, module and bind errors all land
+ * there. The file is cleared before each start, so its tail is that start's.
  *
  * ## Death under a live lease (iOS resume)
  *
@@ -75,15 +87,24 @@ function sharedServer(port: number): StaticServer {
     fileDir: fsPath(documentDirUri()),
     port,
     hostname: '127.0.0.1',
+    // Write lighttpd's errors to ERROR_LOG_FILE (no debug categories, so only
+    // real errors and the one "server started" line). Off, they go to syslog
+    // and a failed start cannot say why (#327).
+    errorLog: true,
     extraConfig: lighttpdAccessConfig(SERVED_DOCUMENT_PREFIXES),
   });
   return server;
 }
 
+/** The library gives a plain filesystem path; expo-file-system takes a uri. */
+function errorLogFile(): File {
+  return new File(fileUriOfPath(ERROR_LOG_FILE));
+}
+
 /** The tail of lighttpd's error log, or null when it cannot be read. */
 async function readErrorLogTail(): Promise<string | null> {
   try {
-    const file = new File(ERROR_LOG_FILE);
+    const file = errorLogFile();
     if (!file.exists) return null;
     return logTail(await file.text());
   } catch {
@@ -91,10 +112,21 @@ async function readErrorLogTail(): Promise<string | null> {
   }
 }
 
+/** Start each attempt with an empty log, so a failure's tail is its own. */
+function clearErrorLog(): void {
+  try {
+    const file = errorLogFile();
+    if (file.exists) file.delete();
+  } catch {
+    // Best effort: a stale tail is still better than none.
+  }
+}
+
 /** `preferredPort` is tried first; a retry always takes any free port. */
 async function startServer(preferredPort = 0): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+    clearErrorLog();
     try {
       lastOrigin = await sharedServer(attempt === 1 ? preferredPort : 0).start();
       return lastOrigin;
