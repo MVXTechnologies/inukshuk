@@ -20,12 +20,17 @@ import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
 import { GeodeticFilterPanel } from './GeodeticFilterPanel';
 import { ExtensionsPanel } from './ExtensionsPanel';
-import { extensionsRowHint, extensionsRowTarget } from '@core/map/extensions';
-import { useExtensionsState } from '../hooks/useExtensions';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  OVERLAY_TABS,
+  OVERLAY_TAB_LABEL,
+  OVERLAY_TAB_SHORT,
+  tabForRow,
+  type OverlayRow,
+  type OverlayTab,
+} from '@core/map/overlayTabs';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
   CONTOUR_INTERVALS,
@@ -57,14 +62,18 @@ import { StepSlider } from './StepSlider';
  * checkboxes, segmented pickers where a row has levels. It replaces the
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * - On the map — Content (folder picker), PDF maps, Personal heatmap,
- *   Parks, Extensions (geodetic points, tide stations), Labels on satellite.
+ * Four tabs (`@core/map/overlayTabs`; the last one is remembered):
+ * - Map — Content (folder picker), PDF maps, Parks, Labels on satellite,
+ *   Imagery.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
  *   Peaks, and last See-through white (the PDF maps' white paper, a 5-stop
  *   slider: Off, 25 / 50 / 75 / 100 %; needs PDF maps).
- * - Live layers — Weather (drills into its list) and Marine, both parked
- *   this release (greyed "Coming soon", never removed: a feature that
- *   silently disappears reads as a bug).
+ * - Sports — Personal heatmap; Live layers: Weather (drills into its list)
+ *   and Marine, both parked this release (greyed "Coming soon", never
+ *   removed: a feature that silently disappears reads as a bug). Climbing
+ *   crags will join here.
+ * - Extensions — the installed extensions' switches and legends (geodetic
+ *   filter funnel), "Get more extensions"; an empty state with none.
  *
  * Every setting it drives is the one the old rows drove, with the same
  * semantics (Shading None = hillshade off; a level turns it on at that
@@ -117,15 +126,15 @@ const CONTOUR_DENSITY = CONTOUR_INTERVALS.map((m) => ({
  * into the weather list.
  */
 function OverlayRows({
+  tab,
   onSlopeEnabled,
   onOpenFolders,
   onOpenWeather,
-  onOpenExtensions,
 }: {
+  tab: Exclude<OverlayTab, 'extensions'>;
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onOpenWeather: () => void;
-  onOpenExtensions: () => void;
 }) {
   const { accent } = useSheetAccent();
   const tokens = useSchemeTokens();
@@ -150,9 +159,6 @@ function OverlayRows({
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
-  const ext = useExtensionsState();
-  const extTarget = extensionsRowTarget(ext);
-  const router = useRouter();
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
   const set = useSettingsStore((s) => s.set);
@@ -185,6 +191,172 @@ function OverlayRows({
   const marineOn = MARINE_ENABLED && marineLayers.length > 0;
   const weatherName = weatherLayer !== null ? weatherLayerById(weatherLayer).label : null;
 
+  // One tab at a time (@core/map/overlayTabs): Map · Terrain · Sports. The
+  // Extensions tab is the ExtensionsPanel, rendered by the sheet.
+  if (tab === 'terrain') {
+    return (
+      <>
+        <LevelsRow
+          icon="image-filter-hdr"
+          label="Shading"
+          levels={SHADING}
+          selected={shading}
+          onSelect={setShading}
+        />
+        {/* #480: how much the relief deepens when the map is tilted (two
+          fingers). With the native 3D terrain the mountains really rise —
+          on every base map, so it no longer needs Shading; without it
+          (older binaries) it deepens the hillshade and rests with Shading None. */}
+        <LevelsRow
+          icon="rotate-3d-variant"
+          label="3D relief"
+          hint={
+            nativeTerrain3d
+              ? 'Real 3D when you tilt the map'
+              : showHillshade
+                ? 'When you tilt the map'
+                : 'Needs shading'
+          }
+          levels={TILT}
+          selected={tiltRelief}
+          onSelect={(r) => set('tiltRelief', r)}
+          disabled={!showHillshade && !nativeTerrain3d}
+        />
+        <SwitchRow
+          icon="vector-curve"
+          label="Contours"
+          value={contours}
+          onToggle={() => set('terrainContours', !contours)}
+          below={
+            <Segmented
+              levels={CONTOUR_DENSITY}
+              selected={intervalM}
+              onSelect={(m) => set('terrainContourIntervalM', m)}
+              disabled={!contours}
+            />
+          }
+        />
+        <SwitchRow
+          icon="angle-acute"
+          label="Slope"
+          hint="Steepness shading"
+          value={slope}
+          onToggle={() => {
+            const next = !slope;
+            set('terrainSlope', next);
+            if (next) onSlopeEnabled();
+          }}
+          below={
+            <RangeSlider
+              min={0}
+              max={90}
+              width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+              lo={slopeMinDeg}
+              hi={slopeMaxDeg}
+              disabled={!slope}
+              accessibilityLabel="Slope"
+              onChange={(newLo, newHi) => {
+                set('terrainSlopeMinDeg', newLo);
+                set('terrainSlopeMaxDeg', newHi);
+              }}
+              accentColor={accent}
+              trackColor={tokens.surfaceVariant}
+            />
+          }
+        />
+        <LevelsRow
+          icon="triangle-outline"
+          label="Peaks"
+          hint="How early summits are named"
+          levels={PEAKS}
+          selected={peakDensity}
+          onSelect={(d) => set('peakDensity', d)}
+        />
+        {/* How see-through the PDF maps' white paper is, so the base map shows
+          through open land and margins. The default for every PDF map; a
+          map can override it from its Library ⋮ menu. Last in Terrain (owner,
+          2026-10-05: less important than the rest); still needs PDF maps. */}
+        <ControlRow
+          icon="circle-opacity"
+          label="See-through white"
+          hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
+          disabled={!showPdfMaps}
+        >
+          <StepSlider
+            labels={WHITE_KEY_STOPS}
+            value={pdfWhiteKey}
+            onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
+            width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+            disabled={!showPdfMaps}
+            accessibilityLabel="See-through white"
+            accentColor={accent}
+            trackColor={tokens.surfaceVariant}
+            tickColor={tokens.inkMuted}
+          />
+        </ControlRow>
+      </>
+    );
+  }
+  if (tab === 'sports') {
+    return (
+      <>
+        <SectionTitle>Your activity</SectionTitle>
+        <SwitchRow
+          icon="fire"
+          label="Personal heatmap"
+          hint="Where you have been, by visits"
+          value={showHeatmap}
+          onToggle={() => set('showHeatmap', !showHeatmap)}
+        />
+        {/* Climbing crags will join here (owner, 2026-10-05). */}
+        <SectionTitle>Live layers</SectionTitle>
+        {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
+          it is the permanent condition this release. Otherwise these are
+          network-only: under "Locally downloaded only" the layers are dropped
+          from the style, so the rows are disabled with a hint instead of
+          pretending a pick would show anything. */}
+        <NavRow
+          icon="weather-partly-cloudy"
+          label="Weather"
+          hint={
+            !WEATHER_ENABLED
+              ? PARKED_LABEL
+              : offlineOnly
+                ? 'Needs connection'
+                : (weatherName ?? 'Off')
+          }
+          accessibilityLabel={
+            !WEATHER_ENABLED
+              ? `Weather (${PARKED_LABEL.toLowerCase()})`
+              : offlineOnly
+                ? 'Weather (needs connection)'
+                : weatherName !== null
+                  ? `Weather: ${weatherName}`
+                  : 'Weather'
+          }
+          disabled={!WEATHER_ENABLED || offlineOnly}
+          onPress={onOpenWeather}
+        />
+        <SwitchRow
+          icon="anchor"
+          label="Marine"
+          hint={
+            !MARINE_ENABLED ? PARKED_LABEL : offlineOnly ? 'Needs connection' : 'Nautical chart'
+          }
+          accessibilityLabel={
+            !MARINE_ENABLED
+              ? `Marine (${PARKED_LABEL.toLowerCase()})`
+              : offlineOnly
+                ? 'Marine (needs connection)'
+                : 'Marine'
+          }
+          value={marineOn}
+          disabled={!MARINE_ENABLED || offlineOnly}
+          onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
+        />
+      </>
+    );
+  }
   return (
     <>
       <SectionTitle>On the map</SectionTitle>
@@ -203,13 +375,6 @@ function OverlayRows({
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
       />
-      <SwitchRow
-        icon="fire"
-        label="Personal heatmap"
-        hint="Where you have been, by visits"
-        value={showHeatmap}
-        onToggle={() => set('showHeatmap', !showHeatmap)}
-      />
       {/* National parks, reserves and protected areas: boundary and name on
           the vector map. Over imagery they ride "Labels on satellite" (the
           same vector pass), so the row rests while that is off. */}
@@ -221,21 +386,6 @@ function OverlayRows({
         disabled={!parksAvailable}
         onToggle={() => set('showParks', !showParks)}
       />
-      {/* Map extensions (@core/map/extensions): ONE row. Nothing installed →
-          Settings → Extensions (the download page); something installed →
-          the Extensions panel in this sheet. */}
-      {extTarget !== null && (
-        <NavRow
-          icon="puzzle-outline"
-          label="Extensions"
-          hint={extensionsRowHint(ext)}
-          onPress={
-            extTarget === 'panel'
-              ? onOpenExtensions
-              : () => router.push({ pathname: '/settings', params: { open: 'extensions' } })
-          }
-        />
-      )}
       <SwitchRow
         icon="label-outline"
         label="Labels on satellite"
@@ -254,150 +404,6 @@ function OverlayRows({
         selected={satelliteImagery}
         onSelect={(l) => set('satelliteImagery', l)}
         disabled={!onSatellite}
-      />
-
-      <SectionTitle>Terrain</SectionTitle>
-      <LevelsRow
-        icon="image-filter-hdr"
-        label="Shading"
-        levels={SHADING}
-        selected={shading}
-        onSelect={setShading}
-      />
-      {/* #480: how much the relief deepens when the map is tilted (two
-          fingers). With the native 3D terrain the mountains really rise —
-          on every base map, so it no longer needs Shading; without it
-          (older binaries) it deepens the hillshade and rests with Shading None. */}
-      <LevelsRow
-        icon="rotate-3d-variant"
-        label="3D relief"
-        hint={
-          nativeTerrain3d
-            ? 'Real 3D when you tilt the map'
-            : showHillshade
-              ? 'When you tilt the map'
-              : 'Needs shading'
-        }
-        levels={TILT}
-        selected={tiltRelief}
-        onSelect={(r) => set('tiltRelief', r)}
-        disabled={!showHillshade && !nativeTerrain3d}
-      />
-      <SwitchRow
-        icon="vector-curve"
-        label="Contours"
-        value={contours}
-        onToggle={() => set('terrainContours', !contours)}
-        below={
-          <Segmented
-            levels={CONTOUR_DENSITY}
-            selected={intervalM}
-            onSelect={(m) => set('terrainContourIntervalM', m)}
-            disabled={!contours}
-          />
-        }
-      />
-      <SwitchRow
-        icon="angle-acute"
-        label="Slope"
-        hint="Steepness shading"
-        value={slope}
-        onToggle={() => {
-          const next = !slope;
-          set('terrainSlope', next);
-          if (next) onSlopeEnabled();
-        }}
-        below={
-          <RangeSlider
-            min={0}
-            max={90}
-            width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-            lo={slopeMinDeg}
-            hi={slopeMaxDeg}
-            disabled={!slope}
-            accessibilityLabel="Slope"
-            onChange={(newLo, newHi) => {
-              set('terrainSlopeMinDeg', newLo);
-              set('terrainSlopeMaxDeg', newHi);
-            }}
-            accentColor={accent}
-            trackColor={tokens.surfaceVariant}
-          />
-        }
-      />
-      <LevelsRow
-        icon="triangle-outline"
-        label="Peaks"
-        hint="How early summits are named"
-        levels={PEAKS}
-        selected={peakDensity}
-        onSelect={(d) => set('peakDensity', d)}
-      />
-      {/* How see-through the PDF maps' white paper is, so the base map shows
-          through open land and margins. The default for every PDF map; a
-          map can override it from its Library ⋮ menu. Last in Terrain (owner,
-          2026-10-05: less important than the rest); still needs PDF maps. */}
-      <ControlRow
-        icon="circle-opacity"
-        label="See-through white"
-        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
-        disabled={!showPdfMaps}
-      >
-        <StepSlider
-          labels={WHITE_KEY_STOPS}
-          value={pdfWhiteKey}
-          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
-          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-          disabled={!showPdfMaps}
-          accessibilityLabel="See-through white"
-          accentColor={accent}
-          trackColor={tokens.surfaceVariant}
-          tickColor={tokens.inkMuted}
-        />
-      </ControlRow>
-
-      <SectionTitle>Live layers</SectionTitle>
-      {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
-          it is the permanent condition this release. Otherwise these are
-          network-only: under "Locally downloaded only" the layers are dropped
-          from the style, so the rows are disabled with a hint instead of
-          pretending a pick would show anything. */}
-      <NavRow
-        icon="weather-partly-cloudy"
-        label="Weather"
-        hint={
-          !WEATHER_ENABLED
-            ? PARKED_LABEL
-            : offlineOnly
-              ? 'Needs connection'
-              : (weatherName ?? 'Off')
-        }
-        accessibilityLabel={
-          !WEATHER_ENABLED
-            ? `Weather (${PARKED_LABEL.toLowerCase()})`
-            : offlineOnly
-              ? 'Weather (needs connection)'
-              : weatherName !== null
-                ? `Weather: ${weatherName}`
-                : 'Weather'
-        }
-        disabled={!WEATHER_ENABLED || offlineOnly}
-        onPress={onOpenWeather}
-      />
-      <SwitchRow
-        icon="anchor"
-        label="Marine"
-        hint={!MARINE_ENABLED ? PARKED_LABEL : offlineOnly ? 'Needs connection' : 'Nautical chart'}
-        accessibilityLabel={
-          !MARINE_ENABLED
-            ? `Marine (${PARKED_LABEL.toLowerCase()})`
-            : offlineOnly
-              ? 'Marine (needs connection)'
-              : 'Marine'
-        }
-        value={marineOn}
-        disabled={!MARINE_ENABLED || offlineOnly}
-        onToggle={() => set('marineLayers', marineOn ? [] : [...MARINE_LAYER_IDS])}
       />
     </>
   );
@@ -485,6 +491,43 @@ function WeatherList({ onBack }: { onBack: () => void }) {
 }
 
 /**
+ * The sheet's tabs (Map · Terrain · Sports · Ext.): a segmented strip under
+ * the title, in the sheet's accent. Each tab is a button with its full name
+ * as label and `selected` state.
+ */
+function OverlayTabBar({ tab, onSelect }: { tab: OverlayTab; onSelect: (t: OverlayTab) => void }) {
+  const tokens = useSchemeTokens();
+  const { accent, onAccent } = useSheetAccent();
+  return (
+    <View
+      style={[styles.tabBar, { backgroundColor: tokens.surfaceVariant }]}
+      accessibilityRole="tablist"
+    >
+      {OVERLAY_TABS.map((t) => {
+        const selected = t === tab;
+        return (
+          <Pressable
+            key={t}
+            onPress={() => onSelect(t)}
+            accessibilityRole="tab"
+            accessibilityLabel={`${OVERLAY_TAB_LABEL[t]} tab`}
+            accessibilityState={{ selected }}
+            style={[styles.tab, selected && { backgroundColor: accent }]}
+          >
+            <Text
+              numberOfLines={1}
+              style={[styles.tabLabel, { color: selected ? onAccent : tokens.inkVariant }]}
+            >
+              {OVERLAY_TAB_SHORT[t]}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
  * The sheet's content: title + ✕, then the scrolling rows (or the weather
  * list). Mounted only while the menu is open, so it always opens at the top.
  */
@@ -492,14 +535,30 @@ export function OverlaysPanel({
   onSlopeEnabled,
   onOpenFolders,
   onClose,
+  openOn,
 }: {
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onClose: () => void;
+  /**
+   * Open on this row's tab (`@core/map/overlayTabs`, e.g. 'geodeticFilter')
+   * instead of the remembered one. The geodetic filter also opens itself.
+   */
+  openOn?: OverlayRow;
 }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
-  // The sheet's sub-views: the Extensions panel, and from it the geodetic filter.
-  const [extView, setExtView] = useState<null | 'extensions' | 'geodeticFilter'>(null);
+  // The remembered tab (persisted), unless a caller asked for a row.
+  const savedTab = useSettingsStore((s) => s.overlaysTab);
+  const setSetting = useSettingsStore((s) => s.set);
+  const [tab, setTabState] = useState<OverlayTab>(() =>
+    openOn !== undefined ? tabForRow(openOn) : savedTab,
+  );
+  const setTab = (t: OverlayTab) => {
+    setTabState(t);
+    setSetting('overlaysTab', t);
+  };
+  // The Extensions tab's drill-in: the geodetic filter.
+  const [filterOpen, setFilterOpen] = useState(openOn === 'geodeticFilter');
   const { height: windowH } = useWindowDimensions();
   // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
   // behind it on a phone and "Live layers" could never be scrolled to.
@@ -508,6 +567,7 @@ export function OverlaysPanel({
   return (
     <>
       <SheetHeader title="Overlays" closeLabel="Close overlays" onClose={onClose} />
+      {!weatherOpen && !filterOpen && <OverlayTabBar tab={tab} onSelect={setTab} />}
       <ScrollView
         ref={bodyRef as never}
         onLayout={onBodyLayout}
@@ -525,20 +585,16 @@ export function OverlaysPanel({
       >
         {weatherOpen ? (
           <WeatherList onBack={() => setWeatherOpen(false)} />
-        ) : extView === 'geodeticFilter' ? (
-          <GeodeticFilterPanel onBack={() => setExtView('extensions')} />
-        ) : extView === 'extensions' ? (
-          <ExtensionsPanel
-            onBack={() => setExtView(null)}
-            onOpenGeodeticFilter={() => setExtView('geodeticFilter')}
-            onClose={onClose}
-          />
+        ) : tab === 'extensions' && filterOpen ? (
+          <GeodeticFilterPanel onBack={() => setFilterOpen(false)} />
+        ) : tab === 'extensions' ? (
+          <ExtensionsPanel onOpenGeodeticFilter={() => setFilterOpen(true)} onClose={onClose} />
         ) : (
           <OverlayRows
+            tab={tab}
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
             onOpenWeather={() => setWeatherOpen(true)}
-            onOpenExtensions={() => setExtView('extensions')}
           />
         )}
       </ScrollView>
@@ -616,6 +672,22 @@ export function MapOverlaysMenu({
 const styles = StyleSheet.create({
   body: { paddingBottom: 4 },
   backRow: { borderRadius: 12, marginHorizontal: 4 },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    gap: 2,
+  },
+  tab: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabLabel: { fontSize: 14, fontWeight: '600' },
   backInner: {
     flexDirection: 'row',
     alignItems: 'center',
