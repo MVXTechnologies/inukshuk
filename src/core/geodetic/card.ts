@@ -11,6 +11,7 @@
  * - a field the mark doesn't have produces NO row (no "—" placeholders);
  * - there is always a link out: the agency datasheet, else the agency's page.
  */
+import { tidalCardRow, tidalCredit } from '@core/tides/tidalBenchmark';
 import { datumAt, sourceAt, vdatumAt } from './catalog';
 import type { GeodeticMark, MarkType } from './record';
 
@@ -31,7 +32,16 @@ export interface CardLine {
 
 export interface CardRow {
   /** Stable key (tests, React keys). */
-  key: 'wgs84' | 'native' | 'heights' | 'chart' | 'elevation' | 'monument' | 'visit' | 'name';
+  key:
+    | 'wgs84'
+    | 'native'
+    | 'tidal'
+    | 'heights'
+    | 'chart'
+    | 'elevation'
+    | 'monument'
+    | 'visit'
+    | 'name';
   /** The short label shown on the left. */
   label: string;
   lines: CardLine[];
@@ -39,7 +49,7 @@ export interface CardRow {
 
 export interface CardChip {
   label: string;
-  tone: 'type' | 'ok' | 'warn' | 'muted';
+  tone: 'type' | 'ok' | 'warn' | 'muted' | 'tidal';
 }
 
 export interface GeodeticCardModel {
@@ -196,6 +206,8 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
       copyName: 'ellipsoidal height',
     });
   }
+  // Tidal benchmark: its chart-datum height, a row of its own above the heights.
+  if (mark.tidal) rows.push({ key: 'tidal', ...tidalCardRow(mark.tidal) });
   if (ortho.length > 0) rows.push({ key: 'heights', label: 'Heights', lines: ortho });
   if (chart.length > 0) rows.push({ key: 'chart', label: 'Chart datum', lines: chart });
   if (unstated.length > 0) rows.push({ key: 'elevation', label: 'Elevation', lines: unstated });
@@ -222,6 +234,7 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
     );
   }
   if (mark.legacy) chips.push({ label: 'Legacy datum', tone: 'muted' });
+  if (mark.tidal) chips.unshift({ label: 'Tidal benchmark', tone: 'tidal' });
 
   const link = sheetLink(mark) ?? {
     url: `https://www.openstreetmap.org/?mlat=${mark.lat}&mlon=${mark.lng}#map=18/${mark.lat}/${mark.lng}`,
@@ -237,7 +250,9 @@ export function buildGeodeticCard(mark: GeodeticMark): GeodeticCardModel {
     chips,
     rows,
     link,
-    credit: source?.attribution ?? '',
+    credit: [source?.attribution, mark.tidal ? tidalCredit(mark.tidal) : undefined]
+      .filter(Boolean)
+      .join(' · '),
     copyText: copy.join('\n'),
   };
 }

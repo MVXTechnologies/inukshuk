@@ -31,6 +31,12 @@ export const VISITED_SINCE_CHOICES: readonly number[] = [0, 2000, 2010, 2020];
 export interface GeodeticFilter {
   /** Types shown. */
   types: MarkType[];
+  /**
+   * Tidal benchmarks shown (the type chips' "Tidal" entry). A mark with a
+   * chart-datum height (`cd`, `@core/tides/tidalBenchmark`) draws with the
+   * tidal symbol, so this chip — not its geodetic type — decides it.
+   */
+  tidal: boolean;
   datum: DatumFilter;
   /** Conditions shown. */
   status: MarkStatus[];
@@ -49,6 +55,7 @@ export interface GeodeticFilter {
 
 export const DEFAULT_GEODETIC_FILTER: GeodeticFilter = {
   types: [...FILTER_TYPES],
+  tidal: true,
   datum: 'all',
   status: [...FILTER_STATUSES],
   precision: 'any',
@@ -92,6 +99,7 @@ export function sanitizeGeodeticFilter(raw: unknown): GeodeticFilter {
   const year = r.visitedSince;
   return {
     types: pickList(r.types, FILTER_TYPES) ?? [...d.types],
+    tidal: r.tidal !== false,
     datum,
     status: pickList(r.status, FILTER_STATUSES) ?? [...d.status],
     precision,
@@ -107,7 +115,7 @@ export function sanitizeGeodeticFilter(raw: unknown): GeodeticFilter {
 /** How many filter groups differ from the default (the funnel's badge). */
 export function activeFilterCount(f: GeodeticFilter): number {
   let n = 0;
-  if (f.types.length !== FILTER_TYPES.length) n++;
+  if (f.types.length !== FILTER_TYPES.length || !f.tidal) n++;
   if (f.datum !== 'all') n++;
   if (f.status.length !== FILTER_STATUSES.length) n++;
   if (f.precision !== 'any') n++;
@@ -145,13 +153,13 @@ export function buildGeodeticFilters(f: GeodeticFilter): GeodeticLayerFilters {
   const osm: ExpressionSpecification[] = [];
   let osmHidden = f.types.length === 0;
 
-  if (f.types.length !== FILTER_TYPES.length) {
-    if (f.types.length === 0) {
-      official.push(NOTHING);
-    } else {
-      official.push(typeClause(f.types));
-      osm.push(typeClause(f.types));
-    }
+  if (f.types.length !== FILTER_TYPES.length || !f.tidal) {
+    // Tidal benchmarks follow the Tidal chip; every other mark its type chip.
+    const byType = f.types.length === 0 ? NOTHING : typeClause(f.types);
+    official.push(
+      f.types.length === 0 && !f.tidal ? NOTHING : ['case', ['has', 'cd'], f.tidal, byType],
+    );
+    if (f.types.length !== FILTER_TYPES.length && f.types.length > 0) osm.push(byType);
   }
   if (f.datum !== 'all') {
     official.push(f.datum === 'legacy' ? ['has', 'l'] : ['!', ['has', 'l']]);

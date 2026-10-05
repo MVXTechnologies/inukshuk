@@ -19,6 +19,7 @@ const IMAGES: Record<GeodeticTheme, Record<string, ImageRequireSource>> = {
     'geodetic-gnss-o-light': require('../../../assets/map/geodetic/geodetic-gnss-o-light.png'),
     'geodetic-u-light': require('../../../assets/map/geodetic/geodetic-u-light.png'),
     'geodetic-u-o-light': require('../../../assets/map/geodetic/geodetic-u-o-light.png'),
+    'geodetic-tbm-light': require('../../../assets/map/geodetic/geodetic-tbm-light.png'),
   },
   dark: {
     'geodetic-3d-dark': require('../../../assets/map/geodetic/geodetic-3d-dark.png'),
@@ -31,6 +32,7 @@ const IMAGES: Record<GeodeticTheme, Record<string, ImageRequireSource>> = {
     'geodetic-gnss-o-dark': require('../../../assets/map/geodetic/geodetic-gnss-o-dark.png'),
     'geodetic-u-dark': require('../../../assets/map/geodetic/geodetic-u-dark.png'),
     'geodetic-u-o-dark': require('../../../assets/map/geodetic/geodetic-u-o-dark.png'),
+    'geodetic-tbm-dark': require('../../../assets/map/geodetic/geodetic-tbm-dark.png'),
   },
 };
 

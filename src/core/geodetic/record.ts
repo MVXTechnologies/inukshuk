@@ -20,6 +20,7 @@
  * `i`, `s` and a position is optional: a mark with nothing else still makes a
  * card (type, source, display position, datasheet link).
  */
+import { parseTidalHeight, type TidalHeight } from '@core/tides/tidalBenchmark';
 import { OSM_SOURCE_INDEX } from './catalog';
 
 export type MarkType = '3d' | 'h' | 'v' | 'gnss' | 'u';
@@ -63,6 +64,8 @@ export interface GeodeticMark {
   posAccM?: number;
   /** A per-mark page (OSM `website`/`url`). */
   url?: string;
+  /** A tidal benchmark's chart-datum height (`@core/tides/tidalBenchmark`). */
+  tidal?: TidalHeight;
 }
 
 const TYPES: readonly string[] = ['3d', 'h', 'v', 'gnss', 'u'];
@@ -157,6 +160,8 @@ export function parseGeodeticFeature(
   if (p !== undefined && p > 0) mark.posAccM = p / 10;
   const w = str(props.w);
   if (w !== undefined && /^https?:\/\//.test(w)) mark.url = w;
+  const tidal = parseTidalHeight(props);
+  if (tidal) mark.tidal = tidal;
   return mark;
 }
 

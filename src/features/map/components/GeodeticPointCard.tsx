@@ -48,7 +48,9 @@ export function GeodeticPointCard({
   const scheme = theme.dark ? 'dark' : 'light';
   const colors = geodeticColors(scheme);
   const muted = theme.colors.onSurfaceVariant;
-  const icon = geodeticImage(scheme, mark.type, mark.legacy);
+  const icon = mark.tidal
+    ? geodeticImage(scheme, 'tbm')
+    : geodeticImage(scheme, mark.type, mark.legacy);
   const typeColor = colors[mark.type];
 
   const chipStyle = (tone: CardChip['tone']) => {
@@ -59,6 +61,8 @@ export function GeodeticPointCard({
         return { bg: theme.colors.secondaryContainer, fg: theme.colors.onSecondaryContainer };
       case 'warn':
         return { bg: theme.colors.errorContainer, fg: theme.colors.onErrorContainer };
+      case 'tidal':
+        return { bg: `${colors['3d']}26`, fg: colors['3d'] };
       default:
         return { bg: theme.colors.surfaceVariant, fg: muted };
     }
