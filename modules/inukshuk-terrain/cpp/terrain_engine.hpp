@@ -196,6 +196,12 @@ class Engine {
   static constexpr int kImagerySlots = 192;
   static constexpr int kImageryUploadsPerFrame = 6;
   static constexpr double kImageryFadeMs = 300;
+  /** LOD split threshold (px of grid spacing): finer near the camera than the core default. */
+  static constexpr double kLodMaxErrorPx = 8.0;
+  /** The base ring spans (2·radius+1)² tiles. */
+  static constexpr int kBaseRingRadius = 2;
+  /** Placeholder surfaces (sampled from an ancestor) built per frame at most. */
+  static constexpr int kMaxInheritPerFrame = 24;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
   static constexpr size_t kMaxUnwantedImagery = 48;
 
@@ -344,6 +350,8 @@ class Engine {
   void installResults(double now);
   void workerLoop();
   float morphOf(const Mesh& m, double now) const;
+  /** A placeholder mesh for `t` sampled from its nearest ancestor's surface; false if none. */
+  bool inheritMesh(const TileId& t, double now);
 
   const int meshGrid_;
   RequestFn demRequest_, imageryRequest_;

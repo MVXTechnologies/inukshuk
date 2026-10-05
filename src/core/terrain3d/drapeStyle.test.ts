@@ -170,3 +170,28 @@ describe('scaleRgbaAlpha', () => {
     expect(d.layers[0]?.paint?.['hillshade-highlight-color']).toBe('rgba(255, 255, 255, 0.4)');
   });
 });
+
+describe('drapeStyle raster detail', () => {
+  const withRaster: DrapeStyleInput = {
+    sources: {
+      osm: { type: 'raster', tiles: ['s'], tileSize: 362 },
+      dem: { type: 'raster-dem', tiles: ['d'], tileSize: 256 },
+    },
+    layers: [],
+  };
+  it('reads the imagery source deeper, alongside the DEM', () => {
+    const d = drapeStyle(withRaster, {
+      rasterSourceId: 'osm',
+      rasterTileSize: 256,
+      demSourceId: 'dem',
+      demTileSize: 128,
+    });
+    const s = d.sources as Record<string, Record<string, unknown>>;
+    expect(s.osm?.tileSize).toBe(256);
+    expect(s.dem?.tileSize).toBe(128);
+  });
+  it('only resizes a raster source', () => {
+    const d = drapeStyle(withRaster, { rasterSourceId: 'dem', rasterTileSize: 64 });
+    expect(d.sources).toBe(withRaster.sources);
+  });
+});

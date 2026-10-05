@@ -45,6 +45,8 @@ export interface NativeTerrainOptions {
   contourLayerIds?: readonly string[];
   /** The hillshade's raster-dem source (read deeper in the drape). */
   demSourceId?: string;
+  /** The satellite imagery's raster source (read deeper in the drape). */
+  imagerySourceId?: string;
 }
 
 /** Contours in the drape: half as strong (steep 3D slopes pack them tight). */
@@ -55,6 +57,8 @@ const DRAPE_HILLSHADE_BOOST = 2.2;
 const DRAPE_HILLSHADE_ALPHA = { shadow: 1.35, highlight: 2, accent: 1.3 };
 /** At night the shadows are already deep: the relief reads through its lit faces. */
 const DRAPE_HILLSHADE_ALPHA_DARK = { shadow: 1.05, highlight: 2.4, accent: 1.1 };
+/** Satellite imagery in the drape: 256 px tiles fill a 512 px drape texture 1:1. */
+const DRAPE_IMAGERY_TILE_SIZE = 256;
 /** The drape's DEM is read two zooms deeper (256 px tiles declared as 128). */
 const DRAPE_DEM_TILE_SIZE = 128;
 
@@ -170,9 +174,19 @@ export function useNativeTerrain(o: NativeTerrainOptions): NativeTerrainBinding 
         contourOpacity: DRAPE_CONTOUR_OPACITY,
         demSourceId: o.demSourceId,
         demTileSize: DRAPE_DEM_TILE_SIZE,
+        rasterSourceId: o.imagerySourceId,
+        rasterTileSize: DRAPE_IMAGERY_TILE_SIZE,
       }),
     );
-  }, [o.style, o.drapeDropLayerIds, o.hillshadeLayerId, o.contourLayerIds, o.demSourceId, o.dark]);
+  }, [
+    o.style,
+    o.drapeDropLayerIds,
+    o.hillshadeLayerId,
+    o.contourLayerIds,
+    o.demSourceId,
+    o.imagerySourceId,
+    o.dark,
+  ]);
   useEffect(() => {
     if (viewTag === null || module === null || module.setDrapeStyle === undefined) return;
     try {

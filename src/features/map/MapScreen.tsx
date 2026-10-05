@@ -892,6 +892,8 @@ export function MapScreen() {
     // Pins stay clear of the search/status band and the scale-bar row.
     labelInsets: { top: insets.top + TERRAIN_PIN_TOP_CHROME, bottom: TERRAIN_PIN_BOTTOM_CHROME },
     demSourceId: HILLSHADE_DEM_SOURCE_ID,
+    // The satellite basemap's raster source ('osm' in buildOsmStyle).
+    imagerySourceId: basemap === 'satellite' ? 'osm' : undefined,
   });
   useEffect(() => {
     terrainTagRef.current = terrain3d.viewTag;

@@ -244,8 +244,10 @@ fragment float4 terrain_fs(VOut in [[stage_in]], constant FrameU &f [[buffer(0)]
   float flatL = f.light.z;
   float3 c;
   if (f.rock.w > 0.5) {
-    float3 b = u.ib.x < 0.0 ? f.fogColor.rgb : imgB.sample(ds, u.ib.yz + in.uv * u.ib.w).rgb;
-    float3 a = u.ia.x < 0.0 ? b : imgA.sample(ds, u.ia.yz + in.uv * u.ia.w).rgb;
+    // A slight negative mip bias: crisper drapes at a normal tilt (the 16×
+    // anisotropic sampler keeps the grazing angles from shimmering).
+    float3 b = u.ib.x < 0.0 ? f.fogColor.rgb : imgB.sample(ds, u.ib.yz + in.uv * u.ib.w, bias(-0.5)).rgb;
+    float3 a = u.ia.x < 0.0 ? b : imgA.sample(ds, u.ia.yz + in.uv * u.ia.w, bias(-0.5)).rgb;
     c = mix(a, b, u.ix.x);
     // The drape carries the 2D hillshade's detail; the mesh adds the large forms.
     float form = lambert - flatL;

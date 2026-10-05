@@ -626,6 +626,49 @@ double smoothToward(std::optional<double> current, double target, double dtMs, d
   return std::abs(next - target) < epsilon ? target : next;
 }
 
+double stableReferenceHeight(std::optional<double> center, std::optional<double> nearMax,
+                             double eyeAltM, double heightScale, double marginM) {
+  const std::optional<double> c = center && std::isfinite(*center) ? center : std::nullopt;
+  const std::optional<double> n = nearMax && std::isfinite(*nearMax) ? nearMax : std::nullopt;
+  double ref = c ? *c : (n ? *n : 0.0);
+  if (n && heightScale > 1e-6 && std::isfinite(eyeAltM)) {
+    const double margin = std::max(marginM, 0.15 * std::max(eyeAltM, 0.0));
+    const double guard = *n - (eyeAltM - margin) / heightScale;
+    if (guard > ref) ref = guard;
+  }
+  return ref;
+}
+
+std::vector<TileId> baseRing(double mx, double my, int zoom, int radius) {
+  std::vector<TileId> out;
+  if (zoom < 0) return out;
+  const int n = 1 << zoom;
+  const int cx = static_cast<int>(std::floor(mx * n));
+  const int cy = static_cast<int>(std::floor(my * n));
+  for (int dy = -radius; dy <= radius; dy++) {
+    const int y = cy + dy;
+    if (y < 0 || y >= n) continue;
+    for (int dx = -radius; dx <= radius; dx++) {
+      const int xw = cx + dx;
+      const int wrap = static_cast<int>(std::floor(static_cast<double>(xw) / n));
+      const int x = xw - wrap * n;
+      bool dup = false;
+      for (const auto& t : out) dup = dup || (t.x == x && t.y == y);
+      if (!dup) out.push_back({zoom, x, y, wrap});
+    }
+  }
+  return out;
+}
+
+int baseRingZoom(double zoom, double fogDistancePx) {
+  const double tilePx = std::max(fogDistancePx, 1.0) / 2.0;  // ±2 tiles span the fog distance
+  const double levels = std::log2(std::max(1.0, tilePx / 512.0));
+  int z = static_cast<int>(std::floor(zoom - levels));
+  z = std::max(z, static_cast<int>(std::floor(zoom)) - 7);
+  z = std::min(z, static_cast<int>(std::floor(zoom)) - 2);
+  return std::max(0, std::min(z, kDemMaxZoom));
+}
+
 std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bearingDeg,
                                    const std::function<bool(const DemId&)>& isLoaded,
                                    const std::function<bool(const DemId&)>& isPending,
