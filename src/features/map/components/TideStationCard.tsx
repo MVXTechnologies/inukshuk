@@ -6,6 +6,10 @@ import { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
 import { useLiveTide } from '../hooks/useLiveTide';
+import { useChsStationDetail } from '../hooks/useChs';
+import { CONVERT_ENABLED } from '@core/features/flags';
+import type { ConvertPrefill } from '@core/convert/entry';
+import { convertFromTideStation } from '@core/convert/entry';
 import { tideImage } from '../tideImages';
 import { CopyValueButton } from './CopyValueButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -17,6 +21,8 @@ interface Props {
   /** Put a value on the clipboard and toast it. */
   onCopy: (text: string) => void;
   onClose: () => void;
+  /** The Convert tool's entry (hidden while CONVERT_ENABLED is false). */
+  onConvert?: (prefill: ConvertPrefill) => void;
   offline?: boolean;
   floating?: boolean;
 }
@@ -49,12 +55,16 @@ export function TideStationCard({
   onNavigate,
   onCopy,
   onClose,
+  onConvert,
   offline = false,
   floating = false,
 }: Props) {
   const theme = useTheme();
   const tokens = useSchemeTokens();
-  const model = useMemo(() => (station ? buildTideCard(station) : null), [station]);
+  // A CHS station arrives as a map stub; its levels come live from CHS (cached).
+  const chs = useChsStationDetail(station);
+  const shown = chs.status === 'ready' ? chs.station : station;
+  const model = useMemo(() => (shown ? buildTideCard(shown) : null), [shown]);
   const live = useLiveTide(station, offline);
   if (!station || !model) return null;
   const scheme = theme.dark ? 'dark' : 'light';
@@ -141,6 +151,27 @@ export function TideStationCard({
                   : 'Live level needs a connection.'}
             </Text>
           </View>
+        )}
+
+        {chs.status === 'loading' && (
+          <Text variant="bodyMedium" style={styles.section}>
+            Reading CHS levels and datums…
+          </Text>
+        )}
+        {chs.status === 'error' && (
+          <Text variant="bodyMedium" style={styles.section}>
+            CHS levels need a connection the first time (this station is not on the device yet).
+          </Text>
+        )}
+        {chs.status === 'ready' && model.rows.length === 0 && (
+          <Text variant="bodyMedium" style={styles.section}>
+            CHS publishes no tidal levels for this station.
+          </Text>
+        )}
+        {chs.status === 'ready' && chs.fromCache && (
+          <Text variant="bodySmall" style={[styles.note, { color: muted }]}>
+            Offline: CHS values saved on this device.
+          </Text>
         )}
 
         {model.rows.length > 0 && (
@@ -259,27 +290,34 @@ export function TideStationCard({
           </View>
         )}
 
-        <View
-          style={[styles.cdBox, { backgroundColor: theme.dark ? `${teal}1F` : `${teal}14` }]}
-          testID="tide-cd-box"
-        >
-          <Text variant="bodyMedium" style={{ color: teal, fontWeight: '700' }}>
-            {model.cdBox.title}
-          </Text>
-          {model.cdBox.values.map((v) => (
-            <View key={v.copy} style={styles.refRow}>
-              <Text variant="bodyMedium" style={styles.flex} selectable>
-                = {v.text}
-              </Text>
-              <CopyValueButton text={v.copy} label={v.a11y} onCopy={onCopy} size={13} />
-            </View>
-          ))}
-          {model.cdBox.notes.map((n) => (
-            <Text key={n} variant="bodySmall" style={{ color: muted }}>
-              {n}
+        {chs.status !== 'loading' && chs.status !== 'error' && (
+          <View
+            style={[styles.cdBox, { backgroundColor: theme.dark ? `${teal}1F` : `${teal}14` }]}
+            testID="tide-cd-box"
+          >
+            <Text variant="bodyMedium" style={{ color: teal, fontWeight: '700' }}>
+              {model.cdBox.title}
             </Text>
-          ))}
-        </View>
+            {model.cdBox.values.map((v) => (
+              <View key={v.copy} style={styles.refRow}>
+                <Text variant="bodyMedium" style={styles.flex} selectable>
+                  = {v.text}
+                </Text>
+                <CopyValueButton text={v.copy} label={v.a11y} onCopy={onCopy} size={13} />
+              </View>
+            ))}
+            {model.cdBox.notes.map((n) => (
+              <Text key={n} variant="bodySmall" style={{ color: muted }}>
+                {n}
+              </Text>
+            ))}
+          </View>
+        )}
+        {model.notice !== undefined && (
+          <Text variant="labelSmall" style={[styles.note, { color: muted }]} testID="tide-notice">
+            {model.notice}
+          </Text>
+        )}
       </ScrollView>
 
       <View style={styles.actions}>
@@ -297,6 +335,16 @@ export function TideStationCard({
         <Button mode="outlined" icon="navigation-variant-outline" compact onPress={onNavigate}>
           Navigate
         </Button>
+        {CONVERT_ENABLED && onConvert !== undefined && shown !== null && (
+          <Button
+            mode="outlined"
+            icon="swap-vertical"
+            compact
+            onPress={() => onConvert(convertFromTideStation(shown))}
+          >
+            Convert
+          </Button>
+        )}
       </View>
       <Text variant="labelSmall" style={[styles.credit, { color: muted }]} numberOfLines={3}>
         {model.credit}

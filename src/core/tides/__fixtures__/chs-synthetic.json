@@ -1,0 +1,199 @@
+{
+  "_readme": "SYNTHETIC test input shaped like CHS IWLS responses (/stations, /stations/{id}/metadata, /height-types). Every name, id and value is made up. No CHS data is in this repository: the app fetches CHS live.",
+  "stations": [
+    {
+      "id": "synth0000000000000000bb",
+      "code": "09902",
+      "officialName": "Port-Exemple",
+      "latitude": 47.12,
+      "longitude": -70.46,
+      "operating": false,
+      "timeSeries": [
+        {
+          "code": "wlp"
+        },
+        {
+          "code": "wlp-hilo"
+        }
+      ]
+    },
+    {
+      "id": "synth0000000000000000aa",
+      "code": "09901",
+      "officialName": "Anse-Fictive",
+      "latitude": 47.1,
+      "longitude": -70.5,
+      "operating": true,
+      "timeSeries": [
+        {
+          "code": "wlo"
+        },
+        {
+          "code": "wlp"
+        },
+        {
+          "code": "wlp-hilo"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "09901": {
+      "id": "synth0000000000000000aa",
+      "code": "09901",
+      "officialName": "Anse-Fictive",
+      "datums": [
+        {
+          "code": "CGVD2013",
+          "offset": -1.5,
+          "offsetPrecision": 2
+        },
+        {
+          "code": "CGVD28",
+          "offset": -1.2,
+          "offsetPrecision": 2
+        },
+        {
+          "code": "IGLD85",
+          "offset": -1.25,
+          "offsetPrecision": 2
+        },
+        {
+          "code": "SD",
+          "offset": 0.4,
+          "offsetPrecision": 2
+        }
+      ],
+      "heights": [
+        {
+          "heightTypeId": "ht01synthetic",
+          "value": 5.0,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht02synthetic",
+          "value": 4.0,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht04synthetic",
+          "value": 2.0,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht06synthetic",
+          "value": 0.5,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht07synthetic",
+          "value": 0.1,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht09synthetic",
+          "value": 6.0,
+          "valuePrecision": 2,
+          "date": "2020-01-15"
+        },
+        {
+          "heightTypeId": "ht10synthetic",
+          "value": -0.5,
+          "valuePrecision": 2,
+          "date": "2015-02-20"
+        }
+      ],
+      "referencePortStationId": "synth0000000000000000bb",
+      "isTideTableReferencePort": false
+    },
+    "09902": {
+      "id": "synth0000000000000000bb",
+      "code": "09902",
+      "officialName": "Port-Exemple",
+      "datums": [
+        {
+          "code": "CGVD2013",
+          "offset": -1.4,
+          "offsetPrecision": 2
+        }
+      ],
+      "heights": [
+        {
+          "heightTypeId": "ht00synthetic",
+          "value": 4.8,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht04synthetic",
+          "value": 2.1,
+          "valuePrecision": 2
+        },
+        {
+          "heightTypeId": "ht08synthetic",
+          "value": -0.3,
+          "valuePrecision": 2
+        }
+      ],
+      "referencePortStationId": null,
+      "isTideTableReferencePort": true
+    }
+  },
+  "heightTypes": [
+    {
+      "id": "ht00synthetic",
+      "code": "HAT"
+    },
+    {
+      "id": "ht01synthetic",
+      "code": "HHWLT"
+    },
+    {
+      "id": "ht02synthetic",
+      "code": "MHHW"
+    },
+    {
+      "id": "ht03synthetic",
+      "code": "MHW"
+    },
+    {
+      "id": "ht04synthetic",
+      "code": "MWL"
+    },
+    {
+      "id": "ht05synthetic",
+      "code": "MLW"
+    },
+    {
+      "id": "ht06synthetic",
+      "code": "MLLW"
+    },
+    {
+      "id": "ht07synthetic",
+      "code": "LLWLT"
+    },
+    {
+      "id": "ht08synthetic",
+      "code": "LAT"
+    },
+    {
+      "id": "ht09synthetic",
+      "code": "HRWL"
+    },
+    {
+      "id": "ht10synthetic",
+      "code": "LRWL"
+    },
+    {
+      "id": "ht11synthetic",
+      "code": "HWL"
+    },
+    {
+      "id": "ht12synthetic",
+      "code": "LWL"
+    },
+    {
+      "id": "ht13synthetic",
+      "code": "SD"
+    }
+  ]
+}

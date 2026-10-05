@@ -11,6 +11,8 @@ import {
   type LiveTide,
 } from '@core/tides/live';
 import type { TideStation } from '@core/tides/station';
+import { nextHighLow, parseSeries, stationDataUrl } from '@core/weather/tides';
+import { chsGet } from '@data/chsStations';
 import { useEffect, useState } from 'react';
 
 /**
@@ -44,6 +46,23 @@ async function get(url: string, signal: AbortSignal, as: 'json' | 'text'): Promi
 
 async function load(s: TideStation, signal: AbortSignal): Promise<LiveTide> {
   const now = Date.now();
+  if (s.live === 'chs' && s.iwlsId !== undefined) {
+    // CHS IWLS, live from the phone (rate-limited with the rest of CHS traffic).
+    const [obs, hilo] = await Promise.all([
+      chsGet(stationDataUrl(s.iwlsId, 'wlo', now - 3_600_000, now), signal).catch(() => null),
+      chsGet(
+        stationDataUrl(s.iwlsId, 'wlp-hilo', now, now + LIVE_LOOKAHEAD_H * 3_600_000),
+        signal,
+      ).catch(() => null),
+    ]);
+    if (obs === null && hilo === null) throw new Error('offline');
+    const { nextHigh, nextLow } = nextHighLow(parseSeries(hilo), now);
+    return liveTide(
+      parseSeries(obs),
+      [nextHigh, nextLow].filter((e) => e !== null),
+      now,
+    );
+  }
   if (s.live === 'coops') {
     const [levels, hilo] = await Promise.all([
       get(coopsLevelUrl(s.id, now), signal, 'json').catch(() => null),

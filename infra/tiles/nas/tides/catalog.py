@@ -50,6 +50,8 @@ CD_KINDS = [
     ('zh', 'ZH', 'Zéro hydrographique (chart datum), ≈ lowest astronomical tide'),
     ('sjokartnull', 'CD', 'Sjøkartnull (chart datum) = lowest astronomical tide (LAT)'),
     ('jma-tt', 'Tide-table datum', 'JMA tide-table datum (潮位表基準面) — close to, not guaranteed equal to, chart datum'),
+    # Label only: CHS stations are fetched live by the app, never by this pipeline (owner Q1).
+    ('cd-ca', 'CD', 'Chart datum (zéro des cartes), local to each Canadian station, ≈ lower low water large tide (not LAT)'),
 ]
 CD_KIND_INDEX = {c[0]: i for i, c in enumerate(CD_KINDS)}
 
@@ -90,6 +92,8 @@ NATIONAL = {
     'IGN78': 'NGF-IGN78 (Corse)',
     'NN2000': 'NN2000',
     'JGD2024': '標高 (GSI 測地成果2024)',
+    'CGVD2013': 'CGVD2013',
+    'CGVD28': 'CGVD28',
 }
 
 

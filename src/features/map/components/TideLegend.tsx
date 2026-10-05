@@ -35,7 +35,7 @@ export function TideLegend({ disabled = false }: { disabled?: boolean }) {
         </View>
       </View>
       <Text variant="labelSmall" style={{ color: tokens.inkMuted }}>
-        USA, France, Norway, Japan · not for navigation
+        Canada (CHS, live) · USA · France · Norway · Japan · not for navigation
       </Text>
     </View>
   );

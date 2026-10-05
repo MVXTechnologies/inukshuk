@@ -8,6 +8,7 @@
  * c) keeps CHS live-only; its data is never in our tiles.
  */
 import raw from './catalog-v1.json';
+import { CHS_SOURCE, CHS_SOURCE_INDEX } from './chs';
 
 export interface TideSource {
   key: string;
@@ -41,6 +42,8 @@ export interface TideCatalog {
 export const TIDE_CATALOG: TideCatalog = raw;
 
 export function tideSourceAt(index: number | undefined): TideSource | undefined {
+  // CHS stations come live from the phone (`./chs`), never from the tiles.
+  if (index === CHS_SOURCE_INDEX) return CHS_SOURCE;
   return index === undefined ? undefined : TIDE_CATALOG.sources[index];
 }
 

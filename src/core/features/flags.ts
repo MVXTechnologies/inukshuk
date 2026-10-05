@@ -110,3 +110,10 @@ export const CONTOUR_RECOVERY_ENABLED: boolean = true;
  * constant so the menu copy and the e2e matchers can never drift apart.
  */
 export const PARKED_LABEL = 'Coming soon';
+
+/**
+ * The Convert tool (chart-datum PLAN phases C–F). NOT BUILT YET: the cards'
+ * Convert button and its prefill hook (`@core/convert/entry`) exist so the
+ * cards need no change when it lands; the button stays hidden until then.
+ */
+export const CONVERT_ENABLED: boolean = false;

@@ -171,7 +171,8 @@ export function mapCredits(input: MapCreditsInput): MapCreditLine[] {
       credit:
         'NOAA/NOS/CO-OPS · Shom, 2025. Références Altimétriques Maritimes, ' +
         'doi:10.17183/MAREE_COURANTS_RAM (Licence Ouverte 2.0) · © Kartverket (CC BY 4.0) · ' +
-        '出典：気象庁 (JMA) · Not for navigation',
+        '出典：気象庁 (JMA) · Canada: contains data of the Canadian Hydrographic Service (DFO), ' +
+        'fetched live by this device · Not for navigation',
     });
   }
   if (input.marine) {

@@ -48,8 +48,25 @@ export const TIDE_LAYER_IDS = {
   labels: 'tides-labels',
 } as const;
 
-/** The layers a tap hit-tests. */
-export const TIDE_TAP_LAYERS: readonly string[] = [TIDE_LAYER_IDS.dots, TIDE_LAYER_IDS.symbols];
+/**
+ * Canadian (CHS) stations: a client-side GeoJSON source the phone fills from
+ * CHS IWLS itself (`@core/tides/chs`), drawn by the same layers under these
+ * ids — one tide layer to the user, nothing CHS in our tiles.
+ */
+export const CHS_TIDE_SOURCE = 'tides-chs';
+export const CHS_TIDE_LAYER_IDS = {
+  dots: 'tides-chs-dots',
+  symbols: 'tides-chs-symbols',
+  labels: 'tides-chs-labels',
+} as const;
+
+/** The layers a tap hit-tests (ours and CHS's). */
+export const TIDE_TAP_LAYERS: readonly string[] = [
+  TIDE_LAYER_IDS.dots,
+  TIDE_LAYER_IDS.symbols,
+  CHS_TIDE_LAYER_IDS.dots,
+  CHS_TIDE_LAYER_IDS.symbols,
+];
 
 /** Every icon image the layers may ask for, for one theme. */
 export function tideIconNames(theme: TideTheme): string[] {
@@ -62,18 +79,22 @@ export interface TideLayerOptions {
   theme: TideTheme;
   font: readonly string[];
   source?: string;
+  /** A GeoJSON source (no source-layer) drawn under the CHS layer ids. */
+  chs?: boolean;
 }
 
 export function buildTideLayers(options: TideLayerOptions): LayerSpecification[] {
   const { theme } = options;
-  const source = options.source ?? TIDE_SOURCE;
+  const source = options.source ?? (options.chs ? CHS_TIDE_SOURCE : TIDE_SOURCE);
+  const ids = options.chs ? CHS_TIDE_LAYER_IDS : TIDE_LAYER_IDS;
+  const sourceLayer = options.chs ? {} : { 'source-layer': TIDE_SOURCE_LAYER };
   const c = tideColors(theme);
 
   const dots: CircleLayerSpecification = {
-    id: TIDE_LAYER_IDS.dots,
+    id: ids.dots,
     type: 'circle',
     source,
-    'source-layer': TIDE_SOURCE_LAYER,
+    ...sourceLayer,
     maxzoom: 8,
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 2, 6, 3, 8, 4],
@@ -84,10 +105,10 @@ export function buildTideLayers(options: TideLayerOptions): LayerSpecification[]
   };
 
   const symbols: SymbolLayerSpecification = {
-    id: TIDE_LAYER_IDS.symbols,
+    id: ids.symbols,
     type: 'symbol',
     source,
-    'source-layer': TIDE_SOURCE_LAYER,
+    ...sourceLayer,
     minzoom: 8,
     layout: {
       'icon-image': [
@@ -103,10 +124,10 @@ export function buildTideLayers(options: TideLayerOptions): LayerSpecification[]
   };
 
   const labels: SymbolLayerSpecification = {
-    id: TIDE_LAYER_IDS.labels,
+    id: ids.labels,
     type: 'symbol',
     source,
-    'source-layer': TIDE_SOURCE_LAYER,
+    ...sourceLayer,
     minzoom: 10,
     layout: {
       'text-field': ['get', 'n'] as unknown as string,

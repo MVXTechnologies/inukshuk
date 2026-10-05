@@ -117,6 +117,7 @@ import { tideColors } from '@core/map/tideStyle';
 import { TideStationCard } from './components/TideStationCard';
 import { tideImages } from './tideImages';
 import { tideStationAt } from './tideTap';
+import { useChsStations } from './hooks/useChs';
 import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
@@ -540,6 +541,8 @@ export function MapScreen() {
   /** Overlays → Tide stations (`@core/map/tideStyle`). */
   const showTideStations = useSettingsStore((s) => s.showTideStations);
   const tideTiles = showTideStations ? tideTilesUrl() : null;
+  /** Canadian stations: fetched live from CHS by the phone and kept on it (never our tiles). */
+  const chsStations = useChsStations(tideTiles !== null, offlineOnly);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -872,7 +875,7 @@ export function MapScreen() {
           }
         : {}),
       ...(tideTiles !== null && editorStyle === null
-        ? { tides: { tiles: tideTiles, dark: theme.dark, ...geodeticGlyphs() } }
+        ? { tides: { tiles: tideTiles, dark: theme.dark, chs: chsStations, ...geodeticGlyphs() } }
         : {}),
     };
     // While the map maker is open the base raster becomes the source the
@@ -919,6 +922,7 @@ export function MapScreen() {
     geodeticTiles,
     geodeticFilters,
     tideTiles,
+    chsStations,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and

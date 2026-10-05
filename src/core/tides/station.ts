@@ -21,7 +21,7 @@
  */
 
 export type StationKind = 'gauge' | 'ref' | 'sec' | 'hist';
-export type LiveSeries = 'coops' | 'kv';
+export type LiveSeries = 'coops' | 'kv' | 'chs';
 
 export interface PublishedLevel {
   code: string;
@@ -51,6 +51,8 @@ export interface EllipsoidalCd {
 
 export interface TideStation {
   id: string;
+  /** CHS IWLS station id (`ci`), for CHS stations fetched live (`./chs`). */
+  iwlsId?: string;
   source: number;
   name: string;
   lat: number;
@@ -162,7 +164,9 @@ export function parseTideStation(
     flags: (str(props.f) ?? '').split(',').filter((f) => f !== ''),
   };
   const lv = str(props.lv);
-  if (lv === 'coops' || lv === 'kv') station.live = lv;
+  if (lv === 'coops' || lv === 'kv' || lv === 'chs') station.live = lv;
+  const ci = str(props.ci);
+  if (ci) station.iwlsId = ci;
   const e = parseEllipsoid(props.E);
   if (e) station.ellipsoid = e;
   const ep = str(props.ep);

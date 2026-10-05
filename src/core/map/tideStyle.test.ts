@@ -3,6 +3,8 @@ import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import { buildGeodeticLayers, GEODETIC_SOURCE } from './geodeticStyle';
 import {
   buildTideLayers,
+  CHS_TIDE_LAYER_IDS,
+  CHS_TIDE_SOURCE,
   TIDE_LAYER_IDS,
   TIDE_SOURCE,
   TIDE_TAP_LAYERS,
@@ -64,7 +66,12 @@ describe('tide-station layers (and the tidal branch of the geodetic ones)', () =
     expect(byId[TIDE_LAYER_IDS.dots]).toMatchObject({ type: 'circle', maxzoom: 8 });
     expect(byId[TIDE_LAYER_IDS.symbols]).toMatchObject({ type: 'symbol', minzoom: 8 });
     expect(byId[TIDE_LAYER_IDS.labels]).toMatchObject({ minzoom: 10 });
-    expect(TIDE_TAP_LAYERS).toEqual([TIDE_LAYER_IDS.dots, TIDE_LAYER_IDS.symbols]);
+    expect(TIDE_TAP_LAYERS).toEqual([
+      TIDE_LAYER_IDS.dots,
+      TIDE_LAYER_IDS.symbols,
+      CHS_TIDE_LAYER_IDS.dots,
+      CHS_TIDE_LAYER_IDS.symbols,
+    ]);
     expect(JSON.stringify(byId[TIDE_LAYER_IDS.symbols])).toContain('tide-gauge-dark');
     expect(tideIconNames('light')).toEqual(['tide-gauge-light', 'tide-pred-light']);
   });
@@ -73,5 +80,28 @@ describe('tide-station layers (and the tidal branch of the geodetic ones)', () =
     const geo = JSON.stringify(buildGeodeticLayers({ theme: 'light', font: FONT }));
     expect(geo).toContain('geodetic-tbm-light');
     expect(geo).toContain('geodetic-tidal-labels');
+  });
+
+  it('draws the live CHS stations from a GeoJSON source with the same look', () => {
+    const chs = buildTideLayers({ theme: 'light', font: FONT, chs: true });
+    expect(chs.map((l) => l.id)).toEqual([
+      CHS_TIDE_LAYER_IDS.dots,
+      CHS_TIDE_LAYER_IDS.symbols,
+      CHS_TIDE_LAYER_IDS.labels,
+    ]);
+    for (const l of chs) expect('source-layer' in l).toBe(false);
+    const style = {
+      version: 8 as const,
+      glyphs: 'https://glyphs.example/{fontstack}/{range}.pbf',
+      sources: {
+        [CHS_TIDE_SOURCE]: {
+          type: 'geojson' as const,
+          data: { type: 'FeatureCollection' as const, features: [] },
+        },
+      },
+      layers: chs,
+    };
+    expect(validateStyleMin(style).map((e) => e.message)).toEqual([]);
+    expect(zoomInsideMatchOrCase(chs)).toBe(false);
   });
 });

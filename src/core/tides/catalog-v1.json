@@ -67,6 +67,11 @@
       "key": "jma-tt",
       "label": "Tide-table datum",
       "description": "JMA tide-table datum (潮位表基準面) — close to, not guaranteed equal to, chart datum"
+    },
+    {
+      "key": "cd-ca",
+      "label": "CD",
+      "description": "Chart datum (zéro des cartes), local to each Canadian station, ≈ lower low water large tide (not LAT)"
     }
   ],
   "levels": {
@@ -99,6 +104,8 @@
     "IGN69": "NGF-IGN69",
     "IGN78": "NGF-IGN78 (Corse)",
     "NN2000": "NN2000",
-    "JGD2024": "標高 (GSI 測地成果2024)"
+    "JGD2024": "標高 (GSI 測地成果2024)",
+    "CGVD2013": "CGVD2013",
+    "CGVD28": "CGVD28"
   }
 }

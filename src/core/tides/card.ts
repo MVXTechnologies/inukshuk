@@ -17,6 +17,7 @@
  */
 import { formatLatLng } from '@core/geodetic/card';
 import { cdKind, levelName, nationalName, tideSourceAt } from './catalog';
+import { CHS_CGVD2013_NOTE } from './chs';
 import { addPublished, displayNumber } from './published';
 import type { PublishedLevel, StationKind, TideStation } from './station';
 
@@ -64,9 +65,11 @@ export interface TideCardModel {
   tableCopy: string;
   link: { url: string; label: string };
   credit: string;
-  live?: 'coops' | 'kv';
+  live?: 'coops' | 'kv' | 'chs';
   /** The CD label used everywhere on this card ("MLLW", "ZH", "CD"…). */
   cdLabel: string;
+  /** A licence notice to show in full on the card (CHS's). */
+  notice?: string;
 }
 
 export const NOT_FOR_NAVIGATION = 'Not for navigation';
@@ -211,11 +214,14 @@ export function buildTideCard(s: TideStation): TideCardModel {
 
   // The chart-datum box: what CD is here, its offsets, and how far to trust each.
   const values: TideCell[] = [];
-  if (national && natLabel) {
+  // Every national offset the agency publishes (CHS: CGVD2013, CGVD28, IGLD85);
+  // the table's middle column uses the first.
+  for (const n of s.national) {
+    const label = nationalName(n.datum);
     values.push({
-      text: `${displayNumber(national.text)} m ${natLabel}`,
-      copy: ascii(`CD (${cdLabel}) = ${national.text} m ${natLabel}`),
-      a11y: `Copy chart datum in ${natLabel}`,
+      text: `${displayNumber(n.text)} m ${label}`,
+      copy: ascii(`CD (${cdLabel}) = ${n.text} m ${label}`),
+      a11y: `Copy chart datum in ${label}`,
     });
   }
   if (ell && ellLabel) {
@@ -228,14 +234,25 @@ export function buildTideCard(s: TideStation): TideCardModel {
   const notes: string[] = [];
   if (kind) notes.push(kind.description);
   if (national && natLabel) {
-    notes.push(`${natLabel} offset as published by ${source?.name ?? 'the agency'}.`);
+    notes.push(
+      `${s.national.length > 1 ? 'Offsets' : `${natLabel} offset`} as published by ${source?.name ?? 'the agency'}.`,
+    );
+  }
+  if (s.flags.includes('chs') && s.national.some((n) => n.datum === 'CGVD2013')) {
+    notes.push(CHS_CGVD2013_NOTE);
   }
   if (ell) {
     const delta = Math.abs(ell.deltaM * 100).toFixed(1);
     notes.push(
-      ell.how === 'published'
-        ? `Ellipsoidal height published by ${source?.name ?? 'the agency'}; agrees with ${ell.checkedBy} within ${delta} cm.`
-        : `Ellipsoidal height derived (${ell.basis}); confirmed by ${ell.checkedBy} within ${delta} cm. About ±5 cm.`,
+      ell.checkedBy === ''
+        ? `Ellipsoidal height as published by ${source?.name ?? 'the agency'} (${ell.basis}).`
+        : ell.how === 'published'
+          ? `Ellipsoidal height published by ${source?.name ?? 'the agency'}; agrees with ${ell.checkedBy} within ${delta} cm.`
+          : `Ellipsoidal height derived (${ell.basis}); confirmed by ${ell.checkedBy} within ${delta} cm. About ±5 cm.`,
+    );
+  } else if (s.flags.includes('chs')) {
+    notes.push(
+      'No ellipsoidal height: CHS publishes no NAD83(CSRS) offset here, and none is derived on the device.',
     );
   } else if (national) {
     notes.push('No ellipsoidal height: no agency value confirms one at this station.');
@@ -290,7 +307,12 @@ export function buildTideCard(s: TideStation): TideCardModel {
     link: page
       ? { url: page, label: source?.key === 'us-coops' ? 'Datums page' : 'Agency page' }
       : { url: source?.licenceUrl ?? '', label: 'Agency page' },
-    credit: [source?.attribution, source?.disclaimer].filter(Boolean).join(' · '),
+    // CHS: the short credit in the footer, the licence's full notice in the card body.
+    credit:
+      source?.key === 'ca-chs'
+        ? `${source.attribution} · ${NOT_FOR_NAVIGATION}`
+        : [source?.attribution, source?.disclaimer].filter(Boolean).join(' · '),
+    ...(source?.key === 'ca-chs' ? { notice: source.disclaimer } : {}),
     ...(s.live ? { live: s.live } : {}),
     cdLabel,
   };
