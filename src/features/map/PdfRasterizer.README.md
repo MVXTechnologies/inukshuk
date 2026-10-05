@@ -140,6 +140,15 @@ holds (`coverFromCache`, children, pruning). Ring blocks are capped at
 Work starts 40 ms after a settle (it was 250 ms). Emulator, Beau Lake US Topo,
 z+4 view: 15 cells, 15 × ~280 ms before; see the PR for the measured views.
 
+**Resolution.** Detail starts as soon as the 2048 px overview has less than
+one raster pixel per device pixel (it used to wait for 1.4x, so the sheet
+was shown magnified up to 1.4x), and the visible budget is three times the
+map frame's device pixels, 6 to 10 Mi px (`visibleBudget`): with a flat
+6 Mi px, the planner's worst-alignment reserve left tiles at 0.83 raster px
+per device px on an iPhone 17 and 0.95 on a 1080 x 2400 screen. Sheets
+rotated against north still reserve more than they show and can come out
+below 1.0 (CanTopo, AUSTopo ~0.82 on the emulator); this predates blocks.
+
 **Native refusals and cold launches.** A native refusal whose reason is the
 page itself (`@core/geo/nativePdfSupport`; on iOS every vector page) marks
 the page, and its later crops go straight to pdf.js, which keeps the page open
