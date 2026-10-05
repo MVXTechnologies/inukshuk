@@ -83,6 +83,19 @@ def props(rec):
     if rec.get('url'):
         # A per-mark datasheet link the source's URL template can't express.
         p['w'] = rec['url'][:200]
+    t = rec.get('tidal')
+    if t:
+        # Tidal benchmark (../tides/join_geodetic.py): the hydrographic office's
+        # height above chart datum, verbatim, kept apart from H/H2 (never mixed).
+        p['cd'] = str(t['cd'])
+        p['cs'] = t['cs'][:60]
+        p['cN'] = t['cN'][:60]
+        p['cn'] = t['cn']
+        for k in ('cdt', 'cm'):
+            if t.get(k):
+                p[k] = str(t[k])[:20]
+        if t.get('cu'):
+            p['cu'] = 1
     return p
 
 
