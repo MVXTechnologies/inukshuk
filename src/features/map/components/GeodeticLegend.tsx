@@ -8,6 +8,8 @@ const ENTRIES = [
   { kind: 'h', label: 'Horiz.' },
   { kind: 'v', label: 'Vert.' },
   { kind: 'gnss', label: 'GNSS' },
+  // Tidal benchmarks (@core/tides/tidalBenchmark): a role, not a type.
+  { kind: 'tbm', label: 'Tidal' },
 ] as const;
 
 /**
@@ -17,8 +19,11 @@ const ENTRIES = [
 export function GeodeticLegend({
   disabled = false,
   types,
+  tidal = true,
 }: {
   disabled?: boolean;
+  /** The filter's Tidal chip (tidal benchmarks shown). */
+  tidal?: boolean;
   /** Types the user's filter shows (default all); the others are struck through. */
   types?: readonly string[];
 }) {
@@ -32,7 +37,7 @@ export function GeodeticLegend({
     >
       {ENTRIES.map((e) => {
         const src = geodeticImage(theme, e.kind);
-        const shown = types === undefined || types.includes(e.kind);
+        const shown = e.kind === 'tbm' ? tidal : types === undefined || types.includes(e.kind);
         return (
           <View
             key={e.kind}

@@ -1,0 +1,5583 @@
+{
+ "_meta": {
+  "generated": "2026-10-05",
+  "generator": "build_reference.py (reads ./raw, produced by ./collect/*.py)",
+  "proj_reference": {
+   "pyproj": "3.8.0",
+   "proj": "9.8.1"
+  },
+  "conventions": {
+   "axis_order": "geographic = [lon_deg, lat_deg, h_m(, t_year)] always",
+   "pipeline": "explicit PROJ pipeline, lon/lat order; {name} placeholders filled from point.params; null pipeline => see pinned_operation.compute",
+   "compare_kinds": "lon/lat: degrees, delta converted to metres on GRS80; x/y: metres; x_ftus/y_ftus: US survey feet, delta in metres; h: metres; none: not compared",
+   "delta": "delta_m = {horizontal: |dE,dN| metres, vertical: |dh| metres}; signed components in delta.components (proj - expected)",
+   "pass": "horizontal <= tolerance_m.h AND vertical <= tolerance_m.v (null tolerance => component not compared)",
+   "expected_alt": "other official values for the same point (second path); compared with their own tolerance"
+  },
+  "sources_note": "Every expected value comes from an agency tool/dataset (expected_source). Inputs marked synthetic are arbitrary test positions.",
+  "last_run": {
+   "proj": "9.8.1",
+   "pyproj": "3.8.0",
+   "totals": {
+    "pass": 1391,
+    "fail": 0,
+    "known": 402,
+    "error": 0,
+    "informational": 1
+   },
+   "date": "2026-10-05"
+  }
+ },
+ "pairs": [
+  {
+   "pair_id": "CD-NO-station-vs-grid",
+   "group": "Chart datum",
+   "title": "Norway: station CD-NN2000 (tide API) vs CD grid (no_kv v2023b) minus HREF2018B",
+   "source_crs": "CD Norway depth surface",
+   "target_crs": "NN2000 height",
+   "pinned_operation": {
+    "epsg": [
+     "EPSG:10509 ETRS89-NOR to CD Norway depth (4) inverse",
+     "EPSG:9485"
+    ],
+    "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=vgridshift +grids=no_kv_CD_above_Ell_ETRS89_v2023b.tif +multiplier=1 +step +inv +proj=vgridshift +grids=no_kv_HREF2018B_NN2000_EUREF89.tif +multiplier=1 +step +proj=unitconvert +xy_in=rad +xy_out=deg",
+    "note": "input height 0 on CD -> ellipsoidal -> NN2000: output = CD expressed in NN2000. Grid band 1 = CD above ellipsoid (band 2 accuracy not used)"
+   },
+   "io": {
+    "input": [
+     "lon_deg",
+     "lat_deg",
+     "H_CD_m"
+    ],
+    "output": [
+     "lon_deg",
+     "lat_deg",
+     "H_NN2000_m"
+    ]
+   },
+   "compare": [
+    "none",
+    "none",
+    "h"
+   ],
+   "tolerance_m": {
+    "h": null,
+    "v": 0.05,
+    "basis": "station levels in cm; CD grid accuracy band (cm-dm); epochs (land uplift) may differ"
+   },
+   "points": [
+    {
+     "id": "ANX Andenes",
+     "input": [
+      16.134848,
+      69.326067,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.4880000000000002
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:38-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=ANX&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=ANX&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      16.134848,
+      69.326067,
+      -1.4871352372076458
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0008647627923543677,
+      "components": {
+       "dh_m": 0.0008647627923543677
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "BGO Bergen",
+     "input": [
+      5.320487,
+      60.398046,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.022
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:40-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BGO&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BGO&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.320487000000001,
+      60.39804600000001,
+      -1.0211905418207081
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0008094581792918998,
+      "components": {
+       "dh_m": 0.0008094581792918998
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "BOO Bodø",
+     "input": [
+      14.39977,
+      67.29233,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.815
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:43-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BOO&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BOO&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      14.399770000000002,
+      67.29233,
+      -1.8152696933469876
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0002696933469876761,
+      "components": {
+       "dh_m": -0.0002696933469876761
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "BRJ Bruravik",
+     "input": [
+      6.893949,
+      60.492094,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:45-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BRJ&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BRJ&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      6.893949,
+      60.492094,
+      -1.0160113186270294
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.015011318627029535,
+      "components": {
+       "dh_m": -0.015011318627029535
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "BOH Bøfjorden",
+     "input": [
+      5.339699,
+      61.135925,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.1360000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:47-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BOH&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=BOH&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.339699,
+      61.13592500000001,
+      -1.1160262425097542
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01997375749024588,
+      "components": {
+       "dh_m": 0.01997375749024588
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "EYD Eydehavn",
+     "input": [
+      8.875352,
+      58.494604,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.594
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:50-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=EYD&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=EYD&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      8.875352,
+      58.494604,
+      -0.6041426191963666
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.010142619196366609,
+      "components": {
+       "dh_m": -0.010142619196366609
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "HFT Hammerfest",
+     "input": [
+      23.67869,
+      70.66475,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.8940000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:52-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HFT&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HFT&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      23.67869,
+      70.66475,
+      -1.8946251829802918
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0006251829802916831,
+      "components": {
+       "dh_m": -0.0006251829802916831
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "HAR Harstad",
+     "input": [
+      16.548236,
+      68.801261,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.578
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:54-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HAR&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HAR&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      16.548236000000003,
+      68.801261,
+      -1.5774328280502914
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.000567171949708678,
+      "components": {
+       "dh_m": 0.000567171949708678
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "HEI Heimsjøen",
+     "input": [
+      9.101504,
+      63.425224,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.564
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:57-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HEI&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HEI&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      9.101504,
+      63.42522400000001,
+      -1.5652971395800392
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.001297139580039186,
+      "components": {
+       "dh_m": -0.001297139580039186
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "HRO Helgeroa",
+     "input": [
+      9.856379,
+      58.995212,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.611
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:17:59-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HRO&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HRO&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      9.856379,
+      58.995212,
+      -0.609471491624916
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0015285083750840034,
+      "components": {
+       "dh_m": 0.0015285083750840034
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "HVG Honningsvåg",
+     "input": [
+      25.972697,
+      70.980318,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.885
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:01-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HVG&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=HVG&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      25.972697,
+      70.980318,
+      -1.8860051405147154
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0010051405147153414,
+      "components": {
+       "dh_m": -0.0010051405147153414
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "KAB Kabelvåg",
+     "input": [
+      14.482149,
+      68.212639,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.8869999999999998
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:04-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KAB&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KAB&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      14.482149000000001,
+      68.212639,
+      -1.8827017691326091
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004298230867390673,
+      "components": {
+       "dh_m": 0.004298230867390673
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "KAZ Kaupanger",
+     "input": [
+      7.252396,
+      61.18248,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.163
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:06-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KAZ&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KAZ&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      7.252395999999999,
+      61.18248,
+      -1.1416364187958479
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02136358120415216,
+      "components": {
+       "dh_m": 0.02136358120415216
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "KSU Kristiansund",
+     "input": [
+      7.73614,
+      63.11392,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.405
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:08-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KSU&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=KSU&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      7.73614,
+      63.11392,
+      -1.4045372410888604
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00046275891113967127,
+      "components": {
+       "dh_m": 0.00046275891113967127
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "LEH Leirvik",
+     "input": [
+      5.50367,
+      59.766394,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.8340000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:11-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=LEH&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=LEH&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.50367,
+      59.766394,
+      -0.8191462569170227
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.014853743082977378,
+      "components": {
+       "dh_m": 0.014853743082977378
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "MSU Mausund",
+     "input": [
+      8.665231,
+      63.869331,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.515
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:13-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=MSU&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=MSU&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      8.665231,
+      63.869330999999995,
+      -1.512769342558002
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0022306574419979075,
+      "components": {
+       "dh_m": 0.0022306574419979075
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "MAY Måløy",
+     "input": [
+      5.11331,
+      61.933776,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.2309999999999999
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:15-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=MAY&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=MAY&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.11331,
+      61.933775999999995,
+      -1.2241922176422122
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.006807782357787673,
+      "components": {
+       "dh_m": 0.006807782357787673
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "NVK Narvik",
+     "input": [
+      17.425759,
+      68.428286,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.9989999999999997
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:18-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=NVK&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=NVK&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      17.425759,
+      68.428286,
+      -1.9935187000052181
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00548129999478153,
+      "components": {
+       "dh_m": 0.00548129999478153
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "OSC Oscarsborg",
+     "input": [
+      10.604861,
+      59.678073,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.732
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:20-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=OSC&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=OSC&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      10.604861,
+      59.678073000000005,
+      -0.7297008231557598
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0022991768442401916,
+      "components": {
+       "dh_m": 0.0022991768442401916
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "OSL Oslo",
+     "input": [
+      10.73451,
+      59.908559,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.7480000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:22-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=OSL&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=OSL&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      10.73451,
+      59.908559000000004,
+      -0.7484675038610575
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0004675038610574278,
+      "components": {
+       "dh_m": -0.0004675038610574278
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "RVK Rørvik",
+     "input": [
+      11.230107,
+      64.859456,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.651
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:25-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=RVK&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=RVK&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      11.230107000000002,
+      64.859456,
+      -1.6521930764261015
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.001193076426101447,
+      "components": {
+       "dh_m": -0.001193076426101447
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "SBG Sandnes",
+     "input": [
+      5.746613,
+      58.868232,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.79
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:27-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SBG&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SBG&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.746613000000001,
+      58.868232,
+      -0.7699070032009487
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0200929967990513,
+      "components": {
+       "dh_m": 0.0200929967990513
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "SIE Sirevåg",
+     "input": [
+      5.791602,
+      58.5052,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.515
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:29-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SIE&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SIE&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.791602,
+      58.5052,
+      -0.5122079242554207
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.002792075744579292,
+      "components": {
+       "dh_m": 0.002792075744579292
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "SOY Solumstrand",
+     "input": [
+      10.273018,
+      59.710622,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.5660000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:31-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SOY&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SOY&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      10.273018,
+      59.71062200000001,
+      -0.5693441802478603
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0033441802478602067,
+      "components": {
+       "dh_m": -0.0033441802478602067
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "SVG Stavanger",
+     "input": [
+      5.730121,
+      58.974339,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.764
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:34-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SVG&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=SVG&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      5.730121,
+      58.974339,
+      -0.7656747836810496
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.001674783681049563,
+      "components": {
+       "dh_m": -0.001674783681049563
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "TRG Tregde",
+     "input": [
+      7.554759,
+      58.006377,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.5790000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:36-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TRG&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TRG&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      7.554759000000001,
+      58.00637700000001,
+      -0.5801938569119756
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0011938569119754883,
+      "components": {
+       "dh_m": -0.0011938569119754883
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "TOS Tromsø",
+     "input": [
+      18.95479,
+      69.64611,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.8560000000000003
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:39-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TOS&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TOS&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      18.95479,
+      69.64611,
+      -1.8597042856283075
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.003704285628307158,
+      "components": {
+       "dh_m": -0.003704285628307158
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "TRD Trondheim",
+     "input": [
+      10.391669,
+      63.436484,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.745
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:41-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TRD&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TRD&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      10.391669,
+      63.436484,
+      -1.7400344563470327
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004965543652967419,
+      "components": {
+       "dh_m": 0.004965543652967419
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "TAZ Træna",
+     "input": [
+      12.088633,
+      66.496624,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.6580000000000001
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:43-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TAZ&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=TAZ&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      12.088633,
+      66.496624,
+      -1.6908030946086328
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03280309460863262,
+      "components": {
+       "dh_m": -0.03280309460863262
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "VAW Vardø",
+     "input": [
+      31.104015,
+      70.374978,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -2.178
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:45-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=VAW&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=VAW&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      31.104015000000004,
+      70.374978,
+      -2.1793416177673457
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0013416177673457597,
+      "components": {
+       "dh_m": -0.0013416177673457597
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "VIK Viker",
+     "input": [
+      10.949769,
+      59.036046,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -0.606
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:48-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=VIK&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=VIK&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      10.949769,
+      59.036046000000006,
+      -0.6029212018498669
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.003078798150133122,
+      "components": {
+       "dh_m": 0.003078798150133122
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "AES Ålesund",
+     "input": [
+      6.151946,
+      62.469414,
+      0.0
+     ],
+     "expected": [
+      null,
+      null,
+      -1.3019999999999998
+     ],
+     "expected_source": {
+      "tool": "Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)",
+      "version": "tideapi.php",
+      "date": "2026-10-05T00:18:50-0400",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=AES&refcode=cd&lang=en",
+      "how": "CD_in_NN2000 = level(MSL) above NN2000 - level(MSL) above CD (cm/100); also https://vannstand.kartverket.no/tideapi.php?tide_request=stationlevels&stationcode=AES&refcode=nn2000&lang=en"
+     },
+     "proj_result": [
+      6.151946,
+      62.46941400000001,
+      -1.3005240076003588
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.001475992399641024,
+      "components": {
+       "dh_m": 0.001475992399641024
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    }
+   ],
+   "status": "validated-by-cross-agency-data",
+   "second_path": null,
+   "summary": {
+    "points": 32,
+    "pass": 32,
+    "fail": 0,
+    "fail_known": 0,
+    "informational": 0,
+    "error": 0,
+    "max_horizontal_m": 0.0,
+    "max_vertical_m": 0.03280309460863262
+   }
+  },
+  {
+   "pair_id": "CD-US-VDatum-vs-COOPS",
+   "group": "Chart datum",
+   "title": "USA: VDatum MLLW->NAVD88 vs CO-OPS station datums",
+   "source_crs": "MLLW",
+   "target_crs": "NAVD88",
+   "pinned_operation": {
+    "epsg": [],
+    "pipeline": null,
+    "compute": "model_value",
+    "note": "not in PROJ-data: the app would need VDatum GTX grids (mllw + tss); the value under test is the VDatum API (same grids)"
+   },
+   "io": {
+    "input": [
+     "lon_deg",
+     "lat_deg",
+     "H_MLLW_m"
+    ],
+    "output": [
+     "H_NAVD88_m"
+    ]
+   },
+   "compare": [
+    "h"
+   ],
+   "tolerance_m": {
+    "h": null,
+    "v": 0.05,
+    "basis": "VDatum stated uncertainty ~0.06-0.1 m; decimetre-class"
+   },
+   "points": [
+    {
+     "id": "8518750 The Battery",
+     "input": [
+      -74.01417,
+      40.700554,
+      0.0
+     ],
+     "expected": [
+      -0.846
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:19:30-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8518750/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.855,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:19:32-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-74.01417&s_y=40.700554&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.061 m)"
+     },
+     "proj_result": [
+      -0.855
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.009000000000000008,
+      "components": {
+       "dh_m": -0.009000000000000008
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8443970 Boston",
+     "input": [
+      -71.05028,
+      42.35389,
+      0.0
+     ],
+     "expected": [
+      -1.678
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:19:34-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8443970/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -1.679,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:19:35-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-71.05028&s_y=42.35389&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.117 m)"
+     },
+     "proj_result": [
+      -1.679
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.001000000000000112,
+      "components": {
+       "dh_m": -0.001000000000000112
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8418150 Portland",
+     "input": [
+      -70.24416,
+      43.658054,
+      0.0
+     ],
+     "expected": [
+      -1.601
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:19:37-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8418150/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -1.598,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:19:39-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-70.24416&s_y=43.658054&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.117 m)"
+     },
+     "proj_result": [
+      -1.598
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0029999999999998916,
+      "components": {
+       "dh_m": 0.0029999999999998916
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8534720 Atlantic City",
+     "input": [
+      -74.41805,
+      39.356667,
+      0.0
+     ],
+     "expected": [
+      -0.797
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:20:10-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8534720/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.795,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:20:12-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-74.41805&s_y=39.356667&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.059 m)"
+     },
+     "proj_result": [
+      -0.795
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0020000000000000018,
+      "components": {
+       "dh_m": 0.0020000000000000018
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8665530 Charleston",
+     "input": [
+      -79.923615,
+      32.780834,
+      0.0
+     ],
+     "expected": [
+      -0.957
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:20:14-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8665530/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.958,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:20:18-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-79.923615&s_y=32.780834&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.144 m)"
+     },
+     "proj_result": [
+      -0.958
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0010000000000000009,
+      "components": {
+       "dh_m": -0.0010000000000000009
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8724580 Key West",
+     "input": [
+      -81.8079,
+      24.5557,
+      0.0
+     ],
+     "expected": [
+      -0.538
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:20:20-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8724580/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.533,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:20:22-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-81.8079&s_y=24.5557&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.077 m)"
+     },
+     "proj_result": [
+      -0.533
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0050000000000000044,
+      "components": {
+       "dh_m": 0.0050000000000000044
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8729840 Pensacola",
+     "input": [
+      -87.2112,
+      30.4044,
+      0.0
+     ],
+     "expected": [
+      -0.098
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod",
+      "date": "2026-10-05T00:20:24-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8729840/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.099,
+     "model_source": {
+      "tool": "NOAA VDatum REST API",
+      "version": "vdatumweb api",
+      "date": "2026-10-05T00:20:26-0400",
+      "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-87.2112&s_y=30.4044&s_z=0&region=contiguous&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=MLLW&s_v_unit=m&s_v_elevation=height&t_h_frame=NAD83_2011&t_coor=geo&t_v_frame=NAVD88&t_v_unit=m&t_v_elevation=height&s_v_geoid=geoid18&t_v_geoid=geoid18",
+      "how": "MLLW 0 m -> NAVD88 at the listed point (uncertainty 0.059 m)"
+     },
+     "proj_result": [
+      -0.099
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0010000000000000009,
+      "components": {
+       "dh_m": -0.0010000000000000009
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8574680 Baltimore",
+     "input": [
+      -76.57831,
+      39.266693,
+      0.0
+     ],
+     "expected": [
+      -0.254
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:19:41-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8574680/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.279,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=chesapeak_delaware; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.279 m; spatially varying uncertainty 1 sigma 0.092 m; Vertical_Area MDnwchb11_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.279
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.025000000000000022,
+      "components": {
+       "dh_m": -0.025000000000000022
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "8771450 Galveston Pier 21",
+     "input": [
+      -94.7933,
+      29.31,
+      0.0
+     ],
+     "expected": [
+      -0.094
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:20:28-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8771450/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.109,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=wgmexico; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.109 m; spatially varying uncertainty 1 sigma 0.097 m; Vertical_Area TXcentr00_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.109
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.015,
+      "components": {
+       "dh_m": -0.015
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "9410170 San Diego",
+     "input": [
+      -117.17667,
+      32.715557,
+      0.0
+     ],
+     "expected": [
+      -0.132
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:20:58-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9410170/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.175,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=westcoast; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.175 m; spatially varying uncertainty 1 sigma 0.091 m; Vertical_Area CAsouin00_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.175
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.04299999999999998,
+      "components": {
+       "dh_m": -0.04299999999999998
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "9410660 Los Angeles",
+     "input": [
+      -118.272,
+      33.72,
+      0.0
+     ],
+     "expected": [
+      -0.062
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:21:26-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9410660/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.039,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=westcoast; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.039 m; spatially varying uncertainty 1 sigma 0.094 m; Vertical_Area CAsouthn00_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.039
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.023,
+      "components": {
+       "dh_m": 0.023
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "9414290 San Francisco",
+     "input": [
+      -122.46589,
+      37.806305,
+      0.0
+     ],
+     "expected": [
+      0.018
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:21:55-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9414290/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.024,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=westcoast; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.024 m; spatially varying uncertainty 1 sigma 0.091 m; Vertical_Area CAsfdel00_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.024
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.041999999999999996,
+      "components": {
+       "dh_m": -0.041999999999999996
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "9439040 Astoria",
+     "input": [
+      -123.7683,
+      46.207306,
+      0.0
+     ],
+     "expected": [
+      0.066
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:22:24-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9439040/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": 0.07,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=westcoast; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = +0.070 m; spatially varying uncertainty 1 sigma 0.092 m; Vertical_Area WAcoast00_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      0.07
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0040000000000000036,
+      "components": {
+       "dh_m": 0.0040000000000000036
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "9447130 Seattle",
+     "input": [
+      -122.3393,
+      47.60264,
+      0.0
+     ],
+     "expected": [
+      -0.715
+     ],
+     "expected_source": {
+      "tool": "NOAA CO-OPS mdapi datums (station datum sheet)",
+      "version": "mdapi prod, epoch 1983-2001",
+      "date": "2026-10-05T00:22:53-0400",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/9447130/datums.json?units=metric",
+      "how": "MLLW expressed in NAVD88 = MLLW - NAVD88 (both on STND), metres"
+     },
+     "model_value": -0.747,
+     "model_source": {
+      "tool": "NOAA VDatum web UI (point conversion)",
+      "version": "Online VDatum Version 4.8 (September, 2025)",
+      "date": "2026-10-05",
+      "url": "https://vdatum.noaa.gov/vdatumweb/",
+      "how": "manual: NOAA VDatum web UI (vdatumweb, Version 4.8 September 2025), 2026-10-05, Claude for the owner. Region=westcoast; source horiz IGS14 (forced by the UI for tidal datums), target horiz NAD83(2011), geographic; source vertical MLLW height m, input 0.000 at the gauge coordinate; target NAVD88 height m (GEOID18 selected; the UI disables the geoid box for MLLW->NAVD88). Output NAVD88 = -0.747 m; spatially varying uncertainty 1 sigma 0.092 m; Vertical_Area WApugets13_8301."
+     },
+     "note": "M3 manual check: the VDatum REST API returned errorCode 412 for this station",
+     "proj_result": [
+      -0.747
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03200000000000003,
+      "components": {
+       "dh_m": -0.03200000000000003
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    }
+   ],
+   "status": "validated-by-cross-agency-data",
+   "second_path": null,
+   "summary": {
+    "points": 14,
+    "pass": 14,
+    "fail": 0,
+    "fail_known": 0,
+    "informational": 0,
+    "error": 0,
+    "max_horizontal_m": 0.0,
+    "max_vertical_m": 0.04299999999999998
+   }
+  },
+  {
+   "pair_id": "CD-FR-RAM-vs-RAF20",
+   "group": "Chart datum",
+   "title": "France: RAM zh_elli vs RAM zh_ref (IGN69) + RAF20",
+   "source_crs": "ZH expressed in NGF-IGN69",
+   "target_crs": "ZH ellipsoidal RGF93",
+   "pinned_operation": {
+    "epsg": [
+     "EPSG:9876 inverse"
+    ],
+    "pipeline": "+proj=pipeline +step +proj=unitconvert +xy_in=deg +xy_out=rad +step +proj=vgridshift +grids=fr_ign_RAF20.tif +multiplier=1 +step +proj=unitconvert +xy_in=rad +xy_out=deg"
+   },
+   "io": {
+    "input": [
+     "lon_deg",
+     "lat_deg",
+     "ZH_in_IGN69_m"
+    ],
+    "output": [
+     "lon_deg",
+     "lat_deg",
+     "ZH_h_m"
+    ]
+   },
+   "compare": [
+    "none",
+    "none",
+    "h"
+   ],
+   "tolerance_m": {
+    "h": null,
+    "v": 0.05,
+    "basis": "RAM cm/mm values; RAF20 0.01 m; RAM ellipsoidal heights may predate RGF93 v2b"
+   },
+   "points": [
+    {
+     "id": "Dunkerque (Abords de Dunkerque)",
+     "input": [
+      2.366667,
+      51.05,
+      -2.693
+     ],
+     "expected": [
+      null,
+      null,
+      40.845
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Dunkerque / Abords de Dunkerque: zh_elli=40.845 (ZH ellipsoidal height), zh_ref=-2.693 IGN69"
+     },
+     "proj_result": [
+      2.366667,
+      51.05,
+      40.84999927757287
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004999277572871108,
+      "components": {
+       "dh_m": 0.004999277572871108
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Calais (Abords de Calais)",
+     "input": [
+      1.8675,
+      50.969333,
+      -3.459
+     ],
+     "expected": [
+      null,
+      null,
+      40.007
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Calais / Abords de Calais: zh_elli=40.007 (ZH ellipsoidal height), zh_ref=-3.459 IGN69"
+     },
+     "proj_result": [
+      1.8675,
+      50.969333,
+      39.98269075298477
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.024309247015224855,
+      "components": {
+       "dh_m": -0.024309247015224855
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Boulogne-sur-Mer (Abords de Boulogne-sur-Mer)",
+     "input": [
+      1.5777,
+      50.72745,
+      -4.382
+     ],
+     "expected": [
+      null,
+      null,
+      39.36
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Boulogne-sur-Mer / Abords de Boulogne-sur-Mer: zh_elli=39.36 (ZH ellipsoidal height), zh_ref=-4.382 IGN69"
+     },
+     "proj_result": [
+      1.5777,
+      50.72745,
+      39.33606911674068
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.023930883259318136,
+      "components": {
+       "dh_m": -0.023930883259318136
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Touquet-Étaples (Abords de Boulogne-sur-Mer)",
+     "input": [
+      1.561,
+      50.5153,
+      -4.445
+     ],
+     "expected": [
+      null,
+      null,
+      40.667
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Touquet-Étaples / Abords de Boulogne-sur-Mer: zh_elli=40.667 (ZH ellipsoidal height), zh_ref=-4.445 IGN69"
+     },
+     "proj_result": [
+      1.561,
+      50.5153,
+      39.29881814971802
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 1.3681818502819851,
+      "components": {
+       "dh_m": -1.3681818502819851
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Dieppe (Abords de Dieppe)",
+     "input": [
+      1.085,
+      49.93,
+      -4.454
+     ],
+     "expected": [
+      null,
+      null,
+      39.721
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Dieppe / Abords de Dieppe: zh_elli=39.721 (ZH ellipsoidal height), zh_ref=-4.454 IGN69"
+     },
+     "proj_result": [
+      1.085,
+      49.93,
+      39.72559014892852
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004590148928521387,
+      "components": {
+       "dh_m": 0.004590148928521387
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Tréport (Abords de Dieppe)",
+     "input": [
+      1.366667,
+      50.066667,
+      -4.532
+     ],
+     "expected": [
+      null,
+      null,
+      39.571
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Tréport / Abords de Dieppe: zh_elli=39.571 (ZH ellipsoidal height), zh_ref=-4.532 IGN69"
+     },
+     "proj_result": [
+      1.3666670000000003,
+      50.066667,
+      39.5380003897385
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03299961026149845,
+      "components": {
+       "dh_m": -0.03299961026149845
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Cherbourg (Abords de Cherbourg et du Havre)",
+     "input": [
+      -1.6355,
+      49.651167,
+      -3.285
+     ],
+     "expected": [
+      null,
+      null,
+      43.713
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Cherbourg / Abords de Cherbourg et du Havre: zh_elli=43.713 (ZH ellipsoidal height), zh_ref=-3.285 IGN69"
+     },
+     "proj_result": [
+      -1.6355,
+      49.651167,
+      43.742369168065835
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.029369168065834117,
+      "components": {
+       "dh_m": 0.029369168065834117
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Havre (Abords de Cherbourg et du Havre)",
+     "input": [
+      0.106167,
+      49.481667,
+      -4.375
+     ],
+     "expected": [
+      null,
+      null,
+      40.651
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Havre / Abords de Cherbourg et du Havre: zh_elli=40.651 (ZH ellipsoidal height), zh_ref=-4.375 IGN69"
+     },
+     "proj_result": [
+      0.106167,
+      49.481667,
+      40.67187498788883
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.020874987888824137,
+      "components": {
+       "dh_m": 0.020874987888824137
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "PK 364,775 : Balise A (Abords de Cherbourg et du Havre)",
+     "input": [
+      0.121667,
+      49.433333,
+      -4.38
+     ],
+     "expected": [
+      null,
+      null,
+      39.78
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site PK 364,775 : Balise A / Abords de Cherbourg et du Havre: zh_elli=39.78 (ZH ellipsoidal height), zh_ref=-4.38 IGN69"
+     },
+     "proj_result": [
+      0.12166700000000001,
+      49.433333,
+      40.76163427803074
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.9816342780307394,
+      "components": {
+       "dh_m": 0.9816342780307394
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Ouistreham (Abords de Cherbourg et du Havre)",
+     "input": [
+      -0.25,
+      49.283333,
+      -4.08
+     ],
+     "expected": [
+      null,
+      null,
+      41.731
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Ouistreham / Abords de Cherbourg et du Havre: zh_elli=41.731 (ZH ellipsoidal height), zh_ref=-4.08 IGN69"
+     },
+     "proj_result": [
+      -0.25,
+      49.283333,
+      41.787335012504556
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05633501250455453,
+      "components": {
+       "dh_m": 0.05633501250455453
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Saint-Vaast-la-Hougue (Abords de Cherbourg et du Havre)",
+     "input": [
+      -1.264333,
+      49.587667,
+      -3.474
+     ],
+     "expected": [
+      null,
+      null,
+      42.874
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Vaast-la-Hougue / Abords de Cherbourg et du Havre: zh_elli=42.874 (ZH ellipsoidal height), zh_ref=-3.474 IGN69"
+     },
+     "proj_result": [
+      -1.264333,
+      49.587667,
+      42.89557067283086
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.021570672830854676,
+      "components": {
+       "dh_m": 0.021570672830854676
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Barfleur (Abords de Cherbourg et du Havre)",
+     "input": [
+      -1.25,
+      49.666667,
+      -3.553
+     ],
+     "expected": [
+      null,
+      null,
+      42.801
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Barfleur / Abords de Cherbourg et du Havre: zh_elli=42.801 (ZH ellipsoidal height), zh_ref=-3.553 IGN69"
+     },
+     "proj_result": [
+      -1.25,
+      49.666667,
+      42.54816556059896
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.2528344394010418,
+      "components": {
+       "dh_m": -0.2528344394010418
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Saint-Malo (Abords de Saint-Malo)",
+     "input": [
+      -2.0275,
+      48.641167,
+      -6.289
+     ],
+     "expected": [
+      null,
+      null,
+      41.981
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Malo / Abords de Saint-Malo: zh_elli=41.981 (ZH ellipsoidal height), zh_ref=-6.289 IGN69"
+     },
+     "proj_result": [
+      -2.0275,
+      48.641167,
+      41.91356917939002
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06743082060998518,
+      "components": {
+       "dh_m": -0.06743082060998518
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Goury (Abords de Saint-Malo)",
+     "input": [
+      -1.948667,
+      49.714167,
+      -4.827
+     ],
+     "expected": [
+      null,
+      null,
+      42.629
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Goury / Abords de Saint-Malo: zh_elli=42.629 (ZH ellipsoidal height), zh_ref=-4.827 IGN69"
+     },
+     "proj_result": [
+      -1.948667,
+      49.714167,
+      42.64494465088623
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01594465088623309,
+      "components": {
+       "dh_m": 0.01594465088623309
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Herqueville (Abords de Saint-Malo)",
+     "input": [
+      -1.889167,
+      49.658333,
+      -4.871
+     ],
+     "expected": [
+      null,
+      null,
+      42.524
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Herqueville / Abords de Saint-Malo: zh_elli=42.524 (ZH ellipsoidal height), zh_ref=-4.871 IGN69"
+     },
+     "proj_result": [
+      -1.8891669999999998,
+      49.658333,
+      42.583275922296295
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05927592229629397,
+      "components": {
+       "dh_m": 0.05927592229629397
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Diélette (Abords de Saint-Malo)",
+     "input": [
+      -1.863883,
+      49.55445,
+      -4.912
+     ],
+     "expected": [
+      null,
+      null,
+      42.637
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Diélette / Abords de Saint-Malo: zh_elli=42.637 (ZH ellipsoidal height), zh_ref=-4.912 IGN69"
+     },
+     "proj_result": [
+      -1.863883,
+      49.55445,
+      42.641145283119215
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004145283119214582,
+      "components": {
+       "dh_m": 0.004145283119214582
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Granville (Abords de Saint-Malo)",
+     "input": [
+      -1.644333,
+      48.834167,
+      -6.62
+     ],
+     "expected": [
+      null,
+      null,
+      41.205
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Granville / Abords de Saint-Malo: zh_elli=41.205 (ZH ellipsoidal height), zh_ref=-6.62 IGN69"
+     },
+     "proj_result": [
+      -1.644333,
+      48.83416700000001,
+      41.21050350928925
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.005503509289255248,
+      "components": {
+       "dh_m": 0.005503509289255248
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Briac-sur-Mer (Abords de Saint-Malo)",
+     "input": [
+      -2.1685,
+      48.634,
+      -6.219
+     ],
+     "expected": [
+      null,
+      null,
+      42.177
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Briac-sur-Mer / Abords de Saint-Malo: zh_elli=42.177 (ZH ellipsoidal height), zh_ref=-6.219 IGN69"
+     },
+     "proj_result": [
+      -2.1685,
+      48.634,
+      42.30246969756297
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.12546969756296988,
+      "components": {
+       "dh_m": 0.12546969756296988
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Saint-Cast (Abords de Saint-Malo)",
+     "input": [
+      -2.243333,
+      48.638333,
+      -6.264
+     ],
+     "expected": [
+      null,
+      null,
+      41.82
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Cast / Abords de Saint-Malo: zh_elli=41.82 (ZH ellipsoidal height), zh_ref=-6.264 IGN69"
+     },
+     "proj_result": [
+      -2.243333,
+      48.638333,
+      42.432085533118276
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.6120855331182753,
+      "components": {
+       "dh_m": 0.6120855331182753
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Erquy (Abords de Saint-Malo)",
+     "input": [
+      -2.490183,
+      48.639217,
+      -5.829
+     ],
+     "expected": [
+      null,
+      null,
+      43.245
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Erquy / Abords de Saint-Malo: zh_elli=43.245 (ZH ellipsoidal height), zh_ref=-5.829 IGN69"
+     },
+     "proj_result": [
+      -2.490183,
+      48.639217,
+      43.353946843556095
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.1089468435560974,
+      "components": {
+       "dh_m": 0.1089468435560974
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Le Légué (Bouée) (Abords de Saint-Malo)",
+     "input": [
+      -2.683333,
+      48.566667,
+      -5.946
+     ],
+     "expected": [
+      null,
+      null,
+      43.47
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Légué (Bouée) / Abords de Saint-Malo: zh_elli=43.47 (ZH ellipsoidal height), zh_ref=-5.946 IGN69"
+     },
+     "proj_result": [
+      -2.683333,
+      48.566667,
+      43.3681663902633
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.10183360973670119,
+      "components": {
+       "dh_m": -0.10183360973670119
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Binic (Abords de Saint-Malo)",
+     "input": [
+      -2.816667,
+      48.6,
+      -5.898
+     ],
+     "expected": [
+      null,
+      null,
+      43.658
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Binic / Abords de Saint-Malo: zh_elli=43.658 (ZH ellipsoidal height), zh_ref=-5.898 IGN69"
+     },
+     "proj_result": [
+      -2.816667,
+      48.6,
+      43.63600099669928
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.021999003300720688,
+      "components": {
+       "dh_m": -0.021999003300720688
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Quay-Portrieux (Abords de Saint-Malo)",
+     "input": [
+      -2.818056,
+      48.6475,
+      -5.908
+     ],
+     "expected": [
+      null,
+      null,
+      43.72
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Quay-Portrieux / Abords de Saint-Malo: zh_elli=43.72 (ZH ellipsoidal height), zh_ref=-5.908 IGN69"
+     },
+     "proj_result": [
+      -2.818056,
+      48.6475,
+      43.66673805932079
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05326194067920653,
+      "components": {
+       "dh_m": -0.05326194067920653
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Brehec (Abords de Saint-Malo)",
+     "input": [
+      -2.945833,
+      48.7265,
+      -5.885
+     ],
+     "expected": [
+      null,
+      null,
+      43.897
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Brehec / Abords de Saint-Malo: zh_elli=43.897 (ZH ellipsoidal height), zh_ref=-5.885 IGN69"
+     },
+     "proj_result": [
+      -2.945833,
+      48.7265,
+      43.84249598658731
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05450401341268929,
+      "components": {
+       "dh_m": -0.05450401341268929
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Île de Bréhat (Abords de Saint-Malo)",
+     "input": [
+      -3.003333,
+      48.835167,
+      -5.505
+     ],
+     "expected": [
+      null,
+      null,
+      44.28
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Île de Bréhat / Abords de Saint-Malo: zh_elli=44.28 (ZH ellipsoidal height), zh_ref=-5.505 IGN69"
+     },
+     "proj_result": [
+      -3.003333,
+      48.835167,
+      44.25378340096689
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.026216599033112686,
+      "components": {
+       "dh_m": -0.026216599033112686
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Les Roches Douvres (Abords de Saint-Malo)",
+     "input": [
+      -2.813333,
+      49.104167,
+      -5.03
+     ],
+     "expected": [
+      null,
+      null,
+      44.41
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Les Roches Douvres / Abords de Saint-Malo: zh_elli=44.41 (ZH ellipsoidal height), zh_ref=-5.03 IGN69"
+     },
+     "proj_result": [
+      -2.813333,
+      49.104167,
+      44.333566127012126
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.07643387298787019,
+      "components": {
+       "dh_m": -0.07643387298787019
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Lézardrieux (Abords de Saint-Malo)",
+     "input": [
+      -3.1,
+      48.783333,
+      -5.469
+     ],
+     "expected": [
+      null,
+      null,
+      44.416
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Lézardrieux / Abords de Saint-Malo: zh_elli=44.416 (ZH ellipsoidal height), zh_ref=-5.469 IGN69"
+     },
+     "proj_result": [
+      -3.1,
+      48.783333,
+      44.38266682174606
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03333317825394033,
+      "components": {
+       "dh_m": -0.03333317825394033
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Paimpol (Abords de Saint-Malo)",
+     "input": [
+      -2.955333,
+      48.790333,
+      -5.649
+     ],
+     "expected": [
+      null,
+      null,
+      44.162
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Paimpol / Abords de Saint-Malo: zh_elli=44.162 (ZH ellipsoidal height), zh_ref=-5.649 IGN69"
+     },
+     "proj_result": [
+      -2.955333,
+      48.790333,
+      44.0660242542717
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.09597574572829615,
+      "components": {
+       "dh_m": -0.09597574572829615
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Roscoff (Entrée de La Manche)",
+     "input": [
+      -3.965694,
+      48.718694,
+      -4.764
+     ],
+     "expected": [
+      null,
+      null,
+      45.229
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Roscoff / Entrée de La Manche: zh_elli=45.229 (ZH ellipsoidal height), zh_ref=-4.764 IGN69"
+     },
+     "proj_result": [
+      -3.965694,
+      48.718694,
+      45.23805317502378
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.009053175023780113,
+      "components": {
+       "dh_m": 0.009053175023780113
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Perros-Guirec (Entrée de La Manche)",
+     "input": [
+      -3.458333,
+      48.82,
+      -4.989
+     ],
+     "expected": [
+      null,
+      null,
+      44.9
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Perros-Guirec / Entrée de La Manche: zh_elli=44.9 (ZH ellipsoidal height), zh_ref=-4.989 IGN69"
+     },
+     "proj_result": [
+      -3.458333,
+      48.82000000000001,
+      44.89265013172895
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.007349868271049331,
+      "components": {
+       "dh_m": -0.007349868271049331
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Locquemeau (Entrée de La Manche)",
+     "input": [
+      -3.581667,
+      48.725,
+      -4.923
+     ],
+     "expected": [
+      null,
+      null,
+      44.839
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Locquemeau / Entrée de La Manche: zh_elli=44.839 (ZH ellipsoidal height), zh_ref=-4.923 IGN69"
+     },
+     "proj_result": [
+      -3.5816670000000004,
+      48.725,
+      44.86625063308456
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.027250633084562992,
+      "components": {
+       "dh_m": 0.027250633084562992
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Portsall (Entrée de La Manche)",
+     "input": [
+      -4.716667,
+      48.566667,
+      -3.905
+     ],
+     "expected": [
+      null,
+      null,
+      47.133
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Portsall / Entrée de La Manche: zh_elli=47.133 (ZH ellipsoidal height), zh_ref=-3.905 IGN69"
+     },
+     "proj_result": [
+      -4.716667,
+      48.566667,
+      46.75849994213022
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.37450005786978124,
+      "components": {
+       "dh_m": -0.37450005786978124
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "L'Aber Ildut (Entrée de La Manche)",
+     "input": [
+      -4.7545,
+      48.471167,
+      -3.728
+     ],
+     "expected": [
+      null,
+      null,
+      46.976
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site L'Aber Ildut / Entrée de La Manche: zh_elli=46.976 (ZH ellipsoidal height), zh_ref=-3.728 IGN69"
+     },
+     "proj_result": [
+      -4.7545,
+      48.471167,
+      47.03298020898059
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05698020898059042,
+      "components": {
+       "dh_m": 0.05698020898059042
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Baie du Stiff (Île d'Ouessant) (Entrée de La Manche)",
+     "input": [
+      -5.054047,
+      48.468018,
+      -3.672
+     ],
+     "expected": [
+      null,
+      null,
+      47.402
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Baie du Stiff (Île d'Ouessant) / Entrée de La Manche: zh_elli=47.402 (ZH ellipsoidal height), zh_ref=-3.672 IGN69"
+     },
+     "proj_result": [
+      -5.054047,
+      48.468018,
+      47.41768792989065
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.015687929890646046,
+      "components": {
+       "dh_m": 0.015687929890646046
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Brest (Iroise, Sud Bretagne)",
+     "input": [
+      -4.494722,
+      48.3825,
+      -3.635
+     ],
+     "expected": [
+      null,
+      null,
+      47.033
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Brest / Iroise, Sud Bretagne: zh_elli=47.033 (ZH ellipsoidal height), zh_ref=-3.635 IGN69"
+     },
+     "proj_result": [
+      -4.494722,
+      48.3825,
+      47.023642535346355
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00935746465364673,
+      "components": {
+       "dh_m": -0.00935746465364673
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Baie de Lampaul (Île d'Ouessant) (Iroise, Sud Bretagne)",
+     "input": [
+      -5.1,
+      48.45,
+      -3.674
+     ],
+     "expected": [
+      null,
+      null,
+      47.471
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Baie de Lampaul (Île d'Ouessant) / Iroise, Sud Bretagne: zh_elli=47.471 (ZH ellipsoidal height), zh_ref=-3.674 IGN69"
+     },
+     "proj_result": [
+      -5.1,
+      48.45,
+      47.44900109863245
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.021998901367545898,
+      "components": {
+       "dh_m": -0.021998901367545898
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Île Molène (Iroise, Sud Bretagne)",
+     "input": [
+      -4.954667,
+      48.4035,
+      -3.841
+     ],
+     "expected": [
+      null,
+      null,
+      47.157
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Île Molène / Iroise, Sud Bretagne: zh_elli=47.157 (ZH ellipsoidal height), zh_ref=-3.841 IGN69"
+     },
+     "proj_result": [
+      -4.954667,
+      48.4035,
+      47.156847315707715
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00015268429228143532,
+      "components": {
+       "dh_m": -0.00015268429228143532
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Conquet (Iroise, Sud Bretagne)",
+     "input": [
+      -4.782836,
+      48.359528,
+      -3.503
+     ],
+     "expected": [
+      null,
+      null,
+      47.399
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Conquet / Iroise, Sud Bretagne: zh_elli=47.399 (ZH ellipsoidal height), zh_ref=-3.503 IGN69"
+     },
+     "proj_result": [
+      -4.782836,
+      48.359528,
+      47.380476882682665
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.018523117317336357,
+      "components": {
+       "dh_m": -0.018523117317336357
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Camaret-sur-Mer (Iroise, Sud Bretagne)",
+     "input": [
+      -4.59,
+      48.278333,
+      -3.314
+     ],
+     "expected": [
+      null,
+      null,
+      47.444
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Camaret-sur-Mer / Iroise, Sud Bretagne: zh_elli=47.444 (ZH ellipsoidal height), zh_ref=-3.314 IGN69"
+     },
+     "proj_result": [
+      -4.59,
+      48.278333,
+      47.40268117623864
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.04131882376136531,
+      "components": {
+       "dh_m": -0.04131882376136531
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Trez-Hir (Iroise, Sud Bretagne)",
+     "input": [
+      -4.699333,
+      48.339667,
+      -3.431
+     ],
+     "expected": [
+      null,
+      null,
+      47.401
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Trez-Hir / Iroise, Sud Bretagne: zh_elli=47.401 (ZH ellipsoidal height), zh_ref=-3.431 IGN69"
+     },
+     "proj_result": [
+      -4.699333,
+      48.339667,
+      47.37955373783038
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02144626216962564,
+      "components": {
+       "dh_m": -0.02144626216962564
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Dellec (Iroise, Sud Bretagne)",
+     "input": [
+      -4.562,
+      48.353667,
+      -3.591
+     ],
+     "expected": [
+      null,
+      null,
+      47.18
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Dellec / Iroise, Sud Bretagne: zh_elli=47.18 (ZH ellipsoidal height), zh_ref=-3.591 IGN69"
+     },
+     "proj_result": [
+      -4.562,
+      48.353667,
+      47.11981238173479
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.060187618265210574,
+      "components": {
+       "dh_m": -0.060187618265210574
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Moulin Blanc (Iroise, Sud Bretagne)",
+     "input": [
+      -4.43,
+      48.395,
+      -3.726
+     ],
+     "expected": [
+      null,
+      null,
+      46.904
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Moulin Blanc / Iroise, Sud Bretagne: zh_elli=46.904 (ZH ellipsoidal height), zh_ref=-3.726 IGN69"
+     },
+     "proj_result": [
+      -4.43,
+      48.395,
+      46.88584013366649
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.018159866333512298,
+      "components": {
+       "dh_m": -0.018159866333512298
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Tinduff (Iroise, Sud Bretagne)",
+     "input": [
+      -4.3675,
+      48.335833,
+      -3.741
+     ],
+     "expected": [
+      null,
+      null,
+      46.873
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Tinduff / Iroise, Sud Bretagne: zh_elli=46.873 (ZH ellipsoidal height), zh_ref=-3.741 IGN69"
+     },
+     "proj_result": [
+      -4.3675,
+      48.335833,
+      46.881773901343834
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.008773901343836599,
+      "components": {
+       "dh_m": 0.008773901343836599
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Pont de Térénez (Iroise, Sud Bretagne)",
+     "input": [
+      -4.268883,
+      48.28,
+      -3.743
+     ],
+     "expected": [
+      null,
+      null,
+      46.904
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Pont de Térénez / Iroise, Sud Bretagne: zh_elli=46.904 (ZH ellipsoidal height), zh_ref=-3.743 IGN69"
+     },
+     "proj_result": [
+      -4.268883,
+      48.28,
+      46.81736800082288
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.08663199917712205,
+      "components": {
+       "dh_m": -0.08663199917712205
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Morgat (Iroise, Sud Bretagne)",
+     "input": [
+      -4.497333,
+      48.2245,
+      -3.372
+     ],
+     "expected": [
+      null,
+      null,
+      47.31
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Morgat / Iroise, Sud Bretagne: zh_elli=47.31 (ZH ellipsoidal height), zh_ref=-3.372 IGN69"
+     },
+     "proj_result": [
+      -4.497333,
+      48.2245,
+      47.257334780512245
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05266521948775704,
+      "components": {
+       "dh_m": -0.05266521948775704
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port du Vorlen (Iroise, Sud Bretagne)",
+     "input": [
+      -4.7125,
+      48.053,
+      -3.245
+     ],
+     "expected": [
+      null,
+      null,
+      47.293
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port du Vorlen / Iroise, Sud Bretagne: zh_elli=47.293 (ZH ellipsoidal height), zh_ref=-3.245 IGN69"
+     },
+     "proj_result": [
+      -4.7125,
+      48.053,
+      47.28403064727753
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.008969352722466795,
+      "components": {
+       "dh_m": -0.008969352722466795
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Île de Sein (Iroise, Sud Bretagne)",
+     "input": [
+      -4.8475,
+      48.040167,
+      -3.001
+     ],
+     "expected": [
+      null,
+      null,
+      47.604
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Île de Sein / Iroise, Sud Bretagne: zh_elli=47.604 (ZH ellipsoidal height), zh_ref=-3.001 IGN69"
+     },
+     "proj_result": [
+      -4.8475,
+      48.040167000000004,
+      47.58263803810815
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02136196189184858,
+      "components": {
+       "dh_m": -0.02136196189184858
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Concarneau (Iroise, Sud Bretagne)",
+     "input": [
+      -3.906667,
+      47.873333,
+      -2.534
+     ],
+     "expected": [
+      null,
+      null,
+      46.84
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Concarneau / Iroise, Sud Bretagne: zh_elli=46.84 (ZH ellipsoidal height), zh_ref=-2.534 IGN69"
+     },
+     "proj_result": [
+      -3.906667,
+      47.873333,
+      46.842025164248035
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0020251642480317855,
+      "components": {
+       "dh_m": 0.0020251642480317855
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Audierne (Quai Pelletan) (Iroise, Sud Bretagne)",
+     "input": [
+      -4.537583,
+      48.02155,
+      -2.531
+     ],
+     "expected": [
+      null,
+      null,
+      47.795
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Audierne (Quai Pelletan) / Iroise, Sud Bretagne: zh_elli=47.795 (ZH ellipsoidal height), zh_ref=-2.531 IGN69"
+     },
+     "proj_result": [
+      -4.537583,
+      48.02155,
+      47.78954925936366
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0054507406363413224,
+      "components": {
+       "dh_m": -0.0054507406363413224
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Bénodet (Iroise, Sud Bretagne)",
+     "input": [
+      -4.115833,
+      47.881,
+      -2.694
+     ],
+     "expected": [
+      null,
+      null,
+      46.793
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Bénodet / Iroise, Sud Bretagne: zh_elli=46.793 (ZH ellipsoidal height), zh_ref=-2.694 IGN69"
+     },
+     "proj_result": [
+      -4.115833,
+      47.881,
+      46.80503560439499
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.012035604394988297,
+      "components": {
+       "dh_m": 0.012035604394988297
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Les trois Tourtes (Iroise, Sud Bretagne)",
+     "input": [
+      -4.1125,
+      47.946167,
+      -2.692
+     ],
+     "expected": [
+      null,
+      null,
+      47.004
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Les trois Tourtes / Iroise, Sud Bretagne: zh_elli=47.004 (ZH ellipsoidal height), zh_ref=-2.692 IGN69"
+     },
+     "proj_result": [
+      -4.1125,
+      47.946167,
+      46.98585104497762
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0181489550223759,
+      "components": {
+       "dh_m": -0.0181489550223759
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-la-Forêt (Iroise, Sud Bretagne)",
+     "input": [
+      -3.973833,
+      47.901,
+      -2.584
+     ],
+     "expected": [
+      null,
+      null,
+      46.831
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-la-Forêt / Iroise, Sud Bretagne: zh_elli=46.831 (ZH ellipsoidal height), zh_ref=-2.584 IGN69"
+     },
+     "proj_result": [
+      -3.973833,
+      47.901,
+      46.89256834890036
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06156834890035867,
+      "components": {
+       "dh_m": 0.06156834890035867
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port-Tudy (Iroise, Sud Bretagne)",
+     "input": [
+      -3.446306,
+      47.644583,
+      -2.742
+     ],
+     "expected": [
+      null,
+      null,
+      46.196
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-Tudy / Iroise, Sud Bretagne: zh_elli=46.196 (ZH ellipsoidal height), zh_ref=-2.742 IGN69"
+     },
+     "proj_result": [
+      -3.446306,
+      47.644583,
+      46.18146691878329
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.014533081216704602,
+      "components": {
+       "dh_m": -0.014533081216704602
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Lorient (Port de commerce) (Iroise, Sud Bretagne)",
+     "input": [
+      -3.3545,
+      47.7375,
+      -2.63
+     ],
+     "expected": [
+      null,
+      null,
+      46.197
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Lorient (Port de commerce) / Iroise, Sud Bretagne: zh_elli=46.197 (ZH ellipsoidal height), zh_ref=-2.63 IGN69"
+     },
+     "proj_result": [
+      -3.3545,
+      47.7375,
+      46.163327436445435
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0336725635545676,
+      "components": {
+       "dh_m": -0.0336725635545676
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Entrée rivière d'Étel (Iroise, Sud Bretagne)",
+     "input": [
+      -3.211667,
+      47.644167,
+      -2.773
+     ],
+     "expected": [
+      null,
+      null,
+      45.86
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Entrée rivière d'Étel / Iroise, Sud Bretagne: zh_elli=45.86 (ZH ellipsoidal height), zh_ref=-2.773 IGN69"
+     },
+     "proj_result": [
+      -3.211667,
+      47.644167,
+      45.921307648261916
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06130764826191637,
+      "components": {
+       "dh_m": 0.06130764826191637
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Les Sables d'Olonne (Loire, Vendée)",
+     "input": [
+      -1.793611,
+      46.4975,
+      -2.828
+     ],
+     "expected": [
+      null,
+      null,
+      44.54
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Les Sables d'Olonne / Loire, Vendée: zh_elli=44.54 (ZH ellipsoidal height), zh_ref=-2.828 IGN69"
+     },
+     "proj_result": [
+      -1.793611,
+      46.4975,
+      44.50735458866214
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03264541133786025,
+      "components": {
+       "dh_m": -0.03264541133786025
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-Navalo (Loire, Vendée)",
+     "input": [
+      -2.916667,
+      47.55,
+      -2.625
+     ],
+     "expected": [
+      null,
+      null,
+      46.283
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-Navalo / Loire, Vendée: zh_elli=46.283 (ZH ellipsoidal height), zh_ref=-2.625 IGN69"
+     },
+     "proj_result": [
+      -2.916667,
+      47.55,
+      45.88699921024261
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.3960007897573945,
+      "components": {
+       "dh_m": -0.3960007897573945
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "La Trinité-sur-Mer (Loire, Vendée)",
+     "input": [
+      -3.025556,
+      47.5875,
+      -2.854
+     ],
+     "expected": [
+      null,
+      null,
+      45.795
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site La Trinité-sur-Mer / Loire, Vendée: zh_elli=45.795 (ZH ellipsoidal height), zh_ref=-2.854 IGN69"
+     },
+     "proj_result": [
+      -3.0255560000000004,
+      47.5875,
+      45.7092332443227
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.08576675567730518,
+      "components": {
+       "dh_m": -0.08576675567730518
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Auray (St-Goustan) (Loire, Vendée)",
+     "input": [
+      -2.978117,
+      47.663383,
+      -2.225
+     ],
+     "expected": [
+      null,
+      null,
+      46.353
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Auray (St-Goustan) / Loire, Vendée: zh_elli=46.353 (ZH ellipsoidal height), zh_ref=-2.225 IGN69"
+     },
+     "proj_result": [
+      -2.978117,
+      47.663383,
+      46.35219092432325
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0008090756767487051,
+      "components": {
+       "dh_m": -0.0008090756767487051
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Fort Espagnol (Loire, Vendée)",
+     "input": [
+      -2.953167,
+      47.612333,
+      -2.294
+     ],
+     "expected": [
+      null,
+      null,
+      46.32
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Fort Espagnol / Loire, Vendée: zh_elli=46.32 (ZH ellipsoidal height), zh_ref=-2.294 IGN69"
+     },
+     "proj_result": [
+      -2.953167,
+      47.612333,
+      46.24653786312805
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.07346213687195302,
+      "components": {
+       "dh_m": -0.07346213687195302
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Locmariaquer (Loire, Vendée)",
+     "input": [
+      -2.93,
+      47.57,
+      -2.249
+     ],
+     "expected": [
+      null,
+      null,
+      46.206
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Locmariaquer / Loire, Vendée: zh_elli=46.206 (ZH ellipsoidal height), zh_ref=-2.249 IGN69"
+     },
+     "proj_result": [
+      -2.93,
+      47.57,
+      46.26587907409581
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05987907409580373,
+      "components": {
+       "dh_m": 0.05987907409580373
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Arradon (Loire, Vendée)",
+     "input": [
+      -2.83,
+      47.615,
+      -1.021
+     ],
+     "expected": [
+      null,
+      null,
+      47.446
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Arradon / Loire, Vendée: zh_elli=47.446 (ZH ellipsoidal height), zh_ref=-1.021 IGN69"
+     },
+     "proj_result": [
+      -2.83,
+      47.615,
+      47.42142111205736
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.024578887942638517,
+      "components": {
+       "dh_m": -0.024578887942638517
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Vannes (Loire, Vendée)",
+     "input": [
+      -2.760833,
+      47.638333,
+      -1.033
+     ],
+     "expected": [
+      null,
+      null,
+      47.325
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Vannes / Loire, Vendée: zh_elli=47.325 (ZH ellipsoidal height), zh_ref=-1.033 IGN69"
+     },
+     "proj_result": [
+      -2.760833,
+      47.638333,
+      47.32481395730341
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00018604269659050487,
+      "components": {
+       "dh_m": -0.00018604269659050487
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Armel (Le Passage) (Loire, Vendée)",
+     "input": [
+      -2.715,
+      47.591333,
+      -1.214
+     ],
+     "expected": [
+      null,
+      null,
+      47.078
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Armel (Le Passage) / Loire, Vendée: zh_elli=47.078 (ZH ellipsoidal height), zh_ref=-1.214 IGN69"
+     },
+     "proj_result": [
+      -2.7150000000000003,
+      47.591333,
+      47.070713168284954
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.007286831715049402,
+      "components": {
+       "dh_m": -0.007286831715049402
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Logeo (Loire, Vendée)",
+     "input": [
+      -2.8455,
+      47.547833,
+      -1.066
+     ],
+     "expected": [
+      null,
+      null,
+      47.299
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Logeo / Loire, Vendée: zh_elli=47.299 (ZH ellipsoidal height), zh_ref=-1.066 IGN69"
+     },
+     "proj_result": [
+      -2.8455,
+      47.547833,
+      47.380777393916034
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.08177739391603467,
+      "components": {
+       "dh_m": 0.08177739391603467
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port du Crouesty (Loire, Vendée)",
+     "input": [
+      -2.89495,
+      47.5426,
+      -2.85
+     ],
+     "expected": [
+      null,
+      null,
+      45.634
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port du Crouesty / Loire, Vendée: zh_elli=45.634 (ZH ellipsoidal height), zh_ref=-2.85 IGN69"
+     },
+     "proj_result": [
+      -2.89495,
+      47.5426,
+      45.650023314984594
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01602331498459364,
+      "components": {
+       "dh_m": 0.01602331498459364
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Nazaire (Loire, Vendée)",
+     "input": [
+      -2.201667,
+      47.266944,
+      -3.16
+     ],
+     "expected": [
+      null,
+      null,
+      44.634
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Nazaire / Loire, Vendée: zh_elli=44.634 (ZH ellipsoidal height), zh_ref=-3.16 IGN69"
+     },
+     "proj_result": [
+      -2.201667,
+      47.266944,
+      44.634829854806924
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0008298548069234357,
+      "components": {
+       "dh_m": 0.0008298548069234357
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Pouliguen (Loire, Vendée)",
+     "input": [
+      -2.403333,
+      47.251667,
+      -2.917
+     ],
+     "expected": [
+      null,
+      null,
+      45.126
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Pouliguen / Loire, Vendée: zh_elli=45.126 (ZH ellipsoidal height), zh_ref=-2.917 IGN69"
+     },
+     "proj_result": [
+      -2.403333,
+      47.251667,
+      45.00598065995131
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.12001934004868531,
+      "components": {
+       "dh_m": -0.12001934004868531
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Pointe de Saint-Gildas (Loire, Vendée)",
+     "input": [
+      -2.246667,
+      47.14,
+      -3.078
+     ],
+     "expected": [
+      null,
+      null,
+      44.771
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Pointe de Saint-Gildas / Loire, Vendée: zh_elli=44.771 (ZH ellipsoidal height), zh_ref=-3.078 IGN69"
+     },
+     "proj_result": [
+      -2.246667,
+      47.14,
+      44.75808108459324
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.012918915406757492,
+      "components": {
+       "dh_m": -0.012918915406757492
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "L'Herbaudière (Île de Noirmoutier) (Loire, Vendée)",
+     "input": [
+      -2.298333,
+      47.026667,
+      -3.105
+     ],
+     "expected": [
+      null,
+      null,
+      44.716
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site L'Herbaudière (Île de Noirmoutier) / Loire, Vendée: zh_elli=44.716 (ZH ellipsoidal height), zh_ref=-3.105 IGN69"
+     },
+     "proj_result": [
+      -2.298333,
+      47.026667,
+      44.700969655878296
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.015030344121704786,
+      "components": {
+       "dh_m": -0.015030344121704786
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Fromentine (embarcadère) (Loire, Vendée)",
+     "input": [
+      -2.14,
+      46.893333,
+      -2.811
+     ],
+     "expected": [
+      null,
+      null,
+      44.885
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Fromentine (embarcadère) / Loire, Vendée: zh_elli=44.885 (ZH ellipsoidal height), zh_ref=-2.811 IGN69"
+     },
+     "proj_result": [
+      -2.14,
+      46.893333,
+      44.85574594799606
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02925405200393527,
+      "components": {
+       "dh_m": -0.02925405200393527
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-Joinville (Île d'Yeu) (Loire, Vendée)",
+     "input": [
+      -2.348,
+      46.726667,
+      -2.78
+     ],
+     "expected": [
+      null,
+      null,
+      45.107
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-Joinville (Île d'Yeu) / Loire, Vendée: zh_elli=45.107 (ZH ellipsoidal height), zh_ref=-2.78 IGN69"
+     },
+     "proj_result": [
+      -2.348,
+      46.726667,
+      45.14839422046871
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.04139422046871033,
+      "components": {
+       "dh_m": 0.04139422046871033
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "La Rochelle - La Pallice (Pertuis Charentais)",
+     "input": [
+      -1.221667,
+      46.16,
+      -3.503
+     ],
+     "expected": [
+      null,
+      null,
+      43.474
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site La Rochelle - La Pallice / Pertuis Charentais: zh_elli=43.474 (ZH ellipsoidal height), zh_ref=-3.503 IGN69"
+     },
+     "proj_result": [
+      -1.221667,
+      46.16,
+      43.449920662099586
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02407933790041028,
+      "components": {
+       "dh_m": -0.02407933790041028
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "L'Aiguillon-sur-Mer (Pertuis Charentais)",
+     "input": [
+      -1.316389,
+      46.335,
+      -3.502
+     ],
+     "expected": [
+      null,
+      null,
+      43.483
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site L'Aiguillon-sur-Mer / Pertuis Charentais: zh_elli=43.483 (ZH ellipsoidal height), zh_ref=-3.502 IGN69"
+     },
+     "proj_result": [
+      -1.316389,
+      46.335,
+      43.479795060514775
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.003204939485222269,
+      "components": {
+       "dh_m": -0.003204939485222269
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Denis d'Oléron (Pertuis Charentais)",
+     "input": [
+      -1.372333,
+      46.036833,
+      -3.409
+     ],
+     "expected": [
+      null,
+      null,
+      43.486
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Denis d'Oléron / Pertuis Charentais: zh_elli=43.486 (ZH ellipsoidal height), zh_ref=-3.409 IGN69"
+     },
+     "proj_result": [
+      -1.372333,
+      46.036833,
+      43.45613337800518
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.029866621994820264,
+      "components": {
+       "dh_m": -0.029866621994820264
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Île d'Aix (Pertuis Charentais)",
+     "input": [
+      -1.173333,
+      46.008333,
+      -3.505
+     ],
+     "expected": [
+      null,
+      null,
+      43.315
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Île d'Aix / Pertuis Charentais: zh_elli=43.315 (ZH ellipsoidal height), zh_ref=-3.505 IGN69"
+     },
+     "proj_result": [
+      -1.173333,
+      46.008333,
+      43.30733409815121
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.007665901848788792,
+      "components": {
+       "dh_m": -0.007665901848788792
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Pont aval de la Seudre (Pertuis Charentais)",
+     "input": [
+      -1.137801,
+      45.799561,
+      -2.748
+     ],
+     "expected": [
+      null,
+      null,
+      43.824
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Pont aval de la Seudre / Pertuis Charentais: zh_elli=43.824 (ZH ellipsoidal height), zh_ref=-2.748 IGN69"
+     },
+     "proj_result": [
+      -1.137801,
+      45.799561,
+      43.885893942013666
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06189394201366838,
+      "components": {
+       "dh_m": 0.06189394201366838
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Pointe de Grave (Abords de la Gironde)",
+     "input": [
+      -1.066667,
+      45.568667,
+      -2.831
+     ],
+     "expected": [
+      null,
+      null,
+      43.433
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Pointe de Grave / Abords de la Gironde: zh_elli=43.433 (ZH ellipsoidal height), zh_ref=-2.831 IGN69"
+     },
+     "proj_result": [
+      -1.066667,
+      45.568667,
+      43.43609324964171
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0030932496417079847,
+      "components": {
+       "dh_m": 0.0030932496417079847
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "La Cotinière (Abords de la Gironde)",
+     "input": [
+      -1.325833,
+      45.914167,
+      -3.191
+     ],
+     "expected": [
+      null,
+      null,
+      43.596
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site La Cotinière / Abords de la Gironde: zh_elli=43.596 (ZH ellipsoidal height), zh_ref=-3.191 IGN69"
+     },
+     "proj_result": [
+      -1.325833,
+      45.914167,
+      43.58490250305746
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01109749694253992,
+      "components": {
+       "dh_m": -0.01109749694253992
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Royan (Abords de la Gironde)",
+     "input": [
+      -1.028,
+      45.619333,
+      -2.99
+     ],
+     "expected": [
+      null,
+      null,
+      43.36
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Royan / Abords de la Gironde: zh_elli=43.36 (ZH ellipsoidal height), zh_ref=-2.99 IGN69"
+     },
+     "proj_result": [
+      -1.028,
+      45.619333,
+      43.352336670004675
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.007663329995324375,
+      "components": {
+       "dh_m": -0.007663329995324375
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Verdon-sur-Mer (Abords de la Gironde)",
+     "input": [
+      -1.040833,
+      45.546333,
+      -2.879
+     ],
+     "expected": [
+      null,
+      null,
+      43.386
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Verdon-sur-Mer / Abords de la Gironde: zh_elli=43.386 (ZH ellipsoidal height), zh_ref=-2.879 IGN69"
+     },
+     "proj_result": [
+      -1.040833,
+      45.546333,
+      43.34453061899733
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0414693810026705,
+      "components": {
+       "dh_m": -0.0414693810026705
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Richard (Abords de la Gironde)",
+     "input": [
+      -0.92305,
+      45.453667,
+      -2.859
+     ],
+     "expected": [
+      null,
+      null,
+      43.325
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Richard / Abords de la Gironde: zh_elli=43.325 (ZH ellipsoidal height), zh_ref=-2.859 IGN69"
+     },
+     "proj_result": [
+      -0.92305,
+      45.453667,
+      43.25883597508603
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06616402491397366,
+      "components": {
+       "dh_m": -0.06616402491397366
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Lamena (Abords de la Gironde)",
+     "input": [
+      -0.795217,
+      45.335733,
+      -2.817
+     ],
+     "expected": [
+      null,
+      null,
+      43.255
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Lamena / Abords de la Gironde: zh_elli=43.255 (ZH ellipsoidal height), zh_ref=-2.817 IGN69"
+     },
+     "proj_result": [
+      -0.7952170000000001,
+      45.335733,
+      43.190410462906
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06458953709400106,
+      "components": {
+       "dh_m": -0.06458953709400106
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Bordeaux (La Gironde, la Garonne)",
+     "input": [
+      -0.552805,
+      44.859982,
+      -1.812
+     ],
+     "expected": [
+      null,
+      null,
+      44.244
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Bordeaux / La Gironde, la Garonne: zh_elli=44.244 (ZH ellipsoidal height), zh_ref=-1.812 IGN69"
+     },
+     "proj_result": [
+      -0.552805,
+      44.859982,
+      44.164954315942786
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.07904568405721335,
+      "components": {
+       "dh_m": -0.07904568405721335
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Pauillac - Trompeloup (La Gironde, la Garonne)",
+     "input": [
+      -0.746,
+      45.2168,
+      -2.539
+     ],
+     "expected": [
+      null,
+      null,
+      43.413
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Pauillac - Trompeloup / La Gironde, la Garonne: zh_elli=43.413 (ZH ellipsoidal height), zh_ref=-2.539 IGN69"
+     },
+     "proj_result": [
+      -0.7460000000000001,
+      45.2168,
+      43.394320327755935
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.018679672244061862,
+      "components": {
+       "dh_m": -0.018679672244061862
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Fort Médoc (La Gironde, la Garonne)",
+     "input": [
+      -0.70026,
+      45.11727,
+      -2.26
+     ],
+     "expected": [
+      null,
+      null,
+      43.658
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Fort Médoc / La Gironde, la Garonne: zh_elli=43.658 (ZH ellipsoidal height), zh_ref=-2.26 IGN69"
+     },
+     "proj_result": [
+      -0.70026,
+      45.11727,
+      43.64109241561587
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.016907584384128427,
+      "components": {
+       "dh_m": -0.016907584384128427
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Marquis (La Gironde, la Garonne)",
+     "input": [
+      -0.55967,
+      45.00312,
+      -1.878
+     ],
+     "expected": [
+      null,
+      null,
+      43.993
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Marquis / La Gironde, la Garonne: zh_elli=43.993 (ZH ellipsoidal height), zh_ref=-1.878 IGN69"
+     },
+     "proj_result": [
+      -0.55967,
+      45.00312,
+      43.95249618295018
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.04050381704982442,
+      "components": {
+       "dh_m": -0.04050381704982442
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Jean-de-Luz (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.681667,
+      43.395,
+      -2.173
+     ],
+     "expected": [
+      null,
+      null,
+      46.595
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Jean-de-Luz / Abords d'Arcachon et de Cap Breton: zh_elli=46.595 (ZH ellipsoidal height), zh_ref=-2.173 IGN69"
+     },
+     "proj_result": [
+      -1.681667,
+      43.395,
+      46.592570402474216
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0024295975257828673,
+      "components": {
+       "dh_m": -0.0024295975257828673
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Arcachon (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.163667,
+      44.664333,
+      -1.98
+     ],
+     "expected": [
+      null,
+      null,
+      44.751
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Arcachon / Abords d'Arcachon et de Cap Breton: zh_elli=44.751 (ZH ellipsoidal height), zh_ref=-1.98 IGN69"
+     },
+     "proj_result": [
+      -1.163667,
+      44.664333,
+      44.7879479902888
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.03694799028880169,
+      "components": {
+       "dh_m": 0.03694799028880169
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Cap Ferret (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.241667,
+      44.629167,
+      -1.98
+     ],
+     "expected": [
+      null,
+      null,
+      44.886
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Cap Ferret / Abords d'Arcachon et de Cap Breton: zh_elli=44.886 (ZH ellipsoidal height), zh_ref=-1.98 IGN69"
+     },
+     "proj_result": [
+      -1.241667,
+      44.629167,
+      44.901167317431174
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.015167317431171057,
+      "components": {
+       "dh_m": 0.015167317431171057
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Boucau-Bayonne (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.514722,
+      43.527222,
+      -2.143
+     ],
+     "expected": [
+      null,
+      null,
+      46.706
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Boucau-Bayonne / Abords d'Arcachon et de Cap Breton: zh_elli=46.706 (ZH ellipsoidal height), zh_ref=-2.143 IGN69"
+     },
+     "proj_result": [
+      -1.514722,
+      43.527222,
+      46.37987943139468
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.3261205686053259,
+      "components": {
+       "dh_m": -0.3261205686053259
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Mimizan (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.3,
+      44.216667,
+      -2.16
+     ],
+     "expected": [
+      null,
+      null,
+      45.68
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Mimizan / Abords d'Arcachon et de Cap Breton: zh_elli=45.68 (ZH ellipsoidal height), zh_ref=-2.16 IGN69"
+     },
+     "proj_result": [
+      -1.3,
+      44.216667,
+      45.69199943862735
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01199943862734898,
+      "components": {
+       "dh_m": 0.01199943862734898
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Capbreton (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.437167,
+      43.653667,
+      -2.094
+     ],
+     "expected": [
+      null,
+      null,
+      46.281
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Capbreton / Abords d'Arcachon et de Cap Breton: zh_elli=46.281 (ZH ellipsoidal height), zh_ref=-2.094 IGN69"
+     },
+     "proj_result": [
+      -1.437167,
+      43.653667,
+      46.22174258034959
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05925741965040743,
+      "components": {
+       "dh_m": -0.05925741965040743
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Hendaye (Abords d'Arcachon et de Cap Breton)",
+     "input": [
+      -1.784667,
+      43.379333,
+      -2.218
+     ],
+     "expected": [
+      null,
+      null,
+      46.49
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Hendaye / Abords d'Arcachon et de Cap Breton: zh_elli=46.49 (ZH ellipsoidal height), zh_ref=-2.218 IGN69"
+     },
+     "proj_result": [
+      -1.784667,
+      43.379333,
+      46.420526096557595
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.06947390344240745,
+      "components": {
+       "dh_m": -0.06947390344240745
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Toulon (Méditerranée)",
+     "input": [
+      5.914669,
+      43.122678,
+      -0.252
+     ],
+     "expected": [
+      null,
+      null,
+      48.226
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Toulon / Méditerranée: zh_elli=48.226 (ZH ellipsoidal height), zh_ref=-0.252 IGN69"
+     },
+     "proj_result": [
+      5.914669,
+      43.122678,
+      48.22334008334907
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00265991665092713,
+      "components": {
+       "dh_m": -0.00265991665092713
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-Vendres (Méditerranée)",
+     "input": [
+      3.107369,
+      42.520044,
+      -0.392
+     ],
+     "expected": [
+      null,
+      null,
+      49.341
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-Vendres / Méditerranée: zh_elli=49.341 (ZH ellipsoidal height), zh_ref=-0.392 IGN69"
+     },
+     "proj_result": [
+      3.107369,
+      42.520044,
+      49.33000919574335
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.010990804256650222,
+      "components": {
+       "dh_m": -0.010990804256650222
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-la-Nouvelle (Méditerranée)",
+     "input": [
+      3.061944,
+      43.015278,
+      -0.421
+     ],
+     "expected": [
+      null,
+      null,
+      49.096
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-la-Nouvelle / Méditerranée: zh_elli=49.096 (ZH ellipsoidal height), zh_ref=-0.421 IGN69"
+     },
+     "proj_result": [
+      3.061944,
+      43.015278,
+      49.09662034880066
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.0006203488006661928,
+      "components": {
+       "dh_m": 0.0006203488006661928
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Gruissan (Méditerranée)",
+     "input": [
+      3.101667,
+      43.106667,
+      -0.427
+     ],
+     "expected": [
+      null,
+      null,
+      48.951
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Gruissan / Méditerranée: zh_elli=48.951 (ZH ellipsoidal height), zh_ref=-0.427 IGN69"
+     },
+     "proj_result": [
+      3.101667,
+      43.106667,
+      49.02674669295666
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.07574669295665615,
+      "components": {
+       "dh_m": 0.07574669295665615
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port de Sète (Méditerranée)",
+     "input": [
+      3.699108,
+      43.397642,
+      -0.307
+     ],
+     "expected": [
+      null,
+      null,
+      49.187
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port de Sète / Méditerranée: zh_elli=49.187 (ZH ellipsoidal height), zh_ref=-0.307 IGN69"
+     },
+     "proj_result": [
+      3.699108,
+      43.397642,
+      49.180847236983915
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.006152763016082474,
+      "components": {
+       "dh_m": -0.006152763016082474
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port Camargue (Méditerranée)",
+     "input": [
+      4.126333,
+      43.520333,
+      -0.285
+     ],
+     "expected": [
+      null,
+      null,
+      49.143
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port Camargue / Méditerranée: zh_elli=49.143 (ZH ellipsoidal height), zh_ref=-0.285 IGN69"
+     },
+     "proj_result": [
+      4.126333,
+      43.520333,
+      49.09004776308278
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.052952236917221285,
+      "components": {
+       "dh_m": -0.052952236917221285
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Fos-sur-Mer (Méditerranée)",
+     "input": [
+      4.888833,
+      43.416833,
+      -0.334
+     ],
+     "expected": [
+      null,
+      null,
+      48.775
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Fos-sur-Mer / Méditerranée: zh_elli=48.775 (ZH ellipsoidal height), zh_ref=-0.334 IGN69"
+     },
+     "proj_result": [
+      4.888833,
+      43.416833,
+      48.75635040879635
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01864959120364773,
+      "components": {
+       "dh_m": -0.01864959120364773
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port-de-Bouc (Méditerranée)",
+     "input": [
+      4.983611,
+      43.398333,
+      -0.32
+     ],
+     "expected": [
+      null,
+      null,
+      48.756
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port-de-Bouc / Méditerranée: zh_elli=48.756 (ZH ellipsoidal height), zh_ref=-0.32 IGN69"
+     },
+     "proj_result": [
+      4.983611,
+      43.398333,
+      48.76031009900268
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.00431009900268009,
+      "components": {
+       "dh_m": 0.00431009900268009
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Marseille (Corniche) (Méditerranée)",
+     "input": [
+      5.353736,
+      43.278789,
+      -0.329
+     ],
+     "expected": [
+      null,
+      null,
+      48.602
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Marseille (Corniche) / Méditerranée: zh_elli=48.602 (ZH ellipsoidal height), zh_ref=-0.329 IGN69"
+     },
+     "proj_result": [
+      5.353736,
+      43.278789,
+      48.58332474551584
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.018675254484158188,
+      "components": {
+       "dh_m": -0.018675254484158188
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Le Petit Gaou (Méditerranée)",
+     "input": [
+      5.793617,
+      43.06945,
+      -0.298
+     ],
+     "expected": [
+      null,
+      null,
+      47.813
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Le Petit Gaou / Méditerranée: zh_elli=47.813 (ZH ellipsoidal height), zh_ref=-0.298 IGN69"
+     },
+     "proj_result": [
+      5.793617,
+      43.06945,
+      47.867259542810615
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.054259542810612515,
+      "components": {
+       "dh_m": 0.054259542810612515
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port Pothuau (Méditerranée)",
+     "input": [
+      6.201733,
+      43.115917,
+      -0.306
+     ],
+     "expected": [
+      null,
+      null,
+      48.071
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port Pothuau / Méditerranée: zh_elli=48.071 (ZH ellipsoidal height), zh_ref=-0.306 IGN69"
+     },
+     "proj_result": [
+      6.201733,
+      43.115917,
+      48.020062521687784
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.05093747831221407,
+      "components": {
+       "dh_m": -0.05093747831221407
+      }
+     },
+     "pass": false,
+     "status": "fail-known"
+    },
+    {
+     "id": "Port Avis (Méditerranée)",
+     "input": [
+      6.453817,
+      43.0259,
+      -0.274
+     ],
+     "expected": [
+      null,
+      null,
+      47.087
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port Avis / Méditerranée: zh_elli=47.087 (ZH ellipsoidal height), zh_ref=-0.274 IGN69"
+     },
+     "proj_result": [
+      6.453817,
+      43.0259,
+      47.04839749037953
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.038602509620474734,
+      "components": {
+       "dh_m": -0.038602509620474734
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Saint-Tropez (Méditerranée)",
+     "input": [
+      6.634667,
+      43.271667,
+      -0.3
+     ],
+     "expected": [
+      null,
+      null,
+      47.91
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Saint-Tropez / Méditerranée: zh_elli=47.91 (ZH ellipsoidal height), zh_ref=-0.3 IGN69"
+     },
+     "proj_result": [
+      6.634667000000001,
+      43.271667,
+      47.869370581898934
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.04062941810106224,
+      "components": {
+       "dh_m": -0.04062941810106224
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Port Ferréol (Méditerranée)",
+     "input": [
+      6.7176,
+      43.359067,
+      -0.334
+     ],
+     "expected": [
+      null,
+      null,
+      47.973
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Port Ferréol / Méditerranée: zh_elli=47.973 (ZH ellipsoidal height), zh_ref=-0.334 IGN69"
+     },
+     "proj_result": [
+      6.7176,
+      43.35906700000001,
+      47.94508778030676
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.02791221969324198,
+      "components": {
+       "dh_m": -0.02791221969324198
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "La Figueirette (Méditerranée)",
+     "input": [
+      6.933767,
+      43.483533,
+      -0.329
+     ],
+     "expected": [
+      null,
+      null,
+      48.11
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site La Figueirette / Méditerranée: zh_elli=48.11 (ZH ellipsoidal height), zh_ref=-0.329 IGN69"
+     },
+     "proj_result": [
+      6.933767,
+      43.483533,
+      48.1056529546267
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.004347045373300773,
+      "components": {
+       "dh_m": -0.004347045373300773
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Nice (Méditerranée)",
+     "input": [
+      7.285267,
+      43.6955,
+      -0.344
+     ],
+     "expected": [
+      null,
+      null,
+      48.4
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Nice / Méditerranée: zh_elli=48.4 (ZH ellipsoidal height), zh_ref=-0.344 IGN69"
+     },
+     "proj_result": [
+      7.285267,
+      43.6955,
+      48.41750251211438
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.01750251211438325,
+      "components": {
+       "dh_m": 0.01750251211438325
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    },
+    {
+     "id": "Monaco (Méditerranée)",
+     "input": [
+      7.423936,
+      43.732814,
+      -0.336
+     ],
+     "expected": [
+      null,
+      null,
+      48.486
+     ],
+     "expected_source": {
+      "tool": "SHOM RAM (Références Altimétriques Maritimes) WFS",
+      "version": "RAM 2025 (doi:10.17183/MAREE_COURANTS_RAM)",
+      "date": "2026-10-04",
+      "url": "https://services.data.shom.fr/INSPIRE/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=RAM_BDD_WLD_WGS84G_WFS:ram_3857&outputFormat=application/json",
+      "how": "site Monaco / Méditerranée: zh_elli=48.486 (ZH ellipsoidal height), zh_ref=-0.336 IGN69"
+     },
+     "proj_result": [
+      7.423936,
+      43.732814,
+      48.511521959189686
+     ],
+     "delta": {
+      "horizontal_m": null,
+      "vertical_m": 0.025521959189688914,
+      "components": {
+       "dh_m": 0.025521959189688914
+      }
+     },
+     "pass": true,
+     "status": "pass"
+    }
+   ],
+   "status": "validated-by-cross-agency-data",
+   "second_path": null,
+   "known_disagreement": {
+    "points": "all",
+    "diagnosis": "RAM internal inconsistency (zh_ref vs zh_elli) at some sites, up to 1.37 m (Le Touquet); median -1.1 cm. Data issue in RAM, not engine."
+   },
+   "summary": {
+    "points": 111,
+    "pass": 73,
+    "fail": 0,
+    "fail_known": 38,
+    "informational": 0,
+    "error": 0,
+    "max_horizontal_m": 0.0,
+    "max_vertical_m": 1.3681818502819851
+   }
+  }
+ ]
+}

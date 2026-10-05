@@ -21,10 +21,10 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { geodeticTilesUrl } from '@data/basemapTiles';
-import { GeodeticLegend } from './GeodeticLegend';
-import { GeodeticFilterButton, GeodeticFilterPanel } from './GeodeticFilterPanel';
-import { activeFilterCount } from '@core/geodetic/filter';
+import { GeodeticFilterPanel } from './GeodeticFilterPanel';
+import { ExtensionsPanel } from './ExtensionsPanel';
+import { extensionsRowHint, extensionsRowTarget } from '@core/map/extensions';
+import { useExtensionsState } from '../hooks/useExtensions';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import {
@@ -57,11 +57,11 @@ import { StepSlider } from './StepSlider';
  * checkboxes, segmented pickers where a row has levels. It replaces the
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * - On the map — Content (folder picker), PDF maps, See-through white
- *   (a 5-stop slider: Off, 25 / 50 / 75 / 100 %), Personal heatmap, Labels
- *   on satellite.
+ * - On the map — Content (folder picker), PDF maps, Personal heatmap,
+ *   Parks, Extensions (geodetic points, tide stations), Labels on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
- *   Peaks.
+ *   Peaks, and last See-through white (the PDF maps' white paper, a 5-stop
+ *   slider: Off, 25 / 50 / 75 / 100 %; needs PDF maps).
  * - Live layers — Weather (drills into its list) and Marine, both parked
  *   this release (greyed "Coming soon", never removed: a feature that
  *   silently disappears reads as a bug).
@@ -120,12 +120,12 @@ function OverlayRows({
   onSlopeEnabled,
   onOpenFolders,
   onOpenWeather,
-  onOpenGeodeticFilter,
+  onOpenExtensions,
 }: {
   onSlopeEnabled: () => void;
   onOpenFolders: () => void;
   onOpenWeather: () => void;
-  onOpenGeodeticFilter: () => void;
+  onOpenExtensions: () => void;
 }) {
   const { accent } = useSheetAccent();
   const tokens = useSchemeTokens();
@@ -150,10 +150,8 @@ function OverlayRows({
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
-  const geodeticInstalled = useSettingsStore((s) => s.geodeticInstalledAt > 0);
-  const showGeodetic = useSettingsStore((s) => s.showGeodetic);
-  const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
-  const geodeticFilterCount = activeFilterCount(geodeticFilter);
+  const ext = useExtensionsState();
+  const extTarget = extensionsRowTarget(ext);
   const router = useRouter();
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
@@ -205,27 +203,6 @@ function OverlayRows({
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
       />
-      {/* How see-through the maps' white paper is, so the base map shows
-          through open land and margins. The default for every PDF map; a
-          map can override it from its Library ⋮ menu. */}
-      <ControlRow
-        icon="circle-opacity"
-        label="See-through white"
-        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
-        disabled={!showPdfMaps}
-      >
-        <StepSlider
-          labels={WHITE_KEY_STOPS}
-          value={pdfWhiteKey}
-          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
-          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-          disabled={!showPdfMaps}
-          accessibilityLabel="See-through white"
-          accentColor={accent}
-          trackColor={tokens.surfaceVariant}
-          tickColor={tokens.inkMuted}
-        />
-      </ControlRow>
       <SwitchRow
         icon="fire"
         label="Personal heatmap"
@@ -244,31 +221,21 @@ function OverlayRows({
         disabled={!parksAvailable}
         onToggle={() => set('showParks', !showParks)}
       />
-      {/* Settings → Extensions → Geodetic points. Installed: a switch with
-          the symbol legend under it; not yet: a row that leads to "Get". */}
-      {geodeticTilesUrl() !== null &&
-        (geodeticInstalled ? (
-          <SwitchRow
-            icon="map-marker-radius-outline"
-            label="Geodetic points"
-            hint={
-              geodeticFilterCount > 0
-                ? `Filtered · ${geodeticFilterCount} filter${geodeticFilterCount === 1 ? '' : 's'}`
-                : 'Survey marks and benchmarks'
-            }
-            value={showGeodetic}
-            onToggle={() => set('showGeodetic', !showGeodetic)}
-            accessory={<GeodeticFilterButton onPress={onOpenGeodeticFilter} />}
-            below={<GeodeticLegend disabled={!showGeodetic} types={geodeticFilter.types} />}
-          />
-        ) : (
-          <NavRow
-            icon="map-marker-radius-outline"
-            label="Geodetic points"
-            hint="Get the extension in Settings"
-            onPress={() => router.push({ pathname: '/settings', params: { open: 'extensions' } })}
-          />
-        ))}
+      {/* Map extensions (@core/map/extensions): ONE row. Nothing installed →
+          Settings → Extensions (the download page); something installed →
+          the Extensions panel in this sheet. */}
+      {extTarget !== null && (
+        <NavRow
+          icon="puzzle-outline"
+          label="Extensions"
+          hint={extensionsRowHint(ext)}
+          onPress={
+            extTarget === 'panel'
+              ? onOpenExtensions
+              : () => router.push({ pathname: '/settings', params: { open: 'extensions' } })
+          }
+        />
+      )}
       <SwitchRow
         icon="label-outline"
         label="Labels on satellite"
@@ -366,6 +333,28 @@ function OverlayRows({
         selected={peakDensity}
         onSelect={(d) => set('peakDensity', d)}
       />
+      {/* How see-through the PDF maps' white paper is, so the base map shows
+          through open land and margins. The default for every PDF map; a
+          map can override it from its Library ⋮ menu. Last in Terrain (owner,
+          2026-10-05: less important than the rest); still needs PDF maps. */}
+      <ControlRow
+        icon="circle-opacity"
+        label="See-through white"
+        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
+        disabled={!showPdfMaps}
+      >
+        <StepSlider
+          labels={WHITE_KEY_STOPS}
+          value={pdfWhiteKey}
+          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
+          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+          disabled={!showPdfMaps}
+          accessibilityLabel="See-through white"
+          accentColor={accent}
+          trackColor={tokens.surfaceVariant}
+          tickColor={tokens.inkMuted}
+        />
+      </ControlRow>
 
       <SectionTitle>Live layers</SectionTitle>
       {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
@@ -509,7 +498,8 @@ export function OverlaysPanel({
   onClose: () => void;
 }) {
   const [weatherOpen, setWeatherOpen] = useState(false);
-  const [geodeticFilterOpen, setGeodeticFilterOpen] = useState(false);
+  // The sheet's sub-views: the Extensions panel, and from it the geodetic filter.
+  const [extView, setExtView] = useState<null | 'extensions' | 'geodeticFilter'>(null);
   const { height: windowH } = useWindowDimensions();
   // Stay above the tab bar: capped at 60 % of the window alone, the sheet ran
   // behind it on a phone and "Live layers" could never be scrolled to.
@@ -535,14 +525,20 @@ export function OverlaysPanel({
       >
         {weatherOpen ? (
           <WeatherList onBack={() => setWeatherOpen(false)} />
-        ) : geodeticFilterOpen ? (
-          <GeodeticFilterPanel onBack={() => setGeodeticFilterOpen(false)} />
+        ) : extView === 'geodeticFilter' ? (
+          <GeodeticFilterPanel onBack={() => setExtView('extensions')} />
+        ) : extView === 'extensions' ? (
+          <ExtensionsPanel
+            onBack={() => setExtView(null)}
+            onOpenGeodeticFilter={() => setExtView('geodeticFilter')}
+            onClose={onClose}
+          />
         ) : (
           <OverlayRows
             onSlopeEnabled={onSlopeEnabled}
             onOpenFolders={onOpenFolders}
             onOpenWeather={() => setWeatherOpen(true)}
-            onOpenGeodeticFilter={() => setGeodeticFilterOpen(true)}
+            onOpenExtensions={() => setExtView('extensions')}
           />
         )}
       </ScrollView>

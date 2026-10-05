@@ -31,6 +31,7 @@ import type {
 import { GEODETIC_CATALOG } from '@core/geodetic/catalog';
 import type { GeodeticLayerFilters } from '@core/geodetic/filter';
 import palette from '@core/geodetic/palette.json';
+import { buildTidalLabelLayer, tidalIcon } from '@core/tides/tidalBenchmark';
 
 export type GeodeticTheme = 'light' | 'dark';
 
@@ -167,13 +168,13 @@ export function buildGeodeticLayers(options: GeodeticLayerOptions): LayerSpecifi
     },
   });
 
-  const officialIcon = [
+  const officialIcon = tidalIcon(theme, [
     'concat',
     'geodetic-',
     KIND,
     ['case', ['==', ['get', 'l'], 1], '-o', ''],
     `-${theme}`,
-  ];
+  ]);
   const osmIcon = ['concat', 'geodetic-', KIND, `-${theme}`];
   const symbol = (
     id: string,
@@ -252,7 +253,16 @@ export function buildGeodeticLayers(options: GeodeticLayerOptions): LayerSpecifi
       ),
       symbol(GEODETIC_LAYER_IDS.symbols15, GEODETIC_OFFICIAL_LAYER, officialIcon, { minzoom: 15 }),
       label(GEODETIC_LAYER_IDS.osmLabels, GEODETIC_OSM_LAYER, ['coalesce', ['get', 'n'], '']),
-      label(GEODETIC_LAYER_IDS.labels, GEODETIC_OFFICIAL_LAYER, ['get', 'i']),
+      {
+        ...label(GEODETIC_LAYER_IDS.labels, GEODETIC_OFFICIAL_LAYER, ['get', 'i']),
+        filter: ['!', ['has', 'cd']],
+      },
+      buildTidalLabelLayer({
+        theme,
+        font: options.font,
+        source,
+        sourceLayer: GEODETIC_OFFICIAL_LAYER,
+      }),
     ],
     options.filters,
   );

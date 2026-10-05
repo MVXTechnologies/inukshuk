@@ -21,7 +21,7 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { geodeticTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
+import { geodeticTilesUrl, tideTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
 import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
 import { resolveRegionName } from '../regionNaming';
 
@@ -308,7 +308,14 @@ export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat)
   // The geodetic-points extension, when installed with "Offline in your
   // regions" on: its tiles ride in every new pack (a pack stores every source
   // of its style). Regions from before the install get a companion pack.
-  const geodetic = geodeticPackOption();
+  // Tide stations ride along too (a few KB: the archive stops at z10), so the
+  // overlay works offline in every region downloaded from now on.
+  // Only once the Tide stations extension is installed.
+  const tideTiles = useSettingsStore.getState().tidesInstalledAt > 0 ? tideTilesUrl() : null;
+  const geodetic = {
+    ...geodeticPackOption(),
+    ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),
+  };
   if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
   // Packs always keep the contours, so they work offline whichever way the
   // Contours toggle is set later.

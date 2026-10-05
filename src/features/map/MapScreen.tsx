@@ -101,6 +101,7 @@ import type { Place } from '@core/search/place';
 import { usePlaceRecentsStore } from '@state/placeRecentsStore';
 import {
   geodeticTilesUrl,
+  tideTilesUrl,
   imageryContoursOption,
   vectorBasemapOption,
   vectorContoursUrl,
@@ -111,6 +112,13 @@ import { GEODETIC_TAP_LAYERS, geodeticColors } from '@core/map/geodeticStyle';
 import { cardCameraCenterPx } from '@core/map/cardCamera';
 import { buildGeodeticFilters } from '@core/geodetic/filter';
 import { GeodeticPointCard } from './components/GeodeticPointCard';
+import type { TideStation } from '@core/tides/station';
+import { tideColors } from '@core/map/tideStyle';
+import { TideStationCard } from './components/TideStationCard';
+import { tideImages } from './tideImages';
+import { tideStationAt } from './tideTap';
+import { bottomCardSlotFree } from '@core/map/bottomCardSlot';
+import { useChsStations } from './hooks/useChs';
 import { geodeticImages } from './geodeticImages';
 import { overlayAnchor } from '@core/map/layerSlots';
 import { PuckLayers } from './components/PuckLayers';
@@ -531,6 +539,13 @@ export function MapScreen() {
   const geodeticTiles = geodeticInstalled && showGeodetic ? geodeticTilesUrl() : null;
   const geodeticFilter = useSettingsStore((s) => s.geodeticFilter);
   const geodeticFilters = useMemo(() => buildGeodeticFilters(geodeticFilter), [geodeticFilter]);
+  /** Overlays → Tide stations (`@core/map/tideStyle`). */
+  const showTideStations = useSettingsStore((s) => s.showTideStations);
+  // Settings → Extensions → Tide stations: installed, and its switch on.
+  const tidesInstalled = useSettingsStore((s) => s.tidesInstalledAt > 0);
+  const tideTiles = tidesInstalled && showTideStations ? tideTilesUrl() : null;
+  /** Canadian stations: fetched live from CHS by the phone and kept on it (never our tiles). */
+  const chsStations = useChsStations(tideTiles !== null, offlineOnly);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const betaTerrain3d = useSettingsStore((s) => s.betaTerrain3d);
@@ -862,6 +877,9 @@ export function MapScreen() {
             },
           }
         : {}),
+      ...(tideTiles !== null && editorStyle === null
+        ? { tides: { tiles: tideTiles, dark: theme.dark, chs: chsStations, ...geodeticGlyphs() } }
+        : {}),
     };
     // While the map maker is open the base raster becomes the source the
     // composer stitches, so the frame and the sheet cannot disagree (#349).
@@ -906,6 +924,8 @@ export function MapScreen() {
     satelliteImagery,
     geodeticTiles,
     geodeticFilters,
+    tideTiles,
+    chsStations,
   ]);
 
   // Native 3D terrain (docs/plans/native-terrain.md): with "3D relief" on and
@@ -1487,6 +1507,8 @@ export function MapScreen() {
   const geodeticRecenterRef = useRef<GeodeticMark | null>(null);
   const geodeticDockRef = useRef<View>(null);
   const mapSizeRef = useRef<{ width: number; height: number } | null>(null);
+  /** The tapped tide station (its card is up). */
+  const [tideStation, setTideStation] = useState<TideStation | null>(null);
   const findWp = useCallback(
     (ref: { source: 'live' | 'saved'; id: string } | null) =>
       ref === null
@@ -1535,6 +1557,15 @@ export function MapScreen() {
   const drawingRef = useRef(drawing);
   useEffect(() => {
     drawingRef.current = drawing;
+  });
+  // The bottom-card slot (@core/map/bottomCardSlot): cards step aside for an
+  // open rail sheet (they used to draw over Overlays), an inspection, an edit
+  // or a drawing tool.
+  const cardSlotFree = bottomCardSlotFree({
+    railMenuOpen,
+    inspecting: inspectTrack !== null,
+    editingWaypoint: editWaypoint !== null,
+    drawing: drawing.active,
   });
 
   const saveWaypoint = () => {
@@ -1850,7 +1881,22 @@ export function MapScreen() {
             : { source: pin.source, id: pin.id },
         );
         setGeodeticMark(null);
+        setTideStation(null);
         return;
+      }
+
+      // Tide stations (Overlays → Tide stations): above the survey marks.
+      if (tideTiles !== null && lngLatArr) {
+        const station = await tideStationAt(map, px, py, [lngLatArr[0], lngLatArr[1]]);
+        if (station !== null) {
+          drawingRef.current.closeAreaCard();
+          setPointAt(null);
+          setViewWp(null);
+          setForecastAt(null);
+          setGeodeticMark(null);
+          setTideStation(station);
+          return;
+        }
       }
 
       // Geodetic points (Settings → Extensions): under the waypoint pins and
@@ -1877,6 +1923,7 @@ export function MapScreen() {
           setViewWp(null);
           setForecastAt(null);
           geodeticRecenterRef.current = mark;
+          setTideStation(null);
           setGeodeticMark(mark);
           return;
         }
@@ -1965,8 +2012,9 @@ export function MapScreen() {
           // a fresh chip as before.
           // A survey-mark card is up: this tap only closes it (#258's rule —
           // the chip never drops in the same tap that dismisses a card).
-          if (geodeticMark !== null) {
+          if (geodeticMark !== null || tideStation !== null) {
             setGeodeticMark(null);
+            setTideStation(null);
             return;
           }
           setPointAt(
@@ -1977,10 +2025,13 @@ export function MapScreen() {
       setViewWp(null); // tapping empty map dismisses the waypoint viewer
       setForecastAt(null); // ... and the forecast card
       setGeodeticMark(null); // ... and the survey-mark card
+      setTideStation(null); // ... and the tide-station card
     },
     [
       geodeticTiles,
       geodeticMark,
+      tideTiles,
+      tideStation,
       visiblePins,
       trackHeat,
       scaleAt?.zoom,
@@ -2638,6 +2689,30 @@ export function MapScreen() {
             {geodeticTiles !== null && (
               <Images images={geodeticImages(theme.dark ? 'dark' : 'light')} />
             )}
+            {tideTiles !== null && <Images images={tideImages(theme.dark ? 'dark' : 'light')} />}
+            {tideTiles !== null && tideStation !== null && (
+              <GeoJSONSource
+                id="tide-selected"
+                data={{
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: [tideStation.lng, tideStation.lat] },
+                  properties: {},
+                }}
+              >
+                <Layer
+                  id="tide-selected-ring"
+                  beforeId={MARKERS_ANCHOR}
+                  type="circle"
+                  paint={{
+                    'circle-radius': 17,
+                    'circle-color': tideColors(theme.dark ? 'dark' : 'light').station,
+                    'circle-opacity': 0.16,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': tideColors(theme.dark ? 'dark' : 'light').station,
+                  }}
+                />
+              </GeoJSONSource>
+            )}
             {geodeticTiles !== null && geodeticMark !== null && (
               <GeoJSONSource
                 id="geodetic-selected"
@@ -3288,6 +3363,7 @@ export function MapScreen() {
               weather: weatherLayer !== null && !offlineOnly,
               marine: marineActive,
               geodetic: geodeticTiles !== null,
+              tides: tideTiles !== null,
             })}
             bottom={
               // The bottom column's own lift, same precedence as its style.
@@ -3334,61 +3410,56 @@ export function MapScreen() {
           panel, the save/edit sheets, and a tapped area's card. */}
         {drawing.chrome}
 
-        {inspectTrack === null &&
-          editWaypoint === null &&
-          viewWaypoint !== null &&
-          !drawing.active && (
-            <View
-              style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
-              pointerEvents="box-none"
-              testID="waypoint-card-dock"
-            >
-              <WaypointViewerCard
-                waypoint={viewWaypoint}
-                floating={recordingPanelUp}
-                onCopyCoords={() => {
-                  if (!viewWaypoint) return;
-                  void Clipboard.setStringAsync(
-                    formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
-                  );
-                  showSnack('Coordinates copied');
-                }}
-                onCopyNote={() => {
-                  if (!viewWaypoint?.note) return;
-                  void Clipboard.setStringAsync(viewWaypoint.note);
-                  showSnack('Note copied');
-                }}
-                onSharePhoto={() => {
-                  const uri = viewWaypoint?.photoUri;
-                  if (!uri) return;
-                  void (async () => {
-                    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
-                    else showSnack('Sharing is not available on this device');
-                  })();
-                }}
-                onEdit={() => {
-                  if (!viewWp) return;
-                  discardDraftPhoto(newWp);
-                  setNewWp(null);
-                  setEditWp(viewWp);
-                  setWpName(viewWaypoint?.label ?? '');
-                  setWpDraft(viewWaypoint?.note ?? '');
-                  setViewWp(null);
-                }}
-                onDelete={deleteViewedWaypoint}
-                onClose={() => setViewWp(null)}
-              />
-            </View>
-          )}
+        {cardSlotFree && viewWaypoint !== null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+            testID="waypoint-card-dock"
+          >
+            <WaypointViewerCard
+              waypoint={viewWaypoint}
+              floating={recordingPanelUp}
+              onCopyCoords={() => {
+                if (!viewWaypoint) return;
+                void Clipboard.setStringAsync(
+                  formatLatLng(viewWaypoint.latitude, viewWaypoint.longitude),
+                );
+                showSnack('Coordinates copied');
+              }}
+              onCopyNote={() => {
+                if (!viewWaypoint?.note) return;
+                void Clipboard.setStringAsync(viewWaypoint.note);
+                showSnack('Note copied');
+              }}
+              onSharePhoto={() => {
+                const uri = viewWaypoint?.photoUri;
+                if (!uri) return;
+                void (async () => {
+                  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+                  else showSnack('Sharing is not available on this device');
+                })();
+              }}
+              onEdit={() => {
+                if (!viewWp) return;
+                discardDraftPhoto(newWp);
+                setNewWp(null);
+                setEditWp(viewWp);
+                setWpName(viewWaypoint?.label ?? '');
+                setWpDraft(viewWaypoint?.note ?? '');
+                setViewWp(null);
+              }}
+              onDelete={deleteViewedWaypoint}
+              onClose={() => setViewWp(null)}
+            />
+          </View>
+        )}
 
         {/* Geodetic points: the tapped survey mark's summary card. Same
           bottom-card slot rules as the waypoint viewer. */}
-        {geodeticTiles !== null &&
+        {cardSlotFree &&
+          geodeticTiles !== null &&
           geodeticMark !== null &&
-          inspectTrack === null &&
-          editWaypoint === null &&
-          viewWaypoint === null &&
-          !drawing.active && (
+          viewWaypoint === null && (
             <View
               style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
               pointerEvents="box-none"
@@ -3429,14 +3500,41 @@ export function MapScreen() {
             </View>
           )}
 
+        {/* Tide stations: the tapped station's card. Same bottom-card slot
+          rules as the survey-mark card. */}
+        {cardSlotFree && tideTiles !== null && tideStation !== null && viewWaypoint === null && (
+          <View
+            style={waypointCardDockStyle(recordingPanelUp, panelHeight)}
+            pointerEvents="box-none"
+            testID="tide-card-dock"
+          >
+            <TideStationCard
+              station={tideStation}
+              floating={recordingPanelUp}
+              offline={offlineOnly}
+              onOpenLink={(url) => {
+                Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
+              }}
+              onNavigate={() => {
+                setDestination({ latitude: tideStation.lat, longitude: tideStation.lng });
+                setTideStation(null);
+              }}
+              onCopy={(text) => {
+                void Clipboard.setStringAsync(text);
+                showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
+              }}
+              onClose={() => setTideStation(null)}
+            />
+          </View>
+        )}
+
         {/* ECCC forecast card (weather long-press): nearest citypage forecast +
           the gridded value under the finger. Same bottom-card slot rules as
           the waypoint viewer — hidden while other bottom cards are up. */}
         {forecastAt !== null &&
           (weatherLayer !== null || marineActive) &&
           !offlineOnly &&
-          inspectTrack === null &&
-          editWaypoint === null &&
+          cardSlotFree &&
           viewWaypoint === null && (
             <ForecastCard
               at={forecastAt}

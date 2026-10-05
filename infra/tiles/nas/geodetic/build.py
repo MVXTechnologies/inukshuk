@@ -119,7 +119,12 @@ def _part_key(lat, lng):
     return f'{int(x // 256)}_{int(y // 256)}'
 
 
-def cmd_assemble(norm, out):
+def cmd_assemble(norm, out, tidal_path=None):
+    # Tidal benchmarks (../tides/join_geodetic.py): geodetic uid → its chart-datum block.
+    tidal = json.load(open(tidal_path)) if tidal_path and os.path.exists(tidal_path) else {}
+    if tidal:
+        log(f'assemble: {len(tidal)} tidal benchmarks to mark')
+    tidal_marked = 0
     parts_dir = os.path.join(out, 'parts')
     shutil.rmtree(parts_dir, ignore_errors=True)
     os.makedirs(parts_dir)
@@ -152,6 +157,10 @@ def cmd_assemble(norm, out):
         for z, n in assign_minzoom(kept).items():
             hist[z] = hist.get(z, 0) + n
         for r in kept:
+            t = tidal.get(r['uid'])
+            if t is not None:
+                r['tidal'] = t
+                tidal_marked += 1
             (osm if r['src'] == 'osm' else official).write(feature_line(r) + '\n')
             c = counts[r['src']]
             c['marks'] += 1
@@ -172,6 +181,7 @@ def cmd_assemble(norm, out):
         'sources': counts,
         'minzoom': dict(sorted(hist.items())),
         'merged': dict(sorted(merged.items(), key=lambda kv: -kv[1])),
+        'tidal': tidal_marked,
         'vdatums': {catalog.VDATUMS[i][0]: n for i, n in sorted(vd_counts.items())},
     }
     json.dump(report, open(os.path.join(out, 'report.json'), 'w'), indent=1, ensure_ascii=False)
@@ -198,6 +208,7 @@ def main():
     a = sub.add_parser('assemble')
     a.add_argument('norm')
     a.add_argument('out')
+    a.add_argument('--tidal')
     c = sub.add_parser('catalog')
     c.add_argument('out')
     sub.add_parser('sources')
@@ -215,7 +226,7 @@ def main():
     elif args.cmd == 'normalize':
         cmd_normalize(args.src, args.raw, args.norm, args.fiches)
     elif args.cmd == 'assemble':
-        cmd_assemble(args.norm, args.out)
+        cmd_assemble(args.norm, args.out, args.tidal)
     else:
         catalog.write_json(args.out)
 

@@ -108,6 +108,7 @@ describe('geodetic filter', () => {
   it('every expression compiles under the MapLibre spec, with no zoom in it', () => {
     const everything: GeodeticFilter = {
       types: ['3d'],
+      tidal: false,
       datum: 'modern',
       status: ['ok'],
       precision: '2',

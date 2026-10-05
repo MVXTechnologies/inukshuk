@@ -131,8 +131,26 @@ for SRC in $SOURCES; do
   py normalize "$SRC" /work/raw /work/norm --fiches /fiches || echo "$(date) $SRC: normalize failed" >&2
 done
 
+# Tide stations + tidal benchmarks (tides.sh): its join reads the norm files
+# just written, and its tidal_join.json marks the tidal benchmarks below. A
+# failed tides run never stops the geodetic build (last join stays).
+# ON since the owner approved shipping it (2026-10-05); GEODETIC_TIDAL_JOIN=0
+# builds without the tidal keys.
+TIDAL_ARGS=""
+if [ "${GEODETIC_TIDAL_JOIN:-1}" = 1 ]; then
+  if [ -x "$HERE/tides.sh" ]; then
+    "$HERE/tides.sh" >>"$GEO/logs/tides.log" 2>&1 || echo "$(date) tides.sh failed (see logs/tides.log)" >&2
+  fi
+  TIDAL_JOIN=$WORK/tides/out/tidal_join.json
+fi
+if [ -n "${TIDAL_JOIN:-}" ] && [ -f "$TIDAL_JOIN" ] && grep -q -- "'--tidal'" "$HERE/geodetic/build.py"; then
+  cp "$TIDAL_JOIN" "$GEO/out/tidal_join.json"
+  TIDAL_ARGS="--tidal /work/out/tidal_join.json"
+fi
+
 # Assemble (prints the description the app reads from /geodetic.json).
-DESC=$(py assemble /work/norm /work/out | tail -1)
+# shellcheck disable=SC2086
+DESC=$(py assemble /work/norm /work/out $TIDAL_ARGS | tail -1)
 COUNT=$(python3 -c "import json,sys; print(sum(json.loads(sys.argv[1])['counts'].values()))" "$DESC")
 echo "$(date) $COUNT live marks: $DESC"
 PREVIOUS=$(cat "$GEO/count" 2>/dev/null || echo 0)
@@ -156,7 +174,7 @@ docker run --rm -u "$OWNER" -v "$GEO/out:/data" "$TIPPECANOE_IMAGE" \
   -n 'Inukshuk geodetic points' -A "$ATTRIBUTION" -N "$DESC" \
   -Z5 -z13 -r1 --no-feature-limit --no-tile-size-limit \
   -T s:int -T d:int -T c:int -T hd:int -T hd2:int -T l:int -T p:int -T z:int \
-  -T H:string -T H2:string -T h:string \
+  -T H:string -T H2:string -T h:string -T cd:string -T cm:string -T cu:int \
   --read-parallel --quiet \
   -L geodetic:/data/geodetic.geojsonl -L geodetic_osm:/data/geodetic_osm.geojsonl
 docker run --rm -v "$GEO/out:/data" "$PMTILES_IMAGE" verify /data/geodetic.new.pmtiles >/dev/null

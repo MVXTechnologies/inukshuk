@@ -1,0 +1,18 @@
+{
+  "light": {
+    "station": "#0E6F86",
+    "stationFill": "#FFFFFF",
+    "tidal": "#D2302A",
+    "halo": "#FFFFFF",
+    "label": "#0B4F60",
+    "labelHalo": "#F7F3EA"
+  },
+  "dark": {
+    "station": "#4CC6DE",
+    "stationFill": "#13171B",
+    "tidal": "#FF6252",
+    "halo": "#13171B",
+    "label": "#9FE3F0",
+    "labelHalo": "#13171B"
+  }
+}
