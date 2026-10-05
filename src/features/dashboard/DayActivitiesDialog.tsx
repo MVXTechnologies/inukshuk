@@ -29,12 +29,13 @@ export function DayActivitiesDialog({
         <Dialog.Title>{title ?? ''}</Dialog.Title>
         <Dialog.ScrollArea style={{ paddingHorizontal: 0 }}>
           <ScrollView>
-            {tracks.map((t) => {
+            {tracks.map((t, i) => {
               const category = findCategory(t.category, [...customCategories]);
               const timed = t.stats.movingTimeS > 0;
               return (
                 <List.Item
                   key={t.id}
+                  testID={`day-activity-${i}`}
                   title={t.name}
                   description={`${formatDistance(t.stats.distanceM)}${
                     timed ? ` · ${formatDuration(t.stats.movingTimeS)}` : ''

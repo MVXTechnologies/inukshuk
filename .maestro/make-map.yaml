@@ -119,3 +119,14 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 15000
+# Let the new map's page finish rasterizing before the flow ends. The next
+# flow's launchApp force-stops the app; a render still in flight then leaves
+# its checkpoint behind, and the next launch (by design, pdfRenderRecovery)
+# turns that page off with "Rendering was interrupted" — which then failed
+# pdf-overlays.yaml's unscoped 'Page 1: .*turned off.*' check (CI
+# 2026-10-05, on "My map <date>", not on the JPEG fixture it tests).
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    notVisible: 'Rendering .*My map.*'
+    timeout: 180000
