@@ -134,12 +134,16 @@ done
 # Tide stations + tidal benchmarks (tides.sh): its join reads the norm files
 # just written, and its tidal_join.json marks the tidal benchmarks below. A
 # failed tides run never stops the geodetic build (last join stays).
-if [ -x "$HERE/tides.sh" ] && [ "${GEODETIC_SKIP_TIDES:-}" != 1 ]; then
-  "$HERE/tides.sh" >>"$GEO/logs/tides.log" 2>&1 || echo "$(date) tides.sh failed (see logs/tides.log)" >&2
-fi
-TIDAL_JOIN=$WORK/tides/out/tidal_join.json
+# OFF unless GEODETIC_TIDAL_JOIN=1: the owner decides when chart-datum data
+# ships, so the weekly build never publishes tidal keys on its own.
 TIDAL_ARGS=""
-if [ -f "$TIDAL_JOIN" ] && grep -q -- "'--tidal'" "$HERE/geodetic/build.py"; then
+if [ "${GEODETIC_TIDAL_JOIN:-0}" = 1 ]; then
+  if [ -x "$HERE/tides.sh" ]; then
+    "$HERE/tides.sh" >>"$GEO/logs/tides.log" 2>&1 || echo "$(date) tides.sh failed (see logs/tides.log)" >&2
+  fi
+  TIDAL_JOIN=$WORK/tides/out/tidal_join.json
+fi
+if [ -n "${TIDAL_JOIN:-}" ] && [ -f "$TIDAL_JOIN" ] && grep -q -- "'--tidal'" "$HERE/geodetic/build.py"; then
   cp "$TIDAL_JOIN" "$GEO/out/tidal_join.json"
   TIDAL_ARGS="--tidal /work/out/tidal_join.json"
 fi
