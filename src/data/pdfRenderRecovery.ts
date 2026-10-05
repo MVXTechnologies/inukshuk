@@ -5,6 +5,12 @@ import {
   joinDocumentPath,
   toDocumentRelativePath,
 } from '@core/storage/documentPaths';
+import {
+  clearInterruptions,
+  parseInterruptions,
+  recordInterruption,
+  type RenderInterruption,
+} from '@core/library/renderInterruptions';
 
 export interface InterruptedPdfRender {
   token: string;
@@ -16,6 +22,10 @@ export interface InterruptedPdfRender {
 const CHECKPOINT = '.pdf-render-checkpoint.json';
 const STAGE = `${CHECKPOINT}.tmp`;
 const MAX_BYTES = 8192;
+// Consecutive interruptions per page (see `@core/library/renderInterruptions`).
+const STRIKES = '.pdf-render-interruptions.json';
+const MAX_STRIKE_BYTES = 65536;
+let strikesCache: RenderInterruption[] | null = null;
 // A failed library save leaves the original page active on disk. No subsequent
 // render may replace its recovery evidence until that pause is acknowledged.
 let protectedToken: string | null = null;
@@ -99,16 +109,79 @@ export function readInterruptedPdfRender(): InterruptedPdfRender | null {
     : null;
 }
 
-/** A late completion cannot acknowledge a newer render, including its staging file. */
+/**
+ * A late completion cannot acknowledge a newer render, including its staging file.
+ * The process outlived this render, so the page's interruption strikes are cleared.
+ */
 export function finishPdfRender(token: string): void {
   if (protectedToken === token) return;
-  clearMatchingCheckpoint(token);
+  const page = clearMatchingCheckpoint(token);
+  if (page) clearStrikes(page);
 }
 
-function clearMatchingCheckpoint(token: string): void {
+function clearMatchingCheckpoint(token: string): StoredCheckpoint | null {
+  let matched: StoredCheckpoint | null = null;
   for (const name of [CHECKPOINT, STAGE]) {
-    if (readFile(name)?.token === token) new File(Paths.document, name).delete();
+    const data = readFile(name);
+    if (data?.token === token) {
+      new File(Paths.document, name).delete();
+      matched = data;
+    }
   }
+  return matched;
+}
+
+function loadStrikes(): RenderInterruption[] {
+  if (strikesCache !== null) return strikesCache;
+  let entries: RenderInterruption[] = [];
+  try {
+    const file = new File(Paths.document, STRIKES);
+    if (file.exists && file.size <= MAX_STRIKE_BYTES) {
+      entries = parseInterruptions(JSON.parse(file.textSync()));
+    }
+  } catch {
+    entries = [];
+  }
+  strikesCache = entries;
+  return entries;
+}
+
+/** Throws when the list cannot be written; the cache only changes on success. */
+function saveStrikes(entries: RenderInterruption[]): void {
+  const file = new File(Paths.document, STRIKES);
+  if (entries.length === 0) {
+    if (file.exists) file.delete();
+  } else {
+    if (!file.exists) file.create();
+    file.write(JSON.stringify({ version: 1, entries }));
+  }
+  strikesCache = entries;
+}
+
+function clearStrikes(page: { filePath: string; pageIndex: number }): void {
+  const entries = loadStrikes();
+  const remaining = clearInterruptions(entries, page);
+  if (remaining.length !== entries.length) saveStrikes(remaining);
+}
+
+/**
+ * Count the interrupted render found at launch against its page and say
+ * whether to pause the page now. The first interruption of a page is most
+ * often the process being ended from outside (swiped away, reclaimed by the
+ * OS, force-stopped), not a crash, so the page gets one more attempt; a page
+ * that ends the process again before any render of it completes is paused.
+ * The strike is saved before returning, so the caller may consume the
+ * checkpoint afterwards. Throws when it cannot be saved: pause then.
+ */
+export function recordPdfRenderInterruption(interrupted: InterruptedPdfRender): boolean {
+  const filePath = toDocumentRelativePath(interrupted.fileUri, Paths.document.uri);
+  const { entries, pause } = recordInterruption(loadStrikes(), {
+    filePath,
+    pageIndex: interrupted.pageIndex,
+    token: interrupted.token,
+  });
+  saveStrikes(entries);
+  return pause;
 }
 
 /** Preserve crash evidence when the safe library state could not be saved. */
