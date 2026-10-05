@@ -107,14 +107,20 @@ export function ExploreFilterBar({
           apply: (f: ExploreFilter) => ({ ...f, kind: k }),
         })).filter((o) => o.count > 0);
       case 'activity':
-        return CATALOG_ACTIVITIES.map((a) => ({
-          key: a,
-          label: CATALOG_ACTIVITY_LABELS[a],
-          count: (counts.activities[a] ?? 0) + (placeCounts?.activities[a] ?? 0),
-          places: placeCounts?.activities[a] ?? 0,
-          apply: (f: ExploreFilter) => ({ ...f, activity: a }),
-          ...(extraActivities?.[a] !== undefined ? { countText: extraActivities[a] } : {}),
-        })).filter((o) => o.count > 0 || o.countText !== undefined);
+        return (
+          CATALOG_ACTIVITIES.map((a) => ({
+            key: a,
+            label: CATALOG_ACTIVITY_LABELS[a],
+            count: (counts.activities[a] ?? 0) + (placeCounts?.activities[a] ?? 0),
+            places: placeCounts?.activities[a] ?? 0,
+            apply: (f: ExploreFilter) => ({ ...f, activity: a }),
+            ...(extraActivities?.[a] !== undefined ? { countText: extraActivities[a] } : {}),
+          }))
+            .filter((o) => o.count > 0 || o.countText !== undefined)
+            // Activities with their own layer (Climbing: crags) lead: they are
+            // there wherever the map is, whatever the catalog has loaded.
+            .sort((a, b) => Number(b.countText !== undefined) - Number(a.countText !== undefined))
+        );
       case 'terrain':
         return CATALOG_TERRAINS.filter((v) => (counts.terrains[v] ?? 0) > 0).map((v) => ({
           key: v,
@@ -199,9 +205,13 @@ export function ExploreFilterBar({
                   ? option.countText
                   : option.count.toLocaleString('en-US')
               }`}
-              accessibilityLabel={`${option.label}, ${option.count} ${
-                option.places > 0 ? 'maps and places' : 'maps'
-              }`}
+              accessibilityLabel={
+                option.count === 0 && option.countText !== undefined
+                  ? `${option.label}, ${option.countText}`
+                  : `${option.label}, ${option.count} ${
+                      option.places > 0 ? 'maps and places' : 'maps'
+                    }`
+              }
               on={false}
               onPress={() => {
                 setOpen(null);

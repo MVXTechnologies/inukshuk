@@ -80,7 +80,7 @@ function routeMeta(r: CragRoute, sector: CragSector, system: GradeSystem): strin
   const grade = routeGrade(r, system, SOURCE_SHORT[sector.src]);
   return [
     r.styles.map((s) => STYLE_LABELS[s]).join(' / ') || null,
-    r.bolts !== undefined ? `${r.bolts} bolts` : null,
+    r.bolts !== undefined ? `${r.bolts} ${r.bolts === 1 ? 'bolt' : 'bolts'}` : null,
     r.pitches !== undefined ? `${r.pitches} pitches` : null,
     r.lengthM !== undefined ? `${r.lengthM} m` : null,
     grade?.note ?? null,
@@ -417,7 +417,12 @@ export function CragTopoScreen({ uid }: { uid: string }) {
           </Text>
         </View>
         {saved !== undefined ? (
-          <View accessibilityLabel="Saved offline" style={styles.icon}>
+          <View
+            accessible
+            accessibilityLabel="Saved offline"
+            testID="crag-topo-saved"
+            style={styles.icon}
+          >
             <Icon source="check-circle" size={26} color={t.library.onMapInk} />
           </View>
         ) : (
