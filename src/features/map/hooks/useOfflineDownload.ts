@@ -310,7 +310,8 @@ export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat)
   // of its style). Regions from before the install get a companion pack.
   // Tide stations ride along too (a few KB: the archive stops at z10), so the
   // overlay works offline in every region downloaded from now on.
-  const tideTiles = tideTilesUrl();
+  // Only once the Tide stations extension is installed.
+  const tideTiles = useSettingsStore.getState().tidesInstalledAt > 0 ? tideTilesUrl() : null;
   const geodetic = {
     ...geodeticPackOption(),
     ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),

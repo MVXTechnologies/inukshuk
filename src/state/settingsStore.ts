@@ -213,9 +213,12 @@ export interface Settings {
   /** Geodetic points shown, by attribute (overlays menu → the funnel; `@core/geodetic/filter`). */
   geodeticFilter: GeodeticFilter;
   /**
-   * Overlays → "Tide stations" (`@core/map/tideStyle`): NOAA, SHOM, Kartverket
-   * and JMA tide stations with their tidal levels. Off by default.
+   * Settings → Extensions → Tide stations (`@core/map/tideStyle`): epoch ms of
+   * the install (0 = not installed). Installed, the map can draw the tide
+   * stations (ours + Canada's live from CHS) and new offline regions carry them.
    */
+  tidesInstalledAt: number;
+  /** The Tide stations switch (Overlays → Extensions; only while installed). */
   showTideStations: boolean;
   /**
    * How much the shaded relief deepens when the map is tilted (#480) — the
@@ -331,7 +334,8 @@ const DEFAULTS: Settings = {
   showGeodetic: true,
   geodeticOffline: true,
   geodeticFilter: DEFAULT_GEODETIC_FILTER,
-  showTideStations: false,
+  tidesInstalledAt: 0,
+  showTideStations: true,
   tiltRelief: DEFAULT_TILT_RELIEF,
   betaTerrain3d: false,
   errorReporting: true,
@@ -417,6 +421,7 @@ function snapshot(s: SettingsState): Settings {
     showGeodetic,
     geodeticOffline,
     geodeticFilter,
+    tidesInstalledAt,
     showTideStations,
     tiltRelief,
     betaTerrain3d,
@@ -470,6 +475,7 @@ function snapshot(s: SettingsState): Settings {
     showGeodetic,
     geodeticOffline,
     geodeticFilter,
+    tidesInstalledAt,
     showTideStations,
     tiltRelief,
     betaTerrain3d,

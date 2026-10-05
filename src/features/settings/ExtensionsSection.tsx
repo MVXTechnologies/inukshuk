@@ -1,7 +1,8 @@
 /**
- * Settings → Extensions: layers you add to the map on purpose. One today,
- * Geodetic points (`@core/map/geodeticStyle`):
+ * Settings → Extensions: layers you add to the map on purpose, each installed
+ * on its own (`@core/map/extensions`): Geodetic points and Tide stations.
  *
+ * Geodetic points (`@core/map/geodeticStyle`):
  * - not installed: what it is, and "Get";
  * - installed: the layer switch (also in the overlays menu), "Offline in your
  *   regions" (companion packs for regions downloaded before the install; new
@@ -10,7 +11,8 @@
  */
 import { coverageRows, coverageSummary, formatCount } from '@core/geodetic/coverage';
 import { formatBytes } from '@core/format';
-import { geodeticTilesUrl } from '@data/basemapTiles';
+import { geodeticTilesUrl, tideTilesUrl } from '@data/basemapTiles';
+import { TideExtension } from './TideExtension';
 import { useGeodeticStore } from '@state/geodeticStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -30,6 +32,25 @@ import {
 
 export function ExtensionsSection() {
   const tokens = useSchemeTokens();
+  if (geodeticTilesUrl() === null && tideTilesUrl() === null) {
+    return (
+      <View style={styles.pad}>
+        <Text variant="bodySmall" style={{ color: tokens.inkVariant }}>
+          No extensions yet.
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <>
+      {geodeticTilesUrl() !== null && <GeodeticExtension />}
+      {tideTilesUrl() !== null && <TideExtension />}
+    </>
+  );
+}
+
+function GeodeticExtension() {
+  const tokens = useSchemeTokens();
   const theme = useTheme();
   const installed = useSettingsStore((s) => s.geodeticInstalledAt > 0);
   const show = useSettingsStore((s) => s.showGeodetic);
@@ -46,16 +67,6 @@ export function ExtensionsSection() {
     void refreshGeodeticCoverage();
     void refreshCompanions();
   }, []);
-
-  if (geodeticTilesUrl() === null) {
-    return (
-      <View style={styles.pad}>
-        <Text variant="bodySmall" style={{ color: tokens.inkVariant }}>
-          No extensions yet.
-        </Text>
-      </View>
-    );
-  }
 
   const badge = geodeticImage(theme.dark ? 'dark' : 'light', '3d');
   const companionBytes = companions.reduce((n, c) => n + c.sizeBytes, 0);
@@ -120,7 +131,9 @@ export function ExtensionsSection() {
       <List.Item
         title="Geodetic points"
         description={
-          show ? 'On · shown from Map overlays' : 'Off · switch it on here or in Map overlays'
+          show
+            ? 'On · Map overlays › Extensions'
+            : 'Off · switch it on here or in Map overlays › Extensions'
         }
         left={() => (
           <View

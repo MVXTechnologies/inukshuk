@@ -171,7 +171,7 @@ export function GeodeticFilterPanel({ onBack }: { onBack: () => void }) {
       <View style={styles.header}>
         <TouchableRipple
           onPress={onBack}
-          accessibilityLabel="Back to overlays"
+          accessibilityLabel="Back to extensions"
           style={styles.back}
           borderless
         >

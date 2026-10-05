@@ -1,6 +1,6 @@
 # Geodetic points extension e2e: Settings → Extensions → Get installs it,
 # the installed rows appear (layer switch, offline, coverage, remove), and the
-# overlays menu then carries the "Geodetic points" switch with its legend.
+# overlays menu's Extensions panel then carries the "Geodetic points" switch.
 # Leaves the extension removed again so other flows see the default state.
 #
 # iOS merges a row's title + subtitle into one accessibility string, so row
@@ -67,10 +67,18 @@ appId: com.inukshuk.app
     text: 'Map(, tab.*)?'
     retryTapIfNoChange: true
 - tapOn: 'Map overlays'
+# One "Extensions" row; installed extensions live in its panel.
 - scrollUntilVisible:
-    element: 'Labels on satellite.*'
+    element: 'Extensions'
     direction: DOWN
-- assertVisible: 'Geodetic points.*'
+- swipe:
+    start: 50%, 60%
+    end: 50%, 72%
+    duration: 600
+- waitForAnimationToEnd
+- tapOn: 'Extensions'
+- assertVisible: 'Geodetic points'
+- assertVisible: 'Get more extensions'
 - tapOn: 'Close overlays'
 # Leave it uninstalled.
 - tapOn:

@@ -1,13 +1,12 @@
-# Tide stations overlay e2e: the overlays menu carries the "Tide stations"
-# switch (NOAA, SHOM, Kartverket, JMA — never CHS) with its legend; switching
-# it on keeps the menu usable and the legend live; the flow leaves it off.
-# The station card itself (levels in three datums, copy buttons) is covered
-# by src/core/tides/card.test.ts and the sim screenshots
-# (chart-datum-convert/build/), since a station's screen position depends
-# on the camera.
+# Tide stations extension e2e: Settings → Extensions → "Get Tide stations"
+# installs it; the overlays sheet's Extensions panel then carries its switch
+# and legend (NOAA, SHOM, Kartverket, JMA, and Canada live from CHS); the flow
+# flips it off and on, then removes the extension again so other flows see
+# the default state. The station card itself (levels in three datums, copy
+# buttons) is covered by src/core/tides/card.test.ts and the sim screenshots.
 #
-# The row's accessibility text is exactly "Tide stations" (a switch); the
-# legend is "Gauge symbols legend" so the two never collide.
+# Settings rows merge title + subtitle on iOS, so their matches are wildcard
+# regexes; the overlays rows' accessibility text is exactly their label.
 appId: com.inukshuk.app
 ---
 - runFlow:
@@ -27,38 +26,89 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Tide stations.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Tide stations.*'
+          timeout: 5000
+# Start from "not installed" whatever a previous run left.
+- runFlow:
+    when:
+      visible: 'Remove Tide stations extension'
+    commands:
+      - tapOn: 'Remove Tide stations extension'
+      - tapOn: 'Remove'
+- scrollUntilVisible:
+    element: 'Get Tide stations'
+    direction: DOWN
+- tapOn: 'Get Tide stations'
+- extendedWaitUntil:
+    visible: 'Tide coverage & sources.*'
+    timeout: 10000
+- assertVisible: 'Remove Tide stations extension'
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
 - tapOn: 'Map overlays'
 # The sheet's rows scroll under its header, and Maestro calls a row there
-# "visible" (a tap then lands on the scrim and closes the menu). So: scroll
-# the row into the list, then nudge the list back down a little.
+# "visible" (a tap then lands on the scrim). Scroll it in, then nudge down.
 - scrollUntilVisible:
-    element: 'Tide stations'
+    element: 'Extensions'
     direction: DOWN
 - swipe:
     start: 50%, 60%
     end: 50%, 72%
     duration: 600
 - waitForAnimationToEnd
+- tapOn: 'Extensions'
+- assertVisible: 'Tide stations'
 - assertVisible: 'Live gauge'
-# Flip the switch, close and reopen the menu (the map restyles with or
-# without the tide layer), then flip it back: the flow leaves the setting as
-# it found it (off by default).
+- assertVisible: 'Get more extensions'
+# Off, then on again.
+- tapOn: 'Tide stations'
 - tapOn: 'Tide stations'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
-- tapOn: 'Map overlays'
-# The sheet's rows scroll under its header, and Maestro calls a row there
-# "visible" (a tap then lands on the scrim and closes the menu). So: scroll
-# the row into the list, then nudge the list back down a little.
+# Leave it uninstalled.
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- tapOn: 'Settings'
 - scrollUntilVisible:
-    element: 'Tide stations'
+    element: 'Extensions.*'
     direction: DOWN
-- swipe:
-    start: 50%, 60%
-    end: 50%, 72%
-    duration: 600
-- waitForAnimationToEnd
-- assertVisible: 'Live gauge'
-- tapOn: 'Tide stations'
-- tapOn: 'Close overlays'
-- assertVisible: 'Map actions'
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Tide coverage & sources.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - extendedWaitUntil:
+          visible: 'Tide coverage & sources.*'
+          timeout: 5000
+- scrollUntilVisible:
+    element: 'Remove Tide stations extension'
+    direction: DOWN
+- tapOn: 'Remove Tide stations extension'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible: 'Get Tide stations'
+    timeout: 5000

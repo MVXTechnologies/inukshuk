@@ -541,7 +541,9 @@ export function MapScreen() {
   const geodeticFilters = useMemo(() => buildGeodeticFilters(geodeticFilter), [geodeticFilter]);
   /** Overlays → Tide stations (`@core/map/tideStyle`). */
   const showTideStations = useSettingsStore((s) => s.showTideStations);
-  const tideTiles = showTideStations ? tideTilesUrl() : null;
+  // Settings → Extensions → Tide stations: installed, and its switch on.
+  const tidesInstalled = useSettingsStore((s) => s.tidesInstalledAt > 0);
+  const tideTiles = tidesInstalled && showTideStations ? tideTilesUrl() : null;
   /** Canadian stations: fetched live from CHS by the phone and kept on it (never our tiles). */
   const chsStations = useChsStations(tideTiles !== null, offlineOnly);
   /** How much that shading deepens when the map is tilted — "3D relief", #480. */

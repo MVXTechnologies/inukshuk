@@ -51,6 +51,7 @@ const selected = (label: string): unknown =>
   screen.getByLabelText(label).props.accessibilityState?.selected;
 
 afterEach(async () => {
+  mockPush.mockClear();
   mockFlags.WEATHER_ENABLED = false;
   mockFlags.MARINE_ENABLED = false;
   await act(async () => {
@@ -212,27 +213,54 @@ describe('Parks & protected areas', () => {
   });
 });
 
-describe('Geodetic points (Settings → Extensions)', () => {
-  it('leads to Settings → Extensions while the extension is not installed', async () => {
+describe('Extensions (Settings → Extensions)', () => {
+  it('with nothing installed, one row leads to Settings → Extensions', async () => {
     await renderMenu();
-    expect(screen.getByText('Get the extension in Settings')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(screen.queryByLabelText('Geodetic points')).toBeNull();
+    expect(screen.queryByLabelText('Tide stations')).toBeNull();
+    expect(screen.getByText('Get survey marks, tide stations…')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Extensions'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/settings',
       params: { open: 'extensions' },
     });
   });
 
-  it('filters from its funnel: live, persisted, counted on the badge, reset', async () => {
+  it('opens the Extensions panel once one is installed, with "Get more extensions"', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true, tidesInstalledAt: 0 });
+    await renderMenu();
+    expect(screen.getByText('Geodetic points')).toBeTruthy(); // the row's hint
+    await fireEvent.press(screen.getByLabelText('Extensions'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(checked('Geodetic points')).toBe(true);
+    expect(screen.queryByLabelText('Tide stations')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Get more extensions'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/settings',
+      params: { open: 'extensions' },
+    });
+  });
+
+  it('geodetic: a switch with its legend', async () => {
     useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
     await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Extensions'));
+    expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Geodetic points'));
+    expect(useSettingsStore.getState().showGeodetic).toBe(false);
+  });
+
+  it('geodetic: filters from its funnel, back to the panel, badge counted, reset', async () => {
+    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+    await renderMenu();
+    await fireEvent.press(screen.getByLabelText('Extensions'));
     await fireEvent.press(screen.getByLabelText('Filter geodetic points'));
     await fireEvent.press(screen.getByLabelText('GNSS'));
     await fireEvent.press(screen.getByLabelText('Has heights'));
     const f = useSettingsStore.getState().geodeticFilter;
     expect(f.types).not.toContain('gnss');
     expect(f.hasHeights).toBe(true);
-    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    await fireEvent.press(screen.getByLabelText('Back to extensions'));
     expect(screen.getByText('Filtered · 2 filters')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Filter geodetic points, 2 filters on'));
     await fireEvent.press(screen.getByLabelText('Reset geodetic filters'));
@@ -240,13 +268,18 @@ describe('Geodetic points (Settings → Extensions)', () => {
     expect(useSettingsStore.getState().geodeticFilter.types).toContain('gnss');
   });
 
-  it('is a switch with its legend once installed', async () => {
-    useSettingsStore.setState({ geodeticInstalledAt: 1, showGeodetic: true });
+  it('tide stations: its own switch and legend once installed', async () => {
+    useSettingsStore.setState({ tidesInstalledAt: 1, showTideStations: true });
     await renderMenu();
-    expect(checked('Geodetic points')).toBe(true);
-    expect(screen.getByLabelText('Geodetic points legend')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Geodetic points'));
-    expect(useSettingsStore.getState().showGeodetic).toBe(false);
+    expect(screen.getByText('Tide stations')).toBeTruthy(); // the row's hint
+    await fireEvent.press(screen.getByLabelText('Extensions'));
+    expect(screen.queryByLabelText('Geodetic points')).toBeNull();
+    expect(checked('Tide stations')).toBe(true);
+    expect(screen.getByLabelText('Gauge symbols legend')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Tide stations'));
+    expect(useSettingsStore.getState().showTideStations).toBe(false);
+    await fireEvent.press(screen.getByLabelText('Back to overlays'));
+    expect(screen.getByText('All off')).toBeTruthy();
   });
 });
 
