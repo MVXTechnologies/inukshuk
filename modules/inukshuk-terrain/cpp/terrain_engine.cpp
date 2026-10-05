@@ -282,6 +282,7 @@ void Engine::setLabels(std::vector<LabelData> labels) {
     auto it = old.find(d.id);
     if (it != old.end() && it->second.data.mercX == d.mercX && it->second.data.mercY == d.mercY) {
       e.h = it->second.h;
+      e.hTarget = it->second.hTarget;
       e.hGen = it->second.hGen;
     }
     e.data = d;
@@ -864,6 +865,13 @@ FrameOutput Engine::frame(const FrameInput& in) {
     }
   }
   bakesPending = bakesPending || !inProgress_.empty();
+  // Pin positions copied first: sceneMutex_ is never taken under mutex_.
+  std::vector<Pt> labelPoints;
+  {
+    std::lock_guard<std::mutex> sceneLock(sceneMutex_);
+    labelPoints.reserve(labels_.size());
+    for (const auto& e : labels_) labelPoints.push_back({e.data.mercX, e.data.mercY});
+  }
   {
     std::lock_guard<std::mutex> lock(mutex_);
     // Pin everything the request planner still wants (and the ring), so a
@@ -875,6 +883,19 @@ FrameOutput Engine::frame(const FrameInput& in) {
       const uint64_t key = demKey64(d);
       if (dems_.count(key)) pins.insert(key);
     }
+    // ...and the DEMs the reference height and the pins read their heights
+    // from (the loaded chain under each point up to refZoom), so a height
+    // never drops to a coarser DEM after an eviction.
+    auto pinChain = [&](double mx, double my) {
+      for (int z = refZoom; z >= 0; z--) {
+        const int n = 1 << z;
+        const uint64_t key = demKey64({z, std::clamp(static_cast<int>(mx * n), 0, n - 1),
+                                       std::clamp(static_cast<int>(my * n), 0, n - 1)});
+        if (dems_.count(key)) pins.insert(key);
+      }
+    };
+    pinChain(lngToMercX(in.lng), latToMercY(in.lat));
+    for (const auto& p : labelPoints) pinChain(p[0], p[1]);
     demPins_ = std::move(pins);
     evictDemsLocked();
   }
@@ -1083,8 +1104,21 @@ FrameOutput Engine::frame(const FrameInput& in) {
       std::lock_guard<std::mutex> lock(mutex_);
       const int room = kMaxInFlight - static_cast<int>(pending_.size());
       if (room > 0) {
+        // Round 3: a tile already baked from its own DEM needs no DEM again
+        // (its mesh is cached); re-requesting it after an eviction only
+        // re-decoded it from disk while turning around a place.
+        std::vector<TileId> demVisible;
+        demVisible.reserve(visible.size());
+        for (size_t vi = 0; vi < visible.size(); vi++) {
+          const TileId& t = visible[vi];
+          if (vi >= ring.size() && !legacy) {
+            auto m = meshes_.find(meshKeyOf(t));
+            if (m != meshes_.end() && m->second.demZoom >= demWindow(t).dem.z) continue;
+          }
+          demVisible.push_back(t);
+        }
         plan = planDemRequests(
-            visible, in.bearingDeg, [this](const DemId& d) { return demLoadedLocked(d); },
+            demVisible, in.bearingDeg, [this](const DemId& d) { return demLoadedLocked(d); },
             [this, now](const DemId& d) {
               const uint64_t k = demKey64(d);
               if (pending_.count(k)) return true;

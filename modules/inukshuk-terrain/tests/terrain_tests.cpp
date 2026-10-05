@@ -920,6 +920,20 @@ static void testEngine() {
       CHECK(l.y1 > l.y0);
       CHECK(l.y1 <= l.gy);  // the plate sits above its ground point
     }
+    // Round 3 regression: re-sending the same pins (a theme change re-renders
+    // their plates) keeps them shown — their heights must not glide to 0.
+    std::map<int, float> gyBefore;
+    for (const auto& l : so.labels) gyBefore[l.id] = l.gy;
+    for (int k = 0; k < 3; k++) {
+      sc.setLabels(ls);
+      so = settle(in, 30);
+    }
+    std::set<int> again;
+    for (const auto& l : so.labels)
+      if (l.opacity > 0.99) again.insert(l.id);
+    CHECK(again == shown);
+    for (const auto& l : so.labels)
+      if (gyBefore.count(l.id)) CHECK(std::abs(l.gy - gyBefore[l.id]) < 1.0f);
   }
   // 17. Polylines: lifted onto the terrain (heights from the DEM), 6 vertices per segment.
   {

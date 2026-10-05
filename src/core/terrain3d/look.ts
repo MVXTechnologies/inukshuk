@@ -143,8 +143,8 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       skyHorizon: scale(SAT_HORIZON, k),
       skyZenith: scale(SAT_ZENITH, k),
       formStrength: 0.18,
-      fogStartCtc: 0.6,
-      fogDensity: 0.16,
+      fogStartCtc: 2.5,
+      fogDensity: 0.22,
       fogEndCtc: TERRAIN_FOG_END_CTC,
       surface: {
         land,
@@ -168,8 +168,8 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       skyHorizon: mix(land, WHITE, 0.07),
       skyZenith: mix(land, BLACK, 0.35),
       formStrength: 0.2,
-      fogStartCtc: 2,
-      fogDensity: 0.22,
+      fogStartCtc: 4,
+      fogDensity: 0.3,
       fogEndCtc: TERRAIN_FOG_END_CTC,
       surface: {
         // A touch above the 2D ground so the shadows have somewhere to go.
@@ -196,8 +196,8 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
     skyHorizon: mix(land, WHITE, 0.25),
     skyZenith: mix(mix(land, tint, 0.22), WHITE, 0.15),
     formStrength: 0.22,
-    fogStartCtc: 2,
-    fogDensity: 0.22,
+    fogStartCtc: 4,
+    fogDensity: 0.3,
     fogEndCtc: TERRAIN_FOG_END_CTC,
     surface: {
       land,
