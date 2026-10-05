@@ -28,9 +28,13 @@ start)
     -u "$(id -u):$(id -g)" -v "$HERE:/app:ro" -v "$STATE:/state" "$IMAGE" sh -c "
       while true; do
         python -c 'import sys; sys.path.insert(0, \"/app\"); import qc; qc.fetch(\"/state/bulk\")' >>/state/harvest.log 2>&1
-        python /app/enrich_qc.py harvest /state /state/bulk --interval $INTERVAL >>/state/harvest.log 2>&1
-        [ -e /state/STOP ] && sleep infinity
-        sleep 86400
+        if python /app/enrich_qc.py harvest /state /state/bulk --interval $INTERVAL >>/state/harvest.log 2>&1; then
+          [ -e /state/STOP ] && sleep infinity
+          sleep 86400
+        else
+          echo \"\$(date) harvest crashed; resuming in 5 min\" >>/state/harvest.log
+          sleep 300
+        fi
       done"
   echo "started $NAME (log: $STATE/harvest.log)"
   ;;

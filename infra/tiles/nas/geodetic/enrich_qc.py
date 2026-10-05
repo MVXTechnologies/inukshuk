@@ -25,6 +25,7 @@ matricules and those whose bulk status changed (incremental refresh).
 """
 import argparse
 import gzip
+import http.client
 import io
 import json
 import math
@@ -91,12 +92,18 @@ def fetch_text(matricule, datum, ctx):
         if e.code == 429 or e.code >= 500:
             raise Throttled(f'HTTP {e.code}') from e
         return None
-    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
-        raise Throttled(str(e)) from e
+    except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError,
+            OSError) as e:
+        # IncompleteRead (a cut-off PDF) is an HTTPException, not an OSError:
+        # uncaught, it killed the 2026-10-05 run after 1 400 sheets.
+        raise Throttled(f'{type(e).__name__}: {e}') from e
     if not data.startswith(b'%PDF'):
         return None
-    reader = pypdf.PdfReader(io.BytesIO(data))
-    return '\n'.join(p.extract_text() or '' for p in reader.pages[:2])
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(data))
+        return '\n'.join(p.extract_text() or '' for p in reader.pages[:2])
+    except Exception as e:  # noqa: BLE001 — a malformed PDF: fetch it again later
+        raise Throttled(f'unreadable PDF: {e!r}') from e
 
 
 def harvest(state_dir, raw_dir, interval, limit):
