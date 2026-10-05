@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 
 import {
+  adoptMapPdf,
   adoptOverlayPng,
   existingOverlayPng,
   clearPdfDetailPngs,
@@ -650,5 +651,28 @@ describe('overview cache interrupted writes', () => {
     fsMock.__seed('/cache/overlays/broken.png', bytes);
     expect(existingOverlayPng('broken')).toBeNull();
     expect(fsMock.__has('/cache/overlays/broken.png')).toBe(false);
+  });
+});
+
+// #345: a downloaded catalog sheet is moved into the maps store, never read.
+describe('adoptMapPdf', () => {
+  it('moves the staged PDF into maps/<id>.pdf, replacing an older copy', () => {
+    fsMock.__seed('/cache/catalog/m1.part', '%PDF-new');
+    fsMock.__seed('/doc/maps/m1.pdf', '%PDF-old');
+    const bytes = jest.spyOn(File.prototype, 'bytes');
+    expect(adoptMapPdf('m1', 'file:///cache/catalog/m1.part')).toBe('file:///doc/maps/m1.pdf');
+    expect(fsMock.__read('/doc/maps/m1.pdf')).toBe('%PDF-new');
+    expect(fsMock.__has('/cache/catalog/m1.part')).toBe(false);
+    expect(bytes).not.toHaveBeenCalled();
+  });
+
+  it('names a full disk as such', () => {
+    fsMock.__seed('/cache/catalog/m2.part', '%PDF');
+    jest.spyOn(File.prototype, 'moveSync').mockImplementationOnce(() => {
+      throw new Error('ENOSPC');
+    });
+    expect(() => adoptMapPdf('m2', 'file:///cache/catalog/m2.part')).toThrow(
+      'Not enough free space',
+    );
   });
 });

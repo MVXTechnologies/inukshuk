@@ -40,3 +40,29 @@ export function extractPdf(bytes: Uint8Array): Uint8Array | null {
   }
   return best !== null && looksLikePdf(best) ? best : null;
 }
+
+/**
+ * The largest zip a catalog download may unpack in memory. Catalog zips are
+ * CanTopo sheets, 16 MB at most (2026-10); `unzipSync` needs the archive and
+ * the extracted PDF in memory at once, so a much larger zip is refused with a
+ * message rather than risking the OOM #345 describes.
+ */
+export const MAX_CATALOG_ZIP_BYTES = 64 * 1024 * 1024;
+
+/**
+ * What to do with a finished catalog download, from its first bytes and size
+ * (#345). A bare PDF (every US Topo / USFS sheet, up to 220 MB) is moved into
+ * place as is, never read into memory. Anything else is a zip to unpack, if
+ * it is small enough.
+ */
+export type CatalogPayloadPlan =
+  { kind: 'move-pdf' } | { kind: 'unzip' } | { kind: 'refuse'; reason: string };
+
+export function planCatalogPayload(head: Uint8Array, sizeBytes: number): CatalogPayloadPlan {
+  if (looksLikePdf(head)) return { kind: 'move-pdf' };
+  if (sizeBytes > MAX_CATALOG_ZIP_BYTES) {
+    const mb = Math.round(sizeBytes / (1024 * 1024));
+    return { kind: 'refuse', reason: `The downloaded archive is too large to unpack (${mb} MB).` };
+  }
+  return { kind: 'unzip' };
+}
