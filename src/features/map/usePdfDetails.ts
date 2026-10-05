@@ -8,6 +8,7 @@ import {
 } from '@core/geo/pdfDetail';
 import { chooseFallbackDetails } from '@core/geo/detailFallback';
 import { planDetailBlocks } from '@core/geo/pdfDetailBlocks';
+import { chooseRasters } from '@core/geo/pdfRasterChoice';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import {
   blockTileKey,
@@ -315,34 +316,18 @@ export function usePdfDetails(
         if (target.prefetch) covered.add(target.key);
         else holdersByTarget.set(target, holders);
       }
-      // Choose the rasters greedily by visible cells shown per pixel: a
-      // block that is mostly off screen never crowds the cells the camera
-      // wants out of the visible budget (those cells render again instead).
-      for (;;) {
-        const gain = new Map<Detail, number>();
-        for (const [target, holders] of holdersByTarget) {
-          if (covered.has(target.key)) continue;
-          for (const d of holders) gain.set(d, (gain.get(d) ?? 0) + 1);
-        }
-        let best: Detail | null = null;
-        let bestScore = 0;
-        for (const [d, n] of gain) {
-          const cost = fresh.has(d.cacheKey) ? 0 : d.pixels;
-          if (pixels + cost > visiblePixels) continue;
-          const score = cost === 0 ? Infinity : n / cost;
-          if (score > bestScore) {
-            best = d;
-            bestScore = score;
-          }
-        }
-        if (best === null) break;
-        if (!fresh.has(best.cacheKey)) {
-          pixels += best.pixels;
-          fresh.set(best.cacheKey, best);
-        }
-        for (const [target, holders] of holdersByTarget)
-          if (holders.includes(best)) covered.add(target.key);
-      }
+      // Which of them go on screen: as many wanted cells as the visible
+      // budget allows, so a block that is mostly off screen never crowds the
+      // cells the camera wants out (those cells render again instead).
+      const wanted = [...holdersByTarget];
+      const choice = chooseRasters(
+        wanted.map(([, holders]) => holders),
+        [...w.cache.values()].reverse(),
+        visiblePixels,
+      );
+      for (const d of choice.chosen) fresh.set(d.cacheKey, d);
+      pixels += choice.pixels;
+      for (const i of choice.covered) covered.add(wanted[i]![0].key);
       for (const target of w.desired) {
         if (covered.has(target.key)) continue;
         // Its four children from the previous zoom show it at least as
