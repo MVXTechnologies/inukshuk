@@ -2,3 +2,6 @@
 # static libs per platform, proj.db, the two bundled grids. Never committed.
 prebuilt/
 assets/inukshukproj/
+# Gradle / CMake outputs of a local Android build.
+android/.cxx/
+android/build/
