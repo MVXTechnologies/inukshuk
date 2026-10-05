@@ -57,11 +57,11 @@ import { StepSlider } from './StepSlider';
  * checkboxes, segmented pickers where a row has levels. It replaces the
  * D-6 drill-down (top-level groups → Topology sub-menu on a fixed dark slab):
  *
- * - On the map — Content (folder picker), PDF maps, See-through white
- *   (a 5-stop slider: Off, 25 / 50 / 75 / 100 %), Personal heatmap, Labels
- *   on satellite.
+ * - On the map — Content (folder picker), PDF maps, Personal heatmap,
+ *   Parks, Extensions (geodetic points, tide stations), Labels on satellite.
  * - Terrain — Shading, 3D relief, Contours (+ density), Slope (+ range),
- *   Peaks.
+ *   Peaks, and last See-through white (the PDF maps' white paper, a 5-stop
+ *   slider: Off, 25 / 50 / 75 / 100 %; needs PDF maps).
  * - Live layers — Weather (drills into its list) and Marine, both parked
  *   this release (greyed "Coming soon", never removed: a feature that
  *   silently disappears reads as a bug).
@@ -203,27 +203,6 @@ function OverlayRows({
         value={showPdfMaps}
         onToggle={() => set('showPdfOverlay', !showPdfMaps)}
       />
-      {/* How see-through the maps' white paper is, so the base map shows
-          through open land and margins. The default for every PDF map; a
-          map can override it from its Library ⋮ menu. */}
-      <ControlRow
-        icon="circle-opacity"
-        label="See-through white"
-        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
-        disabled={!showPdfMaps}
-      >
-        <StepSlider
-          labels={WHITE_KEY_STOPS}
-          value={pdfWhiteKey}
-          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
-          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
-          disabled={!showPdfMaps}
-          accessibilityLabel="See-through white"
-          accentColor={accent}
-          trackColor={tokens.surfaceVariant}
-          tickColor={tokens.inkMuted}
-        />
-      </ControlRow>
       <SwitchRow
         icon="fire"
         label="Personal heatmap"
@@ -354,6 +333,28 @@ function OverlayRows({
         selected={peakDensity}
         onSelect={(d) => set('peakDensity', d)}
       />
+      {/* How see-through the PDF maps' white paper is, so the base map shows
+          through open land and margins. The default for every PDF map; a
+          map can override it from its Library ⋮ menu. Last in Terrain (owner,
+          2026-10-05: less important than the rest); still needs PDF maps. */}
+      <ControlRow
+        icon="circle-opacity"
+        label="See-through white"
+        hint={showPdfMaps ? 'See the map below white areas' : 'Needs PDF maps'}
+        disabled={!showPdfMaps}
+      >
+        <StepSlider
+          labels={WHITE_KEY_STOPS}
+          value={pdfWhiteKey}
+          onChange={(stop) => set('pdfWhiteKey', nearestWhiteKeyLevel(stop))}
+          width={sheetW - BELOW_INSET - RANGE_VALUE_W}
+          disabled={!showPdfMaps}
+          accessibilityLabel="See-through white"
+          accentColor={accent}
+          trackColor={tokens.surfaceVariant}
+          tickColor={tokens.inkMuted}
+        />
+      </ControlRow>
 
       <SectionTitle>Live layers</SectionTitle>
       {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
