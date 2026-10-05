@@ -198,7 +198,29 @@ double formShade(double slopeX, double slopeY, double exaggeration, const Vec3& 
 double referenceHeight(const std::vector<std::optional<double>>& samples);
 double smoothToward(std::optional<double> current, double target, double dtMs, double tauMs = 150,
                     double epsilon = 0.05);
+/**
+ * reference.ts stableReferenceHeight: the ground under the map centre (the
+ * tilt pivot), raised only when the near terrain would come within the
+ * margin (≥ 50 m, ≥ 15 % of the altitude) of the camera.
+ */
+double stableReferenceHeight(std::optional<double> center, std::optional<double> nearMax,
+                             double eyeAltM, double heightScale, double marginM = 50);
+/**
+ * The 360° base ring (2.2.1): (2·radius+1)² tiles at `zoom` around the mercator
+ * point (mx, my), x wrapped (TileId.wrap), y clamped to the world. Their DEMs,
+ * meshes and drapes stay pinned so every tile in any direction has an
+ * ancestor surface and texture: nothing draws flat or white.
+ */
+std::vector<TileId> baseRing(double mx, double my, int zoom, int radius = 2);
+/** The base ring's zoom: tiles of about half the fog distance, `zoom` − 7 … `zoom` − 2. */
+int baseRingZoom(double zoom, double fogDistancePx);
 constexpr int kCoarseLead = 3;
+/**
+ * Every DEM planDemRequests may ask for, in its order (coarse base, coarse
+ * lead, own, the neighbours ahead): the engine pins the loaded ones, so a
+ * DEM it asked for is never evicted while still wanted (2.2.1).
+ */
+std::vector<DemId> wantedDems(const std::vector<TileId>& tiles, double bearingDeg);
 constexpr int kBaseZoom = 6;
 std::vector<DemId> planDemRequests(const std::vector<TileId>& tiles, double bearingDeg,
                                    const std::function<bool(const DemId&)>& isLoaded,

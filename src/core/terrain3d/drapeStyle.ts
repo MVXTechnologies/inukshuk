@@ -56,10 +56,21 @@ export interface DrapeStyleOptions {
    */
   demSourceId?: string;
   demTileSize?: number;
+  /**
+   * The same for a raster source (the satellite imagery): declared smaller
+   * in the drape so it is read deeper — 256 fills a 512 px drape texture
+   * with the imagery's own pixels (2.2.1, sharper satellite in 3D).
+   */
+  rasterSourceId?: string;
+  rasterTileSize?: number;
 }
 
-/** Default lowest zoom for the draped hillshade (tiles further out are fogged). */
-export const DRAPE_HILLSHADE_MIN_ZOOM = 7;
+/**
+ * Default lowest zoom for the draped hillshade: low enough that the coarse
+ * 360° base-ring drapes (2.2.1), the fallback on a fast tilt or turn, are
+ * shaded too rather than flat paper.
+ */
+export const DRAPE_HILLSHADE_MIN_ZOOM = 4;
 
 /**
  * A constant for a zoom-ramped paint value: the last stop of an
@@ -158,22 +169,17 @@ export function drapeStyle<S extends DrapeStyleInput>(style: S, o: DrapeStyleOpt
     layers.push(layer);
   }
   const sources = style.sources;
-  if (
-    o.demSourceId !== undefined &&
-    o.demTileSize !== undefined &&
-    typeof sources === 'object' &&
-    sources !== null &&
-    o.demSourceId in sources
-  ) {
-    const all = sources as Record<string, Record<string, unknown>>;
-    const dem = all[o.demSourceId];
-    if (dem?.type === 'raster-dem') {
-      return {
-        ...style,
-        sources: { ...all, [o.demSourceId]: { ...dem, tileSize: o.demTileSize } },
-        layers,
-      };
-    }
-  }
+  if (typeof sources !== 'object' || sources === null) return { ...style, layers };
+  const all = sources as Record<string, Record<string, unknown>>;
+  let next: Record<string, Record<string, unknown>> | null = null;
+  const resize = (id: string | undefined, size: number | undefined, type: string) => {
+    if (id === undefined || size === undefined) return;
+    const src = all[id];
+    if (src?.type !== type) return;
+    next = { ...(next ?? all), [id]: { ...src, tileSize: size } };
+  };
+  resize(o.demSourceId, o.demTileSize, 'raster-dem');
+  resize(o.rasterSourceId, o.rasterTileSize, 'raster');
+  if (next !== null) return { ...style, sources: next, layers };
   return { ...style, layers };
 }

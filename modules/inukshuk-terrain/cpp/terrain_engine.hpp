@@ -188,6 +188,8 @@ class Engine {
 
   static constexpr int kGridN = kGrid;
   static constexpr size_t kDemBudgetBytes = 48u * 1024u * 1024u;
+  /** The most recent DEM arrivals are never evicted (they are pinned the next frame). */
+  static constexpr size_t kDemGrace = 24;
   static constexpr size_t kMeshBudget = 600;
   static constexpr int kMaxBakeJobs = 24;
   static constexpr int kMaxInFlight = 16;
@@ -196,6 +198,16 @@ class Engine {
   static constexpr int kImagerySlots = 192;
   static constexpr int kImageryUploadsPerFrame = 6;
   static constexpr double kImageryFadeMs = 300;
+  /**
+   * LOD split threshold (px of grid spacing). 8 px looked sharper but needed
+   * ~30 % more drapes per view: a full turn no longer fit the per-device
+   * texture budget and drapes re-rendered on rotation. Kept at the core's 10.
+   */
+  static constexpr double kLodMaxErrorPx = 10.0;
+  /** The base ring spans (2·radius+1)² tiles. */
+  static constexpr int kBaseRingRadius = 2;
+  /** Placeholder surfaces (sampled from an ancestor) built per frame at most. */
+  static constexpr int kMaxInheritPerFrame = 24;
   /** Unrequested drape textures (block siblings) kept CPU-side, waiting to be wanted. */
   static constexpr size_t kMaxUnwantedImagery = 48;
 
@@ -344,6 +356,8 @@ class Engine {
   void installResults(double now);
   void workerLoop();
   float morphOf(const Mesh& m, double now) const;
+  /** A placeholder mesh for `t` sampled from its nearest ancestor's surface; false if none. */
+  bool inheritMesh(const TileId& t, double now);
 
   const int meshGrid_;
   RequestFn demRequest_, imageryRequest_;

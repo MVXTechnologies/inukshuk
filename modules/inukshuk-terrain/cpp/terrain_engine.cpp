@@ -107,7 +107,15 @@ void Engine::touchDemLocked(uint64_t key) {
 }
 
 void Engine::evictDemsLocked() {
-  for (auto it = demLru_.begin(); it != demLru_.end() && demBytes_ > kDemBudgetBytes;) {
+  // Never below what is pinned (with room for the newest arrivals), and the
+  // kDemGrace most recent arrivals are never evicted: a DEM that just loaded
+  // survives until the next frame pins it.
+  const size_t perDem = static_cast<size_t>(kDemSize) * kDemSize * sizeof(float);
+  const size_t budget = std::max(kDemBudgetBytes, (demPins_.size() + kDemGrace) * perDem);
+  const size_t evictable = demLru_.size() > kDemGrace ? demLru_.size() - kDemGrace : 0;
+  size_t visited = 0;
+  for (auto it = demLru_.begin(); it != demLru_.end() && demBytes_ > budget && visited < evictable;
+       visited++) {
     const uint64_t k = *it;
     if (demPins_.count(k)) {
       ++it;
@@ -597,6 +605,46 @@ void Engine::installResults(double now) {
   }
 }
 
+// ---- inherited placeholder meshes (2.2.1) -------------------------------------------
+
+bool Engine::inheritMesh(const TileId& t, double /*now*/) {
+  for (int up = 1; up <= t.z; up++) {
+    const TileId a{t.z - up, t.x >> up, t.y >> up, t.wrap};
+    auto it = meshes_.find(meshKeyOf(a));
+    if (it == meshes_.end() || it->second.hTo.empty()) continue;
+    const int N = meshGrid_;
+    if (it->second.hTo.size() != static_cast<size_t>((N + 1) * (N + 1))) continue;
+    const double k = std::pow(2.0, up);
+    const double ox = (t.x - a.x * k) / k, oy = (t.y - a.y * k) / k;
+    const std::vector<float>& ah = it->second.hTo;
+    auto sampler = [&](double u, double v) { return surfaceAt(N, ah, ox + u / k, oy + v / k); };
+    Mesh mesh;
+    mesh.demZoom = -1;  // stale: the real bake replaces it, morphing from these heights
+    mesh.maskGen = maskGen_.load();
+    mesh.hTo = bakeHeights(N, sampler);
+    mesh.hFrom = mesh.hTo;
+    const double tileMeters = tileSizeMeters(t.z, tileCenterLat(t));
+    const std::vector<float> slopes = bakeSlopes(N, sampler, tileMeters / N);
+    mesh.attributes = std::make_shared<const std::vector<float>>(packAttributes(N, mesh.hFrom, mesh.hTo, slopes));
+    float mn = mesh.hTo.empty() ? 0.f : mesh.hTo[0], mx = mn;
+    for (float h : mesh.hTo) {
+      mn = std::min(mn, h);
+      mx = std::max(mx, h);
+    }
+    mesh.minH = mn;
+    mesh.maxH = mx;
+    mesh.fromFlat = false;
+    mesh.morphStart = -1e300;
+    mesh.version = ++versionCounter_;
+    const uint64_t key = meshKeyOf(t);
+    meshLru_.push_back(key);
+    mesh.lru = std::prev(meshLru_.end());
+    meshes_.emplace(key, std::move(mesh));
+    return true;
+  }
+  return false;
+}
+
 // ---- frame -----------------------------------------------------------------------
 
 FrameOutput Engine::frame(const FrameInput& in) {
@@ -638,7 +686,11 @@ FrameOutput Engine::frame(const FrameInput& in) {
   const int refZoom = std::min(kDemMaxZoom, static_cast<int>(std::floor(in.zoom)) + 1);
   const auto invP = invert(in.P);
 
-  // Reference height: the highest ground under the bottom edge.
+  // Reference height (2.2.1): the ground under the map centre — the tilt
+  // pivot, so tilting never moves it — raised only when the nearest visible
+  // ground (under the bottom edge) would come too close to the camera. The
+  // 2.2.0 rule (the max under the bottom edge) swept across ridges as the
+  // view tilted and heaved the whole terrain ("mountains grow and shrink").
   bool hRefSettling = false;
   if (invP) {
     std::vector<std::optional<double>> samples;
@@ -650,9 +702,15 @@ FrameOutput Engine::frame(const FrameInput& in) {
     }
     bool any = false;
     for (auto& s : samples) any = any || s.has_value();
-    if (any) {
-      const double target = referenceHeight(samples);
-      hRef_ = smoothToward(hRef_, target, dt, 150, 0.5);
+    const auto center = heightAt(lngToMercX(in.lng), latToMercY(in.lat), refZoom);
+    if (any || center) {
+      const std::optional<double> nearMax =
+          any ? std::optional<double>(referenceHeight(samples)) : std::nullopt;
+      const auto eye = eyeFromProjection(in.P);
+      const double eyeAlt = eye ? (*eye)[2] : 1e9;
+      const double target =
+          stableReferenceHeight(center, nearMax, eyeAlt, exag * pitchRamp(in.pitchDeg));
+      hRef_ = smoothToward(hRef_, target, dt, 300, 0.5);
       hRefSettling = *hRef_ != target;
     }
   }
@@ -663,7 +721,9 @@ FrameOutput Engine::frame(const FrameInput& in) {
   // LOD selection.
   LodOptions opts;
   opts.fogEndCtc = out.look.fogEndCtc;
-  if (out.look.debugFlags & 8) opts.maxErrorPx = kDefaultMaxErrorPx * 2;
+  // A finer mesh (and so drape) near the camera than the 2.2.0 default.
+  opts.maxErrorPx = kLodMaxErrorPx;
+  if (out.look.debugFlags & 8) opts.maxErrorPx = kLodMaxErrorPx * 2;
   opts.hRef = hRef;
   opts.heightScale = heightScale;
   opts.heightRange = [this](const TileId& t) -> std::optional<std::pair<double, double>> {
@@ -679,6 +739,12 @@ FrameOutput Engine::frame(const FrameInput& in) {
     return std::nullopt;
   };
   const Selection sel = selectTiles(cam, opts);
+  // The 360° base ring: pinned coarse DEMs, meshes and drapes in every
+  // direction, so a tile that turns into view always has an ancestor
+  // surface and texture (never flat, never white) — and prefetch on rotation.
+  const std::vector<TileId> ring =
+      baseRing(lngToMercX(in.lng), latToMercY(in.lat),
+               baseRingZoom(in.zoom, out.look.fogEndCtc * sel.ctc), kBaseRingRadius);
   out.ctc = static_cast<float>(sel.ctc);
   out.farW = static_cast<float>(out.look.fogEndCtc * sel.ctc * 1.6);
   out.contourBase = baseLevelIndex(in.zoom);
@@ -696,7 +762,14 @@ FrameOutput Engine::frame(const FrameInput& in) {
     std::lock_guard<std::mutex> lock(jobMutex_);
     queued = static_cast<int>(jobs_.size());
   }
-  for (const auto& s : sel.tiles) {
+  std::vector<TileId> bakeOrder;
+  bakeOrder.reserve(ring.size() + sel.tiles.size());
+  for (const auto& t : ring) bakeOrder.push_back(t);
+  for (const auto& s : sel.tiles) bakeOrder.push_back(s.tile);
+  for (const auto& tile : bakeOrder) {
+    const struct {
+      TileId tile;
+    } s{tile};
     std::optional<int> best;
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -706,12 +779,11 @@ FrameOutput Engine::frame(const FrameInput& in) {
         pins.insert(demKey64(w.dem));
         touchDemLocked(demKey64(w.dem));
       }
-      const DemId own = demWindow(s.tile).dem;
-      for (int z = std::min(own.z, best.value_or(own.z + 1) - 1); z >= 0; z--) {
-        const int k = own.z - z;
-        const uint64_t key = demKey64({z, own.x >> k, own.y >> k});
-        if (dems_.count(key)) pins.insert(key);
-      }
+      // 2.2.1: only the DEM each tile bakes from is pinned (plus the base
+      // ring's). 2.2.0 also pinned every loaded ancestor; at a steep tilt the
+      // pinned set outgrew the budget, every fresh DEM was evicted on arrival
+      // and re-requested (~400/s at rest), and the height lookups behind the
+      // reference height and the pins flickered.
     }
     if (!best) continue;
     auto it = meshes_.find(meshKeyOf(s.tile));
@@ -731,6 +803,15 @@ FrameOutput Engine::frame(const FrameInput& in) {
   bakesPending = bakesPending || !inProgress_.empty();
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Pin everything the request planner still wants (and the ring), so a
+    // DEM it fetched is never evicted while wanted and then fetched again.
+    std::vector<TileId> wantedFor;
+    wantedFor.reserve(bakeOrder.size());
+    for (const auto& t : bakeOrder) wantedFor.push_back(t);
+    for (const auto& d : wantedDems(wantedFor, in.bearingDeg)) {
+      const uint64_t key = demKey64(d);
+      if (dems_.count(key)) pins.insert(key);
+    }
     demPins_ = std::move(pins);
     evictDemsLocked();
   }
@@ -739,8 +820,17 @@ FrameOutput Engine::frame(const FrameInput& in) {
   std::vector<TileId> draw;
   draw.reserve(sel.tiles.size());
   std::unordered_set<std::string> substituted;
+  int inherited = 0;
   for (const auto& s : sel.tiles) {
     if (meshes_.count(meshKeyOf(s.tile))) {
+      draw.push_back(s.tile);
+      continue;
+    }
+    // 2.2.1: a placeholder surface sampled from the nearest ancestor's, so
+    // only this tile is coarse until its own bake morphs in (substituting the
+    // ancestor would redraw its whole area coarse, pruning loaded children).
+    if (inherited < kMaxInheritPerFrame && inheritMesh(s.tile, now)) {
+      inherited++;
       draw.push_back(s.tile);
       continue;
     }
@@ -794,6 +884,13 @@ FrameOutput Engine::frame(const FrameInput& in) {
   };
   if (imageryMode) {
     std::lock_guard<std::mutex> lock(imgMutex_);
+    // The base ring's drapes never age out (the fallback in every direction).
+    for (const auto& t : ring) {
+      auto it = imagery_.find(demKey64({t.z, t.x, t.y}));
+      if (it == imagery_.end()) continue;
+      it->second.lastFrame = frameNo_;
+      it->second.wanted = true;
+    }
     // Uploads (bounded per frame), evicting the least recently drawn slots.
     int uploads = 0;
     std::vector<uint64_t> ready;
@@ -835,6 +932,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
 
   bool morphing = false;
   meshPins_.clear();
+  for (const auto& t : ring) meshPins_.insert(meshKeyOf(t));
   int flat = 0;
   {
     std::unique_lock<std::mutex> imgLock(imgMutex_, std::defer_lock);
@@ -913,7 +1011,8 @@ FrameOutput Engine::frame(const FrameInput& in) {
 
   // DEM requests.
   std::vector<TileId> visible;
-  visible.reserve(sel.tiles.size());
+  visible.reserve(ring.size() + sel.tiles.size());
+  for (const auto& t : ring) visible.push_back(t);
   for (const auto& s : sel.tiles) visible.push_back(s.tile);
   {
     std::vector<DemId> plan;
@@ -945,10 +1044,17 @@ FrameOutput Engine::frame(const FrameInput& in) {
       std::lock_guard<std::mutex> lock(imgMutex_);
       int room = kMaxInFlight - static_cast<int>(imgPending_.size());
       std::unordered_set<uint64_t> seen;
-      for (const auto& t : visible) {
+      // Each visible tile, nearest first (a coarse ancestor, then its own),
+      // then the base ring's own drapes — coarse renders are slow, so they
+      // never hold up what is on screen.
+      std::vector<std::pair<TileId, bool>> order;
+      order.reserve(visible.size());
+      for (size_t vi = ring.size(); vi < visible.size(); vi++) order.push_back({visible[vi], false});
+      for (const auto& t : ring) order.push_back({t, true});
+      for (const auto& [t, ringTile] : order) {
         if (room <= 0 || static_cast<int>(want.size()) >= kRequestsPerFrame) break;
         const int zOwn = std::min(t.z, kImageryMaxZoom);
-        for (int z : {std::max(0, zOwn - 3), zOwn}) {
+        for (int z : {ringTile ? zOwn : std::max(0, zOwn - 3), zOwn}) {
           const DemId id = demWindowAt(t, z).dem;
           const uint64_t k = demKey64(id);
           if (!seen.insert(k).second) continue;

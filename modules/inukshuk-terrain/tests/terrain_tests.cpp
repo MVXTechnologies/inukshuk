@@ -649,6 +649,20 @@ static void testEngine() {
     for (const auto& t : out.tiles) CHECK(t.morph == 0);
     CHECK(!out.needsRepaint);
   }
+  // 4b. At rest nothing is re-requested (2.2.1: 2.2.0 could evict each fresh
+  // DEM on arrival and fetch it again, forever).
+  {
+    g_cases++;
+    const int before = eng.stats().requested;
+    for (int i = 0; i < 60; i++) {
+      for (const auto& d : requested) eng.onDemHeights(d.z, d.x, d.y, synth(d));
+      requested.clear();
+      eng.drainBakes();
+      in.timeMs += 16;
+      out = eng.frame(in);
+    }
+    CHECK(eng.stats().requested - before <= 2);
+  }
   // 5. Attribute sanity: hTo equals the synthetic surface at a vertex.
   {
     g_cases++;
@@ -702,6 +716,22 @@ static void testEngine() {
       if (versions.count(t.key) && versions[t.key] == t.version) kept++;
     CHECK(kept > 0);
   }
+  // 7b. Turning around (2.2.1): the tiles behind were never shown, yet the very
+  // first frame draws them on a real surface (the base ring's), none flat.
+  {
+    g_cases++;
+    FrameInput turned = in;
+    turned.P = refProjection(lng, lat, zoom, 60, 200, w, h);
+    turned.bearingDeg = 200;
+    turned.timeMs += 16;
+    auto o2 = eng.frame(turned);
+    CHECK(!o2.tiles.empty());
+    CHECK(eng.stats().flatTiles == 0);
+    int withMesh = 0;
+    for (const auto& t : o2.tiles) withMesh += t.attributes != nullptr;
+    CHECK(withMesh == static_cast<int>(o2.tiles.size()));
+    in.timeMs = turned.timeMs;
+  }
   // 8. Low memory drops unpinned DEMs but keeps what's on screen drawable.
   {
     g_cases++;
@@ -719,7 +749,9 @@ static void testEngine() {
       if (before.count(t.key) && before[t.key]) CHECK(t.attributes != nullptr);
     CHECK(eng.stats().flatTiles == 0);
     CHECK(eng.stats().meshCount <= meshesBefore);
-    CHECK(eng.stats().meshCount <= static_cast<int>(o3.tiles.size()) + Engine::kMaxBakeJobs);
+    // ... plus the pinned base ring (the fallback in every direction).
+    const int ringMax = (2 * Engine::kBaseRingRadius + 1) * (2 * Engine::kBaseRingRadius + 1);
+    CHECK(eng.stats().meshCount <= static_cast<int>(o3.tiles.size()) + Engine::kMaxBakeJobs + ringMax);
     // Culled neighbours lose their (unpinned) height bounds, so the walk may
     // admit a few more tiles — never a flat one.
     CHECK(o3.tiles.size() <= out.tiles.size() * 5 / 4);
@@ -973,6 +1005,31 @@ static void testEngine() {
     CHECK(sc.stats().imagerySlots == slotsBefore);
     for (const auto& u : so.imageryUploads) CHECK(u.slot >= 0);
     sc.setDrape(false, 24);
+  }
+  // 23. Stable reference height (reference.ts twin) and the base ring.
+  {
+    g_cases++;
+    CHECK_NEAR(stableReferenceHeight(1500.0, 2100.0, 6000, 1), 1500, 1e-9);
+    for (double nearMax : {800.0, 1500.0, 2100.0, 4000.0})
+      CHECK_NEAR(stableReferenceHeight(1500.0, nearMax, 6000, 1), 1500, 1e-9);
+    CHECK_NEAR(stableReferenceHeight(1500.0, 4000.0, 2000, 1), 4000 - (2000 - 300), 1e-9);
+    CHECK_NEAR((3000 - stableReferenceHeight(1500.0, 3000.0, 2000, 2)) * 2, 2000 - 300, 1e-9);
+    CHECK_NEAR(stableReferenceHeight(std::nullopt, 2100.0, 6000, 1), 2100, 1e-9);
+    CHECK_NEAR(stableReferenceHeight(std::nullopt, std::nullopt, 6000, 1), 0, 1e-9);
+    CHECK_NEAR(stableReferenceHeight(1500.0, 9000.0, 6000, 0), 1500, 1e-9);
+    // Ring: 25 tiles around the point, wrapped across the antimeridian, clamped at the poles.
+    const auto ring = baseRing(0.5, 0.5, 6, 2);
+    CHECK(ring.size() == 25);
+    const auto wrapped = baseRing(0.001, 0.5, 4, 2);
+    CHECK(wrapped.size() == 25);
+    int west = 0;
+    for (const auto& t : wrapped) west += t.wrap == -1;
+    CHECK(west == 10);
+    CHECK(baseRing(0.5, 0.0001, 5, 2).size() == 15);
+    // Ring zoom: two tiles span about the fog distance, within zoom − 7 … zoom − 2.
+    CHECK(baseRingZoom(13, 15600) == 9);
+    CHECK(baseRingZoom(13, 100) == 11);
+    CHECK(baseRingZoom(13, 1e9) == 6);
   }
   // 22. Mip chains: level count, packing, box filter.
   {

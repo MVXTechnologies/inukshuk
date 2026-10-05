@@ -147,8 +147,9 @@ void main() {
   vec3 c;
   if (u_imageryMode > 0.5) {
     vec3 b = v_ib.x < 0.0 ? u_fogColor
-                          : texture(u_imagery, vec3(v_ib.yz + v_uvs.xy * v_ib.w, v_ib.x)).rgb;
-    vec3 a = v_ia.x < 0.0 ? b : texture(u_imagery, vec3(v_ia.yz + v_uvs.xy * v_ia.w, v_ia.x)).rgb;
+                          : texture(u_imagery, vec3(v_ib.yz + v_uvs.xy * v_ib.w, v_ib.x), -0.5).rgb;
+    vec3 a = v_ia.x < 0.0 ? b
+                          : texture(u_imagery, vec3(v_ia.yz + v_uvs.xy * v_ia.w, v_ia.x), -0.5).rgb;
     c = mix(a, b, v_blend);
     // The drape carries the 2D hillshade's detail; the mesh adds the large forms.
     float form = lambert - flatL;
