@@ -59,7 +59,7 @@ describe('buildGeodeticCard', () => {
     ]);
     expect(card.link).toEqual({
       url: 'https://fichegeodesique.mern.gouv.qc.ca/matricule-datum/M15KM007/2',
-      label: 'Full datasheet',
+      label: 'Datasheet',
     });
     expect(card.credit).toBe('© Gouvernement du Québec (MRNF) · CC BY 4.0');
   });
@@ -106,7 +106,7 @@ describe('buildGeodeticCard', () => {
     );
     expect(card.rows.map((r) => r.key)).toEqual(['native', 'wgs84']);
     expect(card.rows.every((r) => r.lines.every((l) => l.text !== ''))).toBe(true);
-    expect(card.link.label).toBe('Full datasheet');
+    expect(card.link.label).toBe('Datasheet');
   });
 
   it('never shows a chart datum as an orthometric height', () => {
