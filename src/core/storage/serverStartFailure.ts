@@ -45,3 +45,13 @@ export function describeServerStartFailure(
     ? `${head} (no lighttpd error log)`
     : `${head}\nlighttpd error log:\n${tail}`;
 }
+
+/**
+ * The library names its log by plain filesystem path (react-native-fs style),
+ * while expo-file-system reads `file://` uris. Already a uri: unchanged.
+ */
+export function fileUriOfPath(path: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(path)
+    ? path
+    : `file://${path.startsWith('/') ? '' : '/'}${path}`;
+}

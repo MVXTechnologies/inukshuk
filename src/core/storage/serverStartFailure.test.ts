@@ -1,4 +1,5 @@
 import {
+  fileUriOfPath,
   LOG_TAIL_CHARS,
   LOG_TAIL_LINES,
   describeServerStartFailure,
@@ -47,5 +48,17 @@ describe('describeServerStartFailure', () => {
       'Loopback server failed to start after 1 attempt: boom (no lighttpd error log)',
     );
     expect(describeServerStartFailure(undefined, null, 1)).toContain('unknown error');
+  });
+});
+
+describe('fileUriOfPath', () => {
+  it("turns the library's plain log path into a file uri", () => {
+    expect(fileUriOfPath('/data/user/0/app/cache/__rn-static-server__/errorlog.txt')).toBe(
+      'file:///data/user/0/app/cache/__rn-static-server__/errorlog.txt',
+    );
+  });
+
+  it('leaves a uri alone', () => {
+    expect(fileUriOfPath('file:///tmp/errorlog.txt')).toBe('file:///tmp/errorlog.txt');
   });
 });
