@@ -18,15 +18,25 @@ const FINGERPRINT_FRAMES = 5;
  * occurrences of the same failure hash identically.
  */
 export function normalizeMessage(message: string): string {
-  return message
-    .replace(/(file|content|https?):\/\/\S+/gi, '<uri>')
-    .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '<str>')
-    .replace(/\b0x[0-9a-f]+\b/gi, '<hex>')
-    .replace(/\b[0-9a-f]{8,}\b/gi, '<hex>')
-    .replace(/\d+(\.\d+)?/g, '#')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 200);
+  return (
+    message
+      .replace(/(file|content|https?):\/\/\S+/gi, '<uri>')
+      // The app's own file ids (nanoid(12): maps/<id>.pdf, <id>.gpx, …): one
+      // failing map must not open one issue per file (#358–#419 were one bug
+      // filed 20 times). Mixed-case, so ordinary words are left alone.
+      .replace(
+        // No lookbehind: the boundary is captured and put back.
+        /(^|[^\w-])(?=[\w-]{0,11}[A-Z])(?=[\w-]{0,11}[a-z0-9])[\w-]{12}(?=\.[a-z0-9]{2,5}\b)/g,
+        '$1<id>',
+      )
+      .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '<str>')
+      .replace(/\b0x[0-9a-f]+\b/gi, '<hex>')
+      .replace(/\b[0-9a-f]{8,}\b/gi, '<hex>')
+      .replace(/\d+(\.\d+)?/g, '#')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 200)
+  );
 }
 
 /**

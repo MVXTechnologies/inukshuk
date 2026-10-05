@@ -1,6 +1,11 @@
 import { NetworkManager, OfflineManager } from '@maplibre/maplibre-react-native';
 
-import { createRegionPack, listRegionPacks, setOfflineOnly } from './offline';
+import {
+  createRegionPack,
+  listRegionPacks,
+  OfflineConnectivityError,
+  setOfflineOnly,
+} from './offline';
 import * as storage from './storage';
 
 jest.mock('./storage', () => ({
@@ -202,6 +207,8 @@ describe('createRegionPack', () => {
     // … but 90 s of silence rejects, naming the zoom range that stalled.
     await jest.advanceTimersByTimeAsync(2_000);
     await expect(pending).rejects.toThrow('no tiles arrived for 90 s at z10–z14');
+    // A stall is connectivity: told to the user, never reported as an app error.
+    await expect(pending).rejects.toBeInstanceOf(OfflineConnectivityError);
 
     // The partially-created native pack and its orphaned style file are removed.
     expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-1');
@@ -222,6 +229,30 @@ describe('createRegionPack', () => {
     expect(fsMock.__has('/doc/offline-styles/r1.json')).toBe(false);
     expect(lastServer()?.stop).toHaveBeenCalled();
   });
+
+  it.each([
+    'Error Domain=MLNErrorDomain Code=3 "The Internet connection appears to be offline."',
+    'Error Domain=MLNErrorDomain Code=3 "The request timed out."',
+    'Error Domain=MLNErrorDomain Code=3 "Could not connect to the server."',
+  ])('classes a connectivity failure as such: %s', async (message) => {
+    mockCreatePack();
+    const pending = createRegionPack(packArgs, jest.fn());
+    await flushMicrotasks();
+    emitError({ id: 'native-1' }, { message });
+    await expect(pending).rejects.toBeInstanceOf(OfflineConnectivityError);
+    await expect(pending).rejects.toThrow(/^network error at z10–z14/);
+  });
+
+  it.each(['Error Domain=MLNErrorDomain Code=2 "HTTP status code 503"', 'cannot parse response'])(
+    'keeps a server or data failure an ordinary error: %s',
+    async (message) => {
+      mockCreatePack();
+      const pending = createRegionPack(packArgs, jest.fn());
+      await flushMicrotasks();
+      emitError({ id: 'native-1' }, { message });
+      await expect(pending).rejects.not.toBeInstanceOf(OfflineConnectivityError);
+    },
+  );
 
   it('gives an empty native error a specific reason', async () => {
     mockCreatePack();
