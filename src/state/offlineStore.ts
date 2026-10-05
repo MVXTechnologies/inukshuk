@@ -2,6 +2,7 @@ import {
   createRegionPack,
   deleteRegionPack,
   listRegionPacks,
+  OfflineConnectivityError,
   setTileLimit,
   type OfflineRegion,
 } from '@data/offline';
@@ -120,7 +121,11 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
             (pct, sizeBytes) => set({ progress: { pct, sizeBytes, label } }),
           );
         } catch (err) {
-          reportError(err, 'offline-region-download');
+          // Connectivity is the user's to fix and the message says so; only
+          // other failures are app errors worth a report.
+          if (!(err instanceof OfflineConnectivityError)) {
+            reportError(err, 'offline-region-download');
+          }
           const reason = err instanceof Error ? err.message : String(err);
           failed.push(`${LAYER_LABEL[layer.basemap]}: ${reason}`);
         }
@@ -170,7 +175,9 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
           doneBytes += last;
           streak = 0;
         } catch (err) {
-          reportError(err, 'offline-series-download');
+          if (!(err instanceof OfflineConnectivityError)) {
+            reportError(err, 'offline-series-download');
+          }
           failed.push(`${i + 1}/${total}: ${err instanceof Error ? err.message : String(err)}`);
           streak += 1;
           if (streak >= 2) break;

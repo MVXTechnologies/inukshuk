@@ -124,6 +124,27 @@ function regionFromPack(
 }
 
 /**
+ * The download failed because the device could not reach the tile server —
+ * offline, connection lost or refused, timed out, or no tile for 90 s. The
+ * message tells the user; it is not reported as an app error (#384, #397,
+ * #409, #410 were the same offline phone retrying).
+ */
+export class OfflineConnectivityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OfflineConnectivityError';
+  }
+}
+
+/** The native error as an Error a user can act on: see {@link describeNativeError}. */
+function nativeDownloadError(message: string, zoomRange: string): Error {
+  const description = describeNativeError(message, zoomRange);
+  return description.startsWith('network error at ')
+    ? new OfflineConnectivityError(description)
+    : new Error(description);
+}
+
+/**
  * Turn MapLibre's native download error into something a user can act on.
  * Native messages are terse and sometimes empty ("" from an OfflineRegionError
  * with no reason), which is how a failing layer used to surface as nothing more
@@ -226,7 +247,9 @@ export async function createRegionPack(
           () =>
             settle(() =>
               reject(
-                new Error(`no tiles arrived for 90 s at ${zoomRange} — check your connection`),
+                new OfflineConnectivityError(
+                  `no tiles arrived for 90 s at ${zoomRange} — check your connection`,
+                ),
               ),
             ),
           STALL_MS,
@@ -250,7 +273,7 @@ export async function createRegionPack(
         },
         (pack, err) => {
           nativePackId = pack.id;
-          settle(() => reject(new Error(describeNativeError(err.message, zoomRange))));
+          settle(() => reject(nativeDownloadError(err.message, zoomRange)));
         },
       )
         .then((pack) => {
@@ -259,9 +282,7 @@ export async function createRegionPack(
         .catch((err: unknown) =>
           settle(() =>
             reject(
-              new Error(
-                describeNativeError(err instanceof Error ? err.message : String(err), zoomRange),
-              ),
+              nativeDownloadError(err instanceof Error ? err.message : String(err), zoomRange),
             ),
           ),
         );

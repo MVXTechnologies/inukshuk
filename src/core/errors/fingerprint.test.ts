@@ -22,6 +22,25 @@ describe('normalizeMessage', () => {
     );
   });
 
+  it("collapses the app's file ids, so one failure is one issue", () => {
+    const served = (id: string) =>
+      `Error: Load failed [served fetch: 1 requests, 1 failed; GET /maps/${id}.pdf (0 B read) failed: Load failed]`;
+    expect(normalizeMessage(served('EHXbl0y6UwLl'))).toBe(normalizeMessage(served('kY0nMJ7QHLk8')));
+    expect(normalizeMessage(served('whfgy_TjtIuW'))).toContain('/maps/<id>.pdf');
+    expect(
+      normalizeMessage('The file “QWpj4JKq0Osq.gpx” couldn’t be opened because the text encoding'),
+    ).toBe(
+      normalizeMessage('The file “aot48Ran8f7P.gpx” couldn’t be opened because the text encoding'),
+    );
+  });
+
+  it('leaves ordinary file names and words alone', () => {
+    expect(normalizeMessage('error-reports.json.tmp missing')).toBe(
+      'error-reports.json.tmp missing',
+    );
+    expect(normalizeMessage('trailheading.json')).toBe('trailheading.json');
+  });
+
   it('collapses whitespace and truncates to 200 chars', () => {
     expect(normalizeMessage('a   b\n\tc')).toBe('a b c');
     expect(normalizeMessage('x'.repeat(500))).toHaveLength(200);
