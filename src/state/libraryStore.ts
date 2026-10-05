@@ -23,9 +23,11 @@ import { nextFolderVisibility } from '@core/library/visibility';
 import { nextWaypointLabel } from '@core/library/waypoints';
 import * as storage from '@data/storage';
 import {
+  type InterruptedPdfRender,
   clearInterruptedPdfRender,
   protectInterruptedPdfRender,
   readInterruptedPdfRender,
+  recordPdfRenderInterruption,
 } from '@data/pdfRenderRecovery';
 import { reportError } from '@lib/errorReporting';
 import { create } from 'zustand';
@@ -376,6 +378,21 @@ function persistMapRetry(state: LibraryState, map: MapDocument, pageIndex: numbe
   }
 }
 
+/**
+ * Whether the render cut short by the last process exit pauses its page now.
+ * A first interruption is usually the app being killed from outside, so the
+ * page is retried; a repeat pauses it. If the strike cannot be saved, pause:
+ * a page that crashes the app must never be retried in a loop.
+ */
+function shouldPauseInterrupted(interrupted: InterruptedPdfRender): boolean {
+  try {
+    return recordPdfRenderInterruption(interrupted);
+  } catch (error) {
+    reportError(error, 'pdf-recovery-strike');
+    return true;
+  }
+}
+
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   maps: [],
   tracks: [],
@@ -397,6 +414,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       storage.ensureStorage();
       // Snapshot before publishing any maps: restored active pages otherwise
       // immediately retry the render interrupted by the previous process exit.
+      // A first interruption of a page is retried on purpose (it is usually a
+      // kill, not a crash); a repeat pauses it — see shouldPauseInterrupted.
       const interrupted = readInterruptedPdfRender();
       const raw = await storage.readIndex<unknown>();
       if (raw) {
@@ -413,7 +432,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             (m) =>
               storage.toDocumentPath(m.fileUri) === storage.toDocumentPath(interrupted.fileUri),
           );
-          if (map && interrupted.pageIndex < map.pageCount) {
+          if (map && interrupted.pageIndex < map.pageCount && shouldPauseInterrupted(interrupted)) {
             index.maps = index.maps.map((m) =>
               m === map
                 ? {
@@ -439,6 +458,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               reportError(error, 'pdf-recovery-save');
             }
           } else {
+            // Unknown page, or a first strike already saved: consume the
+            // checkpoint and let the page render again.
             try {
               clearInterruptedPdfRender(interrupted.token);
             } catch (error) {
