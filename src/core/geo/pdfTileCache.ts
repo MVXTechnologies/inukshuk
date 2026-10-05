@@ -156,16 +156,30 @@ export interface PdfTileBudgets {
 const MI = 1024 * 1024;
 
 /**
+ * Texture budget for the tiles the camera asks for. The planner reserves it
+ * for the worst grid alignment of the view, so on a dense screen 6 Mi px left
+ * the tiles below the screen's own resolution: an iPhone 17 (1206 x 2622 px)
+ * got as little as 0.83 raster px per device px, a Pixel-class 1080 x 2400
+ * screen 0.95. Three times the screen's pixels (at least 6 Mi, at most 10 Mi)
+ * keeps every zoom at or above one raster pixel per device pixel on both.
+ */
+export function visibleBudget(viewportPixels: number): number {
+  if (!(viewportPixels > 0)) return 6 * MI;
+  return Math.min(10 * MI, Math.max(6 * MI, Math.ceil(3 * viewportPixels)));
+}
+
+/**
  * Limits for the device's memory state. On-screen textures (visible plus
  * fallback) cost GPU memory, so they are the same everywhere; prefetched and
  * cached tiles are files, not textures, and only cost disk and render time.
  * Once the OS has warned about memory the ring is dropped, the renderer stops
  * holding the document between tiles, the fallback shrinks and the cache holds little more than the visible set.
  */
-export function pdfTileBudgets(lowMemory: boolean): PdfTileBudgets {
+export function pdfTileBudgets(lowMemory: boolean, viewportPixels = 0): PdfTileBudgets {
+  const visiblePixels = visibleBudget(viewportPixels);
   if (lowMemory) {
     return {
-      visiblePixels: 6 * MI,
+      visiblePixels,
       fallbackPixels: 2 * MI,
       maxFallbackTiles: 8,
       prefetchMargin: 0,
@@ -177,7 +191,7 @@ export function pdfTileBudgets(lowMemory: boolean): PdfTileBudgets {
     };
   }
   return {
-    visiblePixels: 6 * MI,
+    visiblePixels,
     fallbackPixels: 6 * MI,
     maxFallbackTiles: 24,
     prefetchMargin: 1,

@@ -124,7 +124,8 @@ export function usePdfDetails(
   const [displayed, setDisplayed] = useState<Detail[]>([]);
   // After the OS warns about memory: no neighbour ring, a small cache.
   const [lowMemory, setLowMemory] = useState(false);
-  const budgets = pdfTileBudgets(lowMemory);
+  const viewportPixels = viewportWidthPx * (viewport?.heightPx ?? viewportWidthPx * 2);
+  const budgets = pdfTileBudgets(lowMemory, viewportPixels);
   const VISIBLE_PIXELS = budgets.visiblePixels;
   const tileOptions = {
     prefetchMargin: budgets.prefetchMargin,
@@ -259,7 +260,7 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const epoch = w.epoch;
-    w.budgets = pdfTileBudgets(lowMemory);
+    w.budgets = pdfTileBudgets(lowMemory, viewportPixels);
     const statusKeys = new Set(
       (JSON.parse(key) as Target[])
         .filter((target) => !target.prefetch)
@@ -710,7 +711,7 @@ export function usePdfDetails(
       clearTimeout(timer);
       clearLoading();
     };
-  }, [key, boundsKey, liveKey, lowMemory, rasterize, serverOrigin, enabled]);
+  }, [key, boundsKey, liveKey, lowMemory, viewportPixels, rasterize, serverOrigin, enabled]);
 
   useEffect(() => {
     const w = worker.current;

@@ -313,16 +313,24 @@ it('cancels debounced refinement when focus leaves before dispatch', async () =>
   await view.unmount();
 });
 
-it('divides the six Mi-pixel visible budget by the number of eligible pages', async () => {
+it('divides the visible budget by the number of eligible pages', async () => {
   mockPlans.mockReturnValue([tile('a', 0.25)]);
-  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  // A 1200 x 900 device-pixel map: the floor of 6 Mi px applies.
+  const viewport = { heightPx: 900, bearing: 0 };
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200, viewport));
   await flush();
   expect(mockPlans.mock.calls.at(-1)?.[4]).toBe(6 * 1024 * 1024);
   await v.unmount();
   mockPlans.mockClear();
   const secondMap = { ...map, id: 'second' };
   const both = await renderHook(() =>
-    usePdfDetails([map, secondMap], [overview, { ...overview, id: 'second:0' }], bounds, 1200),
+    usePdfDetails(
+      [map, secondMap],
+      [overview, { ...overview, id: 'second:0' }],
+      bounds,
+      1200,
+      viewport,
+    ),
   );
   await flush();
   expect(mockPlans.mock.calls.slice(-2).map((c) => c[4])).toEqual([
@@ -331,6 +339,17 @@ it('divides the six Mi-pixel visible budget by the number of eligible pages', as
   ]);
   expect(new Set(both.result.current.map((d) => d.id)).size).toBe(2);
   await both.unmount();
+});
+
+it('gives a dense screen three times its pixels, so tiles stay at device resolution', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25)]);
+  // An iPhone 17 map frame: 1206 x 2622 device pixels.
+  const v = await renderHook(() =>
+    usePdfDetails([map], [overview], bounds, 1206, { heightPx: 2622, bearing: 0 }),
+  );
+  await flush();
+  expect(mockPlans.mock.calls.at(-1)?.[4]).toBe(Math.ceil(3 * 1206 * 2622));
+  await v.unmount();
 });
 
 it('bounds actual raster pixels during pan handoff and delayed settled cleanup', async () => {
