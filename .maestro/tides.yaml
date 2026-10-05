@@ -28,13 +28,17 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 - tapOn: 'Map overlays'
-# Centre the row BELOW it: centring "Tide stations" itself can leave it under
-# the sheet header, where a tap lands on the scrim and closes the menu.
+# The sheet's rows scroll under its header, and Maestro calls a row there
+# "visible" (a tap then lands on the scrim and closes the menu). So: scroll
+# the row into the list, then nudge the list back down a little.
 - scrollUntilVisible:
-    element: 'Labels on satellite.*'
+    element: 'Tide stations'
     direction: DOWN
-    centerElement: true
-- assertVisible: 'Gauge symbols legend'
+- swipe:
+    start: 50%, 60%
+    end: 50%, 72%
+    duration: 600
+- waitForAnimationToEnd
 - assertVisible: 'Live gauge'
 # Flip the switch, close and reopen the menu (the map restyles with or
 # without the tide layer), then flip it back: the flow leaves the setting as
@@ -43,13 +47,18 @@ appId: com.inukshuk.app
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
 - tapOn: 'Map overlays'
-# Centre the row BELOW it: centring "Tide stations" itself can leave it under
-# the sheet header, where a tap lands on the scrim and closes the menu.
+# The sheet's rows scroll under its header, and Maestro calls a row there
+# "visible" (a tap then lands on the scrim and closes the menu). So: scroll
+# the row into the list, then nudge the list back down a little.
 - scrollUntilVisible:
-    element: 'Labels on satellite.*'
+    element: 'Tide stations'
     direction: DOWN
-    centerElement: true
-- assertVisible: 'Gauge symbols legend'
+- swipe:
+    start: 50%, 60%
+    end: 50%, 72%
+    duration: 600
+- waitForAnimationToEnd
+- assertVisible: 'Live gauge'
 - tapOn: 'Tide stations'
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
