@@ -114,6 +114,17 @@ jobs:
             # the app in the a11y tree and failed EVERY flow's first assert on
             # 6 of the 7 red nightlies between 07-25 and 08-02.
             adb shell settings put global hide_error_dialogs 1
+            # Pre-acknowledge Android's "Viewing full screen — swipe down from
+            # the top to exit" cling. Since 2.0.0 the app hides the system
+            # navigation bar (useAndroidImmersive / expo-navigation-bar), and
+            # on a fresh device the OS draws that cling across the top third
+            # of the screen until someone taps "Got it". No flow does, so it
+            # came back on every launch, covered the Map's top-right control
+            # rail and failed EVERY flow's first assert ("Map actions" is
+            # visible) on every nightly from 09-29 to 10-05. "confirmed" is the
+            # value the OS itself stores when "Got it" is tapped.
+            adb shell settings put secure immersive_mode_confirmations confirmed
+            echo "immersive_mode_confirmations=$(adb shell settings get secure immersive_mode_confirmations)"
             # Location SERVICES must be on or Maestro's setLocation feeds a fix
             # the OS never delivers: the app shows "Location is turned off",
             # waypoint drops no-op and recording captures zero points — the

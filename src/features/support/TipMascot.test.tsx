@@ -11,7 +11,7 @@ import { useRecorderStore } from '@state/recorderStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSupportStore } from '@state/supportStore';
 import { useTipMascotStore } from '@state/tipMascotStore';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
 
@@ -170,11 +170,19 @@ it('tapping the bubble opens Support at the tips', async () => {
 });
 
 it('folds away on its own when left alone', async () => {
-  const view = await mount({}, 30);
+  // Real timers: the bubble's lifetime must outlast `at()`'s 40 ms window by
+  // a wide margin, or a slow runner sees it already folded (nightly flake,
+  // 2026-10-05: 30 ms here raced the 40 ms wait). `lastBubbleAt` proves it
+  // appeared without depending on when we look.
+  const view = await mount({}, 300);
   await at(BUBBLE_FIRST_DELAY_MS);
-  expect(useTipMascotStore.getState().bubbleFact).not.toBeNull();
-  await wait(80);
+  expect(useTipMascotStore.getState().lastBubbleAt).toBe(T0 + BUBBLE_FIRST_DELAY_MS);
+  // Only the bubble's own timer clears `bubbleFact` without a tap or (x).
+  await waitFor(() => expect(useTipMascotStore.getState().bubbleFact).toBeNull(), {
+    timeout: 3_000,
+  });
   expect(screen.queryByTestId('tip-bubble')).toBeNull();
+  expect(useTipMascotStore.getState().snoozed).toBe(false);
   view.unmount();
 });
 
