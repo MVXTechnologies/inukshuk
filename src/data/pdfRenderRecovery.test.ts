@@ -1,6 +1,7 @@
 const mockFiles = new Map<string, string>();
 let mockDocument = 'file:///container-A/Documents';
 let mockFailMove = false;
+let mockFailWrite = false;
 
 jest.mock('expo-file-system', () => {
   class File {
@@ -18,6 +19,7 @@ jest.mock('expo-file-system', () => {
       mockFiles.set(this.uri, '');
     }
     write(text: string) {
+      if (mockFailWrite) throw new Error('ENOSPC');
       mockFiles.set(this.uri, text);
     }
     textSync() {
@@ -57,6 +59,7 @@ beforeEach(() => {
   mockFiles.clear();
   mockDocument = 'file:///container-A/Documents';
   mockFailMove = false;
+  mockFailWrite = false;
 });
 
 test('cold module reload recovers the durable checkpoint without modifying the PDF', () => {
@@ -149,4 +152,71 @@ test('failed promotion throws before dispatch and keeps a recoverable stage', ()
 test.each([-1, 0.5, NaN, Infinity])('invalid page index %s never writes anything', (pageIndex) => {
   expect(() => load().beginPdfRender({ ...input, pageIndex })).toThrow();
   expect(mockFiles.size).toBe(0);
+});
+
+describe('interruption strikes', () => {
+  const strikesUri = 'file:///container-A/Documents/.pdf-render-interruptions.json';
+  /** A fresh process launching after the last render was cut short. */
+  function launchAfterKill(): boolean {
+    const api = load();
+    const interrupted = api.readInterruptedPdfRender();
+    if (!interrupted) throw new Error('no checkpoint');
+    const pause = api.recordPdfRenderInterruption(interrupted);
+    api.clearInterruptedPdfRender(interrupted.token);
+    return pause;
+  }
+
+  test('a page killed mid-render once is retried; killed again before finishing, it pauses', () => {
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(false);
+    expect(JSON.parse(mockFiles.get(strikesUri)!)).toMatchObject({
+      entries: [{ filePath: 'maps/eco.pdf', pageIndex: 2, count: 1 }],
+    });
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(true);
+  });
+
+  test('a completed render of the page clears its strike', () => {
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(false);
+    const api = load();
+    api.finishPdfRender(api.beginPdfRender(input));
+    expect(mockFiles.has(strikesUri)).toBe(false);
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(false);
+  });
+
+  test('another page completing does not clear the strike', () => {
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(false);
+    const api = load();
+    api.finishPdfRender(api.beginPdfRender({ ...input, pageIndex: 0 }));
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(true);
+  });
+
+  test('dying again before the checkpoint is consumed does not add a strike', () => {
+    load().beginPdfRender(input);
+    const api = load();
+    expect(api.recordPdfRenderInterruption(api.readInterruptedPdfRender()!)).toBe(false);
+    // The process ends here, before clearInterruptedPdfRender.
+    expect(launchAfterKill()).toBe(false);
+  });
+
+  test('a corrupt strike file reads as no strikes', () => {
+    mockFiles.set(strikesUri, '{not json');
+    load().beginPdfRender(input);
+    expect(launchAfterKill()).toBe(false);
+  });
+
+  test('a strike that cannot be saved throws so the caller pauses', () => {
+    load().beginPdfRender(input);
+    const api = load();
+    const interrupted = api.readInterruptedPdfRender()!;
+    mockFailWrite = true;
+    expect(() => api.recordPdfRenderInterruption(interrupted)).toThrow('ENOSPC');
+    mockFailWrite = false;
+    // Nothing was counted: a later launch still sees a first strike.
+    expect(load().recordPdfRenderInterruption(interrupted)).toBe(false);
+  });
 });
