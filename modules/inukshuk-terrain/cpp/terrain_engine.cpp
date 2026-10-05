@@ -1265,6 +1265,7 @@ FrameOutput Engine::frame(const FrameInput& in) {
     po.hRef = hRef;
     po.heightScale = heightScale;
     po.toggles = &stats_.labelToggles;
+    po.legacy = legacy;
     po.topPx = labelTopPx_;
     po.bottomPx = labelBottomPx_;
     po.dtMs = dt;

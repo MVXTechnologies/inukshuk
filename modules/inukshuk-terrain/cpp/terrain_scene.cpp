@@ -171,12 +171,14 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
   }
   // Stable ranking (labels.ts): priority, a shown pin's stickiness, then id.
   auto rank = [&](const Cand& c) {
+    if (o.legacy) return c.l->priority;
     auto it = states.find(c.l->id);
     return c.l->priority - (it != states.end() && it->second.shown ? kLabelSticky : 0.0);
   };
   std::stable_sort(cands.begin(), cands.end(), [&](const Cand& a, const Cand& b) {
     const double ra = rank(a), rb = rank(b);
     if (ra != rb) return ra < rb;
+    if (o.legacy && a.w != b.w) return a.w < b.w;
     return a.l->id < b.l->id;
   });
   std::vector<std::array<double, 4>> taken;
@@ -188,7 +190,7 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
     LabelState st = it == states.end() ? LabelState{} : it->second;
     const double w = c.l->w * c.scale, h = c.l->ph * c.scale, stem = o.stemPx * c.scale;
     const std::array<double, 4> r = {c.gx - w / 2, c.gy - stem - h, c.gx + w / 2, c.gy - stem};
-    const double slack = st.shown ? kLabelEdgeSlackPx : 0;
+    const double slack = st.shown && !o.legacy ? kLabelEdgeSlackPx : 0;
     const bool clearTop = o.topPx > 0 ? r[1] >= o.topPx - slack : r[3] > 0;
     const bool clearBottom = o.bottomPx > 0 ? r[3] <= o.height - o.bottomPx + slack : r[1] < o.height;
     const bool onScreen = r[2] > -slack && r[0] < o.width + slack && clearTop && clearBottom;
@@ -206,7 +208,7 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
     bool want = fits;
     if (fits) {
       st.blockedAt = std::numeric_limits<double>::quiet_NaN();
-    } else if (st.shown && onScreen) {
+    } else if (st.shown && onScreen && !o.legacy) {
       if (std::isnan(st.blockedAt)) st.blockedAt = o.nowMs;
       want = o.nowMs - st.blockedAt < kLabelHoldMs;
     }

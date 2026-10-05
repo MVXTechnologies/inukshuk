@@ -295,6 +295,8 @@ struct PlaceOptions {
   double topPx = 0, bottomPx = 0;
   /** Show/hide decision flips are added here (round 3 counter); may be null. */
   int* toggles = nullptr;
+  /** QA A/B only (engine debug flag 32): the 2.2.1 placement — distance ranking, no hysteresis. */
+  bool legacy = false;
 };
 double labelScale(double distance, double ctc);
 bool rectsOverlap(const std::array<double, 4>& a, const std::array<double, 4>& b, double pad);
