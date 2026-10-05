@@ -4,7 +4,7 @@ import type { TideStation } from '@core/tides/station';
 import { tideColors } from '@core/map/tideStyle';
 import { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, IconButton, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
 import { useLiveTide } from '../hooks/useLiveTide';
 import { tideImage } from '../tideImages';
 import { CopyValueButton } from './CopyValueButton';
@@ -92,8 +92,9 @@ export function TideStationCard({
           const s = chipStyle(c.tone);
           return (
             <View key={c.label} style={[styles.chip, { backgroundColor: s.bg }]}>
+              {c.tone === 'warn' && <Icon source="alert-outline" size={13} color={s.fg} />}
               <Text variant="labelSmall" style={{ color: s.fg, fontWeight: '700' }}>
-                {c.tone === 'warn' ? `⚠ ${c.label}` : c.label}
+                {c.label}
               </Text>
             </View>
           );
@@ -137,8 +138,7 @@ export function TideStationCard({
           <View style={styles.section} testID="tide-levels">
             <View style={styles.tableTitle}>
               <Text variant="labelSmall" style={[styles.caps, styles.flex, { color: muted }]}>
-                TIDAL LEVELS · METRES · SAME LEVEL IN {model.columns.length} DATUM
-                {model.columns.length > 1 ? 'S' : ''}
+                TIDAL LEVELS · METRES
               </Text>
               <Button
                 compact
@@ -186,7 +186,6 @@ export function TideStationCard({
                     style={r.datum ? { color: teal, fontWeight: '700' } : undefined}
                     numberOfLines={1}
                   >
-                    {r.datum ? '■ ' : ''}
                     {r.code}
                   </Text>
                 </View>
@@ -310,7 +309,14 @@ const styles = StyleSheet.create({
   icon: { width: 24, height: 24, marginRight: 10 },
   titles: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2, marginBottom: 4 },
-  chip: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  chip: {
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   body: { maxHeight: 360 },
   flex: { flex: 1 },
   posRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
@@ -325,7 +331,7 @@ const styles = StyleSheet.create({
     minHeight: 30,
   },
   th: { alignItems: 'flex-end', paddingBottom: 3 },
-  codeCol: { width: 92 },
+  codeCol: { width: 100 },
   numCol: { flex: 1, paddingLeft: 4, justifyContent: 'center', minHeight: 28 },
   copyCol: { width: 28, alignItems: 'flex-end' },
   right: { textAlign: 'right' },

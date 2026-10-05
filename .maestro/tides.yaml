@@ -28,8 +28,10 @@ appId: com.inukshuk.app
     visible: 'Map actions'
     timeout: 30000
 - tapOn: 'Map overlays'
+# Centre the row BELOW it: centring "Tide stations" itself can leave it under
+# the sheet header, where a tap lands on the scrim and closes the menu.
 - scrollUntilVisible:
-    element: 'Tide stations'
+    element: 'Labels on satellite.*'
     direction: DOWN
     centerElement: true
 - assertVisible: 'Gauge symbols legend'
@@ -41,8 +43,10 @@ appId: com.inukshuk.app
 - tapOn: 'Close overlays'
 - assertVisible: 'Map actions'
 - tapOn: 'Map overlays'
+# Centre the row BELOW it: centring "Tide stations" itself can leave it under
+# the sheet header, where a tap lands on the scrim and closes the menu.
 - scrollUntilVisible:
-    element: 'Tide stations'
+    element: 'Labels on satellite.*'
     direction: DOWN
     centerElement: true
 - assertVisible: 'Gauge symbols legend'
