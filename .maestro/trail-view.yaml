@@ -47,7 +47,9 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Trail layers'
     timeout: 30000
-- assertVisible: 'Notes.*'
+# The Overview tab's body rendered (#511 C2 dropped the old "Notes" tab; the
+# Overview now ends with this section).
+- assertVisible: 'Photos and waypoints'
 # The 2D/3D toggle is gone (#480) — its labels must not come back.
 - assertNotVisible: 'Switch to (2D|3D) view'
 # The layers menu carries the two base maps (Relief retired, #484). Assert
@@ -90,6 +92,6 @@ appId: com.inukshuk.app
       - tapOn:
           point: 50%,8%
 # Still responsive: leave.
-- assertVisible: 'Notes.*'
+- assertVisible: 'Trail layers'
 - tapOn: 'Back'
 - assertVisible: 'Recorded trails.*'
