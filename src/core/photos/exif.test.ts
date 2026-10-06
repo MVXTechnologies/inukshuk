@@ -68,6 +68,19 @@ describe('normalizeExif', () => {
     expect(n).toMatchObject({ width: 4000, height: 3000 });
   });
 
+  it('keeps the raw wall-clock reading the time came from, for re-pick dedupe', () => {
+    expect(normalizeExif(ANDROID).wallClock).toBe('2026:09:27 10:31:05.120');
+    expect(normalizeExif(IOS).wallClock).toMatch(/^2026:09:27 10:31:05/);
+    expect(normalizeExif({ DateTime: ' 2027:01:01 00:00:00 ' }).wallClock).toBe(
+      '2027:01:01 00:00:00',
+    );
+    expect(normalizeExif({ DateTimeOriginal: '2026:01:01 00:00:00.5' }).wallClock).toBe(
+      '2026:01:01 00:00:00.5',
+    );
+    const { DateTimeOriginal: _d, ...gpsOnly } = ANDROID;
+    expect(normalizeExif(gpsOnly)).not.toHaveProperty('wallClock');
+  });
+
   it('falls back to an unzoned local time', () => {
     expect(normalizeExif({ DateTimeOriginal: '2026:09:27 10:31:05' }).time).toEqual({
       kind: 'local',

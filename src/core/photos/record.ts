@@ -56,19 +56,23 @@ export function newTrackPhoto(input: NewPhotoInput): TrackPhoto {
 
 /**
  * A re-import dedupe key for a picked photo: the platform asset id when the
- * picker gives one (stable across picks), else the EXIF time with the pixel
- * size (the same shot picked twice). Undefined when neither is known — such a
- * photo can't be recognised again, so it is never skipped.
+ * picker gives one (stable across picks), else the camera's raw EXIF wall
+ * clock with the pixel size (the same shot picked twice). The raw string, not
+ * the resolved instant: an unzoned time is read in the device's CURRENT zone,
+ * so the same shot would get a different instant after travel or a DST
+ * switch. Undefined when neither is known — such a photo can't be recognised
+ * again, so it is never skipped.
  */
 export function sourceKeyFor(input: {
   assetId?: string | null;
-  exifTime?: number;
+  /** `NormalizedExif.wallClock`. */
+  exifWallClock?: string;
   width?: number;
   height?: number;
 }): string | undefined {
   if (input.assetId) return `asset:${input.assetId}`;
-  if (input.exifTime !== undefined && input.width && input.height) {
-    return `shot:${input.exifTime}:${input.width}x${input.height}`;
+  if (input.exifWallClock && input.width && input.height) {
+    return `shot:${input.exifWallClock}:${input.width}x${input.height}`;
   }
   return undefined;
 }

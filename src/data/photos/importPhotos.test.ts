@@ -223,6 +223,30 @@ describe('commitPhotoImport', () => {
     expect(again.plan.byTime.map((p) => p.candidate.key)).toEqual(['pick-2']);
   });
 
+  it('recognises a re-picked shot without an asset id after the device changed zone', async () => {
+    const noAsset = picks.slice(0, 2).map(({ assetId: _a, ...p }) => p);
+    const first = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: noAsset,
+      zoneOffsetAt: EDT,
+    });
+    await commitPhotoImport({
+      prepared: first,
+      selected: defaultSelection(first),
+      resizer: fakeResizer(),
+      newId,
+    });
+    // Imported again from another zone (or across a DST change): same shots.
+    const again = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: noAsset,
+      zoneOffsetAt: () => 120,
+    });
+    expect(again.duplicates).toBe(2);
+  });
+
   it('places a ticked outsider at the cursor and records the clock correction', async () => {
     const skewed = [
       ...picks

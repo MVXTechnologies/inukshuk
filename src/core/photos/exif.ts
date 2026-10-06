@@ -35,6 +35,13 @@ export type ExifTime =
 
 export interface NormalizedExif {
   time?: ExifTime;
+  /**
+   * The capture time exactly as the camera wrote it (`DateTimeOriginal`, else
+   * Digitized, else `DateTime`, plus its sub-seconds), with no zone applied.
+   * Unlike `time`, it never changes with the device's zone or a DST switch, so
+   * it identifies the same shot picked again later.
+   */
+  wallClock?: string;
   /** `[lng, lat]`, signed. */
   lngLat?: LngLat;
   /** GPS altitude in metres, if any (informational: placement uses the trail's elevation). */
@@ -220,14 +227,7 @@ const MAX_ZONE_MS = 14 * 60 * 60_000;
  * (an editor may have rewritten that one).
  */
 export function exifTime(raw: Raw): ExifTime | undefined {
-  const subSec = pick(raw, 'SubsecTimeOriginal', 'SubSecTimeOriginal');
-  const original =
-    parseExifDateTime(pick(raw, 'DateTimeOriginal'), subSec) ??
-    parseExifDateTime(
-      pick(raw, 'DateTimeDigitized'),
-      pick(raw, 'SubsecTimeDigitized', 'SubSecTimeDigitized'),
-    ) ??
-    parseExifDateTime(pick(raw, 'DateTime'), pick(raw, 'SubsecTime', 'SubSecTime'));
+  const original = originalTime(raw)?.wallMs;
   const offset = parseExifOffset(
     pick(raw, 'OffsetTimeOriginal', 'OffsetTimeDigitized', 'OffsetTime'),
   );
@@ -253,6 +253,29 @@ export function exifTime(raw: Raw): ExifTime | undefined {
   return { kind: 'local', wallMs: original };
 }
 
+/**
+ * The camera's own capture time: `DateTimeOriginal`, else `DateTimeDigitized`,
+ * else `DateTime`, each with its sub-second tag. `wallMs` is the reading taken
+ * as if UTC; `text` is the reading as written (plus `.<subsec>` when the
+ * sub-seconds come from their own tag).
+ */
+function originalTime(raw: Raw): { wallMs: number; text: string } | undefined {
+  const tags: [string, string[]][] = [
+    ['DateTimeOriginal', ['SubsecTimeOriginal', 'SubSecTimeOriginal']],
+    ['DateTimeDigitized', ['SubsecTimeDigitized', 'SubSecTimeDigitized']],
+    ['DateTime', ['SubsecTime', 'SubSecTime']],
+  ];
+  for (const [tag, subTags] of tags) {
+    const text = str(pick(raw, tag));
+    const subSec = pick(raw, ...subTags);
+    const wallMs = text === undefined ? undefined : parseExifDateTime(text, subSec);
+    if (text === undefined || wallMs === undefined) continue;
+    const sub = str(subSec);
+    return { wallMs, text: text.includes('.') || sub === undefined ? text : `${text}.${sub}` };
+  }
+  return undefined;
+}
+
 /** Everything placement needs from one picked photo's EXIF. */
 export function normalizeExif(raw: unknown): NormalizedExif {
   if (raw === null || typeof raw !== 'object') return {};
@@ -260,6 +283,8 @@ export function normalizeExif(raw: unknown): NormalizedExif {
   const out: NormalizedExif = {};
   const time = exifTime(r);
   if (time) out.time = time;
+  const wall = originalTime(r);
+  if (wall) out.wallClock = wall.text;
   const lngLat = exifLngLat(r);
   if (lngLat) {
     out.lngLat = lngLat;

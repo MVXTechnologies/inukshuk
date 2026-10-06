@@ -91,12 +91,15 @@ describe('newTrackPhoto', () => {
 });
 
 describe('sourceKeyFor / existingKeys', () => {
-  it('prefers the asset id, else time + size', () => {
-    expect(sourceKeyFor({ assetId: 'ABC/L0/001', exifTime: 5, width: 2, height: 3 })).toBe(
+  it('prefers the asset id, else the raw EXIF wall clock + size', () => {
+    const wall = '2026:09:27 10:31:05.120';
+    expect(sourceKeyFor({ assetId: 'ABC/L0/001', exifWallClock: wall, width: 2, height: 3 })).toBe(
       'asset:ABC/L0/001',
     );
-    expect(sourceKeyFor({ assetId: null, exifTime: 5, width: 2, height: 3 })).toBe('shot:5:2x3');
-    expect(sourceKeyFor({ exifTime: 5 })).toBeUndefined();
+    expect(sourceKeyFor({ assetId: null, exifWallClock: wall, width: 2, height: 3 })).toBe(
+      'shot:2026:09:27 10:31:05.120:2x3',
+    );
+    expect(sourceKeyFor({ exifWallClock: wall })).toBeUndefined();
     expect(sourceKeyFor({})).toBeUndefined();
   });
 

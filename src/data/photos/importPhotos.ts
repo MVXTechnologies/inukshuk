@@ -88,17 +88,15 @@ export async function preparePhotoImport(args: {
     const exif = normalizeExif(picked.exif);
     const candidate: ImportCandidate = { key };
     const item: PreparedItem = { picked, candidate, duplicate: false };
-    let rawTime: number | undefined;
     if (exif.time) {
       const resolved = resolveTakenAt(exif.time, zoneOffsetAt);
       candidate.takenAt = resolved.epochMs;
       item.takenAtSource = resolved.source;
-      rawTime = resolved.epochMs;
     }
     if (exif.lngLat) candidate.lngLat = exif.lngLat;
     const sourceKey = sourceKeyFor({
       assetId: picked.assetId,
-      exifTime: rawTime,
+      exifWallClock: exif.wallClock,
       width: exif.width ?? picked.width,
       height: exif.height ?? picked.height,
     });
