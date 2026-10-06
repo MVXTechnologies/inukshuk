@@ -1,6 +1,6 @@
 import { buildGpx, parseGpx, type GpxDocument, type GpxWaypoint } from '@core/geo/gpx';
 
-import type { TrackPhoto } from './model';
+import { isNotePhoto, type TrackPhoto } from './model';
 import { orderPhotos, visiblePhotos } from './stack';
 
 /**
@@ -12,9 +12,15 @@ import { orderPhotos, visiblePhotos } from './stack';
  *     <link href="photos/<id>.jpg"><type>image/jpeg</type></link>
  *     <type>photo</type></wpt>
  *
- * — plus the optimized copies under `photos/`. Those copies carry no EXIF, so
- * the archive leaks no location beyond the waypoints the user chose to share.
- * Opening the zip in Inukshuk re-attaches each photo to its waypoint.
+ * — plus each photo's display copy under `photos/`. That copy is either a
+ * canvas re-encode (no metadata at all) or, with "Full size", the original
+ * JPEG run through `stripJpegMetadata` (EXIF, XMP, IPTC, MPF, comments and
+ * anything appended after the image, such as a Motion Photo's video, removed;
+ * only the orientation and the ICC profile kept). Trail-note photos seen
+ * through `noteToPhoto` are NOT included: they are the user's own files, never
+ * stripped, and their `note:<id>` ids are not file names. So the archive
+ * leaks no location beyond the waypoints the user chose to share. Opening the
+ * zip in Inukshuk re-attaches each photo to its waypoint.
  */
 
 /** GPX `<type>` marking a photo waypoint. */
@@ -27,9 +33,17 @@ export function zipPhotoPath(photo: Pick<TrackPhoto, 'id'>): string {
   return `${ZIP_PHOTO_DIR}/${photo.id}.jpg`;
 }
 
+/**
+ * The photos a "Trail + photos" archive carries: visible, in time order, and
+ * never a trail-note photo (the user's own file, not a stripped copy).
+ */
+function sharedPhotos(photos: readonly TrackPhoto[]): TrackPhoto[] {
+  return orderPhotos(visiblePhotos(photos)).filter((p) => !isNotePhoto(p));
+}
+
 /** One photo as a GPX waypoint, in the order of {@link orderPhotos}. */
 export function photoWaypoints(photos: readonly TrackPhoto[]): GpxWaypoint[] {
-  return orderPhotos(visiblePhotos(photos)).map((p, i) => {
+  return sharedPhotos(photos).map((p, i) => {
     const name = p.caption?.trim() || `Photo ${i + 1}`;
     const wpt: GpxWaypoint = {
       latitude: p.lngLat[1],
@@ -82,7 +96,7 @@ export function planTrailPhotoZip(trackName: string, photos: readonly TrackPhoto
   return {
     zipName: `${base}.zip`,
     gpxName: `${base}.gpx`,
-    entries: orderPhotos(visiblePhotos(photos)).map((p) => ({
+    entries: sharedPhotos(photos).map((p) => ({
       zipPath: zipPhotoPath(p),
       sourcePath: p.file,
       photoId: p.id,

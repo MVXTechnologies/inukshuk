@@ -20,7 +20,6 @@ const base: TrackPhoto = {
   takenAt: 1_790_519_520_000,
   takenAtSource: 'exif-offset',
   clockOffsetMs: 3_600_000,
-  exifLngLat: [-70.6133, 47.6676],
   file: 'photos/t1/abc123def456.jpg',
   thumb: 'photos/t1/abc123def456.sq.jpg',
   sprite: 'photos/t1/abc123def456.map.png',
@@ -39,6 +38,12 @@ const base: TrackPhoto = {
 describe('sanitizePhoto', () => {
   it('round-trips a full record (JSON in, same record out)', () => {
     expect(sanitizePhoto(JSON.parse(JSON.stringify(base)), 't1')).toEqual(base);
+  });
+
+  it('drops a raw EXIF position an earlier build persisted (privacy: never stored)', () => {
+    const p = sanitizePhoto({ ...base, exifLngLat: [-70.6133, 47.6676] }, 't1')!;
+    expect(p).not.toHaveProperty('exifLngLat');
+    expect(p).toEqual(base);
   });
 
   it('forces the owning trail id', () => {

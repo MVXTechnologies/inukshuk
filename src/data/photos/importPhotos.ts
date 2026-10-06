@@ -272,7 +272,6 @@ export async function commitPhotoImport(args: {
       if (prepared.plan.clock.offsetMs !== 0 && planned.candidate.takenAt !== undefined) {
         input.clockOffsetMs = prepared.plan.clock.offsetMs;
       }
-      if (planned.candidate.lngLat) input.exifLngLat = planned.candidate.lngLat;
       if (copies.contentHash) input.contentHash = copies.contentHash;
       if (item.sourceKey) input.sourceKey = item.sourceKey;
       if (args.author) input.author = args.author;

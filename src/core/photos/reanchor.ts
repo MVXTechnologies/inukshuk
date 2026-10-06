@@ -51,8 +51,10 @@ export function reanchorAfterTrim(
 
 /**
  * Re-place photos on a different trail (a merge): by time when the photo has
- * one and the new trail covers it, else by its EXIF GPS, else at its old
- * distance (clamped). `trackId` is moved to the new trail.
+ * one and the new trail covers it, else by where it sat on the old trail (for
+ * any photo not placed by hand: that on-trail spot came from its time, its GPS
+ * or the live fix), else at its old distance (clamped). `trackId` is moved to
+ * the new trail. The raw EXIF position is never stored (see `sanitizePhoto`).
  */
 export function reanchorOnTrail(
   photos: readonly TrackPhoto[],
@@ -67,10 +69,8 @@ export function reanchorOnTrail(
       const pos = positionAtTime(index, p.takenAt);
       if (pos) return at(moved, index, pos.distanceM, now);
     }
-    const gps =
-      p.exifLngLat ?? (p.placement === 'gps' || p.placement === 'capture' ? p.lngLat : undefined);
-    if (gps) {
-      const pass = choosePass(index, passesNear(index, gps, 200), p.takenAt);
+    if (p.placement !== 'manual') {
+      const pass = choosePass(index, passesNear(index, p.lngLat, 200), p.takenAt);
       if (pass) return at(moved, index, pass.distanceM, now);
     }
     return at(moved, index, Math.min(p.distanceM, index.totalM), now);

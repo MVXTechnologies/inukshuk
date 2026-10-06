@@ -20,7 +20,6 @@ const full = newTrackPhoto({
   takenAt: 1000,
   takenAtSource: 'exif-gps-utc',
   clockOffsetMs: 3_600_000,
-  exifLngLat: [-70.61, 47.61],
   paths,
   width: 2048,
   height: 1536,
@@ -44,7 +43,6 @@ describe('newTrackPhoto', () => {
       takenAt: 1000,
       takenAtSource: 'exif-gps-utc',
       clockOffsetMs: 3_600_000,
-      exifLngLat: [-70.61, 47.61],
       ...paths,
       width: 2048,
       height: 1536,
@@ -137,11 +135,10 @@ describe('editPhoto', () => {
 });
 
 describe('tombstones', () => {
-  it('drops the caption and the EXIF position, keeps the id for peers', () => {
+  it('drops the caption, keeps the id for peers', () => {
     const t = tombstone(full, 77);
     expect(t).toMatchObject({ id: 'p1', deletedAt: 77, updatedAt: 77 });
     expect(t).not.toHaveProperty('caption');
-    expect(t).not.toHaveProperty('exifLngLat');
   });
 
   it('prunes tombstones past retention', () => {

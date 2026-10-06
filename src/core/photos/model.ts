@@ -62,8 +62,6 @@ export interface TrackPhoto {
   takenAtSource?: TakenAtSource;
   /** The camera-clock correction applied to the EXIF time, ms (0 / absent = none). */
   clockOffsetMs?: number;
-  /** Raw EXIF position, kept for "placed by time · GPS 12 m away" and re-placement. */
-  exifLngLat?: LngLat;
   /** Document-relative paths (never absolute: the iOS container moves, #247). */
   file: string;
   thumb: string;
@@ -151,6 +149,11 @@ function asAuthor(v: unknown): PhotoAuthor | undefined {
  * drawn (no id, no files, no position) — a torn or hand-edited sidecar must not
  * crash the trail view. Unknown fields are dropped; optional fields with a bad
  * type are dropped individually.
+ *
+ * The photo's raw EXIF position is deliberately NOT part of the record: it is
+ * used once, at import, to place the photo and check the camera clock, and is
+ * never stored, synced or exported. Only the on-trail position is kept (an
+ * `exifLngLat` an early stage-1 build wrote is dropped here as unknown).
  */
 export function sanitizePhoto(raw: unknown, trackId: string): TrackPhoto | null {
   if (raw === null || typeof raw !== 'object') return null;
@@ -193,8 +196,6 @@ export function sanitizePhoto(raw: unknown, trackId: string): TrackPhoto | null 
   if (isFiniteNumber(r['clockOffsetMs']) && r['clockOffsetMs'] !== 0) {
     photo.clockOffsetMs = r['clockOffsetMs'];
   }
-  const exif = asLngLat(r['exifLngLat']);
-  if (exif) photo.exifLngLat = exif;
   if (isNonEmptyString(r['contentHash'])) photo.contentHash = r['contentHash'];
   if (isNonEmptyString(r['sourceKey'])) photo.sourceKey = r['sourceKey'];
   if (typeof r['caption'] === 'string' && r['caption'].trim() !== '') {

@@ -61,10 +61,10 @@ describe('reanchorOnTrail', () => {
     expect(p!.updatedAt).toBe(7);
   });
 
-  it('then by EXIF GPS, then at the old distance', () => {
+  it('then by its on-trail position, then at the old distance', () => {
     const [gps, kept, clamped, gone] = reanchorOnTrail(
       [
-        photo('g', 400, { placement: 'gps', exifLngLat: offset(400, 10) }),
+        photo('g', 400, { placement: 'gps', lngLat: offset(400, 10) }),
         photo('m', 400, { placement: 'manual' }),
         photo('far', 5000, { placement: 'manual' }),
         photo('dead', 1, { deletedAt: 3 }),
@@ -87,6 +87,16 @@ describe('reanchorOnTrail', () => {
       1,
     );
     expect(cap!.distanceM).toBeCloseTo(800, 0);
+  });
+
+  it('re-places a time-placed photo by position when the new trail misses its time', () => {
+    const [p] = reanchorOnTrail(
+      [photo('t', 50, { takenAt: T0 + 99 * 3_600_000, lngLat: offset(500) })],
+      merged,
+      'new',
+      1,
+    );
+    expect(p!.distanceM).toBeCloseTo(800, 0);
   });
 
   it('drops elevation when the new trail has none', () => {

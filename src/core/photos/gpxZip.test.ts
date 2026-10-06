@@ -39,6 +39,8 @@ const photos = [
   photo('hidden', T0, { hidden: true }),
   photo('gone', T0, { deletedAt: 1 }),
   photo('notime', undefined, { distanceM: 900 }),
+  // A trail note's photo seen through noteToPhoto: the user's own, unstripped file.
+  photo('note:n1', T0 + 1500, { file: 'photos/n1.jpg', caption: 'Note' }),
 ];
 
 describe('photoWaypoints', () => {
@@ -86,6 +88,13 @@ describe('gpxWithPhotoWaypoints', () => {
 });
 
 describe('planTrailPhotoZip', () => {
+  it('never ships a trail-note photo (unstripped, and `note:` is no file name)', () => {
+    const plan = planTrailPhotoZip('T', photos);
+    expect(plan.entries.map((e) => e.photoId)).not.toContain('note:n1');
+    expect(plan.entries.some((e) => e.zipPath.includes(':'))).toBe(false);
+    expect(photoWaypoints(photos).map((w) => w.name)).not.toContain('Note');
+  });
+
   it('names the archive after the trail and lists the copies to store', () => {
     const plan = planTrailPhotoZip('Mont du Lac des Cygnes', photos);
     expect(plan.zipName).toBe('Mont du Lac des Cygnes.zip');

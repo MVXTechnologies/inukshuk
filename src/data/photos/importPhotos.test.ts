@@ -192,7 +192,8 @@ describe('commitPhotoImport', () => {
       createdAt: 77,
     });
     expect(first.distanceM).toBeCloseTo(500, 0);
-    expect(first.exifLngLat).toBeDefined();
+    // The photo's own GPS is used to place it, never stored (privacy).
+    expect(first).not.toHaveProperty('exifLngLat');
     expect(first.contentHash).toMatch(/^md5:/);
     expect(fs.text('/doc/photos/t1/p1.jpg')).toBe('display:file:///cache/a.jpg');
     // The GPS-only photo has no time.

@@ -1,5 +1,3 @@
-import type { LngLat } from '@core/models';
-
 import type { PhotoAuthor, PhotoPlacement, TakenAtSource, TrackPhoto } from './model';
 import type { PhotoFilePaths } from './paths';
 import type { TrailPosition } from './trackIndex';
@@ -17,7 +15,6 @@ export interface NewPhotoInput {
   takenAt?: number;
   takenAtSource?: TakenAtSource;
   clockOffsetMs?: number;
-  exifLngLat?: LngLat;
   paths: PhotoFilePaths;
   width: number;
   height: number;
@@ -49,7 +46,6 @@ export function newTrackPhoto(input: NewPhotoInput): TrackPhoto {
   if (input.takenAt !== undefined) photo.takenAt = input.takenAt;
   if (input.takenAtSource !== undefined) photo.takenAtSource = input.takenAtSource;
   if (input.clockOffsetMs) photo.clockOffsetMs = input.clockOffsetMs;
-  if (input.exifLngLat) photo.exifLngLat = input.exifLngLat;
   if (input.contentHash) photo.contentHash = input.contentHash;
   if (input.sourceKey) photo.sourceKey = input.sourceKey;
   const caption = input.caption?.trim();
@@ -122,7 +118,7 @@ export function editPhoto(
  * `retainMs` are dropped from the sidecar entirely.
  */
 export function tombstone(photo: TrackPhoto, now: number): TrackPhoto {
-  const { caption: _caption, exifLngLat: _exif, ...rest } = photo;
+  const { caption: _caption, ...rest } = photo;
   return { ...rest, deletedAt: now, updatedAt: now };
 }
 

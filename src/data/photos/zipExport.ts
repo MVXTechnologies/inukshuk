@@ -14,7 +14,8 @@ import {
 /**
  * Build the "Trail + photos" zip (#587, owner Q8) in the cache, ready for the
  * share sheet: the trail's GPX with a photo waypoint per photo, plus the
- * optimized copies (no EXIF) under `photos/`. Streamed like "Download your
+ * display copies (canvas re-encodes, or stripped "Full size" originals; see
+ * `@core/photos/gpxZip`) under `photos/`. Trail-note photos are never included. Streamed like "Download your
  * data" — one 1 MB slice in memory at a time — and the copies are stored, not
  * deflated (JPEG doesn't compress). The caller shares `uri` and then deletes it.
  */
