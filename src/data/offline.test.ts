@@ -4,6 +4,8 @@ import {
   createRegionPack,
   listRegionPacks,
   OfflineConnectivityError,
+  readPackStyleTemplates,
+  replaceRegionPack,
   setOfflineOnly,
 } from './offline';
 import * as storage from './storage';
@@ -66,6 +68,9 @@ jest.mock('expo-file-system', () => {
     }
     write(data: string): void {
       files.set(this.path, data);
+    }
+    async text(): Promise<string> {
+      return files.get(this.path) ?? '';
     }
   }
   class Directory {
@@ -359,5 +364,92 @@ describe('setOfflineOnly', () => {
     setOfflineOnly(false);
     expect(NetworkManager.setConnected).toHaveBeenLastCalledWith(true);
     expect(storage.setNetworkAllowed).toHaveBeenLastCalledWith(true);
+  });
+});
+
+describe('tile URL templates (P1-2)', () => {
+  const TILES = 'https://tiles.example/basemap/{z}/{x}/{y}.mvt?v=1';
+  const styled = {
+    ...packArgs,
+    styleJSON: JSON.stringify({
+      version: 8,
+      glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+      sources: { base: { type: 'vector', tiles: [TILES] } },
+      layers: [],
+    }),
+  };
+  const templates = {
+    glyphs: 'https://tiles.example/fonts/{fontstack}/{range}.pbf',
+    'source:base': TILES,
+  };
+
+  beforeEach(() => {
+    (OfflineManager.createPack as jest.Mock).mockClear();
+    (OfflineManager.deletePack as jest.Mock).mockClear();
+  });
+
+  it('records the templates a pack is built with in its metadata', async () => {
+    mockCreatePack();
+    const pending = createRegionPack(styled, jest.fn());
+    await flushMicrotasks();
+    const options = (OfflineManager.createPack as jest.Mock).mock.calls[0]?.[0] as {
+      metadata: Record<string, unknown>;
+    };
+    expect(options.metadata.urls).toEqual(templates);
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+  });
+
+  it('lists the native id and the recorded templates, and ignores a malformed record', async () => {
+    const pack = (appId: string, urls: unknown) => ({
+      id: `native-${appId}`,
+      bounds: [-72, 46, -71, 47],
+      metadata: { appId, label: appId, basemap: 'map', format: 'vector', urls },
+      status: jest.fn(async () => ({
+        percentage: 100,
+        completedTileSize: 5,
+        completedResourceSize: 5,
+      })),
+    });
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([
+      pack('a', templates),
+      pack('b', { glyphs: 7 }),
+      pack('c', undefined),
+    ]);
+    const regions = await listRegionPacks();
+    expect(regions.map((r) => r.packId)).toEqual(['native-a', 'native-b', 'native-c']);
+    expect(regions.map((r) => r.urls)).toEqual([templates, undefined, undefined]);
+  });
+
+  it('replaces a pack: the old one goes only once the new one is complete', async () => {
+    mockCreatePack();
+    const pending = replaceRegionPack('native-old', styled, jest.fn());
+    await flushMicrotasks();
+    expect(OfflineManager.deletePack).not.toHaveBeenCalled();
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+    expect(OfflineManager.deletePack).toHaveBeenCalledTimes(1);
+    expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-old');
+  });
+
+  it('keeps the old pack and its style file when the replacement fails', async () => {
+    mockCreatePack();
+    const pending = replaceRegionPack('native-old', styled, jest.fn());
+    await flushMicrotasks();
+    emitError({ id: 'native-1' }, { message: 'boom' });
+    await expect(pending).rejects.toThrow('boom');
+    expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-1'); // the partial new one
+    expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-old');
+    expect(fsMock.__has('/doc/offline-styles/r1.json')).toBe(true);
+  });
+
+  it("reads a legacy pack's templates from its saved style, or null without one", async () => {
+    mockCreatePack();
+    const pending = createRegionPack(styled, jest.fn());
+    await flushMicrotasks();
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+    expect(await readPackStyleTemplates('r1')).toEqual(templates);
+    expect(await readPackStyleTemplates('nope')).toBeNull();
   });
 });

@@ -3,10 +3,14 @@ import {
   deleteRegionPack,
   listRegionPacks,
   OfflineConnectivityError,
+  readPackStyleTemplates,
+  replaceRegionPack,
   setTileLimit,
   type OfflineRegion,
 } from '@data/offline';
+import { deletePackUrls, readPackUrls, savePackUrls } from '@data/packUrls';
 import { deleteRegionName, readRegionNames, saveRegionNames } from '@data/regionNames';
+import type { UrlTemplates } from '@core/map/tileUrls';
 import type { Basemap, PackFormat } from '@core/geo/tiles';
 import type { BoundingBox } from '@core/models';
 import { reportError } from '@lib/errorReporting';
@@ -67,6 +71,16 @@ interface OfflineState {
    * regions in place; regions still downloading pick the name up on refresh.
    */
   rename: (ids: string[], label: string) => Promise<void>;
+  /**
+   * Record the URL templates of packs that carry none (P1-2): the offline-maps
+   * health check stamps a legacy pack with today's templates on first read.
+   */
+  stampUrls: (entries: Record<string, UrlTemplates>) => Promise<void>;
+  /**
+   * Download a region again with today's style (its "needs update" action),
+   * under the same id. The old pack stays until the new one completes.
+   */
+  redownload: (region: OfflineRegion, layer: DownloadLayer) => Promise<void>;
 }
 
 const LAYER_LABEL: Record<Basemap, string> = {
@@ -74,13 +88,37 @@ const LAYER_LABEL: Record<Basemap, string> = {
   satellite: 'Satellite',
 };
 
-/** Native pack list with the persisted name overrides merged over pack labels. */
+/**
+ * Native pack list with the persisted name overrides merged over pack labels,
+ * and each pack's URL templates: its own record, else its sidecar stamp, else
+ * — first read of a pack from before packs recorded them — the templates its
+ * saved style names, stamped now so the answer never drifts with the app.
+ */
 async function loadRegions(): Promise<OfflineRegion[]> {
-  const [packs, names] = await Promise.all([listRegionPacks(), readRegionNames()]);
-  return packs.map((region) => {
+  const [packs, names, stamps] = await Promise.all([
+    listRegionPacks(),
+    readRegionNames(),
+    readPackUrls(),
+  ]);
+  const fresh: Record<string, UrlTemplates> = {};
+  const out: OfflineRegion[] = [];
+  for (const pack of packs) {
+    let region = pack;
     const label = names[region.id];
-    return label !== undefined ? { ...region, label } : region;
-  });
+    if (label !== undefined) region = { ...region, label };
+    if (region.urls === undefined) {
+      const urls = stamps[region.id] ?? (await readPackStyleTemplates(region.id));
+      if (urls !== null) {
+        if (stamps[region.id] === undefined) fresh[region.id] = urls;
+        region = { ...region, urls };
+      }
+    }
+    out.push(region);
+  }
+  if (Object.keys(fresh).length > 0) {
+    await savePackUrls(fresh).catch((err: unknown) => reportError(err, 'offline-pack-urls'));
+  }
+  return out;
 }
 
 export const useOfflineStore = create<OfflineState>((set, get) => ({
@@ -194,6 +232,7 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
   remove: async (id) => {
     await deleteRegionPack(id);
     await deleteRegionName(id);
+    await deletePackUrls(id);
     set({ regions: get().regions.filter((r) => r.id !== id) });
   },
 
@@ -202,5 +241,44 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     set({
       regions: get().regions.map((r) => (ids.includes(r.id) ? { ...r, label } : r)),
     });
+  },
+
+  stampUrls: async (entries) => {
+    if (Object.keys(entries).length === 0) return;
+    await savePackUrls(entries);
+    set({
+      regions: get().regions.map((r) => {
+        const urls = entries[r.id];
+        return r.urls === undefined && urls !== undefined ? { ...r, urls } : r;
+      }),
+    });
+  },
+
+  redownload: async (region, layer) => {
+    const label = `Updating ${region.label}`;
+    set({ progress: { pct: 0, sizeBytes: 0, label } });
+    try {
+      await replaceRegionPack(
+        region.packId,
+        {
+          id: region.id,
+          label: region.label,
+          basemap: layer.basemap,
+          ...(layer.format ? { format: layer.format } : {}),
+          styleJSON: layer.styleJSON,
+          bounds: region.bounds,
+          minZoom: layer.minZoom,
+          maxZoom: layer.maxZoom,
+        },
+        (pct, sizeBytes) => set({ progress: { pct, sizeBytes, label } }),
+      );
+      // The new pack records its own templates; the legacy stamp is moot.
+      await deletePackUrls(region.id);
+    } catch (err) {
+      if (!(err instanceof OfflineConnectivityError)) reportError(err, 'offline-region-update');
+      throw err;
+    } finally {
+      set({ progress: null, regions: await loadRegions() });
+    }
   },
 }));

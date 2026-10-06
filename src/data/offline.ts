@@ -7,6 +7,7 @@ import {
   type PackBasemap,
   type PackFormat,
 } from '@core/geo/tiles';
+import { parseUrlTemplates, styleUrlTemplates, type UrlTemplates } from '@core/map/tileUrls';
 import { isOutOfSpaceMessage } from '@core/storage/diskBudget';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import type { BoundingBox } from '@core/models';
@@ -51,6 +52,8 @@ function writeStyleFile(id: string, styleJSON: string): void {
 
 export interface OfflineRegion {
   id: string;
+  /** MapLibre's own id for the pack (a UUID): what a re-download replaces. */
+  packId: string;
   label: string;
   /**
    * What the pack holds. `relief` only on packs downloaded before #484
@@ -73,6 +76,12 @@ export interface OfflineRegion {
   format: PackFormat;
   /** Extensions whose tiles the pack already holds (absent: none). */
   includes?: ExtensionKind[];
+  /**
+   * The URL templates the pack was built with — its tiles' cache keys
+   * (`@core/map/tileUrls`). Absent on packs from before they were recorded;
+   * the offline store stamps those on first read.
+   */
+  urls?: UrlTemplates;
 }
 
 // MapLibre LngLatBounds is [west, south, east, north].
@@ -105,6 +114,12 @@ interface PackMeta {
   companionOf?: string;
   /** Extensions whose tiles this pack's own style already carried. */
   includes?: ExtensionKind[];
+  /**
+   * Every URL template the pack's style referenced (`styleUrlTemplates`): the
+   * keys its tiles are stored under. Compared with today's templates to flag a
+   * pack the live map can no longer read (P1-2). Absent on older packs.
+   */
+  urls?: UrlTemplates;
 }
 
 /** Extensions that can add a companion pack to an offline region. */
@@ -126,8 +141,10 @@ function regionFromPack(
 ): OfflineRegion {
   const meta = metadata as Partial<PackMeta>;
   const [w, s, e, n] = bounds;
+  const urls = parseUrlTemplates(meta.urls);
   return {
     id: (meta.appId as string | undefined) ?? packId,
+    packId,
     label: (meta.label as string | undefined) ?? 'Region',
     basemap: normalizePackBasemap(meta.basemap),
     bounds: { minLng: w, minLat: s, maxLng: e, maxLat: n },
@@ -141,6 +158,7 @@ function regionFromPack(
     ...(Array.isArray(meta.includes) && meta.includes.includes('geodetic')
       ? { includes: ['geodetic' as const] }
       : {}),
+    ...(urls !== null ? { urls } : {}),
     // Only trust a sane recorded number; legacy packs simply omit it.
     ...(typeof meta.maxZoom === 'number' && Number.isFinite(meta.maxZoom)
       ? { maxZoom: meta.maxZoom }
@@ -222,6 +240,11 @@ export async function createRegionPack(
     companion?: { extension: ExtensionKind; of: string };
   },
   onProgress: (pct: number, sizeBytes: number) => void,
+  /**
+   * Native id of a pack this one replaces (see {@link replaceRegionPack}):
+   * deleted once the new pack completes, and left alone if it fails.
+   */
+  replacing?: string,
 ): Promise<void> {
   // Last line of defence for the zoom range: a pack may only request zooms its
   // basemap's tile source actually serves (satellite: z17) and MapLibre rejects an
@@ -246,6 +269,7 @@ export async function createRegionPack(
     ...(!args.companion && styleHasSource(args.styleJSON, 'geodetic')
       ? { includes: ['geodetic'] }
       : {}),
+    urls: styleUrlTemplates(args.styleJSON),
   };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can
@@ -335,8 +359,9 @@ export async function createRegionPack(
     if (nativePackId !== undefined) {
       await OfflineManager.deletePack(nativePackId).catch(() => undefined);
     }
+    // A replaced pack shares the id, and with it the style file: keep it.
     const f = styleFile(args.id);
-    if (f.exists) f.delete();
+    if (replacing === undefined && f.exists) f.delete();
     throw err;
   } finally {
     // The style is fetched once at the start of the download; the tiles stream from
@@ -344,6 +369,40 @@ export async function createRegionPack(
     // itself stops only if nobody else — the rasterizer — still holds one).
     // `lease` is undefined if acquiring it failed (nothing to release then).
     if (lease) await lease.release();
+  }
+  // Only now that the new pack is complete does the one it replaces go: a
+  // failed re-download leaves the user what they had.
+  // (Best-effort: should it fail, `deleteRegionPack` still removes both later.)
+  if (replacing !== undefined) await OfflineManager.deletePack(replacing).catch(() => undefined);
+}
+
+/**
+ * Download a region again under the same app-level id, with today's style —
+ * the "needs update" action for a pack built with URL templates the app no
+ * longer uses (P1-2). The old pack (native id `oldPackId`) stays until the
+ * new one completes, so a failure loses nothing.
+ */
+export function replaceRegionPack(
+  oldPackId: string,
+  args: Parameters<typeof createRegionPack>[0],
+  onProgress: (pct: number, sizeBytes: number) => void,
+): Promise<void> {
+  return createRegionPack(args, onProgress, oldPackId);
+}
+
+/**
+ * The URL templates a pack's saved style references (`offline-styles/<id>.json`,
+ * written when it was downloaded), or null without one: the faithful record of
+ * what a pack from before `PackMeta.urls` was built with.
+ */
+export async function readPackStyleTemplates(id: string): Promise<UrlTemplates | null> {
+  try {
+    const f = styleFile(id);
+    if (!f.exists) return null;
+    const urls = styleUrlTemplates(await f.text());
+    return Object.keys(urls).length > 0 ? urls : null;
+  } catch {
+    return null;
   }
 }
 

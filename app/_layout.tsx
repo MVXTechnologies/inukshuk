@@ -30,6 +30,11 @@ import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { installTileHostAlias } from '@data/tileHostAlias';
+
+// Before any map mounts: MapLibre's requests for the frozen tile-template host
+// go to wherever the Worker lives (a no-op until it moves; P1-2).
+installTileHostAlias();
 
 export default function RootLayout() {
   const osScheme = useColorScheme();

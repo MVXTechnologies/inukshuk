@@ -11,7 +11,6 @@ import {
   overviewZoomFor,
   packZoomRange,
   type Basemap,
-  type PackFormat,
 } from '@core/geo/tiles';
 import { assessFreeSpaceForWrite } from '@data/diskSpace';
 import { setOfflineOnly } from '@data/offline';
@@ -21,9 +20,14 @@ import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
-import { geodeticTilesUrl, tideTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
-import { buildOsmStyle, MAP_PACK_FORMAT } from '../mapStyle';
+import { MAP_PACK_FORMAT } from '../mapStyle';
+import { useOfflinePackHealthNotice } from '../offlinePackHealth';
+import { packStyle } from '../packStyle';
 import { resolveRegionName } from '../regionNaming';
+
+// Moved to `../packStyle` (the offline-maps health check builds them too);
+// re-exported for the callers that import them from here.
+export { geodeticPackOption, packStyle } from '../packStyle';
 
 /**
  * Offline-region download orchestration for the map screen: region-select
@@ -147,6 +151,9 @@ export function useOfflineDownload({
   useEffect(() => {
     void useOfflineStore.getState().hydrate();
   }, []);
+  // ...and say so once if any of them needs downloading again (P1-2): a pack
+  // built with tile URLs the map no longer uses would otherwise just be blank.
+  useOfflinePackHealthNotice(showSnack);
 
   const onMapLayout = useCallback((e: LayoutChangeEvent) => {
     setMapSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
@@ -297,39 +304,4 @@ export function useOfflineDownload({
     prepareRegionGeometry,
     resolveRegionRect,
   };
-}
-
-/**
- * The style a pack downloads through: MapLibre stores every tile and glyph
- * range the style references inside the box. A vector `map` pack therefore
- * references our vector tiles (and glyphs), not the OSM raster.
- */
-export function packStyle(tileUrl: string, basemap: Basemap, format: PackFormat) {
-  // The geodetic-points extension, when installed with "Offline in your
-  // regions" on: its tiles ride in every new pack (a pack stores every source
-  // of its style). Regions from before the install get a companion pack.
-  // Tide stations ride along too (a few KB: the archive stops at z10), so the
-  // overlay works offline in every region downloaded from now on.
-  // Only once the Tide stations extension is installed.
-  const tideTiles = useSettingsStore.getState().tidesInstalledAt > 0 ? tideTilesUrl() : null;
-  const geodetic = {
-    ...geodeticPackOption(),
-    ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),
-  };
-  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
-  // Packs always keep the contours, so they work offline whichever way the
-  // Contours toggle is set later.
-  return buildOsmStyle(tileUrl, basemap, false, {
-    vectorBasemap: vectorBasemapOption(false, true),
-    ...geodetic,
-  });
-}
-
-/** `{ geodetic }` for a pack style when the extension wants its marks offline, else `{}`. */
-export function geodeticPackOption(): { geodetic?: { tiles: string; dark: boolean } } {
-  const s = useSettingsStore.getState();
-  const tiles = geodeticTilesUrl();
-  return tiles !== null && s.geodeticInstalledAt > 0 && s.geodeticOffline
-    ? { geodetic: { tiles, dark: false } }
-    : {};
 }

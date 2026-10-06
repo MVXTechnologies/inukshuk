@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+import { aliasTileUrl } from '@core/map/tileUrls';
+
 /**
  * Where the vector base map's tiles come from: our own Protomaps extract,
  * served as XYZ by a Cloudflare Worker in front of R2 (see
@@ -7,16 +9,37 @@ import Constants from 'expo-constants';
  * elsewhere with `VECTOR_TILES_URL` (e.g. a loopback `pmtiles serve` in dev).
  */
 /**
- * Our Worker's address. The free workers.dev host for now: the
- * mvxtechnologies.com zone is on Namecheap DNS, so a custom domain waits for
- * it to move to Cloudflare (then change this — it is OTA-updatable config).
+ * THE HOST IN EVERY TILE URL TEMPLATE — part of the offline cache key. Never
+ * change it: MapLibre's offline packs store each tile under the exact URL the
+ * style named, so a new value here orphans every region on every phone (see
+ * `docs/design/tile-urls.md` and `tileUrls.contract.test.ts`). To move the
+ * Worker, change {@link TILE_HOST} instead.
  */
-export const TILE_HOST = 'https://inukshuk-tiles.marcandre-vigneault-96.workers.dev';
+export const TILE_KEY_HOST = 'https://inukshuk-tiles.marcandre-vigneault-96.workers.dev';
 
-export const DEFAULT_VECTOR_TILES_URL = `${TILE_HOST}/basemap/{z}/{x}/{y}.mvt`;
+/**
+ * Our Worker's address: where every request to it actually goes. The free
+ * workers.dev host for now: the mvxtechnologies.com zone is on Namecheap DNS,
+ * so a custom domain waits for it to move to Cloudflare. Moving is THIS ONE
+ * LINE (OTA-updatable): plain `fetch` callers follow it directly, and
+ * MapLibre's requests for {@link TILE_KEY_HOST} templates are rewritten to it
+ * in the network layer (`installTileHostAlias`), after the offline lookup —
+ * so downloaded regions keep working with no re-download.
+ */
+export const TILE_HOST: string = TILE_KEY_HOST;
+
+/**
+ * A tile URL built on {@link TILE_KEY_HOST}, aimed at {@link TILE_HOST}: for
+ * code that fetches tiles itself instead of through MapLibre.
+ */
+export function tileFetchUrl(url: string): string {
+  return aliasTileUrl(url, TILE_KEY_HOST, TILE_HOST);
+}
+
+export const DEFAULT_VECTOR_TILES_URL = `${TILE_KEY_HOST}/basemap/{z}/{x}/{y}.mvt`;
 
 /** Atkinson Hyperlegible Next glyphs on the same Worker (`infra/tiles/fonts/`). */
-export const DEFAULT_VECTOR_GLYPHS_URL = `${TILE_HOST}/fonts/{fontstack}/{range}.pbf`;
+export const DEFAULT_VECTOR_GLYPHS_URL = `${TILE_KEY_HOST}/fonts/{fontstack}/{range}.pbf`;
 
 /** The vector tile template this build reads (build-time override or ours). */
 export function vectorTilesUrl(): string {
@@ -36,8 +59,10 @@ export function vectorGlyphsUrl(): string | null {
 
 /** Contour-line vector tiles, generated on demand by the same Worker. */
 // `v` versions the contour recipe: bump it when levels change, so the 30-day
-// edge and device caches fetch fresh tiles.
-export const DEFAULT_VECTOR_CONTOURS_URL = `${TILE_HOST}/contours/{z}/{x}/{y}.mvt?v=2`;
+// edge and device caches fetch fresh tiles. A bump also orphans the contours
+// of every offline region: the regions list then flags them "needs update"
+// (`docs/design/tile-urls.md`), and the contract test must be updated with it.
+export const DEFAULT_VECTOR_CONTOURS_URL = `${TILE_KEY_HOST}/contours/{z}/{x}/{y}.mvt?v=2`;
 
 /** The contour tile template this build reads (build-time override or ours). */
 export function vectorContoursUrl(): string {
@@ -50,7 +75,7 @@ export function vectorContoursUrl(): string {
  * monthly on the NAS (`infra/tiles/nas/peaks.sh`) and served by the same
  * Worker — Protomaps only carries peaks from z13.
  */
-export const DEFAULT_VECTOR_PEAKS_URL = `${TILE_HOST}/peaks/{z}/{x}/{y}.mvt`;
+export const DEFAULT_VECTOR_PEAKS_URL = `${TILE_KEY_HOST}/peaks/{z}/{x}/{y}.mvt`;
 
 /** The summit tile template this build reads (build-time override or ours). */
 export function vectorPeaksUrl(): string {
@@ -64,7 +89,7 @@ export function vectorPeaksUrl(): string {
  * (`infra/tiles/nas/parks.sh`) and served by the same Worker. Protomaps
  * misfiles too many of them to rank (`infra/tiles/README.md` § Parks).
  */
-export const DEFAULT_VECTOR_PARKS_URL = `${TILE_HOST}/parks/{z}/{x}/{y}.mvt`;
+export const DEFAULT_VECTOR_PARKS_URL = `${TILE_KEY_HOST}/parks/{z}/{x}/{y}.mvt`;
 
 /**
  * Whether `parks.pmtiles` is on the tile host. NOT YET: `parks.sh` has not
@@ -92,8 +117,9 @@ export function vectorParksUrl(): string | null {
 // `v` versions the TILE SCHEMA (record.ts): bump it when the build's keys
 // change, so the day-long edge and device caches can't serve old-schema
 // tiles to a new app. Weekly data refreshes need no bump (a day of staleness
-// on weekly data is fine).
-export const DEFAULT_GEODETIC_URL = `${TILE_HOST}/geodetic/{z}/{x}/{y}.mvt?v=2`;
+// on weekly data is fine). A bump orphans the marks in offline regions (they
+// are flagged "needs update"): see `docs/design/tile-urls.md`.
+export const DEFAULT_GEODETIC_URL = `${TILE_KEY_HOST}/geodetic/{z}/{x}/{y}.mvt?v=2`;
 
 /**
  * Whether `geodetic.pmtiles` is on the tile host. While false the extension
@@ -115,8 +141,9 @@ export function geodeticTilesUrl(): string | null {
  * the NAS (`infra/tiles/nas/tides.sh`) and served by the same Worker. CHS
  * (Canada) is never in it (owner decision: CHS stays live-only).
  */
-// `v` versions the TILE SCHEMA (`@core/tides/station`); bump it when the keys change.
-export const DEFAULT_TIDES_URL = `${TILE_HOST}/tides/{z}/{x}/{y}.mvt?v=1`;
+// `v` versions the TILE SCHEMA (`@core/tides/station`); bump it when the keys change
+// (a bump flags offline regions "needs update": `docs/design/tile-urls.md`).
+export const DEFAULT_TIDES_URL = `${TILE_KEY_HOST}/tides/{z}/{x}/{y}.mvt?v=1`;
 
 /** Whether `tides.pmtiles` is on the tile host. While false the overlay row is hidden. */
 export const TIDES_TILES_PUBLISHED = true;
