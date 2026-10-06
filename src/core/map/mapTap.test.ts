@@ -46,8 +46,9 @@ describe('routeMapTap', () => {
 });
 
 describe('chipSurvivesHit', () => {
-  it('keeps the chip for Navigate only', () => {
+  it('keeps the chip for Navigate and Convert (screens over the map)', () => {
     expect(chipSurvivesHit('navigate')).toBe(true);
+    expect(chipSurvivesHit('convert')).toBe(true);
     expect(chipSurvivesHit('copy')).toBe(false);
   });
 

@@ -25,6 +25,12 @@
  *   Whether `ios/` and `android/` are generated is still read from it; it is
  *   just not hashed.
  *
+ * - `ignorePaths`: the Convert module's build OUTPUTS (PROJ static libs,
+ *   proj.db, the two bundled grids) exist only where a native build ran
+ *   (`modules/inukshuk-proj/scripts/prepare.sh`), never on the OTA runner.
+ *   What they are is pinned by the build script itself (versions + sha256),
+ *   which IS hashed with the rest of modules/.
+ *
  * Everything else stays in: native packages, autolinking, config plugins
  * (plugins/*), modules/, eas.json, the icon and splash assets, and every
  * other key of the Expo config. `.fingerprintignore` is not needed — docs/,
@@ -45,6 +51,7 @@ const config = {
     'PackageJsonScriptsAll',
     'GitIgnore',
   ],
+  ignorePaths: ['modules/inukshuk-proj/prebuilt/**', 'modules/inukshuk-proj/assets/**'],
 };
 
 module.exports = config;

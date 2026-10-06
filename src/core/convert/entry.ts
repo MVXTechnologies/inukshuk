@@ -1,40 +1,38 @@
 /**
- * The Convert tool's entry hook (PLAN phases C–F, not built yet): the one
- * place a card turns what it shows into the tool's prefilled source, so the
- * cards need no change when Convert lands. Hidden behind
- * `CONVERT_ENABLED` (`@core/features/flags`) until then.
+ * The cards' Convert hook: the one place a tide card turns what it shows into
+ * the tool's prefilled request (`./prefill`), opened with
+ * `openConvert(router, …)` (`@features/convert/openConvert`).
  *
- * The prefill carries the agency's published values verbatim (text) with
- * their system labels; Convert decides what it can do with them.
+ * Survey-mark cards use `prefillFromMark` directly. A tidal benchmark's card is
+ * a survey-mark card: it converts the mark's published heights, never its
+ * height above chart datum (the station's offsets are not on the mark, and
+ * Convert refuses rather than guess them).
  */
-import type { GeodeticMark } from '@core/geodetic/record';
+import { cdKind, tideSourceAt } from '@core/tides/catalog';
 import type { TideStation } from '@core/tides/station';
+import { prefillFromTideStation, type ConvertRequest } from './prefill';
 
-export interface ConvertPrefill {
-  /** What the user tapped, for the tool's "From …" line. */
-  label: string;
-  lat: number;
-  lng: number;
-  /** A published height to convert, with its vertical system as published. */
-  height?: { text: string; system: string };
-  /** Chart-datum context (tide station or tidal benchmark). */
-  chartDatum?: { station: string; kind: string; offsets: { datum: string; text: string }[] };
+export type { ConvertRequest } from './prefill';
+
+/** "us-coops" → "us", "ca-chs" → "ca". */
+function countryOfSource(key: string | undefined): string | undefined {
+  const c = key?.split('-')[0];
+  return c && c.length === 2 ? c : undefined;
 }
 
-export function convertFromTideStation(s: TideStation): ConvertPrefill {
-  return {
-    label: `${s.name} (${s.id})`,
+/** A tide station card → Convert on the station's chart datum. */
+export function convertFromTideStation(s: TideStation): ConvertRequest {
+  const src = tideSourceAt(s.source);
+  const country = countryOfSource(src?.key);
+  const cdLabel = cdKind(s.cdKind)?.label;
+  return prefillFromTideStation({
+    id: s.id,
+    name: s.name,
     lat: s.lat,
     lng: s.lng,
-    chartDatum: { station: `${s.source}:${s.id}`, kind: s.cdKind, offsets: s.national },
-  };
-}
-
-export function convertFromMark(m: GeodeticMark): ConvertPrefill {
-  const out: ConvertPrefill = { label: m.id, lat: m.lat, lng: m.lng };
-  if (m.tidal) {
-    out.height = { text: m.tidal.cd, system: `chart datum (${m.tidal.cdKind})` };
-    out.chartDatum = { station: m.tidal.station, kind: m.tidal.cdKind, offsets: [] };
-  }
-  return out;
+    ...(src ? { agency: src.name } : {}),
+    ...(country ? { country } : {}),
+    ...(cdLabel ? { cdName: cdLabel === 'CD' ? 'Chart datum' : cdLabel } : {}),
+    national: s.national,
+  });
 }

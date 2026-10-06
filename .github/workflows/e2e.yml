@@ -61,6 +61,20 @@ jobs:
 
       - run: npm ci
 
+      # Convert's PROJ static libs, x86_64 only like the APK below.
+      - name: Cache PROJ build (Convert)
+        uses: actions/cache@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-android-x86_64-${{ runner.os }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh') }}
+
+      - name: Build PROJ for Android x86_64 (Convert)
+        run: npm run proj:prepare -- android
+        env:
+          ANDROID_ABIS: x86_64
+
       # x86_64 only: the emulator is x86_64, and a single-ABI APK cuts both the
       # native build and the ~6-minute multi-ABI adb install.
       - name: Prebuild + assemble release APK

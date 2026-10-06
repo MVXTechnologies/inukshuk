@@ -1,0 +1,50 @@
+# Convert e2e: the map-actions row opens Convert; a deep link opens it on
+# survey mark 81KM003's published values (NAD83(CSRS) 1997.0, h -3.127);
+# without the Québec grid pack the CGVD2013 height is REFUSED with the pack
+# offered (never approximated); dropping the height gives the MTM 7 result
+# with an exact (projection-only) accuracy panel.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- tapOn: 'Map actions'
+- tapOn: 'Convert coordinates'
+- extendedWaitUntil:
+    visible:
+      id: 'convert-screen'
+    timeout: 10000
+- tapOn: 'Back'
+- openLink: 'inukshuk://convert?from=csrs%3Ageo&epoch=1997.0&a=46.851168&b=-71.238585&h=-3.127&fh=ell&to=csrs%3Amtm7&th=cgvd2013a&label=From%20mark%2081KM003&kind=mark&lon=-71.238585&lat=46.851168'
+- extendedWaitUntil:
+    visible: 'From mark 81KM003'
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: 'convert-status-red'
+    timeout: 10000
+- assertVisible: '.*Needs CGG2013a.*'
+- tapOn:
+    id: 'convert-to-height'
+- tapOn:
+    id: 'convert-pick-none'
+- extendedWaitUntil:
+    visible:
+      id: 'convert-result-e'
+    timeout: 10000
+- assertVisible:
+    id: 'convert-status-green'

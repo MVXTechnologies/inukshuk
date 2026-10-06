@@ -8,8 +8,7 @@ import { Button, Icon, IconButton, Surface, Text, useTheme } from 'react-native-
 import { useLiveTide } from '../hooks/useLiveTide';
 import { useChsStationDetail } from '../hooks/useChs';
 import { CONVERT_ENABLED } from '@core/features/flags';
-import type { ConvertPrefill } from '@core/convert/entry';
-import { convertFromTideStation } from '@core/convert/entry';
+import { convertFromTideStation, type ConvertRequest } from '@core/convert/entry';
 import { tideImage } from '../tideImages';
 import { CopyValueButton } from './CopyValueButton';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
@@ -21,8 +20,8 @@ interface Props {
   /** Put a value on the clipboard and toast it. */
   onCopy: (text: string) => void;
   onClose: () => void;
-  /** The Convert tool's entry (hidden while CONVERT_ENABLED is false). */
-  onConvert?: (prefill: ConvertPrefill) => void;
+  /** Open Convert on the station's chart datum (`@core/convert/entry`). */
+  onConvert?: (req: ConvertRequest) => void;
   offline?: boolean;
   floating?: boolean;
 }

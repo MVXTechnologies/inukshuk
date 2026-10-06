@@ -1,0 +1,962 @@
+{
+  "CA-EPOCH-CSRS-math": {
+    "title": "NAD83(CSRS) epoch propagation, identical velocities (engine math)",
+    "tools": ["NRCan TRX web service (CSRS/tools/TRX/calc/geo)"],
+    "n": 54,
+    "pass": 54,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-EPOCH-CSRS-TRXdefault": {
+    "title": "NAD83(CSRS) epoch propagation vs TRX default (v8 grid) - model check",
+    "tools": ["NRCan TRX web service (CSRS/tools/TRX/calc/geo)"],
+    "n": 81,
+    "pass": 0,
+    "known": 81,
+    "diagnosis": "TRX interpolates the NAD83(CSRS) v8 velocity grid (NAD83v80VG, EPSG grid 10707); PROJ-data only ships v70VG. With identical velocities the same math agrees to <=0.5 mm (CA-EPOCH-CSRS-math). Velocity-model difference reaches 5.7 mm/yr north at Sandspit 987007 (78 mm over 13 yr)."
+  },
+  "CA-CSRS-ITRF2020-math": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2020@2026.75 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 27,
+    "pass": 27,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-CSRS-ITRF2020-TRXdefault": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2020@2026.75 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 28,
+    "pass": 0,
+    "known": 28,
+    "diagnosis": "Same cause: v8 vs v7 velocity grid over 16.75 yr; Helmert + epoch math identical (CA-CSRS-ITRF2020-math <=0.5 mm)."
+  },
+  "CA-CSRS-ITRF2014-math": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2014@2026.75 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 27,
+    "pass": 27,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-CSRS-ITRF2014-TRXdefault": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2014@2026.75 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 27,
+    "pass": 0,
+    "known": 27,
+    "diagnosis": "Same cause: v8 vs v7 velocity grid."
+  },
+  "CA-CSRS-ITRF2008-math": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2008@2010.0 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 27,
+    "pass": 27,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-CSRS-ITRF2008-TRXdefault": {
+    "title": "NAD83(CSRS)@2010 -> ITRF2008@2010.0 TRX convention (velocity grid to target epoch, then Helmert at t)",
+    "tools": ["NRCan TRX web service"],
+    "n": 27,
+    "pass": 27,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-H-CGG2013a": {
+    "title": "h -> CGVD2013 (CGG2013a), epoch 2010 coords",
+    "tools": ["NRCan GPS·H web service (CSRS/tools/GPSH/CGG2013a)"],
+    "n": 27,
+    "pass": 24,
+    "known": 3,
+    "diagnosis": "GPS·H vs PROJ bilinear on the same grid differ 4-8 mm at three marks with steep geoid gradients (Haida Gwaii coast, Dease Lake, Thunder Bay); 24 other marks agree <=3 mm. GPS·H interpolation method is undocumented (suspected bi-quadratic/spline) - suspected, not proven."
+  },
+  "CA-H-CGG2013": {
+    "title": "h -> CGVD2013 (CGG2013, original realisation)",
+    "tools": ["NRCan GPS·H web service (CSRS/tools/GPSH/CGG2013)"],
+    "n": 27,
+    "pass": 24,
+    "known": 3,
+    "diagnosis": "Same as CA-H-CGG2013a."
+  },
+  "CA-H-HT2_2010v70": {
+    "title": "h (epoch 2010) -> CGVD28 via HTv2.0 2010 v70",
+    "tools": ["NRCan GPS·H web service (CSRS/tools/GPSH/HT2_2010v70)"],
+    "n": 27,
+    "pass": 24,
+    "known": 3,
+    "diagnosis": "Same as CA-H-CGG2013a (same marks)."
+  },
+  "CA-H-HT2_1997": {
+    "title": "h (epoch 1997) -> CGVD28 via HTv2.0 1997",
+    "tools": ["NRCan GPS·H web service", "NRCan GPS·H web service (CSRS/tools/GPSH/HT2_1997)"],
+    "n": 28,
+    "pass": 25,
+    "known": 3,
+    "diagnosis": "Same as CA-H-CGG2013a (same marks)."
+  },
+  "CA-H-HT2_2002v70": {
+    "title": "h (epoch 2002) -> CGVD28 via HTv2.0 2002 v70",
+    "tools": ["NRCan GPS·H web service (CSRS/tools/GPSH/HT2_2002v70)"],
+    "n": 27,
+    "pass": 24,
+    "known": 3,
+    "diagnosis": "Same as CA-H-CGG2013a (same marks)."
+  },
+  "CA-H-CGG2013a-1997": {
+    "title": "h (epoch 1997) -> CGVD2013a(1997)",
+    "tools": ["NRCan GPS·H web service", "NRCan GPS·H web service (CSRS/tools/GPSH/CGG2013a)"],
+    "n": 28,
+    "pass": 25,
+    "known": 3,
+    "diagnosis": "Same as CA-H-CGG2013a (same marks)."
+  },
+  "CA-H-datasheet-CGVD2013": {
+    "title": "Published levelled CGVD2013 vs published NAD83(CSRS) h minus geoid/HT model (CBN marks)",
+    "tools": ["NRCan station report (Vertical Data, levelling)"],
+    "n": 21,
+    "pass": 21,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-H-datasheet-CGVD28": {
+    "title": "Published levelled CGVD28 vs published NAD83(CSRS) h minus geoid/HT model (CBN marks)",
+    "tools": ["NRCan station report (Vertical Data, levelling)"],
+    "n": 21,
+    "pass": 21,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2947": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 5",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2949": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 7",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2950": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 8",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2952": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 10",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2953": {
+    "title": "Geographic -> NAD83(CSRS) / New Brunswick Stereographic",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2954": {
+    "title": "Geographic -> NAD83(CSRS) / Prince Edward Isl. Stereographic (NAD83)",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2955": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 11N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 4,
+    "pass": 4,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2956": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 12N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2958": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 17N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2959": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 18N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2960": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 19N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 6,
+    "pass": 6,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG2961": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 20N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 6,
+    "pass": 6,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3155": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 8N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3156": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 9N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3157": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 10N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3158": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 14N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3160": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 16N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG3761": {
+    "title": "Geographic -> NAD83(CSRS) / UTM zone 22N",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG6622": {
+    "title": "Geographic -> NAD83(CSRS)v2 / Quebec Lambert",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 3,
+    "pass": 3,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG8082": {
+    "title": "Geographic -> NAD83(CSRS)v6 / MTM NS 2010 zone 4",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG8083": {
+    "title": "Geographic -> NAD83(CSRS)v6 / MTM NS 2010 zone 5",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG26891": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 11",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG26896": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 16",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG26898": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 1",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-PROJ-EPSG26899": {
+    "title": "Geographic -> NAD83(CSRS) / MTM zone 2",
+    "tools": ["NRCan TRX web service (destproj=plan)"],
+    "n": 1,
+    "pass": 0,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-NTV2-NTV2": {
+    "title": "NTv2 NTV2 inverse (EPSG:1313 NAD27 to NAD83 (4) [ntv2_0])",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=NTV2)"],
+    "n": 27,
+    "pass": 26,
+    "known": 1,
+    "diagnosis": "PROJ inverse hgridshift does not round-trip at West Vancouver: forward(PROJ inverse) misses the input by 1.2 mm, NRCan inverse round-trips to 0.1 mm. PROJ inverse iteration issue (suspected NTv2 sub-grid boundary)."
+  },
+  "CA-NTV2-BC_27_05": {
+    "title": "NTv2 BC_27_05 inverse (NAD27 to NAD83(CSRS)v4 (British Columbia))",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=BC_27_05)"],
+    "n": 3,
+    "pass": 2,
+    "known": 1,
+    "diagnosis": "Same as CA-NTV2-NTV2: PROJ inverse misses its own forward by 2.4 mm at West Vancouver; NRCan 0.15 mm."
+  },
+  "CA-NTV2-NB2783v2": {
+    "title": "NTv2 NB2783v2 inverse (NAD27 to NAD83(CSRS)v2 (New Brunswick))",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=NB2783v2)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-NTV2-ON27CSv1": {
+    "title": "NTv2 ON27CSv1 inverse (NAD27 to NAD83(CSRS)v2 (Ontario))",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=ON27CSv1)"],
+    "n": 3,
+    "pass": 3,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-NTV2-NA27SCRS": {
+    "title": "NTv2 NA27SCRS inverse (EPSG:1691? / QUE27-98: NAD27 to NAD83(CSRS)v2 (1))",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=NA27SCRS)"],
+    "n": 5,
+    "pass": 5,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-NTV2-NA83SCRS": {
+    "title": "NTv2 NA83SCRS inverse (NAD83 to NAD83(CSRS)v2 (Quebec) [NA83SCRS])",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=NA83SCRS)"],
+    "n": 5,
+    "pass": 5,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CA-NTV2-SK27-98": {
+    "title": "NTv2 SK27-98 inverse (NAD27 to NAD83(CSRS)v2 (Saskatchewan))",
+    "tools": ["NRCan NTv2 web service (CSRS/tools/NTV2/inverse, grid=SK27-98)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-NADCON5-NAD83_2011-to-NAD27": {
+    "title": "NAD83(2011) -> NAD27 (NADCON 5.0 CONUS chain)",
+    "tools": ["NOAA NCAT llh (NADCON 5.0)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-NADCON5-NAD83_2011-to-NAD83_1986": {
+    "title": "NAD83(2011) -> NAD83(1986) (NADCON 5.0 CONUS chain)",
+    "tools": ["NOAA NCAT llh (NADCON 5.0)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6404": {
+    "title": "Geographic -> NAD83(2011) / Arizona Central",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6423": {
+    "title": "Geographic -> NAD83(2011) / California zone 5",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6427": {
+    "title": "Geographic -> NAD83(2011) / Colorado Central",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6437": {
+    "title": "Geographic -> NAD83(2011) / Florida East",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6446": {
+    "title": "Geographic -> NAD83(2011) / Georgia West",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6454": {
+    "title": "Geographic -> NAD83(2011) / Illinois East",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6478": {
+    "title": "Geographic -> NAD83(2011) / Louisiana South",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6483": {
+    "title": "Geographic -> NAD83(2011) / Maine East",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6487": {
+    "title": "Geographic -> NAD83(2011) / Maryland",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6491": {
+    "title": "Geographic -> NAD83(2011) / Massachusetts Mainland",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6504": {
+    "title": "Geographic -> NAD83(2011) / Minnesota South",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6513": {
+    "title": "Geographic -> NAD83(2011) / Missouri West",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6526": {
+    "title": "Geographic -> NAD83(2011) / New Jersey",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6546": {
+    "title": "Geographic -> NAD83(2011) / North Dakota South",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6587": {
+    "title": "Geographic -> NAD83(2011) / Texas South Central",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6596": {
+    "title": "Geographic -> NAD83(2011) / Washington North",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-SPC-EPSG6619": {
+    "title": "Geographic -> NAD83(2011) / Utah Central",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6339": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6339)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6340": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6340)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6341": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6341)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6342": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6342)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6343": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6343)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6344": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6344)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 4,
+    "pass": 4,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6345": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6345)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6346": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6346)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6347": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6347)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-UTM-EPSG6348": {
+    "title": "Geographic -> NAD83(2011) / UTM (EPSG:6348)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-GEOID18": {
+    "title": "NAD83(2011) h -> NAVD88 (GEOID18)",
+    "tools": ["NGS GEOID18 API (api/geoid/ght model=14)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-GEOID18-levelled": {
+    "title": "Levelled NAVD88 (datasheet) vs NAD83(2011) h - GEOID18",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 7,
+    "pass": 6,
+    "known": 1,
+    "diagnosis": "Chicago AE9238: levelled NAVD88 178.668 vs h-N(GEOID18) 178.613 (5.5 cm). Hybrid-geoid residual/datasheet h; data disagreement, not an engine issue."
+  },
+  "US-ECEF": {
+    "title": "Geographic 3D -> geocentric (GRS80)",
+    "tools": ["NGS datasheet (NDE API)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-LCC2SP": {
+    "title": "worked example, 3.1.1.1 LCC 2SP NAD27 / Texas South Central, p.20",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-LCC1SP": {
+    "title": "worked example, 3.1.1.2 LCC 1SP JAD69 / Jamaica NG, p.21",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-TM": {
+    "title": "worked example, 3.2.3.1 TM, OSGB 1936 / BNG, p.54",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 0,
+    "known": 1,
+    "diagnosis": "GN 7-2 prints N=69740.50; PROJ and an independent JHS implementation both give 69740.4923 (7.7 mm). GN example print precision issue."
+  },
+  "GN72-HotineB": {
+    "title": "worked example, 3.2.4.1 Hotine variant B, Timbalai 1948 / RSO Borneo (m), p.62",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-ObliqueStereo": {
+    "title": "worked example, 3.3.1.1 Oblique Stereographic, Amersfoort / RD New, p.72",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-Geocentric-inverse": {
+    "title": "Geocentric -> geographic 3D (WGS 84)",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-Helmert-PV": {
+    "title": "Position Vector 7-param (EPSG:1238 WGS 72 -> WGS 84)",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 0,
+    "known": 1,
+    "diagnosis": "GN 7-2 prints X=3657660.78; PROJ and an independent PV implementation give 3657660.774 (5.9 mm). GN example print precision issue."
+  },
+  "GN72-Helmert-TimeDep-CF": {
+    "title": "Time-dependent Coordinate Frame (EPSG:6276 ITRF2008 -> GDA94 at 2013.90)",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GN72-Helmert-TimeDep-CF-reverse": {
+    "title": "Reverse of EPSG:6276 (GDA94 -> ITRF2008 at 2013.90)",
+    "tools": ["IOGP Geomatics Guidance Note 7-2 (Sept 2019)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "GB-OSTN15-OSGM15-fwd": {
+    "title": "ETRS89 -> OSGB36 National Grid + ODN/local datum (OSTN15/OSGM15)",
+    "tools": ["Ordnance Survey OSTN15/OSGM15 developer pack test files"],
+    "n": 40,
+    "pass": 9,
+    "known": 31,
+    "diagnosis": "PROJ uses the OSTN15 NTv2 lat/long grid and a lat/long GeoTIFF of OSGM15; OS test outputs come from the definitive 1-km E/N grids. Differences up to 7.4 mm horizontal / 2.0 mm vertical. Use the definitive OSTN15 algorithm if sub-cm agreement with OS is required."
+  },
+  "GB-OSTN15-OSGM15-rev": {
+    "title": "OSGB36 National Grid + ODN -> ETRS89 (OSTN15/OSGM15 reverse, iterative)",
+    "tools": ["Ordnance Survey OSTN15/OSGM15 developer pack test files"],
+    "n": 40,
+    "pass": 9,
+    "known": 31,
+    "diagnosis": "Same as GB-OSTN15-OSGM15-fwd."
+  },
+  "GB-OSGM15-Belfast": {
+    "title": "ETRS89 h -> Belfast height (OSGM15 NI)",
+    "tools": ["Ordnance Survey OSGM15 NI test files"],
+    "n": 100,
+    "pass": 97,
+    "known": 3,
+    "diagnosis": "OSGM15 Belfast as GeoTIFF vs OS native grid interpolation: 1.0-1.6 mm at 3 of 100 points."
+  },
+  "FR-L93": {
+    "title": "RGF93 v2b geographic -> Lambert-93",
+    "tools": ["IGN fiche géodésique (WFS GEODESIE:data_geod, data.geopf.fr)"],
+    "n": 30,
+    "pass": 23,
+    "known": 7,
+    "diagnosis": "IGN fiche geographic and Lambert-93 values are mutually inconsistent by up to 1.7 mm (published on different dates); PROJ and an independent LCC implementation agree to <0.01 mm."
+  },
+  "FR-RAF20": {
+    "title": "RGF93 v2b h -> NGF-IGN69 altitude (RAF20) vs published levelled altitude",
+    "tools": ["IGN fiche géodésique (WFS GEODESIE:data_geod, data.geopf.fr)"],
+    "n": 30,
+    "pass": 26,
+    "known": 4,
+    "diagnosis": "RAF20 model residual vs published levelled NGF-IGN69 altitude: 3.3-12 cm at 4 of 30 marks (Rhone valley / Alps, re-observed 2024). Model accuracy, not engine."
+  },
+  "CH-LV95LN02-to-ETRS89": {
+    "title": "LV95 E/N + LN02 H -> ETRS89 lat/lon/h",
+    "tools": ["swisstopo REFRAME REST (ln02tobessel + lv95towgs84)"],
+    "n": 7,
+    "pass": 5,
+    "known": 2,
+    "diagnosis": "PROJ uses the single swisstopo grid chgeo2004_htrans_ETRS (LN02<->ETRS89); REFRAME chains HTRANS (LN02->LHN95) + CHGeo2004 + Bessel shift. 7-12 mm at high-altitude marks (Calanda 2805 m, Zermatt)."
+  },
+  "CH-ETRS89-to-LV95": {
+    "title": "ETRS89 lat/lon -> LV95 E/N",
+    "tools": ["swisstopo REFRAME REST wgs84tolv95"],
+    "n": 7,
+    "pass": 7,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CH-ETRS89-to-LHN95": {
+    "title": "ETRS89 h -> LHN95 orthometric height (CHGeo2004)",
+    "tools": ["swisstopo REFRAME REST ln02tolhn95 (+lv95towgs84 for h)"],
+    "n": 7,
+    "pass": 7,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NO-NN2000": {
+    "title": "EUREF89 h -> NN2000 (HREF2018B)",
+    "tools": ["Kartverket transformasjons-API (ws.geonorge.no/transformering/v1, OpenAPI 1.10.0)"],
+    "n": 10,
+    "pass": 10,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NO-UTM-EPSG25832": {
+    "title": "EUREF89 -> EPSG:25832",
+    "tools": ["Kartverket transformasjons-API"],
+    "n": 7,
+    "pass": 7,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NO-UTM-EPSG25833": {
+    "title": "EUREF89 -> EPSG:25833",
+    "tools": ["Kartverket transformasjons-API"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NO-UTM-EPSG25835": {
+    "title": "EUREF89 -> EPSG:25835",
+    "tools": ["Kartverket transformasjons-API"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NL-RDNAPTRANS2018-fwd": {
+    "title": "ETRS89 (ETRF2000) -> RD New + NAP (RDNAPTRANS2018)",
+    "tools": ["NSGI RDNAPTRANS2018 self-validation file Z001_ETRS89andRDNAP.txt"],
+    "n": 50,
+    "pass": 50,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NL-RDNAPTRANS2018-RDonly": {
+    "title": "ETRS89 -> RD New outside the NAP area (RDNAPTRANS2018 horizontal)",
+    "tools": ["NSGI RDNAPTRANS2018 self-validation file Z001_ETRS89andRDNAP.txt"],
+    "n": 10,
+    "pass": 10,
+    "known": 0,
+    "diagnosis": null
+  },
+  "NL-RDNAPTRANS2018-rev": {
+    "title": "RD New + NAP -> ETRS89 (RDNAPTRANS2018 reverse)",
+    "tools": ["NSGI RDNAPTRANS2018 self-validation file Z001_ETRS89andRDNAP.txt"],
+    "n": 50,
+    "pass": 50,
+    "known": 0,
+    "diagnosis": null
+  },
+  "WGS84-EGM2008": {
+    "title": "WGS 84 / ITRF h -> EGM2008 height (2.5-arcmin grid) vs NRCan GPS·H EGM08",
+    "tools": ["NRCan GPS·H web service, model EGM08, frame=ITRF2014"],
+    "n": 27,
+    "pass": 8,
+    "known": 19,
+    "diagnosis": "GPS·H EGM08 vs PROJ 2.5-arcmin EGM2008 grid: up to 10.8 mm. PROJ-data has no 1-arcmin EGM2008 grid (us_nga_egm08_1.tif 404); GPS·H resolution/method undocumented (suspected 1-arcmin grid or harmonic synthesis). EPSG states 0.113 m for the 2.5-arcmin op."
+  },
+  "WGS84-EGM96": {
+    "title": "WGS 84 h -> EGM96 height (15-arcmin grid)",
+    "tools": ["NGA EGM96 interpolation package (INTPT.F test output OUTINTPT.DAT)"],
+    "n": 6,
+    "pass": 1,
+    "known": 5,
+    "diagnosis": "NGA reference output uses a 4x4 spline (INTPT.F IWINDO=4); PROJ is bilinear. PROJ equals bilinear interpolation of NGA WW15MGH.GRD to <=0.3 mm (expected_alt)."
+  },
+  "CD-CHS-BM-vs-NRCan": {
+    "title": "CHS benchmark height above CD + CHS station offset vs NRCan levelled height of the same mark",
+    "tools": ["NRCan station report (Vertical Data table, levelling)"],
+    "n": 58,
+    "pass": 47,
+    "known": 11,
+    "diagnosis": "CHS-derived (benchmark CD elevation + station offset) minus NRCan levelled height on the same marks: CGVD2013 mean -4.0 cm (systematic, n=20), CGVD28 mean -2.3 cm, IGLD85 -0.2 cm. Beyond 5 cm: Sept-Iles (7.5-14 cm), North Sydney CGVD28 (9 cm), Lauzon 74L9000 (6-10 cm, wharf-wall mark likely moved), Vieux-Quebec 19L760B CGVD2013 (5.6 cm). The CGVD2013 bias suggests CHS CGVD2013 offsets were not derived from NRCan CGVD2013 levelling; cause not confirmed - ask CHS."
+  },
+  "CD-CHS-NAD83-vs-CGVD2013+CGG2013a": {
+    "title": "CHS CD ellipsoidal (NAD83_CSRS) vs CHS CD_in_CGVD2013 + CGG2013a",
+    "tools": ["CHS IWLS station metadata (datums: NAD83_CSRS)"],
+    "n": 9,
+    "pass": 9,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CD-CHS-NAD83-vs-CGVD28+HT2_2010v70": {
+    "title": "CHS CD ellipsoidal (NAD83_CSRS) vs CHS CD_in_CGVD28 + HT2_2010v70",
+    "tools": ["CHS IWLS station metadata (datums: NAD83_CSRS)"],
+    "n": 285,
+    "pass": 274,
+    "known": 11,
+    "diagnosis": "HTv2.0 vs CHS CGVD28 offsets: 6-22 cm at Newfoundland, Labrador and Bay of Fundy stations (CGVD28 poorly realised there; HTv2.0 stated 5 cm). Use CGVD2013+CGG2013a for CD conversions."
+  },
+  "CD-NO-station-vs-grid": {
+    "title": "Norway: station CD-NN2000 (tide API) vs CD grid (no_kv v2023b) minus HREF2018B",
+    "tools": ["Kartverket tide API stationlevels (vannstand.kartverket.no/tideapi.php)"],
+    "n": 32,
+    "pass": 32,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CD-NL-NAPLAT-vs-grids": {
+    "title": "Netherlands: NAP-LAT (hydrographic WFS) vs NLLAT2018 - NLGEO2018",
+    "tools": ["NLHO / Defensie INSPIRE WFS NAP_LAT (NEVREF)"],
+    "n": 31,
+    "pass": 31,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CD-US-VDatum-vs-COOPS": {
+    "title": "USA: VDatum MLLW->NAVD88 vs CO-OPS station datums",
+    "tools": ["NOAA CO-OPS mdapi datums (station datum sheet)"],
+    "n": 14,
+    "pass": 14,
+    "known": 0,
+    "diagnosis": null
+  },
+  "CD-FR-RAM-vs-RAF20": {
+    "title": "France: RAM zh_elli vs RAM zh_ref (IGN69) + RAF20",
+    "tools": ["SHOM RAM (Références Altimétriques Maritimes) WFS"],
+    "n": 111,
+    "pass": 73,
+    "known": 38,
+    "diagnosis": "RAM internal inconsistency (zh_ref vs zh_elli) at some sites, up to 1.37 m (Le Touquet); median -1.1 cm. Data issue in RAM, not engine."
+  },
+  "CD-FR-RAM-vs-BathyElli": {
+    "title": "France: RAM zh_elli (port) vs BathyElli v2.1 ZH surface (IDW of 6 nearest nodes)",
+    "tools": ["SHOM RAM (Références Altimétriques Maritimes) WFS"],
+    "n": 116,
+    "pass": 35,
+    "known": 81,
+    "diagnosis": "BathyElli v2.1 ZH surface (IDW of nodes) sits +0.18 m (median) above RAM zh_elli at ports, with outliers to 1.6 m. Cause unconfirmed (surface vs port ZH definition, IDW across nodes, epochs). Do not mix RAM and BathyElli without a stated +-0.2 m uncertainty."
+  },
+  "FR-L93-Circe": {
+    "title": "RGF93 v2b → Lambert-93 vs IGN Circé 5.5.0",
+    "tools": ["IGN Circé France 5.5.0 (circeFR.exe, circelib 1.3.0, DataFRnew.txt, RAF20.tac)"],
+    "n": 3,
+    "pass": 3,
+    "known": 0,
+    "diagnosis": null
+  },
+  "FR-RAF20-Circe": {
+    "title": "RGF93 v2b h → NGF-IGN69 (RAF20) vs IGN Circé 5.5.0",
+    "tools": ["IGN Circé France 5.5.0 (circeFR.exe, circelib 1.3.0, DataFRnew.txt, RAF20.tac)"],
+    "n": 3,
+    "pass": 3,
+    "known": 0,
+    "diagnosis": null
+  },
+  "FR-CC43-Circe": {
+    "title": "RGF93 v2b → CC43 vs IGN Circé 5.5.0",
+    "tools": ["IGN Circé France 5.5.0 (circeFR.exe, circelib 1.3.0, DataFRnew.txt, RAF20.tac)"],
+    "n": 1,
+    "pass": 1,
+    "known": 0,
+    "diagnosis": null
+  },
+  "FR-CC44-Circe": {
+    "title": "RGF93 v2b → CC44 vs IGN Circé 5.5.0",
+    "tools": ["IGN Circé France 5.5.0 (circeFR.exe, circelib 1.3.0, DataFRnew.txt, RAF20.tac)"],
+    "n": 2,
+    "pass": 2,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-NADCON5-NAD27-to-NAD83_2011": {
+    "title": "NAD27 → NAD83(2011) (NADCON5 CONUS) vs NOAA NCAT",
+    "tools": ["NOAA NCAT llh (NADCON 5.0)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  },
+  "US-NADCON5-NAD83_1986-to-NAD83_2011": {
+    "title": "NAD83_1986 → NAD83(2011) (NADCON5 CONUS) vs NOAA NCAT",
+    "tools": ["NOAA NCAT llh (NADCON 5.0)"],
+    "n": 17,
+    "pass": 17,
+    "known": 0,
+    "diagnosis": null
+  }
+}

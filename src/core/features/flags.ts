@@ -112,8 +112,7 @@ export const CONTOUR_RECOVERY_ENABLED: boolean = true;
 export const PARKED_LABEL = 'Coming soon';
 
 /**
- * The Convert tool (chart-datum PLAN phases C–F). NOT BUILT YET: the cards'
- * Convert button and its prefill hook (`@core/convert/entry`) exist so the
- * cards need no change when it lands; the button stays hidden until then.
+ * The Convert tool (chart-datum PLAN phases C–F; shipped in 2.3.0). Gates the
+ * tide station card's Convert button (`@core/convert/entry`).
  */
-export const CONVERT_ENABLED: boolean = false;
+export const CONVERT_ENABLED: boolean = true;

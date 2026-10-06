@@ -65,6 +65,9 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useLongTrailsStore } from '@state/longTrailsStore';
+import { prefillFromMark, prefillFromPoint } from '@core/convert/prefill';
+import { openConvert } from '@features/convert/openConvert';
+import { useMapAimStore } from '@state/mapAimStore';
 import { useMapStore } from '@state/mapStore';
 import { useRecorderStore } from '@state/recorderStore';
 import { useMarinePackStore } from '@state/marinePackStore';
@@ -1162,6 +1165,24 @@ export function MapScreen() {
     [showSnack],
   );
 
+  // "Show on map" from Convert: aim at the converted point once the map is up
+  // (a request made before the map loaded waits; later ones arrive by subscription).
+  useEffect(() => {
+    if (!mapLoaded) return;
+    const run = () => {
+      const at = useMapAimStore.getState().take();
+      if (at) aimAt(at);
+    };
+    const first = setTimeout(run, 0);
+    const unsubscribe = useMapAimStore.subscribe((s) => {
+      if (s.pending) run();
+    });
+    return () => {
+      clearTimeout(first);
+      unsubscribe();
+    };
+  }, [mapLoaded, aimAt]);
+
   // Rotation index for the fit FAB's PDF tour (reset when the set changes).
   const fitCycleRef = useRef(0);
   useEffect(() => {
@@ -1686,6 +1707,8 @@ export function MapScreen() {
         void openGoToCoordinates(at);
       } else if (hit === 'waypoint') {
         composeWaypointAt(at);
+      } else if (hit === 'convert') {
+        openConvert(router, prefillFromPoint(at.latitude, at.longitude));
       } else {
         void Clipboard.setStringAsync(formatLatLng(at.latitude, at.longitude));
         showSnack('Coordinates copied');
@@ -1693,7 +1716,7 @@ export function MapScreen() {
         setForecastAt(null);
       }
     },
-    [openGoToCoordinates, composeWaypointAt, showSnack],
+    [openGoToCoordinates, composeWaypointAt, showSnack, router],
   );
 
   // "+" actions menu → Add waypoint: compose a standalone waypoint at the
@@ -2823,6 +2846,7 @@ export function MapScreen() {
                   actions={{
                     onNavigate: () => runPointChipHit('navigate', pointAt),
                     onAddWaypoint: () => runPointChipHit('waypoint', pointAt),
+                    onConvert: () => runPointChipHit('convert', pointAt),
                     onClaimTouch: () => {
                       chipTouchAtRef.current = Date.now();
                     },
@@ -3037,6 +3061,8 @@ export function MapScreen() {
                     // Drawing (#502/#503) taps the flat 2D map; "Draw" asks
                     // route or area first.
                     onDraw: drawing.openChooser,
+                    // Convert (appended last): type a coordinate you have not tapped.
+                    onConvert: () => openConvert(router),
                   }
                 : undefined
             }
@@ -3491,6 +3517,7 @@ export function MapScreen() {
                   setDestination({ latitude: geodeticMark.lat, longitude: geodeticMark.lng });
                   setGeodeticMark(null);
                 }}
+                onConvert={() => openConvert(router, prefillFromMark(geodeticMark))}
                 onCopy={(text, what) => {
                   void Clipboard.setStringAsync(text);
                   showSnack(`Copied ${what}`);
@@ -3524,6 +3551,7 @@ export function MapScreen() {
                 showSnack(`Copied: ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
               }}
               onClose={() => setTideStation(null)}
+              onConvert={(req) => openConvert(router, req)}
             />
           </View>
         )}
