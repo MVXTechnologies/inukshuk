@@ -16,16 +16,13 @@ const HEX_ALLOWLIST = [
   'src/features/map/TrailViewerRail.tsx',
   'src/features/map/components/DestinationMarkerPin.tsx',
   'src/features/map/components/HeatPointCarousel.tsx',
-  'src/features/map/components/InukshukIcon.tsx',
   'src/features/map/components/MapOverlaysMenu.tsx',
   'src/features/map/components/MapPointChip.tsx',
   'src/features/map/components/NoteNumberBadge.tsx',
   'src/features/map/components/RangeSlider.tsx',
-  'src/features/map/components/RecordControls.tsx',
   'src/features/map/components/WaypointMarkerPin.tsx',
   'src/features/map/mapLayers.tsx',
   'src/features/map/mapStyle.ts',
-  'src/features/map/mapmaker/MakeMapSheet.tsx',
   'src/features/map/marine/MarineLegend.tsx',
   'src/features/map/weather/WeatherCompareScreen.tsx',
   'src/features/map/weather/weatherChrome.ts',
@@ -104,7 +101,7 @@ module.exports = [
       'dist/*',
       'node_modules/*',
       // The two above are root-anchored, so they miss NESTED build output and
-      // dependency trees — e.g. a sibling npm project's `web/dist` left in the
+      // dependency trees — e.g. a sibling npm project's `playground/dist` left in the
       // working tree lints its minified bundle and buries the real findings
       // under thousands of warnings. Never lint generated or vendored code,
       // at any depth.
@@ -124,7 +121,7 @@ module.exports = [
       // (Vite, react-dom, maplibre-gl) and its own lint/typecheck scripts.
       // It reuses src/core by alias but must not be linted with the app's
       // React Native config, which knows nothing about the DOM.
-      'web/*',
+      'playground/*',
     ],
   },
 ];

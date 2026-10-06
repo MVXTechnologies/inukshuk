@@ -46,8 +46,10 @@ Ordered roughly by priority (top = next).
   - Trail 3D view renders blank in the iOS simulator (fine on device?).
   - Maps tab "Near you" from Québec City lists New Brunswick CanTopo
     sheets 300+ km away (CanTopo has no Québec City sheet).
-  - Refresh the marketing site's `docs/assets/screens/*.webp` and the Play
-    store phone/tablet sets from the new UI (needs a local Android build).
+  - Refresh the marketing site's `docs/assets/screens/*.webp`, and capture a
+    new Play store phone/tablet set and feature graphic from the new UI (the
+    June 1.x set was deleted in the October 2026 cleanup; needs a local
+    Android build).
 
 - **Weather UX v2 — Windy-style (owner spec, 2026-08-09).** ~~M1~~ SHIPPED
   (PR #195, OTA'd 1.5.0 + 1.4.0, 2026-08-09): thumbnail layer picker, dark

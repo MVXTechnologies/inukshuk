@@ -10,7 +10,7 @@ import { defineConfig } from 'vite';
  * georeferencing/weather/catalog logic shows up here on the next HMR tick.
  *
  * `server.fs.allow` has to be widened for that: by default Vite refuses to
- * serve files outside the project root, and `../src/core` is outside `web/`.
+ * serve files outside the project root, and `../src/core` is outside `playground/`.
  */
 export default defineConfig({
   plugins: [react()],

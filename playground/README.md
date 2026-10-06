@@ -7,14 +7,14 @@ anywhere near a phone.
 
 It is a self-contained npm project. It does **not** share `package.json`,
 `tsconfig.json` or `eslint.config.js` with the app — the repo root excludes
-`web/` from all three on purpose.
+`playground/` from all three on purpose.
 
 ---
 
 ## Run it
 
 ```bash
-cd web
+cd playground
 npm install      # first time only. NEVER run npm install at the repo root.
 npm run dev      # http://localhost:5173  — Vite, HMR on
 ```
@@ -152,7 +152,7 @@ Every one of these is a proposal to accept or reject, not an accident.
    be read DOWN a column instead of across each row.
 2. **There is a sort.** The app has none: `libraryStore` prepends on add, so the
    list is insertion order and "which of these was longest?" has no answer short
-   of scrolling. Seven orders are offered (`web/src/library/sortTracks.ts`). If
+   of scrolling. Seven orders are offered (`playground/src/library/sortTracks.ts`). If
    this survives review it belongs in `@core/library/sortTracks.ts` with tests,
    adopted by the app unchanged; it is not in `@core` today only because `@core`
    requires a co-located test file and its own coverage gate.
@@ -365,7 +365,7 @@ Every decision with a number in it comes from `@core`.
 ## Layout
 
 ```
-web/
+playground/
   vite.config.ts        @core -> ../src/core, and fs.allow for it
   src/
     App.tsx             wiring: theme, drawers, drag-and-drop, URL state

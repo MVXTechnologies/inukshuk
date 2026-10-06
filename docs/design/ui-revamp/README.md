@@ -3,9 +3,7 @@
 _Approved by Marc on 2026-09-25 from the design canvas (claude.ai design artifact "Inukshuk UI revamp"). This folder is the implementation handoff. The **HTML boards are the source of truth** for layout, sizes and colours._
 
 - `boards/*.html`: one file per artboard, with exact px, hex and copy. Images are in `boards/blobs/`. Open a board in a browser to see it with the real font (Atkinson Hyperlegible Next from Google Fonts).
-- `screens/*.jpg`: quick renders of the boards at 2×. They were rendered **offline with a fallback font**, so text runs wider than in the design; where the two differ, the HTML is right. For example, the TIME and DISTANCE values in `After-Recording.jpg` look like they collide; they don't in the real font.
-- `Before-*.html` show the current iOS build, for contrast only.
-- `review-2026-09.md`: the full design review with the critique, the rationale and proposals P1–P4, citing file:line in the current code.
+- The October 2026 cleanup removed three things from this folder: the `screens/*.jpg` quick renders (made with a fallback font, so the HTML was always right where they differed), the `Before-*.html` contrast boards of the pre-revamp build, and `review-2026-09.md` (the full design review: critique, rationale and proposals P1–P4). The renders and boards remain in git history; the review is on the `archive/docs-2026-10` branch.
 
 Every board is a 390 × 844 pt iPhone frame unless noted. 1 px in a board is 1 dp/pt in React Native.
 

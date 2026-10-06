@@ -22,5 +22,8 @@ preview sheet, and commit the regenerated files.
 - **`android-icon-monochrome.png`**: the same silhouette in one opaque colour, for Android 13+ themed icons. The launcher tints it.
 - **`splash-icon.png` / `splash-icon-dark.png`**: the figure alone on transparency, sized so it clears Android 12's circular splash mask when `imageWidth` is 200. The dark variant lifts the stones to the _night tone_: each channel becomes 60 + 1.05·c, which turns #273037 into #656E76. It sits on `#13171B`. `InukshukLoader` uses the same transform on dark surfaces.
 - **`favicon.png`** (48²) and **`store/play/icon-512.png`** (512², RGB) are downscaled from `icon.png`.
+- The website's copies, which GitHub Pages can only serve from `docs/`, are downscaled too: **`docs/icon.png`** (512²), **`docs/apple-touch-icon.png`** (180²) and **`docs/favicon-32.png`** (32², rounded corners). The site logos `docs/assets/brand/logo-{128,256,384}.webp` are still hand exports.
+
+PNG encoders differ between Pillow versions, so a re-run can rewrite a file's bytes with identical pixels. Commit only files whose pixels actually changed: the icon and splash files are part of the runtime fingerprint (`fingerprint.config.js`), so new bytes alone would cut existing installs off from OTA updates.
 
 `figure-compact@2x.png` is the only step that PIL can't do. To regenerate it after editing the SVG, render it headless: with Playwright + Chromium, set the viewport and the SVG `width`/`height` to 1568 × 1740 and take a screenshot with `omitBackground: true`.

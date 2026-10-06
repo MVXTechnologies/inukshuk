@@ -417,7 +417,7 @@ is 2–3× slower until V8 has optimised the loops):
   and takes the others from the isolate's cache, or from the request that is decoding them.
   When some are still missing it answers a **partial tile**: the same lines, drawn without the
   missing neighbours' border (up to half a DEM pixel off along those edges —
-  `docs/assets/contour-cpu-before-after.jpg`). A partial tile is `X-Contour-Source: partial`,
+  [`contour-cpu-before-after.jpg`](contour-cpu-before-after.jpg)). A partial tile is `X-Contour-Source: partial`,
   cached 15 s, **never written to R2**; a later request for it finds the DEM decoded and makes
   the full tile. A cold 3 × 4-tile
   viewport: 9 full + 3 partial on the first round, all full on the second, 16 DEM decodes in
