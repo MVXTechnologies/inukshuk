@@ -24,6 +24,14 @@ jest.mock('@dr.pogodin/react-native-static-server', () => {
 
 jest.mock('./storage', () => ({ documentDirUri: () => 'file:///doc/' }));
 
+const SECRET = '0f8e2c1a-5b7d-4e9f-a3c6-1d2b4f6a8c0e';
+jest.mock('expo-modules-core', () => ({
+  ...jest.requireActual<object>('expo-modules-core'),
+  uuid: { v4: jest.fn(() => SECRET) },
+}));
+/** The lease value for a server the library started at `origin`. */
+const served = (origin: string): string => `${origin}/${SECRET}`;
+
 jest.mock('expo-file-system', () => {
   const files = new Map<string, string>();
   const dirs = new Set<string>();
@@ -100,7 +108,11 @@ describe('acquireLocalServer', () => {
     const instance = serverMock.__instances[0];
     expect(instance?.options).toMatchObject({ fileDir: '/doc/', port: 0, hostname: '127.0.0.1' });
     expect(instance?.options.extraConfig).toContain('url.access-deny');
-    expect(a.value).toBe('http://127.0.0.1:8080');
+    // Files are reachable only under this session's secret (another app on
+    // the device can connect to loopback; it cannot guess the secret).
+    expect(instance?.options.extraConfig).toContain(`alias.url = ( "/${SECRET}/" => "/doc/" )`);
+    expect(instance?.options.extraConfig).toContain(`!~ "^/${SECRET}/(maps|`);
+    expect(a.value).toBe(served('http://127.0.0.1:8080'));
     expect(b.value).toBe(a.value);
     expect(localServerLeases()).toBe(2);
 
@@ -159,7 +171,7 @@ describe('start failures (#290)', () => {
     serverMock.__startPlan.push(crash, async () => 'http://127.0.0.1:9090');
     const mod = freshModule();
     const lease = await mod.acquireLocalServer();
-    expect(lease.value).toBe('http://127.0.0.1:9090');
+    expect(lease.value).toBe(served('http://127.0.0.1:9090'));
     expect(serverMock.__instances).toHaveLength(2);
     expect(serverMock.__instances[0]?.start).toHaveBeenCalledTimes(1);
     expect(serverMock.__instances[1]?.start).toHaveBeenCalledTimes(1);
@@ -225,7 +237,7 @@ describe('start failures (#290)', () => {
     const mod = freshModule();
     await expect(mod.acquireLocalServer()).rejects.toThrow();
     const lease = await mod.acquireLocalServer();
-    expect(lease.value).toBe('http://127.0.0.1:7070');
+    expect(lease.value).toBe(served('http://127.0.0.1:7070'));
     expect(serverMock.__instances).toHaveLength(3);
     await lease.release();
   });
@@ -255,13 +267,17 @@ describe('restartLocalServer', () => {
     );
     const mod = freshModule();
     const lease = await mod.acquireLocalServer();
-    await expect(mod.restartLocalServer('http://127.0.0.1:41234')).resolves.toBe(
-      'http://127.0.0.1:41234',
+    await expect(mod.restartLocalServer(served('http://127.0.0.1:41234'))).resolves.toBe(
+      served('http://127.0.0.1:41234'),
     );
     expect(serverMock.__instances).toHaveLength(2);
     expect(serverMock.__instances[0]?.stop).toHaveBeenCalledTimes(1);
     expect(serverMock.__instances[1]?.options.port).toBe(41234);
-    expect(lease.value).toBe('http://127.0.0.1:41234');
+    // The replacement keeps the session's secret, so handed-out URLs stay valid.
+    expect(serverMock.__instances[1]?.options.extraConfig).toBe(
+      serverMock.__instances[0]?.options.extraConfig,
+    );
+    expect(lease.value).toBe(served('http://127.0.0.1:41234'));
     await lease.release();
     // The replacement is the one a last release stops.
     expect(serverMock.__instances[1]?.stop).toHaveBeenCalledTimes(1);
@@ -275,11 +291,11 @@ describe('restartLocalServer', () => {
     );
     const mod = freshModule();
     const lease = await mod.acquireLocalServer();
-    await expect(mod.restartLocalServer('http://127.0.0.1:41234')).resolves.toBe(
-      'http://127.0.0.1:50000',
+    await expect(mod.restartLocalServer(served('http://127.0.0.1:41234'))).resolves.toBe(
+      served('http://127.0.0.1:50000'),
     );
     expect(serverMock.__instances.map((i) => i.options.port)).toEqual([0, 41234, 0]);
-    expect(lease.value).toBe('http://127.0.0.1:50000');
+    expect(lease.value).toBe(served('http://127.0.0.1:50000'));
     await lease.release();
   });
 
@@ -289,7 +305,7 @@ describe('restartLocalServer', () => {
       const mod = freshModule();
       const lease = await mod.acquireLocalServer();
       serverMock.__instances[0]?.stop.mockImplementationOnce(() => new Promise(() => undefined));
-      const restarting = mod.restartLocalServer('http://127.0.0.1:8080');
+      const restarting = mod.restartLocalServer(served('http://127.0.0.1:8080'));
       const settled = expect(restarting).rejects.toThrow(/did not stop within 3000 ms/);
       await jest.advanceTimersByTimeAsync(mod.STOP_TIMEOUT_MS);
       await settled;
@@ -308,8 +324,8 @@ describe('restartLocalServer', () => {
     const mod = freshModule();
     const lease = await mod.acquireLocalServer();
     serverMock.__instances[0]?.stop.mockRejectedValueOnce(new Error('crashed'));
-    await expect(mod.restartLocalServer('http://127.0.0.1:8080')).resolves.toBe(
-      'http://127.0.0.1:8080',
+    await expect(mod.restartLocalServer(served('http://127.0.0.1:8080'))).resolves.toBe(
+      served('http://127.0.0.1:8080'),
     );
     expect(serverMock.__instances).toHaveLength(2);
     await lease.release();
@@ -317,7 +333,7 @@ describe('restartLocalServer', () => {
 
   it('refuses without a lease', async () => {
     const mod = freshModule();
-    await expect(mod.restartLocalServer('http://127.0.0.1:8080')).rejects.toThrow(
+    await expect(mod.restartLocalServer(served('http://127.0.0.1:8080'))).rejects.toThrow(
       /no lease is held/,
     );
     expect(serverMock.__instances).toHaveLength(0);

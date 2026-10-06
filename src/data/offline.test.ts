@@ -178,7 +178,10 @@ describe('createRegionPack', () => {
       maxZoom: number;
       metadata: Record<string, unknown>;
     };
-    expect(options.mapStyle).toBe('http://127.0.0.1:8080/offline-styles/r1.json');
+    // Under the loopback server's per-session secret (a v4 UUID).
+    expect(options.mapStyle).toMatch(
+      /^http:\/\/127\.0\.0\.1:8080\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/offline-styles\/r1\.json$/,
+    );
     expect(options.bounds).toEqual([-72, 46, -71, 47]); // [west, south, east, north]
     expect(options.metadata).toMatchObject({ appId: 'r1', label: 'Home range', basemap: 'map' });
 
