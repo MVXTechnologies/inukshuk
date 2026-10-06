@@ -49,6 +49,20 @@ import {
 } from './donorVerify';
 
 import { handleRoute, type RouteEnv } from './route';
+import {
+  allowRequest,
+  archiveAllowlist,
+  clientKey,
+  glyphStack,
+  isPlausibleToken,
+  memoryLimiter as floorLimiter,
+  positiveInt,
+  readTextCapped,
+  staticCacheUrl,
+  tooManyRequests,
+  utcDay,
+  type RateLimitBinding,
+} from './guards';
 
 export interface Env extends SearchEnv, RouteEnv {
   BUCKET: R2Bucket;
@@ -84,11 +98,34 @@ export interface Env extends SearchEnv, RouteEnv {
    * its first request.
    */
   CONTOUR_DECODE_BUDGET?: string;
+  /** Archives served as /{archive}/… (comma separated); default DEFAULT_ARCHIVES in ./guards.ts. */
+  ARCHIVES?: string;
+  /**
+   * Contour tiles one client may have GENERATED per minute (an R2 miss: DEM
+   * fetches, CPU, an R2 write). Stored and edge-cached tiles don't count.
+   * `[[ratelimits]]` binding CONTOUR_LIMITER; CONTOUR_GEN_PER_MIN is the
+   * per-isolate floor (default 300).
+   */
+  CONTOUR_LIMITER?: RateLimitBinding;
+  CONTOUR_GEN_PER_MIN?: string;
+  /** `[[ratelimits]]` binding for the Strava token proxy (per client IP). */
+  STRAVA_LIMITER?: RateLimitBinding;
+  /** Code emails /donor-verify/start may send per UTC day, all addresses together (default 100). */
+  VERIFY_DAILY_SEND_CAP?: string;
 }
 
 const donorFallbackLimit = memoryLimiter();
 /** Per-isolate hourly cap on verify requests per client, on top of the binding. */
 const verifyFallbackLimit = memoryLimiter(10, 60 * 60_000);
+/** Per-isolate floor for the Strava token proxy: 30 exchanges/refreshes per client per hour. */
+const stravaFloor = floorLimiter(30, 60 * 60_000);
+/** Largest JSON body the small POST routes accept. */
+const VERIFY_MAX_BODY = 1024;
+const DONOR_MAX_BODY = 4096;
+const STRAVA_MAX_BODY = 1024;
+const DEFAULT_VERIFY_DAILY_SEND_CAP = 100;
+/** R2 counter of today's code emails (swept by the verify sweep the next day). */
+const sendCounterKey = (day: string) => `${VERIFY_PREFIX}_sends-${day}.json`;
 
 async function hmacHex(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -110,16 +147,11 @@ async function donorVerify(
   const salt = env.DONOR_VERIFY_SALT;
   const resendKey = env.RESEND_API_KEY;
   if (!salt || !resendKey) return new Response('not found', { status: 404 });
-  const length = Number(request.headers.get('Content-Length') ?? '0');
-  if (length > 1024) return Response.json({ ok: false, error: 'body too large' }, { status: 400 });
-  const client = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const body = request.method === 'POST' ? await readTextCapped(request, VERIFY_MAX_BODY) : '';
+  if (body === null) return Response.json({ ok: false, error: 'body too large' }, { status: 400 });
+  const client = clientKey(request);
   const result = await handleVerify(
-    {
-      route,
-      method: request.method,
-      client,
-      body: request.method === 'POST' ? await request.text() : '',
-    },
+    { route, method: request.method, client, body },
     {
       get: async (key) => {
         const object = await env.BUCKET.get(key);
@@ -167,6 +199,23 @@ async function donorVerify(
         });
         return res.ok;
       },
+      allowSend: async (now) => {
+        // A soft cap (two concurrent starts can both read the same count),
+        // which is all a quota guard needs.
+        const cap = positiveInt(env.VERIFY_DAILY_SEND_CAP, DEFAULT_VERIFY_DAILY_SEND_CAP);
+        const { day, endsAt } = utcDay(now);
+        const key = sendCounterKey(day);
+        const object = await env.BUCKET.get(key);
+        const sent =
+          object === null ? 0 : Number((await object.json<{ sent?: number }>()).sent ?? 0);
+        if (sent >= cap) return false;
+        await env.BUCKET.put(key, JSON.stringify({ sent: sent + 1 }), {
+          httpMetadata: { contentType: 'application/json' },
+          // The sweep deletes it an hour after the day ends.
+          customMetadata: { expiresAt: String(endsAt) },
+        });
+        return true;
+      },
       now: () => Date.now(),
     },
   );
@@ -177,11 +226,11 @@ async function donorVerify(
 }
 
 async function donors(request: Request, env: Env): Promise<Response> {
-  const client = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-  const length = Number(request.headers.get('Content-Length') ?? '0');
-  if (length > 4096) return Response.json({ error: 'body too large' }, { status: 413 });
+  const client = clientKey(request);
+  const body = request.method === 'POST' ? await readTextCapped(request, DONOR_MAX_BODY) : '';
+  if (body === null) return Response.json({ error: 'body too large' }, { status: 413 });
   const result = await handleDonor(
-    { method: request.method, client, body: request.method === 'POST' ? await request.text() : '' },
+    { method: request.method, client, body },
     {
       put: async (key, json) => {
         await env.BUCKET.put(key, json, { httpMetadata: { contentType: 'application/json' } });
@@ -201,8 +250,6 @@ async function donors(request: Request, env: Env): Promise<Response> {
 }
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
-/** Longest code / refresh token we forward (Strava's are 40 hex chars). */
-const STRAVA_MAX_TOKEN_LENGTH = 256;
 
 /**
  * Strava token proxy: `POST /strava/token {code}` and
@@ -215,10 +262,24 @@ async function stravaToken(request: Request, env: Env, kind: string): Promise<Re
   if (!env.STRAVA_CLIENT_ID || !env.STRAVA_CLIENT_SECRET)
     return new Response('not found', { status: 404 });
   if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  // The proxy spends our Strava app's standing (its client secret, its
+  // athlete cap, Strava's view of its traffic): a client hammering it with
+  // junk is cut off before anything reaches Strava.
+  if (!(await allowRequest(env.STRAVA_LIMITER, stravaFloor, `strava:${clientKey(request)}`)))
+    return tooManyRequests({}, 60, { message: 'too many requests, try again later' });
+  const text = await readTextCapped(request, STRAVA_MAX_BODY);
+  let body: unknown = null;
+  try {
+    body = text === null ? null : (JSON.parse(text) as unknown);
+  } catch {
+    body = null;
+  }
   const field = kind === 'token' ? 'code' : 'refresh_token';
-  const value = body?.[field];
-  if (typeof value !== 'string' || value === '' || value.length > STRAVA_MAX_TOKEN_LENGTH)
+  const value =
+    body !== null && typeof body === 'object'
+      ? (body as Record<string, unknown>)[field]
+      : undefined;
+  if (!isPlausibleToken(value))
     return Response.json({ message: `${field} required` }, { status: 400 });
 
   const form = new URLSearchParams({
@@ -360,6 +421,15 @@ const CONTOUR_CACHE_CONTROL = 'public, max-age=2592000';
  * lacked are decoded.
  */
 const CONTOUR_PARTIAL_CACHE_CONTROL = 'public, max-age=15';
+const DEFAULT_CONTOUR_GEN_PER_MIN = 300;
+/** Per-isolate generation floor, rebuilt only if CONTOUR_GEN_PER_MIN changes. */
+let contourFloorState: { perMin: number; allow: (key: string) => boolean } | undefined;
+function contourFloor(perMin: number): (key: string) => boolean {
+  if (contourFloorState?.perMin !== perMin) {
+    contourFloorState = { perMin, allow: floorLimiter(perMin, 60_000) };
+  }
+  return contourFloorState.allow;
+}
 
 /**
  * A contour tile (#509): from R2 when it was generated before, else generated
@@ -372,6 +442,7 @@ async function serveContours(
   env: Env,
   ctx: ExecutionContext,
   cors: Record<string, string>,
+  client: string,
   z: number,
   x: number,
   y: number,
@@ -390,6 +461,13 @@ async function serveContours(
       headers: { ...headers, 'X-Contour-Source': 'r2' },
       encodeBody: 'manual',
     });
+  }
+  // Generating is the expensive path (DEM fetches, CPU, an R2 write, once per
+  // tile ever). One client may only make so many new tiles a minute; MapLibre
+  // (offline packs included) honours 429 + Retry-After and comes back.
+  const floor = contourFloor(positiveInt(env.CONTOUR_GEN_PER_MIN, DEFAULT_CONTOUR_GEN_PER_MIN));
+  if (!(await allowRequest(env.CONTOUR_LIMITER, floor, `contours:${client}`))) {
+    return tooManyRequests(cors, 30);
   }
   const { mvt, partial } = await contourTile(z, x, y, {
     decodeBudget: decodeBudgetFrom(env.CONTOUR_DECODE_BUDGET),
@@ -432,12 +510,14 @@ async function serve(
     const [z, x, y] = [Number(cz), Number(cx), Number(cy)];
     if (z > CONTOUR_MAX_ZOOM || x >= 2 ** z || y >= 2 ** z)
       return new Response('bad tile', { status: 400, headers: cors });
-    return serveContours(env, ctx, cors, z, x, y);
+    return serveContours(env, ctx, cors, clientKey(request), z, x, y);
   }
 
+  const archives = archiveAllowlist(env.ARCHIVES);
   const tile = TILE_PATH.exec(url.pathname);
   const [, archive, zs, xs, ys] = tile ?? [];
   if (archive !== undefined) {
+    if (!archives.has(archive)) return new Response('not found', { status: 404, headers: cors });
     const [z, x, y] = [Number(zs), Number(xs), Number(ys)];
     if (z > 22 || x >= 2 ** z || y >= 2 ** z)
       return new Response('bad tile', { status: 400, headers: cors });
@@ -476,17 +556,22 @@ async function serve(
 
   const [, jsonArchive] = TILEJSON_PATH.exec(url.pathname) ?? [];
   if (jsonArchive !== undefined) {
+    if (!archives.has(jsonArchive)) {
+      return new Response('not found', { status: 404, headers: cors });
+    }
     const first = (await piecesOf(env, jsonArchive))?.[0]?.name ?? jsonArchive;
     const pmtiles = new PMTiles(new R2Source(env.BUCKET, `${first}.pmtiles`), CACHE, decompress);
     const json = await pmtiles.getTileJson(`${url.origin}/${jsonArchive}`);
     return Response.json(json, { headers: { ...cors, 'Cache-Control': cacheControl } });
   }
 
-  const [, stack, range] = GLYPH_PATH.exec(url.pathname) ?? [];
-  if (stack !== undefined && range !== undefined) {
+  const [, rawStack, range] = GLYPH_PATH.exec(url.pathname) ?? [];
+  if (rawStack !== undefined && range !== undefined) {
+    const stack = glyphStack(rawStack);
+    if (stack === null) return new Response('bad font stack', { status: 400, headers: cors });
     // One font per stack: MapLibre asks for a comma-joined stack only when a
     // style mixes fonts, which ours never does.
-    const object = await env.BUCKET.get(`fonts/${decodeURIComponent(stack)}/${range}.pbf`);
+    const object = await env.BUCKET.get(`fonts/${stack}/${range}.pbf`);
     // Only ranges the font covers are stored (Latin, punctuation, arrows…).
     // Any other range is answered with an EMPTY glyph message — valid
     // protobuf — so MapLibre skips those characters instead of logging a
@@ -702,9 +787,8 @@ export default {
     }
 
     const cache = caches.default;
-    const keyUrl = new URL(url);
-    keyUrl.searchParams.set('__g', CACHE_GENERATION);
-    const cacheKey = new Request(keyUrl.toString(), request);
+    // Path + the app's ?v= only: a random query string must not buy a miss.
+    const cacheKey = new Request(staticCacheUrl(url, CACHE_GENERATION), request);
     const hit = await cache.match(cacheKey);
     // Our tiles are stored ALREADY gzipped (Content-Encoding: gzip). Handing
     // the cached Response straight back lets Cloudflare gzip it a SECOND time
@@ -723,7 +807,9 @@ export default {
     try {
       response = await serve(request, env, ctx, url);
     } catch (e) {
-      return new Response(`tile error: ${(e as Error).message}`, { status: 502 });
+      // Logged for `wrangler tail`; the client gets no internals (R2 keys, stack).
+      console.error('serve failed', url.pathname, e);
+      return new Response('tile error', { status: 502 });
     }
     if (response.status === 200 || response.status === 204)
       ctx.waitUntil(cache.put(cacheKey, response.clone()));

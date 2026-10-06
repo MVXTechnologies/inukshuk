@@ -386,9 +386,9 @@ ask you to run your own instance. Hence the Worker:
 - caches every answer at the edge for a day (`SEARCH_CACHE_CONTROL`), keyed on
   the case- and space-folded query, so every phone typing "Mont-Sainte-Anne"
   costs Photon three requests a day (at most `MAX_UPSTREAM_CALLS` per search);
-- limits searches that miss the cache per client IP (`SEARCH_RATE_PER_MIN`, default 60 —
-  per isolate; for a global limit, enable the commented `[[ratelimits]]`
-  binding `SEARCH_LIMITER` in `wrangler.toml`);
+- limits searches that miss the cache per client IP (the `SEARCH_LIMITER`
+  `[[ratelimits]]` binding in `wrangler.toml`, 60 a minute; without it a
+  per-isolate counter, `SEARCH_RATE_PER_MIN`);
 - the app debounces 250 ms, needs 2 characters, and aborts stale requests.
 
 If traffic grows past "reasonable", self-host Photon on the NAS (Docker image
