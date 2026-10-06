@@ -1,3 +1,12 @@
+# The prebuilt xcframeworks must exist when `pod install` runs: CocoaPods links
+# only the vendored frameworks it finds at install time, so a later build of
+# them links nothing ("Undefined symbols … _proj_*", 2.3.0 EAS build 8766525f).
+# Fail here with the fix instead of at the final link.
+unless File.exist?(File.join(__dir__, 'prebuilt/ios/Proj.xcframework/Info.plist'))
+  raise 'InukshukProj: prebuilt/ios/Proj.xcframework is missing. Run ' \
+        '`npm run proj:prepare -- ios` before `pod install` (EAS: scripts/eas-pre-install.sh).'
+end
+
 Pod::Spec.new do |s|
   s.name = 'InukshukProj'
   s.version = '1.0.0'
