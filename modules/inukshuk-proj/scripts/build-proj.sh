@@ -41,20 +41,49 @@ if ! command -v cmake >/dev/null 2>&1 && [ -n "${ANDROID_HOME:-}" ]; then
   for c in "$ANDROID_HOME"/cmake/*/bin; do [ -x "$c/cmake" ] && export PATH="$c:$PATH"; done
 fi
 
-fetch() { # url sha256 dest
-  if [ ! -f "$3" ]; then curl -fsSL "$1" -o "$3.part" && mv "$3.part" "$3"; fi
-  local got
-  got=$(shasum -a 256 "$3" | cut -d' ' -f1)
-  if [ "$got" != "$2" ]; then
-    echo "sha256 mismatch for $3: $got (expected $2)" >&2
-    exit 1
-  fi
+sha256_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1 || sha256sum "$1" | cut -d' ' -f1; }
+
+# fetch DEST SHA256 URL [URL…]: the first mirror that answers with the pinned
+# bytes wins. The sha pin is what is trusted, never the host, so any mirror is
+# safe. EAS's Linux workers could not connect to www.sqlite.org at all (2.3.0
+# build 6b22ea52: "Failed to connect … after 132764 ms"), hence the mirrors,
+# a short connect timeout, and a second try over IPv4.
+fetch() {
+  local dest=$1 sha=$2 url got
+  shift 2
+  if [ -f "$dest" ] && [ "$(sha256_of "$dest")" = "$sha" ]; then return 0; fi
+  for url in "$@"; do
+    for ipflag in "" "-4"; do
+      rm -f "$dest.part"
+      # shellcheck disable=SC2086
+      if curl -fsSL $ipflag --connect-timeout 20 --max-time 600 --retry 2 "$url" -o "$dest.part"; then
+        got=$(sha256_of "$dest.part")
+        if [ "$got" = "$sha" ]; then
+          mv "$dest.part" "$dest"
+          return 0
+        fi
+        echo "sha256 mismatch from $url: $got (expected $sha)" >&2
+      else
+        echo "could not fetch $url${ipflag:+ (IPv4)}" >&2
+      fi
+    done
+  done
+  rm -f "$dest.part"
+  echo "no mirror served $dest with sha256 $sha" >&2
+  exit 1
 }
 
 cd "$WORK/src"
-fetch "https://download.osgeo.org/proj/proj-$PROJ_VERSION.tar.gz" "$PROJ_SHA256" proj.tgz
-fetch "https://download.osgeo.org/libtiff/tiff-$TIFF_VERSION.tar.gz" "$TIFF_SHA256" tiff.tgz
-fetch "https://www.sqlite.org/2025/$SQLITE_NAME.zip" "$SQLITE_SHA256" sqlite.zip
+fetch proj.tgz "$PROJ_SHA256" \
+  "https://download.osgeo.org/proj/proj-$PROJ_VERSION.tar.gz" \
+  "https://github.com/OSGeo/PROJ/releases/download/$PROJ_VERSION/proj-$PROJ_VERSION.tar.gz"
+fetch tiff.tgz "$TIFF_SHA256" \
+  "https://download.osgeo.org/libtiff/tiff-$TIFF_VERSION.tar.gz"
+# sqlite.org runs three independent servers with the same download paths.
+fetch sqlite.zip "$SQLITE_SHA256" \
+  "https://www.sqlite.org/2025/$SQLITE_NAME.zip" \
+  "https://www2.sqlite.org/2025/$SQLITE_NAME.zip" \
+  "https://www3.sqlite.org/2025/$SQLITE_NAME.zip"
 [ -d "proj-$PROJ_VERSION" ] || tar xzf proj.tgz
 [ -d "tiff-$TIFF_VERSION" ] || tar xzf tiff.tgz
 [ -d "$SQLITE_NAME" ] || unzip -q sqlite.zip

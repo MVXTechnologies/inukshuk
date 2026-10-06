@@ -113,7 +113,6 @@
     "release:bump": "node scripts/release/bump-version.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:ci && npm run test:scripts",
     "eas-build-pre-install": "sh scripts/eas-pre-install.sh",
-    "eas-build-post-install": "bash modules/inukshuk-proj/scripts/prepare.sh ${EAS_BUILD_PLATFORM:-all}",
     "proj:prepare": "bash modules/inukshuk-proj/scripts/prepare.sh",
     "proj:test-host": "bash modules/inukshuk-proj/tests/run-host.sh"
   },
