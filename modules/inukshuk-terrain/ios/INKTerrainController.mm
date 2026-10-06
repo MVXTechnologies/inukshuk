@@ -605,6 +605,7 @@ double mercY(double lat) {
   DrapeParams _drapeParams;
   dispatch_queue_t _drapeDecodeQueue;
   std::atomic<int> _drapeRendered;
+  std::atomic<uint32_t> _drapeGenAtomic;
   // Round 3: drape textures persist on disk per style (revisits never re-render).
   NSString *_drapeTileDir;
   // two-finger disambiguation
@@ -1368,6 +1369,7 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
       stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%d-%d", hash, params.texture, params.shift]];
   [[NSFileManager defaultManager] createDirectoryAtPath:_drapeTileDir withIntermediateDirectories:YES attributes:nil error:nil];
   _drapeGen++;
+  _drapeGenAtomic = _drapeGen;
   _engine->setDrape(true, drapeSlotBudget());
   _engine->resetImagery();  // a new style: every drape re-renders (the generation drops stale ones)
   [self requestRepaint];
@@ -1432,6 +1434,9 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
     _snapshotterBusy[idle] = @YES;
     const uint32_t drapeGen = _drapeGen;
     const int tex = _drapeParams.texture;
+    // The cache folder of the style this snapshot renders: a render finishing
+    // after a style change must not land in the new style's folder.
+    NSString *renderDir = _drapeTileDir;
     const CFTimeInterval started = CACurrentMediaTime();
     __weak INKTerrainController *weakSelf = self;
     __weak id weakSnap = snap;
@@ -1463,7 +1468,9 @@ static bool writeTexture(const uint8_t *rgba, int size, NSString *file) {
                  auto chain = buildMipChain(tile.data(), tex, levels);
                  if (!chain.empty())
                    s->_engine->onImageryLevels(job.z, x0 + i, y0 + j, std::move(chain), tex, levels, job.gen);
-                 if (NSString *file = [s drapeFileZ:job.z x:x0 + i y:y0 + j]) {
+                 if (renderDir && drapeGen == s->_drapeGenAtomic.load()) {
+                   NSString *file = [renderDir stringByAppendingPathComponent:
+                                                   [NSString stringWithFormat:@"%d-%d-%d.jpg", job.z, x0 + i, y0 + j]];
                    if (writeTexture(tile.data(), tex, file)) {
                      if (++s->_drapeDiskWrites % 64 == 0) [s trimDrapeCache];
                    }

@@ -199,6 +199,9 @@ class DrapeRenderer(
       }
       busy[idle] = true
       val tex = texture
+      // The cache folder of the style this snapshot renders: a render that
+      // finishes after a style change must not land in the new style's folder.
+      val dir = tileDir
       val gen = styleGen
       val started = System.nanoTime()
       val slot = idle
@@ -209,7 +212,7 @@ class DrapeRenderer(
         snap.start(
           { snapshot ->
             val bmp = snapshot.bitmap
-            pixels.execute { slice(bmp, job, x0, y0, k, tex) }
+            pixels.execute { slice(bmp, job, x0, y0, k, tex, dir) }
             finish()
           },
           { error ->
@@ -240,7 +243,7 @@ class DrapeRenderer(
   }
 
   /** Worker: the k×k block's bitmap → k² tile textures. */
-  private fun slice(bmp: Bitmap, job: Job, x0: Int, y0: Int, k: Int, tex: Int) {
+  private fun slice(bmp: Bitmap, job: Job, x0: Int, y0: Int, k: Int, tex: Int, dir: java.io.File?) {
     try {
       val full = tex * k
       val src = if (bmp.width == full && bmp.height == full) bmp
@@ -250,7 +253,7 @@ class DrapeRenderer(
           val tile = Bitmap.createBitmap(src, i * tex, j * tex, tex, tex)
           val buf = ByteBuffer.allocate(tex * tex * 4)
           tile.copyPixelsToBuffer(buf) // RGBA bytes for ARGB_8888 (opaque map: no premultiply effect)
-          tileDir?.let { dir -> writeTile(tile, java.io.File(dir, "${job.z}-${x0 + i}-${y0 + j}.jpg")) }
+          if (dir != null && dir == tileDir) writeTile(tile, java.io.File(dir, "${job.z}-${x0 + i}-${y0 + j}.jpg"))
           if (tile !== src) tile.recycle()
           deliver(job.z, x0 + i, y0 + j, buf.array(), tex, job.gen)
         }
