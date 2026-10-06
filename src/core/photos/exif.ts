@@ -192,12 +192,32 @@ export function parseGpsDateTime(date: unknown, time: unknown): number | undefin
   return base + Math.round(((h * 60 + mi) * 60 + se) * 1000);
 }
 
+/** How far a GPS stamp may sit from a whole time zone and still date the shot (ms). */
+export const GPS_ZONE_TOLERANCE_MS = 60_000;
+const QUARTER_HOUR = 15 * 60_000;
+const MAX_ZONE_MS = 14 * 60 * 60_000;
+
 /**
- * When the photo was taken, as far as the file says. Preference: the
- * original time WITH its offset → the GPS UTC stamp → the original time as an
- * unzoned wall clock (resolved later against the device's zone, see
- * {@link resolveTakenAt}). `DateTimeOriginal` beats `DateTimeDigitized` beats
- * the file's `DateTime` (an editor may have rewritten that one).
+ * When the photo was taken, as far as the file says. Preference:
+ *
+ * 1. `DateTimeOriginal` WITH its offset tag (iOS; Android never exposes one —
+ *    expo-image-picker 56 does not read `OffsetTimeOriginal` there).
+ * 2. `DateTimeOriginal` in a zone INFERRED from the GPS stamp. The GPS stamp
+ *    is the time of the last location fix, not of the shot, and a phone can
+ *    reuse a fix minutes or hours old. So it is used only to find the zone:
+ *    when original − GPS is within {@link GPS_ZONE_TOLERANCE_MS} of a whole
+ *    quarter hour (every real zone), that is the zone, and the original time
+ *    in it is the instant (`exif-gps-utc`). Anything else is a stale fix, and
+ *    the original time falls back to an unzoned wall clock read in the
+ *    device's zone (`exif-local`, see {@link resolveTakenAt}). Known limit: a
+ *    fix that is stale by almost exactly a multiple of 15 min (within the
+ *    tolerance) is indistinguishable from a zone and is still trusted; the
+ *    import's camera-clock check catches it when it affects every photo.
+ * 3. The GPS stamp alone, when the file has no original time at all.
+ * 4. The original time as an unzoned wall clock.
+ *
+ * `DateTimeOriginal` beats `DateTimeDigitized` beats the file's `DateTime`
+ * (an editor may have rewritten that one).
  */
 export function exifTime(raw: Raw): ExifTime | undefined {
   const subSec = pick(raw, 'SubsecTimeOriginal', 'SubSecTimeOriginal');
@@ -218,20 +238,19 @@ export function exifTime(raw: Raw): ExifTime | undefined {
     pick(raw, 'GPSDateStamp', 'DateStamp'),
     pick(raw, 'GPSTimeStamp', 'TimeStamp'),
   );
-  if (gps !== undefined) {
-    // A GPS stamp keeps whole seconds at best; when the camera clock agrees
-    // with it to within a minute, the original time's sub-seconds are finer.
-    if (original !== undefined) {
-      const drift = original - gps;
-      const zoneish = Math.round(drift / (15 * 60_000)) * 15 * 60_000;
-      if (Math.abs(drift - zoneish) < 60_000) {
-        return { kind: 'absolute', epochMs: original - zoneish, source: 'exif-gps-utc' };
-      }
-    }
-    return { kind: 'absolute', epochMs: gps, source: 'exif-gps-utc' };
+  if (original === undefined) {
+    return gps === undefined
+      ? undefined
+      : { kind: 'absolute', epochMs: gps, source: 'exif-gps-utc' };
   }
-  if (original !== undefined) return { kind: 'local', wallMs: original };
-  return undefined;
+  if (gps !== undefined) {
+    const drift = original - gps;
+    const zone = Math.round(drift / QUARTER_HOUR) * QUARTER_HOUR;
+    if (Math.abs(drift - zone) <= GPS_ZONE_TOLERANCE_MS && Math.abs(zone) <= MAX_ZONE_MS) {
+      return { kind: 'absolute', epochMs: original - zone, source: 'exif-gps-utc' };
+    }
+  }
+  return { kind: 'local', wallMs: original };
 }
 
 /** Everything placement needs from one picked photo's EXIF. */

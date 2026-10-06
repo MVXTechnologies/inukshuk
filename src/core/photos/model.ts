@@ -30,7 +30,10 @@ export type PhotoPlacement =
 export type TakenAtSource =
   /** `DateTimeOriginal` + `OffsetTimeOriginal` (EXIF 2.31; iOS exposes it). */
   | 'exif-offset'
-  /** `GPSDateStamp` + `GPSTimeStamp`, which EXIF defines as UTC. */
+  /**
+   * `DateTimeOriginal` in the zone a fresh GPS stamp (UTC) implies, or the GPS
+   * stamp alone when the file has no original time.
+   */
   | 'exif-gps-utc'
   /** `DateTimeOriginal` read as the device's local wall-clock time then. */
   | 'exif-local'

@@ -75,12 +75,35 @@ describe('normalizeExif', () => {
     });
   });
 
-  it('trusts the GPS stamp when the camera clock disagrees with it by minutes', () => {
+  it('ignores a stale GPS fix and reads the original time in the device zone', () => {
+    // Android: no offset tag. The last fix was 6 min 56 s before the shot, so
+    // the stamp is NOT the capture time and no time zone explains the gap.
     const n = normalizeExif({ ...ANDROID, DateTimeOriginal: '2026:09:27 10:38:00' });
-    expect(n.time).toMatchObject({
-      epochMs: Date.UTC(2026, 8, 27, 14, 31, 4),
+    expect(n.time).toEqual({ kind: 'local', wallMs: Date.UTC(2026, 8, 27, 10, 38, 0, 120) });
+    expect(resolveTakenAt(n.time!, EDT)).toEqual({
+      epochMs: Date.UTC(2026, 8, 27, 14, 38, 0, 120),
+      source: 'exif-local',
+    });
+  });
+
+  it('ignores a fix hours stale, falling back to the device zone', () => {
+    const n = normalizeExif({ ...ANDROID, GPSTimeStamp: '11/1,49/1,30/1' }); // 2 h 42 min old
+    expect(n.time).toEqual({ kind: 'local', wallMs: Date.UTC(2026, 8, 27, 10, 31, 5, 120) });
+    expect(resolveTakenAt(n.time!, EDT).source).toBe('exif-local');
+  });
+
+  it('infers the zone from a fresh fix even when the device is elsewhere now', () => {
+    // Shot in Paris (UTC+2) at 16:31:05 local, imported back home in EDT.
+    const n = normalizeExif({ ...ANDROID, DateTimeOriginal: '2026:09:27 16:31:05' });
+    expect(resolveTakenAt(n.time!, EDT)).toEqual({
+      epochMs: Date.UTC(2026, 8, 27, 14, 31, 5, 120),
       source: 'exif-gps-utc',
     });
+  });
+
+  it('does not infer a zone beyond ±14 h', () => {
+    const n = normalizeExif({ ...ANDROID, GPSDateStamp: '2026:09:26' }); // 24 h apart
+    expect(n.time).toMatchObject({ kind: 'local' });
   });
 
   it('uses the GPS stamp alone when there is no original time', () => {
