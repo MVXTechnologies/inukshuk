@@ -258,6 +258,12 @@ class C2c(unittest.TestCase):
         self.assertEqual((rec['min'], rec['max'], rec['declared']), ('5a', '7a', 40))
         self.assertEqual(rec['rock'], 'anorthosite')
 
+    def test_plain_drops_image_embeds(self):
+        self.assertEqual(
+            c2c.plain('[img=282307 left]Weir - accès[/img]Paroi située à 120 km. [url=https://x.org]Lien[/url]'),
+            'Paroi située à 120 km. Lien',
+        )
+
     def test_access_time(self):
         self.assertEqual(c2c.access_minutes('1h30'), 90)
         self.assertEqual(c2c.access_minutes('1h'), 60)

@@ -39,7 +39,12 @@ def plain(text):
     """camptocamp markdown → plain text (links keep their label)."""
     if not text:
         return None
-    t = _LINK.sub(r'\1', text)
+    # Embedded images and their captions: the picture isn't shown, so its
+    # caption would only run into the text ("Weir - accèsParoi située…").
+    t = re.sub(r'\[img[^\]]*\].*?\[/img\]', ' ', text, flags=re.S)
+    t = re.sub(r'\[img[^\]]*\]', ' ', t)
+    t = re.sub(r'\[url=[^\]]*\](.*?)\[/url\]', r'\1', t, flags=re.S)
+    t = _LINK.sub(r'\1', t)
     t = _URL.sub(r'\1', t)
     t = re.sub(r'\[/?[a-z]+(?:=[^\]]*)?\]', '', t)  # [warning], [p], …
     t = _MARK.sub('', t)

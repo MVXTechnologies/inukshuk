@@ -133,7 +133,7 @@ export function searchLocal(
       name: c.name,
       latitude: c.lat,
       longitude: c.lng,
-      context: c.region ? `Climbing crag · ${c.region}` : 'Climbing crag',
+      ...(c.region ? { context: c.region } : {}),
     });
     // A common word ("lac") can match thousands: the ranking needs a few.
     if (++crags >= 50) break;

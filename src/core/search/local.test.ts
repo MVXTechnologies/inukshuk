@@ -133,7 +133,7 @@ describe('climbing crags', () => {
       { lang: 'en', origin: null },
     );
     expect(out.map((r) => [r.place.id, r.place.type, r.place.context])).toEqual([
-      ['crag:ob-1', 'crag', 'Climbing crag · Portneuf'],
+      ['crag:ob-1', 'crag', 'Portneuf'],
     ]);
   });
 
