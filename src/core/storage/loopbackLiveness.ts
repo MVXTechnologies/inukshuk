@@ -45,6 +45,28 @@ export type LoopbackSignal =
   /** A fresh server was started (and is, as of now, reachable). */
   | { kind: 'restarted' };
 
+/** Why the server's liveness is being checked. */
+export type VerifyReason = 'resume' | 'idle' | 'transport' | 'page-load';
+
+/**
+ * Is a dead listener found at this check the platform working as documented,
+ * rather than a fault worth a report (#582)?
+ *
+ * On iOS, a listener found dead by the check made on returning from the
+ * background is exactly TN2277: the OS reclaimed the suspended app's
+ * listening socket. The field reports (`pdf-rasterizer-server-restart`,
+ * "(resume); restarted on the same port") confirmed the #392 hypothesis, and
+ * the restart that follows is the designed recovery — the user sees nothing.
+ * Reporting it on every such resume only files noise. A death found any other
+ * way (an idle re-check, a transport failure, a page that would not load),
+ * or on Android, which does not reclaim a background app's sockets, is still
+ * unexplained and still reported, as is a restart that fails or a spent
+ * restart budget.
+ */
+export function isExpectedServerDeath(reason: VerifyReason, platform: string): boolean {
+  return platform === 'ios' && reason === 'resume';
+}
+
 /** Health of a server that has just started. */
 export function startedHealth(now: number): LoopbackHealth {
   return { verifiedAt: now, backgroundedAt: null, restarts: [] };
