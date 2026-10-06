@@ -33,6 +33,19 @@ describe('buildLabel / latestBuild', () => {
     assert.equal(latestBuild(null), null);
     assert.equal(latestBuild([{ id: 'no runtime' }]), null);
   });
+
+  it('reads the runtime from either eas-cli JSON shape', () => {
+    // eas-cli 24+: runtime is an object (and the fingerprint hash is beside it).
+    const v24 = {
+      appVersion: '2.3.0',
+      runtime: { id: 'r', version: 'abc' },
+      fingerprint: { hash: 'abc' },
+    };
+    assert.equal(latestBuild([v24])?.runtimeVersion, 'abc');
+    assert.equal(latestBuild([{ fingerprint: { hash: 'def' } }])?.runtimeVersion, 'def');
+    // eas-cli 20: a top-level string.
+    assert.equal(latestBuild([{ runtimeVersion: 'ghi' }])?.runtimeVersion, 'ghi');
+  });
 });
 
 describe('changedSources', () => {

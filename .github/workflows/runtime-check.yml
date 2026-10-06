@@ -86,7 +86,7 @@ jobs:
           for p in ios android; do
             if eas build:list --platform "$p" --status finished --build-profile production \
               --limit 1 --json --non-interactive > "$OUT/store-$p.json" 2> "$OUT/store-$p.err"; then
-              node -e "const [b]=require('$OUT/store-$p.json'); console.log('$p:', b ? b.appVersion + ' (' + b.appBuildVersion + ') runtime ' + b.runtimeVersion : 'none')"
+              node -e "const [b]=require('$OUT/store-$p.json'); console.log('$p:', b ? b.appVersion + ' (' + b.appBuildVersion + ') runtime ' + (b.runtime?.version ?? b.runtimeVersion) : 'none')"
             else
               echo "::warning title=Native runtime::could not read the latest $p store build from EAS"
               tail -5 "$OUT/store-$p.err"

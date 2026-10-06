@@ -22,11 +22,22 @@ export function buildLabel(platform, build) {
   return `${build.appVersion ?? '?'} (${number} ${build.appBuildVersion ?? '?'})`;
 }
 
-/** The newest entry of an `eas build:list --json` result, or null. */
+/**
+ * The newest entry of an `eas build:list --json` result, with its runtime
+ * under `runtimeVersion`, or null. eas-cli changed the shape: up to v20 it is
+ * a top-level `runtimeVersion` string, from v24 an object `runtime.version`
+ * (with the same value as `fingerprint.hash` under the fingerprint policy).
+ */
 export function latestBuild(list) {
   if (!Array.isArray(list) || list.length === 0) return null;
   const build = list[0];
-  return build && typeof build.runtimeVersion === 'string' ? build : null;
+  if (!build || typeof build !== 'object') return null;
+  const runtimeVersion = [
+    build.runtimeVersion,
+    build.runtime?.version,
+    build.fingerprint?.hash,
+  ].find((v) => typeof v === 'string' && v !== '');
+  return runtimeVersion ? { ...build, runtimeVersion } : null;
 }
 
 /** Fingerprint sources that differ between two `fingerprint:generate` results. */
