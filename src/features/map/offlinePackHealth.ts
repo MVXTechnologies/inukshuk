@@ -11,7 +11,7 @@ import { useSettingsStore } from '@state/settingsStore';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { MAP_PACK_FORMAT } from './mapStyle';
-import { packStyle } from './packStyle';
+import { packStyle, type PackExtensions } from './packStyle';
 
 /**
  * Offline-pack health (architecture review P1-2): a pack stores its tiles
@@ -24,12 +24,16 @@ import { packStyle } from './packStyle';
 
 /**
  * Every URL template a pack of this region's kind would carry if downloaded
- * today (every published extension included), or null for a kind no longer
- * drawn (the retired relief base map).
+ * today (by default every published extension included; `'none'`: the base
+ * layer only), or null for a kind no longer drawn (the retired relief map).
  */
-export function currentPackUrls(tileUrl: string, region: OfflineRegion): UrlTemplates | null {
+export function currentPackUrls(
+  tileUrl: string,
+  region: OfflineRegion,
+  extensions: Exclude<PackExtensions, 'settings'> = 'all',
+): UrlTemplates | null {
   if (region.basemap === 'relief') return null;
-  return styleUrlTemplates(packStyle(tileUrl, region.basemap, region.format, 'all'));
+  return styleUrlTemplates(packStyle(tileUrl, region.basemap, region.format, extensions));
 }
 
 /**
@@ -75,8 +79,10 @@ export function regionUpdateLayer(tileUrl: string, region: OfflineRegion): Downl
 /**
  * The ids of the offline regions that need downloading again. Also completes
  * the migration for packs that recorded no templates and had no saved style to
- * read them from: those are taken to match today's templates and stamped so,
- * once — a later template change then flags them like any other pack.
+ * read them from: those are taken to match today's BASE-LAYER templates and
+ * stamped so, once — a later template change then flags them like any other
+ * pack. Only the base layer: nothing says which extensions such a pack holds,
+ * and stamping one it never had would flag it when that extension moves.
  */
 export function useOfflinePackHealth(): ReadonlySet<string> {
   const regions = useOfflineStore((s) => s.regions);
@@ -89,7 +95,7 @@ export function useOfflinePackHealth(): ReadonlySet<string> {
     const stamps: Record<string, UrlTemplates> = {};
     for (const region of regions) {
       if (region.urls !== undefined || !region.complete) continue;
-      const current = currentPackUrls(tileUrl, region);
+      const current = currentPackUrls(tileUrl, region, 'none');
       if (current !== null) stamps[region.id] = current;
     }
     if (Object.keys(stamps).length > 0) void useOfflineStore.getState().stampUrls(stamps);

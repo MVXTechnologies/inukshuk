@@ -138,8 +138,17 @@ describe('useOfflinePackHealth', () => {
     });
     expect(stampUrls).toHaveBeenCalledTimes(1);
     expect(stampUrls).toHaveBeenCalledWith({
-      legacy: currentPackUrls(DEFAULT_TILE_URL, region('legacy')),
+      legacy: currentPackUrls(DEFAULT_TILE_URL, region('legacy'), 'none'),
     });
+  });
+
+  it('stamps only the base layer: a legacy pack may hold no extension tiles at all', async () => {
+    useOfflineStore.setState({ regions: [region('legacy')] });
+    await renderHook(() => useOfflinePackHealth());
+    const stamped = (stampUrls.mock.calls[0] as unknown as [Record<string, object>])[0].legacy;
+    expect(stamped).toHaveProperty(['source:basemap-vector']);
+    expect(stamped).not.toHaveProperty(['source:geodetic']);
+    expect(stamped).not.toHaveProperty(['source:tides']);
   });
 });
 

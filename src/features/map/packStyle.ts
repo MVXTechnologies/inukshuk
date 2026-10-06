@@ -6,11 +6,13 @@ import { buildOsmStyle } from './mapStyle';
 
 /**
  * Which extensions' tiles a pack style carries: those the settings say ride
- * along (`'settings'`, what a download uses), or every published one
- * (`'all'`, the full set of templates a pack of this kind could hold today —
- * what the offline-maps health check compares a pack's record with).
+ * along (`'settings'`, what a download uses), every published one (`'all'`,
+ * the full set of templates a pack of this kind could hold today — what the
+ * offline-maps health check compares a pack's record with), or none
+ * (`'none'`, the base layer alone — what a legacy pack is stamped with, as
+ * nothing says which extensions it holds).
  */
-export type PackExtensions = 'settings' | 'all';
+export type PackExtensions = 'settings' | 'all' | 'none';
 
 /**
  * The style a pack downloads through: MapLibre stores every tile and glyph
@@ -30,14 +32,18 @@ export function packStyle(
   // overlay works offline in every region downloaded from now on.
   // Only once the Tide stations extension is installed.
   const all = extensions === 'all';
-  const tideTiles = all || useSettingsStore.getState().tidesInstalledAt > 0 ? tideTilesUrl() : null;
+  const none = extensions === 'none';
+  const tideTiles =
+    !none && (all || useSettingsStore.getState().tidesInstalledAt > 0) ? tideTilesUrl() : null;
   const geodeticTiles = all ? geodeticTilesUrl() : null;
   const geodetic = {
-    ...(all
-      ? geodeticTiles !== null
-        ? { geodetic: { tiles: geodeticTiles, dark: false } }
-        : {}
-      : geodeticPackOption()),
+    ...(none
+      ? {}
+      : all
+        ? geodeticTiles !== null
+          ? { geodetic: { tiles: geodeticTiles, dark: false } }
+          : {}
+        : geodeticPackOption()),
     ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),
   };
   if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
