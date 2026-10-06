@@ -7,8 +7,11 @@ import {
   type PdfDetailViewport,
 } from '@core/geo/pdfDetail';
 import { chooseFallbackDetails } from '@core/geo/detailFallback';
+import { planDetailBlocks } from '@core/geo/pdfDetailBlocks';
+import { chooseRasters } from '@core/geo/pdfRasterChoice';
 import { bboxFromLngLats } from '@core/geo/geomath';
 import {
+  blockTileKey,
   coverFromCache,
   parseTileKey,
   pdfTileBudgets,
@@ -27,6 +30,7 @@ import { overlayDetailStatusKey } from '@core/library/overlayStatus';
 import type { MapDocument } from '@core/models';
 import * as storage from '@data/storage';
 import { reportError } from '@lib/errorReporting';
+import { PDF_BENCH, pdfBenchEmit } from '@lib/pdfBenchProbe';
 import { useOverlayStatusStore } from '@state/overlayStatusStore';
 import { useLibraryStore } from '@state/libraryStore';
 import { isPdfRenderCancellation, PdfRenderNotStartedError } from './pdfRenderFailure';
@@ -62,6 +66,8 @@ interface Target {
   nativeGeometry: { expectedPageWidthPt: number; expectedPageHeightPt: number } | null;
   revision: string;
   plan: PdfDetailPlan;
+  /** The overview's corners: the page placement every tile and block follows. */
+  corners: PdfOverlay['coordinates'];
   bbox: PdfOverlay['bbox'];
   /** The overview's "See-through white" level; tiles are drawn to match it. */
   whiteKey: WhiteKeyLevel;
@@ -69,6 +75,35 @@ interface Target {
 const overviewKey = (o: PdfOverlay) => JSON.stringify([o.id, o.imageUri, o.coordinates]);
 /** A page's file revision: a re-import or replacement starts its backoff over. */
 const pageRevision = (t: Target) => `${t.fileUri}@${t.revision}`;
+
+/**
+ * Delay between a camera settle and the first render. The map reports one
+ * settle per gesture, so this only coalesces the few re-renders that follow
+ * it (overview list, layout); it used to be 250 ms, a quarter of the whole
+ * one-second budget for a sharp view.
+ */
+export const DETAIL_START_DELAY_MS = 40;
+
+/** Largest neighbour-ring block (background work), in raster pixels. */
+const RING_BLOCK_PIXELS = 1.5 * 1024 * 1024;
+
+/** Cached rasters (tiles or blocks) holding `cell` at its level, at least as wide. */
+function holdersOf(cache: Map<string, Detail>, pageKey: string, cell: TileCell): Detail[] {
+  const out: Detail[] = [];
+  for (const d of cache.values()) {
+    const c = d.cell;
+    if (d.pageKey !== pageKey || c === null || c.divisions !== cell.divisions) continue;
+    if (c.width < cell.width) continue;
+    if (
+      cell.x >= c.x &&
+      cell.x < c.x + (c.cols ?? 1) &&
+      cell.y >= c.y &&
+      cell.y < c.y + (c.rows ?? 1)
+    )
+      out.push(d);
+  }
+  return out;
+}
 
 /** One in-flight refinement; later camera positions replace waiting work. */
 export function usePdfDetails(
@@ -84,7 +119,8 @@ export function usePdfDetails(
   const [displayed, setDisplayed] = useState<Detail[]>([]);
   // After the OS warns about memory: no neighbour ring, a small cache.
   const [lowMemory, setLowMemory] = useState(false);
-  const budgets = pdfTileBudgets(lowMemory);
+  const viewportPixels = viewportWidthPx * (viewport?.heightPx ?? viewportWidthPx * 2);
+  const budgets = pdfTileBudgets(lowMemory, viewportPixels);
   const VISIBLE_PIXELS = budgets.visiblePixels;
   const tileOptions = {
     prefetchMargin: budgets.prefetchMargin,
@@ -183,6 +219,7 @@ export function usePdfDetails(
           nativeGeometry: nativePageGeometry(geo),
           revision: String(map.importedAt),
           plan,
+          corners: o.coordinates,
           bbox: o.bbox,
           whiteKey,
         });
@@ -218,7 +255,7 @@ export function usePdfDetails(
   useEffect(() => {
     const w = worker.current;
     const epoch = w.epoch;
-    w.budgets = pdfTileBudgets(lowMemory);
+    w.budgets = pdfTileBudgets(lowMemory, viewportPixels);
     const statusKeys = new Set(
       (JSON.parse(key) as Target[])
         .filter((target) => !target.prefetch)
@@ -261,36 +298,52 @@ export function usePdfDetails(
       const fresh = new Map<string, Detail>();
       const covered = new Set<string>();
       let pixels = 0;
-      // Exact tiles first, then stand-ins with what is left of the budget: a
-      // stand-in (four children) costs up to four times the texture of the
-      // tile it replaces and must never crowd out a tile already rendered.
-      for (const exactPass of [true, false]) {
-        for (const target of w.desired) {
-          const exact = w.cache.get(target.key);
-          if ((exact !== undefined) !== exactPass) continue;
-          // A wider raster of the same cell, or its four children from the
-          // previous zoom, show it at least as sharp: zooming out reuses them
-          // instead of rendering (and blurring) again.
-          const cover = exact
-            ? [exact]
-            : target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
-          if (!cover) continue;
-          if (target.prefetch) {
-            covered.add(target.key);
-            continue;
-          }
-          const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
-          const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
-          // Native result dimensions are authoritative, even if an unexpected
-          // backend result is larger than the planner's requested raster.
-          if (pixels + addedPixels > visiblePixels) continue;
-          pixels += addedPixels;
-          for (const detail of added) fresh.set(detail.cacheKey, detail);
+      // Rasters of the cells themselves first (a tile, a wider tile or a
+      // block holding the cell at its level), then stand-ins with what is
+      // left of the budget: a stand-in (four children) costs up to four
+      // times the texture of the tile it replaces and must never crowd out
+      // a tile already rendered.
+      const holdersByTarget = new Map<Target, Detail[]>();
+      for (const target of w.desired) {
+        const holders = target.cell ? holdersOf(w.cache, target.pageKey, target.cell) : [];
+        const own = w.cache.get(target.key);
+        if (own && !holders.includes(own)) holders.push(own);
+        if (holders.length === 0) continue;
+        if (target.prefetch) covered.add(target.key);
+        else holdersByTarget.set(target, holders);
+      }
+      // Which of them go on screen: as many wanted cells as the visible
+      // budget allows, so a block that is mostly off screen never crowds the
+      // cells the camera wants out (those cells render again instead).
+      const wanted = [...holdersByTarget];
+      const choice = chooseRasters(
+        wanted.map(([, holders]) => holders),
+        [...w.cache.values()].reverse(),
+        visiblePixels,
+      );
+      for (const d of choice.chosen) fresh.set(d.cacheKey, d);
+      pixels += choice.pixels;
+      for (const i of choice.covered) covered.add(wanted[i]![0].key);
+      for (const target of w.desired) {
+        if (covered.has(target.key)) continue;
+        // Its four children from the previous zoom show it at least as
+        // sharp: zooming out reuses them instead of rendering.
+        const cover = target.cell && coverFromCache(target.pageKey, target.cell, w.cache.values());
+        if (!cover) continue;
+        if (target.prefetch) {
           covered.add(target.key);
+          continue;
         }
+        const added = cover.filter((detail) => !fresh.has(detail.cacheKey));
+        const addedPixels = added.reduce((sum, detail) => sum + detail.pixels, 0);
+        // Native result dimensions are authoritative, even if an unexpected
+        // backend result is larger than the planner's requested raster.
+        if (pixels + addedPixels > visiblePixels) continue;
+        pixels += addedPixels;
+        for (const detail of added) fresh.set(detail.cacheKey, detail);
+        covered.add(target.key);
       }
       w.covered = covered;
-
       // Keep the detail already rendered until its replacement arrives (#344):
       // tiles of a page still on screen stay under the fresh ones. Cached
       // tiles are ordered least-recently-used first, so reverse for MRU.
@@ -315,6 +368,24 @@ export function usePdfDetails(
       );
       const current: Detail[] = [...keep, ...freshList];
       w.pinned = new Set(current.map((detail) => detail.imageUri));
+      if (PDF_BENCH) {
+        const visible = w.desired.filter((target) => !target.prefetch);
+        pdfBenchEmit({
+          kind: 'details',
+          at: Date.now(),
+          bounds: boundsKey,
+          visible: visible.length,
+          covered: visible.filter((target) => covered.has(target.key)).length,
+          shown: current.map((detail) => detail.imageUri),
+          resolution: Math.min(
+            ...visible.map((t) =>
+              t.cell && t.plan.pageDensityPx
+                ? (t.cell.width * t.cell.divisions) / t.plan.pageDensityPx
+                : Infinity,
+            ),
+          ),
+        });
+      }
       setDisplayed((previous) =>
         previous.length === current.length &&
         previous.every((detail, index) => detail === current[index])
@@ -324,6 +395,66 @@ export function usePdfDetails(
     };
     const prune = (budget: number) =>
       trimTileCache(w.cache, w.pinned, w.desired, w.budgets.cacheFiles, budget);
+    /**
+     * What to render for `target`: the block (`@core/geo/pdfDetailBlocks`)
+     * holding its cell among every cell of the same page, level and kind
+     * (visible or ring) that is still to draw — one renderer call for many
+     * cells, at the cells' own scale. A lone cell (or a crop off the grid)
+     * renders as itself, under its own key.
+     */
+    const blockJob = (target: Target, snapshot: Target[], drawn: ReadonlySet<string>) => {
+      const single = {
+        cacheKey: target.key,
+        id: target.id,
+        cell: target.cell,
+        crop: target.plan.crop,
+        targetWidthPx: target.plan.targetWidthPx,
+        coordinates: target.plan.coordinates,
+      };
+      const cell = target.cell;
+      if (cell === null) return single;
+      const peers = snapshot.filter(
+        (t) =>
+          t.prefetch === target.prefetch &&
+          t.pageKey === target.pageKey &&
+          t.cell !== null &&
+          t.cell.divisions === cell.divisions &&
+          t.cell.width === cell.width &&
+          (t === target || (!w.covered.has(t.key) && !drawn.has(t.key))),
+      );
+      const blocks = planDetailBlocks({
+        corners: target.corners,
+        page: { width: target.pageWidthPt, height: target.pageHeightPt },
+        divisions: cell.divisions,
+        cellWidthPx: cell.width,
+        cells: peers.map((t) => t.cell!),
+        focus: { x: cell.x + 0.5, y: cell.y + 0.5 },
+        // A render cannot be interrupted: keep ring blocks small enough that
+        // a gesture landing outside the ring waits little for the one in flight.
+        ...(target.prefetch ? { maxPixels: RING_BLOCK_PIXELS } : {}),
+      });
+      const block = blocks.find(
+        (b) => cell.x >= b.x && cell.x < b.x + b.cols && cell.y >= b.y && cell.y < b.y + b.rows,
+      );
+      if (!block || (block.cols === 1 && block.rows === 1)) return single;
+      const blockCell = {
+        divisions: cell.divisions,
+        x: block.x,
+        y: block.y,
+        width: cell.width,
+        cols: block.cols,
+        rows: block.rows,
+      };
+      const tileKey = blockTileKey(blockCell);
+      return {
+        cacheKey: `${target.pageKey}|${tileKey}`,
+        id: `${target.parentId}:tile:${tileKey}`,
+        cell: blockCell as TileCell,
+        crop: block.crop,
+        targetWidthPx: block.targetWidthPx,
+        coordinates: block.coordinates,
+      };
+    };
     // Reuse every cached tile in the new desired snapshot immediately. Waiting
     // for a new center tile must not hide matching neighbors during a pan.
     publish();
@@ -332,8 +463,17 @@ export function usePdfDetails(
       if (w.busy || w.epoch !== epoch) return;
       w.busy = true;
       void (async () => {
+        // Cells a block rendered for this camera snapshot (across passes):
+        // never rendered twice, even when the visible budget cannot show
+        // the raster holding them, so a pass can always end.
+        let drawnFor: Target[] | null = null;
+        let drawn = new Set<string>();
         while (w.epoch === epoch) {
           const snapshot = w.desired;
+          if (drawnFor !== snapshot) {
+            drawnFor = snapshot;
+            drawn = new Set<string>();
+          }
           const attempted = new Set<string>();
           // Tiles skipped because stand-ins showed them when their turn came.
           const stoodIn: Target[] = [];
@@ -344,7 +484,10 @@ export function usePdfDetails(
             // its place is rendered before the ring starts.
             if (
               target.prefetch &&
-              stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))
+              // A cell an older raster stood for, which the visible budget
+              // then gave to newer ones: render it (once) rather than leave
+              // it blank behind a raster that is no longer shown.
+              stoodIn.some((t) => !w.covered.has(t.key) && !drawn.has(t.key))
             )
               break;
             let dispatched = false;
@@ -354,8 +497,9 @@ export function usePdfDetails(
                 w.cache.delete(target.key);
                 detail = undefined;
               }
-              // Already on screen through a wider raster or its children.
-              if (!detail && w.covered.has(target.key)) {
+              // Already on screen through a wider raster, a block or its
+              // children; or held by a block the budget could not show yet.
+              if (!detail && (w.covered.has(target.key) || drawn.has(target.key))) {
                 stoodIn.push(target);
                 continue;
               }
@@ -405,12 +549,13 @@ export function usePdfDetails(
                   source = { base64 };
                 }
                 if (w.desired !== snapshot || w.epoch !== epoch) break;
+                const job = blockJob(target, snapshot, drawn);
                 dispatched = true;
                 const result = await rasterize({
                   source,
                   pageIndex: target.pageIndex,
-                  targetWidthPx: target.plan.targetWidthPx,
-                  crop: target.plan.crop,
+                  targetWidthPx: job.targetWidthPx,
+                  crop: job.crop,
                   whiteKey: target.whiteKey,
                   // Neighbours wait behind anything the map is waiting for.
                   priority: target.prefetch ? 'background' : 'interactive',
@@ -432,38 +577,54 @@ export function usePdfDetails(
                   result.fileUri !== undefined
                     ? result.fileUri
                     : storage.writeOverlayPng(
-                        `pdf-detail-${fnv1a32(target.key)}-${++w.serial}`,
+                        `pdf-detail-${fnv1a32(job.cacheKey)}-${++w.serial}`,
                         result.pngDataUri.replace(/^data:image\/png;base64,/, ''),
                       );
                 const estimate = rasterCropGeometry(
                   target.pageWidthPt,
                   target.pageHeightPt,
-                  target.plan.targetWidthPx,
-                  target.plan.crop,
+                  job.targetWidthPx,
+                  job.crop,
                 );
                 const actualPixels = result.widthPx * result.heightPx;
                 detail = {
-                  cacheKey: target.key,
+                  cacheKey: job.cacheKey,
                   pageKey: target.pageKey,
-                  cell: target.cell,
+                  cell: job.cell,
                   pixels:
                     Number.isFinite(actualPixels) && actualPixels > 0
                       ? actualPixels
                       : estimate.widthPx * estimate.heightPx,
-                  id: target.id,
+                  id: job.id,
                   parentId: target.parentId,
                   overviewKey: target.overviewKey,
                   imageUri,
-                  coordinates: target.plan.coordinates,
-                  // The tile's own footprint: what it covers as a fallback.
-                  bbox: bboxFromLngLats(target.plan.coordinates),
+                  coordinates: job.coordinates,
+                  // The raster's own footprint: what it covers as a fallback.
+                  bbox: bboxFromLngLats(job.coordinates),
                 };
-                w.cache.set(target.key, detail);
+                w.cache.set(job.cacheKey, detail);
+                const jobCell = job.cell;
+                for (const t of snapshot) {
+                  const c = t.cell;
+                  if (
+                    t === target ||
+                    (jobCell !== null &&
+                      c !== null &&
+                      t.pageKey === target.pageKey &&
+                      c.divisions === jobCell.divisions &&
+                      c.x >= jobCell.x &&
+                      c.x < jobCell.x + (jobCell.cols ?? 1) &&
+                      c.y >= jobCell.y &&
+                      c.y < jobCell.y + (jobCell.rows ?? 1))
+                  )
+                    drawn.add(t.key);
+                }
                 w.backoff = recordSuccess(w.backoff, target.parentId);
               }
               // Touch LRU order. Cache stale completions, but never display them.
-              w.cache.delete(target.key);
-              w.cache.set(target.key, detail);
+              w.cache.delete(detail.cacheKey);
+              w.cache.set(detail.cacheKey, detail);
               // A stale completion may be useful on a later pan. Only tiles
               // belonging to the latest desired snapshot can become visible.
               publish();
@@ -531,7 +692,13 @@ export function usePdfDetails(
           if (w.desired === snapshot) {
             // A stand-in can lose its place to tiles rendered after it (the
             // visible budget): go round again for the tile it stood in for.
-            if (stoodIn.some((t) => !w.covered.has(t.key) && !w.cache.has(t.key))) continue;
+            if (
+              // A cell an older raster stood for, which the visible budget
+              // then gave to newer ones: render it (once) rather than leave
+              // it blank behind a raster that is no longer shown.
+              stoodIn.some((t) => !w.covered.has(t.key) && !drawn.has(t.key))
+            )
+              continue;
             for (const statusKey of attempted) {
               if (!failed.has(statusKey)) {
                 useOverlayStatusStore.getState().setStatus(statusKey, { phase: 'rendered' });
@@ -543,12 +710,12 @@ export function usePdfDetails(
       })().finally(() => {
         if (w.epoch === epoch) w.busy = false;
       });
-    }, 250);
+    }, DETAIL_START_DELAY_MS);
     return () => {
       clearTimeout(timer);
       clearLoading();
     };
-  }, [key, boundsKey, liveKey, lowMemory, rasterize, serverOrigin, enabled]);
+  }, [key, boundsKey, liveKey, lowMemory, viewportPixels, rasterize, serverOrigin, enabled]);
 
   useEffect(() => {
     const w = worker.current;
@@ -582,6 +749,23 @@ function trimTileCache(
 ): void {
   let pixels = [...cache.values()].reduce((sum, detail) => sum + detail.pixels, 0);
   const wanted = new Set(desired.map((target) => target.key));
+  for (const [cacheKey, detail] of cache) {
+    const c = detail.cell;
+    if (c === null || wanted.has(cacheKey) || (c.cols ?? 1) * (c.rows ?? 1) === 1) continue;
+    if (
+      desired.some(
+        (t) =>
+          t.pageKey === detail.pageKey &&
+          t.cell !== null &&
+          t.cell.divisions === c.divisions &&
+          t.cell.x >= c.x &&
+          t.cell.x < c.x + (c.cols ?? 1) &&
+          t.cell.y >= c.y &&
+          t.cell.y < c.y + (c.rows ?? 1),
+      )
+    )
+      wanted.add(cacheKey);
+  }
   for (const keepWanted of [true, false]) {
     for (const [cacheKey, detail] of cache) {
       if (cache.size <= maxFiles && pixels <= maxPixels) return;

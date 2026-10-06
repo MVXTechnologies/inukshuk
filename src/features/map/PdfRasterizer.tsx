@@ -1,6 +1,7 @@
 import { PdfLoopbackUnavailableError, PdfRenderNotStartedError } from './pdfRenderFailure';
 import { type PdfCrop } from '@core/geo/pdfDetail';
 import { PDF_LAYER_RUNTIME_SOURCE } from '@core/geo/pdfLayers';
+import { isPageLevelUnsupported, persistentNativeGeometryKey } from '@core/geo/nativePdfSupport';
 import { PDF_RASTER_ROTATION } from '@core/geo/geopdf/orientation';
 import {
   PDF_WHITE_KEY_RUNTIME_SOURCE,
@@ -64,7 +65,9 @@ import {
 } from '@data/localServer';
 import { nativePdfAvailable, renderNativePdfCrop, deleteNativePdfOutput } from '@data/nativePdf';
 import { beginPdfRender, finishPdfRender } from '@data/pdfRenderRecovery';
+import { loadVerifiedNativePages, saveVerifiedNativePages } from '@data/nativePdfGeometry';
 import { reportError } from '@lib/errorReporting';
+import { PDF_BENCH, pdfBenchEmit, pdfBenchId } from '@lib/pdfBenchProbe';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import React, {
@@ -261,6 +264,26 @@ function nativeRequestKey(args: Required<RasterizeArgs>): string | null {
     : null;
 }
 const NATIVE_GEOMETRY_CACHE_LIMIT = 16;
+
+/** The layer-plan code a persisted verification was made with (see below). */
+const LAYER_PLAN_VERSION = fnv1a32(PDF_LAYER_RUNTIME_SOURCE);
+
+/** A verification that outlives this launch: the page, not the served URL. */
+function persistedGeometryKey(args: Required<RasterizeArgs>): string | null {
+  const page = args.nativePage;
+  return page
+    ? persistentNativeGeometryKey(
+        {
+          fileUri: page.fileUri,
+          revision: page.revision,
+          pageIndex: args.pageIndex,
+          widthPt: page.expectedPageWidthPt,
+          heightPt: page.expectedPageHeightPt,
+        },
+        LAYER_PLAN_VERSION,
+      )
+    : null;
+}
 
 interface PendingRequest {
   backendDispatched: boolean;
@@ -594,8 +617,11 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
   // same hold key as the last one (same served URL and file revision) reuses
   // the open document and page, whose operator list pdf.js keeps, and only
   // paints. Released after HOLD_IDLE_MS without a matching request, on any
-  // other request, and on every failure.
-  var HOLD_IDLE_MS = 8000;
+  // other request, on every failure, and when RN asks (__pdfDropHeld: the app
+  // went to the background or the OS warned about memory). 30 s, not 8: a
+  // person looks at a view for longer than 8 s, and the next pan then paid
+  // the whole open again (iPhone 17 simulator, US Topo: ~0.9 s vs ~0.2 s).
+  var HOLD_IDLE_MS = 30000;
   var held = null;
   function dropHeld() {
     if (!held) return;
@@ -604,6 +630,7 @@ function buildHtml(pdfMainSource: string, pdfWorkerSource: string): string {
     clearTimeout(h.timer);
     Promise.resolve().then(function () { return h.task.destroy(); }).catch(function () {});
   }
+  window.__pdfDropHeld = dropHeld;
 
   function renderOnce(id, pageIndex, targetWidthPx, input, attempt, crop, nativePage, look) {
     var holdKey = input.url && look && typeof look.hold === 'string' && look.hold ? look.hold : null;
@@ -924,6 +951,41 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const nativeActiveRef = useRef<string | null>(null);
   const verifiedGeometryRef = useRef(new Set<string>());
   const unsupportedRequestsRef = useRef(new Set<string>());
+  // Verifications from earlier launches: a verified page's crops go native
+  // at once, even before the pdf.js page has loaded (a cold launch).
+  const persistedGeometryRef = useRef<Set<string> | null>(null);
+  const persistedGeometry = useCallback(() => {
+    if (persistedGeometryRef.current === null)
+      persistedGeometryRef.current = new Set(loadVerifiedNativePages());
+    return persistedGeometryRef.current;
+  }, []);
+  /** Did a native renderer refuse this page itself (this launch or an earlier one)? */
+  const refusedPage = useCallback(
+    (args: Required<RasterizeArgs>) => {
+      const key = nativeGeometryKey(args);
+      if (key !== null && unsupportedPagesRef.current.has(key)) return true;
+      const persisted = persistedGeometryKey(args);
+      return persisted !== null && persistedGeometry().has(`U${persisted}`);
+    },
+    [persistedGeometry],
+  );
+  /** May this request go to the native renderer without the pdf.js page? */
+  const nativeReady = useCallback(
+    (args: Required<RasterizeArgs>) => {
+      if (!args.nativePage || whiteKeyStrength(args.whiteKey) > 0) return false;
+      const key = nativeGeometryKey(args);
+      if (key === null || refusedPage(args)) return false;
+      const requestKey = nativeRequestKey(args);
+      if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) return false;
+      if (verifiedGeometryRef.current.has(key)) return true;
+      const persisted = persistedGeometryKey(args);
+      return persisted !== null && persistedGeometry().has(persisted);
+    },
+    [persistedGeometry, refusedPage],
+  );
+  // Pages (geometry keys) a native renderer refused for the page itself: their
+  // crops go straight to pdf.js (`@core/geo/nativePdfSupport`).
+  const unsupportedPagesRef = useRef(new Set<string>());
   const pumpQueueRef = useRef<() => void>(() => {});
   const mountedRef = useRef(true);
   const activeRequestRef = useRef<string | null>(null);
@@ -1093,6 +1155,19 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           }
           clearTimeout(pending.timeout);
           pendingRef.current.delete(id);
+          const persisted = persistedGeometryKey(pending.args);
+          if (persisted !== null) {
+            // Same bound and recency order as the in-memory cache.
+            const set = persistedGeometry();
+            const known = set.delete(persisted);
+            set.add(persisted);
+            while (set.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+              const oldest = set.values().next().value;
+              if (oldest === undefined) break;
+              set.delete(oldest);
+            }
+            if (!known) saveVerifiedNativePages([...set]);
+          }
           if (cacheKey !== null) {
             const cache = verifiedGeometryRef.current;
             cache.delete(cacheKey);
@@ -1120,6 +1195,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         } catch (error) {
           if (cacheKey !== null) verifiedGeometryRef.current.delete(cacheKey);
+          const persisted = persistedGeometryKey(pending.args);
+          if (persisted !== null && persistedGeometry().delete(persisted))
+            saveVerifiedNativePages([...persistedGeometry()]);
           if (
             mountedRef.current &&
             pendingRef.current.get(id) === pending &&
@@ -1132,6 +1210,29 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             // Unsupported can describe either the page encoding or this crop's
             // decoder budget. Cache only the exact crop and output width, never
             // disable valid small crops after a full-page request is refused.
+            const reason = error instanceof Error ? error.message : String(error);
+            if (cacheKey !== null && isPageLevelUnsupported(reason)) {
+              // Remembered across launches too: on iOS every vector page is
+              // refused, and the first crop after a launch would otherwise
+              // open the page in pdf.js twice.
+              const persisted = persistedGeometryKey(pending.args);
+              if (persisted !== null && !persistedGeometry().has(`U${persisted}`)) {
+                const set = persistedGeometry();
+                set.add(`U${persisted}`);
+                // The same bound as the in-memory refusals, oldest first.
+                const refusals = [...set].filter((k) => k.startsWith('U'));
+                for (const old of refusals.slice(0, -NATIVE_GEOMETRY_CACHE_LIMIT)) set.delete(old);
+                saveVerifiedNativePages([...set]);
+              }
+              const pages = unsupportedPagesRef.current;
+              pages.delete(cacheKey);
+              pages.add(cacheKey);
+              while (pages.size > NATIVE_GEOMETRY_CACHE_LIMIT) {
+                const oldest = pages.values().next().value;
+                if (oldest === undefined) break;
+                pages.delete(oldest);
+              }
+            }
             if (requestKey !== null) {
               const unsupported = unsupportedRequestsRef.current;
               unsupported.delete(requestKey);
@@ -1179,13 +1280,15 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       })();
     },
-    [keyNativeTile],
+    [keyNativeTile, persistedGeometry],
   );
 
   const pumpQueue = useCallback(() => {
-    if (busyRef.current || nativeActiveRef.current !== null || !readyRef.current) {
-      return;
-    }
+    if (busyRef.current || nativeActiveRef.current !== null) return;
+    // The pdf.js page is only needed for pdf.js work and first verifications:
+    // a crop of a verified page goes native even while the page loads.
+    const first = queueRef.current[0];
+    if (!readyRef.current && !(first && nativeReady(first.args))) return;
     // A liveness check pumps again when it is done.
     if (verifyingRef.current !== null) return;
     const head = queueRef.current[0];
@@ -1226,11 +1329,13 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     // Check at dispatch: an identical request may already be queued when
     // the first probe reports an unsupported encoding or decoder budget.
     const requestKey = nativeRequestKey(args);
-    if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) {
+    if (cachedKey !== null && refusedPage(args)) {
+      args.nativePage = null;
+    } else if (requestKey !== null && unsupportedRequestsRef.current.has(requestKey)) {
       unsupportedRequestsRef.current.delete(requestKey);
       unsupportedRequestsRef.current.add(requestKey);
       args.nativePage = null;
-    } else if (cachedKey !== null && verifiedGeometryRef.current.has(cachedKey) && nativePending) {
+    } else if (cachedKey !== null && nativePending && nativeReady(args)) {
       startNative(id, nativePending);
       return;
     }
@@ -1286,7 +1391,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     wv.injectJavaScript(
       `window.__pdfRender && window.__pdfRender(${idLiteral}, ${args.pageIndex}, ${args.targetWidthPx}, null, ${JSON.stringify(args.crop)}, ${JSON.stringify(args.nativePage)}, ${lookLiteral}); true;`,
     );
-  }, [startNative]);
+  }, [startNative, nativeReady, refusedPage]);
 
   // Whenever the engine becomes ready (initial load or after a reload), drain
   // any queued requests.
@@ -1610,6 +1715,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
         signalHealth({ kind: 'background' });
+        // A held document (parsed page, decoded images) is memory the OS
+        // may reclaim the app for while it is suspended.
+        if (readyRef.current)
+          webviewRef.current?.injectJavaScript(
+            'window.__pdfDropHeld && window.__pdfDropHeld(); true;',
+          );
         return;
       }
       if (state !== 'active') return;
@@ -1617,7 +1728,16 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       signalHealth({ kind: 'foreground' });
       if (returning) void verifyServerRef.current('resume');
     });
-    return () => subscription.remove();
+    const memory = AppState.addEventListener('memoryWarning', () => {
+      if (readyRef.current)
+        webviewRef.current?.injectJavaScript(
+          'window.__pdfDropHeld && window.__pdfDropHeld(); true;',
+        );
+    });
+    return () => {
+      subscription.remove();
+      memory.remove();
+    };
   }, [signalHealth]);
 
   const handleHttpError = useCallback(
@@ -1637,7 +1757,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     pumpQueueRef.current = pumpQueue;
   }, [pumpQueue]);
 
-  const rasterize = useCallback<RasterizeFn>(
+  const enqueue = useCallback<RasterizeFn>(
     (args) => {
       return new Promise<RasterResult>((resolve, reject) => {
         if (!mountedRef.current) {
@@ -1688,6 +1808,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
             if (nativeActiveRef.current === id) {
               const key = nativeGeometryKey(normalized);
               if (key !== null) verifiedGeometryRef.current.delete(key);
+              const persisted = persistedGeometryKey(normalized);
+              if (persisted !== null && persistedGeometry().delete(persisted))
+                saveVerifiedNativePages([...persistedGeometry()]);
               // PdfRenderer cannot be interrupted by replacing a WebView. Keep
               // queue ownership until its promise settles; delete late output.
               return;
@@ -1746,9 +1869,55 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         pumpQueueRef.current();
       });
     },
-    [replaceEngine],
+    [replaceEngine, persistedGeometry],
   );
 
+  const rasterize = useCallback<RasterizeFn>(
+    (args) => {
+      if (!PDF_BENCH) return enqueue(args);
+      const id = pdfBenchId();
+      const at = Date.now();
+      pdfBenchEmit({
+        kind: 'raster-start',
+        id,
+        at,
+        priority: args.priority ?? 'interactive',
+        targetWidthPx: args.targetWidthPx ?? DEFAULT_TARGET_WIDTH_PX,
+        crop: !!args.crop,
+        native: !!args.nativePage,
+      });
+      return enqueue(args).then(
+        (result) => {
+          pdfBenchEmit({
+            kind: 'raster-end',
+            id,
+            at: Date.now(),
+            ok: true,
+            ms: Date.now() - at,
+            path: result.fileUri !== undefined ? 'file' : 'data',
+            loadMs: result.loadMs,
+            renderMs: result.renderMs,
+            widthPx: result.widthPx,
+            heightPx: result.heightPx,
+          });
+          return result;
+        },
+        (error: unknown) => {
+          pdfBenchEmit({
+            kind: 'raster-end',
+            id,
+            at: Date.now(),
+            ok: false,
+            ms: Date.now() - at,
+            path: 'data',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        },
+      );
+    },
+    [enqueue],
+  );
   const serverOrigin = useCallback<ServerOriginFn>(async () => {
     while (mountedRef.current) {
       const settled = settledRef.current;
@@ -1763,6 +1932,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
     const pending = pendingRef.current;
     const verifiedGeometry = verifiedGeometryRef.current;
     const unsupportedRequests = unsupportedRequestsRef.current;
+    const unsupportedPages = unsupportedPagesRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -1774,6 +1944,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.clear();
       verifiedGeometry.clear();
       unsupportedRequests.clear();
+      unsupportedPages.clear();
       // StrictMode can replay setup on these same refs. Discard abandoned JS
       // queue entries, but never release an unfinished native operation.
       queueRef.current = [];

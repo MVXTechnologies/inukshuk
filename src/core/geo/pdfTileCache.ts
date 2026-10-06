@@ -16,23 +16,45 @@
  * (`detailFallback`) until the replacement lands.
  */
 
-/** One grid cell at one raster width; the parsed form of a plan's `tileKey`. */
+/**
+ * One grid cell at one raster width; the parsed form of a plan's `tileKey`.
+ * A block raster (`pdfDetailBlocks`) spans `cols` x `rows` cells from
+ * (`x`, `y`), each drawn `width` px wide; a plain tile is a 1 x 1 block.
+ */
 export interface TileCell {
   divisions: number;
   x: number;
   y: number;
   width: number;
+  cols?: number;
+  rows?: number;
 }
 
-/** `"divisions:x:y:width"` → its parts, or null for anything else. */
+/** The key of a block raster: a tile key plus its span, `"d:x:y:width:COLSxROWS"`. */
+export function blockTileKey(cell: Required<TileCell>): string {
+  return `${cell.divisions}:${cell.x}:${cell.y}:${cell.width}:${cell.cols}x${cell.rows}`;
+}
+
+/** `"divisions:x:y:width"` (or a block key) → its parts, or null for anything else. */
 export function parseTileKey(tileKey: string | undefined): TileCell | null {
   if (tileKey === undefined) return null;
   const parts = tileKey.split(':');
-  if (parts.length !== 4) return null;
-  const [divisions, x, y, width] = parts.map(Number) as [number, number, number, number];
+  if (parts.length !== 4 && parts.length !== 5) return null;
+  const [divisions, x, y, width] = parts.slice(0, 4).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+  ];
   if (![divisions, x, y, width].every((n) => Number.isInteger(n) && n >= 0)) return null;
   if (divisions < 1 || x >= divisions || y >= divisions || width < 1) return null;
-  return { divisions, x, y, width };
+  if (parts.length === 4) return { divisions, x, y, width };
+  const span = /^(\d+)x(\d+)$/.exec(parts[4]!);
+  if (!span) return null;
+  const cols = Number(span[1]),
+    rows = Number(span[2]);
+  if (cols < 1 || rows < 1 || x + cols > divisions || y + rows > divisions) return null;
+  return { divisions, x, y, width, cols, rows };
 }
 
 /** What the cover search needs from a cached tile; the hook's `Detail` satisfies it. */
@@ -44,15 +66,23 @@ export interface CachedTile {
   pixels: number;
 }
 
-const sameCell = (a: TileCell, b: Omit<TileCell, 'width'>) =>
-  a.divisions === b.divisions && a.x === b.x && a.y === b.y;
+/** True when raster `a` (a cell or a block) contains cell (x, y) of its level. */
+const holds = (a: TileCell, divisions: number, x: number, y: number) =>
+  a.divisions === divisions &&
+  x >= a.x &&
+  x < a.x + (a.cols ?? 1) &&
+  y >= a.y &&
+  y < a.y + (a.rows ?? 1);
+const area = (a: TileCell) => (a.cols ?? 1) * (a.rows ?? 1);
 
 /**
  * Cached tiles that together show `cell` of `pageKey` at no less than its
  * requested density, or null when the cache cannot.
  *
- * Prefers one raster of the same cell (the narrowest one wide enough, the
- * least texture), then the four children of the next level down.
+ * Prefers one raster holding the same cell (a plain tile or a block; the
+ * narrowest wide enough, then the block holding the most cells, so the
+ * cells of one block all pick it and share one texture), then the four
+ * children of the next level down (each from any raster holding it).
  */
 export function coverFromCache<T extends CachedTile>(
   pageKey: string,
@@ -61,31 +91,42 @@ export function coverFromCache<T extends CachedTile>(
 ): T[] | null {
   let exact: T | null = null;
   let exactWidth = Infinity;
+  let exactArea = 0;
   const children: (T | null)[] = [null, null, null, null];
   const childWidths = [Infinity, Infinity, Infinity, Infinity];
+  const childAreas = [0, 0, 0, 0];
   const childDivisions = cell.divisions * 2;
   for (const tile of cached) {
     const c = tile.cell;
     if (tile.pageKey !== pageKey || c === null) continue;
-    if (sameCell(c, cell)) {
-      if (c.width >= cell.width && c.width < exactWidth) {
+    if (holds(c, cell.divisions, cell.x, cell.y)) {
+      if (
+        c.width >= cell.width &&
+        (c.width < exactWidth || (c.width === exactWidth && area(c) > exactArea))
+      ) {
         exact = tile;
         exactWidth = c.width;
+        exactArea = area(c);
       }
       continue;
     }
     if (c.divisions !== childDivisions || c.width * 2 < cell.width) continue;
-    const dx = c.x - cell.x * 2,
-      dy = c.y - cell.y * 2;
-    if (dx < 0 || dx > 1 || dy < 0 || dy > 1) continue;
-    const slot = dy * 2 + dx;
-    if (c.width < childWidths[slot]!) {
-      children[slot] = tile;
-      childWidths[slot] = c.width;
+    for (let slot = 0; slot < 4; slot++) {
+      const cx = cell.x * 2 + (slot % 2),
+        cy = cell.y * 2 + Math.floor(slot / 2);
+      if (!holds(c, childDivisions, cx, cy)) continue;
+      if (
+        c.width < childWidths[slot]! ||
+        (c.width === childWidths[slot] && area(c) > childAreas[slot]!)
+      ) {
+        children[slot] = tile;
+        childWidths[slot] = c.width;
+        childAreas[slot] = area(c);
+      }
     }
   }
   if (exact) return [exact];
-  if (children.every((child) => child !== null)) return children as T[];
+  if (children.every((child) => child !== null)) return [...new Set(children as T[])];
   return null;
 }
 
@@ -115,16 +156,30 @@ export interface PdfTileBudgets {
 const MI = 1024 * 1024;
 
 /**
+ * Texture budget for the tiles the camera asks for. The planner reserves it
+ * for the worst grid alignment of the view, so on a dense screen 6 Mi px left
+ * the tiles below the screen's own resolution: an iPhone 17 (1206 x 2622 px)
+ * got as little as 0.83 raster px per device px, a Pixel-class 1080 x 2400
+ * screen 0.95. Three times the screen's pixels (at least 6 Mi, at most 10 Mi)
+ * keeps every zoom at or above one raster pixel per device pixel on both.
+ */
+export function visibleBudget(viewportPixels: number): number {
+  if (!(viewportPixels > 0)) return 6 * MI;
+  return Math.min(10 * MI, Math.max(6 * MI, Math.ceil(3 * viewportPixels)));
+}
+
+/**
  * Limits for the device's memory state. On-screen textures (visible plus
  * fallback) cost GPU memory, so they are the same everywhere; prefetched and
  * cached tiles are files, not textures, and only cost disk and render time.
  * Once the OS has warned about memory the ring is dropped, the renderer stops
  * holding the document between tiles, the fallback shrinks and the cache holds little more than the visible set.
  */
-export function pdfTileBudgets(lowMemory: boolean): PdfTileBudgets {
+export function pdfTileBudgets(lowMemory: boolean, viewportPixels = 0): PdfTileBudgets {
+  const visiblePixels = visibleBudget(viewportPixels);
   if (lowMemory) {
     return {
-      visiblePixels: 6 * MI,
+      visiblePixels,
       fallbackPixels: 2 * MI,
       maxFallbackTiles: 8,
       prefetchMargin: 0,
@@ -136,7 +191,7 @@ export function pdfTileBudgets(lowMemory: boolean): PdfTileBudgets {
     };
   }
   return {
-    visiblePixels: 6 * MI,
+    visiblePixels,
     fallbackPixels: 6 * MI,
     maxFallbackTiles: 24,
     prefetchMargin: 1,

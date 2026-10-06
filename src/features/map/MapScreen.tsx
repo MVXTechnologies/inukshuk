@@ -185,6 +185,8 @@ import type { DrapeStyleInput } from '@core/terrain3d/drapeStyle';
 
 import { sceneLines, type TerrainLineSpec } from '@core/terrain3d/sceneInput';
 import { useTerrainQa } from './hooks/useTerrainQa';
+import { usePdfBench } from './hooks/usePdfBench';
+import { PDF_BENCH } from '@lib/pdfBenchProbe';
 import { useTiltRelief } from './hooks/useTiltRelief';
 import { useLocationTracking } from './useLocation';
 import { usePdfOverlays } from './usePdfOverlay';
@@ -1083,6 +1085,16 @@ export function MapScreen() {
     { heightPx: windLayout.height * pdfPixelRatio, bearing: mapBearing },
     isFocused,
   );
+  // Local perf builds only (EXPO_PUBLIC_PDF_BENCH=1): the time-to-sharp harness.
+  const benchFramesRef = useRef(0);
+  usePdfBench({
+    cameraRef,
+    settledBounds,
+    overlays,
+    details: pdfDetails,
+    renderedFramesRef,
+    framesRef: benchFramesRef,
+  });
   // Live distance + bearing to the destination pin (#97). Recomputed on every
   // fix, which is exactly what "live" means here — the maths is two trig
   // calls in `@core/geo/destination`, far cheaper than the fix that triggers it.
@@ -2393,6 +2405,13 @@ export function MapScreen() {
             onDidFinishRenderingFrameFully={() => {
               renderedFramesRef.current += 1;
             }}
+            onDidFinishRenderingFrame={
+              PDF_BENCH
+                ? () => {
+                    benchFramesRef.current += 1;
+                  }
+                : undefined
+            }
             // Wind particles track the camera at gesture rate; the handler is
             // only attached while the overlay is live (zero event traffic
             // otherwise — the map stays byte-identical to a windless one).

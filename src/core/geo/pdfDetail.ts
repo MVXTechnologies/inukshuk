@@ -29,6 +29,13 @@ export interface PdfDetailPlan {
    * until the camera moves onto it.
    */
   prefetch?: true;
+  /**
+   * Device pixels the whole page width spans on screen at this camera (the
+   * planner's sampling density): a cell `divisions` wide drawn
+   * `targetWidthPx` wide shows `targetWidthPx * divisions / pageDensityPx`
+   * raster pixels per device pixel.
+   */
+  pageDensityPx?: number;
 }
 
 /** Options for {@link planPdfDetailTiles}. */
@@ -49,6 +56,9 @@ export interface PdfDetailTileOptions {
  * most 1.33x the last) keeps a tile's key, and therefore its cached raster,
  * valid across small zoom changes instead of re-rendering on each one.
  */
+/** Raster width of a page's overview (`OVERLAY_TARGET_WIDTH_PX`): detail starts beyond it. */
+export const OVERVIEW_DENSITY_PX = 2048;
+
 export const PDF_TILE_WIDTH_LADDER: readonly number[] = [
   256, 384, 512, 640, 768, 1024, 1280, 1536, 2048, 2560, 3072,
 ];
@@ -355,7 +365,10 @@ export function planPdfDetailTiles(
         (by + ry) / page.height,
       ),
     );
-  if (!Number.isFinite(density) || density < 2048 * 1.4) return [];
+  // The 2048 px overview is enough only while it has at least one raster
+  // pixel per device pixel; past that (it used to wait for 1.4x) the sheet
+  // was shown magnified up to 1.4x, visibly soft at text and contours.
+  if (!Number.isFinite(density) || density <= OVERVIEW_DENSITY_PX) return [];
   let divisions = 2 ** Math.min(20, Math.max(0, Math.ceil(Math.log2(density / 768))));
   // Bound the inverse viewport span using both affine triangles' derivatives.
   // Unlike the clipped visible range, this depends only on zoom/frame and page
@@ -419,6 +432,7 @@ export function planPdfDetailTiles(
     return {
       crop,
       targetWidthPx: width,
+      pageDensityPx: density,
       tileKey: `${divisions}:${x}:${y}:${width}`,
       coordinates: [
         geo(crop.x0, crop.y0),

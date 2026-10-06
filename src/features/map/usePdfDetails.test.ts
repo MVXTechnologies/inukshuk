@@ -8,6 +8,7 @@ import type { MapDocument } from '@core/models';
 import type { PdfOverlay } from './usePdfOverlay';
 import { planPdfDetail, type PdfDetailPlan } from '@core/geo/pdfDetail';
 import { pdfTileBudgets } from '@core/geo/pdfTileCache';
+import { pageToMercator } from '@core/geo/pdfDetailBlocks';
 
 const BUDGETS = pdfTileBudgets(false);
 
@@ -83,6 +84,16 @@ const raster = { pngDataUri: 'data:image/png;base64,DETAIL' };
 const flush = async () => {
   await act(async () => {
     jest.advanceTimersByTime(300);
+  });
+};
+/** The shown raster (a tile or a block) holding grid cell `tileKey`, if any. */
+const heldBy = (shown: PdfOverlay[], tileKey: string) => {
+  const [d, x, y] = tileKey.split(':').map(Number) as [number, number, number];
+  return shown.find((o) => {
+    const m = /:tile:(\d+):(\d+):(\d+):(\d+)(?::(\d+)x(\d+))?$/.exec(o.id);
+    if (!m || Number(m[1]) !== d) return false;
+    const [bx, by, cols, rows] = [Number(m[2]), Number(m[3]), Number(m[5] ?? 1), Number(m[6] ?? 1)];
+    return x >= bx && x < bx + cols && y >= by && y < by + rows;
   });
 };
 beforeEach(() => {
@@ -302,16 +313,24 @@ it('cancels debounced refinement when focus leaves before dispatch', async () =>
   await view.unmount();
 });
 
-it('divides the six Mi-pixel visible budget by the number of eligible pages', async () => {
+it('divides the visible budget by the number of eligible pages', async () => {
   mockPlans.mockReturnValue([tile('a', 0.25)]);
-  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200));
+  // A 1200 x 900 device-pixel map: the floor of 6 Mi px applies.
+  const viewport = { heightPx: 900, bearing: 0 };
+  const v = await renderHook(() => usePdfDetails([map], [overview], bounds, 1200, viewport));
   await flush();
   expect(mockPlans.mock.calls.at(-1)?.[4]).toBe(6 * 1024 * 1024);
   await v.unmount();
   mockPlans.mockClear();
   const secondMap = { ...map, id: 'second' };
   const both = await renderHook(() =>
-    usePdfDetails([map, secondMap], [overview, { ...overview, id: 'second:0' }], bounds, 1200),
+    usePdfDetails(
+      [map, secondMap],
+      [overview, { ...overview, id: 'second:0' }],
+      bounds,
+      1200,
+      viewport,
+    ),
   );
   await flush();
   expect(mockPlans.mock.calls.slice(-2).map((c) => c[4])).toEqual([
@@ -320,6 +339,17 @@ it('divides the six Mi-pixel visible budget by the number of eligible pages', as
   ]);
   expect(new Set(both.result.current.map((d) => d.id)).size).toBe(2);
   await both.unmount();
+});
+
+it('gives a dense screen three times its pixels, so tiles stay at device resolution', async () => {
+  mockPlans.mockReturnValue([tile('a', 0.25)]);
+  // An iPhone 17 map frame: 1206 x 2622 device pixels.
+  const v = await renderHook(() =>
+    usePdfDetails([map], [overview], bounds, 1206, { heightPx: 2622, bearing: 0 }),
+  );
+  await flush();
+  expect(mockPlans.mock.calls.at(-1)?.[4]).toBe(Math.ceil(3 * 1206 * 2622));
+  await v.unmount();
 });
 
 it('bounds actual raster pixels during pan handoff and delayed settled cleanup', async () => {
@@ -425,34 +455,36 @@ it('consumes real planned tiles, prefetches the ring and pans onto it without re
     { initialProps: { b: bounds } },
   );
   await flush();
-  // Only the visible tiles are shown; the ring is rendered (at background
-  // priority, after them) but kept off screen.
-  expect(v.result.current.map((d) => d.id)).toEqual(visible.map((p) => `map:0:tile:${p.tileKey}`));
-  expect(mockRasterize).toHaveBeenCalledTimes(expected.length);
+  // The visible cells are drawn as blocks (one renderer call per block, not
+  // per cell) and shown; the ring is rendered after them, at background
+  // priority, and kept off screen.
+  for (const p of visible) expect(heldBy(v.result.current, p.tileKey!)).toBeDefined();
+  const visibleCalls = mockRasterize.mock.calls.filter(([args]) => args.priority === 'interactive');
+  expect(visibleCalls.length).toBeLessThan(visible.length);
   const priorities = mockRasterize.mock.calls.map(([args]) => args.priority);
-  expect(priorities.slice(0, visible.length).every((p) => p === 'interactive')).toBe(true);
-  expect(priorities.slice(visible.length).every((p) => p === 'background')).toBe(true);
+  expect(priorities.slice(0, visibleCalls.length).every((p) => p === 'interactive')).toBe(true);
+  expect(priorities.slice(visibleCalls.length).every((p) => p === 'background')).toBe(true);
+  expect(mockRasterize.mock.calls.length).toBeLessThan(expected.length);
   const uris = new Map(v.result.current.map((d) => [d.id, d.imageUri]));
   // The original eastern edge lies exactly on page-grid x=.5. Moving east
   // crosses that edge into a column the ring already rendered.
   const nextBounds = { ...bounds, east: bounds.east + 0.000001, west: bounds.west + 0.000001 };
   const nextVisible = plan(nextBounds).filter((p) => !p.prefetch);
-  const added = nextVisible.filter((p) => !uris.has(`map:0:tile:${p.tileKey}`));
+  const added = nextVisible.filter((p) => !heldBy(v.result.current, p.tileKey!));
   expect(added).toHaveLength(2);
   const calls = mockRasterize.mock.calls.length;
   await v.rerender({ b: nextBounds });
   // Shown at once, from the prefetched files, before any render could run.
-  const ids = new Set(v.result.current.map((d) => d.id));
-  for (const p of nextVisible) expect(ids.has(`map:0:tile:${p.tileKey}`)).toBe(true);
+  for (const p of nextVisible) expect(heldBy(v.result.current, p.tileKey!)).toBeDefined();
   await flush();
-  for (const p of added) {
-    const call = mockRasterize.mock.calls
-      .slice(calls)
-      .find(([args]) => JSON.stringify(args.crop) === JSON.stringify(p.crop));
-    expect(call).toBeUndefined();
+  // Nothing the view needs is rendered again; only the new ring (background).
+  expect(
+    mockRasterize.mock.calls.slice(calls).every(([args]) => args.priority === 'background'),
+  ).toBe(true);
+  for (const [id, uri] of uris) {
+    const still = v.result.current.find((d) => d.id === id);
+    if (still) expect(still.imageUri).toBe(uri);
   }
-  for (const [id, uri] of uris)
-    expect(v.result.current.find((d) => d.id === id)?.imageUri).toBe(uri);
   await v.unmount();
   expect(mockFiles.size).toBe(0);
 });
@@ -559,9 +591,10 @@ it('uses the physical map height when a portrait viewport rotates', async () => 
   expect(expected.length).toBeGreaterThan(0);
   const v = await renderHook(() => usePdfDetails([map], [square], rotatedBounds, 1200, viewport));
   await flush();
-  expect(v.result.current.map((detail) => detail.id)).toEqual(
-    expected.map((plan) => `map:0:tile:${plan.tileKey}`),
-  );
+  // Every planned cell is on screen, drawn in fewer renderer calls than cells.
+  for (const plan of expected) expect(heldBy(v.result.current, plan.tileKey!)).toBeDefined();
+  const interactive = mockRasterize.mock.calls.filter(([args]) => args.priority === 'interactive');
+  if (expected.length > 1) expect(interactive.length).toBeLessThan(expected.length);
   await v.unmount();
 });
 
@@ -916,6 +949,11 @@ it("renders tiles at the overview's see-through level and never shows them for a
 });
 
 describe('reusing rendered detail across zooms and pans', () => {
+  const toMercator = pageToMercator(overview.coordinates);
+  const geoAt = (u: number, v: number): [number, number] => {
+    const [x, y] = toMercator(u, v);
+    return [(x * 180) / Math.PI, ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI];
+  };
   /** A real dyadic grid cell of the test page (corners -71..-70, 47..46). */
   const cell = (divisions: number, x: number, y: number, width: number, prefetch = false) => {
     const u0 = x / divisions,
@@ -926,12 +964,8 @@ describe('reusing rendered detail across zooms and pans', () => {
       tileKey: `${divisions}:${x}:${y}:${width}`,
       crop: { x0: u0, y0: v0, x1: u1, y1: v1 },
       targetWidthPx: width,
-      coordinates: [
-        [-71 + u0, 47 - v0],
-        [-71 + u1, 47 - v0],
-        [-71 + u1, 47 - v1],
-        [-71 + u0, 47 - v1],
-      ],
+      // Placed the way the planner places cells: the page mapping in Mercator.
+      coordinates: [geoAt(u0, v0), geoAt(u1, v0), geoAt(u1, v1), geoAt(u0, v1)],
       ...(prefetch ? { prefetch: true as const } : {}),
     } as PdfDetailPlan;
   };
@@ -952,7 +986,8 @@ describe('reusing rendered detail across zooms and pans', () => {
       { initialProps: { b: bounds } },
     );
     await flush();
-    expect(v.result.current).toHaveLength(4);
+    // The four children render as one 2x2 block: one call, one texture.
+    expect(ids(v.result.current)).toEqual(['map:0:tile:16:6:8:512:2x2']);
     const sharp = new Set(ids(v.result.current));
     let land!: (value: typeof raster) => void;
     mockRasterize.mockImplementationOnce(
@@ -967,7 +1002,7 @@ describe('reusing rendered detail across zooms and pans', () => {
     // Never back to the bare (blurry) overview while the replacement renders.
     expect(new Set(ids(v.result.current))).toEqual(sharp);
     await flush();
-    expect(mockRasterize).toHaveBeenCalledTimes(5);
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
     expect(new Set(ids(v.result.current))).toEqual(sharp);
     await act(async () => {
       land(raster);
@@ -989,7 +1024,8 @@ describe('reusing rendered detail across zooms and pans', () => {
     mockPlans.mockReturnValue([cell(8, 3, 4, 1024)]);
     await v.rerender({ b: zoomedOut });
     await flush();
-    expect(mockRasterize).toHaveBeenCalledTimes(4);
+    // The children's block stands in for the parent: nothing is rendered.
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
     expect(new Set(ids(v.result.current))).toEqual(sharp);
     await v.unmount();
   });
@@ -1003,28 +1039,56 @@ describe('reusing rendered detail across zooms and pans', () => {
       { initialProps: { b: bounds } },
     );
     await flush();
-    expect(mockRasterize).toHaveBeenCalledTimes(4);
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
     // Zoomed out: the covered parent first, then three cells that must render.
     // Children (4 Mi) + three tiles (3 Mi) exceed the 6 Mi visible budget.
     const parents = [cell(8, 3, 4, 1024), cell(8, 2, 4, 1024), cell(8, 4, 4, 1024)];
     mockPlans.mockReturnValue([...parents, cell(8, 3, 3, 1024), cell(8, 5, 4, 1024, true)]);
     await v.rerender({ b: zoomedOut });
     await flush();
-    // The stood-in parent is rendered before the neighbour ring starts.
-    const order = mockRasterize.mock.calls.slice(4).map(([args]) => args.priority);
-    expect(order).toEqual([
-      'interactive',
-      'interactive',
-      'interactive',
-      'interactive',
-      'background',
-    ]);
-    // Every requested tile ends up on screen; the parent was rendered once the
-    // children no longer fitted beside the tiles the camera asked for.
-    const shown = new Set(ids(v.result.current));
+    // Everything the view needs renders before the neighbour ring starts.
+    const order = mockRasterize.mock.calls.slice(1).map(([args]) => args.priority);
+    expect(order.length).toBeGreaterThan(1);
+    expect(order[order.length - 1]).toBe('background');
+    expect(order.slice(0, -1).every((p) => p === 'interactive')).toBe(true);
+    // Every requested tile ends up on screen within the visible budget.
     for (const key of ['8:3:4:1024', '8:2:4:1024', '8:4:4:1024', '8:3:3:1024'])
-      expect(shown.has(`map:0:tile:${key}`)).toBe(true);
-    expect(mockRasterize).toHaveBeenCalledTimes(9);
+      expect(heldBy(v.result.current, key)).toBeDefined();
+    await v.unmount();
+  });
+
+  it('never leaves a cell blank behind a mostly off-screen block the budget cannot show', async () => {
+    // Rasters as big as asked: 1024 px cells are 1 Mi px each.
+    mockRasterize.mockImplementation(
+      async (args: {
+        targetWidthPx: number;
+        crop: { x0: number; x1: number; y0: number; y1: number };
+      }) => ({
+        ...raster,
+        widthPx: args.targetWidthPx,
+        heightPx: Math.round(
+          (args.targetWidthPx * (args.crop.y1 - args.crop.y0)) / (args.crop.x1 - args.crop.x0),
+        ),
+      }),
+    );
+    const row = (x0: number, x1: number, y: number) =>
+      Array.from({ length: x1 - x0 + 1 }, (_, i) => cell(8, x0 + i, y, 1024));
+    mockPlans.mockReturnValue([...row(2, 4, 4), ...row(2, 4, 5)]);
+    const v = await renderHook(
+      ({ b }: { b: typeof bounds }) =>
+        usePdfDetails([map], [overview], b, 1200, { heightPx: 900, bearing: 0 }),
+      { initialProps: { b: bounds } },
+    );
+    await flush();
+    const first = mockRasterize.mock.calls.length;
+    // One column east: two thirds of the view is in the old (6 Mi px) blocks.
+    const panned = [...row(3, 5, 4), ...row(3, 5, 5)];
+    mockPlans.mockReturnValue(panned);
+    await v.rerender({ b: { ...bounds, east: bounds.east + 0.01 } });
+    for (let i = 0; i < 6; i++) await flush();
+    for (const p of panned) expect(heldBy(v.result.current, p.tileKey!)).toBeDefined();
+    // Bounded: no render loop.
+    expect(mockRasterize.mock.calls.length - first).toBeLessThanOrEqual(6);
     await v.unmount();
   });
 

@@ -1,4 +1,10 @@
-import { coverFromCache, parseTileKey, pdfTileBudgets, type CachedTile } from './pdfTileCache';
+import {
+  coverFromCache,
+  parseTileKey,
+  pdfTileBudgets,
+  visibleBudget,
+  type CachedTile,
+} from './pdfTileCache';
 
 const tile = (key: string, pageKey = 'page', pixels = 100): CachedTile & { key: string } => ({
   key,
@@ -121,5 +127,14 @@ describe('pdfTileBudgets', () => {
     expect(low.settledPixels).toBeLessThanOrEqual(low.handoffPixels);
     // Still room for a full view plus a little continuity.
     expect(low.settledPixels).toBeGreaterThanOrEqual(low.visiblePixels);
+  });
+});
+
+describe('visibleBudget', () => {
+  it('is three times the screen, between 6 and 10 Mi px', () => {
+    expect(visibleBudget(0)).toBe(6 * 1024 * 1024);
+    expect(visibleBudget(1080 * 1200)).toBe(6 * 1024 * 1024);
+    expect(visibleBudget(1206 * 2622)).toBe(Math.ceil(3 * 1206 * 2622));
+    expect(visibleBudget(1440 * 3200)).toBe(10 * 1024 * 1024);
   });
 });
