@@ -29,7 +29,16 @@ export interface NativeTerrainConfig {
 export type { TerrainLineSpec as NativeTerrainLine } from '@core/terrain3d/sceneInput';
 
 export interface NativeBenchStep {
-  kind: 'idle' | 'pitch' | 'rotate' | 'pan' | 'fling' | 'zoom';
+  kind:
+    | 'idle'
+    | 'pitch'
+    | 'rotate'
+    | 'pan'
+    | 'fling'
+    | 'zoom'
+    | 'tiltnoisy'
+    | 'rotatenoisy'
+    | 'pinchnoisy';
   durationMs: number;
   amount: number;
 }
@@ -125,6 +134,10 @@ export function namedTerrainStats(s: readonly number[]): Record<string, number> 
     'gesturePinch',
     'gesturePan',
     'labelToggles',
+    // Android only: the camera when sampled
+    'camBearing',
+    'camZoom',
+    'camTilt',
   ];
   const out: Record<string, number> = {};
   names.forEach((n, i) => {

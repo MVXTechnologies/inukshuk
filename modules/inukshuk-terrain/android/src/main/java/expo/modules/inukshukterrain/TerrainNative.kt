@@ -62,7 +62,16 @@ object TerrainNative {
    * 11 doubles per label: id, mercX, mercY, kind, priority, w, h, u0, v0, u1, v1; `ink`
    * (rgb) colours the stems and ground dots.
    */
-  @JvmStatic external fun nativeSetLabels(handle: Long, values: DoubleArray, ink: FloatArray)
+  @JvmStatic external fun nativeSetLabels(handle: Long, values: DoubleArray, ink: FloatArray, keepMissing: Boolean)
+
+  /** Two-finger gesture class from start/now points in dp (0 undecided, 1 tilt, 2 rotate, 3 pinch, 4 pan). */
+  @JvmStatic external fun nativeClassifyTwoFinger(
+    sax: Double, say: Double, sbx: Double, sby: Double,
+    nax: Double, nay: Double, nbx: Double, nby: Double,
+  ): Int
+
+  /** Decoded-DEM byte budget (per device class). */
+  @JvmStatic external fun nativeSetDemBudget(handle: Long, bytes: Long)
 
   /** Premultiplied RGBA8 pixels into the label sprite atlas (2048²) at x, y. */
   @JvmStatic external fun nativeUploadSprite(handle: Long, x: Int, y: Int, w: Int, h: Int, rgba: ByteArray)
@@ -91,7 +100,8 @@ object TerrainNative {
 
   /**
    * [demCount, demBytes, meshCount, drawnTiles, flatTiles, inFlight, requested, failed,
-   * engineCpuMs, drawMs, pitchDeg, gpuTileSlots, labelsShown, imagerySlots, bakeQueue]
+   * engineCpuMs, drawMs, pitchDeg, gpuTileSlots, labelsShown, imagerySlots, bakeQueue,
+   * hRef, hRefTravelM, morphs, maxMorphM, meshBakes, imageryUploads, labelToggles]
    */
   @JvmStatic external fun nativeStats(handle: Long): DoubleArray
 }

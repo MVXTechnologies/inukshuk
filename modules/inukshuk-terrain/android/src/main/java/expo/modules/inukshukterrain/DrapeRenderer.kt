@@ -59,6 +59,12 @@ class DrapeRenderer(
   private var shift = -1
   @Volatile private var closed = false
   private var rendered = 0
+  /** Round 3 counters: snapshot renders and drape tiles served from the disk cache. */
+  val renders = java.util.concurrent.atomic.AtomicInteger()
+  val diskHits = java.util.concurrent.atomic.AtomicInteger()
+  private val diskRoot = java.io.File(context.cacheDir, "terrain-drape-tiles")
+  @Volatile private var tileDir: java.io.File? = null
+  private var writes = 0
   private var msTotal = 0.0
 
   /**
@@ -91,6 +97,10 @@ class DrapeRenderer(
   fun setStyle(json: String?, satellite: Boolean) {
     styleJson = json
     shift = if (satellite) 0 else -1
+    // Drapes persist on disk per style and drape parameters: a revisit never re-renders.
+    tileDir = json?.let {
+      java.io.File(diskRoot, "${Integer.toHexString(it.hashCode())}-${it.length}-$texture-$shift").apply { mkdirs() }
+    }
     styleGen++
     for (s in snapshotters) {
       try {
@@ -109,6 +119,26 @@ class DrapeRenderer(
       if (closed) return@post
       if (styleJson == null) {
         deliver(z, x, y, null, texture, gen)
+        return@post
+      }
+      val file = tileDir?.let { java.io.File(it, "$z-$x-$y.jpg") }
+      val tex = texture
+      if (file != null && file.isFile) {
+        pixels.execute {
+          val px = decodeTile(file, tex)
+          if (px != null) {
+            diskHits.incrementAndGet()
+            deliver(z, x, y, px, tex, gen)
+          } else {
+            file.delete()
+            main.post {
+              if (!closed) {
+                jobs.addLast(Job(z, x, y, gen))
+                pump()
+              }
+            }
+          }
+        }
         return@post
       }
       jobs.addLast(Job(z, x, y, gen))
@@ -201,6 +231,7 @@ class DrapeRenderer(
     if (closed) return
     if (gen == styleGen && slot < busy.size) busy[slot] = false
     rendered++
+    renders.incrementAndGet()
     msTotal += (System.nanoTime() - started) / 1e6
     if (rendered % 40 == 0) {
       Log.i(TAG, "drape snapshots $rendered (2x2 blocks), mean ${"%.0f".format(msTotal / rendered)} ms, queue ${jobs.size}")
@@ -219,6 +250,7 @@ class DrapeRenderer(
           val tile = Bitmap.createBitmap(src, i * tex, j * tex, tex, tex)
           val buf = ByteBuffer.allocate(tex * tex * 4)
           tile.copyPixelsToBuffer(buf) // RGBA bytes for ARGB_8888 (opaque map: no premultiply effect)
+          tileDir?.let { dir -> writeTile(tile, java.io.File(dir, "${job.z}-${x0 + i}-${y0 + j}.jpg")) }
           if (tile !== src) tile.recycle()
           deliver(job.z, x0 + i, y0 + j, buf.array(), tex, job.gen)
         }
@@ -230,7 +262,46 @@ class DrapeRenderer(
     }
   }
 
+  private fun decodeTile(file: java.io.File, tex: Int): ByteArray? = try {
+    val opts = android.graphics.BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+    val bmp = android.graphics.BitmapFactory.decodeFile(file.path, opts)
+    if (bmp == null || bmp.width != tex || bmp.height != tex) {
+      bmp?.recycle()
+      null
+    } else {
+      val buf = ByteBuffer.allocate(tex * tex * 4)
+      bmp.copyPixelsToBuffer(buf)
+      bmp.recycle()
+      file.setLastModified(System.currentTimeMillis())
+      buf.array()
+    }
+  } catch (_: Throwable) {
+    null
+  }
+
+  private fun writeTile(tile: Bitmap, file: java.io.File) {
+    try {
+      val tmp = java.io.File(file.path + ".${Thread.currentThread().id}.tmp")
+      tmp.outputStream().use { tile.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+      if (!tmp.renameTo(file)) tmp.delete()
+      if (++writes % 64 == 0) trimDisk()
+    } catch (_: Throwable) {}
+  }
+
+  /** Oldest-first trim of every style's drapes to 3/4 of [DISK_BYTES]. */
+  private fun trimDisk() {
+    val files = diskRoot.walkTopDown().filter { it.isFile && it.name.endsWith(".jpg") }.toList()
+    var total = files.sumOf { it.length() }
+    if (total <= DISK_BYTES) return
+    for (f in files.sortedBy { it.lastModified() }) {
+      if (total <= DISK_BYTES * 3 / 4) break
+      total -= f.length()
+      f.delete()
+    }
+  }
+
   companion object {
+    const val DISK_BYTES = 150L * 1024 * 1024
     const val TAG = "InukshukTerrain"
     const val MAX_SNAPSHOTTERS = 3
   }

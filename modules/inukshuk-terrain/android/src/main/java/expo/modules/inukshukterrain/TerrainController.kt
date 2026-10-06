@@ -55,8 +55,8 @@ class TerrainController(
     override fun uploadSprite(x: Int, y: Int, w: Int, h: Int, rgba: ByteArray) =
       lock.read { if (!destroyed.get()) TerrainNative.nativeUploadSprite(handle, x, y, w, h, rgba) }
 
-    override fun setLabels(values: DoubleArray, ink: FloatArray) =
-      lock.read { if (!destroyed.get()) TerrainNative.nativeSetLabels(handle, values, ink) }
+    override fun setLabels(values: DoubleArray, ink: FloatArray, keepMissing: Boolean) =
+      lock.read { if (!destroyed.get()) TerrainNative.nativeSetLabels(handle, values, ink, keepMissing) }
 
     override fun setMasks(waterXY: DoubleArray, waterCounts: IntArray, iceXY: DoubleArray, iceCounts: IntArray) =
       lock.read { if (!destroyed.get()) TerrainNative.nativeSetMasks(handle, waterXY, waterCounts, iceXY, iceCounts) }
@@ -91,6 +91,20 @@ class TerrainController(
     setCoreMaxPitch(if (enabled) maxPitch else LEGACY_MAX_PITCH)
     applyTileLod(enabled)
     installShoveExtension()
+    installTwoFingerObserver()
+    // Decoded DEMs by device class (round 3): a whole place stays in memory.
+    run {
+      val am = mapView.context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+      val info = android.app.ActivityManager.MemoryInfo()
+      am?.getMemoryInfo(info)
+      val gb = info.totalMem shr 30
+      val bytes = when {
+        am == null || am.isLowRamDevice || gb < 4 -> 48L shl 20
+        gb < 6 -> 96L shl 20
+        else -> 160L shl 20
+      }
+      lock.read { if (!destroyed.get()) TerrainNative.nativeSetDemBudget(handle, bytes) }
+    }
     mapView.addOnDidFinishLoadingStyleListener(styleListener)
     map.addOnCameraIdleListener(idleListener)
     ensureOnTop()
@@ -201,6 +215,8 @@ class TerrainController(
     main.removeCallbacks(watcher)
     mapView.removeOnDidFinishLoadingStyleListener(styleListener)
     map.removeOnCameraIdleListener(idleListener)
+    releaseTwoFinger()
+    mapView.setOnTouchListener(null)
     restoreShove()
     setCoreMaxPitch(LEGACY_MAX_PITCH)
     applyTileLod(false)
@@ -226,8 +242,127 @@ class TerrainController(
 
   fun trimMemory() = lock.read { if (!destroyed.get()) TerrainNative.nativeTrimMemory(handle) }
 
+  /**
+   * The engine's stats with this platform's counters inserted before the last
+   * (labelToggles) — the order of namedTerrainStats (src/lib/nativeTerrain.ts).
+   */
   fun stats(): DoubleArray = lock.read {
-    if (destroyed.get()) DoubleArray(0) else TerrainNative.nativeStats(handle)
+    if (destroyed.get()) return@read DoubleArray(0)
+    val e = TerrainNative.nativeStats(handle)
+    if (e.size < 22) return@read e
+    val ours = doubleArrayOf(
+      drapes.renders.get().toDouble(), drapes.diskHits.get().toDouble(),
+      fetcher.fromDisk.get().toDouble(), fetcher.fromNetwork.get().toDouble(),
+      gestureCounts[1].toDouble(), gestureCounts[2].toDouble(),
+      gestureCounts[3].toDouble(), gestureCounts[4].toDouble(),
+    )
+    val cam = map.cameraPosition
+    e.copyOfRange(0, e.size - 1) + ours + doubleArrayOf(e[e.size - 1]) +
+      doubleArrayOf(cam.bearing, cam.zoom, cam.tilt)
+  }
+
+  // ---- two-finger disambiguation (round 3; iOS twin in INKTerrainController.mm) --------------
+  //
+  // MapLibre runs scale, rotate and shove (tilt) detectors at once, so a tilt
+  // that drifts also turns the map and a pinch that slides also tilts it. A
+  // passive touch listener (never consumes) classifies the gesture from its
+  // first points (classifyTwoFinger, shared C++), then disables the competing
+  // detectors for the rest of the gesture and undoes what they changed before
+  // the decision; everything is restored when the fingers lift.
+  private val gestureCounts = IntArray(5)
+  private var tfStart: DoubleArray? = null
+  private var tfIntent = 0
+  private var tfBearing = 0.0
+  private var tfTilt = 0.0
+  private var tfZoom = 0.0
+  private var tfSaved: BooleanArray? = null
+  private val density = context.resources.displayMetrics.density.toDouble()
+
+  @android.annotation.SuppressLint("ClickableViewAccessibility")
+  private fun installTwoFingerObserver() {
+    mapView.setOnTouchListener { _, ev ->
+      try {
+        onTwoFingerEvent(ev)
+      } catch (e: Exception) {
+        Log.w(TAG, "two-finger observer", e)
+      }
+      false
+    }
+  }
+
+  private fun points(ev: android.view.MotionEvent) = doubleArrayOf(
+    ev.getX(0) / density, ev.getY(0) / density, ev.getX(1) / density, ev.getY(1) / density,
+  )
+
+  private fun onTwoFingerEvent(ev: android.view.MotionEvent) {
+    if (destroyed.get() || !enabled) return
+    // QA A/B: the legacy flag (32) runs MapLibre's detectors unmanaged, as before round 3.
+    if (((lastLook?.getOrNull(LOOK_DEBUG_INDEX) ?: 0f).toInt() and 32) != 0) return
+    when (ev.actionMasked) {
+      android.view.MotionEvent.ACTION_POINTER_DOWN -> if (ev.pointerCount == 2 && tfStart == null) {
+        tfStart = points(ev)
+        tfIntent = 0
+        val cam = map.cameraPosition
+        tfBearing = cam.bearing
+        tfTilt = cam.tilt
+        tfZoom = cam.zoom
+      }
+      android.view.MotionEvent.ACTION_MOVE -> {
+        val s = tfStart ?: return
+        if (tfIntent != 0 || ev.pointerCount < 2) return
+        val n = points(ev)
+        val intent = TerrainNative.nativeClassifyTwoFinger(s[0], s[1], s[2], s[3], n[0], n[1], n[2], n[3])
+        if (intent != 0) lockTwoFinger(intent)
+      }
+      android.view.MotionEvent.ACTION_POINTER_UP, android.view.MotionEvent.ACTION_UP,
+      android.view.MotionEvent.ACTION_CANCEL -> if (ev.pointerCount <= 2) releaseTwoFinger()
+    }
+  }
+
+  private fun lockTwoFinger(intent: Int) {
+    tfIntent = intent
+    gestureCounts[intent]++
+    val gm = map.gesturesManager
+    val tilt = intent == 1
+    val rotate = intent == 2
+    val zoom = intent == 3 || intent == 4
+    val detectors = listOf(gm.shoveGestureDetector, gm.rotateGestureDetector, gm.standardScaleGestureDetector)
+    tfSaved = BooleanArray(3) { detectors[it].isEnabled }
+    if (!tilt) gm.shoveGestureDetector.isEnabled = false
+    if (!rotate) gm.rotateGestureDetector.isEnabled = false
+    if (!zoom) gm.standardScaleGestureDetector.isEnabled = false
+    // Undo what the locked-out gestures did before the decision.
+    val cam = map.cameraPosition
+    var changed = false
+    val b = org.maplibre.android.camera.CameraPosition.Builder(cam)
+    if (!rotate && Math.abs(cam.bearing - tfBearing) > 0.05) { b.bearing(tfBearing); changed = true }
+    if (!zoom && Math.abs(cam.zoom - tfZoom) > 0.001) { b.zoom(tfZoom); changed = true }
+    if (changed) map.moveCamera(CameraUpdateFactory.newCameraPosition(b.build()))
+    if (!tilt && Math.abs(map.cameraPosition.tilt - tfTilt) > 0.05) setTiltDirect(tfTilt)
+  }
+
+  private fun releaseTwoFinger() {
+    tfStart = null
+    tfIntent = 0
+    val saved = tfSaved ?: return
+    tfSaved = null
+    val gm = map.gesturesManager
+    gm.shoveGestureDetector.isEnabled = saved[0]
+    gm.rotateGestureDetector.isEnabled = saved[1]
+    gm.standardScaleGestureDetector.isEnabled = saved[2]
+  }
+
+  /** Animate the pitch (3D/2D button), past the 60° clamp while 3D is attached; the zoom is kept. */
+  fun animatePitch(deg: Double, durationMs: Double) {
+    val target = deg.coerceIn(0.0, if (enabled) maxPitch else LEGACY_MAX_PITCH)
+    val from = map.cameraPosition.tilt
+    val anim = android.animation.ValueAnimator.ofFloat(0f, 1f)
+    anim.duration = durationMs.toLong().coerceAtLeast(1)
+    anim.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+    anim.addUpdateListener { a ->
+      if (!destroyed.get()) setTiltDirect(from + (target - from) * (a.animatedValue as Float))
+    }
+    anim.start()
   }
 
   fun setRecording(on: Boolean) = lock.read {

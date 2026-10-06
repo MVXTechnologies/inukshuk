@@ -19,6 +19,10 @@ class DemFetcher(
 ) {
   @Volatile var networkAllowed: Boolean = true
 
+  /** Round 3 counters: DEMs served from the disk cache / fetched over the network. */
+  val fromDisk = java.util.concurrent.atomic.AtomicInteger()
+  val fromNetwork = java.util.concurrent.atomic.AtomicInteger()
+
   private val dir = File(context.cacheDir, "dem").apply { mkdirs() }
   private val pool: ExecutorService = Executors.newFixedThreadPool(4) { r ->
     Thread(r, "terrain-dem").apply {
@@ -40,7 +44,10 @@ class DemFetcher(
     try {
       if (file.isFile && file.length() > 0) {
         val bytes = file.readBytes()
-        if (isPng(bytes)) return bytes
+        if (isPng(bytes)) {
+          fromDisk.incrementAndGet()
+          return bytes
+        }
         file.delete()
       }
     } catch (_: Exception) {
@@ -60,6 +67,7 @@ class DemFetcher(
       val tmp = File(dir, "dem-$z-$x-$y.png.${Thread.currentThread().id}.tmp")
       tmp.writeBytes(bytes)
       if (!tmp.renameTo(file)) tmp.delete()
+      fromNetwork.incrementAndGet()
       bytes
     } catch (_: Exception) {
       null

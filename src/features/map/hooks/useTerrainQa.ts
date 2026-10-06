@@ -4,7 +4,7 @@ import { readQaCommand, writeQaReport } from '@data/qaReports';
 import * as storage from '@data/storage';
 import { importGpxFromUri } from '@features/library/importGpx';
 import { mapDocumentFromStoredPdf } from '@features/library/importMap';
-import { namedTerrainStats, nativeTerrain } from '@lib/nativeTerrain';
+import { namedTerrainStats, nativeTerrain, type NativeBenchStep } from '@lib/nativeTerrain';
 import type { CameraRef } from '@maplibre/maplibre-react-native';
 import { useLibraryStore } from '@state/libraryStore';
 import { useMapStore } from '@state/mapStore';
@@ -25,6 +25,7 @@ import { useEffect, useState, type RefObject } from 'react';
  *     &pdf=<url>  &gpx=<url>          (import a GeoPDF overlay / a trail, shown)
  *     &pdfs=0|1                       (the "PDF maps" master switch)
  *     &bench=<label>                  (run the standard gesture script)
+ *     &script=kind:ms:amount,…        (a custom bench script, e.g. tiltnoisy:1500:120)
  *     &stats=<label>                  (dump engine stats)
  *     &trim=1                         (the low-memory path, as on a warning)
  *     &beta3d=0                       (keep the beta 3D terrain off; default: forced on)
@@ -132,7 +133,7 @@ export function useTerrainQa(
       const tag = tagRef.current;
       const bench = q('bench');
       if (bench && module && tag !== null) {
-        void module.runBench(tag, []).then((r) => {
+        void module.runBench(tag, parseBenchScript(q('script'))).then((r) => {
           if (!r) return;
           const report = {
             label: bench,
@@ -199,4 +200,32 @@ async function importQaGpx(url: string): Promise<void> {
   } catch (e) {
     console.log(`TERRAIN_QA gpx failed ${String(e)}`);
   }
+}
+
+const BENCH_KINDS = new Set<NativeBenchStep['kind']>([
+  'idle',
+  'pitch',
+  'rotate',
+  'pan',
+  'fling',
+  'zoom',
+  'tiltnoisy',
+  'rotatenoisy',
+  'pinchnoisy',
+]);
+
+/** `kind:ms:amount,…` → bench steps ([] = the standard script). */
+export function parseBenchScript(s: string | undefined): NativeBenchStep[] {
+  if (!s) return [];
+  const out: NativeBenchStep[] = [];
+  for (const part of s.split(',')) {
+    const [kind, ms, amount] = part.split(':');
+    if (!BENCH_KINDS.has(kind as NativeBenchStep['kind'])) continue;
+    out.push({
+      kind: kind as NativeBenchStep['kind'],
+      durationMs: Number(ms) || 0,
+      amount: Number(amount) || 0,
+    });
+  }
+  return out;
 }

@@ -1139,7 +1139,7 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSet
 }
 
 JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetLabels(
-    JNIEnv* env, jclass, jlong h, jdoubleArray values, jfloatArray ink) {
+    JNIEnv* env, jclass, jlong h, jdoubleArray values, jfloatArray ink, jboolean keepMissing) {
   // [id, mercX, mercY, kind, priority, w, h, u0, v0, u1, v1] per label
   if (ink && env->GetArrayLength(ink) >= 3) {
     auto& wr = *handle(h);
@@ -1165,7 +1165,19 @@ JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSet
     d.v1 = static_cast<float>(v[i + 10]);
     labels.push_back(d);
   }
-  (*handle(h))->engine->setLabels(std::move(labels));
+  (*handle(h))->engine->setLabels(std::move(labels), keepMissing == JNI_TRUE);
+}
+
+/** classifyTwoFinger (terrain_core): 0 undecided, 1 tilt, 2 rotate, 3 pinch, 4 pan. */
+JNIEXPORT jint JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeClassifyTwoFinger(
+    JNIEnv*, jclass, jdouble sax, jdouble say, jdouble sbx, jdouble sby, jdouble nax, jdouble nay,
+    jdouble nbx, jdouble nby) {
+  return static_cast<jint>(classifyTwoFinger({sax, say, sbx, sby}, {nax, nay, nbx, nby}));
+}
+
+JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeSetDemBudget(
+    JNIEnv*, jclass, jlong h, jlong bytes) {
+  (*handle(h))->engine->setDemBudget(static_cast<size_t>(bytes));
 }
 
 JNIEXPORT void JNICALL Java_expo_modules_inukshukterrain_TerrainNative_nativeUploadSprite(
@@ -1269,7 +1281,15 @@ JNIEXPORT jdoubleArray JNICALL Java_expo_modules_inukshukterrain_TerrainNative_n
                       static_cast<double>(w->gl.tiles.size()),
                       static_cast<double>(s.labelsShown),
                       static_cast<double>(s.imagerySlots),
-                      static_cast<double>(s.bakeQueue)};
+                      static_cast<double>(s.bakeQueue),
+                      // round 3 (the platform inserts its own counters before labelToggles)
+                      s.hRef,
+                      s.hRefTravelM,
+                      static_cast<double>(s.morphs),
+                      s.maxMorphM,
+                      static_cast<double>(s.meshBakes),
+                      static_cast<double>(s.imageryUploads),
+                      static_cast<double>(s.labelToggles)};
   const jsize n = sizeof(v) / sizeof(v[0]);
   jdoubleArray arr = env->NewDoubleArray(n);
   env->SetDoubleArrayRegion(arr, 0, n, v);

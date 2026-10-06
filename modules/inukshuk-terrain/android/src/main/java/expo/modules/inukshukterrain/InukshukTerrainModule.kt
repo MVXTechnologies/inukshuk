@@ -140,6 +140,11 @@ class InukshukTerrainModule : Module() {
       Unit
     }
 
+    AsyncFunction("animatePitch") { viewTag: Int, deg: Double, durationMs: Double ->
+      controllers[viewTag]?.animatePitch(deg, durationMs)
+      Unit
+    }.runOnQueue(Queues.MAIN)
+
     AsyncFunction("jumpTo") { viewTag: Int, lat: Double, lng: Double, zoom: Double, pitch: Double, bearing: Double ->
       controllers[viewTag]?.jumpTo(lat, lng, zoom, pitch, bearing)
       Unit
