@@ -8,11 +8,11 @@ import {
   decodeActivityFile,
   sniffActivityFormat,
   walkActivityArchive,
-  type ActivityFileFormat,
   type ArchiveHost,
   type DecodedActivity,
 } from '@core/geo/activityFiles';
 import { buildImportedTrack, snapWaypointsToNotes } from '@core/geo/track';
+import { sniffOpenedFile, type OpenedFileFormat } from '@core/import/openedFile';
 import type { TrackSummary } from '@core/models';
 import * as storage from '@data/storage';
 import { primeTrackGeometry } from '@data/trackGeometry';
@@ -250,7 +250,8 @@ export async function pickAndImportActivityFiles(
 export interface OpenedImport {
   /** Uri to read from: the original, or a cache copy when it can't be opened in place. */
   uri: string;
-  format: ActivityFileFormat;
+  /** A PDF is a map (#246); anything else an activity file, or `unknown`. */
+  format: OpenedFileFormat;
   /** Remove the cache copy, if one was made. Never throws. */
   dispose: () => void;
 }
@@ -267,7 +268,7 @@ export async function openImportedUri(uri: string): Promise<OpenedImport> {
     const head = storage.readFileHead(uri, 4096);
     // An empty head means the provider reported no size to the handle
     // (some content:// providers): copy it to find out what it is.
-    if (head.length > 0) return { uri, format: sniffActivityFormat(head, uri), dispose: noop };
+    if (head.length > 0) return { uri, format: sniffOpenedFile(head, uri), dispose: noop };
   } catch {
     // Fall through to a cache copy.
   }
@@ -287,7 +288,7 @@ export async function openImportedUri(uri: string): Promise<OpenedImport> {
   try {
     return {
       uri: local,
-      format: sniffActivityFormat(storage.readFileHead(local, 4096), uri),
+      format: sniffOpenedFile(storage.readFileHead(local, 4096), uri),
       dispose,
     };
   } catch {
