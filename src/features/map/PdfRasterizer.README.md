@@ -122,6 +122,41 @@ therefore never drops back to the blurry overview. Before this, the hook's
 return filtered by the current targets and dropped every fallback, and tiles
 carried the page bbox instead of their own.
 
+**Blocks (`@core/geo/pdfDetailBlocks`).** Every renderer call has a fixed cost
+that does not depend on the crop: Android's `PdfRenderer` opens and parses the
+page each time (about 170 ms of a 200 ms 480 px US Topo tile on the API 34
+emulator, against 3–25 ms to paint it), and pdf.js walks every operator of the
+page on each paint. So the hook no longer renders a view cell by cell. When a
+cell's turn comes, it is grouped with every other cell of the same page, level
+and kind (visible or ring) still to draw, and the group is rendered as blocks:
+rectangles of cells, each ONE crop at exactly the cells' scale (same pixels
+per page point), within the 3072 px / 3 Mi px crop limits, shown as one image
+with the key `divisions:x:y:width:COLSxROWS`. A block on one side of the page
+diagonal is exact; one crossing it is split until the misplacement from
+MapLibre's two-triangle drawing stays under 0.25 raster px (a lat/lon
+rectangle sheet never splits). The cache treats a block like the cells it
+holds (`coverFromCache`, children, pruning). Ring blocks are capped at
+1.5 Mi px so a gesture outside the ring waits less for the render in flight.
+Work starts 40 ms after a settle (it was 250 ms). Emulator, Beau Lake US Topo,
+z+4 view: 15 cells, 15 × ~280 ms before; see the PR for the measured views.
+
+**Resolution.** Detail starts as soon as the 2048 px overview has less than
+one raster pixel per device pixel (it used to wait for 1.4x, so the sheet
+was shown magnified up to 1.4x), and the visible budget is three times the
+map frame's device pixels, 6 to 10 Mi px (`visibleBudget`): with a flat
+6 Mi px, the planner's worst-alignment reserve left tiles at 0.83 raster px
+per device px on an iPhone 17 and 0.95 on a 1080 x 2400 screen. Sheets
+rotated against north still reserve more than they show and can come out
+below 1.0 (CanTopo, AUSTopo ~0.82 on the emulator); this predates blocks.
+
+**Native refusals and cold launches.** A native refusal whose reason is the
+page itself (`@core/geo/nativePdfSupport`; on iOS every vector page) marks
+the page, and its later crops go straight to pdf.js, which keeps the page open
+between them. A page pdf.js verified for the native renderer is remembered
+across launches (file tail, revision, page, size, layer-plan version, in
+`cache/pdf-native-geometry.json`); its crops then go native even before the
+hidden pdf.js page has loaded.
+
 **Neighbour prefetch.** `planPdfDetailTiles(..., {prefetchMargin, maxPrefetch})`
 also plans the ring around the view (one view per side, up to 24 cells, nearest
 first) at the same level and width, so each ring cell has the key it will have

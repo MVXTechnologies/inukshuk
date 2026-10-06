@@ -135,8 +135,8 @@ beforeEach(() => {
   mockOrigin = ORIGIN;
   mockProbe.mockReset().mockResolvedValue(true);
   mockRestart.mockReset().mockImplementation(async (origin) => origin);
-  jest.mocked(AppState.addEventListener).mockImplementation((_type, handler) => {
-    appStateListener = handler as (state: AppStateStatus) => void;
+  jest.mocked(AppState.addEventListener).mockImplementation((type, handler) => {
+    if (type === 'change') appStateListener = handler as (state: AppStateStatus) => void;
     return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
   });
 });

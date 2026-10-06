@@ -161,7 +161,13 @@ async function loadPage(options: { failRender?: () => boolean } = {}) {
     for (const fn of pending) fn();
     await settle();
   };
-  return { view, render, stats, fireTimers, settle };
+  const run = async (code: string) => {
+    await act(async () => {
+      runInNewContext(code, window);
+    });
+    await settle();
+  };
+  return { view, render, stats, fireTimers, settle, run };
 }
 
 afterEach(() => {
@@ -185,6 +191,17 @@ it('opens the document once for a burst of tiles with the same hold key', async 
   await fireTimers();
   expect(stats.destroys).toBe(1);
   await render('t4', { whiteKey: 0, hold: 'maps/m.pdf@1' });
+  expect(stats.opens).toBe(2);
+  await view.unmount();
+});
+
+it('releases the held document when RN asks (background, memory warning)', async () => {
+  const { view, render, stats, run } = await loadPage();
+  await render('t1', { whiteKey: 0, hold: 'maps/m.pdf@1' });
+  expect(stats.destroys).toBe(0);
+  await run('window.__pdfDropHeld()');
+  expect(stats.destroys).toBe(1);
+  await render('t2', { whiteKey: 0, hold: 'maps/m.pdf@1' });
   expect(stats.opens).toBe(2);
   await view.unmount();
 });

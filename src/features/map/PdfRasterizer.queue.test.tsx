@@ -1071,6 +1071,32 @@ it('bounds unsupported request memory and reprobes the evicted oldest request', 
   await pending;
 });
 
+it('sends later crops of a page the native renderer refused for the page itself straight to pdf.js', async () => {
+  jest.mocked(renderNativePdfCrop).mockRejectedValue(
+    Object.assign(new Error('Page is not a single opaque JPEG paint'), {
+      code: 'E_PDF_UNSUPPORTED',
+    }),
+  );
+  const view = await renderHook(usePdfRasterizer, { wrapper });
+  await ready();
+  const first = view.result.current(nativeRequest).catch(() => undefined);
+  await handoff();
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: { data: JSON.stringify({ id: 'req-1', ok: false, error: 'fallback failed' }) },
+    });
+  });
+  await first;
+  const next = view.result
+    .current({ ...nativeRequest, crop: { x0: 0.5, y0: 0.5, x1: 0.75, y1: 0.75 } })
+    .catch(() => undefined);
+  // No native handoff: pdf.js renders it (and keeps its page open for the next).
+  expect(renders().at(-1)?.[0]).not.toContain('expectedPageWidthPt');
+  expect(renders().at(-1)?.[0]).toContain('"x0":0.5');
+  await view.unmount();
+  await next;
+});
+
 it('does not disable a small native crop when a full-page request is unsupported', async () => {
   jest
     .mocked(renderNativePdfCrop)
