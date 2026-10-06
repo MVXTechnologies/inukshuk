@@ -1,6 +1,7 @@
 import { MapAreaBottomContext, useWindowEdge } from './mapAreaBottom';
 import { reportError } from '@lib/errorReporting';
 import { fnv1a32 } from '@core/encoding/fnv1a';
+import { isWebUrl } from '@core/links/externalUrl';
 import {
   nearestPinAt,
   projectablePins,
@@ -3559,6 +3560,11 @@ export function MapScreen() {
                 floating={recordingPanelUp}
                 offline={offlineOnly}
                 onOpenLink={(url) => {
+                  // Datasheet links come from downloaded data: web addresses only.
+                  if (!isWebUrl(url)) {
+                    showSnack("Couldn't open the datasheet");
+                    return;
+                  }
                   Linking.openURL(url).catch(() => showSnack("Couldn't open the datasheet"));
                 }}
                 onNavigate={() => {
@@ -3588,6 +3594,10 @@ export function MapScreen() {
               floating={recordingPanelUp}
               offline={offlineOnly}
               onOpenLink={(url) => {
+                if (!isWebUrl(url)) {
+                  showSnack("Couldn't open the agency page");
+                  return;
+                }
                 Linking.openURL(url).catch(() => showSnack("Couldn't open the agency page"));
               }}
               onNavigate={() => {
