@@ -494,3 +494,42 @@ describe('parseGpx multiple routes', () => {
     expect(back.map((p) => p.latitude)).toEqual([9]);
   });
 });
+
+describe('waypoint <type> and <link> (#587 trail photos)', () => {
+  it('round-trips a photo waypoint in GPX 1.1 element order', () => {
+    const xml = buildGpx({
+      points: [],
+      waypoints: [
+        {
+          latitude: 47.6675,
+          longitude: -70.6132,
+          name: 'Summit',
+          description: 'Lac des Cygnes',
+          symbol: 'Scenic Area',
+          type: 'photo',
+          link: { href: 'photos/p1.jpg', text: 'Summit', mimeType: 'image/jpeg' },
+        },
+      ],
+    });
+    // link* comes after desc and before sym; type after sym.
+    expect(xml.indexOf('<desc>')).toBeLessThan(xml.indexOf('<link'));
+    expect(xml.indexOf('<link')).toBeLessThan(xml.indexOf('<sym>'));
+    expect(xml.indexOf('<sym>')).toBeLessThan(xml.indexOf('<type>photo'));
+    const [w] = parseGpx(xml).waypoints;
+    expect(w).toMatchObject({
+      type: 'photo',
+      link: { href: 'photos/p1.jpg', text: 'Summit', mimeType: 'image/jpeg' },
+    });
+  });
+
+  it('reads the first usable of several links and ignores empty ones', () => {
+    const xml = `<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+      <wpt lat="1" lon="2"><link href=""/><link href="a.jpg"/><link href="b.jpg"><text>B</text></link></wpt>
+      <wpt lat="1" lon="2"><link><text>no href</text></link></wpt>
+      <wpt lat="1" lon="2"><link href="only.jpg"/></wpt></gpx>`;
+    const [a, none, only] = parseGpx(xml).waypoints;
+    expect(a!.link).toEqual({ href: 'a.jpg' });
+    expect(none!.link).toBeUndefined();
+    expect(only!.link).toEqual({ href: 'only.jpg' });
+  });
+});

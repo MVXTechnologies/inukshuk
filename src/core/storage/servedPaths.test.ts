@@ -42,7 +42,7 @@ describe('lighttpdAccessConfig', () => {
     const config = lighttpdAccessConfig(SERVED_DOCUMENT_PREFIXES);
     expect(config).toBe(
       'server.modules += ( "mod_access" )\n' +
-        '$HTTP["url"] !~ "^/(maps|offline-styles|[.]rasterizer)/" {\n  url.access-deny = ( "" )\n}',
+        '$HTTP["url"] !~ "^/(maps|offline-styles|[.]rasterizer|[.]photo-inbox)/" {\n  url.access-deny = ( "" )\n}',
     );
     expect(config).not.toContain('\\');
   });
@@ -56,5 +56,9 @@ describe('lighttpdAccessConfig', () => {
     expect(pattern.test('/library.json')).toBe(false);
     expect(pattern.test('/tracks/t.gpx')).toBe(false);
     expect(pattern.test('/xrasterizer/index.html')).toBe(false);
+    expect(pattern.test('/.photo-inbox/j1.jpg')).toBe(true);
+    // The kept photo copies (and their EXIF-free data) are never served.
+    expect(pattern.test('/photos/t1/p1.jpg')).toBe(false);
+    expect(pattern.test('/photos/p1.jpg')).toBe(false);
   });
 });

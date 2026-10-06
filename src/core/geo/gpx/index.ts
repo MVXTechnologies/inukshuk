@@ -24,6 +24,17 @@ export interface GpxWaypoint {
   symbol?: string;
   /** Epoch milliseconds of the waypoint's <time>, if present. */
   time?: number;
+  /** GPX `<type>` classification (e.g. `photo` for a trail photo, #587). */
+  type?: string;
+  /** First GPX `<link>`: a related file or URL (a trail photo's image, #587). */
+  link?: GpxLink;
+}
+
+/** A GPX 1.1 `<link href>` with its optional `<text>` and MIME `<type>`. */
+export interface GpxLink {
+  href: string;
+  text?: string;
+  mimeType?: string;
 }
 
 export interface GpxDocument {
@@ -195,7 +206,27 @@ const parseWaypoint = (raw: AnyRecord): GpxWaypoint | undefined => {
   if (sym !== undefined) wpt.symbol = sym;
   const time = isoToEpochMs(textOf(raw['time']));
   if (time !== undefined) wpt.time = time;
+  const type = textOf(raw['type']);
+  if (type !== undefined) wpt.type = type;
+  const link = parseLink(raw['link']);
+  if (link !== undefined) wpt.link = link;
   return wpt;
+};
+
+/** The first usable `<link href>` of a waypoint (GPX allows several). */
+const parseLink = (raw: unknown): GpxLink | undefined => {
+  for (const candidate of asArray<AnyRecord>(raw)) {
+    if (candidate === null || typeof candidate !== 'object') continue;
+    const href = textOf(candidate[`${ATTR_PREFIX}href`]);
+    if (href === undefined || href === '') continue;
+    const link: GpxLink = { href };
+    const text = textOf(candidate['text']);
+    if (text !== undefined) link.text = text;
+    const mimeType = textOf(candidate['type']);
+    if (mimeType !== undefined) link.mimeType = mimeType;
+    return link;
+  }
+  return undefined;
 };
 
 /**
@@ -354,7 +385,15 @@ export function buildGpx(args: {
       }
       if (w.name !== undefined) node['name'] = w.name;
       if (w.description !== undefined) node['desc'] = w.description;
+      // GPX 1.1 wptType order: … desc, src, link*, sym, type …
+      if (w.link !== undefined) {
+        const link: AnyRecord = { [`${ATTR_PREFIX}href`]: w.link.href };
+        if (w.link.text !== undefined) link['text'] = w.link.text;
+        if (w.link.mimeType !== undefined) link['type'] = w.link.mimeType;
+        node['link'] = link;
+      }
       if (w.symbol !== undefined) node['sym'] = w.symbol;
+      if (w.type !== undefined) node['type'] = w.type;
       return node;
     });
   }

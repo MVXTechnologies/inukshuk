@@ -16,6 +16,9 @@ export const SERVED_DOCUMENT_PREFIXES: readonly string[] = [
   'maps',
   'offline-styles',
   '.rasterizer',
+  // Picked photos staged for the resize worker, deleted once their copies
+  // are made (#587). The kept copies under `photos/` stay unreachable.
+  '.photo-inbox',
 ];
 
 /**

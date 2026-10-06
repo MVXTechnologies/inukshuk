@@ -44,6 +44,9 @@ const ALLOWED = new Set([
   'data/offline.ts',
   // Test-only helper (never imported by the app): the mocked document dir.
   'data/storageTestMock.ts',
+  // Test-only helper (never imported by the app): the in-memory file system
+  // the photo data tests run on (#587).
+  'data/photos/testFileSystem.ts',
 ]);
 
 /**
