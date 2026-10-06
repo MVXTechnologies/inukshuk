@@ -94,6 +94,7 @@ export async function preparePhotoImport(args: {
       item.takenAtSource = resolved.source;
     }
     if (exif.lngLat) candidate.lngLat = exif.lngLat;
+    if (exif.camera) candidate.camera = exif.camera;
     const sourceKey = sourceKeyFor({
       assetId: picked.assetId,
       exifWallClock: exif.wallClock,
@@ -147,7 +148,7 @@ function finalPlacement(
     return { placement: 'time', position: result.position, takenAt: result.takenAt };
   }
   const corrected =
-    candidate.takenAt === undefined ? undefined : candidate.takenAt + prepared.plan.clock.offsetMs;
+    candidate.takenAt === undefined ? undefined : candidate.takenAt + planned.clockOffsetMs;
   if (result.kind === 'gps') {
     return corrected === undefined
       ? { placement: 'gps', position: result.position }
@@ -267,8 +268,8 @@ export async function commitPhotoImport(args: {
       };
       if (spot.takenAt !== undefined) input.takenAt = spot.takenAt;
       if (item.takenAtSource) input.takenAtSource = item.takenAtSource;
-      if (prepared.plan.clock.offsetMs !== 0 && planned.candidate.takenAt !== undefined) {
-        input.clockOffsetMs = prepared.plan.clock.offsetMs;
+      if (planned.clockOffsetMs !== 0 && planned.candidate.takenAt !== undefined) {
+        input.clockOffsetMs = planned.clockOffsetMs;
       }
       if (copies.contentHash) input.contentHash = copies.contentHash;
       if (item.sourceKey) input.sourceKey = item.sourceKey;

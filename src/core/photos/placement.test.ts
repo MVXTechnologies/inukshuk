@@ -167,6 +167,64 @@ describe('planPhotoImport', () => {
     expect(zero.clock.status).toBe('ok');
   });
 
+  it('checks each camera clock on its own photos', () => {
+    // The phone is right; the DSLR (with a GPS dongle) is an hour behind.
+    const phone = [500, 1200, 2000].map((m, i) => ({
+      key: `p${i}`,
+      takenAt: at(m),
+      lngLat: offset(m, 4),
+      camera: 'samsung SM-S918B',
+    }));
+    const dslr = [700, 1500, 2600].map((m, i) => ({
+      key: `d${i}`,
+      takenAt: at(m) - HOUR,
+      lngLat: offset(m, 4),
+      camera: 'Canon EOS R6',
+    }));
+    // No make/model: falls back to the batch estimate.
+    const anon = { key: 'anon', takenAt: at(900) };
+    const plan = planPhotoImport(idx, [...phone, ...dslr, anon]);
+    expect(plan.cameraClocks.get('samsung SM-S918B')).toMatchObject({ status: 'ok', offsetMs: 0 });
+    expect(plan.cameraClocks.get('Canon EOS R6')).toMatchObject({
+      status: 'corrected',
+      offsetMs: HOUR,
+    });
+    expect(plan.byTime.map((p) => [p.candidate.key, p.clockOffsetMs])).toEqual([
+      ['p0', 0],
+      ['d0', HOUR],
+      ['anon', plan.clock.offsetMs],
+      ['p1', 0],
+      ['d1', HOUR],
+      ['p2', 0],
+      ['d2', HOUR],
+    ]);
+    for (const p of plan.byTime.filter((x) => x.candidate.key !== 'anon')) {
+      const r = p.result;
+      const m = [500, 1200, 2000, 700, 1500, 2600][
+        ['p0', 'p1', 'p2', 'd0', 'd1', 'd2'].indexOf(p.candidate.key)
+      ]!;
+      expect(r.kind === 'time' && r.position.distanceM).toBeCloseTo(m, 0);
+    }
+  });
+
+  it('falls back to the batch estimate for a camera with too few samples', () => {
+    const behind = candidates.slice(0, 3).map((c) => ({ ...c, takenAt: c.takenAt! - HOUR }));
+    const lone = { key: 'lone', takenAt: at(1500) - HOUR, camera: 'Old Cam' };
+    const plan = planPhotoImport(idx, [...behind, lone]);
+    expect(plan.cameraClocks.get('Old Cam')).toMatchObject({ status: 'unknown' });
+    expect(plan.byTime.find((p) => p.candidate.key === 'lone')!.clockOffsetMs).toBe(HOUR);
+  });
+
+  it('a manual Adjust applies to every camera', () => {
+    const plan = planPhotoImport(
+      idx,
+      candidates.slice(0, 3).map((c) => ({ ...c, camera: 'X' })),
+      { manualClockOffsetMs: 2 * MIN },
+    );
+    expect(plan.byTime.every((p) => p.clockOffsetMs === 2 * MIN)).toBe(true);
+    expect(plan.cameraClocks.size).toBe(0);
+  });
+
   it('breaks distance ties by key so the order is stable', () => {
     const twins: ImportCandidate[] = [
       { key: 'z', takenAt: at(100) },

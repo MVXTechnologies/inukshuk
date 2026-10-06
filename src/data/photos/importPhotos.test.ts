@@ -273,6 +273,34 @@ describe('commitPhotoImport', () => {
     expect(r.added[1]!.takenAt).toBeDefined();
   });
 
+  it('corrects each camera with its own clock', async () => {
+    const phone = picks.slice(0, 3).map((p) => ({ ...p, exif: { ...p.exif, Model: 'Pixel 8' } }));
+    const dslr = [700, 1700, 2700].map((m, i) => ({
+      uri: `file:///cache/dslr${i}.jpg`,
+      assetId: `DSLR${i}`,
+      exif: { ...exifAt(m, { skewMs: -HOUR }), Make: 'NIKON', Model: 'Z 6' },
+    }));
+    const prepared = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: [...phone, ...dslr],
+      zoneOffsetAt: EDT,
+    });
+    const r = await commitPhotoImport({
+      prepared,
+      selected: defaultSelection(prepared),
+      resizer: fakeResizer(),
+      newId,
+    });
+    const byUri = (u: string) =>
+      r.added[
+        prepared.plan.byTime.findIndex((p) => prepared.items.get(p.candidate.key)!.picked.uri === u)
+      ]!;
+    expect(byUri('file:///cache/a.jpg')).not.toHaveProperty('clockOffsetMs');
+    expect(byUri('file:///cache/dslr0.jpg')).toMatchObject({ clockOffsetMs: HOUR });
+    expect(byUri('file:///cache/dslr0.jpg').distanceM).toBeCloseTo(700, 0);
+  });
+
   it('keeps going past a photo that fails, and reports it', async () => {
     const prepared = await preparePhotoImport({
       trackId: 't1',

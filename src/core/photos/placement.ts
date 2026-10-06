@@ -1,7 +1,12 @@
 import { haversineMeters } from '@core/geo/geomath';
 import type { LngLat } from '@core/models';
 
-import { estimateClockOffset, type ClockEstimate, type ClockOptions } from './clock';
+import {
+  estimateClockOffset,
+  type ClockEstimate,
+  type ClockOptions,
+  type ClockSample,
+} from './clock';
 import type { PhotoPlacement, TakenAtSource } from './model';
 import {
   passesNear,
@@ -158,16 +163,27 @@ export function placeForced(
 export interface ImportCandidate extends PhotoFix {
   /** The caller's id for it (picker asset id, or an index). */
   key: string;
+  /** The camera that took it (EXIF Make + Model), when known: its clock is checked on its own. */
+  camera?: string;
 }
 
 export interface PlannedPhoto {
   candidate: ImportCandidate;
   result: PlacementResult;
+  /** The clock correction this photo was placed with (its camera's, else the batch's). */
+  clockOffsetMs: number;
 }
 
 /** The Add-photos sheet's three groups plus the clock check. */
 export interface ImportPlan {
+  /** The whole batch's clock (or the user's Adjust value). */
   clock: ClockEstimate;
+  /**
+   * Each named camera's own estimate (empty with a manual Adjust). A camera
+   * whose estimate is `unknown` (too few photos with time AND GPS) uses
+   * {@link clock}, as do photos with no Make/Model.
+   */
+  cameraClocks: Map<string, ClockEstimate>;
   /** "On the trail, by time" — checked by default. */
   byTime: PlannedPhoto[];
   /** "By location only" — checked by default. */
@@ -182,19 +198,28 @@ export interface ImportPlanOptions extends PlacementOptions {
   clock?: ClockOptions;
 }
 
+const clockSamples = (candidates: readonly ImportCandidate[]): ClockSample[] =>
+  candidates.flatMap((c) =>
+    c.takenAt !== undefined && c.lngLat ? [{ takenAt: c.takenAt, lngLat: c.lngLat }] : [],
+  );
+
 /**
- * Plan an import: check the camera clock on the photos that have both time
- * and GPS, then place every photo with that correction and sort it into the
+ * Plan an import: check the camera clocks on the photos that have both time
+ * and GPS, then place every photo with its correction and sort it into the
  * sheet's groups. Each group is in trail order (distance), outsiders by time.
+ *
+ * Clocks are checked per camera (EXIF Make + Model): a phone and a DSLR in
+ * one batch rarely agree. A camera with too few usable photos for its own
+ * estimate, and photos with no Make/Model, use the whole batch's estimate.
+ * Two bodies of the same model share one estimate (EXIF has no portable
+ * serial the picker exposes).
  */
 export function planPhotoImport(
   index: TrackIndex,
   candidates: readonly ImportCandidate[],
   { manualClockOffsetMs, clock: clockOpts, ...placementOpts }: ImportPlanOptions = {},
 ): ImportPlan {
-  const samples = candidates.flatMap((c) =>
-    c.takenAt !== undefined && c.lngLat ? [{ takenAt: c.takenAt, lngLat: c.lngLat }] : [],
-  );
+  const samples = clockSamples(candidates);
   const clock: ClockEstimate =
     manualClockOffsetMs !== undefined
       ? {
@@ -203,13 +228,28 @@ export function planPhotoImport(
           samples: samples.length,
         }
       : estimateClockOffset(index, samples, clockOpts);
-  const plan: ImportPlan = { clock, byTime: [], byGps: [], outside: [] };
+  const cameraClocks = new Map<string, ClockEstimate>();
+  if (manualClockOffsetMs === undefined) {
+    const byCamera = new Map<string, ImportCandidate[]>();
+    for (const c of candidates) {
+      if (c.camera === undefined) continue;
+      const group = byCamera.get(c.camera);
+      if (group) group.push(c);
+      else byCamera.set(c.camera, [c]);
+    }
+    for (const [camera, group] of byCamera) {
+      cameraClocks.set(camera, estimateClockOffset(index, clockSamples(group), clockOpts));
+    }
+  }
+  const offsetFor = (c: ImportCandidate): number => {
+    const own = c.camera === undefined ? undefined : cameraClocks.get(c.camera);
+    return own && own.status !== 'unknown' ? own.offsetMs : clock.offsetMs;
+  };
+  const plan: ImportPlan = { clock, cameraClocks, byTime: [], byGps: [], outside: [] };
   for (const candidate of candidates) {
-    const result = placePhoto(index, candidate, {
-      ...placementOpts,
-      clockOffsetMs: clock.offsetMs,
-    });
-    const planned = { candidate, result };
+    const clockOffsetMs = offsetFor(candidate);
+    const result = placePhoto(index, candidate, { ...placementOpts, clockOffsetMs });
+    const planned = { candidate, result, clockOffsetMs };
     if (result.kind === 'time') plan.byTime.push(planned);
     else if (result.kind === 'gps') plan.byGps.push(planned);
     else plan.outside.push(planned);

@@ -81,6 +81,14 @@ describe('normalizeExif', () => {
     expect(normalizeExif(gpsOnly)).not.toHaveProperty('wallClock');
   });
 
+  it('names the camera from Make + Model, for a per-camera clock check', () => {
+    expect(normalizeExif({ Make: ' Canon ', Model: 'Canon  EOS R6' }).camera).toBe('Canon EOS R6');
+    expect(normalizeExif({ Make: 'samsung', Model: 'SM-S918B' }).camera).toBe('samsung SM-S918B');
+    expect(normalizeExif({ Model: 'iPhone 15 Pro' }).camera).toBe('iPhone 15 Pro');
+    expect(normalizeExif({ Make: 'Apple' }).camera).toBe('Apple');
+    expect(normalizeExif({ Make: 3 })).not.toHaveProperty('camera');
+  });
+
   it('falls back to an unzoned local time', () => {
     expect(normalizeExif({ DateTimeOriginal: '2026:09:27 10:31:05' }).time).toEqual({
       kind: 'local',

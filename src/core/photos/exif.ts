@@ -46,6 +46,8 @@ export interface NormalizedExif {
   lngLat?: LngLat;
   /** GPS altitude in metres, if any (informational: placement uses the trail's elevation). */
   altitudeM?: number;
+  /** The camera, `Make` + `Model` (e.g. `Canon EOS R6`), when either is present. */
+  camera?: string;
   /** Pixel size the file declares, when present. */
   width?: number;
   height?: number;
@@ -276,6 +278,16 @@ function originalTime(raw: Raw): { wallMs: number; text: string } | undefined {
   return undefined;
 }
 
+/** `Make` + `Model`, whitespace collapsed, without repeating a make the model already names. */
+function cameraName(raw: Raw): string | undefined {
+  const clean = (v: unknown) => str(v)?.replace(/\s+/g, ' ');
+  const make = clean(raw['Make']);
+  const model = clean(raw['Model']);
+  if (make === undefined) return model;
+  if (model === undefined) return make;
+  return model.toLowerCase().startsWith(make.toLowerCase()) ? model : `${make} ${model}`;
+}
+
 /** Everything placement needs from one picked photo's EXIF. */
 export function normalizeExif(raw: unknown): NormalizedExif {
   if (raw === null || typeof raw !== 'object') return {};
@@ -285,6 +297,8 @@ export function normalizeExif(raw: unknown): NormalizedExif {
   if (time) out.time = time;
   const wall = originalTime(r);
   if (wall) out.wallClock = wall.text;
+  const camera = cameraName(r);
+  if (camera) out.camera = camera;
   const lngLat = exifLngLat(r);
   if (lngLat) {
     out.lngLat = lngLat;
