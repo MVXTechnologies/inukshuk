@@ -131,6 +131,21 @@ describe('redownload', () => {
     expect(listRegionPacks).toHaveBeenCalled();
   });
 
+  it("stamps the old pack's templates before the update touches its saved style", async () => {
+    (replaceRegionPack as jest.Mock).mockImplementationOnce(async () => {
+      expect(savePackUrls).toHaveBeenCalledWith({ r: OLD });
+    });
+    await useOfflineStore.getState().redownload(region('r', { urls: OLD }), layer);
+    expect(replaceRegionPack).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the progress even when re-reading the regions fails', async () => {
+    (listRegionPacks as jest.Mock).mockRejectedValueOnce(new Error('native gone'));
+    await useOfflineStore.getState().redownload(region('r'), layer);
+    expect(useOfflineStore.getState().progress).toBeNull();
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'offline-regions-reload');
+  });
+
   it('reports an app failure, not a connectivity one, and rethrows both', async () => {
     (replaceRegionPack as jest.Mock).mockRejectedValueOnce(new Error('bad style'));
     await expect(useOfflineStore.getState().redownload(region('r'), layer)).rejects.toThrow(

@@ -258,6 +258,11 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
     const label = `Updating ${region.label}`;
     set({ progress: { pct: 0, sizeBytes: 0, label } });
     try {
+      // The download rewrites the region's saved style before it starts, and
+      // a pack without its own record is judged by that file: pin the old
+      // pack's templates first, so a failed or killed update can't make the
+      // old pack read as healthy. Dropped below once the new pack is in.
+      if (region.urls !== undefined) await savePackUrls({ [region.id]: region.urls });
       await replaceRegionPack(
         region.packId,
         {
@@ -278,7 +283,13 @@ export const useOfflineStore = create<OfflineState>((set, get) => ({
       if (!(err instanceof OfflineConnectivityError)) reportError(err, 'offline-region-update');
       throw err;
     } finally {
-      set({ progress: null, regions: await loadRegions() });
+      // Progress first: a failing reload must not leave the update "running".
+      set({ progress: null });
+      try {
+        set({ regions: await loadRegions() });
+      } catch (err) {
+        reportError(err, 'offline-regions-reload');
+      }
     }
   },
 }));
