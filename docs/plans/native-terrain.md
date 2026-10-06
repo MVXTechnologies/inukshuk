@@ -1,6 +1,6 @@
 # Native 3D terrain inside the MapLibre map ("Option C")
 
-Status: "Match Outmap" checkpoint (per-tile drape of the 2D style on a finer mesh, see below); branch `feat/native-3d-terrain`, HOLD for owner review.
+Status: **shipped as a beta** behind Settings → Beta features (`betaTerrain3d`). It shipped with the "Match Outmap" per-tile drape (the 2D style draped on a finer mesh, see below), merged in #551 and released in 2.2.0 (#553). Stability fixes followed in 2.2.1 (#555, #557) and round 3 in 2.3.0 (#577, #579).
 Store build only — this is native code (a new local Expo module), never an OTA.
 
 ## Goal

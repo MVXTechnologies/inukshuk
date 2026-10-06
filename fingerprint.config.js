@@ -34,7 +34,7 @@
  * Everything else stays in: native packages, autolinking, config plugins
  * (plugins/*), modules/, eas.json, the icon and splash assets, and every
  * other key of the Expo config. `.fingerprintignore` is not needed — docs/,
- * web/, store/, .maestro/ and scripts/ are never fingerprint sources.
+ * playground/, store/, .maestro/ and scripts/ are never fingerprint sources.
  *
  * Check what is hashed with
  * `npx expo-updates fingerprint:generate --platform ios` (or android).

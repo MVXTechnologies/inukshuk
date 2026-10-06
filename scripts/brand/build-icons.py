@@ -4,7 +4,7 @@
 Reproducible, PIL + numpy only. Not run in CI — run it by hand after changing a
 master, look at the outputs (and the --preview sheet), then commit them:
 
-    python3 scripts/brand/build-icons.py            # writes assets/*.png + store/play/icon-512.png
+    python3 scripts/brand/build-icons.py            # writes assets/*.png, store/play/icon-512.png, docs/ icons
     python3 scripts/brand/build-icons.py --preview out.png   # also writes a mask preview sheet
 
 Inputs (assets/brand/):
@@ -27,6 +27,14 @@ Outputs:
   assets/splash-icon-dark.png         1024 RGBA figure in the night tone (dark splash)
   assets/favicon.png                  48 RGB
   store/play/icon-512.png             512 RGB (Play listing)
+  docs/icon.png                       512 RGB (website icon)
+  docs/apple-touch-icon.png           180 RGB (website, iOS home screen)
+  docs/favicon-32.png                 32 RGBA, rounded corners (website favicon)
+
+Not generated: the website's docs/assets/brand/logo-{128,256,384}.webp were
+exported by hand (rounded corners, lossy WebP) and a re-encode is not
+pixel-identical, so they stay as committed. Re-export them by hand if the icon
+changes.
 """
 
 from __future__ import annotations
@@ -168,6 +176,21 @@ def build() -> dict[str, Image.Image]:
 
     out['assets/favicon.png'] = out['assets/icon.png'].resize((48, 48), Image.Resampling.LANCZOS)
     out['store/play/icon-512.png'] = out['assets/icon.png'].resize((512, 512), Image.Resampling.LANCZOS)
+
+    # Website (GitHub Pages serves docs/, so the site needs its own copies).
+    out['docs/icon.png'] = out['assets/icon.png'].resize((512, 512), Image.Resampling.LANCZOS)
+    out['docs/apple-touch-icon.png'] = out['assets/icon.png'].resize((180, 180), Image.Resampling.LANCZOS)
+    out['docs/favicon-32.png'] = rounded_corners(out['assets/icon.png'], 32)
+    return out
+
+
+def rounded_corners(im: Image.Image, size: int, frac: float = 0.22) -> Image.Image:
+    """Downscale to size² and cut rounded corners (radius frac·size), antialiased at 4x."""
+    out = im.resize((size, size), Image.Resampling.LANCZOS).convert('RGBA')
+    n = size * 4
+    m = Image.new('L', (n, n), 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, n - 1, n - 1), radius=int(n * frac), fill=255)
+    out.putalpha(m.resize((size, size), Image.Resampling.LANCZOS))
     return out
 
 

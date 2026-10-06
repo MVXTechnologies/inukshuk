@@ -82,11 +82,17 @@ scripts/catalog/.cache/
 
 expo-env.d.ts
 # @end expo-cli
+# ...but this repo tracks it on purpose, so `tsc --noEmit` works in CI before a
+# native prebuild (see the file's own comment). Kept outside the generated block.
+!expo-env.d.ts
 # E2E fixture generated at test time by scripts/catalog/make-fixture.ts (#331); ~6.6 MB
 .maestro/fixtures/catalog/jpeg_eco_class_geopdf.zip
 
 # Local agent worktrees and tooling (~800 MB); keeps EAS build uploads small.
-.claude/
+# `.claude/*` (not `.claude/`) so git can still see the one tracked file: the
+# shared project settings.
+.claude/*
+!.claude/settings.json
 
 # IDE
 .idea/

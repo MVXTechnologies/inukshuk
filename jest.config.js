@@ -26,7 +26,6 @@ module.exports = {
     // be named index.ts (gpx, track) stay covered; don't re-add a blanket glob.
     '!src/core/geo/geopdf/index.ts',
     '!src/core/models/index.ts',
-    '!src/core/terrain3d/index.ts',
     // Test-only fixture helpers.
     '!src/core/geo/geopdf/testUtils.ts',
     '!src/core/terrain3d/testUtils.ts',
