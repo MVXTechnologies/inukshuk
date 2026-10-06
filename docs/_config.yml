@@ -1,0 +1,19 @@
+# GitHub Pages publishes this folder (main:/docs) as https://inukshuk.mvxtechnologies.com.
+# docs/ also holds the developer docs, which belong in the repo but not on the
+# product site. Jekyll leaves the excluded paths out of the published site.
+#
+# Everything the app or the site uses stays published, byte for byte:
+# index.html, fr/, privacy/, support/ (and support/costs.json), catalog/v1 and
+# catalog/v2, data/, assets/ (badges, logos, screenshots), the icons,
+# og-image*.png. When you add a public file, check it is not matched below.
+#
+# Setting `exclude` replaces the github-pages gem's default list, which is just
+# ["CNAME"] (Pages reads the custom domain from CNAME; it is not a page), so
+# CNAME is listed again here.
+exclude:
+  - CNAME
+  - '*.md' # ARCHITECTURE, BACKLOG, CATALOG*, CI, DEPLOYMENT, APP-STORE-SUBMISSION, READMEs
+  - plans/
+  - design/
+  - research/
+  - brand/
