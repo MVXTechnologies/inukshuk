@@ -3,10 +3,19 @@
 # vertical activity carousel; focusing + tapping a card opens the viewer.
 #
 # MUST run after category-record.yaml (its Run trail is the first overlap
-# partner). The camera follows the user location (the geo fixes), so after
-# saving, the overlapping trace sits at the screen centre — the 40%..60%
-# tap grid below is a deliberately generous net around it (heat lookup has
-# a one-cell fat-finger ring).
+# partner).
+#
+# The heat tap is aimed, not guessed (2026-10-06 rework): both recordings
+# start at the fix A = (46.8139, -71.2082), so A is where the two Runs
+# overlap. The flow parks the user on A, makes sure the camera is FOLLOWING
+# (the 'Locate' button's selected state — tapping it blindly toggles follow
+# OFF when it is already on), and taps the centre of the map view itself
+# (testID 'map-area'): while following, that centre IS the user, so the tap
+# lands on A at any zoom and whatever the screen's insets. The `own-location`
+# tag makes the runner (.github/scripts/e2e-attempts.sh) pause its background
+# geo-fix loop for this flow: that loop alternated the user between A and a
+# point ~86 m away every 2 s, which dragged the followed camera back and
+# forth under the old fixed-percentage tap grid — the flake this replaces.
 #
 # Also runs after waypoint.yaml in the full suite, which drops "Waypoint 1"
 # at the exact fix (46.8139, -71.2082) both this flow's and category-record's
@@ -18,6 +27,8 @@
 # them to aim for). So the flow deletes that pin before recording, rather
 # than trying to out-aim it.
 appId: com.inukshuk.app
+tags:
+  - own-location
 ---
 - runFlow:
     when:
@@ -134,7 +145,8 @@ appId: com.inukshuk.app
 # cluster of real, accepted points right at the shared start fix, maximising
 # the odds of landing in the same ~25 m heat grid cell (HEAT_CELL_M,
 # src/core/heat/grid.ts) as category-record's own (possibly still short)
-# trail there.
+# trail there. (The geo loop is now paused for this whole flow — the
+# `own-location` tag — so these fixes are the only ones the recorder sees.)
 - setLocation:
     latitude: 46.813975
     longitude: -71.2081125
@@ -279,173 +291,47 @@ appId: com.inukshuk.app
       - tapOn:
           point: 50%,8%
 # The heat GPX-load effect is async (reads + parses both trails' files); give
-# it a beat before probing for the rendered heat layer. Widened from 3000 to
-# 5000 as a low-risk safety margin — the original report's own unresolved
-# iteration 8 ("no heat rendered" with visibility otherwise confirmed
-# correct) suspected this load racing the wait; the primary fix for the
-# no-heat failure this session is the paced setLocation walk above, but this
-# costs nothing extra to widen too.
+# it a beat before probing for the rendered heat layer.
 - waitForAnimationToEnd:
     timeout: 5000
-# Both recordings started at this exact fix (the "setLocation" above, before
-# either dial-open), so it's where their traces overlap. The background
-# geo-fix loop (outside this flow) keeps nudging the followed camera between
-# its two points every ~2 s — re-issue the shared start fix right before
-# tapping so the followed camera (and the tap grid below) is centred on it,
-# not wherever the loop's other point last left it.
+# Park the user on A, the fix both recordings started from (their overlap).
 - setLocation:
     latitude: 46.8139
     longitude: -71.2082
-# 'follow user' pans the camera to a fresh fix rather than snapping — give
-# the pan its own beat to finish, on top of the GPX-load wait above, or the
-# tap grid below chases a camera that's still mid-animation toward centre.
+# Make sure the camera FOLLOWS the user, so the map's centre is A. 'Locate'
+# is a toggle — idle it starts following, while following it STOPS — and it
+# exposes which through its selected state, so tap it only when it is not
+# selected (guarded), then wait for the selected state. Retried whole: a tap
+# swallowed by a still-settling sheet just gets another go.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              text: 'Locate'
+              selected: true
+          commands:
+            - tapOn: 'Locate'
+      - extendedWaitUntil:
+          visible:
+            text: 'Locate'
+            selected: true
+          timeout: 10000
+# Following glides the camera onto A (and Locate zooms in to ~2.5 km across
+# if it was further out — never out). Let the glide finish before tapping.
 - waitForAnimationToEnd:
-    timeout: 2000
-# smoke.yaml (suite flow #1) can leave the camera zoomed out to fit an entire
-# city — camera position+zoom persist via settingsStore, and nothing above
-# normalizes zoom back in. At that zoom the ~85 m overlap between the two
-# recorded trails is sub-pixel, so no tap-grid point below could ever land on
-# a heat cell (this is what broke the full 12-flow suite even though the
-# isolated/quad runs, which never ran after smoke.yaml, passed).
-#
-# Locate re-centres on the user but does NOT reliably zoom: onLocate engages
-# follow mode and issues zoomToLocateLevel in the same tick, and the
-# follow-engage fly cancels the concurrent zoomTo (verified in the
-# 2026-08-03_121830 run: 'Locate' tap COMPLETED, camera still city-wide at
-# the tap grid). Known app-level race, tracked as a follow-up. So: tap Locate
-# for the recentre, then zoom IN deterministically with native double-tap
-# zoom (one level each, relative — over-zooming is harmless because the
-# trail passes through the centred user location, but too-far-out is fatal).
-# Double-taps land dead-centre, ON the recentred user dot: MapLibre anchors
-# double-tap zoom at the tap point, so an off-centre anchor would compound
-# drift each zoom and push the trail off-screen. Centre = the trail itself.
-# (Double-taps cannot open the carousel: MapLibre fires onPress only via
-# onSingleTapConfirmed, after the double-tap window.)
-- tapOn: 'Locate'
-- waitForAnimationToEnd:
-    timeout: 2000
-- doubleTapOn:
-    point: '50%,50%'
-- waitForAnimationToEnd:
-    timeout: 1500
-- doubleTapOn:
-    point: '50%,50%'
-- waitForAnimationToEnd:
-    timeout: 1500
-- doubleTapOn:
-    point: '50%,50%'
-- waitForAnimationToEnd:
-    timeout: 1500
-- doubleTapOn:
-    point: '50%,50%'
-- waitForAnimationToEnd:
-    timeout: 2000
-# After save the map shows both runs overlapping near the centre — empirically
-# a little up-and-left of dead-centre (verified interactively: the hot spot's
-# on-screen offset from a 1080x2400 device's true centre came out around
-# (-30, -84) px, i.e. roughly (47%, 47%), not (50%, 50%) — the heat lookup's
-# "one-cell fat-finger ring" is only ~25-30 px wide on screen at this zoom, so
-# a coarse 45/55 diagonal net can straddle it without ever landing inside it.
-# Try centre, then a dense 1%-step cluster around that measured offset, then
-# fall back to a wider 40%..60% net in case a run's overlap lands elsewhere.
+    timeout: 5000
+# Tap the centre of the map view: while following, the camera centre is the
+# user, i.e. A. The heat lookup reaches ±2 grid cells (~40-50 m) around the
+# tapped cell and widens with the finger tolerance when zoomed out, so a tap
+# on A finds both Runs at ANY zoom — no zoom normalisation, no tap grid.
+# Heat outranks the user dot in the tap routing (MapScreen handleMapPress),
+# and a tap never stops following, so nothing else can claim this tap.
+# Exactly one tap: a second one on an open carousel would close it.
 - tapOn:
-    point: '50%,50%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '47%,47%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '46%,46%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '48%,46%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '46%,47%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '48%,47%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '46%,48%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '47%,48%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '48%,48%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '45%,45%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '55%,55%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '45%,55%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '55%,45%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '40%,50%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '60%,50%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '50%,40%'
-- runFlow:
-    when:
-      notVisible: 'Activities here'
-    commands:
-      - tapOn:
-          point: '50%,60%'
+    id: 'map-area'
+    retryTapIfNoChange: false
 - extendedWaitUntil:
     visible: 'Activities here'
     timeout: 10000

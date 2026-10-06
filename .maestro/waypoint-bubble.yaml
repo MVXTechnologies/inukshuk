@@ -8,8 +8,10 @@
 # dead whenever a bubble or a waypoint pin was on screen.
 #
 # ANDROID-ONLY, PIXEL-6-GEOMETRY flow (1080x2400 @ 420 dpi — the local
-# `inukshuk` AVD and CI's pixel_6 profile). Not in e2e-attempts.sh: it clears
-# app state, which the fixture flows after it depend on.
+# `inukshuk` AVD and CI's pixel_6 profile). It clears app state, so it runs
+# LAST in its CI shard (.maestro/shards.json); the `own-location` tag pauses
+# the runner's background geo-fix loop, whose ~86 m oscillation would move the
+# followed camera between a tap and the tap on its bubble.
 #
 # The bubble itself is invisible to Maestro on Android (MapLibre marker
 # children carry no a11y nodes — see waypoint.yaml), so its presence is proven
@@ -25,6 +27,8 @@
 #   C = 55%,35%  -> its Waypoint button WC = 68%,32%
 #   B = 55%,78%  -> a bare spot, used to close a bubble
 appId: com.inukshuk.app
+tags:
+  - own-location
 ---
 - launchApp:
     clearState: true

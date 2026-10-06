@@ -1,0 +1,135 @@
+name: OTA runtime check
+
+# Does this change cut installed store builds off from OTA updates? An EAS
+# Update reaches only binaries whose runtime (the native fingerprint, see
+# fingerprint.config.js) matches the commit it was published from. This job
+# computes the iOS and Android fingerprints of the PR (and of its base), reads
+# the runtime of the latest finished production build of each platform from
+# EAS, and says what changes — as a job summary, warning annotations and, on a
+# PR that changes the runtime, one sticky PR comment. It WARNS and never fails
+# on a mismatch: native changes are legitimate, the release process just has
+# to know a store build is needed. docs/CI.md › "OTA runtime-match check".
+#
+# Without EXPO_TOKEN (forks, Dependabot) the head-vs-base comparison still
+# runs; only the store-build comparison is skipped.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  runtime:
+    name: Native runtime vs store builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HAS_EXPO_TOKEN: ${{ secrets.EXPO_TOKEN != '' }}
+    steps:
+      # A pull_request checkout is the PR's merge commit; depth 2 brings its
+      # first parent, the base branch tip it merges onto.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fingerprint this commit
+        run: |
+          OUT="$RUNNER_TEMP/runtime"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+          mkdir -p "$OUT"
+          for p in ios android; do
+            npx expo-updates fingerprint:generate --platform "$p" > "$OUT/head-$p.json"
+            echo "$p: $(node -p "require('$OUT/head-$p.json').hash")"
+          done
+
+      # Its own checkout and its own `npm ci`: the fingerprint hashes the
+      # installed native packages, so the base must be measured with the
+      # base's dependencies, not this PR's.
+      - name: Fingerprint the PR base
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add "$RUNNER_TEMP/base" HEAD^1
+          cd "$RUNNER_TEMP/base"
+          npm ci --no-audit --no-fund
+          for p in ios android; do
+            npx expo-updates fingerprint:generate --platform "$p" > "$OUT/base-$p.json"
+            echo "$p: $(node -p "require('$OUT/base-$p.json').hash")"
+          done
+
+      - uses: expo/expo-github-action@v9
+        if: env.HAS_EXPO_TOKEN == 'true'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # The newest FINISHED production build per platform — what the stores
+      # were last given. Best effort: a read failure only drops the store
+      # comparison from the report.
+      - name: Read the latest store builds from EAS
+        if: env.HAS_EXPO_TOKEN == 'true'
+        run: |
+          for p in ios android; do
+            if eas build:list --platform "$p" --status finished --build-profile production \
+              --limit 1 --json --non-interactive > "$OUT/store-$p.json" 2> "$OUT/store-$p.err"; then
+              node -e "const [b]=require('$OUT/store-$p.json'); console.log('$p:', b ? b.appVersion + ' (' + b.appBuildVersion + ') runtime ' + b.runtimeVersion : 'none')"
+            else
+              echo "::warning title=Native runtime::could not read the latest $p store build from EAS"
+              tail -5 "$OUT/store-$p.err"
+              rm -f "$OUT/store-$p.json"
+            fi
+          done
+
+      - name: Compare
+        id: compare
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          node scripts/ci/runtime-check.mjs --event "$EVENT" --dir "$OUT" --out "$OUT/report.md"
+          cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per PR, updated in place: posted when the PR changes the
+      # runtime, and rewritten (not deleted) if a later push no longer does.
+      # Best effort — a fork's or Dependabot's read-only token cannot comment;
+      # the summary and annotations above still say it.
+      - name: Comment on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        env:
+          CHANGED: ${{ steps.compare.outputs.changed }}
+          REPORT: ${{ env.OUT }}/report.md
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- runtime-check -->';
+            const body = fs.readFileSync(process.env.REPORT, 'utf8');
+            const issue_number = context.payload.pull_request.number;
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                ...context.repo,
+                issue_number,
+                per_page: 100,
+              });
+              const mine = comments.find((c) => c.body?.startsWith(marker));
+              if (mine) {
+                await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+              } else if (process.env.CHANGED === 'true') {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body });
+              }
+            } catch (err) {
+              core.warning(`Could not comment on the PR (${err.message}); see the job summary.`);
+            }
