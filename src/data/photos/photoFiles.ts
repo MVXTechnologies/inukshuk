@@ -23,7 +23,9 @@ import { resolveDocumentPath, StorageFullError } from '@data/storage';
  *
  * Location stripping: the optimized copies come out of a canvas and carry no
  * metadata at all; a "Full size" copy goes through `stripJpegMetadata`, which
- * drops EXIF (GPS), XMP, IPTC and comments but keeps the orientation.
+ * drops EXIF (GPS), XMP, IPTC, MPF, comments and anything appended after the
+ * image (a Motion Photo's MP4, Ultra HDR gain maps), keeping the orientation
+ * and the ICC profile.
  */
 
 const fileAt = (path: string) => new File(resolveDocumentPath(path));
@@ -103,7 +105,12 @@ function finish(paths: PhotoFilePaths): WrittenCopies {
   return out;
 }
 
-/** Write the worker's three outputs (base64) as a photo's copies. */
+/**
+ * Write the worker's three outputs (base64) as a photo's copies. These MUST be
+ * canvas re-encodes (the resize worker's output), which carry no metadata.
+ * Never pass source bytes here: a copy that keeps the original file's bytes
+ * goes through {@link writeFullSizeCopies}, which strips it first.
+ */
 export function writePhotoCopies(
   trackId: string,
   photoId: string,

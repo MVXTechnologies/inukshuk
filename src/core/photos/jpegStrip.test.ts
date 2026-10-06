@@ -1,5 +1,6 @@
 import jpeg from 'jpeg-js';
 
+import { PROGRESSIVE_JPEG_BASE64 } from './__fixtures__/progressiveJpeg';
 import { orientationApp1, readExifOrientation, stripJpegMetadata } from './jpegStrip';
 
 const seg = (marker: number, payload: number[]): number[] => {
@@ -129,14 +130,117 @@ describe('stripJpegMetadata', () => {
     expect(stripJpegMetadata(noLen).jpeg).toBe(false);
   });
 
-  it('passes standalone markers, fill bytes and data after EOI through', () => {
+  it('passes standalone markers and fill bytes through, and drops data after EOI', () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xff, 0xd0, 0xff, 0xd9, 0xaa]);
     const r = stripJpegMetadata(bytes);
     expect(r.jpeg).toBe(true);
-    expect([...r.bytes]).toEqual([0xff, 0xd8, 0xff, 0xd0, 0xff, 0xd9, 0xaa]);
+    expect([...r.bytes]).toEqual([0xff, 0xd8, 0xff, 0xd0, 0xff, 0xd9]);
+    expect(r.removed).toBe(1);
     // Trailing fill bytes with no marker: kept as they were.
     const tail = new Uint8Array([0xff, 0xd8, 0xff, 0xff]);
     expect(stripJpegMetadata(tail).bytes).toEqual(tail);
+  });
+
+  it('drops a second image appended after EOI (MPF / Ultra HDR gain map) with its own GPS', () => {
+    const second = withSegments(base, seg(0xe1, exifPayload(1)));
+    expect(has(second, 'GPS 47.6675')).toBe(true);
+    const mpf = seg(0xe2, [...ascii('MPF'), 0, 0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8]);
+    const file = new Uint8Array([...withSegments(base, mpf), ...second]);
+    const r = stripJpegMetadata(file);
+    expect(r.jpeg).toBe(true);
+    expect(has(r.bytes, 'GPS 47.6675')).toBe(false);
+    expect(has(r.bytes, 'MPF')).toBe(false);
+    expect(r.removed).toBe(2); // the MPF segment and the trailer
+    expect(r.bytes).toEqual(base);
+    expect(Buffer.from(jpeg.decode(r.bytes).data)).toEqual(Buffer.from(jpeg.decode(base).data));
+  });
+
+  it('drops a Motion Photo MP4 appended after EOI', () => {
+    const mp4 = [
+      0,
+      0,
+      0,
+      0x18,
+      ...ascii('ftypmp42'),
+      0,
+      0,
+      0,
+      0,
+      ...ascii('isommp42'),
+      ...ascii('moov udta \xa9xyz+47.6675-070.6132/'),
+    ];
+    const xmp = seg(0xe1, [
+      ...ascii('http://ns.adobe.com/xap/1.0/\0'),
+      ...ascii('<x:xmpmeta GCamera:MicroVideo="1" Item:Semantic="MotionPhoto"/>'),
+    ]);
+    const r = stripJpegMetadata(new Uint8Array([...withSegments(base, xmp), ...mp4]));
+    expect(has(r.bytes, 'ftyp')).toBe(false);
+    expect(has(r.bytes, '+47.6675')).toBe(false);
+    expect(has(r.bytes, 'MotionPhoto')).toBe(false);
+    expect(r.bytes).toEqual(base);
+  });
+
+  it('keeps APP2 only when it is an ICC profile', () => {
+    const r = stripJpegMetadata(
+      withSegments(base, [
+        ...seg(0xe2, ascii('ICC_PROFILE\0\x01\x01icc')),
+        ...seg(0xe2, ascii('FPXR\0flashpix junk')),
+        ...seg(0xe2, ascii('ICC_PROFILE')), // no NUL: not an ICC chunk
+      ]),
+    );
+    expect(r.removed).toBe(2);
+    expect(r.bytes).toEqual(withSegments(base, seg(0xe2, ascii('ICC_PROFILE\0\x01\x01icc'))));
+  });
+
+  it('keeps every scan of a progressive JPEG, with the tables between them and its RST markers', () => {
+    const prog = new Uint8Array(Buffer.from(PROGRESSIVE_JPEG_BASE64, 'base64'));
+    const count = (b: Uint8Array, m: number) => {
+      let n = 0;
+      for (let k = 0; k + 1 < b.length; k++) if (b[k] === 0xff && b[k + 1] === m) n++;
+      return n;
+    };
+    expect(count(prog, 0xda)).toBeGreaterThan(1);
+    const dirty = new Uint8Array([
+      ...withSegments(prog, seg(0xe1, exifPayload(1))),
+      ...withSegments(base, seg(0xe1, exifPayload(1))),
+    ]);
+    const r = stripJpegMetadata(dirty);
+    expect(r.jpeg).toBe(true);
+    expect(r.bytes).toEqual(prog);
+    expect(count(r.bytes, 0xda)).toBe(count(prog, 0xda));
+    expect(count(r.bytes, 0xc4)).toBe(count(prog, 0xc4));
+    expect(count(r.bytes, 0xd0)).toBeGreaterThan(0);
+    const a = jpeg.decode(prog);
+    const b = jpeg.decode(r.bytes);
+    expect(b.width).toBe(32);
+    expect(Buffer.from(b.data).equals(Buffer.from(a.data))).toBe(true);
+  });
+
+  it('walks RST markers and stuffed bytes inside a scan without stopping there', () => {
+    // SOS, then entropy data holding FF00, FFD0 and FFD7, then a COM and EOI.
+    const sos = seg(0xda, [1, 1, 0, 0, 0x3f, 0]);
+    const scan = [0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56, 0xff, 0xd7, 0x78];
+    const bytes = new Uint8Array([
+      0xff,
+      0xd8,
+      ...sos,
+      ...scan,
+      ...seg(0xfe, ascii('after the scan')),
+      0xff,
+      0xd9,
+    ]);
+    const r = stripJpegMetadata(bytes);
+    expect(r.jpeg).toBe(true);
+    expect(r.removed).toBe(1);
+    expect([...r.bytes]).toEqual([0xff, 0xd8, ...sos, ...scan, 0xff, 0xd9]);
+  });
+
+  it('keeps a scan that runs to the end of a truncated file', () => {
+    const sos = seg(0xda, [1, 1, 0, 0, 0x3f, 0]);
+    const bytes = new Uint8Array([0xff, 0xd8, ...sos, 0x12, 0xff, 0x00, 0x34, 0xff]);
+    const r = stripJpegMetadata(bytes);
+    expect(r.jpeg).toBe(true);
+    expect(r.bytes).toEqual(bytes);
   });
 });
 

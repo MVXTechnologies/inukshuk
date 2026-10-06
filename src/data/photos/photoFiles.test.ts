@@ -80,6 +80,17 @@ describe('writeFullSizeCopies', () => {
     expect(w.bytes).toBe(kept.length + 5 + 10);
   });
 
+  it('drops a Motion Photo video or MPF image appended after the JPEG', async () => {
+    const trailer = [...Buffer.from('\0\0\0\x18ftypmp42 moov +47.6675-070.6132/')];
+    fs.seed('/cache/motion.jpg', new Uint8Array([...jpegWithGps, ...trailer]));
+    await writeFullSizeCopies('t1', 'p4', 'file:///cache/motion.jpg', {
+      thumb: outputs.thumb,
+      sprite: outputs.sprite,
+    });
+    const kept = fs.files.get('/doc/photos/t1/p4.jpg')!;
+    expect([...kept]).toEqual([0xff, 0xd8, 0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9]);
+  });
+
   it('refuses a non-JPEG', async () => {
     fs.seed('/cache/picked.heic', new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74]));
     await expect(
