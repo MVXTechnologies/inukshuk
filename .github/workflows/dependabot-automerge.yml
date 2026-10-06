@@ -3,16 +3,28 @@ name: Dependabot Auto-merge
 # Self-maintaining dependencies: once CI passes, automatically merge Dependabot
 # minor/patch updates. Major bumps are left for human review, and so is any
 # update that touches native code (see NATIVE_DEPENDENCIES below).
+#
+# Security: `pull_request_target` runs with a write token on PRs from forks, so
+# this workflow must never check out or run the PR's code (it doesn't: it only
+# reads Dependabot's metadata and asks GitHub to merge once the required checks
+# pass). It runs only for PRs that Dependabot itself OPENED in THIS repository:
+# `github.actor` alone is not enough, since it is whoever triggered the event,
+# and Dependabot can be made the actor of an event on someone else's PR.
 on: pull_request_target
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
+    if: >
+      github.repository == 'MVXTechnologies/inukshuk' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     env:
       # Native-bearing dependencies — THE list (one glob per line). A bump to
       # any of these changes the binary: it has to ship in a store build that
@@ -38,7 +50,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 

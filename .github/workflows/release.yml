@@ -18,9 +18,17 @@ on:
         default: all
         options: [all, ios, android]
 
+# Least privilege: the GITHUB_TOKEN can only read the repository. A job that
+# needs more says so itself.
+permissions:
+  contents: read
+
 jobs:
   guard:
     runs-on: ubuntu-latest
+    # Same environment as the publishing job, so the check still sees
+    # EXPO_TOKEN once it is an environment secret rather than a repo secret.
+    environment: production
     outputs:
       enabled: ${{ steps.c.outputs.enabled }}
     steps:
@@ -31,20 +39,24 @@ jobs:
     needs: guard
     if: needs.guard.outputs.enabled == 'true'
     runs-on: ubuntu-latest
+    # Store credentials and EXPO_TOKEN belong to this environment once the
+    # owner moves them there (docs/CI.md § Who can publish): then only runs
+    # the environment's rules allow (tags v*, main) can read them.
+    environment: production
     # `secrets` can't be referenced in a step-level `if:`; surface their presence
     # as job-level env (which `if:` may read) instead.
     env:
       HAS_GSA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
       HAS_ASC: ${{ secrets.ASC_API_KEY_P8 != '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
 
-      - uses: expo/expo-github-action@v9
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # v9
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
@@ -70,10 +82,15 @@ jobs:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
         run: printf '%s' "$ASC_API_KEY_P8" > asc-api-key.p8
 
+      # The input goes through env, never spliced into the script: `${{ }}` in
+      # `run:` is text substitution, i.e. shell injection for any free-form value.
       - name: Build and submit
+        env:
+          PLATFORM: ${{ inputs.platform || 'all' }}
         run: |
+          case "$PLATFORM" in all | ios | android) ;; *) echo "bad platform: $PLATFORM" >&2; exit 1 ;; esac
           eas build \
-            --platform "${{ github.event.inputs.platform || 'all' }}" \
+            --platform "$PLATFORM" \
             --profile production \
             --auto-submit \
             --non-interactive \

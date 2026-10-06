@@ -36,11 +36,11 @@ jobs:
     steps:
       # A pull_request checkout is the PR's merge commit; depth 2 brings its
       # first parent, the base branch tip it merges onto.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -71,7 +71,7 @@ jobs:
             echo "$p: $(node -p "require('$OUT/base-$p.json').hash")"
           done
 
-      - uses: expo/expo-github-action@v9
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # v9
         if: env.HAS_EXPO_TOKEN == 'true'
         with:
           eas-version: latest
@@ -108,7 +108,7 @@ jobs:
       # the summary and annotations above still say it.
       - name: Comment on the PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CHANGED: ${{ steps.compare.outputs.changed }}
           REPORT: ${{ env.OUT }}/report.md
