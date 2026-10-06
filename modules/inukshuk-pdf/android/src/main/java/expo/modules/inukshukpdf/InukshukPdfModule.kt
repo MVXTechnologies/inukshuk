@@ -1,6 +1,8 @@
 package expo.modules.inukshukpdf
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Matrix
@@ -18,6 +20,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class CropOptions : Record {
@@ -78,7 +82,25 @@ class InukshukPdfModule : Module() {
       }
     }
 
-    OnDestroy { destroyed.set(true) }
+    OnCreate {
+      appContext.reactContext?.applicationContext?.registerComponentCallbacks(trimCallbacks)
+    }
+
+    OnDestroy {
+      destroyed.set(true)
+      appContext.reactContext?.applicationContext?.unregisterComponentCallbacks(trimCallbacks)
+      worker.execute { closeHeld() }
+    }
+  }
+
+  // The OS is short of memory: drop the held page (its parsed content).
+  private val trimCallbacks = object : ComponentCallbacks2 {
+    override fun onTrimMemory(level: Int) {
+      if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) worker.execute { closeHeld() }
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {}
+    @Deprecated("Deprecated in Java")
+    override fun onLowMemory() { worker.execute { closeHeld() } }
   }
 
   private fun render(context: Context, options: RenderCropOptions): Map<String, Any> {
@@ -98,14 +120,14 @@ class InukshukPdfModule : Module() {
     var success = false
     try {
       val started = SystemClock.elapsedRealtime()
-      val descriptor = ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY)
-      val renderer = try { PdfRenderer(descriptor) } catch (error: Throwable) {
-        descriptor.close()
-        throw error
-      }
-      val result = renderer.use { document ->
-        require(options.pageIndex < document.pageCount) { "PDF page index is out of range" }
-        document.openPage(options.pageIndex.toInt()).use { page ->
+      // Opening the document and page parses the page's content: most of a
+      // small crop's cost (~170 ms of a 200 ms 480 px tile on a US Topo sheet,
+      // API 34 emulator). A burst of crops of one page reuses them.
+      val held = holdPage(input, options.pageIndex.toInt())
+      val result = run {
+        val document = held.renderer
+        val page = held.page
+        run {
           CropGeometry.requirePageSize(page.width, page.height, options.pageWidthPt, options.pageHeightPt)
           val loaded = SystemClock.elapsedRealtime()
           val bitmap = Bitmap.createBitmap(geometry.widthPx, geometry.heightPx, Bitmap.Config.ARGB_8888)
@@ -132,19 +154,73 @@ class InukshukPdfModule : Module() {
         }
       }
       success = true
+      scheduleClose()
       return result
     } finally {
       partial.delete()
-      if (!success) output.delete()
+      if (!success) {
+        output.delete()
+        // A failure may leave the renderer in an unknown state: never reuse it.
+        closeHeld()
+      }
     }
+  }
+
+  /** One open document + page, kept between crops of the same page (worker thread only). */
+  private class HeldPage(
+    val descriptor: ParcelFileDescriptor,
+    val renderer: PdfRenderer,
+    val page: PdfRenderer.Page,
+  )
+
+  private fun holdPage(input: File, pageIndex: Int): HeldPage {
+    closeFuture?.cancel(false)
+    // The file's identity includes its size and modification time, so a
+    // replaced PDF at the same path is opened afresh.
+    val key = PageHold.key(input.canonicalPath, input.length(), input.lastModified(), pageIndex)
+    return hold.acquire(key) {
+      val descriptor = ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY)
+      val renderer = try { PdfRenderer(descriptor) } catch (error: Throwable) {
+        descriptor.close()
+        throw error
+      }
+      try {
+        require(pageIndex < renderer.pageCount) { "PDF page index is out of range" }
+        HeldPage(descriptor, renderer, renderer.openPage(pageIndex))
+      } catch (error: Throwable) {
+        renderer.close()
+        descriptor.close()
+        throw error
+      }
+    }
+  }
+
+  private fun scheduleClose() {
+    closeFuture?.cancel(false)
+    closeFuture = worker.schedule({ closeHeld() }, HOLD_IDLE_MS, TimeUnit.MILLISECONDS)
+  }
+
+  private fun closeHeld() {
+    closeFuture?.cancel(false)
+    closeFuture = null
+    hold.release()
   }
 
   companion object {
     // Shared across React contexts. The admission gate means the executor can
     // contain at most one accepted render; overlap is rejected, never queued.
     private val busy = AtomicBoolean(false)
-    private val worker = Executors.newSingleThreadExecutor { task ->
+    private val worker = Executors.newSingleThreadScheduledExecutor { task ->
       Thread(task, "InukshukPdf").apply { isDaemon = true }
     }
+    // Confined to the worker thread.
+    private val hold = PageHold<HeldPage> { h ->
+      try { h.page.close() } catch (_: Throwable) {}
+      try { h.renderer.close() } catch (_: Throwable) {}
+      try { h.descriptor.close() } catch (_: Throwable) {}
+    }
+    private var closeFuture: ScheduledFuture<*>? = null
+    /** Idle time after which the held page is closed. */
+    private const val HOLD_IDLE_MS = 8_000L
   }
 }

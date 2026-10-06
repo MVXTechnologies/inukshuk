@@ -7,7 +7,11 @@ javac -d "$classes_dir" \
   "$module_dir/android/src/main/java/expo/modules/inukshukpdf/CropGeometry.java" \
   "$module_dir/android/src/test/java/expo/modules/inukshukpdf/CropGeometryTest.java" \
   "$module_dir/android/src/main/java/expo/modules/inukshukpdf/PrivatePdfFiles.java" \
-  "$module_dir/android/src/test/java/expo/modules/inukshukpdf/PrivatePdfFilesTest.java"
+  "$module_dir/android/src/test/java/expo/modules/inukshukpdf/PrivatePdfFilesTest.java" \
+  "$module_dir/android/src/main/java/expo/modules/inukshukpdf/PageHold.java" \
+  "$module_dir/android/src/test/java/expo/modules/inukshukpdf/PageHoldTest.java"
 java -cp "$classes_dir" expo.modules.inukshukpdf.CropGeometryTest
 
 java -cp "$classes_dir" expo.modules.inukshukpdf.PrivatePdfFilesTest
+
+java -cp "$classes_dir" expo.modules.inukshukpdf.PageHoldTest
