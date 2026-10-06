@@ -21,7 +21,7 @@ import {
   type WrittenCopies,
 } from './photoFiles';
 import type { PhotoResizer, ResizedPhoto } from './resizer';
-import { readSidecar, updateSidecar } from './sidecarStore';
+import { readWritableSidecar, updateSidecar } from './sidecarStore';
 
 /**
  * Add photos from the phone's library to a trail (#587).
@@ -77,7 +77,8 @@ export async function preparePhotoImport(args: {
   manualClockOffsetMs?: number;
 }): Promise<PreparedImport> {
   const zoneOffsetAt = args.zoneOffsetAt ?? deviceZoneOffsetAt;
-  const { sidecar } = await readSidecar(args.trackId);
+  // Fails early (SidecarUnavailableError) when the commit could not write anyway.
+  const { sidecar } = await readWritableSidecar(args.trackId);
   const known = existingKeys(sidecar.photos);
   const items = new Map<string, PreparedItem>();
   const candidates: ImportCandidate[] = [];
@@ -206,6 +207,8 @@ export async function commitPhotoImport(args: {
   const chosen = all.filter((p) => args.selected.has(p.candidate.key));
   const result: CommitResult = { added: [], failed: [] };
   if (chosen.length === 0) return result;
+  // Before any copy is made: an unreadable or newer sidecar must not be written over.
+  await readWritableSidecar(prepared.trackId);
 
   const disk = assessFreeSpaceForWrite(chosen.length * ESTIMATED_BYTES_PER_PHOTO);
   if (disk?.verdict === 'block') throw new StorageFullError(disk.message ?? 'disk full');

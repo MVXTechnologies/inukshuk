@@ -234,26 +234,65 @@ function sanitizeComment(raw: unknown): PhotoComment | null {
 }
 
 /**
- * Read any persisted sidecar into the current schema. Total: garbage, a
- * missing file (`null`) or a future version we cannot read yields an empty
- * sidecar rather than a throw, and duplicate ids keep the most recently
- * updated record. `dropped` counts records that could not be read, so the
- * caller can log a torn file.
+ * What reading a trail's sidecar found:
+ *
+ * - `ok` — a sidecar this app understands (some records may still have been
+ *   dropped, see `dropped`).
+ * - `missing` — no sidecar at all: the trail has no photos yet.
+ * - `unreadable` — a file is there but is not a sidecar (corrupt JSON, wrong
+ *   shape). Its photos may still be recoverable by hand.
+ * - `future` — written by a newer app version this one cannot read.
+ *
+ * Only `ok` and `missing` may be written over ({@link sidecarWritable}):
+ * rewriting an `unreadable` or `future` file would replace the trail's real
+ * photo list with an empty one, and an orphan sweep would then delete every
+ * copy as unreferenced.
  */
-export function migratePhotoSidecar(
-  raw: unknown,
-  trackId: string,
-): { sidecar: PhotoSidecar; dropped: number } {
+export type SidecarStatus = 'ok' | 'missing' | 'unreadable' | 'future';
+
+export interface MigratedSidecar {
+  status: SidecarStatus;
+  /** The readable content; empty unless `status` is `ok`. */
+  sidecar: PhotoSidecar;
+  /** Records that could not be read (logged by the caller). */
+  dropped: number;
+}
+
+/** Whether a sidecar read with this status may be rewritten (or its folder swept). */
+export function sidecarWritable(status: SidecarStatus): boolean {
+  return status === 'ok' || status === 'missing';
+}
+
+/**
+ * Read any persisted sidecar into the current schema. Total: never throws.
+ * `null`/`undefined` (no file) is `missing`; anything that is not a sidecar
+ * object is `unreadable`; a newer version is `future` and is not half-read.
+ * Duplicate ids keep the most recently updated record, and `dropped` counts
+ * records that could not be read, so the caller can log a torn file.
+ */
+export function migratePhotoSidecar(raw: unknown, trackId: string): MigratedSidecar {
   const sidecar = emptySidecar(trackId);
-  if (raw === null || typeof raw !== 'object') return { sidecar, dropped: 0 };
+  if (raw === null || raw === undefined) return { status: 'missing', sidecar, dropped: 0 };
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { status: 'unreadable', sidecar, dropped: 0 };
+  }
   const r = raw as Record<string, unknown>;
   // A newer app wrote this: leave it alone rather than half-read it.
   if (isFiniteNumber(r['version']) && r['version'] > PHOTO_SIDECAR_VERSION) {
-    return { sidecar, dropped: Array.isArray(r['photos']) ? r['photos'].length : 0 };
+    return {
+      status: 'future',
+      sidecar,
+      dropped: Array.isArray(r['photos']) ? r['photos'].length : 0,
+    };
+  }
+  const photosRaw = r['photos'] ?? [];
+  const commentsRaw = r['comments'] ?? [];
+  if (!Array.isArray(photosRaw) || !Array.isArray(commentsRaw)) {
+    return { status: 'unreadable', sidecar, dropped: 0 };
   }
   let dropped = 0;
   const byId = new Map<string, TrackPhoto>();
-  for (const item of Array.isArray(r['photos']) ? r['photos'] : []) {
+  for (const item of photosRaw) {
     const photo = sanitizePhoto(item, trackId);
     if (!photo) {
       dropped++;
@@ -263,12 +302,12 @@ export function migratePhotoSidecar(
     if (!prev || photo.updatedAt >= prev.updatedAt) byId.set(photo.id, photo);
   }
   sidecar.photos = [...byId.values()];
-  for (const item of Array.isArray(r['comments']) ? r['comments'] : []) {
+  for (const item of commentsRaw) {
     const comment = sanitizeComment(item);
     if (comment) sidecar.comments.push(comment);
     else dropped++;
   }
-  return { sidecar, dropped };
+  return { status: 'ok', sidecar, dropped };
 }
 
 /**

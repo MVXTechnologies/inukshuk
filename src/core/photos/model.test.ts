@@ -6,6 +6,7 @@ import {
   noteToPhoto,
   PHOTO_SIDECAR_VERSION,
   sanitizePhoto,
+  sidecarWritable,
   type TrackPhoto,
 } from './model';
 
@@ -107,7 +108,7 @@ describe('sanitizePhoto', () => {
 
 describe('migratePhotoSidecar', () => {
   it('reads a v1 file, keeping valid records and counting the rest', () => {
-    const { sidecar, dropped } = migratePhotoSidecar(
+    const { status, sidecar, dropped } = migratePhotoSidecar(
       {
         version: 1,
         trackId: 't1',
@@ -136,6 +137,7 @@ describe('migratePhotoSidecar', () => {
       },
       't1',
     );
+    expect(status).toBe('ok');
     expect(sidecar.version).toBe(PHOTO_SIDECAR_VERSION);
     expect(sidecar.photos).toEqual([base]);
     expect(sidecar.comments).toEqual([
@@ -172,17 +174,45 @@ describe('migratePhotoSidecar', () => {
     );
   });
 
-  it('gives an empty sidecar for a missing or garbage file', () => {
-    expect(migratePhotoSidecar(null, 't9')).toEqual({ sidecar: emptySidecar('t9'), dropped: 0 });
-    expect(migratePhotoSidecar('nope', 't9').sidecar.photos).toEqual([]);
-    expect(migratePhotoSidecar({ photos: 'x', comments: 'y' }, 't9').sidecar.photos).toEqual([]);
+  it('reports a missing file as missing, with an empty sidecar', () => {
+    expect(migratePhotoSidecar(null, 't9')).toEqual({
+      status: 'missing',
+      sidecar: emptySidecar('t9'),
+      dropped: 0,
+    });
+    expect(migratePhotoSidecar(undefined, 't9').status).toBe('missing');
   });
 
-  it('leaves a file from a newer app alone', () => {
-    const { sidecar, dropped } = migratePhotoSidecar({ version: 2, photos: [base, base] }, 't1');
-    expect(sidecar.photos).toEqual([]);
-    expect(dropped).toBe(2);
-    expect(migratePhotoSidecar({ version: 2 }, 't1').dropped).toBe(0);
+  it('reports a file that is not a sidecar as unreadable', () => {
+    for (const raw of ['nope', 42, [], { photos: 'x' }, { comments: 'y' }]) {
+      const r = migratePhotoSidecar(raw, 't9');
+      expect(r.status).toBe('unreadable');
+      expect(r.sidecar.photos).toEqual([]);
+    }
+  });
+
+  it('reports a file from a newer app as future, and does not half-read it', () => {
+    const r = migratePhotoSidecar({ version: 2, photos: [base, base] }, 't1');
+    expect(r.status).toBe('future');
+    expect(r.sidecar.photos).toEqual([]);
+    expect(r.dropped).toBe(2);
+    expect(migratePhotoSidecar({ version: 2 }, 't1')).toMatchObject({
+      status: 'future',
+      dropped: 0,
+    });
+  });
+
+  it('reads a sidecar whose lists are absent as ok', () => {
+    expect(migratePhotoSidecar({ version: 1 }, 't1').status).toBe('ok');
+  });
+});
+
+describe('sidecarWritable', () => {
+  it('allows writes only over a sidecar that was read whole, or never existed', () => {
+    expect(sidecarWritable('ok')).toBe(true);
+    expect(sidecarWritable('missing')).toBe(true);
+    expect(sidecarWritable('unreadable')).toBe(false);
+    expect(sidecarWritable('future')).toBe(false);
   });
 });
 

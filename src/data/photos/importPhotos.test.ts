@@ -9,7 +9,7 @@ import {
   type PickedPhoto,
 } from './importPhotos';
 import type { PhotoResizer, ResizedPhoto } from './resizer';
-import { readSidecar } from './sidecarStore';
+import { readSidecar, SidecarUnavailableError } from './sidecarStore';
 import { fakeFs } from './testUtils/testFileSystem';
 
 jest.mock('expo-file-system', () =>
@@ -351,6 +351,31 @@ describe('commitPhotoImport', () => {
     expect(r.added[0]).toMatchObject({ width: 4000, height: 3000 });
     expect([...fs.files.get('/doc/photos/t1/p1.jpg')!]).toEqual([0xff, 0xd8, 0xff, 0xd9]);
     expect(r.added[1]).toMatchObject({ width: 2048, height: 1536 });
+  });
+
+  it('refuses to import over an unreadable or newer sidecar, writing nothing', async () => {
+    const prepared = await preparePhotoImport({
+      trackId: 't1',
+      points,
+      picked: picks.slice(0, 2),
+      zoneOffsetAt: EDT,
+    });
+    const torn = '{"version":1,"photos":[{"id":"x"';
+    fs.seed('/doc/photos/t1/photos.json', torn);
+    const resizer = fakeResizer();
+    await expect(
+      commitPhotoImport({ prepared, selected: defaultSelection(prepared), resizer, newId }),
+    ).rejects.toThrow(SidecarUnavailableError);
+    expect(resizer.calls).toEqual([]);
+    expect(fs.list('/doc/photos/t1/')).toEqual(['/doc/photos/t1/photos.json']);
+    expect(fs.text('/doc/photos/t1/photos.json')).toBe(torn);
+    await expect(
+      preparePhotoImport({ trackId: 't1', points, picked: picks, zoneOffsetAt: EDT }),
+    ).rejects.toMatchObject({ status: 'unreadable' });
+    fs.seed('/doc/photos/t1/photos.json', JSON.stringify({ version: 7 }));
+    await expect(
+      preparePhotoImport({ trackId: 't1', points, picked: picks, zoneOffsetAt: EDT }),
+    ).rejects.toMatchObject({ status: 'future' });
   });
 
   it('does nothing with an empty selection', async () => {

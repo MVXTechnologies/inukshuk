@@ -4,7 +4,7 @@ import { photoFilePaths } from '@core/photos/paths';
 import { TOMBSTONE_RETAIN_MS } from '@core/photos/record';
 
 import { writePhotoCopies } from './photoFiles';
-import { readSidecar, updateSidecar, writeSidecar } from './sidecarStore';
+import { readSidecar, SidecarUnavailableError, updateSidecar, writeSidecar } from './sidecarStore';
 import { fakeFs } from './testUtils/testFileSystem';
 import {
   deleteTrailWithPhotos,
@@ -64,6 +64,53 @@ describe('sidecar store', () => {
     expect((await readSidecar('t1')).sidecar.photos.map((p) => p.id)).toEqual(['a']);
     expect(await readSidecar('t2')).toMatchObject({ dropped: 1 });
     expect((await readSidecar('none')).sidecar.photos).toEqual([]);
+  });
+
+  it('reports each read status', async () => {
+    seedTrail('ok', [photo('ok', 'a', 10)]);
+    expect(await readSidecar('ok')).toMatchObject({ status: 'ok' });
+    expect(await readSidecar('none')).toMatchObject({ status: 'missing', dropped: 0 });
+    fs.seed('/doc/photos/bad/photos.json', '{"version":1,"photos":[');
+    expect(await readSidecar('bad')).toMatchObject({ status: 'unreadable' });
+    fs.seed('/doc/photos/new/photos.json', JSON.stringify({ version: 9, photos: [{ id: 'a' }] }));
+    expect(await readSidecar('new')).toMatchObject({ status: 'future', dropped: 1 });
+    fs.seed('/doc/photos/shape/photos.json', '[1,2]');
+    expect(await readSidecar('shape')).toMatchObject({ status: 'unreadable' });
+  });
+
+  it('recovers from the staged copy when the sidecar itself is torn', async () => {
+    seedTrail('t1', [photo('t1', 'a', 10)]);
+    const good = fs.text('/doc/photos/t1/photos.json')!;
+    fs.seed('/doc/photos/t1/photos.json', '{"torn');
+    fs.seed('/doc/photos/t1/photos.json.tmp', good);
+    const r = await readSidecar('t1');
+    expect(r.status).toBe('ok');
+    expect(r.sidecar.photos.map((p) => p.id)).toEqual(['a']);
+    // Promoted from the stage after a crash between delete and move.
+    fs.files.delete('/doc/photos/t1/photos.json');
+    expect((await readSidecar('t1')).status).toBe('ok');
+  });
+
+  it('is unreadable when both the sidecar and its staged copy are corrupt', async () => {
+    fs.seed('/doc/photos/t1/photos.json', '{"torn');
+    fs.seed('/doc/photos/t1/photos.json.tmp', '{"also torn');
+    expect((await readSidecar('t1')).status).toBe('unreadable');
+  });
+
+  it('treats a lone torn staged copy (a first write that never landed) as missing', async () => {
+    fs.seed('/doc/photos/t1/photos.json.tmp', '{"torn');
+    expect((await readSidecar('t1')).status).toBe('missing');
+  });
+
+  it.each([
+    ['unreadable', '{"version":1,"photos":['],
+    ['future', JSON.stringify({ version: 2, photos: [] })],
+  ])('refuses to write over an %s sidecar and leaves it as it was', async (status, text) => {
+    fs.seed('/doc/photos/t1/photos.json', text);
+    const update = updateSidecar('t1', (s) => ({ ...s, photos: [photo('t1', 'a', 1)] }));
+    await expect(update).rejects.toThrow(SidecarUnavailableError);
+    await expect(update).rejects.toMatchObject({ status, trackId: 't1' });
+    expect(fs.text('/doc/photos/t1/photos.json')).toBe(text);
   });
 
   it('serializes concurrent updates to one trail', async () => {
@@ -164,6 +211,47 @@ describe('trail photos', () => {
     expect(all[0]).toMatchObject({ trackId: 't1', file: 'photos/t1/other.jpg' });
     expect(fs.files.has('/doc/photos/t1/other.map.png')).toBe(true);
     expect(fs.list('/doc/photos/t2')).toEqual([]);
+  });
+
+  describe.each([
+    ['unreadable', '{"version":1,"photos":[{"id":"late"'],
+    ['future', JSON.stringify({ version: 2, trackId: 't1', photos: [], extra: 'x' })],
+  ])('over an %s sidecar', (_status, text) => {
+    beforeEach(() => fs.seed('/doc/photos/t1/photos.json', text));
+    const files = () => fs.list('/doc/photos/t1/');
+
+    it('tidy neither rewrites it nor sweeps a single copy', async () => {
+      const before = files();
+      expect(await tidyTrailPhotos('t1', 5)).toBe(0);
+      expect(files()).toEqual(before);
+      expect(fs.text('/doc/photos/t1/photos.json')).toBe(text);
+    });
+
+    it('edits, removals and trims fail and touch nothing', async () => {
+      const before = files();
+      await expect(editTrailPhoto('t1', 'late', { caption: 'x' })).rejects.toThrow(
+        SidecarUnavailableError,
+      );
+      await expect(removeTrailPhoto('t1', 'late')).rejects.toThrow(SidecarUnavailableError);
+      await expect(
+        onTrailTrimmed('t1', 200, 700, lineTrack({ lengthM: 1000 }).slice(20, 71), 9),
+      ).rejects.toThrow(SidecarUnavailableError);
+      expect(files()).toEqual(before);
+      expect(fs.text('/doc/photos/t1/photos.json')).toBe(text);
+    });
+
+    it('a merge from or into it fails before moving anything', async () => {
+      seedTrail('t2', [photo('t2', 'other', 50)]);
+      const before = fs.list('/doc/photos/');
+      const merged = lineTrack({ lengthM: 1000 });
+      await expect(onTrailsMerged(['t1', 't2'], 't2', merged, 9)).rejects.toThrow(
+        SidecarUnavailableError,
+      );
+      await expect(onTrailsMerged(['t1', 't2'], 't1', merged, 9)).rejects.toThrow(
+        SidecarUnavailableError,
+      );
+      expect(fs.list('/doc/photos/')).toEqual(before);
+    });
   });
 
   it('tidies: rewrites a torn sidecar and sweeps orphans', async () => {
