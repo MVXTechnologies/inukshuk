@@ -36,9 +36,69 @@ JOBS=$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 OUT="$HERE/prebuilt"
 mkdir -p "$WORK/src" "$OUT" "$HERE/assets/inukshukproj"
 export PATH="/opt/homebrew/bin:$PATH"
-# A Linux EAS worker may have no system CMake: use the Android SDK's.
-if ! command -v cmake >/dev/null 2>&1 && [ -n "${ANDROID_HOME:-}" ]; then
-  for c in "$ANDROID_HOME"/cmake/*/bin; do [ -x "$c/cmake" ] && export PATH="$c:$PATH"; done
+# --- Build tools -----------------------------------------------------------
+# EAS's Android image has an NDK but no CMake on PATH at pre-install time
+# (2.3.0 re-tag, build f14bcb1e: "cmake: command not found"); Gradle would
+# fetch the SDK's CMake only later. Find or install CMake, in this order, and
+# say which one is used: PATH → the Android SDK's cmake/*/bin → sdkmanager
+# "cmake;3.22.1" → pip --user. Then a build tool for it: make, else ninja
+# (PATH, the SDK CMake dir, or pip).
+SDK_DIR=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+SDK_CMAKE=3.22.1
+find_sdkmanager() {
+  command -v sdkmanager 2>/dev/null && return 0
+  [ -n "$SDK_DIR" ] || return 1
+  local m
+  for m in "$SDK_DIR"/cmdline-tools/latest/bin/sdkmanager "$SDK_DIR"/cmdline-tools/*/bin/sdkmanager \
+    "$SDK_DIR"/tools/bin/sdkmanager; do
+    [ -x "$m" ] && { echo "$m"; return 0; }
+  done
+  return 1
+}
+use_sdk_cmake() { # newest $SDK_DIR/cmake/<version>/bin first on PATH
+  [ -n "$SDK_DIR" ] || return 1
+  local c found=""
+  for c in "$SDK_DIR"/cmake/*/bin; do [ -x "$c/cmake" ] && found=$c; done
+  [ -n "$found" ] || return 1
+  export PATH="$found:$PATH"
+  CMAKE_FROM="Android SDK ($found)"
+}
+pip_install() { # tools… → ~/.local/bin (or the user base) on PATH
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 -m pip install --user --quiet "$@" 2>/dev/null ||
+    python3 -m pip install --user --quiet --break-system-packages "$@" || return 1
+  export PATH="$(python3 -m site --user-base)/bin:$PATH"
+}
+CMAKE_FROM=""
+if command -v cmake >/dev/null 2>&1; then
+  CMAKE_FROM="PATH ($(command -v cmake))"
+elif use_sdk_cmake; then
+  :
+elif SDKM=$(find_sdkmanager); then
+  (yes | "$SDKM" --install "cmake;$SDK_CMAKE" > /dev/null) || true # `yes` dies of SIGPIPE
+  use_sdk_cmake && CMAKE_FROM="sdkmanager cmake;$SDK_CMAKE → $CMAKE_FROM"
+fi
+if [ -z "$CMAKE_FROM" ] && pip_install cmake && command -v cmake >/dev/null 2>&1; then
+  CMAKE_FROM="pip --user ($(command -v cmake))"
+fi
+if [ -z "$CMAKE_FROM" ]; then
+  echo "inukshuk-proj: no CMake (PATH, \$ANDROID_HOME/cmake, sdkmanager and pip all failed)" >&2
+  exit 1
+fi
+echo "inukshuk-proj: cmake from $CMAKE_FROM: $(cmake --version | head -1)"
+if command -v make >/dev/null 2>&1; then
+  echo "inukshuk-proj: build tool make ($(command -v make))"
+else
+  if ! command -v ninja >/dev/null 2>&1; then
+    use_sdk_cmake > /dev/null 2>&1 || true # the SDK's CMake package ships ninja
+    command -v ninja >/dev/null 2>&1 || pip_install ninja || true
+  fi
+  if ! command -v ninja >/dev/null 2>&1; then
+    echo "inukshuk-proj: no make and no ninja for CMake" >&2
+    exit 1
+  fi
+  export CMAKE_GENERATOR=Ninja
+  echo "inukshuk-proj: build tool ninja ($(command -v ninja)), no make"
 fi
 
 sha256_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1 || sha256sum "$1" | cut -d' ' -f1; }
