@@ -104,7 +104,7 @@ export function assessRuntime({ event, head, base = null, store = null }) {
           status += `; main already differs from store ${label}`;
           notes.push(
             `${LABEL[p]}: main (not this PR) already differs from store ${label}, so OTAs from main ` +
-              `do not reach it.${hotfixRemedy(build)}`,
+              `do not reach it until the next store release.${hotfixRemedy(build)}`,
           );
         }
       } else if (!storeHash) {

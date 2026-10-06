@@ -22,7 +22,21 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Map actions'
     timeout: 30000
-- tapOn: 'Map actions'
+# Guarded opener (make-map.yaml's idiom): the dial animates open, so wait for
+# its row instead of tapping it at once (CI 2026-10-06: the immediate tap on
+# 'Convert coordinates' found nothing), and only re-tap 'Map actions' while
+# the row is absent, so a retry never toggles an open dial shut.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: 'Convert coordinates'
+          commands:
+            - tapOn: 'Map actions'
+      - extendedWaitUntil:
+          visible: 'Convert coordinates'
+          timeout: 15000
 - tapOn: 'Convert coordinates'
 - extendedWaitUntil:
     visible:
