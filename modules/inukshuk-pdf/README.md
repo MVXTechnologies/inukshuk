@@ -30,8 +30,15 @@ the exact 1896×1659 Eco crop encoded in a median 504 ms instead of 1010 ms and 
 6.48 MB instead of 7.31 MB; decoded RGB pixels were identical. This changes neither
 resolution nor decoded bitmap memory.
 
-Pages, renderer/descriptor, streams and
-bitmaps are closed/recycled on success and failure. Partial output is deleted.
+**Held page.** Opening the document and page parses the page's content: on
+the API 34 emulator ~170–500 ms of a US Topo crop whose paint and PNG take
+3–200 ms. The module keeps the last `(file, size, mtime, page)` open on its
+worker thread (`PageHold`) and reuses it for the next crop of the same page;
+it is closed after 8 s idle, on any failure, on `onTrimMemory(RUNNING_LOW)`
+and above, `onLowMemory` and module teardown. A replaced file (another size or
+mtime) is opened afresh.
+
+Streams and bitmaps are closed/recycled on success and failure. Partial output is deleted.
 
 A process-wide admission gate rejects concurrent work with `E_PDF_BUSY`; a dedicated
 serial worker never accumulates accepted rendering jobs or bitmaps. Synchronous
