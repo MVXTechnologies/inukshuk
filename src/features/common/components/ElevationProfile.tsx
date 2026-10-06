@@ -50,8 +50,13 @@ const AXIS_GAP = 5;
  */
 const AXIS_RIGHT = 34;
 
+/** Stable default: a fresh `[]` per render would rebuild the profile every time. */
+const NO_SEGMENTS: readonly number[] = [];
+
 interface Props {
   points: readonly TrackPoint[];
+  /** Segment boundaries in `points` (one per pause): the x axis skips their gaps (#325). */
+  segmentStarts?: readonly number[];
   ascentM: number;
   descentM: number;
   /**
@@ -143,6 +148,7 @@ function distanceTicks(totalM: number): number[] {
  */
 export function ElevationProfile({
   points,
+  segmentStarts = NO_SEGMENTS,
   ascentM,
   descentM,
   onScrub,
@@ -150,7 +156,10 @@ export function ElevationProfile({
   selectedDistanceM = null,
 }: Props) {
   const theme = useTheme();
-  const profile = useMemo(() => buildElevationProfile(points), [points]);
+  const profile = useMemo(
+    () => buildElevationProfile(points, { segmentStarts }),
+    [points, segmentStarts],
+  );
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<number | null>(null);
   const [scrubAt, setScrubAt] = useState<TrackPointAt | null>(null);
@@ -165,7 +174,9 @@ export function ElevationProfile({
   const { speeds, hrs } = useMemo(() => {
     if (!profile.hasElevation)
       return { speeds: [] as (number | undefined)[], hrs: [] as (number | undefined)[] };
-    const ats = profile.samples.map((s) => interpolateTrackAtDistance(points, s.distanceM));
+    const ats = profile.samples.map((s) =>
+      interpolateTrackAtDistance(points, s.distanceM, segmentStarts),
+    );
     const speeds = profile.samples.map((s, i) => {
       const sp = ats[i]?.speed;
       if (sp !== undefined && Number.isFinite(sp) && sp >= 0) return sp;
@@ -183,7 +194,7 @@ export function ElevationProfile({
       return hr !== undefined && Number.isFinite(hr) && hr > 0 ? hr : undefined;
     });
     return { speeds, hrs };
-  }, [points, profile]);
+  }, [points, profile, segmentStarts]);
 
   const speedRange = useMemo(() => rangeOf(speeds), [speeds]);
   const hrRange = useMemo(() => rangeOf(hrs), [hrs]);
@@ -312,7 +323,7 @@ export function ElevationProfile({
       const plot = width - axisLeft - AXIS_RIGHT;
       if (plot <= 0) return;
       const ratio = (e.nativeEvent.locationX - axisLeft) / plot;
-      const res = scrubProfileAtRatio(points, samples, ratio);
+      const res = scrubProfileAtRatio(points, samples, ratio, segmentStarts);
       if (!res) return;
       setScrub(res.sampleIndex);
       setScrubAt(res.at);
@@ -335,7 +346,7 @@ export function ElevationProfile({
       onPanResponderRelease: endScrub,
       onPanResponderTerminate: endScrub,
     });
-  }, [width, samples, points, onScrub, axisLeft]);
+  }, [width, samples, points, segmentStarts, onScrub, axisLeft]);
 
   // Guard every index read: `scrub` indexes a PREVIOUS render's samples.
   const active = scrub === null ? null : (samples[scrub] ?? null);

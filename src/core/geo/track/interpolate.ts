@@ -1,5 +1,6 @@
 import type { TrackPoint } from '@core/models';
 import { haversineMeters } from '@core/geo/geomath';
+import { segmentStartSet } from './trackAxis';
 
 /** A position along a track plus its interpolated attributes. */
 export interface TrackPointAt {
@@ -43,12 +44,17 @@ function lerpOpt(a: number | undefined, b: number | undefined, t: number): numbe
 /**
  * Interpolate a track's position (and altitude/speed/time) at a given distance
  * along it. Walks the haversine arc-length of the original GPS points and lerps
- * within the containing segment. Clamps `distanceM` to [0, totalLength]. Pure —
+ * within the containing step. Clamps `distanceM` to [0, totalLength]. Pure —
  * used to sync a map marker to the elevation-profile scrubber.
+ *
+ * Segment gaps (`segmentStarts`, one per pause) add no distance, as on
+ * `buildTrackAxis` (#325); a distance exactly at a gap resolves to the first
+ * point after it, as `interpolateOnAxis` does.
  */
 export function interpolateTrackAtDistance(
   points: readonly TrackPoint[],
   distanceM: number,
+  segmentStarts: readonly number[] = [],
 ): TrackPointAt | null {
   if (points.length === 0) return null;
   const first = points[0]!;
@@ -65,12 +71,17 @@ export function interpolateTrackAtDistance(
   }
 
   const target = Math.max(0, distanceM);
+  const gaps = segmentStartSet(segmentStarts, points.length);
   let cum = 0;
   for (let i = 1; i < points.length; i++) {
+    // A pause is not walked: nothing lies between its two ends.
+    if (gaps.has(i)) continue;
     const a = points[i - 1]!;
     const b = points[i]!;
     const seg = haversineMeters(a, b);
-    if (cum + seg >= target) {
+    // A target exactly at a step's end is answered by that end, unless a
+    // pause follows it: then the first point after the pause answers.
+    if (cum + seg > target || (cum + seg === target && !gaps.has(i + 1))) {
       const t = seg > 0 ? Math.min(1, Math.max(0, (target - cum) / seg)) : 0;
       return {
         latitude: a.latitude + (b.latitude - a.latitude) * t,

@@ -147,6 +147,29 @@ describe('useRecordingSession — the elapsed/GPS-quality ticker', () => {
     expect(view.result.current.elapsedS).toBe(7);
   });
 
+  it('a recording recovered PAUSED shows its time at once, not 0:00 until Resume (#325)', async () => {
+    // What crash recovery restores: 57 s recorded, then paused, then the
+    // app was killed and relaunched an hour later.
+    const startedAt = Date.now() - 3_600_000;
+    useRecorderStore.setState({
+      status: 'paused',
+      startedAt,
+      pausedAt: startedAt + 57_000,
+      pausedMs: 0,
+    });
+    const view = await mount();
+    expect(view.result.current.elapsedS).toBe(57);
+    await act(async () => jest.advanceTimersByTime(10_000));
+    expect(view.result.current.elapsedS).toBe(57);
+    // Resume continues from there; the pause is not credited.
+    await act(async () => {
+      useRecorderStore.getState().resume();
+    });
+    expect(view.result.current.elapsedS).toBe(57);
+    await act(async () => jest.advanceTimersByTime(3000));
+    expect(view.result.current.elapsedS).toBe(60);
+  });
+
   it('clears its interval on unmount — no leak, no setState after teardown', async () => {
     const view = await mount();
     await act(async () => {

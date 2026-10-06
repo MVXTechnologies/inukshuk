@@ -249,3 +249,69 @@ describe('mergeTracks — large sources (audit A16)', () => {
     expect(merged.stats.pointCount).toBe(150_001);
   });
 });
+
+describe('segments survive trim and merge (#325)', () => {
+  // Two legs, ~111 m per step; a pause and a ~1.1 km relocation between
+  // them (index 3 opens the second leg).
+  const legA = [pt(45.0, -73, T0), pt(45.001, -73, T0 + MIN), pt(45.002, -73, T0 + 2 * MIN)];
+  const legB = [pt(45.012, -73, T0 + 60 * MIN), pt(45.013, -73, T0 + 61 * MIN)];
+  const points = [...legA, ...legB];
+  const starts = [3];
+  const stepM = sliceTrack(points, 0, 1).stats.distanceM;
+
+  it('sliceTrack keeps the boundaries inside the window, re-indexed, and never bridges them', () => {
+    const kept = sliceTrack(points, 1, 4, starts);
+    expect(kept.points).toHaveLength(4);
+    expect(kept.segmentStarts).toEqual([2]);
+    // Two steps walked (1→2 and 3→4); the relocation is not distance.
+    expect(kept.stats.distanceM).toBeCloseTo(2 * stepM, 0);
+    // A window that ends before the pause has no boundary left.
+    expect(sliceTrack(points, 0, 2, starts).segmentStarts).toEqual([]);
+    // A boundary at the window's first point is no boundary.
+    expect(sliceTrack(points, 3, 4, starts).segmentStarts).toEqual([]);
+    expect(sliceTrack(points, 4, 1, starts)).toMatchObject({ points: [], segmentStarts: [] });
+  });
+
+  it('retargetNotesAfterTrim measures the cut on the segment-aware axis', () => {
+    // A note at the last fix of the trail: 3 steps along the segmented axis.
+    const { kept, dropped } = retargetNotesAfterTrim(
+      [note('end', 3 * stepM)],
+      points,
+      1,
+      4,
+      starts,
+    );
+    expect(dropped).toEqual([]);
+    expect(kept[0]?.distanceM).toBeCloseTo(2 * stepM, 0);
+  });
+
+  it("mergeTracks keeps every source's own segments, offset into the merged list", () => {
+    const later = [pt(45.014, -73, T0 + 90 * MIN), pt(45.015, -73, T0 + 91 * MIN)];
+    const earlier = [pt(44.99, -73, T0 - 10 * MIN), pt(44.991, -73, T0 - 9 * MIN)];
+    expect(
+      mergeTracks([
+        { name: 'A', points, segmentStarts: starts },
+        { name: 'B', points: later },
+      ]).segmentStarts,
+    ).toEqual([3]);
+    expect(
+      mergeTracks([
+        { name: 'B', points: earlier },
+        { name: 'A', points, segmentStarts: starts },
+      ]).segmentStarts,
+    ).toEqual([5]);
+    // The relocation inside a source is not counted.
+    const only = mergeTracks([{ name: 'A', points, segmentStarts: starts }]);
+    expect(only.stats.distanceM).toBeCloseTo(3 * stepM, 0);
+  });
+
+  it("re-anchors a note past a source's pause on that source's own axis", () => {
+    const later = [pt(46, -73, T0 + 200 * MIN), pt(46.001, -73, T0 + 201 * MIN)];
+    const merged = mergeTracks([
+      { name: 'A', points, segmentStarts: starts, notes: [note('a', 3 * stepM)] },
+      { name: 'L', points: later, notes: [note('l', 0)] },
+    ]);
+    // 'a' sits at A's end, not clamped short of it by the relocation.
+    expect(merged.notes[0]?.distanceM).toBeCloseTo(3 * stepM, 0);
+  });
+});

@@ -24,15 +24,17 @@ export interface NumberedTrailNote {
 /**
  * Number the notes 1..N in trail order (orderNotes) and anchor each to its
  * position on the track, so map pins and list rows share one numbering. Notes
- * whose distance can't be resolved (empty track) are dropped.
+ * whose distance can't be resolved (empty track) are dropped. Distances are
+ * on the trail's segment-aware axis (`segmentStarts`, #325).
  */
 export function numberNotesOnTrack(
   points: readonly TrackPoint[],
   notes: readonly TrackNote[],
+  segmentStarts: readonly number[] = [],
 ): NumberedTrailNote[] {
   if (points.length === 0) return [];
   return orderNotes(notes).flatMap((note, i) => {
-    const at = interpolateTrackAtDistance(points, note.distanceM);
+    const at = interpolateTrackAtDistance(points, note.distanceM, segmentStarts);
     return at ? [{ note, num: i + 1, latitude: at.latitude, longitude: at.longitude }] : [];
   });
 }

@@ -36,8 +36,10 @@ export class SharingUnavailableError extends Error {
 export async function exportTrailPdf(
   track: TrackSummary,
   points: readonly TrackPoint[],
+  segmentStarts: readonly number[] = [],
 ): Promise<void> {
-  const profile = buildElevationProfile(points);
+  // The same segment-aware axis the notes are anchored on (#325).
+  const profile = buildElevationProfile(points, { segmentStarts });
   const ordered = orderNotes(track.notes ?? []);
 
   const notes: TrailPdfNote[] = [];

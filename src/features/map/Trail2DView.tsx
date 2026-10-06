@@ -102,7 +102,10 @@ export function Trail2DView({
   // Notes numbered 1..N in trail order — the SAME numbering the notes list and
   // the elevation-profile pins use (both go through orderNotes), so a pin on
   // the map is trivially matched to its row in the list.
-  const numberedNotes = useMemo(() => numberNotesOnTrack(points, notes ?? []), [points, notes]);
+  const numberedNotes = useMemo(
+    () => numberNotesOnTrack(points, notes ?? [], segmentStarts),
+    [points, notes, segmentStarts],
+  );
 
   // Scrub marker (see MapScreen's inspect-marker: same shape and colours).
   const scrubFeature = useMemo(
