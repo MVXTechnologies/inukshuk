@@ -1,6 +1,10 @@
 import { needsRedownload } from '@core/geo/tiles';
 import { MAP_PACK_FORMAT } from '@features/map/mapStyle';
-import { regionUpdateLayer, useOfflinePackHealth } from '@features/map/offlinePackHealth';
+import {
+  regionUpdateLayer,
+  staleUpdateGroup,
+  useOfflinePackHealth,
+} from '@features/map/offlinePackHealth';
 import { formatBytes } from '@core/format';
 import type { OfflineRegion } from '@data/offline';
 import { useOfflineStore } from '@state/offlineStore';
@@ -19,6 +23,17 @@ import {
   useTheme,
 } from 'react-native-paper';
 
+/** The name of one offline map to update: a region's label, or a trail download's without "(1/n)". */
+function updateName(group: readonly OfflineRegion[] | null): string {
+  const first = group?.[0];
+  if (!first) return '';
+  return group.length > 1 ? first.label.replace(/\s*\(\d+\/\d+\)$/, '') : first.label;
+}
+
+function updateBytes(group: readonly OfflineRegion[] | null): number {
+  return (group ?? []).reduce((sum, r) => sum + r.sizeBytes, 0);
+}
+
 export function OfflineMapsSection() {
   const theme = useTheme();
   const regions = useOfflineStore((s) => s.regions);
@@ -35,10 +50,15 @@ export function OfflineMapsSection() {
   /** Region being renamed; the rename dialog is visible while non-null. */
   const [renaming, setRenaming] = useState<{ id: string } | null>(null);
   const [renameText, setRenameText] = useState('');
-  /** Region awaiting re-download confirmation; the dialog is visible while non-null. */
-  const [pendingUpdate, setPendingUpdate] = useState<OfflineRegion | null>(null);
-  /** The region re-downloading now, and the last update failure per region. */
+  /**
+   * Regions awaiting re-download confirmation — one offline map: a region, or
+   * every stale part of a trail download. The dialog is visible while non-null.
+   */
+  const [pendingUpdate, setPendingUpdate] = useState<OfflineRegion[] | null>(null);
+  /** The regions of the update running now (the one downloading: `updatingId`). */
+  const [updatingIds, setUpdatingIds] = useState<readonly string[]>([]);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  /** The last update failure per region. */
   const [updateErrors, setUpdateErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -53,31 +73,44 @@ export function OfflineMapsSection() {
   };
 
   const confirmUpdate = () => {
-    const region = pendingUpdate;
+    const group = pendingUpdate;
     setPendingUpdate(null);
-    if (!region || updatingId !== null || progress !== null) return;
-    const layer = regionUpdateLayer(tileUrl, region);
-    if (!layer) return;
-    setUpdatingId(region.id);
+    if (!group || updatingIds.length > 0 || progress !== null) return;
+    const ids = group.map((r) => r.id);
+    setUpdatingIds(ids);
     setUpdateErrors((e) => {
       const next = { ...e };
-      delete next[region.id];
+      for (const id of ids) delete next[id];
       return next;
     });
-    void useOfflineStore
-      .getState()
-      .redownload(region, layer)
-      .catch((err: unknown) => {
-        const reason = err instanceof Error ? err.message : String(err);
-        setUpdateErrors((e) => ({ ...e, [region.id]: reason }));
-      })
-      .finally(() => setUpdatingId(null));
+    // One part after another (one download at a time); the first failure
+    // stops the rest — offline, they would all fail the same way.
+    void (async () => {
+      try {
+        for (const region of group) {
+          const layer = regionUpdateLayer(tileUrl, region);
+          if (!layer) continue;
+          setUpdatingId(region.id);
+          try {
+            await useOfflineStore.getState().redownload(region, layer);
+          } catch (err: unknown) {
+            const reason = err instanceof Error ? err.message : String(err);
+            setUpdateErrors((e) => ({ ...e, [region.id]: reason }));
+            break;
+          }
+        }
+      } finally {
+        setUpdatingId(null);
+        setUpdatingIds([]);
+      }
+    })();
   };
 
   /** The row's second line: what it is, or why and how far it is being updated. */
   const describe = (region: OfflineRegion): string => {
     const size = formatBytes(region.sizeBytes);
     if (updatingId === region.id) return `Updating… ${Math.round(progress?.pct ?? 0)}%`;
+    if (updatingIds.includes(region.id)) return `Waiting to update · ${size}`;
     const failed = updateErrors[region.id];
     if (failed !== undefined) return `Update failed — ${failed}`;
     if (needsRedownload(region, MAP_PACK_FORMAT)) return `Old map style · download again · ${size}`;
@@ -118,8 +151,10 @@ export function OfflineMapsSection() {
                       {...p}
                       icon="download"
                       accessibilityLabel={`Update ${region.label}`}
-                      disabled={updatingId !== null || progress !== null}
-                      onPress={() => setPendingUpdate(region)}
+                      disabled={updatingIds.length > 0 || progress !== null}
+                      onPress={() =>
+                        setPendingUpdate(staleUpdateGroup(region, regions, needsUpdate))
+                      }
                     />
                   )}
                   <IconButton {...p} icon="pencil-outline" onPress={() => beginRename(region)} />
@@ -158,7 +193,7 @@ export function OfflineMapsSection() {
             <Text variant="bodyMedium">
               {offlineOnly
                 ? "Turn off 'Locally downloaded only' to download this area again."
-                : `"${pendingUpdate?.label ?? ''}" was saved with map data this version no longer reads, so parts of it can show blank offline. Download it again (about ${formatBytes(pendingUpdate?.sizeBytes ?? 0)})? The current copy stays until the new one is complete.`}
+                : `"${updateName(pendingUpdate)}" was saved with map data this version no longer reads, so parts of it can show blank offline. Download it again (about ${formatBytes(updateBytes(pendingUpdate))})? The current copy stays until the new one is complete.`}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>

@@ -5,10 +5,14 @@ import {
   packZoomRange,
 } from '@core/geo/tiles';
 import { staleTemplateKeys, styleUrlTemplates, type UrlTemplates } from '@core/map/tileUrls';
+import { offlinePackGroup } from '@core/trails/packIds';
 import type { OfflineRegion } from '@data/offline';
+import { readAnnouncedStale, saveAnnouncedStale } from '@data/packHealthNotice';
 import { type DownloadLayer, useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
+
+import { type TimedSnackbar, useTimedSnackbar } from '../common/useTimedSnackbar';
 
 import { MAP_PACK_FORMAT } from './mapStyle';
 import { packStyle, type PackExtensions } from './packStyle';
@@ -113,20 +117,82 @@ export function useOfflinePackHealth(): ReadonlySet<string> {
 }
 
 /**
- * Tell the user once per session that some offline regions need updating —
- * on the map, where a blank offline area would otherwise be the first sign.
+ * The stale regions to update together with `region`: every stale part of
+ * the same trail download (one offline map to the user — `offlinePackGroup`),
+ * else `region` alone. In list order.
  */
-export function useOfflinePackHealthNotice(showSnack: (message: string) => void): void {
+export function staleUpdateGroup(
+  region: OfflineRegion,
+  regions: readonly OfflineRegion[],
+  stale: ReadonlySet<string>,
+): OfflineRegion[] {
+  const group = offlinePackGroup(region.id);
+  const members = regions.filter((r) => stale.has(r.id) && offlinePackGroup(r.id) === group);
+  return members.length > 0 ? members : [region];
+}
+
+/** The offline maps (not packs: a trail download's parts are one) among `stale`, sorted. */
+export function staleMapGroups(stale: ReadonlySet<string>): string[] {
+  return [...new Set([...stale].map(offlinePackGroup))].sort();
+}
+
+/** How many offline maps need updating (a trail download's parts count once). */
+export function staleMapCount(stale: ReadonlySet<string>): number {
+  return staleMapGroups(stale).length;
+}
+
+/**
+ * What the notice does given what it last announced and the stale maps now
+ * (both sorted group ids): speak only when a map joined the list, and record
+ * the list whenever it changed — so a map updated and later stale again is
+ * news again.
+ */
+export function nextStaleNotice(
+  announced: readonly string[],
+  current: readonly string[],
+): { announce: boolean; save: string[] | null } {
+  const seen = new Set(announced);
+  const announce = current.some((id) => !seen.has(id));
+  const same = announced.length === current.length && current.every((id) => seen.has(id));
+  return { announce, save: same ? null : [...current] };
+}
+
+/**
+ * Tell the user when offline maps need updating — on the map, where a blank
+ * offline area would otherwise be the first sign — once per newly stale map,
+ * across cold starts (the announced list persists). Render the returned
+ * snackbar with an action to Settings › Data (duration Infinity: see
+ * `useTimedSnackbar`). Retired raster packs count too: they are blank offline.
+ */
+export function useOfflinePackHealthNotice(): TimedSnackbar {
+  const snackbar = useTimedSnackbar(8000);
   const stale = useOfflinePackHealth();
-  const told = useRef(false);
-  const count = stale.size;
+  const loaded = useOfflineStore((s) => s.hydrated);
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
+  const key = staleMapGroups(stale).join('\n');
+  const { show } = snackbar;
   useEffect(() => {
-    if (told.current || count === 0) return;
-    told.current = true;
-    showSnack(
-      count === 1
-        ? 'An offline map needs updating — Settings → Offline maps'
-        : `${count} offline maps need updating — Settings → Offline maps`,
-    );
-  }, [count, showSnack]);
+    // Before both stores load, an empty list means "not known yet", not "all fixed".
+    if (!loaded || !settingsHydrated) return;
+    const current = key === '' ? [] : key.split('\n');
+    let live = true;
+    void (async () => {
+      const announced = await readAnnouncedStale().catch(() => []);
+      if (!live) return;
+      const { announce, save } = nextStaleNotice(announced, current);
+      // Speak before recording, so nothing is ever recorded as told unsaid.
+      if (announce) {
+        show(
+          current.length === 1
+            ? 'An offline map needs updating'
+            : `${current.length} offline maps need updating`,
+        );
+      }
+      if (save !== null) await saveAnnouncedStale(save).catch(() => undefined);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [key, loaded, settingsHydrated, show]);
+  return snackbar;
 }

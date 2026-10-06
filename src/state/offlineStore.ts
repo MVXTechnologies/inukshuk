@@ -39,6 +39,8 @@ interface DownloadProgress {
 
 interface OfflineState {
   regions: OfflineRegion[];
+  /** Whether `regions` was read from the native packs yet (an empty list may just mean "not yet"). */
+  hydrated: boolean;
   progress: DownloadProgress | null;
   hydrate: () => Promise<void>;
   /**
@@ -123,11 +125,12 @@ async function loadRegions(): Promise<OfflineRegion[]> {
 
 export const useOfflineStore = create<OfflineState>((set, get) => ({
   regions: [],
+  hydrated: false,
   progress: null,
 
   hydrate: async () => {
     setTileLimit(50_000); // headroom above the 25k UI cap
-    set({ regions: await loadRegions() });
+    set({ regions: await loadRegions(), hydrated: true });
   },
 
   downloadMany: async (args) => {

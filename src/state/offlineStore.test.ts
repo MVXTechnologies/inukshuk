@@ -78,6 +78,12 @@ describe('hydrate: the URL-template migration', () => {
     expect(readPackStyleTemplates).not.toHaveBeenCalledWith('stamped');
   });
 
+  it('marks the regions as loaded', async () => {
+    useOfflineStore.setState({ hydrated: false });
+    await useOfflineStore.getState().hydrate();
+    expect(useOfflineStore.getState().hydrated).toBe(true);
+  });
+
   it('writes nothing when every pack already has templates', async () => {
     (listRegionPacks as jest.Mock).mockResolvedValueOnce([region('a', { urls: OLD })]);
     await useOfflineStore.getState().hydrate();

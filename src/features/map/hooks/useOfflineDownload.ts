@@ -151,9 +151,10 @@ export function useOfflineDownload({
   useEffect(() => {
     void useOfflineStore.getState().hydrate();
   }, []);
-  // ...and say so once if any of them needs downloading again (P1-2): a pack
-  // built with tile URLs the map no longer uses would otherwise just be blank.
-  useOfflinePackHealthNotice(showSnack);
+  // ...and say so if any of them needs downloading again (P1-2): a pack built
+  // with tile URLs the map no longer uses would otherwise just be blank. The
+  // screen renders this snackbar, with its action to the offline maps.
+  const healthNotice = useOfflinePackHealthNotice();
 
   const onMapLayout = useCallback((e: LayoutChangeEvent) => {
     setMapSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
@@ -303,5 +304,6 @@ export function useOfflineDownload({
     confirmDownload,
     prepareRegionGeometry,
     resolveRegionRect,
+    healthNotice,
   };
 }

@@ -7,9 +7,12 @@ import { DEFAULT_TILE_URL, useSettingsStore } from '@state/settingsStore';
 
 import {
   currentPackUrls,
+  nextStaleNotice,
   regionNeedsUpdate,
   regionUpdateLayer,
+  staleMapCount,
   staleRegionUrls,
+  staleUpdateGroup,
   useOfflinePackHealth,
   useOfflinePackHealthNotice,
 } from './offlinePackHealth';
@@ -17,6 +20,14 @@ import {
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: {} } } }));
 // The store's native-pack layer; these tests drive the store's state directly.
 jest.mock('@data/offline', () => ({ OfflineConnectivityError: class extends Error {} }));
+// The notice's persisted record of what it already announced, in memory.
+const mockAnnounced: string[] = [];
+jest.mock('@data/packHealthNotice', () => ({
+  readAnnouncedStale: jest.fn(async () => [...mockAnnounced]),
+  saveAnnouncedStale: jest.fn(async (ids: string[]) => {
+    mockAnnounced.splice(0, mockAnnounced.length, ...ids);
+  }),
+}));
 
 const region = (id: string, extra: Partial<OfflineRegion> = {}): OfflineRegion => ({
   id,
@@ -152,34 +163,91 @@ describe('useOfflinePackHealth', () => {
   });
 });
 
-describe('useOfflinePackHealthNotice', () => {
-  it('tells the user once, with the count', async () => {
-    const showSnack = jest.fn();
-    useOfflineStore.setState({
-      regions: [withOldGeodetic(region('a')), withOldGeodetic(region('b'))],
-    });
-    const { rerender } = await renderHook(() => useOfflinePackHealthNotice(showSnack));
-    expect(showSnack).toHaveBeenCalledWith(
-      '2 offline maps need updating — Settings → Offline maps',
-    );
-    await act(async () => {
-      useOfflineStore.setState({ regions: [withOldGeodetic(region('a'))] });
-    });
-    await rerender({});
-    expect(showSnack).toHaveBeenCalledTimes(1);
+describe('staleUpdateGroup / staleMapCount', () => {
+  const parts = [
+    withOldGeodetic(region('trail-t-s1-1')),
+    region('trail-t-s1-2'),
+    withOldGeodetic(region('trail-t-s1-3')),
+    withOldGeodetic(region('trail-t-s2-1')),
+    withOldGeodetic(region('a')),
+  ];
+  const stale = new Set(['trail-t-s1-1', 'trail-t-s1-3', 'trail-t-s2-1', 'a']);
+
+  it("updates a trail download's stale parts together, anything else alone", () => {
+    const first = parts[0] as OfflineRegion;
+    const last = parts[4] as OfflineRegion;
+    expect(staleUpdateGroup(first, parts, stale).map((r) => r.id)).toEqual([
+      'trail-t-s1-1',
+      'trail-t-s1-3',
+    ]);
+    expect(staleUpdateGroup(last, parts, stale).map((r) => r.id)).toEqual(['a']);
   });
 
-  it('says it in the singular, and nothing when all is well', async () => {
-    const showSnack = jest.fn();
-    const first = await renderHook(() => useOfflinePackHealthNotice(showSnack));
-    expect(showSnack).not.toHaveBeenCalled();
-    await first.unmount();
-    await act(async () => {
-      useOfflineStore.setState({ regions: [withOldGeodetic(region('a'))] });
+  it('counts offline maps, not packs', () => {
+    expect(staleMapCount(stale)).toBe(3);
+    expect(staleMapCount(new Set())).toBe(0);
+  });
+});
+
+describe('nextStaleNotice', () => {
+  it('speaks only when the stale list grows, and records the list as it is', () => {
+    expect(nextStaleNotice([], ['a'])).toEqual({ announce: true, save: ['a'] });
+    expect(nextStaleNotice(['a'], ['a'])).toEqual({ announce: false, save: null });
+    expect(nextStaleNotice(['a', 'b'], ['a'])).toEqual({ announce: false, save: ['a'] });
+    expect(nextStaleNotice(['a'], ['a', 'b'])).toEqual({ announce: true, save: ['a', 'b'] });
+    expect(nextStaleNotice(['a'], [])).toEqual({ announce: false, save: [] });
+  });
+});
+
+describe('useOfflinePackHealthNotice', () => {
+  beforeEach(() => {
+    mockAnnounced.length = 0;
+    useOfflineStore.setState({ hydrated: true });
+  });
+
+  it("tells the user, counting a trail download's parts as one map", async () => {
+    useOfflineStore.setState({
+      regions: [
+        withOldGeodetic(region('a')),
+        withOldGeodetic(region('trail-t-s1-1')),
+        withOldGeodetic(region('trail-t-s1-2')),
+      ],
     });
-    await renderHook(() => useOfflinePackHealthNotice(showSnack));
-    expect(showSnack).toHaveBeenCalledWith(
-      'An offline map needs updating — Settings → Offline maps',
-    );
+    const { result } = await renderHook(() => useOfflinePackHealthNotice());
+    expect(result.current.message).toBe('2 offline maps need updating');
+    expect(mockAnnounced).toEqual(['a', 'trail-t-s1-']);
+  });
+
+  it('stays quiet on the next cold start, and speaks again only when the list grows', async () => {
+    useOfflineStore.setState({ regions: [withOldGeodetic(region('a'))] });
+    const first = await renderHook(() => useOfflinePackHealthNotice());
+    expect(first.result.current.message).toBe('An offline map needs updating');
+    await first.unmount();
+
+    // A cold start: a fresh hook, the same persisted record.
+    const second = await renderHook(() => useOfflinePackHealthNotice());
+    expect(second.result.current.message).toBeNull();
+
+    await act(async () => {
+      useOfflineStore.setState({
+        regions: [withOldGeodetic(region('a')), withOldGeodetic(region('b'))],
+      });
+    });
+    expect(second.result.current.message).toBe('2 offline maps need updating');
+  });
+
+  it('says nothing when all is well, and judges nothing before the regions load', async () => {
+    mockAnnounced.push('a');
+    useOfflineStore.setState({ hydrated: false, regions: [] });
+    const { result } = await renderHook(() => useOfflinePackHealthNotice());
+    expect(result.current.message).toBeNull();
+    // Not loaded yet is not "all fixed": the record survives.
+    expect(mockAnnounced).toEqual(['a']);
+
+    await act(async () => {
+      useOfflineStore.setState({ hydrated: true });
+    });
+    expect(result.current.message).toBeNull();
+    expect(mockAnnounced).toEqual([]);
   });
 });

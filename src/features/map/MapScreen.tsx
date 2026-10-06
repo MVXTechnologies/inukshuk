@@ -1060,6 +1060,7 @@ export function MapScreen() {
     beginRegionSelect,
     cancelRegionSelect,
     confirmDownload,
+    healthNotice,
   } = useOfflineDownload({ mapRef, cameraRef, showSnack, mapLoaded });
   // The recording panel yields the bottom edge to the region-select overlay.
   const recordingPanelUp = status !== 'idle' && !selecting;
@@ -3684,6 +3685,16 @@ export function MapScreen() {
           wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
         >
           {overlaySnack ?? ''}
+        </Snackbar>
+        <Snackbar
+          visible={healthNotice.message !== null}
+          onDismiss={healthNotice.dismiss}
+          duration={Number.POSITIVE_INFINITY}
+          wrapperStyle={snackbarWrapperStyle(recordingPanelUp, panelHeight)}
+          // Settings › Data settings holds the offline maps and their Update buttons.
+          action={{ label: 'View', onPress: () => router.push('/settings?open=data') }}
+        >
+          {healthNotice.message ?? ''}
         </Snackbar>
         {downloadProgress !== null && (
           <Snackbar
