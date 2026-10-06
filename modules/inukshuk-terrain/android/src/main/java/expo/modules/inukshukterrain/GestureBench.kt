@@ -73,6 +73,38 @@ class GestureBench(private val view: View, private val onDone: () -> Unit) : Cho
           (cx + r * cos(a)).toFloat() to (cy + r * sin(a)).toFloat(),
         )
       }
+      // Round 3 disambiguation tests: each gesture with the other cues as noise.
+      "tiltnoisy" -> {
+        // a tilt (amount dp up) whose finger line turns 6° and spreads 5 %
+        val y = cy + 80f * density - step.amount * density * t
+        val a = Math.toRadians(6.0 * t)
+        val h = half * (1f + 0.05f * t)
+        arrayOf(
+          (cx - h * cos(a)).toFloat() to (y - h * sin(a)).toFloat(),
+          (cx + h * cos(a)).toFloat() to (y + h * sin(a)).toFloat(),
+        )
+      }
+      "rotatenoisy" -> {
+        // a turn of amount° with a 10 dp vertical slide and 4 % spread
+        val a = Math.toRadians((step.amount * t).toDouble())
+        val r = 110f * density * (1f + 0.04f * t)
+        val y = cy - 10f * density * t
+        arrayOf(
+          (cx - r * cos(a)).toFloat() to (y - r * sin(a)).toFloat(),
+          (cx + r * cos(a)).toFloat() to (y + r * sin(a)).toFloat(),
+        )
+      }
+      "pinchnoisy" -> {
+        // a spread by amount (×) with a 5° turn and a 12 dp vertical slide
+        val k = 1f + (step.amount - 1f) * t
+        val a = Math.toRadians(5.0 * t)
+        val r = 80f * density * k
+        val y = cy - 12f * density * t
+        arrayOf(
+          (cx - r * cos(a)).toFloat() to (y - r * sin(a)).toFloat(),
+          (cx + r * cos(a)).toFloat() to (y + r * sin(a)).toFloat(),
+        )
+      }
       else -> arrayOf(cx to cy)
     }
   }
@@ -91,7 +123,7 @@ class GestureBench(private val view: View, private val onDone: () -> Unit) : Cho
 
   private fun begin(step: Step, now: Long) {
     downTime = now
-    if (step.kind == "pitch" || step.kind == "rotate") {
+    if (step.kind == "pitch" || step.kind == "rotate" || step.kind.endsWith("noisy")) {
       val p = twoFinger(step, 0f)
       dispatch(MotionEvent.ACTION_DOWN, now, arrayOf(p[0]))
       dispatch(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), now, p)

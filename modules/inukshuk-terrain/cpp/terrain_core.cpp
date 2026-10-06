@@ -250,6 +250,17 @@ struct WalkResult {
   bool overflow = false;
 };
 
+}  // namespace
+
+double fogLodFactor(double distance, double fogStartCtc, double fogEndCtc, double boost, double ctc) {
+  if (!(boost > 0)) return 1;
+  const double a = fogStartCtc * ctc, b = fogEndCtc * ctc;
+  if (!(b > a)) return 1;
+  const double t = std::min(std::max((distance - a) / (b - a), 0.0), 1.0);
+  return 1 + boost * t * t * (3 - 2 * t);
+}
+
+namespace {
 WalkResult walk(const FrameCamera& cam, const LodOptions& opts, double threshold, const Vec3& eye,
                 double ctc) {
   const auto planes = frustumPlanes(cam.P);
@@ -281,7 +292,8 @@ WalkResult walk(const FrameCamera& cam, const LodOptions& opts, double threshold
     const double distance = distanceToAabb(eye[0], eye[1], eye[2], box, ppm);
     if (distance > fogEnd) continue;
     const double sse = screenSpaceError(b.size, opts.grid, ctc, distance);
-    if (sse > threshold && t.z < maxZ) {
+    if (sse > threshold * fogLodFactor(distance, opts.fogStartCtc, opts.fogEndCtc, opts.fogLodBoost, ctc) &&
+        t.z < maxZ) {
       const int z = t.z + 1, x = t.x * 2, y = t.y * 2;
       stack.push_back({z, x, y, t.wrap});
       stack.push_back({z, x + 1, y, t.wrap});
@@ -722,6 +734,49 @@ std::optional<int> bestLoadedDemZoom(const TileId& t,
     if (isLoaded({z, own.x >> k, own.y >> k})) return z;
   }
   return std::nullopt;
+}
+
+// ---- two-finger gestures (round 3) ----------------------------------------------------
+
+TwoFingerIntent classifyTwoFinger(const TwoFingerPoints& s, const TwoFingerPoints& n,
+                                  const TwoFingerThresholds& t) {
+  const double d0 = std::hypot(s.bx - s.ax, s.by - s.ay);
+  const double d1 = std::hypot(n.bx - n.ax, n.by - n.ay);
+  if (d0 < 1 || d1 < 1) return TwoFingerIntent::Undecided;
+  // Spread and turn of the finger line.
+  const double pinch = std::abs(std::log(d1 / d0)) / std::log(1 + t.pinchRatio);
+  double turn = (std::atan2(n.by - n.ay, n.bx - n.ax) - std::atan2(s.by - s.ay, s.bx - s.ax)) * 180 / kPi;
+  while (turn > 180) turn -= 360;
+  while (turn < -180) turn += 360;
+  const double rotate = std::abs(turn) / t.rotateDeg;
+  // Each finger's travel; tilt = both vertical, the same way, fingers side by side.
+  const double ady = n.ay - s.ay, bdy = n.by - s.by;
+  const double adx = n.ax - s.ax, bdx = n.bx - s.bx;
+  const double meanDy = (ady + bdy) / 2, meanDx = (adx + bdx) / 2;
+  double line = std::abs(std::atan2(s.by - s.ay, s.bx - s.ax) * 180 / kPi);
+  if (line > 90) line = 180 - line;  // 0 = side by side, 90 = one above the other
+  const bool together = ady * bdy > 0 && std::min(std::abs(ady), std::abs(bdy)) >= 0.5 * std::abs(meanDy);
+  const bool vertical = std::abs(meanDx) < 0.6 * std::abs(meanDy);
+  const double tilt =
+      together && vertical && line <= t.sideBySideDeg ? std::abs(meanDy) / t.tiltPx : 0.0;
+  const double pan = tilt > 0 ? 0.0 : std::hypot(meanDx, meanDy) / t.panPx;
+  const std::pair<double, TwoFingerIntent> cues[4] = {{tilt, TwoFingerIntent::Tilt},
+                                                      {rotate, TwoFingerIntent::Rotate},
+                                                      {pinch, TwoFingerIntent::Pinch},
+                                                      {pan, TwoFingerIntent::Pan}};
+  int best = 0, second = -1;
+  for (int i = 1; i < 4; i++) {
+    if (cues[i].first > cues[best].first) {
+      second = best;
+      best = i;
+    } else if (second < 0 || cues[i].first > cues[second].first) {
+      second = i;
+    }
+  }
+  const double top = cues[best].first, next = second >= 0 ? cues[second].first : 0;
+  if (top < 1) return TwoFingerIntent::Undecided;
+  if (top >= t.decisive || top >= t.lead * next) return cues[best].second;
+  return TwoFingerIntent::Undecided;
 }
 
 // ---- drape textures ----------------------------------------------------------------

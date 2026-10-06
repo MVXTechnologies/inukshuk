@@ -10,6 +10,7 @@ import {
   rectsOverlap,
   stepOpacity,
   type LabelInput,
+  LABEL_HOLD_MS,
   type LabelState,
 } from './labels';
 import { pixelsPerMeter } from './mercator';
@@ -95,9 +96,48 @@ describe('placeLabels', () => {
     const states = new Map<number, LabelState>();
     placeLabels([lbl(1, 0, 0, 5)], states, base); // fully shown
     const o = { ...base, dtMs: 55 };
-    const out = placeLabels([lbl(1, 0, 0, 5), lbl(2, 3, 0, 1)], states, o);
+    // Displaced by a clearly better pin: held through LABEL_HOLD_MS, then fades.
+    const held = placeLabels([lbl(1, 0, 0, 5), lbl(2, 3, 0, 1)], states, { ...o, nowMs: 100 });
+    expect(held.find((p) => p.id === 1)!.opacity).toBe(1);
+    const out = placeLabels([lbl(1, 0, 0, 5), lbl(2, 3, 0, 1)], states, {
+      ...o,
+      nowMs: 100 + LABEL_HOLD_MS + 1,
+    });
     const one = out.find((p) => p.id === 1)!;
     expect(one.opacity).toBeCloseTo(0.75, 6);
+  });
+  it('a shown pin keeps its slot against an equally ranked newcomer (no flip-flop)', () => {
+    const states = new Map<number, LabelState>();
+    const stats = { toggles: 0 };
+    placeLabels([lbl(2, 0, 0, 3)], states, { ...base, stats }); // 2 shown first
+    for (let i = 0; i < 20; i++) {
+      // 1 has the same priority and a lower id; distances swap every frame.
+      const out = placeLabels([lbl(1, 3 + (i % 2), 0, 3), lbl(2, (i % 2) * 2, 0, 3)], states, {
+        ...base,
+        nowMs: i * 16,
+        stats,
+      });
+      expect(out.find((p) => p.id === 2)?.opacity).toBe(1);
+      expect(out.find((p) => p.id === 1)).toBeUndefined();
+    }
+    expect(stats.toggles).toBe(1); // only 2's first show
+  });
+  it('a brief occlusion does not hide a shown pin', () => {
+    const states = new Map<number, LabelState>();
+    const stats = { toggles: 0 };
+    placeLabels([lbl(1, 0, 0, 3)], states, { ...base, stats });
+    let hidden = true;
+    for (let i = 1; i <= 10; i++) {
+      const out = placeLabels([lbl(1, 0, 0, 3)], states, {
+        ...base,
+        nowMs: i * 30,
+        stats,
+        occluded: () => i % 3 === 0, // flickers as heights refine
+      });
+      hidden = hidden && out.length > 0;
+    }
+    expect(hidden).toBe(true);
+    expect(stats.toggles).toBe(1);
   });
   it('labels leaving the view fade and are forgotten', () => {
     const states = new Map<number, LabelState>();

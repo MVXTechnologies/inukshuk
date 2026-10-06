@@ -31,6 +31,10 @@ export interface LabelState {
   opacity: number;
   /** Last frame it was wanted visible (ms). */
   shownAt: number;
+  /** Round 3: the current show/hide decision (with hysteresis). */
+  shown?: boolean;
+  /** When a shown pin first lost its place (ms); undefined while it has one. */
+  blockedAt?: number;
 }
 
 export interface PlacedLabel {
@@ -73,6 +77,8 @@ export interface PlaceOptions {
   /** True when the terrain hides the anchor (see {@link occludedByTerrain}). */
   occluded?: (l: LabelInput, eye: Vec3 | null) => boolean;
   eye?: Vec3 | null;
+  /** Show/hide decision flips are added here (round 3 counter). */
+  stats?: { toggles: number };
   /**
    * UI bands (px) a plate must stay clear of entirely: the search/status bar
    * at the top and the bottom bar. 0 = the plain screen edge.
@@ -84,6 +90,12 @@ export interface PlaceOptions {
 export const DEFAULT_STEM_PX = 26;
 export const DEFAULT_PAD_PX = 4;
 export const DEFAULT_FADE_MS = 220;
+/** A shown pin stays shown this long after losing its place (collision, band, occlusion). */
+export const LABEL_HOLD_MS = 350;
+/** Ranking bonus of a shown pin: only a pin a full priority band better displaces it. */
+export const LABEL_STICKY = 1;
+/** A shown pin may sit this far (px) past the UI bands / screen edges before it counts as out. */
+export const LABEL_EDGE_SLACK_PX = 8;
 
 /** Distance attenuation of the plate size: full near, never below 60 %. */
 export function labelScale(distance: number, ctc: number): number {
@@ -185,7 +197,11 @@ export function placeLabels(
     const gy = (0.5 - ndc[1] * 0.5) * o.height;
     cands.push({ l, ndc, w, gx, gy, scale, distFade });
   }
-  cands.sort((a, b) => a.l.priority - b.l.priority || a.w - b.w || a.l.id - b.l.id);
+  // Stable ranking (round 3): priority, a shown pin's stickiness, then id —
+  // never the camera distance, which changes every frame and made two
+  // colliding pins of equal rank trade places while moving.
+  const rank = (c: Cand) => c.l.priority - (states.get(c.l.id)?.shown ? LABEL_STICKY : 0);
+  cands.sort((a, b) => rank(a) - rank(b) || a.l.id - b.l.id);
 
   const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const out: PlacedLabel[] = [];
@@ -196,11 +212,23 @@ export function placeLabels(
     const r = plateRect(c.gx, c.gy, c.l.w * c.scale, c.l.ph * c.scale, stem * c.scale);
     const top = o.topPx ?? 0;
     const bottom = o.bottomPx ?? 0;
-    const clearTop = top > 0 ? r.y0 >= top : r.y1 > 0;
-    const clearBottom = bottom > 0 ? r.y1 <= o.height - bottom : r.y0 < o.height;
-    const onScreen = r.x1 > 0 && r.x0 < o.width && clearTop && clearBottom;
-    let want = onScreen && taken.length < maxLabels && !taken.some((t) => rectsOverlap(r, t, pad));
-    if (want && o.occluded && o.occluded(c.l, o.eye ?? null)) want = false;
+    const slack = st.shown ? LABEL_EDGE_SLACK_PX : 0;
+    const clearTop = top > 0 ? r.y0 >= top - slack : r.y1 > 0;
+    const clearBottom = bottom > 0 ? r.y1 <= o.height - bottom + slack : r.y0 < o.height;
+    const onScreen = r.x1 > -slack && r.x0 < o.width + slack && clearTop && clearBottom;
+    let fits = onScreen && taken.length < maxLabels && !taken.some((t) => rectsOverlap(r, t, pad));
+    if (fits && o.occluded && o.occluded(c.l, o.eye ?? null)) fits = false;
+    // Hysteresis: a shown pin keeps its place through a brief loss of it.
+    let want = fits;
+    if (fits) {
+      st.blockedAt = undefined;
+    } else if (st.shown && onScreen) {
+      st.blockedAt ??= o.nowMs;
+      want = o.nowMs - st.blockedAt < LABEL_HOLD_MS;
+    }
+    if (want !== (st.shown ?? false) && o.stats) o.stats.toggles++;
+    st.shown = want;
+    if (!want) st.blockedAt = undefined;
     if (want) {
       taken.push(r);
       st.shownAt = o.nowMs;
@@ -225,6 +253,9 @@ export function placeLabels(
   // Labels not in view this frame fade out (and are forgotten once gone).
   for (const [id, st] of states) {
     if (seen.has(id)) continue;
+    if (st.shown && o.stats) o.stats.toggles++;
+    st.shown = false;
+    st.blockedAt = undefined;
     st.opacity = stepOpacity(st.opacity, 0, o.dtMs, fadeMs);
     if (st.opacity <= 0) states.delete(id);
   }

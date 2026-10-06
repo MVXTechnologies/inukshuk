@@ -1,5 +1,6 @@
 import {
   FALLBACK_PAPER,
+  TERRAIN_FOG_END_CTC,
   fogAmount,
   formShade,
   lightDirection,
@@ -163,5 +164,21 @@ describe('formShade', () => {
       expect(f).toBeGreaterThan(0.4);
       expect(f).toBeLessThan(1.6);
     }
+  });
+});
+
+describe('fog distance (round 3)', () => {
+  it('ends every look at the same, nearer fog distance', () => {
+    for (const basemap of ['map', 'satellite'] as const)
+      for (const dark of [false, true]) {
+        const l = terrainLook({ basemap, dark, land: '#E8E1D3', relief: 'natural' });
+        expect(l.fogEndCtc).toBe(TERRAIN_FOG_END_CTC);
+        // A clear mid-ground (no haze before 2.5 ctc), then the haze builds
+        // naturally rather than ending in a wall: > 55 % by 7/8 of the way.
+        expect(l.fogStartCtc).toBeGreaterThanOrEqual(2.5);
+        expect(l.fogStartCtc).toBeLessThanOrEqual(l.fogEndCtc / 2);
+        const at = l.fogEndCtc * 0.875;
+        expect(1 - Math.exp(-l.fogDensity * (at - l.fogStartCtc))).toBeGreaterThan(0.55);
+      }
   });
 });

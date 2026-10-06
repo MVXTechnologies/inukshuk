@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <unordered_map>
 #include <string>
@@ -111,11 +112,16 @@ struct LodOptions {
   int maxTiles = kDefaultMaxTiles;
   int maxZoom = kTerrainMaxZoom;
   double fogEndCtc = kDefaultFogEndCtc;
+  /** lod.ts fogLodFactor: coarser LOD toward the fog (0 = off). */
+  double fogStartCtc = 0;
+  double fogLodBoost = 0;
   /** Absolute [min, max] (m) known for a tile; nullopt = unknown. */
   std::function<std::optional<std::pair<double, double>>(const TileId&)> heightRange;
   double hRef = 0;
   double heightScale = 1;
 };
+/** lod.ts fogLodFactor: 1 before the fog start, 1 + boost at the fog end (smoothstep). */
+double fogLodFactor(double distance, double fogStartCtc, double fogEndCtc, double boost, double ctc);
 struct SelectedTile {
   TileId tile;
   double distance = 0;
@@ -267,7 +273,13 @@ struct LabelInput {
 };
 struct LabelState {
   double opacity = 0, shownAt = -1e300;
+  /** labels.ts: the show/hide decision with hysteresis, and when it lost its place (NaN: has it). */
+  bool shown = false;
+  double blockedAt = std::numeric_limits<double>::quiet_NaN();
 };
+constexpr double kLabelHoldMs = 350;
+constexpr double kLabelSticky = 1;
+constexpr double kLabelEdgeSlackPx = 8;
 struct PlacedLabel {
   int id = 0;
   double ax = 0, ay = 0, depth = 0, cx = 0, cy = 0, gx = 0, gy = 0, scale = 1, opacity = 0;
@@ -281,6 +293,10 @@ struct PlaceOptions {
   std::function<bool(const LabelInput&)> occluded;
   /** UI bands (px) a plate stays clear of: search/status bar, bottom bar (labels.ts). */
   double topPx = 0, bottomPx = 0;
+  /** Show/hide decision flips are added here (round 3 counter); may be null. */
+  int* toggles = nullptr;
+  /** QA A/B only (engine debug flag 32): the 2.2.1 placement — distance ranking, no hysteresis. */
+  bool legacy = false;
 };
 double labelScale(double distance, double ctc);
 bool rectsOverlap(const std::array<double, 4>& a, const std::array<double, 4>& b, double pad);
@@ -298,6 +314,30 @@ std::vector<Pt> densify(const std::vector<Pt>& pts, double maxStep);
 std::array<double, 2> extrudeOffset(const Pt& a, const Pt& b, double side, double widthPx,
                                     const Pt& viewport);
 std::vector<uint8_t> rasterizePolygons(const std::vector<std::vector<Pt>>& rings, int size);
+
+// ---- two-finger gestures (round 3) ----------------------------------------------------
+/**
+ * What a two-finger gesture is, decided from its first few points and then
+ * locked for the rest of it (the platform disables the competing map
+ * gestures): tilt (both fingers sliding vertically together, side by side),
+ * rotate (the finger line turning), pinch (the spread changing) or a
+ * two-finger pan. Undecided until one cue clearly leads.
+ */
+enum class TwoFingerIntent { Undecided = 0, Tilt = 1, Rotate = 2, Pinch = 3, Pan = 4 };
+struct TwoFingerPoints {
+  double ax = 0, ay = 0, bx = 0, by = 0;  // the two touches, points (y down)
+};
+struct TwoFingerThresholds {
+  double tiltPx = 14;        // mean vertical travel of both fingers
+  double rotateDeg = 10;     // turn of the finger line
+  double pinchRatio = 0.10;  // spread change (10 %)
+  double panPx = 22;         // centroid travel
+  double sideBySideDeg = 50; // a tilt needs the fingers side by side (line within this of horizontal)
+  double lead = 1.35;        // the winning cue must lead the next by this factor…
+  double decisive = 2.5;     // …unless it is this far past its own threshold
+};
+TwoFingerIntent classifyTwoFinger(const TwoFingerPoints& start, const TwoFingerPoints& now,
+                                  const TwoFingerThresholds& t = {});
 
 // ---- drape textures ----------------------------------------------------------------
 /** Mip levels of a size² texture down to 1×1 (size a power of two). */

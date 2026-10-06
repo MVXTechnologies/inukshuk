@@ -169,9 +169,16 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
     cands.push_back({&l, n0, n1, w, (n0 * 0.5 + 0.5) * o.width, (0.5 - n1 * 0.5) * o.height,
                      scale, distFade});
   }
-  std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) {
-    if (a.l->priority != b.l->priority) return a.l->priority < b.l->priority;
-    if (a.w != b.w) return a.w < b.w;
+  // Stable ranking (labels.ts): priority, a shown pin's stickiness, then id.
+  auto rank = [&](const Cand& c) {
+    if (o.legacy) return c.l->priority;
+    auto it = states.find(c.l->id);
+    return c.l->priority - (it != states.end() && it->second.shown ? kLabelSticky : 0.0);
+  };
+  std::stable_sort(cands.begin(), cands.end(), [&](const Cand& a, const Cand& b) {
+    const double ra = rank(a), rb = rank(b);
+    if (ra != rb) return ra < rb;
+    if (o.legacy && a.w != b.w) return a.w < b.w;
     return a.l->id < b.l->id;
   });
   std::vector<std::array<double, 4>> taken;
@@ -183,19 +190,31 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
     LabelState st = it == states.end() ? LabelState{} : it->second;
     const double w = c.l->w * c.scale, h = c.l->ph * c.scale, stem = o.stemPx * c.scale;
     const std::array<double, 4> r = {c.gx - w / 2, c.gy - stem - h, c.gx + w / 2, c.gy - stem};
-    const bool clearTop = o.topPx > 0 ? r[1] >= o.topPx : r[3] > 0;
-    const bool clearBottom = o.bottomPx > 0 ? r[3] <= o.height - o.bottomPx : r[1] < o.height;
-    const bool onScreen = r[2] > 0 && r[0] < o.width && clearTop && clearBottom;
-    bool want = onScreen && static_cast<int>(taken.size()) < o.maxLabels;
-    if (want) {
+    const double slack = st.shown && !o.legacy ? kLabelEdgeSlackPx : 0;
+    const bool clearTop = o.topPx > 0 ? r[1] >= o.topPx - slack : r[3] > 0;
+    const bool clearBottom = o.bottomPx > 0 ? r[3] <= o.height - o.bottomPx + slack : r[1] < o.height;
+    const bool onScreen = r[2] > -slack && r[0] < o.width + slack && clearTop && clearBottom;
+    bool fits = onScreen && static_cast<int>(taken.size()) < o.maxLabels;
+    if (fits) {
       for (const auto& t : taken) {
         if (rectsOverlap(r, t, o.padPx)) {
-          want = false;
+          fits = false;
           break;
         }
       }
     }
-    if (want && o.occluded && o.occluded(*c.l)) want = false;
+    if (fits && o.occluded && o.occluded(*c.l)) fits = false;
+    // Hysteresis: a shown pin keeps its place through a brief loss of it.
+    bool want = fits;
+    if (fits) {
+      st.blockedAt = std::numeric_limits<double>::quiet_NaN();
+    } else if (st.shown && onScreen && !o.legacy) {
+      if (std::isnan(st.blockedAt)) st.blockedAt = o.nowMs;
+      want = o.nowMs - st.blockedAt < kLabelHoldMs;
+    }
+    if (want != st.shown && o.toggles) (*o.toggles)++;
+    st.shown = want;
+    if (!want) st.blockedAt = std::numeric_limits<double>::quiet_NaN();
     if (want) {
       taken.push_back(r);
       st.shownAt = o.nowMs;
@@ -212,6 +231,9 @@ std::vector<PlacedLabel> placeLabels(const std::vector<LabelInput>& inputs,
       ++it;
       continue;
     }
+    if (it->second.shown && o.toggles) (*o.toggles)++;
+    it->second.shown = false;
+    it->second.blockedAt = std::numeric_limits<double>::quiet_NaN();
     it->second.opacity = stepOpacity(it->second.opacity, 0, o.dtMs, o.fadeMs);
     if (it->second.opacity <= 0)
       it = states.erase(it);

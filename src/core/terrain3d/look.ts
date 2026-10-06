@@ -117,6 +117,15 @@ const RIVER_FALLBACK: Rgb = [0x5c / 255, 0x93 / 255, 0xb7 / 255];
 const OCHRE_FALLBACK: Rgb = [0xb0 / 255, 0x7a / 255, 0x3a / 255];
 const ICE: Rgb = [0xee / 255, 0xf3 / 255, 0xf7 / 255];
 
+/**
+ * Where the 3D view ends in haze (camera-to-centre distances; round 3: 12 →
+ * 8). Nothing past it is drawn, fetched or rendered, and the LOD coarsens
+ * toward it (lod.ts fogLodFactor) — the far band was most of the tiles and
+ * drape renders while adding little but haze. The haze curve thickens
+ * (density) so the fog still builds naturally rather than ending in a wall.
+ */
+export const TERRAIN_FOG_END_CTC = 8;
+
 /** The look for a theme/basemap/setting. */
 export function terrainLook(i: TerrainLookInput): TerrainLook {
   const exaggeration = RELIEF_EXAGGERATION[i.relief];
@@ -134,9 +143,9 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       skyHorizon: scale(SAT_HORIZON, k),
       skyZenith: scale(SAT_ZENITH, k),
       formStrength: 0.18,
-      fogStartCtc: 0.6,
-      fogDensity: 0.1,
-      fogEndCtc: 12,
+      fogStartCtc: 2.5,
+      fogDensity: 0.22,
+      fogEndCtc: TERRAIN_FOG_END_CTC,
       surface: {
         land,
         rock: landAlt,
@@ -159,9 +168,9 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
       skyHorizon: mix(land, WHITE, 0.07),
       skyZenith: mix(land, BLACK, 0.35),
       formStrength: 0.2,
-      fogStartCtc: 2.5,
-      fogDensity: 0.12,
-      fogEndCtc: 12,
+      fogStartCtc: 4,
+      fogDensity: 0.3,
+      fogEndCtc: TERRAIN_FOG_END_CTC,
       surface: {
         // A touch above the 2D ground so the shadows have somewhere to go.
         land: mix(land, NIGHT_HIGHLIGHT, 0.06),
@@ -187,9 +196,9 @@ export function terrainLook(i: TerrainLookInput): TerrainLook {
     skyHorizon: mix(land, WHITE, 0.25),
     skyZenith: mix(mix(land, tint, 0.22), WHITE, 0.15),
     formStrength: 0.22,
-    fogStartCtc: 2.5,
-    fogDensity: 0.12,
-    fogEndCtc: 12,
+    fogStartCtc: 4,
+    fogDensity: 0.3,
+    fogEndCtc: TERRAIN_FOG_END_CTC,
     surface: {
       land,
       rock: landAlt,

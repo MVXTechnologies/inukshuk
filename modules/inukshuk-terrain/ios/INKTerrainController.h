@@ -41,6 +41,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)trimMemory;
 /** Programmatic pitch (QA camera), clamped to the current ceiling. */
 - (void)setPitch:(double)deg;
+/** Animate to `deg` pitch (clamped to the current ceiling), keeping the zoom. */
+- (void)animatePitch:(double)deg duration:(double)ms;
 /** QA camera: centre, zoom, bearing and pitch in one synchronous move. */
 - (void)jumpToLat:(double)lat lng:(double)lng zoom:(double)zoom pitch:(double)pitch bearing:(double)bearing;
 - (void)setRecording:(BOOL)on;

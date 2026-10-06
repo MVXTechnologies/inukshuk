@@ -67,7 +67,8 @@ class SceneSource(
   interface Sink {
     fun uploadSprite(x: Int, y: Int, w: Int, h: Int, rgba: ByteArray)
 
-    fun setLabels(values: DoubleArray, ink: FloatArray)
+    /** `keepMissing`: pins absent from this set stay a while (their tile is reloading); false after an atlas reset. */
+    fun setLabels(values: DoubleArray, ink: FloatArray, keepMissing: Boolean)
 
     fun setMasks(waterXY: DoubleArray, waterCounts: IntArray, iceXY: DoubleArray, iceCounts: IntArray)
   }
@@ -256,9 +257,11 @@ class SceneSource(
     }
     val chosen = unique.values.sortedBy { it.priority }.take(MAX_LABELS)
     val tk = t.plate.contentToString() + t.ink.contentToString() + nameFields
+    var atlasReset = false
     if (tk != themeKey) {
       themeKey = tk
       atlas.reset()
+      atlasReset = true
     }
     var hash = 1469598103934665603L
     for (c in chosen) hash = (hash xor c.key.hashCode().toLong()) * 1099511628211L
@@ -268,6 +271,7 @@ class SceneSource(
     if (rects.any { it == null }) {
       // Atlas full: start over with only what is wanted now.
       atlas.reset()
+      atlasReset = true
       rects = chosen.map { render(it, t) }
     }
     val v = DoubleArray(chosen.size * 11)
@@ -288,7 +292,7 @@ class SceneSource(
       v[o + 10] = (r.y + r.h) / ATLAS.toDouble()
       n++
     }
-    sink.setLabels(v.copyOf(n * 11), t.ink)
+    sink.setLabels(v.copyOf(n * 11), t.ink, !atlasReset)
   }
 
   private fun color(c: FloatArray, a: Float = 1f): Int =
