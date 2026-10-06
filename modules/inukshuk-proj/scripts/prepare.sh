@@ -5,20 +5,22 @@
 #
 #   modules/inukshuk-proj/scripts/prepare.sh [ios|android|all]
 #
-# Runs from `npm run proj:prepare`, the `eas-build-post-install` hook and CI.
+# Runs from `npm run proj:prepare`, the `eas-build-pre-install` hook (scripts/eas-pre-install.sh) and CI.
 # Idempotent: does nothing when everything is already there and verified.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 WHAT=${1:-all}
 GRIDS="$HERE/assets/inukshukproj/grids"
 mkdir -p "$GRIDS"
+sha256_of() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1 || sha256sum "$1" | cut -d' ' -f1; }
 
 # name sha256 — the bundled grids (CONVERT §3): EGM96 and the NRCan v7 velocity grid.
 while read -r name sha; do
   f="$GRIDS/$name"
-  if [ ! -f "$f" ] || [ "$(shasum -a 256 "$f" | cut -d' ' -f1)" != "$sha" ]; then
-    curl -fsSL "https://cdn.proj.org/$name" -o "$f.part"
-    got=$(shasum -a 256 "$f.part" | cut -d' ' -f1)
+  if [ ! -f "$f" ] || [ "$(sha256_of "$f")" != "$sha" ]; then
+    curl -fsSL --connect-timeout 20 --retry 3 "https://cdn.proj.org/$name" -o "$f.part" ||
+      curl -fsSL -4 --connect-timeout 20 --retry 3 "https://cdn.proj.org/$name" -o "$f.part"
+    got=$(sha256_of "$f.part")
     if [ "$got" != "$sha" ]; then
       echo "sha256 mismatch for $name: $got" >&2
       rm -f "$f.part"
