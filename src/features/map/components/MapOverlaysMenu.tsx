@@ -20,6 +20,7 @@ import { useMapStore } from '@state/mapStore';
 import { useSettingsStore } from '@state/settingsStore';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useState } from 'react';
+import { cragTilesUrl } from '@data/climbing';
 import { GeodeticFilterPanel } from './GeodeticFilterPanel';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import {
@@ -159,6 +160,10 @@ function OverlayRows({
   const hillshadeStrength = useSettingsStore((s) => s.hillshadeStrength);
   const peakDensity = useSettingsStore((s) => s.peakDensity);
   const showParks = useSettingsStore((s) => s.showParks);
+  const climbingAvailable = cragTilesUrl() !== null;
+  const climbingInstalled = useSettingsStore((s) => s.climbingInstalledAt > 0);
+  const showClimbing = useSettingsStore((s) => s.showClimbing);
+  const climbingShowAll = useSettingsStore((s) => s.climbingShowAll);
   const tiltRelief = useSettingsStore((s) => s.tiltRelief);
   const nativeTerrain3d = nativeTerrainAvailable();
   const set = useSettingsStore((s) => s.set);
@@ -308,7 +313,24 @@ function OverlayRows({
           value={showHeatmap}
           onToggle={() => set('showHeatmap', !showHeatmap)}
         />
-        {/* Climbing crags will join here (owner, 2026-10-05). */}
+        {/* Climbing crags (Settings → Extensions): installed by "Get" or by
+          the first crag download (then the saved crags only). */}
+        {climbingAvailable && (
+          <SwitchRow
+            icon="terrain"
+            label="Climbing crags"
+            hint={
+              !climbingInstalled
+                ? 'Download a crag from Explore › Climbing'
+                : climbingShowAll
+                  ? 'Every crag · saved ones filled'
+                  : 'Your saved crags'
+            }
+            value={climbingInstalled && showClimbing}
+            disabled={!climbingInstalled}
+            onToggle={() => set('showClimbing', !showClimbing)}
+          />
+        )}
         <SectionTitle>Live layers</SectionTitle>
         {/* Parked (see `@core/features/flags`) outranks the offline-only hint:
           it is the permanent condition this release. Otherwise these are

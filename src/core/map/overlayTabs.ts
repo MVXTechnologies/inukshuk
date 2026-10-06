@@ -42,6 +42,7 @@ export const OVERLAY_ROW_TAB = {
   heatmap: 'sports',
   weather: 'sports',
   marine: 'sports',
+  climbing: 'sports',
   geodetic: 'extensions',
   geodeticFilter: 'extensions',
   tides: 'extensions',

@@ -58,3 +58,23 @@ describe('map extensions', () => {
     expect(extensionShown(before, 'tides')).toBe(false);
   });
 });
+
+describe('climbing crags', () => {
+  const base: ExtensionsState = {
+    available: ['geodetic', 'tides', 'climbing'],
+    geodeticInstalledAt: 0,
+    showGeodetic: true,
+    tidesInstalledAt: 0,
+    showTideStations: true,
+  };
+
+  it('is installed by its own timestamp and shown by its own switch', () => {
+    expect(installedExtensions(base)).toEqual([]);
+    const on = { ...base, climbingInstalledAt: 1, showClimbing: true };
+    expect(installedExtensions(on)).toEqual(['climbing']);
+    expect(extensionShown(on, 'climbing')).toBe(true);
+    expect(extensionShown({ ...on, showClimbing: false }, 'climbing')).toBe(false);
+    expect(extensionsRowHint(on)).toBe('Climbing crags');
+    expect(extensionsRowTarget(on)).toBe('panel');
+  });
+});
