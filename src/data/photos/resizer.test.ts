@@ -7,6 +7,7 @@ function harness(overrides: Partial<WebViewResizerDeps> = {}) {
   let id = 0;
   const staged: string[] = [];
   const unstaged: string[] = [];
+  const reloads: number[] = [];
   const deps: WebViewResizerDeps = {
     stage: jest.fn(async (_src: string, jobId: string) => {
       staged.push(jobId);
@@ -15,6 +16,7 @@ function harness(overrides: Partial<WebViewResizerDeps> = {}) {
     unstage: jest.fn((p: string) => unstaged.push(p)),
     origin: async () => 'http://127.0.0.1:8123',
     inject: (script: string) => injected.push(script),
+    reload: () => reloads.push(injected.length),
     newId: () => `j${++id}`,
     now: () => 1000,
     ...overrides,
@@ -35,7 +37,7 @@ function harness(overrides: Partial<WebViewResizerDeps> = {}) {
         ...extra,
       }),
     );
-  return { resizer, injected, staged, unstaged, reply, deps };
+  return { resizer, injected, staged, unstaged, reloads, reply, deps };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -99,6 +101,57 @@ describe('createWebViewResizer', () => {
       await jest.advanceTimersByTimeAsync(1001);
       await assertion;
       expect(h.unstaged).toEqual(['.photo-inbox/j1.jpg']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('reloads the page after a timeout and holds the next job until it is ready again', async () => {
+    jest.useFakeTimers();
+    try {
+      const h = harness({ timeoutMs: 1000 });
+      h.resizer.handleMessage('{"type":"ready"}');
+      const slow = h.resizer.resize('slow');
+      const next = h.resizer.resize('next');
+      const slowFails = expect(slow).rejects.toThrow(ResizeError);
+      await jest.advanceTimersByTimeAsync(1001);
+      await slowFails;
+      // The page may still be decoding the first photo: it is reloaded, and
+      // the next job is NOT injected beside it.
+      expect(h.reloads).toEqual([1]);
+      await jest.advanceTimersByTimeAsync(10);
+      expect(h.injected).toHaveLength(1);
+      // A late answer for the abandoned job is ignored.
+      h.reply('j1');
+      h.resizer.handleMessage('{"type":"ready"}');
+      await jest.advanceTimersByTimeAsync(0);
+      expect(h.injected).toHaveLength(2);
+      expect(h.injected[1]).toContain('"id":"j2"');
+      h.reply('j2');
+      await expect(next).resolves.toMatchObject({ sourceWidth: 4000 });
+      expect(h.reloads).toEqual([1]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('never injects a job that timed out while waiting for the page', async () => {
+    jest.useFakeTimers();
+    try {
+      const h = harness({ timeoutMs: 1000 });
+      const lost = h.resizer.resize('lost');
+      const next = h.resizer.resize('next');
+      const lostFails = expect(lost).rejects.toThrow(/timed out/);
+      await jest.advanceTimersByTimeAsync(1001);
+      await lostFails;
+      expect(h.reloads).toEqual([0]);
+      await jest.advanceTimersByTimeAsync(0);
+      h.resizer.handleMessage('{"type":"ready"}');
+      await jest.advanceTimersByTimeAsync(0);
+      expect(h.injected).toHaveLength(1);
+      expect(h.injected[0]).toContain('"id":"j2"');
+      h.reply('j2');
+      await expect(next).resolves.toBeTruthy();
     } finally {
       jest.useRealTimers();
     }

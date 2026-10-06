@@ -16,9 +16,13 @@ import { servedFileUrl } from '@core/storage/servedPaths';
  *
  * {@link createWebViewResizer} is the WebView-agnostic controller: the host
  * component (stage 2) mounts the WebView, forwards `onMessage` to
- * `handleMessage`, and gives it `inject` (`webView.injectJavaScript`). Jobs run
- * ONE AT A TIME — a 12 MP decode is ~48 MB of canvas memory, and two at once on
- * a mid-range Android is how the PDF rasterizer learned about OOM kills.
+ * `handleMessage`, and gives it `inject` (`webView.injectJavaScript`) and
+ * `reload` (`webView.reload`). Jobs run ONE AT A TIME — a 12 MP decode is
+ * ~48 MB of canvas memory, and two at once on a mid-range Android is how the
+ * PDF rasterizer learned about OOM kills. That holds across timeouts too: a
+ * job that times out may still be decoding in the page, so the page is
+ * reloaded (which kills it) and the next job waits for the fresh page's
+ * `ready` before it is injected.
  */
 
 export interface ResizedPhoto {
@@ -53,6 +57,11 @@ export interface WebViewResizerDeps {
   origin(): Promise<string>;
   /** Run JavaScript in the worker page. */
   inject(script: string): void;
+  /**
+   * Reload the worker page (`webView.reload()`), abandoning whatever it is
+   * doing. Called after a job times out; the page then posts `ready` again.
+   */
+  reload(): void;
   newId(): string;
   now?: () => number;
   /** Per job, including the page load on the first one (ms). */
@@ -82,9 +91,12 @@ export function createWebViewResizer(deps: WebViewResizerDeps): WebViewResizer {
   const whenReady = () =>
     ready ? Promise.resolve() : new Promise<void>((resolve) => readyWaiters.push(resolve));
 
-  function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  function withTimeout<T>(promise: Promise<T>, label: string, onTimeout: () => void): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new ResizeError(`${label} timed out`)), timeoutMs);
+      const timer = setTimeout(() => {
+        onTimeout();
+        reject(new ResizeError(`${label} timed out`));
+      }, timeoutMs);
       promise.then(
         (v) => {
           clearTimeout(timer);
@@ -106,15 +118,26 @@ export function createWebViewResizer(deps: WebViewResizerDeps): WebViewResizer {
     try {
       const src = servedFileUrl(await deps.origin(), staged);
       if (!src) throw new ResizeError(`cannot serve ${staged}`);
+      let abandoned = false;
       const reply = await withTimeout(
         whenReady().then(
           () =>
             new Promise<ResizeReply>((resolve) => {
+              // Timed out while waiting for the page: never inject it later.
+              if (abandoned) return;
               pending.set(jobId, resolve);
               deps.inject(resizeJobScript({ id: jobId, src }));
             }),
         ),
         'photo resize',
+        () => {
+          abandoned = true;
+          pending.delete(jobId);
+          // The page may still be decoding: kill it, and hold the next job
+          // until the reloaded page says it is ready.
+          ready = false;
+          deps.reload();
+        },
       );
       if (reply.type === 'failed') throw new ResizeError(reply.message);
       if (reply.type !== 'resized') throw new ResizeError('unexpected reply');
