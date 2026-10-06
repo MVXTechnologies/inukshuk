@@ -120,6 +120,12 @@ interface PackMeta {
    * pack the live map can no longer read (P1-2). Absent on older packs.
    */
   urls?: UrlTemplates;
+  /**
+   * When the pack was created (epoch ms). Picks the newer of two packs that
+   * share an `appId` — an update in flight, or one killed mid-way
+   * (`listRegionPacks`). Absent on older packs (counts as oldest).
+   */
+  createdAt?: number;
 }
 
 /** Extensions that can add a companion pack to an offline region. */
@@ -270,6 +276,7 @@ export async function createRegionPack(
       ? { includes: ['geodetic'] }
       : {}),
     urls: styleUrlTemplates(args.styleJSON),
+    createdAt: Date.now(),
   };
 
   // Native pack id, captured from the progress/error listener's pack arg so we can
@@ -281,6 +288,15 @@ export async function createRegionPack(
   // Quoted in every failure message: a download that fails at z13–z15 vs one
   // that fails before a single tile is requested are different bugs.
   const zoomRange = `z${minZoom}–z${maxZoom}`;
+
+  // A replaced pack shares the id, and with it the style file. Keep what it
+  // held, to put back should the update fail: the legacy migration reads a
+  // pack's templates from that file, so it must keep describing the old pack.
+  let previousStyle: string | null = null;
+  if (replacing !== undefined) {
+    const f = styleFile(args.id);
+    previousStyle = f.exists ? await f.text().catch(() => null) : null;
+  }
 
   try {
     writeStyleFile(args.id, args.styleJSON);
@@ -359,9 +375,16 @@ export async function createRegionPack(
     if (nativePackId !== undefined) {
       await OfflineManager.deletePack(nativePackId).catch(() => undefined);
     }
-    // A replaced pack shares the id, and with it the style file: keep it.
-    const f = styleFile(args.id);
-    if (replacing === undefined && f.exists) f.delete();
+    // A replaced pack gets its own style back (see `previousStyle`).
+    try {
+      if (previousStyle !== null) writeStyleFile(args.id, previousStyle);
+      else {
+        const f = styleFile(args.id);
+        if (f.exists) f.delete();
+      }
+    } catch {
+      // Best-effort; never mask `err`.
+    }
     throw err;
   } finally {
     // The style is fetched once at the start of the download; the tiles stream from
@@ -373,7 +396,24 @@ export async function createRegionPack(
   // Only now that the new pack is complete does the one it replaces go: a
   // failed re-download leaves the user what they had.
   // (Best-effort: should it fail, `deleteRegionPack` still removes both later.)
-  if (replacing !== undefined) await OfflineManager.deletePack(replacing).catch(() => undefined);
+  if (replacing === undefined) return;
+  await OfflineManager.deletePack(replacing).catch(() => undefined);
+  // The new pack carries the geodetic marks itself: the region's companion
+  // pack (added when the extension was installed) is now redundant.
+  if (meta.includes?.includes('geodetic')) {
+    await deleteCompanionsOf(args.id, 'geodetic').catch(() => undefined);
+  }
+}
+
+/** Delete `regionId`'s companion pack(s) for one extension, and their style files. */
+async function deleteCompanionsOf(regionId: string, extension: ExtensionKind): Promise<void> {
+  for (const p of await OfflineManager.getPacks()) {
+    const meta = p.metadata as Partial<PackMeta>;
+    if (meta.extension !== extension || meta.companionOf !== regionId) continue;
+    await OfflineManager.deletePack(p.id);
+    const f = styleFile(meta.appId ?? p.id);
+    if (f.exists) f.delete();
+  }
 }
 
 /**
@@ -382,11 +422,21 @@ export async function createRegionPack(
  * longer uses (P1-2). The old pack (native id `oldPackId`) stays until the
  * new one completes, so a failure loses nothing.
  */
-export function replaceRegionPack(
+export async function replaceRegionPack(
   oldPackId: string,
   args: Parameters<typeof createRegionPack>[0],
   onProgress: (pct: number, sizeBytes: number) => void,
 ): Promise<void> {
+  // An earlier update killed mid-way left an incomplete pack under this id:
+  // drop it first, so a region never ends up with three packs.
+  for (const p of await OfflineManager.getPacks()) {
+    const meta = p.metadata as Partial<PackMeta>;
+    if (meta.appId !== args.id || meta.extension !== undefined || p.id === oldPackId) continue;
+    const status = await packStatusWithSizeRetry(p);
+    if ((status?.percentage ?? 0) < 100) {
+      await OfflineManager.deletePack(p.id).catch(() => undefined);
+    }
+  }
   return createRegionPack(args, onProgress, oldPackId);
 }
 
@@ -431,18 +481,34 @@ async function packStatusWithSizeRetry(pack: {
   return second ?? first;
 }
 
+/**
+ * One region per app-level id. Two packs share one while an update runs (the
+ * old pack stays until the new one completes — `replaceRegionPack`), and for
+ * good if the app is killed mid-update: the region is then the newest
+ * COMPLETE pack, else the newest one (see `PackMeta.createdAt`).
+ */
 export async function listRegionPacks(): Promise<OfflineRegion[]> {
   const packs = await OfflineManager.getPacks();
-  const out: OfflineRegion[] = [];
+  const byId = new Map<string, { region: OfflineRegion; createdAt: number }>();
   for (const p of packs) {
+    const meta = p.metadata as Partial<PackMeta>;
     // An extension's companion pack is part of its region, not a region.
-    if ((p.metadata as Partial<PackMeta>).extension !== undefined) continue;
+    if (meta.extension !== undefined) continue;
     const status = await packStatusWithSizeRetry(p);
-    out.push(
-      regionFromPack(p.id, p.metadata, p.bounds as [number, number, number, number], status),
+    const region = regionFromPack(
+      p.id,
+      p.metadata,
+      p.bounds as [number, number, number, number],
+      status,
     );
+    const createdAt = typeof meta.createdAt === 'number' ? meta.createdAt : 0;
+    const prev = byId.get(region.id);
+    const better =
+      prev === undefined ||
+      (region.complete !== prev.region.complete ? region.complete : createdAt > prev.createdAt);
+    if (better) byId.set(region.id, { region, createdAt });
   }
-  return out;
+  return [...byId.values()].map((e) => e.region);
 }
 
 /** An extension's companion packs (one per region downloaded before it was installed). */

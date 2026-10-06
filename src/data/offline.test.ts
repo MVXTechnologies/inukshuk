@@ -93,6 +93,7 @@ jest.mock('expo-file-system', () => {
     Directory,
     Paths: { document: '/doc', cache: '/cache' },
     __has: (path: string): boolean => files.has(path),
+    __read: (path: string): string | undefined => files.get(path),
     __reset: (): void => {
       files.clear();
       dirs.clear();
@@ -102,6 +103,7 @@ jest.mock('expo-file-system', () => {
 
 const fsMock = jest.requireMock('expo-file-system') as {
   __has: (path: string) => boolean;
+  __read: (path: string) => string | undefined;
   __reset: () => void;
 };
 const serverMock = jest.requireMock('@dr.pogodin/react-native-static-server') as {
@@ -432,15 +434,133 @@ describe('tile URL templates (P1-2)', () => {
     expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-old');
   });
 
-  it('keeps the old pack and its style file when the replacement fails', async () => {
+  it('keeps the old pack and its style file, unchanged, when the replacement fails', async () => {
+    // The old pack's saved style, as its original download wrote it.
     mockCreatePack();
+    const first = createRegionPack(packArgs, jest.fn());
+    await flushMicrotasks();
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await first;
+    (OfflineManager.deletePack as jest.Mock).mockClear();
+
     const pending = replaceRegionPack('native-old', styled, jest.fn());
     await flushMicrotasks();
     emitError({ id: 'native-1' }, { message: 'boom' });
     await expect(pending).rejects.toThrow('boom');
     expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-1'); // the partial new one
     expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-old');
-    expect(fsMock.__has('/doc/offline-styles/r1.json')).toBe(true);
+    // Still the OLD style: the legacy migration reads a pack's templates from it.
+    expect(fsMock.__read('/doc/offline-styles/r1.json')).toBe(packArgs.styleJSON);
+  });
+
+  it('leaves no style file behind when a replaced pack had none and the update fails', async () => {
+    mockCreatePack();
+    const pending = replaceRegionPack('native-old', styled, jest.fn());
+    await flushMicrotasks();
+    emitError({ id: 'native-1' }, { message: 'boom' });
+    await expect(pending).rejects.toThrow('boom');
+    expect(fsMock.__has('/doc/offline-styles/r1.json')).toBe(false);
+  });
+
+  const listed = (
+    id: string,
+    meta: Record<string, unknown>,
+    percentage = 100,
+  ): Record<string, unknown> => ({
+    id,
+    bounds: [-72, 46, -71, 47],
+    metadata: { label: 'Home range', basemap: 'map', format: 'vector', ...meta },
+    status: jest.fn(async () => ({
+      percentage,
+      completedTileSize: 5,
+      completedResourceSize: 5,
+    })),
+  });
+
+  it('lists one region per app id, preferring the newest complete pack', async () => {
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([
+      listed('native-old', { appId: 'r1' }),
+      listed('native-new', { appId: 'r1', createdAt: 2 }, 40), // an update in flight / killed
+      listed('native-x', { appId: 'x' }),
+    ]);
+    expect((await listRegionPacks()).map((r) => [r.id, r.packId])).toEqual([
+      ['r1', 'native-old'],
+      ['x', 'native-x'],
+    ]);
+
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValueOnce([
+      listed('native-old', { appId: 'r1', createdAt: 1 }),
+      listed('native-new', { appId: 'r1', createdAt: 2 }),
+    ]);
+    expect((await listRegionPacks()).map((r) => r.packId)).toEqual(['native-new']);
+  });
+
+  it('stamps a new pack with its creation time', async () => {
+    mockCreatePack();
+    const pending = createRegionPack(styled, jest.fn());
+    await flushMicrotasks();
+    const options = (OfflineManager.createPack as jest.Mock).mock.calls[0]?.[0] as {
+      metadata: Record<string, unknown>;
+    };
+    expect(typeof options.metadata.createdAt).toBe('number');
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+  });
+
+  it("first drops the region's stray incomplete packs (an update killed mid-way)", async () => {
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValue([
+      listed('native-old', { appId: 'r1' }, 40),
+      listed('native-stray', { appId: 'r1', createdAt: 2 }, 40),
+      listed('native-done', { appId: 'r1', createdAt: 3 }),
+      listed('native-other', { appId: 'x' }, 40),
+    ]);
+    mockCreatePack();
+    const pending = replaceRegionPack('native-old', styled, jest.fn());
+    for (let i = 0; i < 5; i++) await flushMicrotasks();
+    expect(OfflineManager.deletePack).toHaveBeenCalledTimes(1);
+    expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-stray');
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+    expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-other');
+    expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-done');
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValue([]);
+  });
+
+  it("drops the region's geodetic companion once the update carries the marks itself", async () => {
+    const companion = listed('native-comp', {
+      appId: 'r1~geodetic',
+      extension: 'geodetic',
+      companionOf: 'r1',
+    });
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValue([
+      listed('native-old', { appId: 'r1' }),
+      companion,
+    ]);
+    const withMarks = {
+      ...styled,
+      styleJSON: JSON.stringify({
+        version: 8,
+        sources: { geodetic: { type: 'vector', tiles: ['https://t.example/g/{z}/{x}/{y}.mvt'] } },
+        layers: [],
+      }),
+    };
+    mockCreatePack();
+    const pending = replaceRegionPack('native-old', withMarks, jest.fn());
+    await flushMicrotasks();
+    expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-comp');
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await pending;
+    expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-old');
+    expect(OfflineManager.deletePack).toHaveBeenCalledWith('native-comp');
+
+    // Without the marks in the new pack, the companion stays.
+    (OfflineManager.deletePack as jest.Mock).mockClear();
+    const plain = replaceRegionPack('native-old', styled, jest.fn());
+    await flushMicrotasks();
+    emitProgress({ id: 'native-1' }, { percentage: 100, completedTileSize: 1 });
+    await plain;
+    expect(OfflineManager.deletePack).not.toHaveBeenCalledWith('native-comp');
+    (OfflineManager.getPacks as jest.Mock).mockResolvedValue([]);
   });
 
   it("reads a legacy pack's templates from its saved style, or null without one", async () => {
