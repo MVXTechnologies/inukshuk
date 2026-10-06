@@ -1,0 +1,254 @@
+name: Release path (EAS pre-install hook)
+
+# Runs the EAS `eas-build-pre-install` hook (scripts/eas-pre-install.sh →
+# modules/inukshuk-proj/scripts/prepare.sh → build-proj.sh) the way an EAS
+# worker does, on GitHub runners made to look like one. The 2.3.0 store
+# builds failed ONLY on EAS, three times over, in this hook: no CMake on the
+# Android image's PATH ("cmake: command not found"), www.sqlite.org
+# unreachable from EAS Linux, and on iOS the PROJ xcframeworks built after
+# `pod install`, so libproj was never linked. native-build.yml could not see
+# any of it: it calls `proj:prepare` directly, with CMake on PATH.
+#
+# - Android (ubuntu): every CMake is removed from PATH and from the Android
+#   SDK, and the hook runs BEFORE `npm ci` (EAS runs it before installing
+#   dependencies). Two variants exercise build-proj.sh's two fallbacks:
+#   `sdkmanager` (installs the SDK's CMake — all four ABIs, exactly the EAS
+#   build) and `pip` (sdkmanager hidden too, so CMake comes from pip --user;
+#   one ABI, since only the tool discovery differs).
+# - iOS (macOS): CMake is uninstalled, so the hook's own `brew install cmake`
+#   runs; then, like EAS, npm ci → prebuild → `pod install`, which must find
+#   the xcframeworks (InukshukProj.podspec raises if they are missing) and
+#   link them into the Pods project.
+#
+# The PROJ outputs are cached on the scripts that produce them and on this
+# file (it defines the emulated EAS worker), so a PR that touches neither
+# re-runs the hook against restored outputs (the idempotent path, grids
+# re-verified) in a minute or two. The weekly run and
+# a manual run with `cold` skip the cache and rebuild from source — that is
+# what catches drift on the runner images and the download mirrors.
+on:
+  pull_request:
+    paths:
+      - 'modules/inukshuk-proj/**'
+      - 'scripts/eas-pre-install.sh'
+      - 'package.json'
+      - 'app.config.ts'
+      - 'eas.json'
+      - 'plugins/**'
+      - '.github/workflows/release-path.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/inukshuk-proj/**'
+      - 'scripts/eas-pre-install.sh'
+      - 'package.json'
+      - 'app.config.ts'
+      - 'eas.json'
+      - 'plugins/**'
+      - '.github/workflows/release-path.yml'
+  schedule:
+    # Mondays 03:40 UTC, cold (no cache).
+    - cron: '40 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      cold:
+        description: Ignore the PROJ cache and build from source
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-path-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COLD: ${{ github.event_name == 'schedule' || inputs.cold == true }}
+
+jobs:
+  android:
+    name: Android hook (${{ matrix.cmake }} CMake)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cmake: sdkmanager
+            abis: arm64-v8a armeabi-v7a x86_64 x86
+            expect: 'cmake from sdkmanager'
+          - cmake: pip
+            abis: arm64-v8a
+            expect: 'cmake from pip --user'
+    env:
+      ANDROID_ABIS: ${{ matrix.abis }}
+      NDK_VERSION: 27.1.12297006
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Restore PROJ outputs
+        id: cache
+        if: env.COLD != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
+
+      # The pip variant hides sdkmanager, which build-proj.sh would also use
+      # to fetch a missing NDK: install the NDK first (EAS images have one).
+      - name: Pre-install the NDK (pip variant)
+        if: matrix.cmake == 'pip'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null || true
+          test -f "$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake"
+
+      - name: Make the runner look like an EAS Android worker (no CMake)
+        env:
+          HIDE_SDKMANAGER: ${{ matrix.cmake == 'pip' }}
+        run: |
+          for c in $(which -a cmake | sort -u); do sudo rm -f "$c"; done
+          sudo rm -rf "$ANDROID_HOME/cmake"
+          if [ "$HIDE_SDKMANAGER" = true ]; then
+            for s in $(which -a sdkmanager | sort -u); do sudo rm -f "$s"; done
+            sudo mv "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/cmdline-tools.hidden"
+            [ ! -d "$ANDROID_HOME/tools" ] || sudo mv "$ANDROID_HOME/tools" "$ANDROID_HOME/tools.hidden"
+            if command -v sdkmanager; then echo "sdkmanager still on PATH" >&2; exit 1; fi
+          fi
+          hash -r
+          if command -v cmake; then echo "cmake still on PATH" >&2; exit 1; fi
+          echo "No CMake on PATH or in $ANDROID_HOME/cmake."
+
+      # Before `npm ci`, as on EAS: the hook must not need node_modules.
+      - name: Run the EAS pre-install hook
+        env:
+          EAS_BUILD_PLATFORM: android
+        run: |
+          set -o pipefail
+          npm run eas-build-pre-install 2>&1 | tee hook.log
+
+      - name: Check the CMake fallback that was used
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          grep -F "inukshuk-proj: $EXPECT" hook.log || {
+            echo "::error::expected the hook to get CMake via '$EXPECT'"; exit 1; }
+
+      - name: Check the outputs an EAS Gradle build links
+        run: |
+          base=modules/inukshuk-proj
+          missing=0
+          for abi in $ANDROID_ABIS; do
+            for lib in proj tiff sqlite3; do
+              f="$base/prebuilt/android/$abi/lib/lib$lib.a"
+              [ -s "$f" ] || { echo "::error::missing $f"; missing=1; }
+            done
+          done
+          for f in prebuilt/android/include/proj.h assets/inukshukproj/proj.db \
+            assets/inukshukproj/grids/us_nga_egm96_15.tif assets/inukshukproj/grids/ca_nrc_NAD83v70VG.tif; do
+            [ -s "$base/$f" ] || { echo "::error::missing $base/$f"; missing=1; }
+          done
+          exit $missing
+
+      - name: Save PROJ outputs
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
+
+  ios:
+    name: iOS hook → pod install
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same Xcode choice as native-build.yml (Swift 6.2+ for a package dep).
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Restore PROJ outputs
+        id: cache
+        if: env.COLD != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
+
+      # EAS macOS workers do not all ship CMake; the hook installs it. Remove
+      # the runner's so that path runs here too.
+      - name: Make the runner look like an EAS macOS worker (no CMake)
+        run: |
+          if brew list cmake > /dev/null 2>&1; then
+            brew uninstall --ignore-dependencies --force cmake
+          fi
+          for c in $(which -a cmake | sort -u); do sudo rm -f "$c"; done
+          hash -r
+          if command -v cmake; then echo "cmake still on PATH" >&2; exit 1; fi
+
+      # Before `npm ci` and long before `pod install`, as on EAS.
+      - name: Run the EAS pre-install hook
+        env:
+          EAS_BUILD_PLATFORM: ios
+        run: npm run eas-build-pre-install
+
+      - name: Check the outputs pod install needs
+        run: |
+          base=modules/inukshuk-proj
+          missing=0
+          for f in prebuilt/ios/Proj.xcframework/Info.plist prebuilt/ios/Tiff.xcframework/Info.plist \
+            prebuilt/ios/include/proj.h assets/inukshukproj/proj.db \
+            assets/inukshukproj/grids/us_nga_egm96_15.tif assets/inukshukproj/grids/ca_nrc_NAD83v70VG.tif; do
+            [ -s "$base/$f" ] || { echo "::error::missing $base/$f"; missing=1; }
+          done
+          exit $missing
+
+      - name: Save PROJ outputs
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            modules/inukshuk-proj/prebuilt
+            modules/inukshuk-proj/assets
+          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
+
+      - run: npm ci
+
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: pods-${{ runner.os }}-
+
+      - name: Prebuild native iOS project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: pod install
+        run: npx pod-install
+
+      # The 2.3.0 failure mode: pods installed without the vendored
+      # xcframeworks, so nothing linked libproj. They must be in the Pods
+      # project now.
+      - name: Check the Pods project links the PROJ xcframeworks
+        run: |
+          pbx=ios/Pods/Pods.xcodeproj/project.pbxproj
+          for fw in Proj.xcframework Tiff.xcframework; do
+            grep -q "$fw" "$pbx" || { echo "::error::$fw is not in $pbx"; exit 1; }
+          done
+          echo "Proj.xcframework and Tiff.xcframework are in the Pods project."

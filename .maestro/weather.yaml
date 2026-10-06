@@ -8,10 +8,9 @@
 # Weather sub-menu will fail at the first tap.
 #
 # It is kept, not deleted, because flipping WEATHER_ENABLED back to true must
-# restore the feature AND its coverage in one step. Android CI never ran it —
-# .github/scripts/e2e-attempts.sh has an explicit flow list and this file is
-# not on it — so nothing in CI changes. To use it: set WEATHER_ENABLED = true,
-# rebuild, run.
+# restore the feature AND its coverage in one step. Android CI never ran it:
+# it is listed under `parked` in .maestro/shards.json, not in a CI shard.
+# To use it: set WEATHER_ENABLED = true, rebuild, run, then move it into a shard.
 # ============================================================================
 # Weather UX v2 (M1, reworked in wave A + the D-6 drill-down) e2e: open the
 # Overlays menu, drill into the Weather group's in-place icon picker, confirm

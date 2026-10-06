@@ -44,6 +44,14 @@ jobs:
       - name: Unit tests + coverage
         run: npm run test:ci
 
+      # scripts/**/*.test.mjs: the OTA-safety tests of fingerprint.config.js
+      # (a misspelt source skip or an environment-dependent runtime would
+      # strand every OTA), the E2E shard plan, the runtime check, the
+      # expo-doctor gate. Until 2026-10 these ran only in `npm run check`
+      # (OTA/release jobs on main) and the nightly — after the merge.
+      - name: CI script tests
+        run: npm run test:scripts
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7
@@ -51,6 +59,40 @@ jobs:
           name: coverage
           path: coverage/
           retention-days: 7
+
+  # The tiles Worker (infra/tiles/worker) is its own npm project with its own
+  # lockfile and tsconfig (Workers types). Its unit tests run under the app's
+  # Jest (it has no runner of its own), so they also run in `quality`; this
+  # job adds what nothing else checked — the Worker's typecheck against its
+  # own pinned dependencies. Deploying it stays a manual owner step
+  # (infra/tiles/README.md).
+  worker:
+    name: Tiles Worker (typecheck · tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/tiles/worker/package-lock.json
+
+      - name: Install the Worker's dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: infra/tiles/worker
+
+      - name: Typecheck the Worker
+        run: npm run typecheck
+        working-directory: infra/tiles/worker
+
+      - name: Install the app's dependencies (Jest)
+        run: npm ci
+
+      - name: Worker unit tests
+        run: npx jest --ci infra/tiles/worker
 
   doctor:
     name: Expo Doctor (advisory)

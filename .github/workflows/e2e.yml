@@ -1,8 +1,15 @@
 name: E2E (Maestro · Android)
 
-# End-to-end smoke test on a real Android emulator. Builds a release APK, boots
-# an emulator with hardware acceleration, installs the app, and runs the Maestro
-# flow in .maestro/. Nightly + on demand to conserve CI minutes.
+# End-to-end flows on real Android emulators. One job builds a release APK;
+# the flows then run in parallel SHARDS (.maestro/shards.json), each on its
+# own freshly booted emulator. Nightly + on demand to conserve CI minutes.
+#
+# Sharded (2026-10-06) because the single serial job outgrew its 60-minute
+# timeout: ~25 min of APK build plus 14+ flows back to back. Now the build
+# runs once and the slowest shard bounds the rest. State never crosses
+# shards, so flows that need another flow's output (a recorded trail) share
+# its shard — scripts/ci/e2eShards.test.mjs checks the plan, and that every
+# flow in .maestro/ is either in a shard or explicitly parked.
 #
 # The APK must be a RELEASE build: debug builds don't embed a JS bundle, and the
 # app ships expo-dev-client, so a debug APK in CI (no Metro) boots into the
@@ -11,6 +18,11 @@ name: E2E (Maestro · Android)
 # so no signing secrets are needed.
 on:
   workflow_dispatch:
+    inputs:
+      shards:
+        description: Shards to run (comma-separated, see .maestro/shards.json), or all
+        type: string
+        default: all
   schedule:
     - cron: '15 5 * * *'
 
@@ -19,26 +31,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  android-e2e:
+  build:
+    name: Build release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
-
-      # Without this the emulator runs pure-software emulation: boot takes
-      # ~6.5 min and the Android system process itself ANRs under load ("Process
-      # system isn't responding" over the app at launch), failing any UI assert.
-      # Linux runners have /dev/kvm but it isn't accessible by default.
-      - name: Enable KVM group perms (hardware-accelerated emulator)
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
 
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+
+      # The matrix comes from the plan file, so adding a shard is a one-file
+      # change. Validated here first: a broken plan fails in seconds, before
+      # the 20-minute build.
+      - name: Read the shard plan
+        id: plan
+        env:
+          ONLY: ${{ inputs.shards || 'all' }}
+        run: |
+          node scripts/ci/e2e-shards.mjs check
+          echo "shards=$(node scripts/ci/e2e-shards.mjs names "$ONLY")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v6
         with:
@@ -49,7 +65,9 @@ jobs:
 
       # Same lockfile-keyed Gradle cache as native-build.yml — ~/.gradle exists
       # independently of the prebuild-generated android/ dir (setup-java's
-      # `cache: gradle` variant hard-fails here, see #77).
+      # `cache: gradle` variant hard-fails here, see #77). Saved only when the
+      # job succeeds, which the old all-in-one job (build + every flow) rarely
+      # did — this job is the build alone.
       - name: Cache Gradle dependencies
         uses: actions/cache@v6
         with:
@@ -87,12 +105,66 @@ jobs:
           # e2e-attempts.sh (adb reverse tcp:8787) — CI must never hit NRCan.
           CATALOG_MANIFEST_URL: http://127.0.0.1:8787/index.json
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 3
+          if-no-files-found: error
+
+  flows:
+    name: Flows (${{ matrix.shard }})
+    needs: build
+    runs-on: ubuntu-latest
+    # The slowest shard runs ~15 min of flows (+ one retry of a flaky flow)
+    # after ~5 min of setup and boot; 35 leaves room for that without letting
+    # a hung emulator burn an hour.
+    timeout-minutes: 35
+    strategy:
+      # Every shard reports: one red shard must not hide the others' results.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.build.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Without this the emulator runs pure-software emulation: boot takes
+      # ~6.5 min and the Android system process itself ANRs under load ("Process
+      # system isn't responding" over the app at launch), failing any UI assert.
+      # Linux runners have /dev/kvm but it isn't accessible by default.
+      - name: Enable KVM group perms (hardware-accelerated emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Node deps for the runner: the fixture catalog generator (tsx) and the
+      # pdf-overlays pixel check (upng-js).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Maestro's CLI runs on the JVM.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v4
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: e2e-apk
+          path: e2e-apk
+
       - name: Install Maestro
         run: |
           curl -Ls https://get.maestro.mobile.dev | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Run Maestro flow on emulator
+      - name: Run the shard's flows on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
           # The Maestro Android driver installs an instrumentation APK and connects
@@ -154,16 +226,17 @@ jobs:
             # further — installing + launching immediately after boot is what
             # tipped the (previously unaccelerated) system process into ANR.
             sleep 20
-            adb install -r android/app/build/outputs/apk/release/app-release.apk
-            bash .github/scripts/e2e-attempts.sh
+            adb install -r e2e-apk/app-release.apk
+            bash .github/scripts/e2e-attempts.sh ${{ matrix.shard }}
 
       # Maestro writes screenshots + the UI hierarchy on failure; without this
-      # upload every red run is a black box.
+      # upload every red run is a black box. Also uploaded for a green shard
+      # that needed a retry (its first failure's logcat is the flake evidence).
       - name: Upload Maestro debug artifacts
-        if: failure()
+        if: failure() || hashFiles('logcat-failure-*.txt') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: maestro-debug
+          name: maestro-debug-${{ matrix.shard }}
           path: |
             ~/.maestro/tests
             logcat-failure-*.txt

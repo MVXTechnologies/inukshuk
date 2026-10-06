@@ -5,8 +5,8 @@
 # Its driver, `npm run wind:motion` (scripts/wind-motion-check.mjs), reads the
 # same flag and refuses to run rather than pretending to gate a dead feature.
 # Kept so that flipping the flag back to true restores the feature, this flow
-# and the pixel gate together. Not in the Android CI flow list
-# (.github/scripts/e2e-attempts.sh), so CI is unaffected.
+# and the pixel gate together. Parked in
+# .maestro/shards.json (no Android CI shard runs it), so CI is unaffected.
 # ============================================================================
 # Drives the app to a live Wind layer and stops — the setup half of the
 # wind-particle MOTION gate (scripts/wind-motion-check.mjs takes it from here

@@ -2362,6 +2362,8 @@ export function MapScreen() {
         style={styles.fill}
         ref={setMapAreaView}
         collapsable={false}
+        // E2E: the map's centre, which is the user while following (heatmap.yaml).
+        testID="map-area"
         onLayout={(e) => {
           mapSizeRef.current = {
             width: e.nativeEvent.layout.width,

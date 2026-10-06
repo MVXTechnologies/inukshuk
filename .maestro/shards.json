@@ -1,0 +1,42 @@
+{
+  "$comment": [
+    "Which Maestro flows the Android E2E workflow (.github/workflows/e2e.yml) runs, and on which emulator.",
+    "Each shard is one CI job with its OWN fresh emulator, running its flows in the order listed.",
+    "State does not cross shards: a flow that needs another flow's output (requires) must sit after it in the same shard.",
+    "Every .maestro/*.yaml flow must be in exactly one shard or listed under parked with the reason;",
+    "scripts/ci/e2eShards.test.mjs enforces this, so a new flow cannot silently stay out of CI.",
+    "A flow whose launchApp clears state must be the last of its shard (the same test checks that)."
+  ],
+  "shards": {
+    "trails": [
+      "category-record.yaml",
+      "heatmap.yaml",
+      "library-filter.yaml",
+      "trail-view.yaml",
+      "dashboard.yaml",
+      "folders.yaml",
+      "record.yaml"
+    ],
+    "map": ["smoke.yaml", "waypoint.yaml", "map-overlays.yaml", "settings.yaml"],
+    "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml"],
+    "extensions": ["convert.yaml", "geodetic.yaml", "tides.yaml"]
+  },
+  "requires": {
+    "heatmap.yaml": ["category-record.yaml"],
+    "library-filter.yaml": ["category-record.yaml"],
+    "trail-view.yaml": ["category-record.yaml"],
+    "dashboard.yaml": ["category-record.yaml"],
+    "folders.yaml": ["category-record.yaml", "library-filter.yaml", "trail-view.yaml"]
+  },
+  "last": {
+    "record.yaml": "its save-vs-discard outcome is indeterminate, so nothing after it may count trails"
+  },
+  "parked": {
+    "marine.yaml": "Marine is parked behind MARINE_ENABLED (src/core/features/flags.ts); the flow cannot pass on the shipping build",
+    "weather.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
+    "weather-models.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
+    "weather-wind.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
+    "wind-motion.yaml": "Weather is parked behind WEATHER_ENABLED; its driver is npm run wind:motion, not this runner",
+    "waypoint-bubble.yaml": "Pixel-6 screen-geometry taps: on the CI emulator (2026-10-06, run 37521914819) step (b)'s tap at A opened no bubble and the follow-up tap dropped one at WA, both attempts; needs on-device investigation before it can gate CI"
+  }
+}

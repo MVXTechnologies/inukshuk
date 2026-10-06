@@ -8,10 +8,9 @@
 # box, so the toggle this flow taps does nothing.
 #
 # It is kept, not deleted, because flipping MARINE_ENABLED back to true must
-# restore the feature AND its coverage in one step. Android CI never ran it —
-# .github/scripts/e2e-attempts.sh has an explicit flow list and this file is
-# not on it — so nothing in CI changes. To use it: set MARINE_ENABLED = true,
-# rebuild, run.
+# restore the feature AND its coverage in one step. Android CI never ran it:
+# it is listed under `parked` in .maestro/shards.json, not in a CI shard.
+# To use it: set MARINE_ENABLED = true, rebuild, run, then move it into a shard.
 # ============================================================================
 # Marine overlays e2e (marine M3, reworked for the D-6 drill-down): since the
 # drill-down amendment, Marine is a single all-or-nothing chart-mode toggle
