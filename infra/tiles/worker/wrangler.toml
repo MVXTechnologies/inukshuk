@@ -108,3 +108,16 @@ namespace_id = "1476"
   [ratelimits.simple]
   limit = 3
   period = 60
+
+# POST /error-report (src/errorReport.ts): the app's crash reports, filed as
+# GitHub issues with `wrangler secret put ERROR_REPORT_GITHUB_TOKEN` (a
+# fine-grained token: Issues read/write on this repository only). Without the
+# secret the route answers 404. Per client IP 5 a minute (plus 20 an hour per
+# isolate); the key "report:new-issue" also caps NEW issues at 5 a minute.
+[[ratelimits]]
+name = "ERROR_REPORT_LIMITER"
+namespace_id = "1005"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60
