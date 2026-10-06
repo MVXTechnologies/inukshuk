@@ -85,14 +85,15 @@ per-shard timeout. The plan lives in `.maestro/shards.json`:
   a flow that needs another flow's output (category-record's trail) sits after
   it in the same shard; `requires` records those dependencies.
 - `parked` — flows CI deliberately does not run, each with its reason (today:
-  the weather and marine flows, parked behind their feature flags).
+  the weather and marine flows, parked behind their feature flags, and
+  waypoint-bubble, whose screen-geometry taps fail on the CI emulator).
 - A flow whose `launchApp` clears state, or that is listed in `last`, must end
   its shard.
 
 `scripts/ci/e2eShards.test.mjs` (in `npm run test:scripts`, so on every PR)
 fails when a `.maestro/*.yaml` flow is in no shard and not parked, or when the
 ordering rules break — a new flow cannot silently stay out of CI again (tides,
-geodetic, convert and waypoint-bubble did, until 2026-10). The matrix is read
+geodetic and convert did, until 2026-10). The matrix is read
 from the same file, so adding a shard needs no workflow edit.
 
 Run a subset by hand with **Run workflow → shards** (`trails,catalog`), and

@@ -65,7 +65,12 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Tide coverage & sources.*'
     timeout: 10000
-- assertVisible: 'Remove Tide stations extension'
+# Installed, the tide rows grow (switch, coverage & sources) and the Remove
+# row lands below the fold on a Pixel 6: scroll to it, don't assert in place
+# (CI 2026-10-06: the in-place assert failed on the first attempt).
+- scrollUntilVisible:
+    element: 'Remove Tide stations extension'
+    direction: DOWN
 - tapOn: 'Back'
 - tapOn:
     text: 'Map(, tab.*)?'

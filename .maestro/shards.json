@@ -17,13 +17,7 @@
       "folders.yaml",
       "record.yaml"
     ],
-    "map": [
-      "smoke.yaml",
-      "waypoint.yaml",
-      "map-overlays.yaml",
-      "settings.yaml",
-      "waypoint-bubble.yaml"
-    ],
+    "map": ["smoke.yaml", "waypoint.yaml", "map-overlays.yaml", "settings.yaml"],
     "catalog": ["make-map.yaml", "store.yaml", "pdf-overlays.yaml"],
     "extensions": ["convert.yaml", "geodetic.yaml", "tides.yaml"]
   },
@@ -42,6 +36,7 @@
     "weather.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
     "weather-models.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
     "weather-wind.yaml": "Weather is parked behind WEATHER_ENABLED (src/core/features/flags.ts)",
-    "wind-motion.yaml": "Weather is parked behind WEATHER_ENABLED; its driver is npm run wind:motion, not this runner"
+    "wind-motion.yaml": "Weather is parked behind WEATHER_ENABLED; its driver is npm run wind:motion, not this runner",
+    "waypoint-bubble.yaml": "Pixel-6 screen-geometry taps: on the CI emulator (2026-10-06, run 37521914819) step (b)'s tap at A opened no bubble and the follow-up tap dropped one at WA, both attempts; needs on-device investigation before it can gate CI"
   }
 }
