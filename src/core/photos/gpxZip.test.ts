@@ -81,6 +81,38 @@ describe('gpxWithPhotoWaypoints', () => {
     expect(out.waypoints[2]!.type).toBe('photo');
   });
 
+  it("keeps another app's photo waypoints, replacing only ones linking into photos/", () => {
+    const foreign = buildGpx({
+      points: lineTrack({ lengthM: 100 }),
+      waypoints: [
+        {
+          latitude: 1,
+          longitude: 2,
+          name: 'Remote',
+          type: 'photo',
+          link: { href: 'https://x.org/a.jpg' },
+        },
+        {
+          latitude: 1,
+          longitude: 2,
+          name: 'Theirs',
+          type: 'photo',
+          link: { href: 'images/b.jpg' },
+        },
+        { latitude: 1, longitude: 2, name: 'Bare', type: 'photo' },
+        {
+          latitude: 1,
+          longitude: 2,
+          name: 'Ours',
+          type: 'photo',
+          link: { href: './Photos/old.jpg' },
+        },
+      ],
+    });
+    const out = parseGpx(gpxWithPhotoWaypoints(foreign, photos.slice(0, 1)));
+    expect(out.waypoints.map((w) => w.name)).toEqual(['Remote', 'Theirs', 'Bare', 'Summit']);
+  });
+
   it('replaces photo waypoints from an earlier export instead of doubling them', () => {
     const twice = gpxWithPhotoWaypoints(gpxWithPhotoWaypoints(gpx, photos), photos.slice(0, 1));
     expect(parseGpx(twice).waypoints.map((w) => w.name)).toEqual(['Parking', 'Summit']);

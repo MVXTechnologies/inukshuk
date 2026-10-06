@@ -58,13 +58,28 @@ export function photoWaypoints(photos: readonly TrackPhoto[]): GpxWaypoint[] {
 }
 
 /**
+ * A photo waypoint an earlier "Trail + photos" export wrote: `<type>photo`
+ * AND a link into the archive's `photos/` folder. Another app's photo
+ * waypoints (remote links, other folders, no link) are not ours.
+ */
+function isOurPhotoWaypoint(w: GpxWaypoint): boolean {
+  const href = w.link?.href;
+  return (
+    w.type === PHOTO_WPT_TYPE &&
+    href !== undefined &&
+    normalizeHref(href).startsWith(`${ZIP_PHOTO_DIR}/`)
+  );
+}
+
+/**
  * The trail's GPX with its photo waypoints added. The original GPX is parsed
  * and rebuilt (points, segments, metadata and existing waypoints round-trip);
- * photo waypoints a previous export left in it are replaced, not duplicated.
+ * photo waypoints a previous export left in it are replaced, not duplicated,
+ * and other apps' photo waypoints are kept.
  */
 export function gpxWithPhotoWaypoints(gpxXml: string, photos: readonly TrackPhoto[]): string {
   const doc = parseGpx(gpxXml);
-  const kept = doc.waypoints.filter((w) => w.type !== PHOTO_WPT_TYPE);
+  const kept = doc.waypoints.filter((w) => !isOurPhotoWaypoint(w));
   const metadata = { ...doc.metadata };
   return buildGpx({
     points: doc.points,
