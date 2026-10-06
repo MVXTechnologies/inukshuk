@@ -23,6 +23,11 @@
 #   LARGE_JPEG_FIXTURE_BBOX in scripts/catalog/make-fixture.ts) BEFORE the map
 #   is shown, so the follow-camera lands inside the sheet without any camera
 #   gesture. It is far from the Québec City fixtures store.yaml counts on.
+#   Tagged `own-location`: the runner pauses its background geo-fix loop for
+#   this flow. That loop keeps re-sending Québec fixes, which dragged the
+#   follow-camera back across the continent every 2 s and restarted the
+#   viewport render — CI 2026-10-06 screenshot showed the bare basemap
+#   (7/576 samples) after every flow had passed.
 # - Text matchers carry leading and trailing .* (iOS merges title +
 #   description into one accessible string).
 # - The Library card's inner status lines live inside the accessible card
@@ -33,6 +38,8 @@
 #   "Download"; the download block is skipped then and the flow still asserts
 #   the rendered state.
 appId: com.inukshuk.app
+tags:
+  - own-location
 ---
 - runFlow:
     when:

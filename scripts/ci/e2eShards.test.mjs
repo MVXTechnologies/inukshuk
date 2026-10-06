@@ -35,8 +35,8 @@ describe('the real plan (.maestro/shards.json)', () => {
     assert.deepEqual(validateShards(manifest, files, sources), []);
   });
 
-  it('marks the flows that tap by screen position as owning the location', () => {
-    for (const flow of ['heatmap.yaml', 'waypoint-bubble.yaml']) {
+  it('marks the flows that place the user themselves (position taps, far-away fixtures) as owning the location', () => {
+    for (const flow of ['heatmap.yaml', 'waypoint-bubble.yaml', 'pdf-overlays.yaml']) {
       assert.ok(ownsLocation(readFileSync(join(maestroDir, flow), 'utf8')), flow);
     }
   });

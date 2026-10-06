@@ -20,9 +20,10 @@ name: Release path (EAS pre-install hook)
 #   the xcframeworks (InukshukProj.podspec raises if they are missing) and
 #   link them into the Pods project.
 #
-# The PROJ outputs are cached on the scripts that produce them, so a PR that
-# does not touch those scripts re-runs the hook against restored outputs (the
-# idempotent path, grids re-verified) in a minute or two. The weekly run and
+# The PROJ outputs are cached on the scripts that produce them and on this
+# file (it defines the emulated EAS worker), so a PR that touches neither
+# re-runs the hook against restored outputs (the idempotent path, grids
+# re-verified) in a minute or two. The weekly run and
 # a manual run with `cold` skip the cache and rebuild from source — that is
 # what catches drift on the runner images and the download mirrors.
 on:
@@ -95,7 +96,7 @@ jobs:
           path: |
             modules/inukshuk-proj/prebuilt
             modules/inukshuk-proj/assets
-          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh') }}
+          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
 
       # The pip variant hides sdkmanager, which build-proj.sh would also use
       # to fetch a missing NDK: install the NDK first (EAS images have one).
@@ -160,7 +161,7 @@ jobs:
           path: |
             modules/inukshuk-proj/prebuilt
             modules/inukshuk-proj/assets
-          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh') }}
+          key: proj-eas-android-${{ matrix.cmake }}-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
 
   ios:
     name: iOS hook → pod install
@@ -187,7 +188,7 @@ jobs:
           path: |
             modules/inukshuk-proj/prebuilt
             modules/inukshuk-proj/assets
-          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh') }}
+          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
 
       # EAS macOS workers do not all ship CMake; the hook installs it. Remove
       # the runner's so that path runs here too.
@@ -224,7 +225,7 @@ jobs:
           path: |
             modules/inukshuk-proj/prebuilt
             modules/inukshuk-proj/assets
-          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh') }}
+          key: proj-eas-ios-${{ hashFiles('modules/inukshuk-proj/scripts/*.sh', 'scripts/eas-pre-install.sh', '.github/workflows/release-path.yml') }}
 
       - run: npm ci
 

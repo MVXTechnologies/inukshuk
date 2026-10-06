@@ -52,6 +52,23 @@ export function changedSources(before, after) {
   return changed.sort();
 }
 
+/**
+ * How a store build that main's OTAs no longer reach still gets fixes: OTAs
+ * published (ota-update.yml) from a hotfix branch cut at the build's own
+ * commit — by convention hotfix/<major>.<minor>.x (hotfix/2.3.x is 17cfebb,
+ * iOS 2.3.0 build 18's commit). docs/DEPLOYMENT.md › "Field updates without a
+ * store release".
+ */
+export function hotfixRemedy(build) {
+  const mm = /^(\d+)\.(\d+)\./.exec(build.appVersion ?? '');
+  const branch = mm ? `hotfix/${mm[1]}.${mm[2]}.x` : 'a hotfix branch';
+  const commit = typeof build.gitCommitHash === 'string' ? build.gitCommitHash.slice(0, 7) : null;
+  return (
+    ` Until then, fixes reach it as OTAs published from ${branch}` +
+    `${commit ? ` (cut at its commit ${commit})` : ' (cut at its commit)'}: run ota-update.yml on that branch.`
+  );
+}
+
 const short = (hash) => (hash ? hash.slice(0, 12) : 'n/a');
 
 /**
@@ -85,6 +102,10 @@ export function assessRuntime({ event, head, base = null, store = null }) {
         status = 'unchanged by this PR';
         if (storeHash && baseHash && baseHash !== storeHash) {
           status += `; main already differs from store ${label}`;
+          notes.push(
+            `${LABEL[p]}: main (not this PR) already differs from store ${label}, so OTAs from main ` +
+              `do not reach it.${hotfixRemedy(build)}`,
+          );
         }
       } else if (!storeHash) {
         status = 'CHANGED by this PR (latest store build unknown)';
@@ -96,7 +117,7 @@ export function assessRuntime({ event, head, base = null, store = null }) {
         status = `CHANGED by this PR; store ${label} is on main's current runtime`;
         warnings.push(
           `${LABEL[p]}: this PR changes the native runtime; OTAs from main will no longer reach ` +
-            `store ${label} until the next store release.`,
+            `store ${label} until the next store release.${hotfixRemedy(build)}`,
         );
       } else if (headHash === storeHash) {
         status = `CHANGED by this PR, back to store ${label}'s runtime`;
@@ -108,7 +129,8 @@ export function assessRuntime({ event, head, base = null, store = null }) {
         status = `CHANGED by this PR; main had already diverged from store ${label}`;
         warnings.push(
           `${LABEL[p]}: this PR changes the native runtime again. main had already diverged from ` +
-            `store ${label}, so OTAs from main already do not reach it; the next store release picks up both.`,
+            `store ${label}, so OTAs from main already do not reach it; the next store release picks up both.` +
+            hotfixRemedy(build),
         );
       }
     } else if (!storeHash) {
@@ -119,7 +141,7 @@ export function assessRuntime({ event, head, base = null, store = null }) {
       status = `differs from store ${label}`;
       warnings.push(
         `${LABEL[p]}: this commit's native runtime differs from store ${label}; OTAs published from ` +
-          'main no longer reach it until the next store release.',
+          `main no longer reach it until the next store release.${hotfixRemedy(build)}`,
       );
     }
     rows.push(

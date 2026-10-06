@@ -6,6 +6,7 @@ import {
   assessRuntime,
   buildLabel,
   changedSources,
+  hotfixRemedy,
   latestBuild,
 } from './runtimeCheck.mjs';
 
@@ -15,7 +16,11 @@ const build = (runtimeVersion, appBuildVersion = '18') => ({
   runtimeVersion,
   appVersion: '2.3.0',
   appBuildVersion,
+  gitCommitHash: '17cfebb86db0368b0503d895ce075c6d9faa8829',
 });
+const REMEDY =
+  ' Until then, fixes reach it as OTAs published from hotfix/2.3.x (cut at its commit 17cfebb): ' +
+  'run ota-update.yml on that branch.';
 const stores = (ios, android = ios) => ({ ios: build(ios), android: build(android, '61') });
 
 const contains = (haystack, needle) =>
@@ -81,6 +86,19 @@ describe('assessRuntime on a pull request', () => {
     contains(r.markdown, COMMENT_MARKER);
   });
 
+  it('notes (without warning) that main itself already left a store build behind', () => {
+    const r = assessRuntime({
+      event: 'pull_request',
+      head: both('drift', 's'),
+      base: both('drift', 's'),
+      store: stores('s'),
+    });
+    assert.equal(r.prChangesRuntime, false);
+    assert.deepEqual(r.warnings, []);
+    contains(r.markdown, 'iOS: main (not this PR) already differs from store 2.3.0 (build 18)');
+    contains(r.markdown, 'hotfix/2.3.x');
+  });
+
   it('warns that OTAs from main stop reaching the store build', () => {
     const r = assessRuntime({
       event: 'pull_request',
@@ -91,7 +109,8 @@ describe('assessRuntime on a pull request', () => {
     assert.equal(r.prChangesRuntime, true);
     assert.deepEqual(r.warnings, [
       'iOS: this PR changes the native runtime; OTAs from main will no longer reach store ' +
-        '2.3.0 (build 18) until the next store release.',
+        '2.3.0 (build 18) until the next store release.' +
+        REMEDY,
     ]);
     contains(r.markdown, '### This PR changes the native runtime');
   });
@@ -149,11 +168,41 @@ describe('assessRuntime on main', () => {
     assert.equal(r.prChangesRuntime, false);
   });
 
+  // The real case of 2026-10-06: #581 (build-proj.sh) moved main's iOS
+  // runtime after iOS 2.3.0 build 18 was cut; Android main still matched vc63.
+  it('flags the platform whose store build main left behind, and only that one', () => {
+    const r = assessRuntime({
+      event: 'push',
+      head: both(
+        'ceb5e692d12f26aa4274f89cc6fc2072972a0a34',
+        '884f71ce994466a6eb2f4f045f1bcb16a61867d8',
+      ),
+      store: {
+        ios: build('f81e7412f760923f6573f5ae5189cd88910e3a19'),
+        android: build('884f71ce994466a6eb2f4f045f1bcb16a61867d8', '63'),
+      },
+    });
+    assert.equal(r.warnings.length, 1);
+    contains(r.warnings[0] ?? '', 'iOS: this commit');
+    contains(r.warnings[0] ?? '', 'hotfix/2.3.x');
+    contains(r.markdown, 'matches store 2.3.0 (versionCode 63)');
+  });
+
+  it('names the hotfix branch from the store build version', () => {
+    assert.equal(
+      hotfixRemedy({ appVersion: '10.12.3', gitCommitHash: 'abcdef0123' }),
+      ' Until then, fixes reach it as OTAs published from hotfix/10.12.x (cut at its commit abcdef0): ' +
+        'run ota-update.yml on that branch.',
+    );
+    contains(hotfixRemedy({}), 'a hotfix branch (cut at its commit)');
+  });
+
   it('warns when main has diverged from a store build', () => {
     const r = assessRuntime({ event: 'push', head: both('s', 'new'), store: stores('s') });
     assert.deepEqual(r.warnings, [
       "Android: this commit's native runtime differs from store 2.3.0 (versionCode 61); OTAs " +
-        'published from main no longer reach it until the next store release.',
+        'published from main no longer reach it until the next store release.' +
+        REMEDY,
     ]);
   });
 });

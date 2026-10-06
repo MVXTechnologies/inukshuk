@@ -130,9 +130,9 @@ does, before `npm ci`:
   then `npm ci` → `expo prebuild` → `pod install`, and the Pods project must
   contain `Proj.xcframework` and `Tiff.xcframework`.
 
-The PROJ outputs are cached on the scripts that make them
-(`proj-eas-<platform>-…`), so an unrelated PR re-runs the hook's idempotent path
-in a minute or two. The weekly schedule and **Run workflow → cold** ignore the
+The PROJ outputs are cached on the scripts that make them and on the workflow
+itself (`proj-eas-<platform>-…`), so an unrelated PR re-runs the hook's
+idempotent path in a minute or two. The weekly schedule and **Run workflow → cold** ignore the
 cache and build from source, which is what catches runner-image and mirror
 drift.
 
@@ -162,6 +162,21 @@ the release process owes a store build before installed apps take OTAs from
 PR does not make it worse). On push to `main` it compares `main` itself with the
 store builds. "Latest store build" means the newest finished `production` EAS
 build; a build that was never promoted in the store consoles still counts.
+
+**Remedy until the next store release.** A store build that `main`'s OTAs no
+longer reach still takes fixes as OTAs published from a hotfix branch cut at
+that build's own commit: `hotfix/<major>.<minor>.x` by convention, with
+`ota-update.yml` run on that branch ([DEPLOYMENT.md](DEPLOYMENT.md) › "Field
+updates without a store release"). Every warning names the branch and the
+build's commit (`gitCommitHash` from `eas build:list`).
+
+The case this check was built for (2026-10-06): #581 changed
+`modules/inukshuk-proj/scripts/build-proj.sh` after iOS 2.3.0 build 18
+(runtime `f81e7412…`, commit `17cfebb`) was cut, so `main`'s iOS runtime became
+`ceb5e692…` and its OTAs stopped reaching build 18, while Android `main` still
+matched versionCode 63 (`884f71ce…`). On `main` the check reports exactly that,
+one warning, iOS only, and names `hotfix/2.3.x` (cut at `17cfebb`) as the way to
+ship iOS fixes until 2.3.1/2.4.0 is in the store.
 
 ## Tiles Worker (`ci.yml` › `worker`)
 
