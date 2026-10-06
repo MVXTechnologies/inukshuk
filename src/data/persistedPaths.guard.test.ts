@@ -44,9 +44,9 @@ const ALLOWED = new Set([
   'data/offline.ts',
   // Test-only helper (never imported by the app): the mocked document dir.
   'data/storageTestMock.ts',
-  // Test-only helper (never imported by the app): the in-memory file system
-  // the photo data tests run on (#587).
-  'data/photos/testFileSystem.ts',
+  // Test-only helper under a `testUtils/` folder (never imported by the app,
+  // enforced below): the in-memory file system the photo data tests run on (#587).
+  'data/photos/testUtils/testFileSystem.ts',
 ]);
 
 /**
@@ -98,6 +98,15 @@ describe('persisted paths are document-relative (#247)', () => {
     // If this fails: persist the document-relative path (`storage.toDocumentPath`)
     // and rebuild the uri at read time (`storage.resolveDocumentPath`) instead
     // of storing an absolute one. See `mapLibraryIndexPaths`.
+    expect(offenders).toEqual([]);
+  });
+
+  it('no app module imports a test-only helper', () => {
+    const offenders = files
+      .filter((rel) => !rel.includes('/testUtils/') && rel !== 'data/storageTestMock.ts')
+      .filter((rel) =>
+        /from '[^']*(testUtils\/|storageTestMock)/.test(readFileSync(join(SRC, rel), 'utf8')),
+      );
     expect(offenders).toEqual([]);
   });
 

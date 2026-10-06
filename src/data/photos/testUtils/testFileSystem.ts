@@ -3,7 +3,7 @@
  * `expo-file-system` File/Directory/Paths API, covering what `@data/storage`
  * and `@data/photos` touch. Use it as
  *
- *   jest.mock('expo-file-system', () => require('./testFileSystem').createFakeFileSystem());
+ *   jest.mock('expo-file-system', () => require('./testUtils/testFileSystem').createFakeFileSystem());
  *
  * then reach the store with `fakeFs()` for seeding and assertions.
  */

@@ -5,7 +5,7 @@ import { TOMBSTONE_RETAIN_MS } from '@core/photos/record';
 
 import { writePhotoCopies } from './photoFiles';
 import { readSidecar, updateSidecar, writeSidecar } from './sidecarStore';
-import { fakeFs } from './testFileSystem';
+import { fakeFs } from './testUtils/testFileSystem';
 import {
   deleteTrailWithPhotos,
   editTrailPhoto,
@@ -18,7 +18,9 @@ import {
 } from './trailPhotos';
 
 jest.mock('expo-file-system', () =>
-  jest.requireActual<typeof import('./testFileSystem')>('./testFileSystem').createFakeFileSystem(),
+  jest
+    .requireActual<typeof import('./testUtils/testFileSystem')>('./testUtils/testFileSystem')
+    .createFakeFileSystem(),
 );
 jest.mock('@data/localServer', () => ({ copyToServed: jest.fn() }));
 

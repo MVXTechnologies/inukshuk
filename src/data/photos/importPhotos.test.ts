@@ -10,10 +10,12 @@ import {
 } from './importPhotos';
 import type { PhotoResizer, ResizedPhoto } from './resizer';
 import { readSidecar } from './sidecarStore';
-import { fakeFs } from './testFileSystem';
+import { fakeFs } from './testUtils/testFileSystem';
 
 jest.mock('expo-file-system', () =>
-  jest.requireActual<typeof import('./testFileSystem')>('./testFileSystem').createFakeFileSystem(),
+  jest
+    .requireActual<typeof import('./testUtils/testFileSystem')>('./testUtils/testFileSystem')
+    .createFakeFileSystem(),
 );
 jest.mock('@data/localServer', () => ({ copyToServed: jest.fn() }));
 

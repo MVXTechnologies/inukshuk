@@ -15,10 +15,12 @@ import {
   writeFullSizeCopies,
   writePhotoCopies,
 } from './photoFiles';
-import { fakeFs } from './testFileSystem';
+import { fakeFs } from './testUtils/testFileSystem';
 
 jest.mock('expo-file-system', () =>
-  jest.requireActual<typeof import('./testFileSystem')>('./testFileSystem').createFakeFileSystem(),
+  jest
+    .requireActual<typeof import('./testUtils/testFileSystem')>('./testUtils/testFileSystem')
+    .createFakeFileSystem(),
 );
 jest.mock('@data/localServer', () => ({
   copyToServed: jest.fn(async (source: string, documentPath: string) => {
