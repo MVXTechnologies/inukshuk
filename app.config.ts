@@ -306,11 +306,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     //    (`eas env:create --name ERROR_REPORT_TOKEN ...`). It is baked into the
     //    binary at build time — the narrow scope is the mitigation.
     //  - ERROR_REPORT_ENDPOINT: URL of a relay that holds the token
-    //    server-side, so nothing secret ships in the binary.
+    //    server-side, so nothing secret ships in the binary — the tile
+    //    Worker's POST /error-report (infra/tiles/worker/src/errorReport.ts).
     //
     // With neither set (local dev, forks), reports just stay queued on disk.
     // See docs/DEPLOYMENT.md § Error reporting.
-    errorReportToken: process.env.ERROR_REPORT_TOKEN,
+    //
+    // The token is left out whenever an endpoint is set: `extra` ships in every
+    // binary and OTA manifest, i.e. it is public, and the endpoint wins anyway.
+    errorReportToken: process.env.ERROR_REPORT_ENDPOINT
+      ? undefined
+      : process.env.ERROR_REPORT_TOKEN,
     errorReportEndpoint: process.env.ERROR_REPORT_ENDPOINT,
     // Strava integration (src/lib/strava): only the PUBLIC client id ships.
     // Strava has no PKCE, so the code exchange and refreshes go through our
