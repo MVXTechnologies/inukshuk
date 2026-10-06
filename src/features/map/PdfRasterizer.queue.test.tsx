@@ -1,3 +1,5 @@
+import { RESUME_GRACE_MS } from '@core/library/processTermination';
+import { AppState } from 'react-native';
 import { PdfRenderNotStartedError } from './pdfRenderFailure';
 import { runInNewContext } from 'node:vm';
 import { writeServedText } from '@data/localServer';
@@ -149,6 +151,12 @@ it('keeps the native unsupported fallback protected by the same journal token', 
   await handoff();
   expect(mockBeginPdfRender).toHaveBeenCalledTimes(1);
   expect(mockFinishPdfRender).not.toHaveBeenCalled();
+  // The first content-process death re-queues the same render (#323): its
+  // journal token stays armed across the retry.
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  await ready();
+  expect(mockFinishPdfRender).not.toHaveBeenCalled();
+  expect(mockBeginPdfRender).toHaveBeenCalledTimes(1);
   await act(async () => mockProps.onContentProcessDidTerminate?.());
   await pending;
   expect(mockFinishPdfRender).toHaveBeenCalledWith(`token:${nativeRequest.nativePage.fileUri}`);
@@ -872,38 +880,50 @@ it('does not resurrect timed-out native work when unsupported is reported late',
 
 // Content-process loss is a separate native event: it need not emit onError
 // or another onLoadStart. A dead idle engine must recover without an app restart.
+const succeed = async (id: string, png: string) => {
+  await act(async () => {
+    mockProps.onMessage({
+      nativeEvent: {
+        data: JSON.stringify({
+          id,
+          ok: true,
+          pngDataUri: `data:image/png;base64,${png}`,
+          widthPx: 100,
+          heightPx: 100,
+          pageWidthPt: 100,
+          pageHeightPt: 100,
+          pageCount: 1,
+          loadMs: 1,
+          renderMs: 1,
+        }),
+      },
+    });
+  });
+};
+
+// #323: the OS reclaims the content process for reasons that are not the
+// page's, so the render in flight runs again on the replaced engine, ahead
+// of the queue, instead of failing (and pausing) its page.
 it.each(['onContentProcessDidTerminate', 'onRenderProcessGone'] as const)(
-  'recovers from %s and renders the next map without waiting for timeouts',
+  'recovers from %s: retries the interrupted render, then serves the queue',
   async (event) => {
     const view = await renderHook(usePdfRasterizer, { wrapper });
     await ready();
-    const failed = view.result.current(request).catch((error: Error) => error);
-    const next = view.result.current(request).catch((error: Error) => error);
+    const interrupted = view.result.current(request);
+    const next = view.result.current(request);
     await act(async () => mockProps[event]?.());
     expect(mockMounts).toBe(2);
-    expect(await failed).toBeInstanceOf(Error);
     expect(renders()).toHaveLength(1);
     await ready();
     expect(renders()).toHaveLength(2);
-    await act(async () => {
-      mockProps.onMessage({
-        nativeEvent: {
-          data: JSON.stringify({
-            id: 'req-2',
-            ok: true,
-            pngDataUri: 'data:image/png;base64,RECOVERED',
-            widthPx: 100,
-            heightPx: 100,
-            pageWidthPt: 100,
-            pageHeightPt: 100,
-            pageCount: 1,
-            loadMs: 1,
-            renderMs: 1,
-          }),
-        },
-      });
+    expect(renders()[1]?.[0]).toContain('req-1');
+    await succeed('req-1', 'RETRIED');
+    await expect(interrupted).resolves.toMatchObject({
+      pngDataUri: 'data:image/png;base64,RETRIED',
     });
-    await expect(next).resolves.toMatchObject({ pngDataUri: 'data:image/png;base64,RECOVERED' });
+    expect(renders()[2]?.[0]).toContain('req-2');
+    await succeed('req-2', 'NEXT');
+    await expect(next).resolves.toMatchObject({ pngDataUri: 'data:image/png;base64,NEXT' });
     await view.unmount();
   },
 );
@@ -1188,13 +1208,86 @@ it('classifies queue startup expiry as not-started but backend timeout as render
   expect(await active).not.toBeInstanceOf(PdfRenderNotStartedError);
   await view.unmount();
 });
-it('keeps dispatched renderer process death classified as a page render failure', async () => {
+it('a render that kills the content process twice with the app in front fails its page', async () => {
   const view = await renderHook(usePdfRasterizer, { wrapper });
   await ready();
-  const active = view.result.current(request).catch((error: Error) => error);
+  const active = view.result.current(request).then(
+    () => null,
+    (error: Error) => error,
+  );
   await act(async () => mockProps.onContentProcessDidTerminate?.());
-  expect(await active).not.toBeInstanceOf(PdfRenderNotStartedError);
+  await ready();
+  await act(async () => mockProps.onContentProcessDidTerminate?.());
+  const error = await active;
+  expect(error).toBeInstanceOf(Error);
+  expect(error).not.toBeInstanceOf(PdfRenderNotStartedError);
+  expect(error?.message).toBe(
+    'PdfRasterizer: rendering process terminated twice (app active, then active)',
+  );
   await view.unmount();
+});
+
+describe('content-process death and the app phase (#323)', () => {
+  // Capture the provider's AppState listener while still delegating to the
+  // environment's own (mocked) AppState.
+  const original = AppState.addEventListener;
+  let changeAppState: ((state: string) => void) | undefined;
+  beforeEach(() => {
+    AppState.addEventListener = ((type, listener) => {
+      if (type === 'change') changeAppState = listener as (state: string) => void;
+      return original.call(AppState, type, listener);
+    }) as typeof original;
+  });
+  afterEach(() => {
+    AppState.addEventListener = original;
+  });
+
+  it('a repeat in the background is not the page: rejected as not started', async () => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    await ready();
+    const pending = view.result.current(request).then(
+      () => null,
+      (error: Error) => error,
+    );
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    await ready();
+    await act(async () => changeAppState?.('background'));
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    const error = await pending;
+    expect(error).toBeInstanceOf(PdfRenderNotStartedError);
+    expect(error?.message).toContain('(app active, then background)');
+    await view.unmount();
+  });
+
+  it('a repeat right after a resume is not the page either; later it is', async () => {
+    const view = await renderHook(usePdfRasterizer, { wrapper });
+    await ready();
+    await act(async () => changeAppState?.('background'));
+    await act(async () => changeAppState?.('active'));
+    const early = view.result.current(request).then(
+      () => null,
+      (error: Error) => error,
+    );
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    await ready();
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    const error = await early;
+    expect(error).toBeInstanceOf(PdfRenderNotStartedError);
+    expect(error?.message).toContain('(app resuming, then resuming)');
+
+    // Past the grace window the app is simply active again.
+    await act(async () => jest.advanceTimersByTime(RESUME_GRACE_MS));
+    await ready();
+    const late = view.result.current(request).then(
+      () => null,
+      (error: Error) => error,
+    );
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    await ready();
+    await act(async () => mockProps.onContentProcessDidTerminate?.());
+    expect(await late).not.toBeInstanceOf(PdfRenderNotStartedError);
+    await view.unmount();
+  });
 });
 
 it('classifies native busy admission as not-started', async () => {
