@@ -246,7 +246,15 @@ export function unstage(documentPath: string): void {
   quietDelete(documentPath);
 }
 
-/** Empty the inbox (at launch: anything there is left from a crash). */
+/**
+ * Empty the inbox (at launch: anything there is left from a crash, and it is
+ * full-resolution photos WITH their EXIF/GPS, in a folder the loopback server
+ * serves).
+ *
+ * TODO(#587 stage 2): call this from the app's launch path before any import
+ * can start. `inbox.guard.test.ts` fails once app code uses the resizer
+ * without a call to it.
+ */
 export function clearPhotoInbox(): void {
   try {
     const dir = dirAt(PHOTO_INBOX);
