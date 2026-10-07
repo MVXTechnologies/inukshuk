@@ -46,7 +46,9 @@ appId: com.inukshuk.app
 - extendedWaitUntil:
     visible: 'Save'
     timeout: 10000
+- tapOn: 'What is in this photo\?'
 - inputText: 'Lichen glade'
+- hideKeyboard
 - tapOn: 'Save'
 - extendedWaitUntil:
     visible: 'Lichen glade'
