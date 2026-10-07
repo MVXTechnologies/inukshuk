@@ -204,7 +204,7 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
           'circle-radius': ['step', ['get', 'point_count'], 15, 10, 19, 50, 23] as never,
           'circle-color': [
             'case',
-            ['>', ['get', 'unread'], 0],
+            ['>', ['coalesce', ['get', 'unread'], 0], 0],
             t.team.bubbleNew,
             t.team.mapPaper,
           ] as never,
@@ -268,7 +268,7 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
           paint={{
             'text-color': [
               'case',
-              ['>', ['get', 'unread'], 0],
+              ['>', ['coalesce', ['get', 'unread'], 0], 0],
               t.team.bubbleNewInk,
               t.team.mapInk,
             ] as never,
@@ -354,7 +354,17 @@ export function useTeamMapMarks(glyphs: string | undefined): ReactElement[] {
       cluster
       clusterRadius={CLUSTER_RADIUS}
       clusterMaxZoom={CLUSTER_MAX_ZOOM}
-      clusterProperties={{ unread: ['+', ['get', 'fresh']] } as never}
+      // The explicit [reduce, map] form: iOS reads exactly two expressions
+      // (the `['+', map]` shorthand parsed as a constant there, so every
+      // cluster's paint failed to black).
+      clusterProperties={
+        {
+          unread: [
+            ['+', ['accumulated'], ['get', 'unread']],
+            ['get', 'fresh'],
+          ],
+        } as never
+      }
     >
       {layers}
     </GeoJSONSource>,
