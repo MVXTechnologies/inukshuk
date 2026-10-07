@@ -64,7 +64,7 @@ src/core/teamui/              pure view logic (tested): roster, roles, groups,
 
 ## Native dependencies (2.5.0 store build)
 
-`expo-camera ~56.0.8` and `expo-crypto ~56.0.5` (plus `expo-secure-store` from
+`expo-camera ~56.0.8`, `expo-crypto ~56.0.5` and `expo-notifications ~56.0.26` (with `expo-application`) (plus `expo-secure-store` from
 #623 and the mesh module from #621) change the runtime fingerprint; `toqr`
 0.1.1 (QR encoding, pure JS, already in the tree through the Expo CLI) does
 not. `VIBRATE` is added to the Android manifest (normal permission).
@@ -74,7 +74,7 @@ Fingerprints at this PR (CI "Native runtime vs store builds", 2026-10-07): iOS
 `8a04e3fc3c8ca822eda042f50cea95f1d49810ac` (store 2.3.0: iOS `f81e7412…`,
 Android `884f71ce…`). Changed sources: the autolinking config, the Expo config,
 `modules/inukshuk-mesh`, `expo-camera`, `expo-crypto`, `expo-secure-store`,
-`plugins/withTeamMesh.js`. A store build is required.
+`plugins/withTeamMesh.js`. A store build is required. (expo-notifications was added after this fingerprint: CI's runtime check on the PR shows the current one.)
 
 ## Privacy and store texts (owner)
 

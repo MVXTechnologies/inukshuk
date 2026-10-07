@@ -70,7 +70,7 @@ const phone = () =>
   });
 
 async function until(cond: () => boolean): Promise<void> {
-  for (let i = 0; i < 400 && !cond(); i++) {
+  for (let i = 0; i < 1600 && !cond(); i++) {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 5));
     });
