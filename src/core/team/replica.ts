@@ -46,7 +46,7 @@ import { isAdminRole, type Audience, type Priority } from './roles';
  * exception.
  */
 export type IngestRejection =
-  RejectReason | 'removed' | 'quarantine-full' | 'gap-full' | 'stale' | 'full';
+  RejectReason | 'removed' | 'quarantine-full' | 'gap-full' | 'chain' | 'stale' | 'full';
 
 export interface IngestReport {
   /** Ops newly stored (logged or ephemeral). */
@@ -76,6 +76,9 @@ export const MIN_REFOLD_GAP_MS = 1_000;
 /** Ops whose predecessor (`pv`) we don't hold wait here, unfolded (re-review #2). */
 export const MAX_GAP_OPS = 4096;
 export const MAX_GAP_PER_AUTHOR = 256;
+/** Byte caps on the gap buffer, mirroring the quarantine (re-review #4). */
+export const MAX_GAP_BYTES = 8 * 1024 * 1024;
+export const MAX_GAP_BYTES_PER_AUTHOR = 1024 * 1024;
 /** An admin replica auto-rotates for a given leaking author at most this often. */
 export const AUTO_ROTATE_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -105,6 +108,8 @@ export class TeamReplica {
   private readonly gap = new Map<string, SignedOp>();
   private readonly gapByPrev = new Map<string, SignedOp[]>();
   private readonly gapPerAuthor = new Map<string, number>();
+  private readonly gapBytesPerAuthor = new Map<string, number>();
+  private gapBytes = 0;
   /** Admin policy: rotate for leaks automatically, at most once per author per interval. */
   autoRotate = true;
   private readonly autoRotated = new Map<string, number>();
@@ -329,6 +334,13 @@ export class TeamReplica {
       this.park(op, report);
       return;
     }
+    // A held predecessor must be this author's op at sq − 1; anything else can
+    // never be canonical: refuse it rather than store it forever (re-review #4).
+    const prev = logged && op.env.pv !== undefined ? this.log.get(op.env.pv) : undefined;
+    if (prev !== undefined && (prev.env.au !== op.env.au || prev.env.sq !== op.env.sq - 1)) {
+      report.rejected.push({ reason: 'chain', id: op.id });
+      return;
+    }
     const result = this.log.insert(op, now, pinned);
     if (result === 'duplicate') {
       report.duplicates++;
@@ -355,12 +367,15 @@ export class TeamReplica {
       return;
     }
     fresh.push(op);
-    if (op.id === pinned || isControlType(op.env.t)) urgent.add(op.id);
     const ids = this.held.get(op.env.au) ?? [];
-    if (op.env.sq === ids.length + 1 && op.env.pv === ids[ids.length - 1]) {
+    const extends_ = op.env.sq === ids.length + 1 && op.env.pv === ids[ids.length - 1];
+    if (extends_) {
       ids.push(op.id);
       this.held.set(op.env.au, ids);
     }
+    // Only ops that grow a held chain (or repair a pinned one) may force an
+    // immediate rebuild; anything else waits for the coalesced one.
+    if (op.id === pinned || (extends_ && isControlType(op.env.t))) urgent.add(op.id);
     this.promote(op, now, report, fresh, urgent);
   }
 
@@ -376,8 +391,14 @@ export class TeamReplica {
     if (waiting === undefined) return;
     this.gapByPrev.delete(op.id);
     for (const next of waiting) {
-      if (!this.gap.delete(next.id)) continue;
+      if (!this.gap.has(next.id)) continue;
+      this.gap.delete(next.id);
+      this.gapBytes -= next.bytes;
       this.gapPerAuthor.set(next.env.au, (this.gapPerAuthor.get(next.env.au) ?? 1) - 1);
+      this.gapBytesPerAuthor.set(
+        next.env.au,
+        (this.gapBytesPerAuthor.get(next.env.au) ?? 0) - next.bytes,
+      );
       this.store(next, now, report, fresh, urgent);
     }
   }
@@ -389,16 +410,22 @@ export class TeamReplica {
       return;
     }
     const mine = this.gapPerAuthor.get(op.env.au) ?? 0;
-    if (mine >= MAX_GAP_PER_AUTHOR) {
+    const myBytes = this.gapBytesPerAuthor.get(op.env.au) ?? 0;
+    if (mine >= MAX_GAP_PER_AUTHOR || myBytes + op.bytes > MAX_GAP_BYTES_PER_AUTHOR) {
       report.rejected.push({ reason: 'gap-full', id: op.id });
       return;
     }
-    while (this.gap.size >= MAX_GAP_OPS) {
+    while (
+      this.gap.size > 0 &&
+      (this.gap.size >= MAX_GAP_OPS || this.gapBytes + op.bytes > MAX_GAP_BYTES)
+    ) {
       const [oldId, old] = this.gap.entries().next().value as [string, SignedOp];
       this.unpark(oldId, old);
     }
     this.gap.set(op.id, op);
     this.gapPerAuthor.set(op.env.au, mine + 1);
+    this.gapBytesPerAuthor.set(op.env.au, myBytes + op.bytes);
+    this.gapBytes += op.bytes;
     const list = this.gapByPrev.get(op.env.pv!) ?? [];
     list.push(op);
     this.gapByPrev.set(op.env.pv!, list);
@@ -407,6 +434,8 @@ export class TeamReplica {
 
   private unpark(id: string, op: SignedOp): void {
     this.gap.delete(id);
+    this.gapBytes -= op.bytes;
+    this.gapBytesPerAuthor.set(op.env.au, (this.gapBytesPerAuthor.get(op.env.au) ?? 0) - op.bytes);
     this.gapPerAuthor.set(op.env.au, (this.gapPerAuthor.get(op.env.au) ?? 1) - 1);
     const list = (this.gapByPrev.get(op.env.pv!) ?? []).filter((o) => o.id !== id);
     if (list.length > 0) this.gapByPrev.set(op.env.pv!, list);
@@ -416,6 +445,19 @@ export class TeamReplica {
   /** For tests and diagnostics. */
   get parkedSize(): number {
     return this.gap.size;
+  }
+
+  get parkedBytes(): number {
+    return this.gapBytes;
+  }
+
+  /**
+   * For the UI: a join raced and its loser holds the current key until the
+   * next rotation. Show it to every member ("an invite was used twice; an
+   * admin should rotate"); admin replicas also rotate automatically.
+   */
+  get rotationAdvised(): boolean {
+    return this.state.rotationAdvised;
   }
 
   /** Fold new logged ops: append incrementally when possible, else refold once. */

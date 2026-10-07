@@ -5,16 +5,16 @@
  */
 import { performance } from 'node:perf_hooks';
 
-import { admitBody, OpWriter, shareBody, targetOf } from './actions';
+import { admitBody, OpWriter, rotateBody, shareBody, targetOf } from './actions';
 import { checkEnvelope, type SignedOp } from './envelope';
 import { toB64u } from './bytes';
 import { canonicalize, parseJson } from './canonical';
 import { isLive, mergeEntity, setOp, visibleFields } from './crdt';
 import { entityKey, parseSetBody } from './data';
 import { makeJoinProof } from './invite';
-import { cutFor, resolveTeam } from './membership';
+import { activeMembers, cutFor, resolveTeam } from './membership';
 import { routeDelivery } from './notify';
-import { TeamReplica } from './replica';
+import { MAX_GAP_BYTES_PER_AUTHOR, TeamReplica } from './replica';
 import { parseAudience } from './roles';
 import { SyncSession, type Step } from './sync';
 import {
@@ -642,5 +642,89 @@ describe('re-review #3: gap ops and idle convergence', () => {
     const { session } = SyncSession.initiate(c, w.root);
     session.tick(T0 + 3 * MIN + 2);
     expect(w.root.fullFolds).toBe(folds + 1);
+  });
+});
+
+describe('fourth review', () => {
+  it('an op whose held pv is not at sq − 1 is refused, never stored or rebuilt on (PoC)', () => {
+    const w = newWorld();
+    const mal = device();
+    addMember(w.root, mal, 'member', T0 + 1);
+    const rm = joinReplica(w, mal, w.root, T0 + 2);
+    const first = msg(rm, T0 + MIN, 'a', 'a')!;
+    w.root.ingest([first.env], T0 + MIN);
+    const folds = w.root.fullFolds;
+    const size = w.root.log.size;
+    const bad = Array.from({ length: 50 }, (_, i) =>
+      new OpWriter(
+        c,
+        mal.keys,
+        w.teamId,
+        100 + i,
+        { wall: T0 + 2 * MIN + i, counter: 0 },
+        first.id,
+      ).control(T0 + 2 * MIN + i, 'g.set', { id: `x${i}` }),
+    );
+    let refused = 0;
+    for (const op of bad) {
+      refused += w.root
+        .ingest([op.env], T0 + 3 * MIN)
+        .rejected.filter((r) => r.reason === 'chain').length;
+    }
+    expect(refused).toBe(50);
+    expect(w.root.fullFolds).toBe(folds);
+    expect(w.root.log.size).toBe(size);
+  });
+
+  it('the gap buffer is byte-capped per author (PoC: 24.5 MiB parked)', () => {
+    const w = newWorld();
+    const mal = device();
+    addMember(w.root, mal, 'member', T0 + 1);
+    const evil = new OpWriter(
+      c,
+      mal.keys,
+      w.teamId,
+      500,
+      { wall: T0, counter: 0 },
+      toB64u(new Uint8Array(32)),
+    );
+    const big = Array.from({ length: 30 }, (_, i) =>
+      evil.control(T0 + MIN + i, 'm.update', { m: mal.id, pad: 'x'.repeat(100_000) } as never),
+    );
+    const r = w.root.ingest(
+      big.map((o) => o.env),
+      T0 + 2 * MIN,
+    );
+    expect(w.root.parkedBytes).toBeLessThanOrEqual(MAX_GAP_BYTES_PER_AUTHOR);
+    expect(r.rejected.filter((x) => x.reason === 'gap-full').length).toBeGreaterThan(15);
+  });
+
+  it('a second real loss after a rotation is advised again (dedup per key)', () => {
+    const w = newWorld();
+    w.root.autoRotate = false;
+    const bob = device();
+    addMember(w.root, bob, 'member', T0 + 1);
+    const inv = invite(w.root, T0 + 2);
+    const rb = joinReplica(w, bob, w.root, T0 + 3);
+    w.root.admit(makeJoinProof(c, inv.token, device().keys), T0 + MIN);
+    rb.admit(makeJoinProof(c, inv.token, device().keys), T0 + 2 * MIN);
+    w.root.ingest(allEnvs(rb, T0 + 3 * MIN), T0 + 3 * MIN);
+    expect(w.root.rotationAdvised).toBe(true);
+    w.root.control(
+      T0 + 4 * MIN,
+      'k.rotate',
+      rotateBody(c, w.teamId, activeMembers(w.root.state)).body,
+    );
+    expect(w.root.rotationAdvised).toBe(false);
+    rb.ingest(allEnvs(w.root, T0 + 5 * MIN), T0 + 5 * MIN);
+    // Bob, unaware the invite is spent, admits another joiner under the NEW key.
+    const late = rb.control(
+      T0 + 6 * MIN,
+      'm.admit',
+      admitBody(c, w.teamId, makeJoinProof(c, inv.token, device().keys), rb.sendKey()!),
+    );
+    w.root.ingest(allEnvs(rb, T0 + 7 * MIN), T0 + 7 * MIN);
+    expect(w.root.state.rejected.get(late.id)).toBe('invite');
+    expect(w.root.rotationAdvised).toBe(true);
   });
 });

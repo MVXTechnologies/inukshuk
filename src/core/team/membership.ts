@@ -371,7 +371,7 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
       s.leaks.push({ opId: op.id, author: op.env.au, keyId: k, holder: m });
     }
   };
-  /** One counted leak per (invite, author): the rest is evidence. */
+  /** One counted leak per (invite, author, key): the rest is evidence. */
   const countedLeaks = new Set<string>();
 
   /**
@@ -395,10 +395,12 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
     if (author?.status !== 'active') return undefined;
     let target: unknown;
     let slot: string;
+    // Keyed by the wrapped key too: a real loss after a rotation is advised again.
+    const keyIds = [...new Set(kw.w.map(([, k]) => k))].sort().join(',');
     if (op.env.t === 'm.add') {
       if (!helpers.adminOk(author, op.env.sq) || !isRecord(op.env.b)) return undefined;
       target = op.env.b['m'];
-      slot = `add|${op.env.au}`;
+      slot = `add|${op.env.au}|${keyIds}`;
     } else if (op.env.t === 'm.admit' && author.role !== 'guest') {
       const proof = parseJoinProof(op.env.b);
       if (proof === undefined || !s.invites.has(proof.inv)) return undefined;
@@ -409,7 +411,7 @@ function makeFolder(ctx: Ctx, genesis: SignedOp): Folder {
       }
       if (!ok) return undefined;
       target = proof.m;
-      slot = `${proof.inv}|${op.env.au}`;
+      slot = `${proof.inv}|${op.env.au}|${keyIds}`;
     } else {
       return undefined;
     }

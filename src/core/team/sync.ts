@@ -647,9 +647,16 @@ export class SyncSession {
       step.events.push({ type: 'ingested', report });
       const forged = report.rejected.filter((x) => x.reason === 'signature').length;
       const junk = report.rejected.filter((x) =>
-        ['not-object', 'unknown-field', 'version', 'shape', 'too-large', 'type', 'author'].includes(
-          x.reason,
-        ),
+        [
+          'not-object',
+          'unknown-field',
+          'version',
+          'shape',
+          'too-large',
+          'type',
+          'author',
+          'chain',
+        ].includes(x.reason),
       ).length;
       if (forged > 0) this.strike(step, 'signature', now);
       if (junk > 0) this.strike(step, 'malformed', now);
