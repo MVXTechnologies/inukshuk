@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRecordingReadiness } from './useRecordingReadiness';
 
 export type RecordingCheckMode =
@@ -43,12 +44,16 @@ function CheckRow({
   onFix: (fix: ReadinessFix) => void;
 }) {
   const theme = useTheme();
+  const tokens = useSchemeTokens();
+  // ✓ stays neutral; "needs action" is the app's amber (the weak-GPS ink,
+  // contrast-checked on level-3 cards in tokens.test); red only for problems
+  // that WILL break the trail.
   const tint =
     check.status === 'ok'
       ? theme.colors.primary
       : check.status === 'problem'
         ? theme.colors.error
-        : theme.colors.onSurfaceVariant;
+        : tokens.status.gpsWeak;
   const statusWord =
     check.status === 'ok' ? 'OK' : check.status === 'problem' ? 'Problem' : 'Recommended';
   return (
