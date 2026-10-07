@@ -1,6 +1,9 @@
 import type { Basemap, PackFormat } from '@core/geo/tiles';
-import { geodeticTilesUrl, tideTilesUrl, vectorBasemapOption } from '@data/basemapTiles';
-import { useSettingsStore } from '@state/settingsStore';
+import type { ExtensionStyleOptions } from '@core/extensions/registry';
+import { packExtensions } from '@core/extensions/state';
+import { vectorBasemapOption } from '@data/basemapTiles';
+import { extensionTilesUrl } from '@features/extensions/availability';
+import { extensionsState } from '@features/extensions/prefs';
 
 import { buildOsmStyle } from './mapStyle';
 
@@ -10,7 +13,8 @@ import { buildOsmStyle } from './mapStyle';
  * the full set of templates a pack of this kind could hold today — what the
  * offline-maps health check compares a pack's record with), or none
  * (`'none'`, the base layer alone — what a legacy pack is stamped with, as
- * nothing says which extensions it holds).
+ * nothing says which extensions it holds). Each extension's own policy is
+ * its descriptor's `offline.packs` (`@core/extensions/state` packExtensions).
  */
 export type PackExtensions = 'settings' | 'all' | 'none';
 
@@ -25,41 +29,27 @@ export function packStyle(
   format: PackFormat,
   extensions: PackExtensions = 'settings',
 ) {
-  // The geodetic-points extension, when installed with "Offline in your
-  // regions" on: its tiles ride in every new pack (a pack stores every source
-  // of its style). Regions from before the install get a companion pack.
-  // Tide stations ride along too (a few KB: the archive stops at z10), so the
-  // overlay works offline in every region downloaded from now on.
-  // Only once the Tide stations extension is installed.
-  const all = extensions === 'all';
-  const none = extensions === 'none';
-  const tideTiles =
-    !none && (all || useSettingsStore.getState().tidesInstalledAt > 0) ? tideTilesUrl() : null;
-  const geodeticTiles = all ? geodeticTilesUrl() : null;
-  const geodetic = {
-    ...(none
-      ? {}
-      : all
-        ? geodeticTiles !== null
-          ? { geodetic: { tiles: geodeticTiles, dark: false } }
-          : {}
-        : geodeticPackOption()),
-    ...(tideTiles !== null ? { tides: { tiles: tideTiles, dark: false } } : {}),
-  };
-  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, geodetic);
+  // Every extension that rides along: its tiles go in the pack (a pack stores
+  // every source of its style). Regions from before an install get a
+  // companion pack instead (`@features/extensions/companions`).
+  const extensionOptions = packExtensionOptions(extensions);
+  if (format !== 'vector') return buildOsmStyle(tileUrl, basemap, false, extensionOptions);
   // Packs always keep the contours, so they work offline whichever way the
   // Contours toggle is set later.
   return buildOsmStyle(tileUrl, basemap, false, {
     vectorBasemap: vectorBasemapOption(false, true),
-    ...geodetic,
+    ...extensionOptions,
   });
 }
 
-/** `{ geodetic }` for a pack style when the extension wants its marks offline, else `{}`. */
-export function geodeticPackOption(): { geodetic?: { tiles: string; dark: boolean } } {
-  const s = useSettingsStore.getState();
-  const tiles = geodeticTilesUrl();
-  return tiles !== null && s.geodeticInstalledAt > 0 && s.geodeticOffline
-    ? { geodetic: { tiles, dark: false } }
-    : {};
+/** `{ geodetic?, tides? }` for a pack style: the riding extensions' tiles, light theme. */
+export function packExtensionOptions(
+  extensions: PackExtensions = 'settings',
+): ExtensionStyleOptions {
+  const out: ExtensionStyleOptions = {};
+  for (const key of packExtensions(extensionsState(), extensions)) {
+    const tiles = extensionTilesUrl(key);
+    if (tiles !== null) out[key] = { tiles, dark: false };
+  }
+  return out;
 }

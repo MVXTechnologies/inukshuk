@@ -50,19 +50,17 @@ import {
   type ImageryLook,
 } from '@core/map/satelliteImagery';
 import {
-  buildGeodeticLayers,
-  GEODETIC_SOURCE,
-  GEODETIC_SOURCE_MAXZOOM,
-  GEODETIC_SOURCE_MINZOOM,
-} from '@core/map/geodeticStyle';
-import type { GeodeticLayerFilters } from '@core/geodetic/filter';
-import {
-  buildTideLayers,
-  TIDE_SOURCE,
-  TIDE_SOURCE_MAXZOOM,
-  TIDE_SOURCE_MINZOOM,
-  CHS_TIDE_SOURCE,
-} from '@core/map/tideStyle';
+  EXTENSION_KEYS,
+  EXTENSIONS,
+  extensionDescriptor,
+  type ExtensionKey,
+  type ExtensionStyleOptions,
+} from '@core/extensions/registry';
+import type {
+  ExtensionStyleBlock,
+  ExtensionStyleContext,
+  ExtensionStyleInput,
+} from '@core/extensions/types';
 import { imageryStoneScheme, stoneScheme } from './stoneScheme';
 
 /**
@@ -268,7 +266,11 @@ export const HILLSHADE_2D_DEM_TILE_SIZE = 256;
  */
 
 /** Optional tweaks to the base style (all default off). */
-export interface OsmStyleOptions {
+/**
+ * `options.geodetic`, `options.tides`, …: each map extension's style input
+ * (`@core/extensions`), drawn above the trails on every base map when set.
+ */
+export interface OsmStyleOptions extends ExtensionStyleOptions {
   /**
    * Cap the base raster source's tile-fetch zoom, e.g. at the top stored zoom
    * of the offline packs when only locally downloaded tiles may be served —
@@ -445,29 +447,6 @@ export interface OsmStyleOptions {
    * glyph host).
    */
   imageryContours?: { tiles: string; glyphs?: string };
-  /**
-   * Geodetic points (Settings → Extensions, `@core/map/geodeticStyle`): our
-   * survey-mark tiles, drawn above the trails on every base map. `glyphs`
-   * serves the ID labels when the style has no glyph host of its own.
-   */
-  geodetic?: {
-    tiles: string;
-    dark: boolean;
-    glyphs?: string;
-    /** The user's attribute filter (`@core/geodetic/filter`); unset = every mark. */
-    filters?: GeodeticLayerFilters;
-  };
-  /**
-   * Tide stations (Overlays → Tide stations, `@core/map/tideStyle`): drawn
-   * above the geodetic marks. `glyphs` serves the station names.
-   */
-  tides?: {
-    tiles: string;
-    dark: boolean;
-    glyphs?: string;
-    /** CHS (Canada) stations the phone fetched live from CHS (`@core/tides/chs`). */
-    chs?: GeoJSON.FeatureCollection | null;
-  };
   /**
    * Strength of the 2D shaded relief when it is drawn (`shadedRelief`); the
    * "None" setting is `shadedRelief = false`. Default `medium`, the pre-#461
@@ -1146,59 +1125,23 @@ export function buildOsmStyle(
     });
   }
 
-  // Geodetic points, in the trails slot after its anchor: above every trail
-  // line mounted under it, below the reference labels and the position puck.
-  // Built last so the glyph host above is settled.
-  if (options.geodetic) {
-    style.sources[GEODETIC_SOURCE] = {
-      type: 'vector',
-      tiles: [options.geodetic.tiles],
-      minzoom: GEODETIC_SOURCE_MINZOOM,
-      // Built to z13 (`geodetic.sh`); MapLibre overzooms past that.
-      maxzoom: GEODETIC_SOURCE_MAXZOOM,
-    };
-    style.glyphs ??= options.geodetic.glyphs ?? OFM_GLYPHS_URL;
-    const atkinson = style.glyphs !== OFM_GLYPHS_URL;
-    put(
-      'trails',
-      ...buildGeodeticLayers({
-        theme: options.geodetic.dark ? 'dark' : 'light',
-        font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
-        ...(options.geodetic.filters ? { filters: options.geodetic.filters } : {}),
-      }),
-    );
-  }
-
-  // Tide stations, after the geodetic marks in the trails slot (a station
-  // symbol draws over the survey marks round its harbour).
-  if (options.tides) {
-    style.sources[TIDE_SOURCE] = {
-      type: 'vector',
-      tiles: [options.tides.tiles],
-      minzoom: TIDE_SOURCE_MINZOOM,
-      // Built to z10 (`tides.sh`); MapLibre overzooms past that.
-      maxzoom: TIDE_SOURCE_MAXZOOM,
-    };
-    style.glyphs ??= options.tides.glyphs ?? OFM_GLYPHS_URL;
-    const atkinson = style.glyphs !== OFM_GLYPHS_URL;
-    put(
-      'trails',
-      ...buildTideLayers({
-        theme: options.tides.dark ? 'dark' : 'light',
-        font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
-      }),
-    );
-    if (options.tides.chs) {
-      style.sources[CHS_TIDE_SOURCE] = { type: 'geojson', data: options.tides.chs };
-      put(
-        'trails',
-        ...buildTideLayers({
-          theme: options.tides.dark ? 'dark' : 'light',
-          font: atkinson ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
-          chs: true,
-        }),
-      );
-    }
+  // The map extensions (`@core/extensions`), in the trails slot after its
+  // anchor, in registry order (each one above the last: a tide station draws
+  // over the survey marks round its harbour): above every trail line mounted
+  // under it, below the reference labels and the position puck. Built last
+  // so the glyph host above is settled; one that needs glyphs and finds none
+  // brings its own (`glyphs`) or OpenFreeMap's.
+  for (const key of EXTENSION_KEYS) {
+    const input = options[key];
+    if (!input) continue;
+    style.glyphs ??= input.glyphs ?? OFM_GLYPHS_URL;
+    const fonts = style.glyphs !== OFM_GLYPHS_URL ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO;
+    const block = buildExtensionBlock(key, input, {
+      theme: input.dark ? 'dark' : 'light',
+      font: fonts[EXTENSIONS[key].map.fontWeight],
+    });
+    Object.assign(style.sources, block.sources);
+    put('trails', ...block.layers);
   }
 
   style.layers = stackLayers(slots);
@@ -1206,25 +1149,43 @@ export function buildOsmStyle(
 }
 
 /**
- * The style of a geodetic companion pack (`@data/offline`): ONLY the
- * survey-mark tiles (and the label glyphs), so a region downloaded before the
- * extension was installed gains its marks without re-downloading its map.
+ * One extension's sources and layers. `options[key]` is that extension's own
+ * input type; through the registry's common descriptor type it is the base
+ * input (descriptors take it bivariantly, see `@core/extensions/types`).
  */
-export function buildGeodeticPackStyle(tiles: string, glyphs: string | null): StyleSpecification {
+function buildExtensionBlock(
+  key: ExtensionKey,
+  input: ExtensionStyleInput,
+  ctx: ExtensionStyleContext,
+): ExtensionStyleBlock {
+  return extensionDescriptor(key).map.build(input, ctx);
+}
+
+/**
+ * The style of an extension's companion pack (`@data/offline`): ONLY its
+ * tiles (and the label glyphs), so a region downloaded before the extension
+ * was installed gains them without re-downloading its map.
+ */
+export function buildExtensionPackStyle(
+  key: ExtensionKey,
+  tiles: string,
+  glyphs: string | null,
+): StyleSpecification {
+  const fonts = glyphs ? STONE_FONTS_ATKINSON : STONE_FONTS_NOTO;
+  const block = buildExtensionBlock(
+    key,
+    { tiles, dark: false },
+    { theme: 'light', font: fonts[EXTENSIONS[key].map.fontWeight] },
+  );
   return {
     version: 8,
     glyphs: glyphs ?? OFM_GLYPHS_URL,
-    sources: {
-      [GEODETIC_SOURCE]: {
-        type: 'vector',
-        tiles: [tiles],
-        minzoom: GEODETIC_SOURCE_MINZOOM,
-        maxzoom: GEODETIC_SOURCE_MAXZOOM,
-      },
-    },
-    layers: buildGeodeticLayers({
-      theme: 'light',
-      font: glyphs ? STONE_FONTS_ATKINSON.regular : STONE_FONTS_NOTO.regular,
-    }),
+    sources: block.sources,
+    layers: block.layers,
   };
+}
+
+/** The geodetic companion pack's style (pinned by `tileUrls.contract.test.ts`). */
+export function buildGeodeticPackStyle(tiles: string, glyphs: string | null): StyleSpecification {
+  return buildExtensionPackStyle('geodetic', tiles, glyphs);
 }

@@ -10,6 +10,7 @@
  */
 import { setExtensionsForTest } from '@features/map/extensionStyles.testUtils';
 import { ExtensionsPanel } from '@features/map/components/ExtensionsPanel';
+import { useExtensionSyncStore } from '@state/extensionSyncStore';
 import { useGeodeticStore } from '@state/geodeticStore';
 import { useOfflineStore } from '@state/offlineStore';
 import { useSettingsStore } from '@state/settingsStore';
@@ -64,7 +65,8 @@ beforeEach(() => {
     throw new Error('offline');
   }) as unknown as typeof fetch;
   useSettingsStore.setState({ hydrated: true });
-  useGeodeticStore.setState({ coverage: null, companions: [], syncing: null, error: null });
+  useGeodeticStore.setState({ coverage: null });
+  useExtensionSyncStore.setState({ byKey: {} });
   useOfflineStore.setState({ regions: [] });
 });
 
