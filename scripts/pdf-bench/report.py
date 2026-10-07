@@ -61,6 +61,36 @@ def table(rows):
     return out
 
 
+def blank_views(run):
+    """Steps whose screenshot shows only blank paper in the map area.
+
+    Some views are white on paper too: inside the frame, US Topo leaves the
+    far side of a border blank, and a frame's edge can reach a few
+    thousandths of a degree into the collar. Those views are drawn correctly
+    but look like a failed render (#637). This lists them so a reader can
+    tell. It returns None when the run has no screenshots, or PIL is missing.
+    """
+    shots = os.path.join(run, 'shots')
+    if not os.path.isdir(shots):
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    out = []
+    for name in sorted(os.listdir(shots)):
+        if not name.endswith('.png'):
+            continue
+        im = Image.open(os.path.join(shots, name)).convert('RGB')
+        w, h = im.size
+        # The map left of the controls, between the search bar and the scale.
+        px = im.crop((0, int(h * 0.42), int(w * 0.8), int(h * 0.84))).resize((100, 100)).getdata()
+        white = sum(1 for r, g, b in px if min(r, g, b) > 245) / (100 * 100)
+        if white >= 0.98:
+            out.append(name[:-4])
+    return out
+
+
 def show(run):
     rows = load(run)
     print(f'## {os.path.basename(run.rstrip("/"))}  ({len(rows)} steps)')
@@ -75,6 +105,9 @@ def show(run):
                   f"first overview {d.get('overviewMs', '?')} ms")
     allv = [ms(d) for d in rows]
     print(f"ALL n={len(allv)} p50={round(pct(allv,.5))} p95={round(pct(allv,.95))} max={max(allv)} over1s={sum(1 for x in allv if x>1000)}")
+    blank = blank_views(run)
+    if blank:
+        print(f"blank paper in view (drawn correctly, nothing printed there): {', '.join(blank)}")
 
 
 def compare(a, b):

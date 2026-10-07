@@ -23,6 +23,13 @@ Only JS changes can be measured this way; native changes need a real store build
 | `open-android.sh SERIAL PLAN.json CORPUS OUT SLUG LON LAT REPS` | Times a cold launch that opens the map, `REPS` times.                                                                                                                      |
 | `host.py`                                                       | The server the app talks to: it serves the corpus (with HTTP Range) and the plan, and collects logs, results, tiles and screenshots. The `run-*` scripts start it for you. |
 
+Zoom levels in a plan are relative to fitting the whole page. Jump views are
+centred inside the map frame (the georeferenced area), not in the blank
+collar around it (`src/features/map/hooks/pdfBenchPlan.ts`, #637). A view can
+still be blank paper: a sheet may leave areas blank (US Topo leaves the far
+side of a border empty), and the frame can reach slightly into the collar.
+`report.py` lists such views so they are not mistaken for failed renders.
+
 ## Read the results
 
 | Script                                                         | What it does                                                                                                                  |
