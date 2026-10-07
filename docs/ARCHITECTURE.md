@@ -21,8 +21,9 @@ a thin shell around it.**
   lives in `@core/format`; `src/state/formatters.ts` binds it to the user's
   chosen units.
 - `app/**` — expo-router routes only; each file just renders a feature screen.
-  `+native-intent.tsx` intercepts "Open with" file intents (GPX, and FIT /
-  TCX / gzip / zip activity exports sniffed by content) before routing.
+  `+native-intent.tsx` intercepts "Open with" file intents (GPX, FIT / TCX /
+  gzip / zip activity exports, and PDF maps, all sniffed by content —
+  `core/import/openedFile`) before routing.
 
 Path aliases (`@core`, `@data`, `@features`, `@state`, `@ui`, `@lib`, `@/`) are
 declared once in `tsconfig.json` and mirrored in `jest.config.js`.
