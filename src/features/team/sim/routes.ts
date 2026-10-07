@@ -77,5 +77,24 @@ export function routesNear(
       : lines.filter(
           (l) => l.length > 1 && l.some((p, i) => i % 5 === 0 && metres(p, here) <= radiusM),
         );
-  return near.length > 0 ? [...near].sort((a, b) => lineLength(b) - lineLength(a)) : [MSA_TRAIL];
+  if (near.length > 0) return [...near].sort((a, b) => lineLength(b) - lineLength(a));
+  // No trail near me: loops round where I am (so they show on my map), else MSA.
+  return here === null ? [MSA_TRAIL] : [loopAround(here, 450, 0), loopAround(here, 700, 1.3)];
+}
+
+/** A wobbly closed loop of about `radiusM` round a point (no trail data near me). */
+export function loopAround(
+  here: readonly [number, number],
+  radiusM: number,
+  phase: number,
+): [number, number][] {
+  const out: [number, number][] = [];
+  const kLat = radiusM / 111_320;
+  const kLng = kLat / Math.cos((here[1] * Math.PI) / 180);
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * 2 * Math.PI + phase;
+    const r = 1 + 0.18 * Math.sin(3 * a + phase) + 0.08 * Math.cos(5 * a);
+    out.push([here[0] + kLng * r * Math.cos(a), here[1] + kLat * r * Math.sin(a)]);
+  }
+  return out;
 }
