@@ -125,9 +125,10 @@ appId: com.inukshuk.app
     element: '.*Julie Tremblay.*'
     direction: UP
     timeout: 20000
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: 'team-join-notice'
+    direction: UP
     timeout: 10000
 - takeScreenshot: team-hub-joined
 # Chat: her hello arrives; I reply.

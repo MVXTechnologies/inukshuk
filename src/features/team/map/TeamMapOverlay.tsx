@@ -134,7 +134,11 @@ export function TeamMapOverlay({
             {view.name}
           </Text>
           <Text variant="labelMedium" style={{ color: t.inkVariant }}>
-            {meshRunning ? `· ${nearby}/${others} nearby` : '· not syncing'}
+            {!meshRunning
+              ? '· not syncing'
+              : others === 0
+                ? '· just you'
+                : `· ${nearby}/${others} nearby`}
           </Text>
           {unread > 0 && <View style={[styles.dot, { backgroundColor: t.status.gpsLostInk }]} />}
         </Pressable>
