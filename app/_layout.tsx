@@ -13,6 +13,7 @@ import { PdfRecoverySnackbar } from '@features/map/PdfRecoverySnackbar';
 import { installStravaAutoImport } from '@features/import/autoImport';
 import { ImportFeedbackSnackbar } from '@features/share/ImportFeedbackSnackbar';
 import { StravaPushPrompt } from '@features/strava/StravaPushPrompt';
+import { GnssHost } from '@features/gnss/GnssHost';
 import { installErrorReporting, reportError } from '@lib/errorReporting';
 import { sweepUnfinishedTips } from '@lib/iap';
 import { useImportStore } from '@state/importStore';
@@ -147,12 +148,17 @@ export default function RootLayout() {
                   {/* Convert: coordinates, heights, epochs, chart datum (pinned PROJ pipelines). */}
                   <Stack.Screen name="convert" />
                   <Stack.Screen name="convert-selftest" />
+                  {/* External GNSS receiver (#588): Settings › Extensions sub-screens. */}
+                  <Stack.Screen name="gnss/pair" />
+                  <Stack.Screen name="gnss/corrections" />
+                  <Stack.Screen name="gnss/datum" />
                 </Stack>
                 <ImportFeedbackSnackbar />
                 <PdfRecoverySnackbar />
                 <PdfPrerenderWorker />
                 <MapReparseWorker />
                 <StravaPushPrompt />
+                <GnssHost />
               </PdfRasterizerProvider>
             </ErrorBoundary>
           </PaperProvider>

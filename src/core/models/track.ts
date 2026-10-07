@@ -21,6 +21,22 @@ export interface TrackPoint {
   speed?: number;
   /** Heart rate in beats/min, from GPX Garmin TrackPointExtension imports. */
   heartRateBpm?: number;
+  /**
+   * Where the fix came from: an external GNSS receiver (#588) or, unset, the
+   * phone's own GPS (every older track). A change of source starts a new
+   * segment (`@core/geo/track/segments`).
+   */
+  source?: 'external';
+  /** External receiver fixes: what the receiver said about this one. */
+  gnss?: {
+    /** The solution kind (`@core/gnss/quality` FixKind: 'rtk-fixed', 'dgps'…). */
+    fix: string;
+    /** Satellites used in the solution. */
+    sats?: number;
+    /** Age of the corrections, seconds. */
+    ageS?: number;
+    hdop?: number;
+  };
 }
 
 /** Derived statistics for a sequence of {@link TrackPoint}s. */

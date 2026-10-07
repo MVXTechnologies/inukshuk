@@ -15,9 +15,21 @@ const USER_LOCATION_SOURCE = 'mlrn-user-location';
  * uncertainty ring (`After-Paused.html`) sized like MapLibre's own halo.
  * MapLibre circles can't be dashed, so the ring is solid.
  */
-export function PuckLayers({ weakAccuracyM }: { weakAccuracyM: number | null }) {
+export function PuckLayers({
+  weakAccuracyM,
+  accuracyM: externalAccuracyM,
+}: {
+  weakAccuracyM: number | null;
+  /**
+   * The external receiver's accuracy (#588), when the puck is its fix: then
+   * MapLibre's own location listener stays off (the phone GPS is in standby).
+   */
+  accuracyM?: number | null;
+}) {
   const tokens = useSchemeTokens();
-  const accuracyM = useCurrentPosition()?.coords.accuracy;
+  const external = externalAccuracyM !== undefined;
+  const phoneAccuracyM = useCurrentPosition({ enabled: !external })?.coords.accuracy;
+  const accuracyM = external ? externalAccuracyM : phoneAccuracyM;
   return (
     <>
       {typeof accuracyM === 'number' && (

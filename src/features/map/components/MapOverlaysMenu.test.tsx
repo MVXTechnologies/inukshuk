@@ -42,6 +42,7 @@ function setExtensions(p: Partial<Record<ExtensionKey, Partial<ExtensionPrefs>>>
     extensions: {
       geodetic: { ...d.geodetic, ...p.geodetic },
       tides: { ...d.tides, ...p.tides },
+      gnss: d.gnss,
     },
   });
 }

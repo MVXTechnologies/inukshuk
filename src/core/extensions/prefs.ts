@@ -13,14 +13,15 @@
  *   rollback) knows only those, reads the same state, and drops `extensions`
  *   when it next saves; the newer build then reads the flat keys again.
  */
-import { EXTENSIONS } from './registry';
-import { EXTENSION_KEYS, type ExtensionKey } from './keys';
+import { extensionBasics } from './registry';
+import { ALL_EXTENSION_KEYS, type AnyExtensionKey } from './keys';
 import type { ExtensionPrefs, ExtensionPrefsMap } from './types';
 
 /** Every extension not installed, with its descriptor's default switches. */
 export function defaultExtensionPrefs(): ExtensionPrefsMap {
   const out = {} as ExtensionPrefsMap;
-  for (const key of EXTENSION_KEYS) out[key] = { installedAt: 0, ...EXTENSIONS[key].defaults };
+  for (const key of ALL_EXTENSION_KEYS)
+    out[key] = { installedAt: 0, ...extensionBasics(key).defaults };
   return out;
 }
 
@@ -43,9 +44,9 @@ export function migrateExtensionPrefs(raw: unknown): ExtensionPrefsMap {
   const doc = asRecord(raw) ?? {};
   const saved = asRecord(doc.extensions) ?? {};
   const out = defaultExtensionPrefs();
-  for (const key of EXTENSION_KEYS) {
+  for (const key of ALL_EXTENSION_KEYS) {
     const entry = asRecord(saved[key]) ?? {};
-    const legacy = EXTENSIONS[key].legacySettings;
+    const legacy = extensionBasics(key).legacySettings;
     const pick = <T>(
       field: keyof ExtensionPrefs,
       ok: (v: unknown) => v is T,
@@ -69,8 +70,8 @@ export function migrateExtensionPrefs(raw: unknown): ExtensionPrefsMap {
  */
 export function legacyExtensionFields(prefs: ExtensionPrefsMap): Record<string, number | boolean> {
   const out: Record<string, number | boolean> = {};
-  for (const key of EXTENSION_KEYS) {
-    const legacy = EXTENSIONS[key].legacySettings;
+  for (const key of ALL_EXTENSION_KEYS) {
+    const legacy = extensionBasics(key).legacySettings;
     if (!legacy) continue;
     const p = prefs[key];
     out[legacy.installedAt] = p.installedAt;
@@ -83,7 +84,7 @@ export function legacyExtensionFields(prefs: ExtensionPrefsMap): Record<string, 
 /** `prefs` with one extension's fields replaced (a new object: store-safe). */
 export function withExtensionPrefs(
   prefs: ExtensionPrefsMap,
-  key: ExtensionKey,
+  key: AnyExtensionKey,
   patch: Partial<ExtensionPrefs>,
 ): ExtensionPrefsMap {
   return { ...prefs, [key]: { ...prefs[key], ...patch } };

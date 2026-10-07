@@ -533,3 +533,71 @@ describe('waypoint <type> and <link> (#587 trail photos)', () => {
     expect(only!.link).toEqual({ href: 'only.jpg' });
   });
 });
+
+describe('external GNSS receiver fixes (#588)', () => {
+  const phone: TrackPoint = { latitude: 46.8, longitude: -71.2, time: 1_700_000_000_000 };
+  const rtk: TrackPoint = {
+    latitude: 46.8000123,
+    longitude: -71.2000456,
+    time: 1_700_000_001_000,
+    altitude: 51.23,
+    accuracy: 0.0142,
+    altitudeAccuracy: 0.0261,
+    source: 'external',
+    gnss: { fix: 'rtk-fixed', sats: 14, ageS: 1.04, hdop: 0.81 },
+  };
+
+  it('writes GPX 1.1 fix fields in schema order, the solution and accuracies in inukshuk:gnss', () => {
+    const xml = buildGpx({ points: [phone, rtk], segmentStarts: [1] });
+    expect(xml).toContain('xmlns:inukshuk="urn:inukshuk:gnss:1"');
+    expect(xml).toContain('<src>Phone GPS</src>');
+    expect(xml).toMatch(
+      /<src>External GNSS receiver<\/src>\s*<fix>dgps<\/fix>\s*<sat>14<\/sat>\s*<hdop>0.81<\/hdop>\s*<ageofdgpsdata>1<\/ageofdgpsdata>\s*<extensions>\s*<inukshuk:gnss>\s*<inukshuk:fix>rtk-fixed<\/inukshuk:fix>\s*<inukshuk:hacc>0.014<\/inukshuk:hacc>\s*<inukshuk:vacc>0.026<\/inukshuk:vacc>/,
+    );
+  });
+
+  it('reads them back: source, solution, satellites, age, HDOP and accuracies survive a save', () => {
+    const doc = parseGpx(buildGpx({ points: [phone, rtk], segmentStarts: [1] }));
+    expect(doc.segmentStarts).toEqual([1]);
+    expect(doc.points[0]?.source).toBeUndefined();
+    expect(doc.points[1]).toMatchObject({
+      source: 'external',
+      gnss: { fix: 'rtk-fixed', sats: 14, ageS: 1, hdop: 0.81 },
+      accuracy: 0.014,
+      altitudeAccuracy: 0.026,
+    });
+  });
+
+  it('maps every solution to GPX <fix>, and keeps heart rate next to the receiver block', () => {
+    const kinds: [string, string | null][] = [
+      ['rtk-float', 'dgps'],
+      ['dgps', 'dgps'],
+      ['sbas', 'dgps'],
+      ['autonomous', '3d'],
+      ['none', 'none'],
+      ['dr', null],
+    ];
+    for (const [fix, gpx] of kinds) {
+      const xml = buildGpx({
+        points: [{ ...rtk, gnss: { fix }, accuracy: undefined, altitudeAccuracy: undefined }],
+      });
+      if (gpx === null) expect(xml).not.toContain('<fix>');
+      else expect(xml).toContain(`<fix>${gpx}</fix>`);
+      expect(xml).not.toContain('<sat>');
+      expect(xml).not.toContain('inukshuk:hacc');
+    }
+    const both = buildGpx({ points: [{ ...rtk, heartRateBpm: 120 }] });
+    const back = parseGpx(both).points[0];
+    expect(back?.heartRateBpm).toBe(120);
+    expect(back?.source).toBe('external');
+  });
+
+  it("other apps' <src>/<fix> or an empty inukshuk:gnss don't make a point external", () => {
+    const foreign = `<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
+      <trkpt lat="46.8" lon="-71.2"><src>Trimble</src><fix>dgps</fix><sat>9</sat></trkpt>
+      <trkpt lat="46.8" lon="-71.2"><extensions><inukshuk:gnss><inukshuk:fix></inukshuk:fix></inukshuk:gnss></extensions></trkpt>
+      <trkpt lat="46.8" lon="-71.2"><extensions><inukshuk:gnss>x</inukshuk:gnss></extensions></trkpt>
+    </trkseg></trk></gpx>`;
+    for (const p of parseGpx(foreign).points) expect(p.source).toBeUndefined();
+  });
+});

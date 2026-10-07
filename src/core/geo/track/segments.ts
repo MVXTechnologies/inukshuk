@@ -50,13 +50,28 @@ export function segmentIndexAt(time: number, pauses: readonly PauseInterval[]): 
   return n;
 }
 
-/** True when `next` opens a new segment after `prev` (a pause began between them). */
+/**
+ * True when two consecutive fixes come from different position sources (the
+ * phone's GPS and an external receiver, #588). Their coordinates can differ by
+ * a datum's worth (≈ 1.5 m in Canada) or a phone's error, so the recorder never
+ * joins them: the step between them would be a teleport, not a walk.
+ */
+export function sourceChanged(prev: TrackPoint, next: TrackPoint): boolean {
+  return (prev.source ?? 'phone') !== (next.source ?? 'phone');
+}
+
+/**
+ * True when `next` opens a new segment after `prev`: a pause began between
+ * them, or the position source changed ({@link sourceChanged}).
+ */
 export function startsNewSegment(
   prev: TrackPoint | undefined,
   next: TrackPoint,
   pauses: readonly PauseInterval[],
 ): boolean {
-  if (prev === undefined || pauses.length === 0) return false;
+  if (prev === undefined) return false;
+  if (sourceChanged(prev, next)) return true;
+  if (pauses.length === 0) return false;
   return segmentIndexAt(next.time, pauses) !== segmentIndexAt(prev.time, pauses);
 }
 
@@ -79,18 +94,19 @@ export function dropPointsDuringPauses(
   return kept.length === points.length ? points : kept;
 }
 
-/** Segment start indices of a time-ordered point list, derived from its pauses. */
+/**
+ * Segment start indices of a time-ordered point list, derived from its pauses
+ * and its position-source changes ({@link startsNewSegment}).
+ */
 export function segmentStartsFromPauses(
   points: readonly TrackPoint[],
   pauses: readonly PauseInterval[],
 ): number[] {
   const starts: number[] = [];
-  if (pauses.length === 0) return starts;
-  let prevSegment = -1;
+  let prev: TrackPoint | undefined;
   points.forEach((p, i) => {
-    const segment = segmentIndexAt(p.time, pauses);
-    if (i > 0 && segment !== prevSegment) starts.push(i);
-    prevSegment = segment;
+    if (startsNewSegment(prev, p, pauses)) starts.push(i);
+    prev = p;
   });
   return starts;
 }

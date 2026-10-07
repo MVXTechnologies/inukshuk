@@ -2,6 +2,7 @@ import { isBackgroundFeedFresh } from '@core/geo/track/backgroundFeed';
 import { backgroundTaskSupported } from '@core/geo/track/backgroundSupport';
 import type { TrackPoint } from '@core/models';
 import * as checkpoint from '@data/recorderCheckpoint';
+import { phoneFeedsRecorder } from '@state/gnssStore';
 import { getRecorderSessionGeneration, useRecorderStore } from '@state/recorderStore';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
@@ -126,6 +127,10 @@ try {
       // Delivery is the only proof the task is alive — record it so the
       // foreground watch knows it can stand down (see isBackgroundFeedConfirmed).
       lastDeliveryAt = Date.now();
+      // #588: while an external receiver is the position source its fixes are
+      // the recording; the phone's (this task keeps the phone GPS at full
+      // accuracy while recording, for an instant fallback) are not mixed in.
+      if (!phoneFeedsRecorder()) return;
       for (const loc of locations) recorder.addPoint(toTrackPoint(loc));
       return;
     }

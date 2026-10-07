@@ -24,6 +24,12 @@ import { ExtensionsSection } from './ExtensionsSection';
 
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: {} } } }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+// The pins are the MAP extensions' trees: the external GNSS receiver (#588), a
+// device extension listed after them, has its own tests (GnssSettings.test.tsx).
+jest.mock('@data/gnss/link', () => ({
+  ...jest.requireActual('@data/gnss/link'),
+  gnssLinkAvailable: () => false,
+}));
 jest.mock('@data/offline', () => ({
   listCompanionPacks: jest.fn(async () => []),
   listRegionPacks: jest.fn(async () => []),

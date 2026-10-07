@@ -248,6 +248,16 @@ one registry, not hand-wired screens (architecture review P1-3):
    with companion packs for more), then run `extensionStyles.pin.test.ts`:
    the existing extensions' hashes must not move.
 
+An extension that adds a device or a tool rather than a map layer (the GNSS
+receiver) is a **device extension**: its key goes in `DEVICE_EXTENSION_KEYS`,
+its `DeviceExtensionDescriptor` (label, teaser, default switches — no dataset,
+style or packs) in `DEVICE_EXTENSIONS`, its availability check in
+`features/extensions/availability.ts` (`DEVICE_AVAILABLE`), and its Settings
+module in `settingsModules.ts`. It gets the same Get / switch / Remove shell
+(`switchDescription` says what its switch does) and the same persisted
+`extensions[key]` entry; Settings lists it after the map extensions. Its
+`show` is its on/off switch.
+
 ## Long-distance trails (Explore)
 
 Explore's "Long-distance trails near you" (#467) comes from OpenStreetMap
@@ -348,6 +358,32 @@ Field operators rely on it, so **PROJ never chooses an operation**:
   before 2.5.0), `core/gnss/bleProfiles.ts` (the serial GATT profiles, sent on
   every connect), `data/gnss/receiverStream.ts` (native chunks → the
   `@core/gnss` demuxer). Parsing, fixes, NTRIP and datums are `core/gnss`.
+- Stage 3 (UI and wiring, #623): a free **device extension** `gnss`
+  (Settings → Extensions, `features/extensions/gnss`: pairing, NTRIP profile
+  editor with the sourcetable browser, project datum, phone-GPS policy;
+  routes `app/gnss/*`). `features/gnss/session.ts` is the one place the
+  receiver is driven: the native module (`data/gnss/link.ts`; connects through
+  `connectOptions()`, devices ordered by `rankDevices()`) → `receiverStream`
+  into the pipeline's demuxer (a discontinuity flushes the assembler; a 1 s
+  tick runs `nextStatus`) → `core/gnss/receiver.ts` (pipeline, `arbitrate` =
+  `decideSource` + "no fallback", the RAM-only u-blox kit setup written after
+  connecting a kit) → `state/gnssStore.ts`. The module's simulated receiver
+  (`GNSS_FAKE_DEVICE=1`, E2E) is fed the core's Québec RTK session;
+  `simulatedLink.ts` stands in where there is no module (Jest, web).
+  While the receiver is the source: `useLocationTracking` returns its fix
+  (≤ 1 Hz) and idles the phone watch (`Accuracy.Low`, or none), the puck is
+  drawn on it (`UserPuck`, MapLibre's own listener unmounted) and followed by
+  `ReceiverFollow`, the recorder takes its fixes (`trackPointFromFix`:
+  `source: 'external'`, `gnss`, the receiver's 95 % accuracy) and refuses the
+  phone's (`phoneFeedsRecorder`, also in the background task). A source change
+  starts a segment (`core/geo/track/segments`); GPX carries `<src>`, `<fix>`,
+  `<sat>`, `<hdop>`, `<ageofdgpsdata>` and `inukshuk:gnss`. The map dot is the
+  fix moved to WGS 84 by `core/gnss/output.ts` (Convert's validated plans;
+  refused → drawn as received, the sheet says why). NTRIP: `features/gnss/
+ntripClient.ts` over `data/gnss/ntripSocket.ts` (the module's `openTcp` /
+  `writeTcp` / `closeTcp`; RTCM to the receiver with `write`). Passwords and
+  Strava tokens: `data/secureStore.ts` (Keychain / Keystore). A project datum
+  whose grid isn't installed offers Convert's pack download (`GridDownload`).
 
 ## Error reporting ("no silent fails")
 

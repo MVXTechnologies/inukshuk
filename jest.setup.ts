@@ -53,3 +53,22 @@ jest.mock('react-native-reanimated', () => ({
 // ("no health store on this device"); tests that exercise Health mock
 // `@lib/health` (or `./platform`) themselves, which overrides this.
 jest.mock('@lib/health/platform', () => ({ healthPlatform: null }));
+
+// expo-secure-store (Strava tokens, NTRIP passwords): jest-expo's automock
+// answers undefined to everything; an in-memory keychain behaves like the
+// real one. Cleared before each test; `globalThis.__secureStore` is the map.
+jest.mock('expo-secure-store', () => {
+  const store = new Map<string, string>();
+  (globalThis as { __secureStore?: Map<string, string> }).__secureStore = store;
+  return {
+    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 1,
+    getItemAsync: jest.fn(async (k: string) => store.get(k) ?? null),
+    setItemAsync: jest.fn(async (k: string, v: string) => {
+      store.set(k, v);
+    }),
+    deleteItemAsync: jest.fn(async (k: string) => {
+      store.delete(k);
+    }),
+  };
+});
+beforeEach(() => (globalThis as { __secureStore?: Map<string, string> }).__secureStore?.clear());

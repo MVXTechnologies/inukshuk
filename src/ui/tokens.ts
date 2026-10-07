@@ -92,6 +92,14 @@ export interface SchemeTokens {
     puck: string;
     puckRing: string;
     puckHalo: string;
+    /**
+     * External GNSS receiver chip on map chrome (#588): the state's icon and
+     * dot (graphics, ≥ 3:1 on `chrome`); its words are `chromeInk`.
+     */
+    gnssFixed: string;
+    gnssDgps: string;
+    gnssWarn: string;
+    gnssLost: string;
   };
   status: {
     /** Recording: stone chip with a pulsing red dot. */
@@ -107,6 +115,9 @@ export interface SchemeTokens {
     onGpsLost: string;
     /** Lost GPS as text/icon ink on raised surfaces (until the chip lands in PR 5). */
     gpsLostInk: string;
+    /** External receiver chip on surfaces: RTK fixed (green) and DGPS / SBAS (blue) ink. */
+    gnssFixed: string;
+    gnssDgps: string;
   };
   data: {
     route: string;
@@ -284,6 +295,10 @@ export const lightScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.18)',
+    gnssFixed: '#7CD69C',
+    gnssDgps: '#8CC4F0',
+    gnssWarn: '#F2A65A',
+    gnssLost: '#FF8A80',
   },
   status: {
     recording: palette.stone,
@@ -297,6 +312,8 @@ export const lightScheme: SchemeTokens = {
     gpsLost: palette.signalRed,
     onGpsLost: palette.white,
     gpsLostInk: '#B02222',
+    gnssFixed: '#1E6B43',
+    gnssDgps: '#1F5F91',
   },
   data: {
     route: palette.route,
@@ -434,6 +451,10 @@ export const darkScheme: SchemeTokens = {
     puck: palette.puck,
     puckRing: palette.paper,
     puckHalo: 'rgba(47,127,193,0.22)',
+    gnssFixed: '#7CD69C',
+    gnssDgps: '#8CC4F0',
+    gnssWarn: '#F2A65A',
+    gnssLost: '#FF8A80',
   },
   status: {
     recording: palette.stone,
@@ -446,6 +467,8 @@ export const darkScheme: SchemeTokens = {
     gpsLost: '#FF6B5E',
     onGpsLost: palette.black,
     gpsLostInk: '#FF8A80',
+    gnssFixed: '#7CCB98',
+    gnssDgps: '#8CC4F0',
   },
   data: {
     route: palette.route,
@@ -589,6 +612,10 @@ export const sunlightScheme: SchemeTokens = {
     puck: '#1565C0',
     puckRing: palette.white,
     puckHalo: 'rgba(21,101,192,0.2)',
+    gnssFixed: '#1E6B43',
+    gnssDgps: '#1F5F91',
+    gnssWarn: '#8F4206',
+    gnssLost: '#B02222',
   },
   status: {
     recording: palette.black,
@@ -600,6 +627,8 @@ export const sunlightScheme: SchemeTokens = {
     gpsLost: palette.signalRed,
     onGpsLost: palette.white,
     gpsLostInk: '#B02222',
+    gnssFixed: '#1E6B43',
+    gnssDgps: '#1F5F91',
   },
   data: {
     route: palette.route,
@@ -742,6 +771,10 @@ export const nightScheme: SchemeTokens = {
     puck: NIGHT_INK,
     puckRing: palette.black,
     puckHalo: 'rgba(255,59,48,0.2)',
+    gnssFixed: NIGHT_INK,
+    gnssDgps: NIGHT_INK,
+    gnssWarn: NIGHT_INK,
+    gnssLost: NIGHT_INK,
   },
   status: {
     recording: '#3A0B08',
@@ -753,6 +786,8 @@ export const nightScheme: SchemeTokens = {
     gpsLost: NIGHT_INK,
     onGpsLost: palette.black,
     gpsLostInk: NIGHT_INK,
+    gnssFixed: NIGHT_INK,
+    gnssDgps: NIGHT_INK,
   },
   data: {
     route: NIGHT_INK,

@@ -1,0 +1,155 @@
+# External GNSS receiver e2e (#588), on the GNSS module's simulated receiver
+# ("Simulated receiver (test)"), fed the core's scripted Québec City RTK
+# session (autonomous → RTK float → RTK fixed, 1 Hz) through the same native
+# threads and events as Bluetooth. Needs a build made with GNSS_FAKE_DEVICE=1
+# (the E2E APK sets it in .github/workflows/e2e.yml) or a debug build; store
+# builds never list it.
+#
+# Settings → Extensions → "Get External GNSS receiver" → Receiver → connect
+# the simulated receiver → the map's receiver chip goes to "RTK fixed" → its
+# sheet shows the position with how it was computed and "Frame unknown"
+# (no caster declares a frame here, owner A5) → Remove leaves the default.
+#
+# Settings rows merge title + subtitle on iOS: their matches are wildcard
+# regexes (maestro-ios-tap-traps). The accordion opener is guarded.
+appId: com.inukshuk.app
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          permissions:
+            location: allow
+            bluetooth: allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          permissions:
+            location: always
+- extendedWaitUntil:
+    visible: 'Map actions'
+    timeout: 30000
+- setLocation:
+    latitude: 46.8030
+    longitude: -71.2170
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*External GNSS receiver.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*External GNSS receiver.*'
+          direction: DOWN
+          timeout: 5000
+# Start from "not installed" whatever a previous run left.
+- scrollUntilVisible:
+    element: '(Get External GNSS receiver|Remove External GNSS receiver extension)'
+    direction: DOWN
+- runFlow:
+    when:
+      visible: 'Remove External GNSS receiver extension'
+    commands:
+      - tapOn: 'Remove External GNSS receiver extension'
+      - tapOn: 'Remove'
+- scrollUntilVisible:
+    element: 'Get External GNSS receiver'
+    direction: DOWN
+- tapOn: 'Get External GNSS receiver'
+- extendedWaitUntil:
+    visible:
+      id: 'gnss-receiver-row'
+    timeout: 10000
+- tapOn:
+    id: 'gnss-receiver-row'
+# The scan asks for Bluetooth (Android 12+: Nearby devices) unless launchApp
+# already granted it.
+- runFlow:
+    when:
+      visible: '(Allow|OK|While using the app)'
+    commands:
+      - tapOn: '(Allow|OK|While using the app)'
+# Pairing: the scan finds the simulated receiver within a second.
+- extendedWaitUntil:
+    visible: 'Connect Simulated.*'
+    timeout: 15000
+- takeScreenshot: gnss-pair
+- tapOn: 'Connect Simulated.*'
+# Back on Settings, connected.
+- extendedWaitUntil:
+    visible: '.*Simulated .* · (connected|connecting).*'
+    timeout: 10000
+- takeScreenshot: gnss-settings
+- tapOn: 'Back'
+- tapOn:
+    text: 'Map(, tab.*)?'
+    retryTapIfNoChange: true
+# The chip: the receiver's own state, then RTK fixed once the script gets there (~30 s).
+- extendedWaitUntil:
+    visible:
+      id: 'gnss-receiver-chip'
+    timeout: 20000
+- extendedWaitUntil:
+    visible: '.*RTK fixed.*'
+    timeout: 60000
+- takeScreenshot: gnss-chip
+- tapOn:
+    id: 'gnss-receiver-chip'
+- extendedWaitUntil:
+    visible:
+      id: 'gnss-receiver-sheet'
+    timeout: 5000
+- assertVisible: '.*Simulated .*receiver.*'
+- assertVisible: '.*Frame unknown.*'
+- assertVisible: '.*Your location · phone GPS in standby.*'
+- takeScreenshot: gnss-sheet
+- tapOn: 'Close'
+- assertVisible: 'Map actions'
+# Leave it uninstalled (disconnects the receiver).
+- tapOn:
+    text: 'Library(, tab.*)?'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Settings'
+    timeout: 15000
+- tapOn: 'Settings'
+- scrollUntilVisible:
+    element: 'Extensions.*'
+    direction: DOWN
+    centerElement: true
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: '.*External GNSS receiver.*'
+          commands:
+            - tapOn: 'Extensions.*'
+      - scrollUntilVisible:
+          element: '.*External GNSS receiver.*'
+          direction: DOWN
+          timeout: 5000
+- scrollUntilVisible:
+    element: 'Remove External GNSS receiver extension'
+    direction: DOWN
+- tapOn: 'Remove External GNSS receiver extension'
+- tapOn: 'Remove'
+- extendedWaitUntil:
+    visible: 'Get External GNSS receiver'
+    timeout: 5000

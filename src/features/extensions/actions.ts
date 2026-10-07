@@ -7,22 +7,22 @@
  *   `onRemove` (drop its companion packs…);
  * - Offline in your regions: save the switch, then its `onOfflineChange`.
  */
-import type { ExtensionKey } from '@core/extensions/keys';
+import type { AnyExtensionKey } from '@core/extensions/keys';
 
 import { EXTENSION_SETTINGS } from './settingsModules';
 import { setExtensionPrefs } from './prefs';
 
-export function installExtension(key: ExtensionKey): void {
+export function installExtension(key: AnyExtensionKey): void {
   setExtensionPrefs(key, { installedAt: Date.now(), show: true });
   EXTENSION_SETTINGS[key].onInstall?.();
 }
 
-export async function removeExtension(key: ExtensionKey): Promise<void> {
+export async function removeExtension(key: AnyExtensionKey): Promise<void> {
   setExtensionPrefs(key, { installedAt: 0 });
   await EXTENSION_SETTINGS[key].onRemove?.();
 }
 
-export async function setExtensionOffline(key: ExtensionKey, on: boolean): Promise<void> {
+export async function setExtensionOffline(key: AnyExtensionKey, on: boolean): Promise<void> {
   setExtensionPrefs(key, { offline: on });
   await EXTENSION_SETTINGS[key].onOfflineChange?.(on);
 }
