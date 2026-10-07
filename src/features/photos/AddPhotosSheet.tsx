@@ -472,15 +472,17 @@ function Review({
         ) : null}
         <View style={styles.buttons}>
           <PillButton label="Cancel" onPress={onCancel} />
-          {!importing && (
-            <PillButton
-              primary
-              grow={2}
-              label={addButtonLabel(selected.size)}
-              disabled={selected.size === 0}
-              onPress={onAdd}
-            />
-          )}
+          {/* Stays in place (disabled) while adding: if it went away, Cancel
+              would stretch under the finger and a second tap on "Add" would
+              cancel the import (seen in CI: Maestro's retried tap kept one
+              photo of two). */}
+          <PillButton
+            primary
+            grow={2}
+            label={importing ? 'Adding…' : addButtonLabel(selected.size)}
+            disabled={importing !== null || selected.size === 0}
+            onPress={onAdd}
+          />
         </View>
       </View>
     </>

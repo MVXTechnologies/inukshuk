@@ -13,9 +13,12 @@ appId: com.inukshuk.app
     visible: 'Trail layers'
     timeout: 30000
 - tapOn: 'Overview'
-# Let the map draw its photo circles.
-- waitForAnimationToEnd:
-    timeout: 5000
+# Let the map load its photo sprites (no UI sentinel for GL symbols: a
+# bounded optional wait).
+- extendedWaitUntil:
+    visible: 'never-shown-sentinel'
+    timeout: 6000
+    optional: true
 - takeScreenshot: review-photos-trail-${THEME}
 - scrollUntilVisible:
     element: 'Photo 1 of [0-9]+.*'

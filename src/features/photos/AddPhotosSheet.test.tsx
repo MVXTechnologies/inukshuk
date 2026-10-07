@@ -123,6 +123,19 @@ it('adds the ticked photos and reports the result', async () => {
   expect([...args.selected].sort()).toEqual(['pick-0', 'pick-1', 'pick-2', 'pick-3']);
 });
 
+it('keeps the Add button in place while adding, so a second tap cannot cancel', async () => {
+  let finish: (v: unknown) => void = () => {};
+  importer.commitPhotoImport.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  await open();
+  await fireEvent.press(await screen.findByLabelText('Add 3 photos'));
+  const adding = await screen.findByLabelText('Adding…');
+  expect(adding).toBeDisabled();
+  await fireEvent.press(adding);
+  const args = importer.commitPhotoImport.mock.calls[0]![0] as { isCancelled: () => boolean };
+  expect(args.isCancelled()).toBe(false);
+  finish({ added: [1, 2, 3], failed: [] });
+});
+
 it('re-plans with the Adjust stepper', async () => {
   await open();
   await fireEvent.press(await screen.findByLabelText('Adjust camera clock'));
