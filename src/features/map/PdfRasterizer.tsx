@@ -54,6 +54,13 @@ import {
   type LoopbackHealth,
   type LoopbackSignal,
 } from '@core/storage/loopbackLiveness';
+import {
+  appPhaseAt,
+  terminationMessage,
+  terminationVerdict,
+  type AppPhase,
+  type AppPhaseInput,
+} from '@core/library/processTermination';
 import { servedFileUrl } from '@core/storage/servedPaths';
 import {
   acquireLocalServer,
@@ -289,6 +296,11 @@ interface PendingRequest {
   backendDispatched: boolean;
   /** Re-queued once already after a served transport failure. */
   transportRetried: boolean;
+  /**
+   * Where the app was when the WebView content process died under this
+   * request (it was re-queued once); null until that happens (#323).
+   */
+  processGone: AppPhase | null;
   args: Required<RasterizeArgs>;
   recoveryPage: { fileUri: string; pageIndex: number } | null;
   recoveryToken: string | null;
@@ -990,6 +1002,12 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   const mountedRef = useRef(true);
   const activeRequestRef = useRef<string | null>(null);
   const idCounterRef = useRef(0);
+  // Where the app is, for a content-process termination's verdict (#323):
+  // in front, and since when (null: it has not left the foreground).
+  const appPhaseRef = useRef<AppPhaseInput>({
+    foreground: AppState.currentState !== 'background' && AppState.currentState !== 'inactive',
+    activeSince: null,
+  });
 
   // Load + inline the bundled pdf.js sources once (from the local asset files
   // only — no network access), then pick the engine: served if the loopback
@@ -1506,6 +1524,11 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   // WKWebView/Android renderer death has its own event and need not emit a
   // page-load error. Replacing the native WebView revives an idle dead engine
   // too; waiting for an active request timeout leaves every queued map blocked.
+  //
+  // #323: the OS also reclaims that process for reasons that are not the
+  // page's (the app in the background, memory tight elsewhere), so the render
+  // in flight is re-queued once; only a second termination of the same render
+  // with the app in front fails the page (see @core/library/processTermination).
   const handleProcessGone = useCallback(() => {
     readyRef.current = false;
     setReady(false);
@@ -1515,10 +1538,26 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
       const id = activeRequestRef.current;
       const pending = id === null ? undefined : pendingRef.current.get(id);
       if (pending && id !== null) {
-        clearTimeout(pending.timeout);
-        pendingRef.current.delete(id);
-        finishRecovery(pending);
-        pending.reject(new Error('PdfRasterizer: rendering process terminated'));
+        const phase = appPhaseAt(appPhaseRef.current, Date.now());
+        const firstPhase = pending.processGone;
+        const verdict = terminationVerdict(phase, firstPhase);
+        if (verdict === 'retry') {
+          // Back to the head of the queue; the replaced engine runs it again
+          // once ready. Its crash-recovery checkpoint stays: same render.
+          pending.processGone = phase;
+          console.warn(
+            `PdfRasterizer: rendering process terminated (app ${phase}); retrying ${id}`,
+          );
+          queueRef.current.unshift({ id, args: pending.args });
+        } else {
+          clearTimeout(pending.timeout);
+          pendingRef.current.delete(id);
+          finishRecovery(pending);
+          const message = terminationMessage(firstPhase ?? phase, phase);
+          pending.reject(
+            verdict === 'page-failure' ? new Error(message) : new PdfRenderNotStartedError(message),
+          );
+        }
       }
       activeRequestRef.current = null;
       busyRef.current = false;
@@ -1713,6 +1752,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
   // Resume: iOS may have reclaimed the listener while the app was suspended.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') appPhaseRef.current = { ...appPhaseRef.current, foreground: false };
       if (state === 'background') {
         signalHealth({ kind: 'background' });
         // A held document (parsed page, decoded images) is memory the OS
@@ -1724,6 +1764,9 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
       if (state !== 'active') return;
+      if (!appPhaseRef.current.foreground) {
+        appPhaseRef.current = { foreground: true, activeSince: Date.now() };
+      }
       const returning = healthRef.current.backgroundedAt !== null;
       signalHealth({ kind: 'foreground' });
       if (returning) void verifyServerRef.current('resume');
@@ -1840,6 +1883,7 @@ export const PdfRasterizerProvider: React.FC<{ children: React.ReactNode }> = ({
         const pendingRequest: PendingRequest = {
           backendDispatched: false,
           transportRetried: false,
+          processGone: null,
           args: normalized,
           recoveryPage: args.nativePage
             ? { fileUri: args.nativePage.fileUri, pageIndex: args.pageIndex }
