@@ -147,6 +147,7 @@ splitTests()
 throttleTests()
 cursorTests()
 profileTests()
+tcpTests()
 if failures > 0 {
   print("\(failures) of \(checks) checks failed")
   exit(1)

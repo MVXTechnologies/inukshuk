@@ -130,6 +130,18 @@ export interface GnssConnectOptions {
   fake?: { frames: string[]; intervalMs: number; loop: boolean };
 }
 
+/** A chunk from an NTRIP caster socket (base64, ≤ 64 KiB, ≤ 10 per second per socket). */
+export interface GnssTcpDataEvent {
+  id: string;
+  data: string;
+}
+
+/** The caster closed (`error` null) or the socket failed. Not sent after `closeTcp`. */
+export interface GnssTcpCloseEvent {
+  id: string;
+  error: string | null;
+}
+
 export interface GnssEvents {
   onBytes: (e: GnssBytesEvent) => void;
   onState: (e: GnssLinkState) => void;
@@ -138,6 +150,8 @@ export interface GnssEvents {
   onRssi: (e: GnssRssiEvent) => void;
   onError: (e: GnssErrorEvent) => void;
   onAvailability: (e: GnssAvailability) => void;
+  onTcpData: (e: GnssTcpDataEvent) => void;
+  onTcpClose: (e: GnssTcpCloseEvent) => void;
 }
 
 export interface Subscription {
@@ -162,6 +176,16 @@ export interface NativeGnssModule {
   /** Resolves when the bytes left the phone (BLE: split to the MTU natively). */
   write(data: Uint8Array): Promise<void>;
   getState(): GnssLinkState;
+  /**
+   * Raw TCP (optionally TLS, system trust + host-name check) to an NTRIP
+   * caster; resolves with the socket id once connected (15 s timeout,
+   * rejects `E_TCP_CONNECT`). At most 4 open. A caster silent for 60 s is
+   * closed. Contract of src/data/gnss/ntripSocket.ts (#623).
+   */
+  openTcp(options: { host: string; port: number; tls: boolean }): Promise<string>;
+  /** ≤ 64 KiB pending per socket (`E_TCP_WRITE` beyond); `E_TCP_CLOSED` for an unknown id. */
+  writeTcp(id: string, data: Uint8Array): Promise<void>;
+  closeTcp(id: string): Promise<void>;
   addListener<K extends keyof GnssEvents>(event: K, listener: GnssEvents[K]): Subscription;
 }
 

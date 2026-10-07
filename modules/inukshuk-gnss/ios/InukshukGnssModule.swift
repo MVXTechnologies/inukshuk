@@ -29,6 +29,12 @@ struct ScanOptions: Record {
   @Field var durationMs: Double = 15_000
 }
 
+struct TcpOptions: Record {
+  @Field var host: String = ""
+  @Field var port: Int = 0
+  @Field var tls: Bool = false
+}
+
 struct KnownDevicesOptions: Record {
   @Field var serviceUuids: [String] = []
 }
@@ -37,10 +43,18 @@ struct KnownDevicesOptions: Record {
 /// src/lib/gnss/nativeGnss.ts). Thin: validation and handing off to the
 /// process-wide `GnssLink`.
 public final class InukshukGnssModule: Module, GnssEventSink {
+  private static let maxTcp = 4
+  /// NTRIP sockets of this React instance (closed with it); `tcpQueue` only.
+  private let tcpQueue = DispatchQueue(label: "app.inukshuk.gnss.tcp")
+  private var tcp: [String: GnssTcpPipe] = [:]
+  private var tcpListening = false
+
   public func definition() -> ModuleDefinition {
     Name("InukshukGnss")
 
-    Events("onBytes", "onState", "onDevice", "onScanState", "onRssi", "onError", "onAvailability")
+    Events(
+      "onBytes", "onState", "onDevice", "onScanState", "onRssi", "onError", "onAvailability",
+      "onTcpData", "onTcpClose")
 
     OnCreate {
       GnssLink.shared.attach(self)
@@ -50,6 +64,77 @@ public final class InukshukGnssModule: Module, GnssEventSink {
       // The link outlives this React instance on purpose; a scan does not.
       GnssLink.shared.detach(self)
       GnssLink.shared.stopScan(reason: nil)
+      tcpQueue.sync {
+        tcp.values.forEach { $0.close() }
+        tcp.removeAll()
+      }
+    }
+
+    OnStartObserving("onTcpData") {
+      tcpQueue.async {
+        self.tcpListening = true
+        self.tcp.values.forEach { $0.setListening(true) }
+      }
+    }
+
+    OnStopObserving("onTcpData") {
+      tcpQueue.async {
+        self.tcpListening = false
+        self.tcp.values.forEach { $0.setListening(false) }
+      }
+    }
+
+    // Raw TCP / TLS for NTRIP casters (contract: src/data/gnss/ntripSocket.ts).
+    // Resolves with the socket id once connected; rejects E_TCP_CONNECT.
+    AsyncFunction("openTcp") { (options: TcpOptions, promise: Promise) in
+      let host = options.host.trimmingCharacters(in: .whitespaces)
+      guard !host.isEmpty, (1...65_535).contains(options.port) else {
+        return promise.reject("E_TCP_BAD_ARGUMENT", "A host and a port (1-65535) are required")
+      }
+      tcpQueue.async {
+        guard self.tcp.count < Self.maxTcp else {
+          return promise.reject("E_TCP_LIMIT", "Too many open caster connections")
+        }
+        let id = UUID().uuidString
+        let pipe = GnssTcpPipe(
+          host: host, port: UInt16(options.port), tls: options.tls, queue: self.tcpQueue,
+          onData: { [weak self] data in
+            self?.sendEvent("onTcpData", ["id": id, "data": data.base64EncodedString()])
+          },
+          onClose: { [weak self] error in
+            guard let self else { return }
+            self.tcp[id] = nil
+            self.sendEvent("onTcpClose", ["id": id, "error": error])
+          })
+        pipe.setListening(self.tcpListening)
+        self.tcp[id] = pipe
+        pipe.open { error in
+          if let error {
+            self.tcp[id] = nil
+            promise.reject("E_TCP_CONNECT", error)
+          } else {
+            promise.resolve(id)
+          }
+        }
+      }
+    }
+
+    AsyncFunction("writeTcp") { (id: String, data: Data, promise: Promise) in
+      tcpQueue.async {
+        guard let pipe = self.tcp[id] else {
+          return promise.reject("E_TCP_CLOSED", "The caster connection is closed")
+        }
+        pipe.write(data) { error in
+          if let error { promise.reject("E_TCP_WRITE", error) } else { promise.resolve(nil) }
+        }
+      }
+    }
+
+    AsyncFunction("closeTcp") { (id: String, promise: Promise) in
+      tcpQueue.async {
+        self.tcp.removeValue(forKey: id)?.close()
+        promise.resolve(nil)
+      }
     }
 
     OnStartObserving("onBytes") {

@@ -4,7 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.util.Base64
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import expo.modules.inukshukgnss.core.GattProfile
+import expo.modules.inukshukgnss.core.TcpPipe
 import expo.modules.inukshukgnss.core.gattProfileOf
 import expo.modules.interfaces.permissions.Permissions
 import expo.modules.kotlin.Promise
@@ -51,6 +54,14 @@ class ScanOptions : Record {
   @Field var durationMs: Double = 15_000.0
 }
 
+class TcpOptions : Record {
+  @Field var host: String = ""
+
+  @Field var port: Int = 0
+
+  @Field var tls: Boolean = false
+}
+
 class KnownDevicesOptions : Record {
   @Field var serviceUuids: List<String> = emptyList()
 }
@@ -82,10 +93,25 @@ class InukshukGnssModule : Module() {
     }
   }
 
+  /** NTRIP sockets of this React instance (closed with it). */
+  private val tcp = ConcurrentHashMap<String, TcpPipe>()
+
+  @Volatile private var tcpListening = false
+
   override fun definition() = ModuleDefinition {
     Name("InukshukGnss")
 
-    Events("onBytes", "onState", "onDevice", "onScanState", "onRssi", "onError", "onAvailability")
+    Events(
+      "onBytes",
+      "onState",
+      "onDevice",
+      "onScanState",
+      "onRssi",
+      "onError",
+      "onAvailability",
+      "onTcpData",
+      "onTcpClose",
+    )
 
     OnCreate {
       // Attach early so state events are not missed; if the React context is
@@ -108,6 +134,73 @@ class InukshukGnssModule : Module() {
         }
         attached = false
       }
+      tcp.values.forEach { it.close() }
+      tcp.clear()
+    }
+
+    OnStartObserving("onTcpData") {
+      tcpListening = true
+      tcp.values.forEach { it.setListening(true) }
+    }
+
+    OnStopObserving("onTcpData") {
+      tcpListening = false
+      tcp.values.forEach { it.setListening(false) }
+    }
+
+    // Raw TCP / TLS for NTRIP casters (contract: src/data/gnss/ntripSocket.ts).
+    // Resolves with the socket id once connected; rejects E_TCP_CONNECT.
+    AsyncFunction("openTcp") { options: TcpOptions, promise: Promise ->
+      val host = options.host.trim()
+      if (host.isEmpty() || options.port !in 1..65535) {
+        promise.reject("E_TCP_BAD_ARGUMENT", "A host and a port (1-65535) are required", null)
+        return@AsyncFunction
+      }
+      if (tcp.size >= MAX_TCP) {
+        promise.reject("E_TCP_LIMIT", "Too many open caster connections", null)
+        return@AsyncFunction
+      }
+      val id = UUID.randomUUID().toString()
+      val pipe = TcpPipe(
+        host,
+        options.port,
+        options.tls,
+        object : TcpPipe.Listener {
+          override fun onData(data: ByteArray) {
+            sendEvent("onTcpData", mapOf("id" to id, "data" to Base64.encodeToString(data, Base64.NO_WRAP)))
+          }
+
+          override fun onClose(error: String?) {
+            tcp.remove(id)
+            sendEvent("onTcpClose", mapOf("id" to id, "error" to error))
+          }
+        },
+      )
+      pipe.setListening(tcpListening)
+      tcp[id] = pipe
+      pipe.open { error ->
+        if (error == null) {
+          promise.resolve(id)
+        } else {
+          tcp.remove(id)
+          promise.reject("E_TCP_CONNECT", error, null)
+        }
+      }
+    }
+
+    AsyncFunction("writeTcp") { id: String, data: ByteArray, promise: Promise ->
+      val pipe = tcp[id]
+      if (pipe == null) {
+        promise.reject("E_TCP_CLOSED", "The caster connection is closed", null)
+        return@AsyncFunction
+      }
+      pipe.write(data) { error ->
+        if (error == null) promise.resolve(null) else promise.reject("E_TCP_WRITE", error, null)
+      }
+    }
+
+    AsyncFunction("closeTcp") { id: String ->
+      tcp.remove(id)?.close()
     }
 
     OnStartObserving("onBytes") { session.setListening(sink, true) }
@@ -159,6 +252,10 @@ class InukshukGnssModule : Module() {
    * returns nothing without ACCESS_FINE_LOCATION (which the app already asks
    * for to show the blue dot).
    */
+  private companion object {
+    const val MAX_TCP = 4
+  }
+
   private fun requiredPermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)

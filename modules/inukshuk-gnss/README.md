@@ -38,6 +38,34 @@ Events: `onBytes {deviceId, data (base64), length, dropped}`, `onState`
 `FixAssembler`) on every discontinuity: link lost, other device, native
 overflow, corrupt chunk.
 
+## NTRIP TCP sockets
+
+`openTcp({host, port, tls})` → socket id, `writeTcp(id, bytes)`,
+`closeTcp(id)`, events `onTcpData {id, data (base64)}` and
+`onTcpClose {id, error}` (the contract of `src/data/gnss/ntripSocket.ts`).
+NTRIP 1.0 answers `ICY 200 OK`, which is not HTTP, and streams for hours, so
+neither fetch nor WebSocket can carry it. The protocol stays in TypeScript.
+
+- Android: `core/TcpPipe.kt` (java.net `Socket`, its own reader/writer threads; TLS via
+  `SSLSocket` with `endpointIdentificationAlgorithm = HTTPS`, because a bare
+  SSLSocketFactory socket skips the host-name check). iOS: `GnssTcpPipe.swift`
+  (Network.framework `NWConnection`, default TLS options: system trust and
+  host-name validation).
+- Caps: 15 s connect timeout (iOS: a connection still `.waiting` counts as
+  failed); a socket silent for 60 s while reading is closed ("the caster
+  stopped sending"); 256 KiB receive buffer drained as ≤ 64 KiB events at
+  most every 100 ms. When the buffer is full (no listener), reading stops, so
+  TCP flow control pushes back on the caster and nothing is dropped. Writes
+  are capped at 64 KiB pending per socket, and at most 4 sockets can be open.
+  Sockets are closed with the React instance.
+- Cleartext: NTRIP v1 is plain TCP (port 2101). Raw sockets are not subject
+  to Android's network-security-config cleartext policy (it governs HTTP
+  stacks) nor to iOS ATS (URLSession only), so the app-wide policy stays
+  untouched: cleartext HTTP is still loopback-only.
+- Tests: both pipes run against a loopback echo server (echo, ordering,
+  bounded events, backpressure, remote close, refused connect, TLS against a
+  plain server, read timeout) in `android/tests/run.sh` and `ios/Tests/run.sh`.
+
 ## Design decisions
 
 - **Bytes cross as base64 in events.** Uint8Array arguments work (`write`),
@@ -84,8 +112,9 @@ overflow, corrupt chunk.
   transport value `ea` next to `fake` in `GnssLink.connect`, with `EASession`
   streams feeding `received(_:)`/`write`, and
   `UISupportedExternalAccessoryProtocols` per approved vendor in
-  `plugins/withGnss.js`. `tcp` (Wi-Fi receivers) is reserved the same way
-  (`Transport` interface on Android).
+  `plugins/withGnss.js`. A `tcp` receiver transport (Wi-Fi receivers) is
+  reserved the same way (`Transport` interface on Android); the NTRIP
+  `TcpPipe`s above would carry it.
 - **Simulated receiver.** `connect({transport: 'fake', fake: {frames,
 intervalMs, loop}})` replays frames through the same native threads, ring
   and events. Enabled in debug builds, or in a release build built with
