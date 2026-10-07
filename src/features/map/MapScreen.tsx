@@ -2187,9 +2187,12 @@ export function MapScreen() {
         const name = tracks.find((tr) => tr.id === at.trackIds[0])?.name ?? 'Trail';
         useTeamMapSelection.getState().select(null);
         setPointAt(null);
-        useTeamSheet
-          .getState()
-          .open({ kind: 'spot', at: [lngLatArr[0], lngLatArr[1]], trail: name });
+        useTeamSheet.getState().open({
+          kind: 'spot',
+          at: [lngLatArr[0], lngLatArr[1]],
+          trail: name,
+          trackId: at.trackIds[0],
+        });
         return;
       }
       if (lngLatArr && at.hot && at.trackIds.length >= 2) {

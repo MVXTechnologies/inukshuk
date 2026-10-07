@@ -11,11 +11,12 @@ import { palette } from '@ui/tokens';
 import { useSchemeTokens } from '@ui/useSchemeTokens';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 
 import { MemberAvatar } from '../components';
 import { actionMessage } from '../messages';
+import { photoHere } from '../photoHere';
 import { usePinDraft } from './TeamPinComposer';
 import { useTeamPick } from './TeamPick';
 import { useTeamSheet, type TeamSheet } from './teamMode';
@@ -259,14 +260,34 @@ function NotifyCard({ at, onClose }: { at: [number, number] | null; onClose: () 
   );
 }
 
+/** "Photo here": the camera or the library, anchored at this spot. */
+function askPhotoHere(at: [number, number], trackId: string | null, done: () => void): void {
+  const run = (fromCamera: boolean) => {
+    const session = teamService()?.active;
+    if (!session) return;
+    done();
+    void photoHere(session, at, trackId, fromCamera).then((err) => {
+      useTeamStore.getState().refresh();
+      if (err) Alert.alert('Photo not added', err);
+    });
+  };
+  Alert.alert('Photo here', 'It is placed at this spot for the team.', [
+    { text: 'Take a photo', onPress: () => run(true) },
+    { text: 'Choose from library', onPress: () => run(false) },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+}
+
 /** A spot on a trail (team mode): the team's actions there, never the profile. */
 function SpotCard({
   at,
   trail,
+  trackId,
   onClose,
 }: {
   at: [number, number];
   trail: string;
+  trackId: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -289,6 +310,12 @@ function SpotCard({
             onClose();
             usePinDraft.getState().open(at[0], at[1]);
           }}
+        />
+        <Round
+          icon="camera-outline"
+          label="Photo"
+          testID="team-spot-photo"
+          onPress={() => askPhotoHere(at, trackId, onClose)}
         />
         {!guest && (
           <Round
@@ -357,6 +384,12 @@ function PressCard({
             onClose();
             usePinDraft.getState().open(at[0], at[1]);
           }}
+        />
+        <Round
+          icon="camera-outline"
+          label="Photo"
+          testID="team-press-photo"
+          onPress={() => askPhotoHere(at, null, onClose)}
         />
         {!guest && (
           <Round
@@ -434,7 +467,14 @@ export function TeamSheetCard({
     case 'notify':
       return <NotifyCard at={sheet.at} onClose={close} />;
     case 'spot':
-      return <SpotCard at={sheet.at} trail={sheet.trail} onClose={close} />;
+      return (
+        <SpotCard
+          at={sheet.at}
+          trail={sheet.trail}
+          trackId={sheet.trackId ?? null}
+          onClose={close}
+        />
+      );
     case 'press':
       return <PressCard at={sheet.at} onClose={close} onPointActions={onPointActions} />;
     default:
