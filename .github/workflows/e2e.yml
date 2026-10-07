@@ -299,4 +299,5 @@ jobs:
           path: |
             ~/.maestro/tests
             logcat-failure-*.txt
+            logcat-system-server-restart-*.txt
           retention-days: 7

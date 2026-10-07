@@ -20,20 +20,75 @@ mapfile -t FLOWS <<< "$PLAN"
 # deliveries — including through the foreground service while backgrounded,
 # the exact path that killed vc44 (missing RECEIVE_BOOT_COMPLETED).
 #
-# Paused (GEO_PAUSE exists) while a flow tagged `own-location` runs: those
-# flows set the location themselves and then tap by position on a camera that
-# follows the user, and this loop alternates the user between two points
-# ~86 m apart every 2 s — it dragged heatmap.yaml's camera off its tap target.
-GEO_PAUSE=$(mktemp -u)
+# The feed is GATED, not free-running (2026-10-07, run 37628988758): the
+# emulator's GNSS HAL can deadlock system_server when a fix's status report
+# races GnssNative.stop() — the app's location request ending as Maestro
+# force-stops/relaunches it at a flow boundary. The Watchdog then killed
+# system_server ("Blocked in handler on foreground thread (android.fg) for
+# 68s", GnssNative.stop / GnssStatusProvider.onReportStatus) in two shards at
+# once, and every later adb/Maestro call broke ("Broken pipe", "Device server
+# died"). So a fix is sent only when ALL of these hold:
+#
+# - GEO_RUN exists: the runner sets it only while a flow is running, never
+#   across flow transitions or installs, and never for `own-location` flows
+#   (they set the location themselves and tap by position on a camera that
+#   follows the user; the oscillation dragged heatmap.yaml off its target);
+# - the app process is up and is the SAME process as at the previous tick
+#   (event-driven: a launch, a force-stop or a relaunch pauses the feed until
+#   the new process has lived a full tick, i.e. its location request is up);
+# - one fix per GEO_TICK seconds (5 s, was 2 s): a recording only needs a
+#   fresh fix to keep flowing — the flows' own setLocation/travel steps make
+#   the movement — and fewer fixes means fewer status reports to race.
+GEO_RUN=$(mktemp -u)
+GEO_TICK=5
+APP_ID=com.inukshuk.app
 (
+  prev_pid=''
+  point=0
   while true; do
-    [ -e "$GEO_PAUSE" ] || adb emu geo fix -71.2082 46.8139 >/dev/null 2>&1 || true
-    sleep 2
-    [ -e "$GEO_PAUSE" ] || adb emu geo fix -71.2075 46.8145 >/dev/null 2>&1 || true
-    sleep 2
+    sleep "$GEO_TICK"
+    pid=$(adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r')
+    if [ -e "$GEO_RUN" ] && [ -n "$pid" ] && [ "$pid" = "$prev_pid" ]; then
+      if [ "$point" = 0 ]; then
+        adb emu geo fix -71.2082 46.8139 >/dev/null 2>&1 || true
+      else
+        adb emu geo fix -71.2075 46.8145 >/dev/null 2>&1 || true
+      fi
+      point=$((1 - point))
+    fi
+    prev_pid=$pid
   done
 ) &
 GEO_PID=$!
+
+# Stop feeding and let a fix already on its way land before Maestro touches
+# the app (force-stop, clearState, relaunch, driver install).
+geo_pause() {
+  rm -f "$GEO_RUN"
+  sleep 1
+}
+
+# system_server's pid, to tell a real flow failure from the emulator's
+# system process dying under it (Watchdog kill, soft reboot).
+system_server_pid() {
+  adb shell pidof system_server 2>/dev/null | tr -d '\r'
+}
+SYSTEM_SERVER_PID=$(system_server_pid)
+echo "system_server pid at start: ${SYSTEM_SERVER_PID:-none}"
+
+# After a failed attempt: if system_server is no longer the process the shard
+# started with, the emulator itself broke. That is reported as its own,
+# clearly named infrastructure failure with the evidence attached, and the
+# flow is NOT retried: a retry on a rebooted system proves nothing.
+system_server_restarted() {
+  local now
+  now=$(system_server_pid)
+  [ -n "$SYSTEM_SERVER_PID" ] && [ "$now" = "$SYSTEM_SERVER_PID" ] && return 1
+  adb logcat -d > "logcat-system-server-restart-$1.txt" 2>&1 || true
+  adb logcat -b crash -d >> "logcat-system-server-restart-$1.txt" 2>&1 || true
+  echo "::error title=E2E infra: emulator system_server restarted ($SHARD)::during $2 (pid ${SYSTEM_SERVER_PID:-none} -> ${now:-none}); the flow result is void. Evidence: logcat-system-server-restart-$1.txt in the shard's artifact (look for 'WATCHDOG KILLING SYSTEM PROCESS')."
+  return 0
+}
 
 # Map-store fixture catalog (store.yaml, pdf-overlays.yaml): serve
 # .maestro/fixtures/catalog on the host and map the device's loopback :8787
@@ -48,9 +103,21 @@ python3 -m http.server 8787 --bind 127.0.0.1 --directory .maestro/fixtures/catal
 CATALOG_PID=$!
 adb reverse tcp:8787 tcp:8787 || true
 
-trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_PAUSE"' EXIT
+trap 'kill $GEO_PID $CATALOG_PID 2>/dev/null; rm -f "$GEO_RUN"' EXIT
+
+# One flow attempt, with the feed on only while Maestro runs it.
+run_flow() {
+  local flow=$1 own_location=$2
+  geo_pause
+  [ "$own_location" = 1 ] || touch "$GEO_RUN"
+  maestro test "$flow"
+  local rc=$?
+  geo_pause
+  return $rc
+}
 
 RC=0
+SYSTEM_BROKE=0
 SUMMARY="| Flow | Result | Time |"$'\n'"| --- | --- | --- |"
 # Screenshots taken from here on are this run's; anything older is stale.
 SHOT_MARK=$(mktemp)
@@ -60,11 +127,19 @@ for entry in "${FLOWS[@]}"; do
   own_location=${entry##* }
   name=$(basename "$flow" .yaml)
   [ "$name" = pdf-overlays ] && RAN_PDF_OVERLAYS=1
-  if [ "$own_location" = 1 ]; then touch "$GEO_PAUSE"; else rm -f "$GEO_PAUSE"; fi
+  if [ "$SYSTEM_BROKE" = 1 ]; then
+    # Nothing that runs on a rebooted emulator counts.
+    SUMMARY+=$'\n'"| $name | NOT RUN (emulator system_server restarted) | |"
+    continue
+  fi
   started=$SECONDS
   adb logcat -c || true
-  if maestro test "$flow"; then
+  if run_flow "$flow" "$own_location"; then
     result=PASS
+  elif system_server_restarted "$name" "$flow"; then
+    result="FAIL (infra: system_server restarted)"
+    RC=1
+    SYSTEM_BROKE=1
   else
     # One retry: launch races (map-init timing, post-boot churn) pass on a
     # clean second run. Keep the FIRST failure's logcat either way, so a
@@ -72,9 +147,13 @@ for entry in "${FLOWS[@]}"; do
     # an annotation, so a flake is visible on a green run too.
     adb logcat -d > "logcat-failure-$name.txt" || true
     adb logcat -c || true
-    if maestro test "$flow"; then
+    if run_flow "$flow" "$own_location"; then
       result="PASS (on retry)"
       echo "::warning title=E2E flake ($SHARD)::$flow failed once and passed on retry; see logcat-failure-$name.txt in the shard's artifact"
+    elif system_server_restarted "$name-retry" "$flow (retry)"; then
+      result="FAIL (infra: system_server restarted)"
+      RC=1
+      SYSTEM_BROKE=1
     else
       result=FAIL
       RC=1
@@ -85,7 +164,7 @@ for entry in "${FLOWS[@]}"; do
   echo "=== $flow $result ($((took / 60))m$((took % 60))s) ==="
   SUMMARY+=$'\n'"| $name | $result | $((took / 60))m$((took % 60))s |"
 done
-rm -f "$GEO_PAUSE"
+rm -f "$GEO_RUN"
 
 # pdf-overlays.yaml proves the overlay drew through its map screenshot (#331);
 # the flow passing without the pixels is not a pass. Where Maestro writes it
