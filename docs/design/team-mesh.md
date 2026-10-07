@@ -191,6 +191,16 @@ gossips new local ops.
   be fine: the loopback PDF server proved a reclaimed listener can still say
   "ready". Accepted connections are independent of the listener; dead ones
   end by idle timeout and reconnect by backoff.
+- UIScene lifecycle (iOS 27, `plugins/withIosSceneLifecycle.js`): Expo's
+  `OnAppEntersBackground` / `OnAppEntersForeground` come from the
+  `UIApplication` background/foreground notifications, which UIKit still
+  posts under scenes; they never depended on the app-delegate methods the
+  SceneDelegate now forwards. The module also observes
+  `UIScene.didEnterBackgroundNotification` / `willEnterForegroundNotification`
+  and dedupes the two sources (the first one acts), so the refresh survives
+  either path. `plugins/withTeamMesh.test.js` asserts the plugin order, the
+  coexisting Info.plist keys, the scene delegate's forwarding and the
+  module's observers.
 
 **Android**
 

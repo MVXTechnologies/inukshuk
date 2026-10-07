@@ -117,21 +117,64 @@ public final class InukshukMeshModule: Module, MeshEngineDelegate {
     // queued, so a message typed just before locking the phone goes out;
     // nothing else runs in the background unless the app is already kept
     // alive by an active trail recording (UIBackgroundModes: location).
+    //
+    // Lifecycle source (iOS 27 UIScene, plugins/withIosSceneLifecycle.js):
+    // Expo raises OnAppEntersBackground/Foreground from the
+    // UIApplication.didEnterBackground / willEnterForeground NOTIFICATIONS,
+    // which UIKit still posts under the scene lifecycle — they do not depend
+    // on the SceneDelegate forwarding app-delegate calls. The UIScene
+    // notifications are observed as well, so a scene transition the app-level
+    // notification misses still refreshes the listener; the two are deduped
+    // (whichever comes first acts, the other is a no-op).
+    OnCreate {
+      self.observeSceneLifecycle()
+    }
+
     OnAppEntersBackground {
-      self.backgroundedAt = Date()
-      self.flushInBackground()
+      self.enteredBackground()
     }
 
     OnAppEntersForeground {
-      let away = self.backgroundedAt.map { Date().timeIntervalSince($0) } ?? 0
-      self.backgroundedAt = nil
-      self.endBackgroundTask()
-      self.current()?.resume(afterSuspension: away >= 5)
+      self.enteringForeground()
     }
 
     OnDestroy {
+      self.sceneObservers.forEach { NotificationCenter.default.removeObserver($0) }
+      self.sceneObservers.removeAll()
       self.stopAll()
     }
+  }
+
+  // MARK: Lifecycle
+
+  private var sceneObservers: [NSObjectProtocol] = []
+  private var inBackground = false
+
+  private func observeSceneLifecycle() {
+    let center = NotificationCenter.default
+    sceneObservers.append(center.addObserver(forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main) {
+      [weak self] _ in self?.enteredBackground()
+    })
+    sceneObservers.append(center.addObserver(forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main) {
+      [weak self] _ in self?.enteringForeground()
+    })
+  }
+
+  /// Main thread (both notification sources deliver there).
+  private func enteredBackground() {
+    guard !inBackground else { return }
+    inBackground = true
+    backgroundedAt = Date()
+    flushInBackground()
+  }
+
+  private func enteringForeground() {
+    guard inBackground else { return }
+    inBackground = false
+    let away = backgroundedAt.map { Date().timeIntervalSince($0) } ?? 0
+    backgroundedAt = nil
+    endBackgroundTask()
+    current()?.resume(afterSuspension: away >= 5)
   }
 
   // MARK: Helpers
