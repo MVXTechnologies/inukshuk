@@ -23,6 +23,44 @@ describe('accuracy panel', () => {
     expect(formatAccuracy(1.5)).toBe('±1.5 m');
   });
 
+  it('an approximate source position: amber, says why, and replaces "type more decimals"', () => {
+    const p = mustPlan(
+      plan(
+        { from: 'csrs:geo', fromHeight: null, to: 'csrs:mtm7', toHeight: null, epoch: 1997 },
+        qc,
+      ),
+    );
+    const why =
+      '84KM654 is a levelling benchmark: its height is precise, its position only approximate';
+    const panel = buildPanel(p, {
+      inputPrecisionM: 0.0003,
+      approxSource: { accM: 2, why },
+      available: () => true,
+    });
+    expect(panel.status).toBe('amber');
+    expect(panel.lines).toContainEqual({
+      icon: 'warn',
+      lead: 'Approximate position:',
+      text: `${why} (±2.0 m), so the converted position is too. Heights are hardly affected: the height models change by millimetres at most over that distance.`,
+    });
+    // 6-decimal input AND an approximate mark: one line, the mark's (more decimals can't help).
+    const coarse = buildPanel(p, {
+      inputPrecisionM: 0.11,
+      approxSource: { accM: 2, why },
+      available: () => true,
+    });
+    expect(coarse.lines.map((l) => l.lead)).not.toContain('Input limits the result:');
+    // Far off (±100 m): heights are no longer "hardly affected".
+    const far = buildPanel(p, {
+      inputPrecisionM: 0,
+      approxSource: { accM: 100, why },
+      available: () => true,
+    });
+    expect(far.lines.find((l) => l.lead === 'Approximate position:')?.text).toMatch(
+      /centimetre or more/,
+    );
+  });
+
   it('81KM003 → MTM 7 + CGVD2013a(1997): green, EPSG 10111 quoted, validated by NRCan', () => {
     const p = mustPlan(
       plan(

@@ -132,7 +132,13 @@ export function ConvertScreen({ params }: { params: Record<string, unknown> }) {
   const fromFrame = from ? FRAMES[from.frame] : null;
   const toFrame = toSys ? FRAMES[toSys.frame] : fromFrame;
 
-  const update = (patch: Partial<ConvertRequest>) => setReq((r) => ({ ...r, ...patch }));
+  const update = (patch: Partial<ConvertRequest>) =>
+    setReq((r) => {
+      const next = { ...r, ...patch };
+      // Typed coordinates are the user's, no longer the mark's approximate ones.
+      if ('a' in patch || 'b' in patch || 'c' in patch) delete next.approxPosition;
+      return next;
+    });
   const updateSpec = (patch: Partial<ConvertSpec>) =>
     setReq((r) => ({ ...r, spec: { ...r.spec, ...patch } }));
 
@@ -168,8 +174,9 @@ export function ConvertScreen({ params }: { params: Record<string, unknown> }) {
         spec.toHeight = spec.fromHeight ? t.toHeight : null;
       }
       const same = sys.kind === (r.spec.from === id ? sys.kind : coordSystem(r.spec.from)?.kind);
+      const { approxPosition: _approx, ...rest } = r;
       return {
-        ...r,
+        ...rest,
         spec,
         ...(same ? {} : { a: '', b: '', c: '' }),
         origin: { kind: 'point', label: 'Typed coordinates' },

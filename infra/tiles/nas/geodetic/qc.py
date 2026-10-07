@@ -255,8 +255,15 @@ def normalize(raw_dir, fiches=None):
             lat, lng, pos_acc = f['lat'], f['lng'], None
             geo, grids = f.get('geo'), f.get('grids')
         if not grids:
-            # The bulk layer's own published grid (Québec Lambert), ±2 m.
-            grids = [{'system': 'Québec Lambert (bulk layer, ±2 m)',
+            # The open-data layer's own grid (Québec Lambert, EPSG:6622). Checked
+            # against the datasheets 2026-10-07 (src/core/convert/fixtures/
+            # mrnf-layer-vs-datasheet.json): ≤ 2 cm where the sheet has a CSRS
+            # position, but for every levelling benchmark (and marks with no CSRS
+            # position) it IS the sheet's "position approchée" (0.1″, a few m).
+            # The card shows this label as is: plain words, no build jargon
+            # (app tiles built before carry 'Québec Lambert (bulk layer, ±2 m)',
+            # which record.ts maps to this).
+            grids = [{'system': 'Québec Lambert (approximate)',
                       'e': f"{r['x']:.3f}", 'n': f"{r['y']:.3f}"}]
         h_ortho = []
         for key, vd in (('hCGVD2013', 'CGVD2013'), ('hCGVD28', 'CGVD28')):

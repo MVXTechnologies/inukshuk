@@ -48,3 +48,36 @@ appId: com.inukshuk.app
     timeout: 10000
 - assertVisible:
     id: 'convert-status-green'
+# Geodetic card → Convert on a Québec levelling benchmark (field report,
+# Android 2.3.0: "every point says there is no usable data Convert can
+# read"). This is the exact link the card sends for MRNF 84KM654 from the
+# live tiles — markToConvert.test.ts keeps the two in sync. The open-data
+# layer's Québec Lambert must be READ (no "no published coordinates"
+# notice), the CGVD28 height asks for the grid pack, and the position-only
+# result is amber with the approximate-position line.
+- tapOn: 'Back'
+- openLink: 'inukshuk://convert?from=csrs%3Aqclambert&to=csrs%3Amtm7&a=-208379.906&b=317906.512&lon=-71.23569444&lat=46.82080556&fh=cgvd28&th=ell&h=6.49&epoch=1997.0&label=From%20mark%2084KM654&kind=mark&pub=%5B%7B%22heightId%22%3A%22cgvd28%22%2C%22text%22%3A%226.49%22%7D%5D&pacc=2&pwhy=84KM654%20is%20a%20levelling%20benchmark%3A%20its%20height%20is%20precise%2C%20its%20position%20only%20approximate'
+- extendedWaitUntil:
+    visible: 'From mark 84KM654'
+    timeout: 15000
+- assertNotVisible: '.*no published coordinates.*'
+- extendedWaitUntil:
+    visible:
+      id: 'convert-status-red'
+    timeout: 10000
+- assertVisible: '.*Needs HTv2.0.*'
+- tapOn:
+    id: 'convert-to-height'
+- tapOn:
+    id: 'convert-pick-none'
+- extendedWaitUntil:
+    visible:
+      id: 'convert-result-e'
+    timeout: 10000
+- assertVisible:
+    id: 'convert-status-amber'
+- scrollUntilVisible:
+    element: 'Approximate position:.*'
+    direction: DOWN
+- assertNotVisible:
+    id: 'convert-status-red'

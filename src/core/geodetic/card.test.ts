@@ -69,7 +69,42 @@ describe('buildGeodeticCard', () => {
     expect(wgs?.label).toBe('≈ WGS 84');
     expect(shown(wgs?.lines)).toEqual([
       { text: '46.813158° N, 71.207627° W', note: 'display, ±2 m' },
+      // Why ±2 m on a cm-precise mark, in plain words (field report, 2.3.0).
+      {
+        text: 'Map dot only: NAD83(CSRS) and WGS 84 (the map’s datum) differ by up to 2 m. The published values above are unaffected.',
+        muted: true,
+      },
     ]);
+  });
+
+  it('says when the agency itself only gives an approximate position (MRNF open-data layer)', () => {
+    // A live 2026-10-07 tile feature: levelling benchmark 84KM654, Québec City.
+    const bm = mark({
+      i: '84KM654',
+      s: src('qc-mrnf'),
+      k: 'v',
+      y: 46.82080556,
+      x: -71.23569444,
+      d: datum('nad83csrs-qc'),
+      n: 'VQZ-8352',
+      H: '6.49',
+      hd: vdatum('CGVD28'),
+      g1: 'Québec Lambert (bulk layer, ±2 m);-208379.906;317906.512',
+      m: 'disk',
+      p: 20,
+    });
+    const card = buildGeodeticCard(bm);
+    const rows = Object.fromEntries(card.rows.map((r) => [r.key, shown(r.lines)]));
+    // Build jargon ("bulk layer") never reaches the card.
+    expect(rows.native?.[1]).toEqual({
+      text: `E ${groupDigits('-208379.906')} · N ${groupDigits('317906.512')}`,
+      note: 'Québec Lambert (approximate)',
+      muted: true,
+    });
+    expect(card.copyText).not.toMatch(/bulk/);
+    expect(rows.wgs84?.[1]?.text).toBe(
+      'A levelling benchmark: its height is precise, but the agency gives only an approximate position.',
+    );
   });
 
   it('copies the published values, labelled', () => {
