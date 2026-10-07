@@ -77,6 +77,20 @@ it('keeps the photos when the index cannot be written', () => {
   expect(folders.deleteTrailPhotoFolder).not.toHaveBeenCalled();
 });
 
+it('clears every trail’s photo count and cover in one write', () => {
+  const { photoCount: _c, coverPhotoId: _p, ...bare } = summary('b');
+  useLibraryStore.setState({ tracks: [summary('a'), bare] });
+  useLibraryStore.getState().clearTrackPhotoSummaries();
+  expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+  for (const t of useLibraryStore.getState().tracks) {
+    expect(t).not.toHaveProperty('photoCount');
+    expect(t).not.toHaveProperty('coverPhotoId');
+  }
+  // Nothing left to clear: no write.
+  useLibraryStore.getState().clearTrackPhotoSummaries();
+  expect(storage.writeIndex).toHaveBeenCalledTimes(1);
+});
+
 it('keeps the photo count and cover on the summary through a patch', () => {
   useLibraryStore.getState().updateTrack('a', { photoCount: 5, coverPhotoId: 'p9' });
   expect(useLibraryStore.getState().tracks[0]).toMatchObject({

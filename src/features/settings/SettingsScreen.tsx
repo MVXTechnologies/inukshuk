@@ -51,6 +51,7 @@ import { MarinePacksSection } from './MarinePacksSection';
 import { OfflineMapsSection } from './OfflineMapsSection';
 import { ConnectionsSection } from './ConnectionsSection';
 import { TrainingSection } from './TrainingSection';
+import { PhotosSection } from './PhotosSection';
 
 const DISPLACEMENT_OPTIONS = [
   { value: '2', label: '2 m' },
@@ -561,6 +562,22 @@ export function SettingsScreen() {
                   </Text>
                 </View>
               </List.Section>
+            </View>
+          </List.Accordion>
+
+          <Divider />
+
+          <List.Accordion
+            id="photos"
+            title="Photos"
+            // Must not echo body text (E2E open-state guards; see "Data settings").
+            description="On the map, storage and privacy"
+            left={(p) => <List.Icon {...p} icon="image-multiple-outline" />}
+            style={accordionHeaderStyle}
+            titleStyle={accordionTitleStyle}
+          >
+            <View style={styles.accordionBody}>
+              <PhotosSection showSnack={showSnack} />
             </View>
           </List.Accordion>
 

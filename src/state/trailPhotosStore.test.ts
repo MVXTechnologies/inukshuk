@@ -84,6 +84,14 @@ it('forgets a trail', async () => {
   expect(useTrailPhotosStore.getState().byTrack).toEqual({});
 });
 
+it('forgets every trail at once', async () => {
+  data.readTrailPhotos.mockResolvedValue({ status: 'ok', photos: [] });
+  await useTrailPhotosStore.getState().load('t1');
+  await useTrailPhotosStore.getState().load('t2');
+  useTrailPhotosStore.getState().forgetAll();
+  expect(useTrailPhotosStore.getState().byTrack).toEqual({});
+});
+
 it('says which statuses can be edited', () => {
   expect(photosEditable('ok')).toBe(true);
   expect(photosEditable('missing')).toBe(true);

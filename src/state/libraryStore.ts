@@ -131,6 +131,11 @@ interface LibraryState extends Omit<LibraryIndex, 'schemaVersion'> {
   /** Patch a saved trail, including switching its file URI to a committed revision. */
   updateTrack: (id: string, patch: Partial<Omit<TrackSummary, 'id'>>) => void;
   /**
+   * Settings → "Delete all photo copies" (#587): drop every trail's cached
+   * photo count and cover in ONE index write (no write when none had any).
+   */
+  clearTrackPhotoSummaries: () => void;
+  /**
    * Rename a saved trail (the user-facing title of an activity). A blank or
    * whitespace-only name is rejected — the trail keeps its current one, the
    * same guard `renameFolder` applies. Duplicate names are allowed: trails are
@@ -619,6 +624,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     set((s) => {
       if (items.length === 0) return s;
       const next = { ...s, tracks: [...items.map(toSummary), ...s.tracks] };
+      persist(next);
+      return next;
+    }),
+
+  clearTrackPhotoSummaries: () =>
+    set((s) => {
+      if (!s.tracks.some((t) => t.photoCount !== undefined || t.coverPhotoId !== undefined)) {
+        return s;
+      }
+      const next = {
+        ...s,
+        tracks: s.tracks.map((t) => {
+          if (t.photoCount === undefined && t.coverPhotoId === undefined) return t;
+          const { photoCount: _count, coverPhotoId: _cover, ...rest } = t;
+          return rest;
+        }),
+      };
       persist(next);
       return next;
     }),

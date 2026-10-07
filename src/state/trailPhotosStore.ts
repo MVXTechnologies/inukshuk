@@ -55,6 +55,8 @@ interface TrailPhotosState {
   removePhoto: (trackId: string, photoId: string) => Promise<boolean>;
   /** Drop a trail from memory (it was deleted). */
   forget: (trackId: string) => void;
+  /** Every trail's photos are gone (Settings → "Delete all photo copies"): empty memory. */
+  forgetAll: () => void;
 }
 
 const inflight = new Map<string, Promise<void>>();
@@ -120,6 +122,8 @@ export const useTrailPhotosStore = create<TrailPhotosState>((set, get) => {
       await read(trackId);
       return removed;
     },
+
+    forgetAll: () => set({ byTrack: {} }),
 
     forget: (trackId) =>
       set((s) => {
