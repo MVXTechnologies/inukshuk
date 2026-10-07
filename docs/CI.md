@@ -90,6 +90,12 @@ long job, with no retry:
   it (and an AGP bump without a pin fails the script in seconds): add it to
   `android-sdk.json`. The NDKs and CMake are also cached (restored everywhere,
   saved from `main`).
+- **Emulator packages.** The E2E flows job installs platform-tools, the
+  emulator, the system image and the build-tools/platform that
+  `reactivecircus/android-emulator-runner` would otherwise fetch itself with
+  no retry (2026-10-07: a truncated emulator zip killed a shard before boot).
+  It uses `android-sdk.mjs install <pkg…>`, with the same retry and
+  verification.
 - **Maestro** is pinned (`MAESTRO_VERSION` in `e2e.yml`); the installer is
   downloaded to a file, then run, with a bounded retry of that download only.
 - **Gradle and NDK caches are saved from `main` only** (`actions/cache/restore`
