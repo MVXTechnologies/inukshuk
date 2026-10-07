@@ -71,6 +71,7 @@ jobs:
             while IFS= read -r pattern; do
               [ -z "$pattern" ] && continue
               # Unquoted on purpose: `case` matches it as a glob.
+              # shellcheck disable=SC2254
               case "$name" in
                 $pattern) native=true; echo "$name is native-bearing ($pattern)." ;;
               esac

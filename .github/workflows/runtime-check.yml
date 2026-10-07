@@ -18,8 +18,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Per commit on main, per PR otherwise (see ci.yml).
 concurrency:
-  group: runtime-check-${{ github.ref }}
+  group: runtime-check-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 
 permissions:
