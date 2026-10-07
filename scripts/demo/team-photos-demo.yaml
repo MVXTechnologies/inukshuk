@@ -130,3 +130,14 @@ appId: com.inukshuk.app
       id: 'photo-team-comments'
     timeout: 10000
 - takeScreenshot: 04-photo-with-comment
+- tapOn: 'Close'
+- tapOn: '.*Mont-Sainte-Anne · sentier du sommet.*'
+- extendedWaitUntil:
+    visible:
+      id: 'team-trail-screen'
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: 'team-trail-comments'
+    direction: DOWN
+- takeScreenshot: 05-team-trail-comments
