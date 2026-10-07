@@ -1,0 +1,4 @@
+<!-- Permissions and features come from plugins/withGnss.js: they need
+     attributes (maxSdkVersion, usesPermissionFlags) that are clearer in one
+     place than merged from a library manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

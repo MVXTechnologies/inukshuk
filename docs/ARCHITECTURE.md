@@ -318,6 +318,14 @@ Field operators rely on it, so **PROJ never chooses an operation**:
   gated by official-tool vectors (`fixtures/datum-vectors.json`, also run on
   the host PROJ). Module boundaries for the native transport and the UI:
   `src/core/gnss/README.md`.
+- Stage 2 transport: `modules/inukshuk-gnss` — a Bluetooth byte pipe and nothing
+  else (Android: Classic SPP to bonded receivers + BLE GATT; iOS: BLE with
+  state restoration; a test-only simulated receiver). Design, permissions and
+  store obligations: `modules/inukshuk-gnss/README.md`.
+- JS: `lib/gnss/nativeGnss.ts` (typed, optional module: null on binaries
+  before 2.5.0), `core/gnss/bleProfiles.ts` (the serial GATT profiles, sent on
+  every connect), `data/gnss/receiverStream.ts` (native chunks → the
+  `@core/gnss` demuxer). Parsing, fixes, NTRIP and datums are `core/gnss`.
 
 ## Error reporting ("no silent fails")
 

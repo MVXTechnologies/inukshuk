@@ -267,6 +267,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Allow cleartext to loopback only, for the in-app HTTP server that serves the
     // MapLibre style during an offline-region download (see src/data/offline.ts).
     './plugins/withLocalhostCleartext',
+    // External GNSS receivers over Bluetooth (#588, modules/inukshuk-gnss):
+    // Android 12+ Bluetooth permissions (scan never used for location),
+    // optional Bluetooth hardware, the iOS purpose string and the
+    // bluetooth-central background mode. GNSS_FAKE_DEVICE=1 (E2E builds only)
+    // enables the simulated receiver in a release build.
+    ['./plugins/withGnss', { fakeDevice: process.env.GNSS_FAKE_DEVICE === '1' }],
     // Apple Health import (#435): the HealthKit entitlement + read usage text.
     // Read-only access, no background delivery.
     [
